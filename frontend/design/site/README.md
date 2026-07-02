@@ -8,7 +8,7 @@ React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 (`.term*`/`.tl-*`, consumed by `frontend/web/src/components/Terminal.tsx`),
 sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
 **StatCounter**, **ChangelogBand**, **CodeSampleBand**, **CapabilityCard**,
-**HorizontalScrollBand**, `.principles`, and `.footer*`. Terminal-CLI /
+**HorizontalScrollBand**, **ClosingCtaBand**, `.principles`, and `.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -324,3 +324,52 @@ CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
 Content wiring (real changelog/testimonial data) is out of scope here — this
 primitive owns only the scroll/snap/masking contract, same division as
 TrustStrip and ChangelogBand.
+
+## `ClosingCtaBand` (CSS-only, EVOLUTION.md Phase E)
+
+Graphite/Cursor **pre-footer conversion band** — a full-width centered section
+placed directly above the footer: one literal headline, one primary `.btn`, and
+an optional mono secondary link. Compose with `.reveal-up` (above) for a
+scroll-in enter; reduced motion is already honored by the shared block. Copy
+tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-patterns.md)
+(literal verbs, no hype). Landing-page wiring is [#1227](https://github.com/digithings-ai/digithings/issues/1227) — this primitive owns only the markup/CSS contract.
+
+```html
+<section class="closing-cta reveal-up">
+  <div class="closing-cta__inner">
+    <h2 class="closing-cta__title">Build your agent stack in the open.</h2>
+    <p class="closing-cta__sub">Open-core orchestration, quant, RAG, and chat.</p>
+    <div class="closing-cta__actions">
+      <a class="btn btn-primary" href="https://github.com/digithings-ai">Start building</a>
+      <a class="closing-cta__secondary" href="/architecture">Read the architecture <span aria-hidden="true">&rarr;</span></a>
+    </div>
+  </div>
+</section>
+```
+
+**Copy slots** (fill from the consuming app; keep labels literal):
+
+| Slot | Content | Notes |
+|------|---------|-------|
+| `.closing-cta__title` | Headline | Literal, reads best ≤ ~20ch. |
+| `.closing-cta__sub` | Optional one-line support | ≤ ~48ch; omit for a bare title. |
+| `.closing-cta__actions` → `.btn.btn-primary` | Primary label + `href` | The single, literal action (e.g. "Start building", "Open Olympus"). |
+| `.closing-cta__secondary` | Optional secondary label + `href` | Mono, arrow-suffix; the `span[aria-hidden]` translates on hover, matching `.btn`/`.bento__cta`. |
+
+**Copy variants** (shown in `frontend/design/smoke/index.html`):
+
+| Surface | Title | Primary | Secondary |
+|---------|-------|---------|-----------|
+| digithings.ai | "Build your agent stack in the open." | Start building | Read the architecture → |
+| digiquant.io | "One graph, research to execution." | Open Olympus | Browse strategies → |
+
+| Class | Role |
+|-------|------|
+| `.closing-cta` | Full-width band — `padding-block: var(--section-y)`, centered text. |
+| `.closing-cta__inner` | `max-width: var(--wrap-wide)` centered column (title / sub / actions), gap-stacked. |
+| `.closing-cta__title` | Clamped display headline, `max-width: 20ch`. |
+| `.closing-cta__sub` | Muted one-line support, `max-width: 48ch`. |
+| `.closing-cta__actions` | Wrapping, centered row of the primary `.btn` + optional secondary. |
+| `.closing-cta__secondary` | Mono arrow-suffix link; hover tints `--ink` and nudges the arrow. |
+
+CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).

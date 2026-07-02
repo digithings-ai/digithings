@@ -297,7 +297,7 @@ Add to `tokens.css` when implementing primitives:
 ### Phase E — Additional primitives & content-gated integration
 
 - [x] `HorizontalScrollBand` primitive (`.h-scroll`) — #1221
-- [ ] `ClosingCtaBand` primitive — #1222
+- [x] `ClosingCtaBand` primitive (`.closing-cta`) — #1222. CSS-only centered pre-footer band (headline + primary `.btn` + optional mono secondary), `--section-y`/`--wrap-wide`, composes with `.reveal-up`. Copy slots + digithings/digiquant variants documented in `site/README.md`; smoke demo added. Landing wiring is #1227.
 - [ ] `FaqAccordion` + `PricingMatrix` primitives — #1223
 - [ ] `HeroFeaturePicker` primitive — #1224
 - [ ] `AnnouncementBar` primitive (content-gated) — #1225
