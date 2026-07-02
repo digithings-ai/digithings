@@ -464,6 +464,87 @@ chat = client.chat.create(model="grok-4.3")</pre>
   </div>
 </div></section>
 
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 10 — batch 3</div>
+  <h2>Footers &amp; site chrome — utility rows, one personality moment</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — footer with status dot</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;font-size:.68rem;color:#a1a1a6">
+          <span>Features</span><span>Company</span><span>Resources</span><span>Connect</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(255,255,255,.1);margin-top:.7rem;padding-top:.6rem;font-family:var(--mono);font-size:.62rem">
+          <span style="color:#a1a1a6"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--up);margin-right:.4rem"></span>All systems operational</span>
+          <span style="color:#52525b">© Graphite 2026</span>
+        </div>
+      </div>
+      <div class="vals">4 columns (2×2 on mobile) · ~80px top pad · status link + green dot · footer-only accent blocks (orange/yellow/cyan/blue, marquee) = the sanctioned personality zone<br>→ ours: status dot → /healthz ({"ok": true}) · footer color play stays IN the footer</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">cursor — footer utility row</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--cu-bg);border:1px solid var(--cu-border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+          <span style="display:inline-flex;border:1px solid var(--cu-border);border-radius:8px;overflow:hidden;font-size:.66rem;color:#1a1a18">
+            <span style="padding:.3rem .6rem;background:#fff">System</span><span style="padding:.3rem .6rem">Light</span><span style="padding:.3rem .6rem">Dark</span>
+          </span>
+          <span style="border:1px solid var(--cu-border);border-radius:8px;padding:.3rem .6rem;font-size:.66rem;color:#1a1a18">English ↓</span>
+          <span style="font-size:.64rem;color:#8a8a80">© 2026 Anysphere, Inc. · SOC 2 Certified</span>
+        </div>
+      </div>
+      <div class="vals">segmented theme control System/Light/Dark (~40×29 each) · language selector · trust-cert link in the small print<br>→ ours: v7 ThemeToggle as a footer segmented control · SOC2 slot → open-core security docs link</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">footer brand moment (graphite + x.ai)</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:radial-gradient(30rem 10rem at 50% 130%,rgba(79,163,122,.28),transparent 65%),var(--bg);border:1px solid var(--hair);align-items:center;text-align:center">
+        <div style="font-family:var(--mono);font-weight:500;font-size:1.4rem;letter-spacing:-.01em">digi<span style="color:var(--em)">quant</span></div>
+        <div class="vals" style="margin-top:.3rem">one ambient bloom, footer only — quarantined from chrome</div>
+      </div>
+      <div class="vals">graphite: neon-sign brand image at page bottom · x.ai: warm gradient bloom (sunset #ff7a17 / dusk #7c3aed / twilight #c4b5fd — illustration-only palette)<br>→ ours: a single emerald mesh bloom under the wordmark; everything above stays hairline-flat</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — announcement bar</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1);padding:0">
+        <div style="display:flex;justify-content:center;align-items:center;gap:.6rem;min-height:44px;border-bottom:1px solid rgba(255,255,255,.1);font-size:.7rem;color:#e8e8ed;padding:.3rem 2rem;position:relative">
+          <span>Cursor Cloud Agents are now in Graphite. Create, review, and ship without leaving your PR.</span>
+          <span style="color:var(--gr-accent)">Read more →</span>
+          <span style="position:absolute;right:.6rem;color:#52525b">✕</span>
+        </div>
+      </div>
+      <div class="vals">48px · above nav · ENTIRE bar clickable · dismissible · a11y region "Announcement" · x.ai variant: hero pill "New — Grok Build Beta"<br>→ ours: only with real news (release, launch) — content-gated, never evergreen marketing</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 11 — mobile</div>
+  <h2>Mobile nav — dialog semantics, conversion never leaves the bar</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — mobile nav sheet (390×844)</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1);padding:0;max-width:280px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem .7rem;border-bottom:1px solid rgba(255,255,255,.1);font-size:.66rem;color:#e8e8ed">
+          <span style="font-weight:600">graphite</span>
+          <span style="display:flex;gap:.5rem;align-items:center"><span style="color:#a1a1a6">Log in</span><span style="background:var(--gr-accent);color:#160a02;border-radius:999px;padding:.2rem .55rem;font-weight:500">Sign up</span><span style="color:#a1a1a6">✕</span></span>
+        </div>
+        <div style="font-size:.7rem;color:#e8e8ed">
+          <div style="padding:.65rem .7rem;border-bottom:1px solid rgba(255,255,255,.07)">Features <span style="float:right;color:#52525b">＋</span></div>
+          <div style="padding:.65rem .7rem;border-bottom:1px solid rgba(255,255,255,.07)">Resources <span style="float:right;color:#52525b">＋</span></div>
+          <div style="padding:.65rem .7rem;border-bottom:1px solid rgba(255,255,255,.07)">Customers</div>
+          <div style="padding:.65rem .7rem">Pricing</div>
+        </div>
+        <div style="display:flex;gap:.7rem;padding:.55rem .7rem;border-top:1px solid rgba(255,255,255,.1);font-size:.62rem;color:#52525b">GitHub · Slack · X · ©2026</div>
+      </div>
+      <div class="vals">announcement 48px + header 62px · Log in + Sign up BOTH stay visible in the bar · sheet = semantic dialog "Navigation", full-width, no scrim · rows 50px, expandable groups · social row in sheet footer · their Menu tap-target is 28×28 — ours stays ≥40×40<br>→ scan verdict: v7's dqnav sheet (blur backdrop, Escape/backdrop close, full-width primary) is already the better pattern — mine the 50px rows + dialog semantics + social footer only</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">mobile degradation rules (all three)</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair);font-family:var(--mono);font-size:.7rem;line-height:2.1;color:var(--soft)">
+        <div>pinned sections → <span style="color:var(--ink)">plain stack</span> (no pin) on mobile</div>
+        <div>secondary bands → <span style="color:var(--ink)">horizontal 262px card strips</span></div>
+        <div>hero CTAs → <span style="color:var(--ink)">full-width ~342×44</span>, stacked</div>
+        <div>copy sits <span style="color:var(--ink)">above</span> its product image</div>
+        <div>auto-hide nav: <span style="color:var(--down)">none of the three do it</span></div>
+      </div>
+      <div class="vals">graphite hero wraps 3 lines @390 · cursor demo pane 720px tall dominates below fold · cursor changelog/blog cards 262px wide at x=19/290/562/833<br>→ ours: OlympusScene pin → stack fallback is the sanctioned mobile behavior; h-scroll strips for changelog-class content</div>
+    </div>
+  </div>
+</div></section>
+
 <footer style="margin-top:4rem;border-top:1px solid var(--hair)"><div class="wrap" style="padding-top:1.4rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.6rem">
   <span class="vals">frontend/design/references/mine · baseline: origin/main @ 1fba70d (deployed — Cloudflare Pages) · graphite.com (fetch 2026-07-02) · cursor.com + x.ai (deep scans 2026-06-29, bot-blocked to fetch)</span>
   <span class="vals">next: approve/kill blends in 07 → apply to reference pages → conform apps</span>
