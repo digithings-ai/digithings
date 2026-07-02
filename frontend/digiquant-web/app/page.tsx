@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Footer, Reveal } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
@@ -32,78 +31,11 @@ export default function Home() {
             researches, <b>Hermes</b> sizes the risk, <b>Kairos</b> executes. Open-source and
             self-hosted, so a fund that once needed a team now runs for one.
           </p>
-          <div className="dqhero-cta">
-            <Link className="btn btn-primary" href="/#olympus">
-              Open Olympus <span aria-hidden="true">→</span>
-            </Link>
-            <Link className="btn btn-ghost" href="/strategies">
-              Browse strategies
-            </Link>
-          </div>
-          <div className="trust-strip" style={{ marginTop: "1.7rem" }}>
-            <span className="trust-strip__item">NautilusTrader</span>
-            <span className="trust-strip__item">open core</span>
-            <span className="trust-strip__item">Atlas · Hermes · Kairos</span>
-          </div>
-          {/* Real values (no placeholders): 3 reference strategies (BTC/ETH/SOL,
-              public/strategies/index.json) and the 3 specialist agents named in
-              the lede. Static render — the count-up is the vanilla stat-counter.js
-              path (dead in React); a React count-up is a follow-up, not wired here. */}
-          <div className="stat-counter-row" style={{ marginTop: "2.1rem" }}>
-            <div className="stat-counter">
-              <span className="stat-counter__value">3</span>
-              <span className="stat-counter__label">reference strategies</span>
-            </div>
-            <div className="stat-counter">
-              <span className="stat-counter__value">3</span>
-              <span className="stat-counter__label">specialist agents</span>
-            </div>
+          <div className="dqhero-cta dqhero-scrollcue">
+            <span className="dqhero-scroll-label">Scroll to explore</span>
+            <div className="dqhero-scroll" aria-hidden="true" />
           </div>
         </HeroMesh>
-
-        <section className="section" id="features">
-          <div className="wrap">
-            <Reveal className="section-head center">
-              <span className="kicker">{"// what's inside"}</span>
-              <h2>Research, execution, and the terms to run it.</h2>
-            </Reveal>
-            <Reveal className="bento">
-              <Link className="bento__cell" href="#olympus">
-                <div className="bento__kicker">{"// pipeline"}</div>
-                <div className="bento__title">Research → execution</div>
-                <p className="bento__body">
-                  Atlas researches, Hermes sizes the risk, Kairos executes — one live pipeline you can
-                  watch end to end.
-                </p>
-                <span className="bento__cta">
-                  See the pipeline <span aria-hidden="true">→</span>
-                </span>
-              </Link>
-              <Link className="bento__cell" href="/strategies">
-                <div className="bento__kicker">{"// strategies"}</div>
-                <div className="bento__title">Reference strategies</div>
-                <p className="bento__body">
-                  BTC, ETH, and SOL reference strategies with full backtest tearsheets — clone and run
-                  them yourself.
-                </p>
-                <span className="bento__cta">
-                  Browse strategies <span aria-hidden="true">→</span>
-                </span>
-              </Link>
-              <Link className="bento__cell bento__cell--span-2" href="#pricing">
-                <div className="bento__kicker">{"// pricing"}</div>
-                <div className="bento__title">Own it, or have it hosted</div>
-                <p className="bento__body">
-                  Open core and free to self-host, or a managed Olympus runner with an SLA — the same
-                  engine either way.
-                </p>
-                <span className="bento__cta">
-                  See pricing <span aria-hidden="true">→</span>
-                </span>
-              </Link>
-            </Reveal>
-          </div>
-        </section>
 
         <ResearchPipeline />
 
@@ -172,25 +104,6 @@ export default function Home() {
               </Reveal>
             </div>
           </div>
-        </section>
-
-        <section aria-label="Get started">
-          <Reveal className="closing-cta">
-            <div className="closing-cta__inner">
-              <h2 className="closing-cta__title">One graph, research to execution.</h2>
-              <p className="closing-cta__sub">
-                Backtest, optimize, and route strategies on NautilusTrader with Atlas and Hermes.
-              </p>
-              <div className="closing-cta__actions">
-                <Link className="btn btn-primary" href="/#olympus">
-                  Open Olympus
-                </Link>
-                <Link className="closing-cta__secondary" href="/strategies">
-                  Browse strategies <span aria-hidden="true">→</span>
-                </Link>
-              </div>
-            </div>
-          </Reveal>
         </section>
       </main>
       <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />

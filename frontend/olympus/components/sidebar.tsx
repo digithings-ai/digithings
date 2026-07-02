@@ -7,7 +7,6 @@ import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { AtlasMark } from '@/components/atlas-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
-import StatusDot from '@/components/status-dot';
 import { NAV, type NavItem } from '@/lib/nav';
 
 function routeActive(pathname: string, base: string, href: string): boolean {
@@ -172,9 +171,6 @@ export default function Sidebar() {
           }`}
         >
           <SidebarSettings sidebarCollapsed={sidebarCollapsed} />
-          <div className={sidebarCollapsed ? 'mt-3 flex justify-center' : 'mt-3'}>
-            <StatusDot compact={sidebarCollapsed} />
-          </div>
         </div>
       </aside>
     </>
