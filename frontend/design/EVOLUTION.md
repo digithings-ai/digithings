@@ -304,7 +304,7 @@ Add to `tokens.css` when implementing primitives:
 - [ ] digiquant.io pricing FAQ + tier matrix — #1226
 - [ ] both landings closing CTA wiring — #1227
 - [x] `TrustStrip` integration logo variant (`.trust-strip--logos`) — #1229. x.ai-style integration-mark row (real stack: NautilusTrader · LangGraph · LiteLLM · Polars), grayscale/muted default → color on hover, composes on the base strip. Smoke demo (text wordmarks; production uses real logo `<img>` + `alt`) + `site/README.md`. No stock/fabricated logos.
-- [ ] `CaseStudyCard` primitive (P3, content-gated) — #1230
+- [x] `CaseStudyCard` primitive (P3, content-gated) — #1230. `.case-study` flat card (`{org} × digithings` label, quote, attribution + optional logo), composes in bento/capability-grid/`.h-scroll`. Content-gated — ships dormant, `.case-study--example` watermark for demos only, real attribution required in production. Smoke demo (watermarked example row) + `site/README.md` content shape.
 - [ ] Olympus status dot → DigiSmith (P3) — #1231
 
 ---
