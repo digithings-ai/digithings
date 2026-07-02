@@ -98,6 +98,21 @@ Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
 | `NEXT_PUBLIC_SUPABASE_URL`        | Supabase project URL. Used by every client-side reader, including `lib/snapshot-fetch.ts`.               |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase anon key. The frontend reads `daily_snapshots` under the `anon_read` RLS policy (migration 011). |
 | `NEXT_PUBLIC_OLYMPUS_VERSION`     | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
+| `NEXT_PUBLIC_DIGISMITH_URL`       | Optional. Base URL of DigiSmith for the sidebar-footer status dot (#1231). **Unset → the dot is not rendered** (disabled in local dev). See below.                              |
+
+### Status dot (`StatusDot`, #1231)
+
+The sidebar footer shows an optional operator health dot wired to DigiSmith
+`GET /v1/status`. It is **off unless `NEXT_PUBLIC_DIGISMITH_URL` is set**, polls
+every **60s**, and is fully non-blocking (fetched client-side after mount; first
+paint is never delayed). State mapping: `200 + tracing_configured` → green
+("all systems operational"), `200 +` not configured → amber ("degraded"),
+non-200 → red ("service error"), and any network/CSP/CORS/timeout failure →
+grey ("status unknown") — so an unreachable DigiSmith degrades gracefully. The
+label carries no PII (no request ids/hosts). Because the browser polls DigiSmith
+cross-origin, DigiSmith must allow the Olympus origin in CORS and the Olympus CSP
+`connect-src` must include the DigiSmith URL; if either blocks it, the dot simply
+shows grey. Logic: `lib/digismith-status.ts` + `components/status-dot.tsx`.
 
 When the URL or anon key is unset the daily-snapshot panel renders an empty
 banner pointing back to this section instead of throwing. On Cloudflare Pages
