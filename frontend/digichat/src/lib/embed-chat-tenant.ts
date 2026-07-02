@@ -1,4 +1,16 @@
 import type { ChatTenantContext } from "@/lib/chat-route-context";
+import { resolveEmbedTenantByHost, type EmbedTenantConfig } from "@/lib/embed-tenants";
+
+export type EmbedChatTenantContext = ChatTenantContext & {
+  embedConfig: EmbedTenantConfig | null;
+};
+
+/** The embedding page's origin: explicit X-Embed-Host header, else the referer URL. */
+export function embedHostOf(req: Request): string | null {
+  const header = req.headers.get("x-embed-host")?.trim();
+  if (header) return header;
+  return req.headers.get("referer") ?? req.headers.get("referrer");
+}
 
 export function isEmbedReferer(req: Request): boolean {
   const ref = req.headers.get("referer") ?? req.headers.get("referrer");
@@ -24,15 +36,24 @@ export function isEmbedChatRequest(req: Request): boolean {
 }
 
 /** Resolve tenant for embed-only POST /api/chat (unauthenticated). */
-export function resolveEmbedChatTenant(req: Request): ChatTenantContext | Response {
+export function resolveEmbedChatTenant(req: Request): EmbedChatTenantContext | Response {
   if (!isEmbedChatRequest(req)) {
     return new Response(JSON.stringify({ error: "not_embed_request" }), {
       status: 400,
       headers: { "content-type": "application/json" },
     });
   }
+  const registered = resolveEmbedTenantByHost(embedHostOf(req));
+  if (registered) {
+    // Presence in the registry IS the embed allowance for this host.
+    return {
+      tenantSlug: registered.slug,
+      ownerUserSub: "embed:anonymous",
+      embedConfig: registered,
+    };
+  }
   if (isEmbedAllowed(req)) {
-    return { tenantSlug: "embed", ownerUserSub: "embed:anonymous" };
+    return { tenantSlug: "embed", ownerUserSub: "embed:anonymous", embedConfig: null };
   }
   return new Response(
     JSON.stringify({
