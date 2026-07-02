@@ -119,6 +119,28 @@ Cursor-style hero trust line — a muted row of proof items, text or logos.
 | `.trust-strip` | Centered, wrapping flex row. |
 | `.trust-strip__item` | Text item (mono, `--ink-mute`) or `<img>` logo (28px height, grayscale + reduced opacity for visual parity across mixed-brand logos). |
 
+### `--logos` integration variant (EVOLUTION.md Phase E, #1229)
+
+`.trust-strip--logos` turns the strip into an x.ai-style **integration mark row**
+for the real stack (NautilusTrader · LangGraph · LiteLLM · Polars). Marks are
+muted/grayscale by default and lift to full color on hover; it composes on top of
+the base `.trust-strip` and coexists with the text friction variant. **Real
+integrations only — no stock/generic or fabricated customer logos.**
+
+```html
+<div class="trust-strip trust-strip--logos">
+  <span class="trust-strip__item"><img src="/logos/nautilustrader.svg" alt="NautilusTrader" /></span>
+  <span class="trust-strip__item"><img src="/logos/langgraph.svg" alt="LangGraph" /></span>
+  <!-- decorative-only marks use alt="" -->
+</div>
+```
+
+Wrap each logo as `<span class="trust-strip__item"><img alt="…"></span>` so the
+base `.trust-strip__item img` sizing (28px) applies; give every logo real `alt`
+text (or `alt=""` when purely decorative). The smoke page demos the layout with
+the four integration **names as text wordmarks** — production drops in the real
+logo assets. Contrast holds in both themes (grayscale marks over `--surface`).
+
 ## `reveal-up` (CSS-only utility, EVOLUTION.md Phase B)
 
 Opacity + translate enter animation. **This is not the old `site/reveal.js`**
