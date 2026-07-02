@@ -3,7 +3,6 @@ import {
   DIGICHAT_APP_CSP,
   DIGICHAT_APP_SECURITY_HEADERS,
   DIGICHAT_EMBED_SECURITY_HEADERS,
-  EMBED_FRAME_ANCESTORS,
   embedFrameAncestors,
   embedFrameAncestorsCsp,
 } from "./security-headers";
@@ -17,7 +16,8 @@ describe("security-headers", () => {
 
   it("allows only marketing origins on embed frame-ancestors", () => {
     const csp = embedFrameAncestorsCsp();
-    for (const origin of EMBED_FRAME_ANCESTORS) {
+    const firstPartyOrigins = ["'self'", "https://digithings.ai", "https://digiquant.io"];
+    for (const origin of firstPartyOrigins) {
       expect(csp).toContain(origin);
     }
     expect(csp).not.toContain("'none'");

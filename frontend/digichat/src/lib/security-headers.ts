@@ -11,9 +11,6 @@ const FIRST_PARTY_FRAME_ANCESTORS = [
   "https://digiquant.io",
 ] as const;
 
-/** @deprecated use embedFrameAncestors() instead */
-export const EMBED_FRAME_ANCESTORS = FIRST_PARTY_FRAME_ANCESTORS;
-
 /** Baseline CSP for the authenticated app (frame-ancestors deny). */
 export const DIGICHAT_APP_CSP = [
   "default-src 'self'",
