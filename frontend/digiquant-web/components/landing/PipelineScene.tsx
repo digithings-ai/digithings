@@ -226,6 +226,11 @@ export function OlympusScene() {
             <div className="dqp-scene-title">A hedge fund in a box.</div>
           </div>
 
+          {/* Graphite-style progress rail (#1215): scroll-synced .dqp-fill + engine
+              nodes lit in --accent as `gp` advances (see applyState). Reduced-motion-safe
+              (discrete state is scroll-driven, not rAF-gated) and mobile-simplified at the
+              820px breakpoint — #1215 is satisfied here, not via a separate ScrollyFeatures
+              refactor of this hand-tuned scene. */}
           <div className="dqp-rail">
             <div className="dqp-fill" ref={railFillRef} />
             {NODES.map(([num, label], i) => (

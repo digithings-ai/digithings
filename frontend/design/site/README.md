@@ -8,7 +8,8 @@ React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 (`.term*`/`.tl-*`, consumed by `frontend/web/src/components/Terminal.tsx`),
 sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
 **StatCounter**, **ChangelogBand**, **CodeSampleBand**, **CapabilityCard**,
-`.principles`, and `.footer*`. Terminal-CLI /
+**HorizontalScrollBand**, **ClosingCtaBand**, **FaqAccordion**, **PricingMatrix**,
+**HeroFeaturePicker**, **AnnouncementBar**, **CaseStudyCard**, `.principles`, and `.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -117,6 +118,28 @@ Cursor-style hero trust line — a muted row of proof items, text or logos.
 |-------|------|
 | `.trust-strip` | Centered, wrapping flex row. |
 | `.trust-strip__item` | Text item (mono, `--ink-mute`) or `<img>` logo (28px height, grayscale + reduced opacity for visual parity across mixed-brand logos). |
+
+### `--logos` integration variant (EVOLUTION.md Phase E, #1229)
+
+`.trust-strip--logos` turns the strip into an x.ai-style **integration mark row**
+for the real stack (NautilusTrader · LangGraph · LiteLLM · Polars). Marks are
+muted/grayscale by default and lift to full color on hover; it composes on top of
+the base `.trust-strip` and coexists with the text friction variant. **Real
+integrations only — no stock/generic or fabricated customer logos.**
+
+```html
+<div class="trust-strip trust-strip--logos">
+  <span class="trust-strip__item"><img src="/logos/nautilustrader.svg" alt="NautilusTrader" /></span>
+  <span class="trust-strip__item"><img src="/logos/langgraph.svg" alt="LangGraph" /></span>
+  <!-- decorative-only marks use alt="" -->
+</div>
+```
+
+Wrap each logo as `<span class="trust-strip__item"><img alt="…"></span>` so the
+base `.trust-strip__item img` sizing (28px) applies; give every logo real `alt`
+text (or `alt=""` when purely decorative). The smoke page demos the layout with
+the four integration **names as text wordmarks** — production drops in the real
+logo assets. Contrast holds in both themes (grayscale marks over `--surface`).
 
 ## `reveal-up` (CSS-only utility, EVOLUTION.md Phase B)
 
@@ -227,9 +250,11 @@ Activation" pattern — keyboard-navigable, `aria-selected`, focus ring.
 
 ```html
 <div class="code-sample-band">
-  <div class="code-sample-band__tabs" role="tablist" aria-label="Install command">
-    <button class="code-sample-band__tab" role="tab" aria-selected="true" aria-controls="panel-curl" id="tab-curl">curl</button>
-    <button class="code-sample-band__tab" role="tab" aria-selected="false" aria-controls="panel-py" id="tab-py" tabindex="-1">Python</button>
+  <div class="code-sample-band__bar">
+    <div class="code-sample-band__tabs" role="tablist" aria-label="Install command">
+      <button class="code-sample-band__tab" role="tab" aria-selected="true" aria-controls="panel-curl" id="tab-curl">curl</button>
+      <button class="code-sample-band__tab" role="tab" aria-selected="false" aria-controls="panel-py" id="tab-py" tabindex="-1">Python</button>
+    </div>
     <button class="code-sample-band__copy" type="button" aria-label="Copy code">copy</button>
   </div>
   <div class="code-sample-band__panels">
@@ -239,6 +264,10 @@ Activation" pattern — keyboard-navigable, `aria-selected`, focus ring.
 </div>
 ```
 
+The copy button sits **outside** `role="tablist"` (inside `.code-sample-band__bar`
+alongside it) — a tablist owns only `role="tab"` children, so a non-tab button
+inside it is an ARIA structure violation.
+
 ```js
 import { initCodeSampleBand } from '../code-sample-band.js';
 initCodeSampleBand(); // wires every .code-sample-band on the page
@@ -247,7 +276,8 @@ initCodeSampleBand(); // wires every .code-sample-band on the page
 | Class | Role |
 |-------|------|
 | `.code-sample-band` | Dark panel, `--term-bg`/`--term-hair`. |
-| `.code-sample-band__tabs` | `role="tablist"` row. |
+| `.code-sample-band__bar` | Flex header row holding the tablist + the copy button as siblings (padding/fill/border). |
+| `.code-sample-band__tabs` | `role="tablist"` row — owns only `role="tab"` children. |
 | `.code-sample-band__tab` | `role="tab"` button; `[aria-selected="true"]` gets the active surface treatment; `:focus-visible` ring. |
 | `.code-sample-band__copy` | Copies the active panel's `textContent` via `navigator.clipboard`; `.is-ok` after a successful copy (2s, matches `.tl-ok`'s `--up` color). |
 | `.code-sample-band__panel` | `role="tabpanel"` `<pre><code>` block; Geist Mono, wraps long lines. |
@@ -286,3 +316,295 @@ inside a `.bento__cell`.
 | `.capability-card__cta` | `Explore →` arrow link; the `span[aria-hidden]` arrow translates on card hover, matching `.btn`/`.bento__cta`. |
 
 Works unscoped in both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `HorizontalScrollBand` (CSS-only, EVOLUTION.md Phase E)
+
+Cursor-style horizontal snap row for changelog cards, testimonial rows, and
+mobile overflow bands. CSS-only — no `horizontal-scroll.js` was needed:
+keyboard access comes from making `.h-scroll__track` a focusable
+(`tabindex="0"`) native scroll container, so arrow keys scroll it; wrap it in
+`role="group"` with an `aria-label` so the row is announced. `prefers-reduced-motion:
+reduce` collapses the row to a vertical stack, so every card stays reachable
+without a horizontal gesture.
+
+```html
+<div class="h-scroll">
+  <div class="h-scroll__track" tabindex="0" role="group" aria-label="Recent releases">
+    <article class="h-scroll__card"><!-- card content --></article>
+    <article class="h-scroll__card"><!-- card content --></article>
+    <article class="h-scroll__card"><!-- card content --></article>
+  </div>
+</div>
+```
+
+| Class | Role |
+|-------|------|
+| `.h-scroll` | Positioning wrapper; applies an edge-fade `mask-image` on both inline edges (removed under reduced motion). |
+| `.h-scroll__track` | Focusable (`tabindex="0"`) flex scroll container — `scroll-snap-type: x mandatory`, hidden scrollbar, `:focus-visible` ring. Under `prefers-reduced-motion: reduce` it becomes a vertical column with no snap. |
+| `.h-scroll__card` | Snap child — fixed `262px` (Cursor changelog card width), flat `--surface` panel. Full-width when stacked under reduced motion. |
+
+CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+Content wiring (real changelog/testimonial data) is out of scope here — this
+primitive owns only the scroll/snap/masking contract, same division as
+TrustStrip and ChangelogBand.
+
+## `ClosingCtaBand` (CSS-only, EVOLUTION.md Phase E)
+
+Graphite/Cursor **pre-footer conversion band** — a full-width centered section
+placed directly above the footer: one literal headline, one primary `.btn`, and
+an optional mono secondary link. Compose with `.reveal-up` (above) for a
+scroll-in enter; reduced motion is already honored by the shared block. Copy
+tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-patterns.md)
+(literal verbs, no hype). Landing-page wiring is [#1227](https://github.com/digithings-ai/digithings/issues/1227) — this primitive owns only the markup/CSS contract.
+
+```html
+<section class="closing-cta reveal-up">
+  <div class="closing-cta__inner">
+    <h2 class="closing-cta__title">Build your agent stack in the open.</h2>
+    <p class="closing-cta__sub">Open-core orchestration, quant, RAG, and chat.</p>
+    <div class="closing-cta__actions">
+      <a class="btn btn-primary" href="https://github.com/digithings-ai">Start building</a>
+      <a class="closing-cta__secondary" href="/architecture">Read the architecture <span aria-hidden="true">&rarr;</span></a>
+    </div>
+  </div>
+</section>
+```
+
+**Copy slots** (fill from the consuming app; keep labels literal):
+
+| Slot | Content | Notes |
+|------|---------|-------|
+| `.closing-cta__title` | Headline | Literal, reads best ≤ ~20ch. |
+| `.closing-cta__sub` | Optional one-line support | ≤ ~48ch; omit for a bare title. |
+| `.closing-cta__actions` → `.btn.btn-primary` | Primary label + `href` | The single, literal action (e.g. "Start building", "Open Olympus"). |
+| `.closing-cta__secondary` | Optional secondary label + `href` | Mono, arrow-suffix; the `span[aria-hidden]` translates on hover, matching `.btn`/`.bento__cta`. |
+
+**Copy variants** (shown in `frontend/design/smoke/index.html`):
+
+| Surface | Title | Primary | Secondary |
+|---------|-------|---------|-----------|
+| digithings.ai | "Build your agent stack in the open." | Start building | Read the architecture → |
+| digiquant.io | "One graph, research to execution." | Open Olympus | Browse strategies → |
+
+| Class | Role |
+|-------|------|
+| `.closing-cta` | Full-width band — `padding-block: var(--section-y)`, centered text. |
+| `.closing-cta__inner` | `max-width: var(--wrap-wide)` centered column (title / sub / actions), gap-stacked. |
+| `.closing-cta__title` | Clamped display headline, `max-width: 20ch`. |
+| `.closing-cta__sub` | Muted one-line support, `max-width: 48ch`. |
+| `.closing-cta__actions` | Wrapping, centered row of the primary `.btn` + optional secondary. |
+| `.closing-cta__secondary` | Mono arrow-suffix link; hover tints `--ink` and nudges the arrow. |
+
+CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `FaqAccordion` (CSS-only, EVOLUTION.md Phase E)
+
+Graphite/Cursor pricing-page Q&A built on **native `<details>`/`<summary>`** — no
+JS. Give every `.faq__item` the **same `name`** to get a native "one open at a
+time" exclusive accordion (a modern-browser feature); omit `name` and each item
+toggles independently. The disclosure chevron rotates on `[open]`; its transition
+is dropped under `prefers-reduced-motion: reduce` (shared block). Keyboard access
+is native (`Tab` to the summary, `Enter`/`Space` to toggle).
+
+**Content shape** for a data-driven render (per site): `{ q, a }[]`.
+
+```html
+<div class="faq">
+  <details class="faq__item" name="pricing-faq" open>
+    <summary class="faq__q">Is DigiThings really open source?</summary>
+    <p class="faq__a">Yes — the core stack is MIT-licensed and self-hostable.</p>
+  </details>
+  <details class="faq__item" name="pricing-faq">
+    <summary class="faq__q">Do I need to bring my own model keys?</summary>
+    <p class="faq__a">For self-hosting, yes — any LiteLLM provider or a local model.</p>
+  </details>
+</div>
+```
+
+| Class | Role |
+|-------|------|
+| `.faq` | Column container, `max-width: 760px` for readable line length. |
+| `.faq__item` | One `<details>`; hairline divider below. Same `name` across items → exclusive accordion. |
+| `.faq__q` | The `<summary>` — flex row (label + chevron), default marker removed, `:focus-visible` ring. Rotating CSS chevron via `::after`. |
+| `.faq__a` | Answer body, `max-width: 60ch`, muted. |
+
+CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `PricingMatrix` (CSS-only, EVOLUTION.md Phase E)
+
+Open-core pricing tiers + optional comparison table. **Honest-copy policy**
+(EVOLUTION.md §10, anti-pattern #2): no invented usage caps or fake "limited AI
+requests" — the free self-hosted tier is genuinely the full MIT stack. Three
+tiers: **Self-hosted (MIT)** · **Managed (future)** · **Enterprise (contact)**.
+`.pricing__tier--featured` lifts one card with an `--accent` ring.
+
+**Content shape** (per site): `{ name, price, cadence?, desc, features: string[], cta: { label, href }, featured?: boolean }[]`.
+
+```html
+<div class="pricing">
+  <div class="pricing__tier">
+    <div class="pricing__name">Self-hosted</div>
+    <div class="pricing__price">Free <small>· MIT</small></div>
+    <p class="pricing__desc">Run the full stack on your own infrastructure.</p>
+    <ul class="pricing__features"><li>All core services</li><li>Bring your own key</li></ul>
+    <div class="pricing__cta"><a class="btn btn-ghost" href="/docs">Read the docs</a></div>
+  </div>
+  <div class="pricing__tier pricing__tier--featured"><!-- Managed --></div>
+  <div class="pricing__tier"><!-- Enterprise --></div>
+</div>
+
+<!-- optional feature × tier comparison -->
+<table class="pricing-table">
+  <thead><tr><th>Feature</th><th>Self-hosted</th><th>Managed</th><th>Enterprise</th></tr></thead>
+  <tbody>
+    <tr><th scope="row">Core services</th><td class="is-yes">✓</td><td class="is-yes">✓</td><td class="is-yes">✓</td></tr>
+    <tr><th scope="row">Managed upgrades</th><td class="is-no">—</td><td class="is-yes">✓</td><td class="is-yes">✓</td></tr>
+  </tbody>
+</table>
+```
+
+| Class | Role |
+|-------|------|
+| `.pricing` | Grid — 1 column below 768px, `repeat(3, 1fr)` at `min-width: 768px`; `max-width: var(--wrap-wide)`. |
+| `.pricing__tier` | Flat `--surface` card; `.pricing__cta .btn` pins to the bottom, full-width. |
+| `.pricing__tier--featured` | Highlighted tier — `--accent` border + ring. |
+| `.pricing__name` / `.pricing__price` / `.pricing__desc` | Mono tier label, display price (`<small>` for cadence/licence), muted blurb. |
+| `.pricing__features` | Check-bulleted list — `✓` in `--up` via `::before`. |
+| `.pricing-table` | Optional comparison grid; `.is-yes` (`--up`) / `.is-no` (`--ink-mute`) cells; first column left-aligned, tier columns centered. |
+
+CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `HeroFeaturePicker` (CSS + `hero-picker.js`, EVOLUTION.md Phase E)
+
+Graphite-style **icon-tab row** below the hero that swaps which `ProductFrame`
+(#1202) preview shows — e.g. Olympus / Strategies / Pipeline on digiquant.io.
+**Static UI crops only** (no video swap — lighter weight per the design spec).
+Follows the WAI-ARIA "Tabs" pattern; each panel wraps a `.product-frame`, so it
+inherits the container-query sizing and never clips at browser zoom. Tabs are
+icon-only (`~53×53px`, Graphite reference) — give each an `aria-label`.
+
+```html
+<div class="hero-picker">
+  <div class="hero-picker__tabs" role="tablist" aria-label="Preview context">
+    <button class="hero-picker__tab" role="tab" id="hp-tab-olympus"
+            aria-controls="hp-panel-olympus" aria-selected="true" aria-label="Olympus">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><!-- icon --></svg>
+    </button>
+    <button class="hero-picker__tab" role="tab" id="hp-tab-strategies"
+            aria-controls="hp-panel-strategies" aria-selected="false" tabindex="-1" aria-label="Strategies">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><!-- icon --></svg>
+    </button>
+  </div>
+  <div class="hero-picker__panels">
+    <div class="hero-picker__panel" role="tabpanel" id="hp-panel-olympus" aria-labelledby="hp-tab-olympus">
+      <div class="product-frame"><div class="product-frame__surface"><!-- Olympus crop --></div></div>
+    </div>
+    <div class="hero-picker__panel" role="tabpanel" id="hp-panel-strategies" aria-labelledby="hp-tab-strategies" hidden>
+      <div class="product-frame"><div class="product-frame__surface"><!-- Strategies crop --></div></div>
+    </div>
+  </div>
+</div>
+```
+
+```js
+import { initHeroPicker } from '../hero-picker.js';
+initHeroPicker(); // wires every .hero-picker on the page
+```
+
+| Class | Role |
+|-------|------|
+| `.hero-picker` | Centered column — icon tablist above, swapped panels below. |
+| `.hero-picker__tabs` | `role="tablist"` row of icon buttons. |
+| `.hero-picker__tab` | `role="tab"` icon button, `53×53px`; `[aria-selected="true"]` tints `--accent`; `:focus-visible` ring. Icon-only → needs `aria-label`. |
+| `.hero-picker__panels` / `.hero-picker__panel` | `role="tabpanel"` regions; inactive ones carry the `hidden` attribute. Each wraps a `.product-frame`. |
+
+`hero-picker.js`'s `initHeroPicker()` wires click + keyboard (`ArrowLeft`/`ArrowRight`/
+`Home`/`End`, roving `tabindex`) on every `[role="tab"]`, toggling the matching
+`[role="tabpanel"]`'s `hidden` — the same tab model as `code-sample-band.js`. It
+normalizes the initial state from the `aria-selected` tab without stealing focus
+on load. No network calls, pure DOM. `prefers-reduced-motion` needs no special
+handling — the swap is an instant `hidden` toggle, not an animation.
+
+CSS-only styling, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `AnnouncementBar` (CSS + `announcement.js`, EVOLUTION.md Phase E)
+
+Graphite-style **48px full-width notice above the nav**, **content-gated**.
+`announcement.js` renders it only when handed enabled content, so the bar is
+**off by default** — an empty config, `{ enabled: false }`, or missing `text`
+renders nothing. When `href` is set the whole bar is the link (stretched-link
+overlay); the optional dismiss button persists a per-`id` dismissal in
+`localStorage`. No slide-in animation, so `prefers-reduced-motion` needs no
+special handling. `href` is scheme-guarded (relative / `#` / `http(s)` / `mailto`
+only) and all text is escaped before insertion.
+
+**Content shape** (`announcement.json` or inline; see
+[`../announcement-example.json`](../announcement-example.json)):
+
+```json
+{ "enabled": true, "id": "2026-07-launch", "text": "…", "href": "/blog/launch", "linkLabel": "Read more" }
+```
+
+```html
+<div id="announcement" hidden></div>
+```
+
+```js
+import { initAnnouncement } from '../announcement.js';
+// inline config, or fetch('/announcement.json').then(r => r.json())
+initAnnouncement({ selector: '#announcement', data: cfg });
+```
+
+**Enable procedure (per site):** add `announcement.json` with `enabled: true` and
+`text` (and optionally `href`/`linkLabel`/`id`), then call `initAnnouncement`
+with it. To disable, set `enabled: false` or remove the content — nothing
+renders. **Shipped default is disabled** (no content wired), so neither
+digithings.ai nor digiquant.io shows a bar until content is added. Bump `id` to
+re-show the bar after users have dismissed a previous one.
+
+| Class | Role |
+|-------|------|
+| `.announcement` | 48px flat `--surface` bar, hairline bottom border, centered text. |
+| `.announcement--link` | Set when `href` is present — enables the stretched-link overlay (whole bar clickable). |
+| `.announcement__text` | Message text; wrap literals in `<strong>` if needed. |
+| `.announcement__link` | The link (`--accent`, arrow-suffix); its `::after` stretches over the bar. |
+| `.announcement__dismiss` | Optional close button — sits above the overlay (`z-index`), persists dismissal by `id`. |
+
+CSS + `announcement.js`, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `CaseStudyCard` (CSS-only, EVOLUTION.md Phase E · P3)
+
+Graphite `{org} × product` social-proof card — a flat `--surface` panel (same
+sizing family as `.bento__cell`/`.capability-card`) with a mono `{org} × digithings`
+label, a quote, and an attribution row with an optional logo slot. Drop it into a
+`.bento`, `.capability-grid`, or an `.h-scroll` track (for a horizontal row).
+
+**Content-gated (anti-pattern #2 — no fabricated testimonials).** Ship dormant:
+no card renders until a real quote exists. **Production requires real attribution**
+— a name, title, company, or a public GitHub/OSS reference. Use
+`.case-study--example` for a watermarked placeholder in demos/docs **only**.
+
+**Content shape** (per site): `{ org, quote, name, title?, href?, logo? }`.
+
+```html
+<article class="case-study">
+  <div class="case-study__label">Acme × digithings</div>
+  <blockquote class="case-study__quote">A real, attributable quote.</blockquote>
+  <div class="case-study__attr">
+    <img class="case-study__logo" src="/logos/acme.svg" alt="Acme" />
+    <span><strong>Jane Dev</strong> · Staff Engineer, Acme</span>
+  </div>
+</article>
+```
+
+| Class | Role |
+|-------|------|
+| `.case-study` | Flat `--surface` card, `--hair` border, `--r-lg`; column layout, quote grows to push attribution to the bottom. |
+| `.case-study__label` | Mono `{org} × digithings` eyebrow. |
+| `.case-study__quote` | The quote (`<blockquote>`), `--ink`. |
+| `.case-study__attr` | Attribution row — name (`<strong>`) + title/company, optional `.case-study__logo`. |
+| `.case-study__logo` | Optional 24px grayscale logo (real assets only, with `alt`). |
+| `.case-study--example` | Adds an "EXAMPLE" watermark — demos/docs only, never production. |
+
+CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+**P3** — defer content until real quotes or OSS adopter stories exist.

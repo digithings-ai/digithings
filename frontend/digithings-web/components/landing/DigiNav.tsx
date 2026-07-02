@@ -4,12 +4,17 @@
  * Wide: brand · inline links · theme + GitHub.
  * Narrow: brand · theme + GitHub + hamburger — links + Ask digichat live in a full-height sheet.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ThemeToggle } from "@digithings/web";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
 import { DigiChatMark } from "@/components/DigiChatMark";
+
+// Mount gate: server + first (hydration) client render read `false`; the client
+// re-reads `true` post-hydration. Keeps the portal out of the SSR/hydration tree
+// so it can't cause a mismatch — without a setState-in-effect cascade.
+const emptySubscribe = () => () => {};
 
 function GitHubGlyph() {
   return (
@@ -47,7 +52,11 @@ function NavLinks({
 export function DigiNav() {
   const navRef = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const portalReady = typeof window !== "undefined";
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
@@ -84,7 +93,7 @@ export function DigiNav() {
   }, [menuOpen, closeMenu]);
 
   const menuOverlay =
-    portalReady &&
+    mounted &&
     createPortal(
       <>
         <div
