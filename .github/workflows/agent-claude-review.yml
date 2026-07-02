@@ -24,6 +24,10 @@ on:
       - 'docs/**'
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/PULL_REQUEST_TEMPLATE.md'
+      # Presentation-only surfaces — /code-review rarely adds value on CSS /
+      # shared design system, and design iteration pushes frequently (#1310).
+      - 'frontend/design/**'
+      - '**.css'
 
 concurrency:
   # Cancel in-flight review when the PR is updated — avoids stacking reviews
