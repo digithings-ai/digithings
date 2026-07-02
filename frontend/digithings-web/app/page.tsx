@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Footer, Reveal } from "@digithings/web";
 import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "./_nav";
 import { DigiNav } from "@/components/landing/DigiNav";
@@ -182,25 +181,6 @@ supervisor → routes across research · retrieval · chat
             <p className="dt-contact-email">
               <a href={`mailto:${DT_CONTACT_EMAIL}`}>{DT_CONTACT_EMAIL}</a>
             </p>
-          </Reveal>
-        </section>
-
-        <section aria-label="Get started">
-          <Reveal className="closing-cta">
-            <div className="closing-cta__inner">
-              <h2 className="closing-cta__title">Build your agent stack in the open.</h2>
-              <p className="closing-cta__sub">
-                Open-core orchestration, quant, RAG, and chat — self-hosted or bring your own key.
-              </p>
-              <div className="closing-cta__actions">
-                <Link className="btn btn-primary" href="/chat">
-                  Ask digichat
-                </Link>
-                <Link className="closing-cta__secondary" href="/docs">
-                  Read the docs <span aria-hidden="true">→</span>
-                </Link>
-              </div>
-            </div>
           </Reveal>
         </section>
       </main>

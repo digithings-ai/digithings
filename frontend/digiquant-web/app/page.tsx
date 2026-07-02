@@ -173,25 +173,6 @@ export default function Home() {
             </div>
           </div>
         </section>
-
-        <section aria-label="Get started">
-          <Reveal className="closing-cta">
-            <div className="closing-cta__inner">
-              <h2 className="closing-cta__title">One graph, research to execution.</h2>
-              <p className="closing-cta__sub">
-                Backtest, optimize, and route strategies on NautilusTrader with Atlas and Hermes.
-              </p>
-              <div className="closing-cta__actions">
-                <Link className="btn btn-primary" href="/#olympus">
-                  Open Olympus
-                </Link>
-                <Link className="closing-cta__secondary" href="/strategies">
-                  Browse strategies <span aria-hidden="true">→</span>
-                </Link>
-              </div>
-            </div>
-          </Reveal>
-        </section>
       </main>
       <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
     </>
