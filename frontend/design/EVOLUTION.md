@@ -1,6 +1,17 @@
 # DigiThings design evolution
 
-**Status:** Living document · **Last updated:** 2026-07-01
+**Status:** Living document · **Last updated:** 2026-07-02
+
+> **⚠️ 2026-07-02 — landing wiring reverted (design review, #1308).** After review,
+> the epic's live landing/redesign changes were reverted from digithings.ai and
+> digiquant.io. **Kept:** the digiquant.io `/#pricing` + FAQ section (#1226) and the
+> DqNav/DigiNav hydration fix (#1291/#1296). **Reverted:** digithings hero
+> trust-strip + ProductFrame + 4-module bento (#1210/#1211), digiquant hero CTAs +
+> trust-strip + stat row + feature bento (#1213/#1214), the closing-CTA wiring on
+> both sites (#1227), the DigiChat `/welcome` route (#1218), and the Olympus status
+> dot (#1231). The shared CSS/JS **primitives below still exist** in `frontend/design/`
+> (unused except by `/#pricing`); the checklist marks reflect what was *built*, not
+> what is currently wired live. See #1308.
 
 This file synthesizes three external north stars — [Graphite](references/graphite.com.md),
 [Cursor](references/cursor.com.md), [x.ai](references/x.ai.md) — with our current
