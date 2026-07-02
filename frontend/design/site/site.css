@@ -266,6 +266,55 @@ a { color: inherit; text-decoration: none; }
 .closing-cta__secondary span[aria-hidden] { transition: transform var(--duration-hover) var(--ease-glide); }
 .closing-cta__secondary:hover span[aria-hidden] { transform: translateX(3px); }
 
+/* ── FAQ accordion (Graphite/Cursor pricing-page Q&A) ───────────────────
+   Native <details>/<summary> — no JS. For an exclusive "one open at a time"
+   accordion, give every .faq__item the same name attribute
+   (<details class="faq__item" name="pricing-faq">) — a modern-browser native
+   exclusive-accordion feature; omit name and each item toggles independently.
+   The disclosure chevron rotates on [open]; its transition is dropped under
+   reduced motion (shared block below). Data-driven content shape (per site):
+   { q, a }[] — see site/README.md.
+   ───────────────────────────────────────────────────────────────────── */
+.faq { max-width: 760px; width: 100%; margin-inline: auto; }
+.faq__item { border-bottom: 1px solid var(--hair); }
+.faq__q { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.15rem 0; font-size: 1rem; font-weight: 500; color: var(--ink); cursor: pointer; list-style: none; }
+.faq__q::-webkit-details-marker { display: none; }
+.faq__q::after { content: ""; flex: 0 0 auto; width: 0.55rem; height: 0.55rem; border-right: 1.5px solid var(--ink-mute); border-bottom: 1.5px solid var(--ink-mute); transform: rotate(45deg); transition: transform var(--duration-hover) var(--ease-glide); }
+.faq__item[open] .faq__q::after { transform: rotate(-135deg); }
+.faq__q:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--r-sm); }
+.faq__a { max-width: 60ch; margin: 0; padding: 0 0 1.25rem; color: var(--ink-soft); font-size: 0.95rem; line-height: 1.6; }
+
+/* ── pricing matrix (open-core tiers + optional comparison table) ───────
+   3 honest open-core tiers — no invented usage caps or fake "limited AI
+   requests" (EVOLUTION.md §10, anti-pattern #2). Tier content shape (per
+   site): { name, price, cadence?, desc, features: string[], cta: {label, href},
+   featured?: bool }[] — see site/README.md. .pricing__tier--featured lifts one
+   card with an --accent ring. The optional .pricing-table gives a feature ×
+   tier comparison grid with ✓ (--up) / — (--ink-mute) cells.
+   ───────────────────────────────────────────────────────────────────── */
+.pricing { display: grid; grid-template-columns: 1fr; gap: 1.25rem; width: 100%; max-width: var(--wrap-wide); margin-inline: auto; }
+.pricing__tier { display: flex; flex-direction: column; gap: 0.9rem; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 1.75rem; }
+.pricing__tier--featured { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pricing__name { font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); }
+.pricing__price { font-size: clamp(1.6rem, 3vw, 2.1rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+.pricing__price small { font-size: 0.9rem; font-weight: 400; color: var(--ink-mute); letter-spacing: 0; }
+.pricing__desc { font-size: 0.9rem; color: var(--ink-soft); line-height: 1.55; }
+.pricing__features { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; font-size: 0.9rem; color: var(--ink-soft); }
+.pricing__features li { display: flex; align-items: flex-start; gap: 0.55rem; }
+.pricing__features li::before { content: "✓"; flex: 0 0 auto; color: var(--up); font-weight: 600; line-height: 1.4; }
+.pricing__cta { margin-top: auto; }
+.pricing__cta .btn { width: 100%; justify-content: center; }
+@media (min-width: 768px) {
+  .pricing { grid-template-columns: repeat(3, 1fr); }
+}
+.pricing-table { width: 100%; max-width: var(--wrap-wide); margin-inline: auto; border-collapse: collapse; font-size: 0.9rem; }
+.pricing-table th, .pricing-table td { padding: 0.8rem 1rem; text-align: left; border-bottom: 1px solid var(--hair); }
+.pricing-table thead th { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
+.pricing-table th + th, .pricing-table td + td { text-align: center; }
+.pricing-table tbody th { font-weight: 500; color: var(--ink); }
+.pricing-table .is-yes { color: var(--up); font-weight: 600; }
+.pricing-table .is-no { color: var(--ink-mute); }
+
 /* ── principles ─────────────────────────────────────────────────────── */
 .principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
 .principle { padding-top: 1.4rem; border-top: 1px solid var(--hair-2); }
@@ -293,5 +342,6 @@ a { color: inherit; text-decoration: none; }
   .glow { animation: none; }
   .term-cursor { animation: none; }
   .reveal-up { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .faq__q::after { transition: none; }
   * { scroll-behavior: auto !important; }
 }
