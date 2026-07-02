@@ -161,6 +161,25 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   .tcaret{animation:none}
   .pin-tab{transition:none}
 }
+
+/* ── PAGE GRAMMARS (§10+) ─────────────────────────────────── */
+.pagemap{max-width:760px;display:flex;flex-direction:column;gap:6px;counter-reset:pm}
+.pm-blk{border:1px solid var(--hair);border-radius:8px;background:var(--bg);padding:.6rem .9rem;display:flex;gap:1rem;align-items:baseline}
+.pm-blk span{margin-left:auto}
+.pm-blk::before{counter-increment:pm;content:counter(pm,decimal-leading-zero);font-family:var(--mono);font-size:.56rem;color:var(--mute);letter-spacing:.1em}
+.pm-blk b{font-family:var(--mono);font-weight:400;font-size:.68rem;letter-spacing:.08em;color:var(--ink);white-space:nowrap;flex:0 0 auto}
+.pm-blk span{font-family:var(--mono);font-size:.6rem;color:var(--mute);text-align:right;line-height:1.7}
+.pm-blk.hot{border-color:rgba(79,163,122,.45)}
+.pm-tag{font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;color:var(--em);border:1px solid rgba(79,163,122,.45);border-radius:999px;padding:.05rem .45rem;white-space:nowrap}
+.chip-prop{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--warn);border:1px solid rgba(224,179,65,.4);border-radius:4px;padding:.12rem .45rem;vertical-align:middle}
+
+/* mythology posters — the sanctioned luminous moment, one per subsystem hero */
+.posters{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));max-width:1000px}
+.poster{position:relative;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:radial-gradient(130% 95% at 50% 115%,rgba(79,163,122,.17),transparent 62%),var(--bg);padding:3rem 1.3rem 1.1rem;min-height:270px;display:flex;flex-direction:column;justify-content:flex-end}
+.poster .p-name{font-family:var(--serif);font-style:italic;font-weight:300;font-size:clamp(2.4rem,4.5vw,3.4rem);line-height:.95;letter-spacing:-.02em}
+.poster .p-role{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;color:var(--em);margin-top:.75rem}
+.poster .p-fine{font-family:var(--mono);font-size:.56rem;color:var(--mute);margin-top:.4rem;line-height:1.8}
+.poster .regmark{font-size:.8rem}
 </style>
 </head>
 <body>
@@ -528,13 +547,135 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   </div>
 </section>
 
+<section class="canon-sec" id="s10">
+  <span class="sec-num">10</span>
+  <div class="kick">// page grammar — digiquant.io</div>
+  <h2 class="canon">The hero <em>is</em> the terminal.</h2>
+  <p class="sec-note">digiquant.io sells proof, so the product frame does the selling. No screenshot-of-a-screenshot, no abstract illustration: the hero furniture is the live terminal from §05 and the first number the visitor reads has a date on it.</p>
+  <div class="lab">
+    <div class="anno">flagship H1 — <b>live v7 recipe, shown at true size: fraunces 400 · clamp(2.5rem,6vw,4.7rem) · tracking −.025em · em → italic emerald · never bolded (law 03)</b></div>
+    <div class="v-serif" style="font-size:clamp(2.5rem,6vw,4.7rem);line-height:1.02;letter-spacing:-.025em;max-width:14ch">Backtests that <em style="color:var(--em)">testify.</em></div>
+    <div class="v-mono num" style="font-size:.72rem;color:var(--soft);margin-top:1.1rem"><span style="color:var(--up)">●</span> live · 3 strategies · 3,102 bars · refreshed 2026-06-30</div>
+
+    <div class="anno" style="margin-top:1.8rem">alt hero, stacked declarative — <b>okx move: three verbs, one per line, full stop each · honest to the pipeline</b> <span class="chip-prop">proposal — pending approval</span></div>
+    <div class="v-serif" style="font-size:clamp(1.6rem,3.4vw,2.4rem);line-height:1.15">Research. Risk. <em style="color:var(--em)">Execution.</em></div>
+
+    <div class="anno" style="margin-top:1.8rem">the page map — <b>seven blocks, in this order, nothing else · the pin goes on block 03 and nowhere else</b></div>
+    <div class="pagemap">
+      <div class="pm-blk"><b>nav</b><span>transparent → blur on scroll · auto-hide (our signature) · ≤5 links + one CTA</span></div>
+      <div class="pm-blk hot"><b>hero — the terminal</b><span>fraunces H1 + dated proof line + btnP/ghost · §05 terminal as furniture · the ONE entrance <span class="pm-tag">entrance</span></span></div>
+      <div class="pm-blk hot"><b>pipeline story</b><span>data → signal → proof, scrub-driven (§09 anatomy) <span class="pm-tag">the pin</span></span></div>
+      <div class="pm-blk"><b>strategies</b><span>tearsheet strips · real numbers, dated · Chart|Table toggle (§06)</span></div>
+      <div class="pm-blk"><b>quote-as-display</b><span>exactly one · the stat carries the sentence (§06)</span></div>
+      <div class="pm-blk"><b>pricing + faq</b><span>hairline tiers · native exclusive accordion (§07) · shipped 2026-06, human-approved</span></div>
+      <div class="pm-blk"><b>doctrine + footer</b><span>honesty block · dated proof line · the bloom (§08)</span></div>
+    </div>
+    <div class="prov" style="margin-top:.7rem">rules: no closing-CTA band — the pricing section is the close · no logo strip, no stat counters (banned list, §00) · every number above the fold has a refresh date · scroll cue in hero is kept from live v7</div>
+  </div>
+</section>
+
+<section class="canon-sec" id="s11">
+  <span class="sec-num">11</span>
+  <div class="kick">// page grammar — digithings.ai</div>
+  <h2 class="canon">Eight services. <em>One argument.</em></h2>
+  <p class="sec-note">digithings.ai is the umbrella: it argues that the stack composes. The copy device is provenance-as-typography taken to its conclusion — the real config is the content. Ports, repo paths, and licenses do the persuading.</p>
+  <div class="lab">
+    <div class="anno">convergence diagram — <b>candidate hero device: services flow into the supervisor, the supervisor flows into the surfaces · flagship path in emerald, everything else hairline</b> <span class="chip-prop">proposal — pending approval</span></div>
+    <div style="border:1px solid var(--hair);border-radius:10px;background:var(--bg);padding:1rem;max-width:760px;overflow-x:auto">
+      <svg viewBox="0 0 720 290" style="width:100%;min-width:560px;font-family:var(--mono);font-size:11px" role="img" aria-label="seven services converge into digigraph, the supervisor, which serves olympus and digichat">
+        <g fill="#9AA0A6">
+          <text x="16" y="34">digiquant <tspan fill="#6B7177">:8001</tspan></text>
+          <text x="16" y="69">digisearch <tspan fill="#6B7177">:8002</tspan></text>
+          <text x="16" y="104">digismith <tspan fill="#6B7177">:8003</tspan></text>
+          <text x="16" y="139">digivault <tspan fill="#6B7177">:8004</tspan></text>
+          <text x="16" y="174">digikey <tspan fill="#6B7177">:8005</tspan></text>
+          <text x="16" y="209">digiclaw <tspan fill="#6B7177">· heartbeat</tspan></text>
+          <text x="16" y="244">digibase <tspan fill="#6B7177">· shared lib</tspan></text>
+        </g>
+        <g fill="none" stroke="rgba(255,255,255,.14)" stroke-width="1">
+          <path d="M150,30 C 220,30 235,135 300,135" stroke="#4fa37a" stroke-opacity=".8"/>
+          <path d="M150,65 C 220,65 235,135 300,135"/>
+          <path d="M150,100 C 220,100 235,135 300,135"/>
+          <path d="M150,135 C 220,135 235,135 300,135"/>
+          <path d="M150,170 C 220,170 235,135 300,135"/>
+          <path d="M150,205 C 220,205 235,135 300,135"/>
+          <path d="M150,240 C 220,240 235,135 300,135"/>
+          <path d="M440,135 C 500,135 510,95 558,95"/>
+          <path d="M440,135 C 500,135 510,175 558,175"/>
+        </g>
+        <rect x="300" y="112" width="140" height="46" rx="8" fill="#121417" stroke="rgba(255,255,255,.16)"/>
+        <text x="370" y="131" text-anchor="middle" fill="#ECEEF0">digigraph</text>
+        <text x="370" y="147" text-anchor="middle" fill="#6B7177" font-size="9.5">:8000 · supervisor</text>
+        <g fill="#9AA0A6">
+          <text x="566" y="99">olympus <tspan fill="#6B7177">· dashboard</tspan></text>
+          <text x="566" y="179">digichat <tspan fill="#6B7177">:3005</tspan></text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="anno" style="margin-top:1.8rem">service index — <b>the config IS the copy: real ports, real roles, mono first column · this table replaces every capability bento</b></div>
+    <table class="canon" style="max-width:760px">
+      <tr><th>service</th><th>port</th><th>role</th></tr>
+      <tr><td>digigraph</td><td class="num">8000</td><td>langgraph orchestration — the supervisor</td></tr>
+      <tr><td>digiquant</td><td class="num">8001</td><td>nautilustrader quant · atlas + hermes sub-graphs</td></tr>
+      <tr><td>digisearch</td><td class="num">8002</td><td>retrieval-augmented generation</td></tr>
+      <tr><td>digismith</td><td class="num">8003</td><td>tracing</td></tr>
+      <tr><td>digivault</td><td class="num">8004</td><td>markdown vault management</td></tr>
+      <tr><td>digikey</td><td class="num">8005</td><td>jwt + api keys</td></tr>
+      <tr><td>digiclaw</td><td class="num" style="color:var(--mute)">—</td><td>heartbeat + audit</td></tr>
+      <tr><td>digibase</td><td class="num" style="color:var(--mute)">—</td><td>shared library</td></tr>
+    </table>
+
+    <div class="anno" style="margin-top:1.8rem">the page map — <b>six blocks · the flagship earns the numbers: digithings borrows ONE digiquant tearsheet as its proof, nothing synthetic</b></div>
+    <div class="pagemap">
+      <div class="pm-blk"><b>nav</b><span>same grammar as digiquant · base accent cyan #3DD6C4 stays digithings' mark</span></div>
+      <div class="pm-blk hot"><b>hero — the argument</b><span>fraunces: "The stack is the proof." + convergence diagram or artifact collage <span class="pm-tag">entrance</span></span></div>
+      <div class="pm-blk"><b>service index</b><span>the table above · ports as provenance</span></div>
+      <div class="pm-blk"><b>proof crossover</b><span>one real digiquant tearsheet strip (§06) · dated</span></div>
+      <div class="pm-blk"><b>open-core doctrine</b><span>MIT · read the code before you trust the chart</span></div>
+      <div class="pm-blk"><b>footer</b><span>proof line + bloom (§08)</span></div>
+    </div>
+    <div class="prov" style="margin-top:.7rem">no pin on digithings.ai — the pin belongs to the flagship story only · digithings is the reading room, digiquant is the trading floor</div>
+  </div>
+</section>
+
+<section class="canon-sec" id="s12">
+  <span class="sec-num">12</span>
+  <div class="kick">// subsystem posters — atlas · hermes · kairos</div>
+  <h2 class="canon">Name the machinery. <em>Honor it.</em></h2>
+  <p class="sec-note">Each sub-graph hero gets one poster: the second sanctioned luminous moment (law 04). Giant lowercase Fraunces italic, an emerald bloom rising from below, a six-word epithet that is honest to the code, and fine print that is a real repo path or a real function — never lore.</p>
+  <div class="lab">
+    <div class="posters">
+      <div class="poster">
+        <span class="regmark" style="top:.7rem;left:.8rem">+</span>
+        <div class="p-name">atlas</div>
+        <div class="p-role">research sub-graph · olympus</div>
+        <div class="p-fine">he carries the data.<br>digiquant/src/digiquant/olympus/atlas/</div>
+      </div>
+      <div class="poster">
+        <span class="regmark" style="top:.7rem;left:.8rem">+</span>
+        <div class="p-name">hermes</div>
+        <div class="p-role">risk &amp; execution · olympus</div>
+        <div class="p-fine">he carries the orders.<br>digiquant/src/digiquant/olympus/hermes/</div>
+      </div>
+      <div class="poster">
+        <span class="regmark" style="top:.7rem;left:.8rem">+</span>
+        <div class="p-name">kairos</div>
+        <div class="p-role">exploration agent</div>
+        <div class="p-fine">he knows the moment.<br>searches the research library · constrains idea generation</div>
+      </div>
+    </div>
+    <div class="prov" style="margin-top:.8rem">grammar: name lowercase fraunces 300 italic · one bloom per poster, nowhere else on the page · epithet ≤ 6 words, honest to function · fine print = real path or real function only · duotone — emerald on near-black, no third color · registration mark top-left</div>
+  </div>
+</section>
+
 </main>
 
 <footer class="bloom" style="border-top:1px solid var(--hair);margin-top:5rem;padding:3.5rem 0 2.5rem">
   <div class="wrap" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
     <div>
       <div class="v-mono" style="font-weight:500;font-size:1.15rem">digi<span style="color:var(--em)">things</span></div>
-      <div class="prov" style="margin-top:.5rem">canon v1 · iteration 3 of N · shipped: foundation §00–04 · components §05–08 · motion lab §09 · next: page grammars §10+</div>
+      <div class="prov" style="margin-top:.5rem">canon v1 · iteration 4 of N · shipped: foundation §00–04 · components §05–08 · motion §09 · page grammars §10–12 · next: olympus + ivory docs + the invisibles</div>
     </div>
     <div class="v-mono" style="font-size:.72rem;color:var(--soft)"><span id="sysdot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--up);margin-right:.45rem"></span>all systems yours</div>
   </div>
