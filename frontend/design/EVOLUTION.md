@@ -303,7 +303,7 @@ Add to `tokens.css` when implementing primitives:
 - [x] `AnnouncementBar` primitive (content-gated) — #1225. 48px full-width `.announcement` bar + `announcement.js`; renders only for enabled content (empty/`{enabled:false}` → nothing, so OFF by default), stretched-link when `href` set (scheme-guarded), dismiss persists per-`id` in localStorage, escaped text. No animation (reduced-motion safe). `announcement-example.json` shape + smoke demo + `site/README.md` (enable procedure). React landing wiring deferred (content-driven).
 - [ ] digiquant.io pricing FAQ + tier matrix — #1226
 - [ ] both landings closing CTA wiring — #1227
-- [ ] `TrustStrip` integration logo variant — #1229
+- [x] `TrustStrip` integration logo variant (`.trust-strip--logos`) — #1229. x.ai-style integration-mark row (real stack: NautilusTrader · LangGraph · LiteLLM · Polars), grayscale/muted default → color on hover, composes on the base strip. Smoke demo (text wordmarks; production uses real logo `<img>` + `alt`) + `site/README.md`. No stock/fabricated logos.
 - [ ] `CaseStudyCard` primitive (P3, content-gated) — #1230
 - [ ] Olympus status dot → DigiSmith (P3) — #1231
 
