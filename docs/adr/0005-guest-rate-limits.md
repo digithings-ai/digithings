@@ -2,6 +2,7 @@
 
 **Status:** proposed
 **Date:** 2026-04-18
+**Note (2026-07-01):** this ADR assumes the `chat.digithings.ai` subdomain from ADR-0002. That domain plan was superseded by [ADR-0018](0018-digichat-path-routing.md), which serves DigiChat at `digithings.ai/chat` instead. The token-bucket/IP-hash/cost-ceiling design below is otherwise independent of the domain vs. path decision and still applies, adjusted for path-based routing.
 
 ## Context
 

@@ -1,11 +1,16 @@
+import { Suspense } from 'react';
 import PipelineClient from '@/components/pipeline/PipelineClient';
+import AtlasLoader from '@/components/AtlasLoader';
 
 /**
  * Pipeline hub (Surface 1) — zoomable/pannable graph of the daily decision
  * pipeline (Inputs → Research → Synthesis → Selection → Decision).
  *
  * Deep-link grammar: ?date=YYYY-MM-DD&stage=<stage>&node=<document_key>
- * Replaces the /why redirect placeholder.
+ * Replaces the /why redirect placeholder. `PipelineClient` reads the params
+ * itself via `useSearchParams()` (this is a static export — no server-side
+ * `searchParams` prop is available), which is why it must be Suspense-wrapped
+ * here, same as `/why` (`components/why/why-client.tsx`).
  */
 export default function PipelinePage() {
   return (
@@ -26,7 +31,9 @@ export default function PipelinePage() {
       </header>
 
       {/* Client shell */}
-      <PipelineClient />
+      <Suspense fallback={<AtlasLoader fullScreen={false} />}>
+        <PipelineClient />
+      </Suspense>
     </div>
   );
 }

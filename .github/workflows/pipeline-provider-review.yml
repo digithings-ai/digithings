@@ -126,8 +126,13 @@ jobs:
           # search results by fetching the actual page content, which is a separate tool/grant.
           # git checkout/push (issue #1243) let STEP F land its commit on a bot/ branch instead
           # of the protected develop ref it checks out on.
+          # --max-turns 40 was too low once tool access actually worked: a verification run
+          # hit error_max_turns at 41 turns / $7.14 doing real WebSearch+WebFetch research
+          # across ~20 providers, without ever reaching STEP E/F. Raised to 100 to give STEP
+          # A's per-provider research (search + fetch, ~2-3 turns each) headroom to finish
+          # alongside STEP B-F. Raises the per-run cost estimate to roughly $15-20/week.
           claude_args: >-
-            --max-turns 40
+            --max-turns 100
             --allowedTools "Read,Glob,Grep,WebSearch,WebFetch,Write,Edit,Bash(python scripts/provider_review/generate_docs.py:*),Bash(git checkout:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*)"
           prompt: |
             You are performing the weekly LLM provider review for the DigiThings project.

@@ -1,10 +1,6 @@
-export type RegimeChipColor = 'green' | 'red' | 'amber' | 'blue' | 'muted';
+import type { RegimeChip, RegimeChipColor } from '@/lib/render-pipeline-payloads';
 
-export interface RegimeChip {
-  label: string;
-  value: string;
-  color: RegimeChipColor;
-}
+export type { RegimeChip, RegimeChipColor };
 
 export interface PipelineSummaryStripProps {
   headline: string | null;

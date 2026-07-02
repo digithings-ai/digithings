@@ -2,6 +2,8 @@
 
 Decomposition of [Epic #7](https://github.com/digithings-ai/digithings/issues/7) (Phase 3a) into concrete child tasks.
 
+**Historical record.** The `chat.digithings.ai` subdomain target described below (ADR-0002) was later superseded by [ADR-0018](../adr/0018-digichat-path-routing.md), which routes DigiChat at `digithings.ai/chat`. `frontend/digichat/` is not deployed anywhere today — see epic [#1248](https://github.com/digithings-ai/digithings/issues/1248) for the in-progress cutover to the real routing target.
+
 ## Recap
 
 [ADR-0002](../adr/0002-domain-unification.md) commits to a two-domain arrangement:

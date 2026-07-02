@@ -11,6 +11,8 @@ Public API:
 - :func:`run_tools` — agentic tool-calling loop (optional streaming).
 - :func:`structured_completion` — validated Pydantic model from a json_schema call.
 - :func:`get_client_for_model` / :func:`get_client` / :func:`register_provider`.
+- :func:`is_registered_provider` / :func:`get_provider_api_key_env` — read-only
+  registry lookups for callers that need to check provider config before routing.
 - :func:`resolve_model` — opt-in test/medium/best mode resolution.
 - Per-request overrides: :func:`set_proxy_key` / :func:`reset_proxy_key`,
   :func:`set_byok` / :func:`reset_byok`, and the ``proxy_key`` / ``byok``
@@ -31,7 +33,9 @@ from digillm.client import (
     get_byok,
     get_client,
     get_client_for_model,
+    get_provider_api_key_env,
     get_proxy_key,
+    is_registered_provider,
     proxy_key,
     register_provider,
     reset_byok,
@@ -63,7 +67,9 @@ __all__ = [
     "get_byok",
     "get_client",
     "get_client_for_model",
+    "get_provider_api_key_env",
     "get_proxy_key",
+    "is_registered_provider",
     "proxy_key",
     "register_provider",
     "reset_byok",
