@@ -107,6 +107,60 @@ table.canon th,table.canon td{text-align:left;padding:.55rem .7rem;border-bottom
 table.canon th{font-family:var(--mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);font-weight:400}
 table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--soft)}
 .num{font-family:var(--mono);font-feature-settings:"zero" 1,"tnum" 1}
+
+/* ── MOTION LAB (§09) — every demo live, every demo replayable ── */
+.mo-stage{border:1px solid var(--hair);border-radius:10px;background:var(--bg);padding:1rem 1.1rem;max-width:760px}
+.replay{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;color:var(--mute);background:none;border:1px solid var(--hair);border-radius:4px;padding:.28rem .7rem;cursor:pointer;transition:color var(--dur-fast) var(--glide),border-color var(--dur-fast) var(--glide)}
+.replay:hover{color:var(--ink);border-color:var(--em)}
+
+/* easing race — same distance, same 1.2s, four curves */
+.race-lane{display:grid;grid-template-columns:110px 1fr;gap:.8rem;align-items:center;padding:.5rem 0;border-bottom:1px dashed var(--hair)}
+.race-lane:last-child{border-bottom:none}
+.race-track{position:relative;display:block;height:12px;border-bottom:1px solid var(--hair)}
+.race-dot{position:absolute;top:1px;left:0;width:10px;height:10px;border-radius:50%;background:var(--em)}
+.race.play .race-dot{transform:translateX(var(--rw,260px))}
+.race.play .r-glide{transition:transform 1.2s var(--glide)}
+.race.play .r-ease{transition:transform 1.2s ease}
+.race.play .r-ghost{transition:transform 1.2s var(--ghost-ease)}
+.race.play .r-linear{transition:transform 1.2s linear}
+
+/* scoped entrance demo (the page-level .enter fires once; this one replays) */
+.mo-enter .me{opacity:0;transform:translateY(14px)}
+.mo-enter.on .me{opacity:1;transform:none;transition:opacity .9s var(--glide),transform .9s var(--glide)}
+.mo-enter.on .me.d1{transition-delay:.08s}.mo-enter.on .me.d2{transition-delay:.16s}
+
+/* the flagship pin — miniature running the real mechanic */
+.pin-scroller{height:320px;overflow-y:auto;border:1px solid var(--hair);border-radius:10px;background:var(--bg);max-width:760px;scrollbar-width:thin;scrollbar-color:var(--em) transparent}
+.pin-inner{height:960px}
+.pin-stage{position:sticky;top:0;height:320px;display:grid;grid-template-columns:1fr 170px;gap:1rem;padding:1rem}
+.pin-view{position:relative;border:1px solid var(--hair);border-radius:8px;background:var(--srf);padding:1.1rem;overflow:hidden}
+.pin-panel{display:none}
+.pin-panel.on{display:block}
+.pin-rail{position:relative;border-left:1px solid var(--hair);padding-left:.9rem;display:flex;flex-direction:column;gap:.2rem;justify-content:center}
+.pin-prog{position:absolute;left:-1px;top:0;width:1px;height:0%;background:var(--em)}
+.pin-tab{font-family:var(--mono);font-size:.66rem;letter-spacing:.06em;color:var(--mute);padding:.35rem 0;transition:color var(--dur-fast) var(--glide)}
+.pin-tab.on{color:var(--ink)}
+@media (max-width:640px){.pin-stage{grid-template-columns:1fr}.pin-rail{border-left:none;border-top:1px solid var(--hair);padding:.6rem 0 0;flex-direction:row;gap:1rem}.pin-prog{display:none}}
+
+/* diegetic terminal caret */
+@keyframes canonblink{0%,49%{opacity:1}50%,100%{opacity:0}}
+.tcaret{display:inline-block;width:7px;height:14px;background:var(--em);vertical-align:-2px;animation:canonblink 1.1s steps(1) infinite}
+
+/* comparison slider — the range input IS the control */
+.cmp{position:relative;border:1px solid var(--hair);border-radius:10px;overflow:hidden;background:var(--bg);max-width:760px}
+.cmp-top{position:absolute;inset:0;background:var(--bg);clip-path:inset(0 calc(100% - var(--cx,55%)) 0 0)}
+.cmp-handle{position:absolute;top:0;bottom:0;left:var(--cx,55%);width:1px;background:var(--em);pointer-events:none}
+.cmp-handle::after{content:"⇄";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22px;height:22px;display:grid;place-items:center;font-family:var(--mono);font-size:.62rem;color:#071410;background:var(--em);border-radius:999px}
+.cmp input[type=range]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:ew-resize;margin:0}
+.cmp input[type=range]:focus-visible~.cmp-handle{box-shadow:0 0 0 2px rgba(79,163,122,.5)}
+.cmp-tag{position:absolute;top:.6rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;color:var(--soft);background:rgba(11,12,14,.72);padding:.15rem .5rem;border-radius:4px;border:1px solid var(--hair)}
+
+@media (prefers-reduced-motion: reduce){
+  .race.play .race-dot{transition:none !important}
+  .mo-enter .me{opacity:1 !important;transform:none !important;transition:none !important}
+  .tcaret{animation:none}
+  .pin-tab{transition:none}
+}
 </style>
 </head>
 <body>
@@ -369,13 +423,118 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   </div>
 </section>
 
+<section class="canon-sec" id="s09">
+  <span class="sec-num">09</span>
+  <div class="kick">// motion — the lab</div>
+  <h2 class="canon">One moment. <em>Then stillness.</em></h2>
+  <p class="sec-note">Every demo below is live and replayable. The law: one orchestrated entrance per view, at most one scroll pin per page, everything else diegetic — motion happens <i>inside</i> the product frames, never around them. Under <span class="v-mono" style="font-size:.82em">prefers-reduced-motion</span> this entire section collapses to final states.</p>
+  <div class="lab">
+
+    <div class="anno">timing tokens — <b>one house curve for everything · the ghost ease is quarantined to ghost CTAs · three durations are the whole vocabulary</b></div>
+    <table class="canon" style="max-width:760px">
+      <tr><th>token</th><th>value</th><th>quarantine</th></tr>
+      <tr><td>--glide</td><td class="num">cubic-bezier(.22,1,.36,1)</td><td>everything — hovers, entrances, accordions, chevrons</td></tr>
+      <tr><td>--ghost-ease</td><td class="num">cubic-bezier(.19,1,.22,1)</td><td>ghost-CTA wash only (spacex recipe, §04)</td></tr>
+      <tr><td>--dur-fast</td><td class="num">.18s</td><td>micro — hover lifts, arrow nudges, color shifts</td></tr>
+      <tr><td>--dur</td><td class="num">.5s</td><td>state — ghost wash, panel swaps, toggle fills</td></tr>
+      <tr><td>entrance</td><td class="num">.9s · steps of .08s</td><td>the one page-load stagger, nothing else</td></tr>
+    </table>
+    <div class="prov" style="margin-top:.6rem">upgrade path — graphite ships this exact spring-shaped linear() under the same name: <span class="num">linear(0,.012 0.9%,.05 2%,.411 9.2%,.517 11.8%,.611 14.6%,.694 17.7%,.765 21.1%,.824 24.8%,.872 28.9%,.91 33.4%,.939 38.4%,.977 50.9%,.994 68.4%,1)</span> · adopt behind @supports as --glide's high-fidelity twin (mine §16, live-verified)</div>
+
+    <div class="anno" style="margin-top:1.8rem">easing race — <b>same distance, same 1.2s · the glide arrives early and settles; default ease is still braking; linear is a metronome. this is why there is ONE house curve</b></div>
+    <div class="mo-stage race" id="mo-race">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:.3rem"><button class="replay" data-act="race">replay</button></div>
+      <div class="race-lane"><span class="v-mono" style="font-size:.62rem;color:var(--soft)">--glide</span><span class="race-track"><i class="race-dot r-glide"></i></span></div>
+      <div class="race-lane"><span class="v-mono" style="font-size:.62rem;color:var(--mute)">ease (default)</span><span class="race-track"><i class="race-dot r-ease" style="background:var(--mute)"></i></span></div>
+      <div class="race-lane"><span class="v-mono" style="font-size:.62rem;color:var(--soft)">--ghost-ease</span><span class="race-track"><i class="race-dot r-ghost" style="background:var(--soft)"></i></span></div>
+      <div class="race-lane"><span class="v-mono" style="font-size:.62rem;color:var(--mute)">linear</span><span class="race-track"><i class="race-dot r-linear" style="background:#3a3f45"></i></span></div>
+    </div>
+
+    <div class="anno" style="margin-top:1.8rem">the one entrance — <b>a single orchestrated stagger per view: kick → headline → proof line · .9s on the glide, 80ms steps · then the page never moves again</b></div>
+    <div class="mo-stage mo-enter on" id="mo-ent">
+      <div style="display:flex;justify-content:flex-end"><button class="replay" data-act="ent">replay</button></div>
+      <div class="me kick">// digiquant</div>
+      <div class="me d1 v-serif" style="font-size:clamp(1.4rem,3vw,2.1rem);line-height:1.1;margin-top:.4rem">Backtests that <em style="color:var(--em)">testify.</em></div>
+      <div class="me d2 v-mono num" style="font-size:.7rem;color:var(--soft);margin-top:.7rem"><span style="color:var(--up)">●</span> live · 3 strategies · refreshed 2026-06-30</div>
+    </div>
+
+    <div class="anno" style="margin-top:1.8rem">the flagship pin — <b>ONE per page, on the flagship product story only · scrub-driven, never time-driven · anatomy: sticky stage + tab rail with vertical progress (graphite, live-verified) · this miniature runs the real mechanic — scroll inside the box</b></div>
+    <div class="pin-scroller" id="mo-pin" tabindex="0" aria-label="pinned pipeline demo — scroll to scrub through three phases">
+      <div class="pin-inner">
+        <div class="pin-stage">
+          <div class="pin-view">
+            <span class="regmark" style="top:.5rem;left:.6rem;font-size:.8rem">+</span>
+            <span class="regmark" style="bottom:.5rem;right:.6rem;font-size:.8rem">+</span>
+            <div class="pin-panel on">
+              <div class="kick">01 · data</div>
+              <div class="v-mono num" style="font-size:.74rem;color:var(--soft);margin-top:.7rem;line-height:2.1">ETH-USD · daily bars<br>3,102 bars · 2018-01-01 → 2026-06-29<br>source: public/strategies/index.json</div>
+            </div>
+            <div class="pin-panel">
+              <div class="kick">02 · signal</div>
+              <div class="v-mono num" style="font-size:.74rem;color:var(--soft);margin-top:.7rem;line-height:2.1">trend_xsec · long/short<br>rebalance: daily close<br>current: <span style="color:var(--down)">short</span> · entered 2026-05-19 @ 2,110.06</div>
+            </div>
+            <div class="pin-panel">
+              <div class="kick">03 · proof</div>
+              <div style="display:flex;gap:1.8rem;margin-top:.8rem;flex-wrap:wrap">
+                <div><div class="v-mono num" style="font-size:1.5rem;font-weight:300">6.62</div><div class="v-mono" style="font-size:.55rem;letter-spacing:.12em;color:var(--mute)">PROFIT FACTOR</div></div>
+                <div><div class="v-mono num" style="font-size:1.5rem;font-weight:300;color:var(--up)">64.91%</div><div class="v-mono" style="font-size:.55rem;letter-spacing:.12em;color:var(--mute)">WIN RATE</div></div>
+                <div><div class="v-mono num" style="font-size:1.5rem;font-weight:300;color:var(--down)">−59.22%</div><div class="v-mono" style="font-size:.55rem;letter-spacing:.12em;color:var(--mute)">MAX DD</div></div>
+              </div>
+            </div>
+            <span class="prov" style="position:absolute;right:.8rem;bottom:.6rem">scroll ↓</span>
+          </div>
+          <div class="pin-rail">
+            <i class="pin-prog" id="mo-pinprog"></i>
+            <span class="pin-tab on">01 data</span>
+            <span class="pin-tab">02 signal</span>
+            <span class="pin-tab">03 proof</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="prov" style="margin-top:.5rem">spec: pin length 240–320vh · progress = scrolled ÷ (pinHeight − viewport) · active panel = floor(progress × panels) · rail line height = progress · release cleanly at both ends — no rubber-banding, no time-driven autoplay</div>
+
+    <div class="anno" style="margin-top:1.8rem">diegetic motion — <b>animation lives INSIDE the frame: the terminal types, the page holds still · without JS the transcript is simply already there (law 06)</b></div>
+    <div class="mo-stage" id="mo-term" style="font-family:var(--mono);font-size:.74rem;line-height:2.1">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
+        <span class="v-mono" style="font-size:.6rem;letter-spacing:.12em;color:var(--mute)">OLYMPUS · SESSION</span>
+        <button class="replay" data-act="term">replay</button>
+      </div>
+      <div><span style="color:var(--em)">❯</span> <span class="t-cmd num" style="color:var(--ink)">dq backtest run --strategy trend_xsec --asset ETH-USD</span><span class="tcaret" aria-hidden="true"></span></div>
+      <div class="t-row num" style="color:var(--soft)"><span style="color:var(--em)">▸</span> atlas.data&nbsp;&nbsp;&nbsp;&nbsp;load OHLCV · 3,102 bars <span style="color:var(--up)">ok</span> <span style="color:var(--mute)">412ms</span></div>
+      <div class="t-row num" style="color:var(--soft)"><span style="color:var(--em)">▸</span> atlas.signal&nbsp;&nbsp;trend_xsec · long/short assignments <span style="color:var(--up)">ok</span> <span style="color:var(--mute)">88ms</span></div>
+      <div class="t-row num" style="color:var(--soft)"><span style="color:var(--em)">▸</span> hermes.risk&nbsp;&nbsp;&nbsp;position caps · kill-switch armed <span style="color:var(--up)">ok</span> <span style="color:var(--mute)">31ms</span></div>
+      <div class="t-row num" style="color:var(--ink)"><span style="color:var(--up)">✓</span> tearsheet → runs/2026-07-02/trend_xsec-eth/</div>
+    </div>
+
+    <div class="anno" style="margin-top:1.8rem">comparison slider — <b>tailwind's device, repurposed for money: drag (or arrow-key) the divider · gross left, net-of-fees right · the invisible range input IS the control, so keyboard works for free</b></div>
+    <div class="cmp" id="mo-cmp" style="height:200px;--cx:55%">
+      <svg viewBox="0 0 600 180" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%" aria-hidden="true">
+        <polyline fill="none" stroke="#6B7177" stroke-width="1.5" points="0,170 60,156 120,160 180,132 240,140 300,112 360,120 420,88 480,96 540,64 600,50"/>
+      </svg>
+      <div class="cmp-top">
+        <svg viewBox="0 0 600 180" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%" aria-hidden="true">
+          <polyline fill="none" stroke="#4fa37a" stroke-width="1.5" points="0,170 60,150 120,155 180,120 240,128 300,95 360,104 420,66 480,74 540,38 600,20"/>
+        </svg>
+      </div>
+      <span class="cmp-tag" style="left:.6rem">GROSS</span>
+      <span class="cmp-tag" style="right:.6rem">NET · 10 bps/side</span>
+      <input type="range" min="0" max="100" value="55" aria-label="compare gross versus net-of-fees equity curves">
+      <i class="cmp-handle"></i>
+    </div>
+    <div class="prov" style="margin-top:.5rem">curves illustrative for the device demo only — production use requires the real equity series from the shipped tearsheet (law 01)</div>
+
+    <div class="prov" style="margin-top:1.8rem;border-top:1px solid var(--hair);padding-top:.8rem">the five motion laws: one entrance per view · one pin per page, flagship only · diegetic everywhere else · one curve (--glide) plus one quarantined ease · reduced-motion collapses everything to final states</div>
+  </div>
+</section>
+
 </main>
 
 <footer class="bloom" style="border-top:1px solid var(--hair);margin-top:5rem;padding:3.5rem 0 2.5rem">
   <div class="wrap" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
     <div>
       <div class="v-mono" style="font-weight:500;font-size:1.15rem">digi<span style="color:var(--em)">things</span></div>
-      <div class="prov" style="margin-top:.5rem">canon v1 · iteration 1 of N · next: components (§05–08) · motion lab (§09) · page grammars (§10)</div>
+      <div class="prov" style="margin-top:.5rem">canon v1 · iteration 3 of N · shipped: foundation §00–04 · components §05–08 · motion lab §09 · next: page grammars §10+</div>
     </div>
     <div class="v-mono" style="font-size:.72rem;color:var(--soft)"><span id="sysdot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--up);margin-right:.45rem"></span>all systems yours</div>
   </div>
@@ -398,6 +557,78 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,ok);}else{ok();}
     });
   });
+
+  /* ── §09 motion lab ── */
+  var rm=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var race=document.getElementById('mo-race');
+  function runRace(){
+    if(!race)return;
+    var tr=race.querySelector('.race-track');
+    race.style.setProperty('--rw',(tr.clientWidth-12)+'px');
+    race.classList.remove('play');void race.offsetWidth;race.classList.add('play');
+  }
+
+  var ent=document.getElementById('mo-ent');
+  function runEnt(){
+    if(!ent)return;
+    ent.classList.remove('on');void ent.offsetWidth;ent.classList.add('on');
+  }
+
+  var term=document.getElementById('mo-term');
+  function runTerm(){
+    if(!term)return;
+    (term._tm||[]).forEach(clearTimeout);term._tm=[];clearInterval(term._iv);
+    var cmdEl=term.querySelector('.t-cmd');
+    var rows=Array.prototype.slice.call(term.querySelectorAll('.t-row'));
+    var cmd='dq backtest run --strategy trend_xsec --asset ETH-USD';
+    if(rm){cmdEl.textContent=cmd;rows.forEach(function(r){r.style.opacity='1'});return;}
+    cmdEl.textContent='';
+    rows.forEach(function(r){r.style.transition='none';r.style.opacity='0'});
+    var i=0;
+    term._iv=setInterval(function(){
+      if(i<cmd.length){cmdEl.textContent+=cmd.charAt(i++);}
+      else{clearInterval(term._iv);
+        rows.forEach(function(r,j){term._tm.push(setTimeout(function(){r.style.transition='opacity .35s var(--glide)';r.style.opacity='1';},300+j*380));});
+      }
+    },24);
+  }
+
+  document.querySelectorAll('.replay').forEach(function(b){
+    b.addEventListener('click',function(){
+      var a=b.getAttribute('data-act');
+      if(a==='race')runRace();else if(a==='ent')runEnt();else if(a==='term')runTerm();
+    });
+  });
+
+  var pin=document.getElementById('mo-pin');
+  if(pin){
+    var pinInner=pin.querySelector('.pin-inner');
+    var panels=pin.querySelectorAll('.pin-panel');
+    var tabs=pin.querySelectorAll('.pin-tab');
+    var prog=document.getElementById('mo-pinprog');
+    pin.addEventListener('scroll',function(){
+      var max=pinInner.scrollHeight-pin.clientHeight;
+      var p=max>0?Math.min(1,Math.max(0,pin.scrollTop/max)):0;
+      if(prog)prog.style.height=(p*100)+'%';
+      var k=Math.min(panels.length-1,Math.floor(p*panels.length));
+      panels.forEach(function(el,i){el.classList.toggle('on',i===k)});
+      tabs.forEach(function(el,i){el.classList.toggle('on',i===k)});
+    },{passive:true});
+  }
+
+  var cmp=document.getElementById('mo-cmp');
+  if(cmp){
+    var rng=cmp.querySelector('input[type=range]');
+    rng.addEventListener('input',function(){cmp.style.setProperty('--cx',rng.value+'%')});
+  }
+
+  if('IntersectionObserver' in window && !rm && race){
+    var moSeen=false;
+    new IntersectionObserver(function(es){
+      es.forEach(function(e){if(e.isIntersecting&&!moSeen){moSeen=true;runRace();runTerm();}});
+    },{threshold:.2}).observe(race);
+  }
 })();
 </script>
 </body>
