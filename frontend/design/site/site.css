@@ -245,6 +245,27 @@ a { color: inherit; text-decoration: none; }
   .h-scroll__card { min-width: 0; max-width: none; }
 }
 
+/* ── closing CTA band (Graphite/Cursor pre-footer conversion) ───────────
+   Full-width centered band placed directly above the footer: one headline,
+   one literal primary .btn, and an optional mono secondary link. Compose
+   with .reveal-up (above) for a scroll-in enter — reduced-motion is already
+   honored there. Copy slots (see site/README.md for digithings + digiquant
+   variants and references/scans/copy-patterns.md for tone):
+     .closing-cta__title      headline — literal, ≤ ~20ch reads best
+     .closing-cta__sub        optional one-line support — ≤ ~48ch
+     .closing-cta__actions    primary:  <a class="btn btn-primary" href>label</a>
+     .closing-cta__secondary  optional: <a href>label <span aria-hidden>&rarr;</span></a>
+   ───────────────────────────────────────────────────────────────────── */
+.closing-cta { padding-block: var(--section-y); text-align: center; }
+.closing-cta__inner { max-width: var(--wrap-wide); margin-inline: auto; display: flex; flex-direction: column; align-items: center; gap: 1.1rem; }
+.closing-cta__title { font-size: clamp(1.8rem, 4vw, 2.75rem); font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; max-width: 20ch; }
+.closing-cta__sub { font-size: 1rem; color: var(--ink-soft); max-width: 48ch; line-height: 1.6; }
+.closing-cta__actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 1rem; margin-top: 0.4rem; }
+.closing-cta__secondary { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--font-mono); font-size: 0.88rem; color: var(--ink-soft); }
+.closing-cta__secondary:hover { color: var(--ink); }
+.closing-cta__secondary span[aria-hidden] { transition: transform var(--duration-hover) var(--ease-glide); }
+.closing-cta__secondary:hover span[aria-hidden] { transform: translateX(3px); }
+
 /* ── principles ─────────────────────────────────────────────────────── */
 .principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
 .principle { padding-top: 1.4rem; border-top: 1px solid var(--hair-2); }
