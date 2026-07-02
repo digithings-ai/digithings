@@ -294,6 +294,73 @@ await client.chat.send("hello");</code></pre>
   </section>
 
   <section class="smoke-section site-demo">
+    <div class="label">faq — native &lt;details&gt;/&lt;summary&gt; accordion; shared name="" = one open at a time; Tab + Enter/Space</div>
+    <div class="faq">
+      <details class="faq__item" name="smoke-faq" open>
+        <summary class="faq__q">Is DigiThings really open source?</summary>
+        <p class="faq__a">Yes — the core stack is MIT-licensed and self-hostable. Every service (orchestration, quant, RAG, chat) runs on your own infrastructure with your own keys.</p>
+      </details>
+      <details class="faq__item" name="smoke-faq">
+        <summary class="faq__q">Do I need to bring my own model keys?</summary>
+        <p class="faq__a">For self-hosting, yes — point the stack at any LiteLLM-supported provider or a local model. A managed option is planned.</p>
+      </details>
+      <details class="faq__item" name="smoke-faq">
+        <summary class="faq__q">Can I use it for live trading?</summary>
+        <p class="faq__a">Backtest and research paths are open. Live-trading paths require explicit configuration and human approval — they are never enabled by default.</p>
+      </details>
+    </div>
+  </section>
+
+  <section class="smoke-section site-demo">
+    <div class="label">pricing — 3 open-core tiers (honest copy, no fake usage caps); middle tier featured; + comparison table</div>
+    <div class="pricing">
+      <div class="pricing__tier">
+        <div class="pricing__name">Self-hosted</div>
+        <div class="pricing__price">Free <small>· MIT</small></div>
+        <p class="pricing__desc">Run the full stack on your own infrastructure with your own model keys.</p>
+        <ul class="pricing__features">
+          <li>All core services</li>
+          <li>Bring your own key</li>
+          <li>Community support</li>
+        </ul>
+        <div class="pricing__cta"><a class="btn btn-ghost" href="#" onclick="return false;">Read the docs</a></div>
+      </div>
+      <div class="pricing__tier pricing__tier--featured">
+        <div class="pricing__name">Managed</div>
+        <div class="pricing__price">Coming soon</div>
+        <p class="pricing__desc">Hosted DigiThings with managed upgrades and observability. In development.</p>
+        <ul class="pricing__features">
+          <li>Everything in Self-hosted</li>
+          <li>Managed upgrades</li>
+          <li>Hosted tracing (DigiSmith)</li>
+        </ul>
+        <div class="pricing__cta"><a class="btn btn-primary" href="#" onclick="return false;">Join the waitlist</a></div>
+      </div>
+      <div class="pricing__tier">
+        <div class="pricing__name">Enterprise</div>
+        <div class="pricing__price">Contact</div>
+        <p class="pricing__desc">Custom deployment, SLAs, and support for regulated environments.</p>
+        <ul class="pricing__features">
+          <li>Everything in Managed</li>
+          <li>SLA + priority support</li>
+          <li>Deployment assistance</li>
+        </ul>
+        <div class="pricing__cta"><a class="btn btn-ghost" href="#" onclick="return false;">Contact us</a></div>
+      </div>
+    </div>
+    <table class="pricing-table" style="margin-top: var(--space-4);">
+      <thead>
+        <tr><th scope="col">Feature</th><th scope="col">Self-hosted</th><th scope="col">Managed</th><th scope="col">Enterprise</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Core services</th><td class="is-yes">✓</td><td class="is-yes">✓</td><td class="is-yes">✓</td></tr>
+        <tr><th scope="row">Managed upgrades</th><td class="is-no">—</td><td class="is-yes">✓</td><td class="is-yes">✓</td></tr>
+        <tr><th scope="row">SLA + priority support</th><td class="is-no">—</td><td class="is-no">—</td><td class="is-yes">✓</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="smoke-section site-demo">
     <div class="label">closing-cta — pre-footer conversion band; two copy variants (digithings / digiquant); scroll down for the .reveal-up enter</div>
     <div class="closing-cta reveal-up">
       <div class="closing-cta__inner">

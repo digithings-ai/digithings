@@ -8,7 +8,8 @@ React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 (`.term*`/`.tl-*`, consumed by `frontend/web/src/components/Terminal.tsx`),
 sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
 **StatCounter**, **ChangelogBand**, **CodeSampleBand**, **CapabilityCard**,
-**HorizontalScrollBand**, **ClosingCtaBand**, `.principles`, and `.footer*`. Terminal-CLI /
+**HorizontalScrollBand**, **ClosingCtaBand**, **FaqAccordion**, **PricingMatrix**,
+`.principles`, and `.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -371,5 +372,82 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
 | `.closing-cta__sub` | Muted one-line support, `max-width: 48ch`. |
 | `.closing-cta__actions` | Wrapping, centered row of the primary `.btn` + optional secondary. |
 | `.closing-cta__secondary` | Mono arrow-suffix link; hover tints `--ink` and nudges the arrow. |
+
+CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `FaqAccordion` (CSS-only, EVOLUTION.md Phase E)
+
+Graphite/Cursor pricing-page Q&A built on **native `<details>`/`<summary>`** — no
+JS. Give every `.faq__item` the **same `name`** to get a native "one open at a
+time" exclusive accordion (a modern-browser feature); omit `name` and each item
+toggles independently. The disclosure chevron rotates on `[open]`; its transition
+is dropped under `prefers-reduced-motion: reduce` (shared block). Keyboard access
+is native (`Tab` to the summary, `Enter`/`Space` to toggle).
+
+**Content shape** for a data-driven render (per site): `{ q, a }[]`.
+
+```html
+<div class="faq">
+  <details class="faq__item" name="pricing-faq" open>
+    <summary class="faq__q">Is DigiThings really open source?</summary>
+    <p class="faq__a">Yes — the core stack is MIT-licensed and self-hostable.</p>
+  </details>
+  <details class="faq__item" name="pricing-faq">
+    <summary class="faq__q">Do I need to bring my own model keys?</summary>
+    <p class="faq__a">For self-hosting, yes — any LiteLLM provider or a local model.</p>
+  </details>
+</div>
+```
+
+| Class | Role |
+|-------|------|
+| `.faq` | Column container, `max-width: 760px` for readable line length. |
+| `.faq__item` | One `<details>`; hairline divider below. Same `name` across items → exclusive accordion. |
+| `.faq__q` | The `<summary>` — flex row (label + chevron), default marker removed, `:focus-visible` ring. Rotating CSS chevron via `::after`. |
+| `.faq__a` | Answer body, `max-width: 60ch`, muted. |
+
+CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `PricingMatrix` (CSS-only, EVOLUTION.md Phase E)
+
+Open-core pricing tiers + optional comparison table. **Honest-copy policy**
+(EVOLUTION.md §10, anti-pattern #2): no invented usage caps or fake "limited AI
+requests" — the free self-hosted tier is genuinely the full MIT stack. Three
+tiers: **Self-hosted (MIT)** · **Managed (future)** · **Enterprise (contact)**.
+`.pricing__tier--featured` lifts one card with an `--accent` ring.
+
+**Content shape** (per site): `{ name, price, cadence?, desc, features: string[], cta: { label, href }, featured?: boolean }[]`.
+
+```html
+<div class="pricing">
+  <div class="pricing__tier">
+    <div class="pricing__name">Self-hosted</div>
+    <div class="pricing__price">Free <small>· MIT</small></div>
+    <p class="pricing__desc">Run the full stack on your own infrastructure.</p>
+    <ul class="pricing__features"><li>All core services</li><li>Bring your own key</li></ul>
+    <div class="pricing__cta"><a class="btn btn-ghost" href="/docs">Read the docs</a></div>
+  </div>
+  <div class="pricing__tier pricing__tier--featured"><!-- Managed --></div>
+  <div class="pricing__tier"><!-- Enterprise --></div>
+</div>
+
+<!-- optional feature × tier comparison -->
+<table class="pricing-table">
+  <thead><tr><th>Feature</th><th>Self-hosted</th><th>Managed</th><th>Enterprise</th></tr></thead>
+  <tbody>
+    <tr><th scope="row">Core services</th><td class="is-yes">✓</td><td class="is-yes">✓</td><td class="is-yes">✓</td></tr>
+    <tr><th scope="row">Managed upgrades</th><td class="is-no">—</td><td class="is-yes">✓</td><td class="is-yes">✓</td></tr>
+  </tbody>
+</table>
+```
+
+| Class | Role |
+|-------|------|
+| `.pricing` | Grid — 1 column below 768px, `repeat(3, 1fr)` at `min-width: 768px`; `max-width: var(--wrap-wide)`. |
+| `.pricing__tier` | Flat `--surface` card; `.pricing__cta .btn` pins to the bottom, full-width. |
+| `.pricing__tier--featured` | Highlighted tier — `--accent` border + ring. |
+| `.pricing__name` / `.pricing__price` / `.pricing__desc` | Mono tier label, display price (`<small>` for cadence/licence), muted blurb. |
+| `.pricing__features` | Check-bulleted list — `✓` in `--up` via `::before`. |
+| `.pricing-table` | Optional comparison grid; `.is-yes` (`--up`) / `.is-no` (`--ink-mute`) cells; first column left-aligned, tier columns centered. |
 
 CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
