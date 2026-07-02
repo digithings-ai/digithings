@@ -294,6 +294,11 @@ await client.chat.send("hello");</code></pre>
   </section>
 
   <section class="smoke-section site-demo">
+    <div class="label">announcement — 48px content-gated bar rendered from ../announcement-example.json; dismiss persists in localStorage; an empty / {enabled:false} file renders nothing (the shipped default)</div>
+    <div id="announcement" hidden></div>
+  </section>
+
+  <section class="smoke-section site-demo">
     <div class="label">hero-picker — icon tabs swap the ProductFrame preview; click or focus + &larr;/&rarr;/Home/End; aria-controls panels</div>
     <div class="hero-picker">
       <div class="hero-picker__tabs" role="tablist" aria-label="Preview context">
@@ -447,6 +452,7 @@ await client.chat.send("hello");</code></pre>
     import { escapeHtml } from '../html-escape.js';
     import { initCodeSampleBand } from '../code-sample-band.js';
     import { initHeroPicker } from '../hero-picker.js';
+    import { initAnnouncement } from '../announcement.js';
 
     // Theme toggle for the site.css (Phase B) demos below. site/theme.js was
     // removed in #1240 (dead in production — apps use React ThemeProvider
@@ -540,6 +546,13 @@ await client.chat.send("hello");</code></pre>
 
     // hero-picker: icon tabs swap the ProductFrame preview panel
     initHeroPicker();
+
+    // announcement: content-gated bar from the example JSON (an empty or
+    // { enabled:false } file renders nothing — the shipped default)
+    fetch('../announcement-example.json')
+      .then((r) => r.json())
+      .then((data) => initAnnouncement({ data }))
+      .catch(() => {});
   </script>
 </body>
 </html>

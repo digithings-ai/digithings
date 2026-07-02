@@ -333,6 +333,26 @@ a { color: inherit; text-decoration: none; }
 .hero-picker__panels { width: 100%; display: flex; justify-content: center; }
 .hero-picker__panel[hidden] { display: none; }
 
+/* ── announcement bar (Graphite full-width clickable notice above nav) ──
+   48px full-width bar, content-gated by announcement.js: it renders only when
+   handed enabled content, so the bar is OFF by default (empty / {enabled:false}
+   → nothing). When href is set the whole bar is the link (stretched-link
+   overlay); the optional dismiss button sits above the overlay and can persist
+   a per-id dismissal in localStorage. No slide-in animation (reduced-motion
+   friendly by design). Content shape: { enabled, id?, text, href?, linkLabel? }
+   — see site/README.md and ../announcement-example.json.
+   ───────────────────────────────────────────────────────────────────── */
+.announcement { position: relative; display: flex; align-items: center; justify-content: center; gap: 0.6rem; min-height: 48px; padding: 0.5rem 2.75rem; background: var(--surface); border-bottom: 1px solid var(--hair); color: var(--ink-soft); font-size: 0.88rem; text-align: center; }
+.announcement[hidden] { display: none; }
+.announcement__text { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem; }
+.announcement__link { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--accent); font-weight: 500; }
+.announcement__link span[aria-hidden] { transition: transform var(--duration-hover) var(--ease-glide); }
+.announcement--link .announcement__link::after { content: ""; position: absolute; inset: 0; }
+.announcement--link:hover .announcement__link span[aria-hidden] { transform: translateX(3px); }
+.announcement__dismiss { position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%); z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--ink-mute); cursor: pointer; }
+.announcement__dismiss:hover { color: var(--ink); }
+.announcement__dismiss:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 /* ── principles ─────────────────────────────────────────────────────── */
 .principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
 .principle { padding-top: 1.4rem; border-top: 1px solid var(--hair-2); }

@@ -9,7 +9,7 @@ React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
 **StatCounter**, **ChangelogBand**, **CodeSampleBand**, **CapabilityCard**,
 **HorizontalScrollBand**, **ClosingCtaBand**, **FaqAccordion**, **PricingMatrix**,
-**HeroFeaturePicker**, `.principles`, and `.footer*`. Terminal-CLI /
+**HeroFeaturePicker**, **AnnouncementBar**, `.principles`, and `.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -504,3 +504,48 @@ on load. No network calls, pure DOM. `prefers-reduced-motion` needs no special
 handling — the swap is an instant `hidden` toggle, not an animation.
 
 CSS-only styling, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `AnnouncementBar` (CSS + `announcement.js`, EVOLUTION.md Phase E)
+
+Graphite-style **48px full-width notice above the nav**, **content-gated**.
+`announcement.js` renders it only when handed enabled content, so the bar is
+**off by default** — an empty config, `{ enabled: false }`, or missing `text`
+renders nothing. When `href` is set the whole bar is the link (stretched-link
+overlay); the optional dismiss button persists a per-`id` dismissal in
+`localStorage`. No slide-in animation, so `prefers-reduced-motion` needs no
+special handling. `href` is scheme-guarded (relative / `#` / `http(s)` / `mailto`
+only) and all text is escaped before insertion.
+
+**Content shape** (`announcement.json` or inline; see
+[`../announcement-example.json`](../announcement-example.json)):
+
+```json
+{ "enabled": true, "id": "2026-07-launch", "text": "…", "href": "/blog/launch", "linkLabel": "Read more" }
+```
+
+```html
+<div id="announcement" hidden></div>
+```
+
+```js
+import { initAnnouncement } from '../announcement.js';
+// inline config, or fetch('/announcement.json').then(r => r.json())
+initAnnouncement({ selector: '#announcement', data: cfg });
+```
+
+**Enable procedure (per site):** add `announcement.json` with `enabled: true` and
+`text` (and optionally `href`/`linkLabel`/`id`), then call `initAnnouncement`
+with it. To disable, set `enabled: false` or remove the content — nothing
+renders. **Shipped default is disabled** (no content wired), so neither
+digithings.ai nor digiquant.io shows a bar until content is added. Bump `id` to
+re-show the bar after users have dismissed a previous one.
+
+| Class | Role |
+|-------|------|
+| `.announcement` | 48px flat `--surface` bar, hairline bottom border, centered text. |
+| `.announcement--link` | Set when `href` is present — enables the stretched-link overlay (whole bar clickable). |
+| `.announcement__text` | Message text; wrap literals in `<strong>` if needed. |
+| `.announcement__link` | The link (`--accent`, arrow-suffix); its `::after` stretches over the bar. |
+| `.announcement__dismiss` | Optional close button — sits above the overlay (`z-index`), persists dismissal by `id`. |
+
+CSS + `announcement.js`, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
