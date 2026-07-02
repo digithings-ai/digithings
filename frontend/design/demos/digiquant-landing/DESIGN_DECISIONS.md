@@ -225,3 +225,29 @@ GENERAL: whole-page scrolling must be smooth/continuous (Apple-like), no pausing
 2. Run a dev server (preview_start) on each site, screenshot every page at desktop +
    mobile, diff against the Hermès/Linear bar. Capture concrete defects with shots.
 3. Triage homepage hero of each site first (highest-impact surface).
+
+## 2026-07-01 — feature bento (#1214): additive, not a demotion
+
+#1214's AC framed this as *demoting* scroll sections into a bento and keeping "only
+one pinned section." Against the live landing that was stale + risky: digiquant.io
+runs **two** intentional pinned scrollies — `OlympusScene` (the #1205 flagship, which
+#1215 then *enhances* with a progress rail) and `StrategySuite` (#1198). Demoting
+either regresses a good element. Per sign-off we went **additive**: a
+`Pipeline · Strategies · Pricing` `.bento` after the hero (teal marketing accent, real
+links to `#olympus` / `/strategies` / `#contact`), with **both** scrollies untouched.
+Two pins is not the anti-pattern (#4 targets *five*). ProductFrame tearsheet crops
+inside the cells remain a possible follow-up.
+
+## #1226 — `/#pricing` (PricingMatrix + FaqAccordion)
+
+The homepage `#contact` section was an ad-hoc two-card price block. Per Phase E we
+**converted it into `#pricing`** using the shared `PricingMatrix` (`.pricing`) +
+`FaqAccordion` (`.faq`) primitives (#1223): three honest open-core tiers —
+**Self-hosted** (Free · MIT, CTA = existing `CloneRepoButton`), **Managed**
+(featured, "Coming soon", waitlist), **Enterprise** (contact) — plus a pricing FAQ
+(self-host requirements · NautilusTrader license · BYOK · **no fake usage caps**).
+Copy is maintainer-approved and lives in `app/_pricing.ts` (source of truth). The
+bento "// pricing" cell and the nav/footer link now target `#pricing` ("Contact" →
+"Pricing"); Managed/Enterprise CTAs use `contact@digiquant.io`. The standalone
+`/contact` route (+ `_contact.ts` two-tier copy) is intentionally left unchanged —
+reconciling it to the 3-tier copy is a follow-up.
