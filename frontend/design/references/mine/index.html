@@ -22,7 +22,7 @@
   --em:#4fa37a; --em-weak:rgba(79,163,122,.14); --cy:#3DD6C4;
   --up:#3FB984; --down:#E0654B; --warn:#E0B341;
   --glide:cubic-bezier(.22,1,.36,1);
-  /* graphite (deep scan) */ --gr-bg:#0a0a0a; --gr-s1:#18181b; --gr-s2:#27272a; --gr-s3:#3f3f46; --gr-accent:#ff5c0a;
+  /* graphite (deep scan; accent corrected 2026-07-02 — scans record #ff8833) */ --gr-bg:#0a0a0a; --gr-s1:#18181b; --gr-s2:#27272a; --gr-s3:#3f3f46; --gr-accent:#ff8833;
   /* cursor (deep scan) */ --cu-bg:#f7f8f3; --cu-border:#e3e2dd; --cu-ink:#1a1a18; --cu-warm:#d3c9b9; --cu-dark:#141414;
   /* x.ai (deep scan) */ --xa-bg:#0a0a0a; --xa-s:#191919; --xa-hair:#212327; --xa-ink:#fafafa; --xa-mute:#8a8a8a;
   --serif:"Fraunces",Georgia,serif; --sans:"Geist",system-ui,sans-serif; --mono:"Geist Mono",ui-monospace,monospace;
@@ -301,7 +301,7 @@ h2{font-family:var(--serif);font-weight:400;font-size:clamp(1.5rem,2.6vw,2.1rem)
           <span style="display:flex;gap:1rem;font-size:.78rem;color:var(--soft)">Pipeline · Olympus · Strategies · Pricing</span>
         </div>
       </div>
-      <div class="vals">fixed · transparent at top → blur + bg when .scrolled · hides on scroll-down, returns on scroll-up (already the graphite/x.ai behavior — keep)</div>
+      <div class="vals">fixed · transparent at top → blur + bg when .scrolled (graphite-verified) · CORRECTION: auto-hide on scroll-down is OURS alone — none of the three references auto-hide (mobile scan, 390×844) — keep or drop as a deliberate v7 signature · graphite hover doctrine: links white @60% → 100% opacity, never a hue change</div>
     </div>
     <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — mono uppercase wayfinding</span><span class="prov">deep scan</span></div>
       <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair);padding:0">
@@ -356,6 +356,112 @@ h2{font-family:var(--serif);font-weight:400;font-size:clamp(1.5rem,2.6vw,2.1rem)
     </div>
   </div>
   <p class="sec-note" style="margin-top:1.2rem"><b style="color:var(--ink);font-weight:500">Deliberately absent:</b> bento grids, trust/logo strips, stat-counter strips on filler numbers, closing-CTA bands, glass/glow/mesh-on-content — the round-1 slop list. If a move isn't in the mine with provenance, it doesn't ship.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 08 — batch 1</div>
+  <h2>Developer bands &amp; live-UI mocks — the product is the proof</h2>
+  <p class="sec-note">All three references sell by showing a working UI with oddly-specific values. Our analogs are Olympus telemetry, DigiChat transcripts, and digikey quickstarts.</p>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — tabbed API band</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair)">
+        <div style="font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;color:var(--xa-mute);text-transform:uppercase">For developers</div>
+        <div style="font-family:var(--sans);font-weight:500;font-size:1.05rem;color:var(--xa-ink);margin:.2rem 0 .5rem">One API. Every modality.</div>
+        <div style="border:1px solid var(--xa-hair);border-radius:8px;background:var(--xa-s);overflow:hidden">
+          <div style="display:flex;gap:.9rem;border-bottom:1px solid var(--xa-hair);padding:.4rem .7rem;font-family:var(--mono);font-size:.64rem">
+            <span style="color:var(--xa-ink)">Python</span><span style="color:var(--xa-mute)">TypeScript</span><span style="color:var(--xa-mute)">cURL</span><span style="margin-left:auto;color:var(--xa-mute)">copy</span>
+          </div>
+          <pre style="margin:0;padding:.6rem .7rem;font-family:var(--mono);font-size:.66rem;line-height:1.8;color:#c9c9c9">from xai_sdk import Client
+client = Client(api_key=os.getenv("XAI_API_KEY"))
+chat = client.chat.create(model="grok-4.3")</pre>
+        </div>
+      </div>
+      <div class="vals">stats row verbatim: "1M+ API calls per day · &lt;200ms median latency" (real numbers) · card #191919 / border #212327 / r8 / 24px pad · "compatible with OpenAI and Anthropic SDKs"<br>→ ours: digikey token exchange + <b style="color:var(--soft)">make stack-local</b> quickstart, curl/Python/TS tabs</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — code-agent terminal mock</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-s);border:1px solid var(--xa-hair);font-family:var(--mono);font-size:.68rem;line-height:2;color:#c9c9c9">
+        <div style="color:var(--xa-mute)">projects/main | 11.60% | <span style="color:var(--xa-ink)">❯ Migrate auth from sessions to JWT</span></div>
+        <div style="color:var(--xa-mute)">Thinking…</div>
+        <div>▸ read_file src/middleware/auth.ts <span style="color:var(--xa-mute)">68 lines</span></div>
+        <div>▸ grep "session" src/ <span style="color:var(--xa-mute)">4 matches</span></div>
+        <div style="color:var(--xa-mute)">| Audit auth middleware <span style="color:#7ee0c0">explore [running]</span></div>
+      </div>
+      <div class="vals">"Thought for 4.1s" · ▸ tool-call row grammar · animation lives inside the frame only<br>→ ours: this IS Atlas/Hermes pipeline telemetry — ▸ rows for tool calls in Olympus + digichat mocks (extends B3)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">cursor — agent task-list pills</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--cu-bg);border:1px solid var(--cu-border)">
+        <div style="border:1px solid var(--cu-border);border-radius:12px;background:#fff;padding:.7rem">
+          <div style="font-family:var(--mono);font-size:.6rem;color:#8a8a80;margin-bottom:.45rem">cursor.com/agent · This Week</div>
+          <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+            <span style="border:1px solid var(--cu-border);border-radius:999px;padding:.2rem .6rem;font-size:.66rem;color:#1a1a18">Explored 12 files</span>
+            <span style="border:1px solid var(--cu-border);border-radius:999px;padding:.2rem .6rem;font-size:.66rem;color:#1a1a18">Worked for 14m 22s</span>
+            <span style="border:1px solid var(--cu-border);border-radius:999px;padding:.2rem .6rem;font-size:.66rem;color:#1a1a18">Agent · Opus 4.8</span>
+          </div>
+          <div style="border:1px solid var(--cu-border);border-radius:8px;padding:.4rem .6rem;font-size:.68rem;color:#8a8a80;margin-top:.5rem">Add a follow up…</div>
+        </div>
+      </div>
+      <div class="vals">status-pill vocabulary = the specificity doctrine ("14m 22s", never "~15 min")<br>→ ours: digichat session pills — "routed → digiquant · 3 tools · 1.84s"</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — inline diff review + CLI rows</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1);font-family:var(--mono);font-size:.66rem;line-height:1.9">
+        <div style="color:#71717a"><span style="color:#52525b">41</span>&nbsp;&nbsp;const session = <span style="color:#f0999b">getSession(req)</span></div>
+        <div style="color:#a0e3a6"><span style="color:#52525b">42</span>+ const claims = verifyJwt(req)</div>
+        <div style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:.4rem .6rem;margin-top:.4rem;background:#18181b">
+          <span style="color:#e8e8ed">Diamond · AI review</span><span style="color:#a1a1a6"> — prefer constant-time compare here.</span>
+          <span style="color:#52525b;margin-left:.5rem">👍 👎</span>
+        </div>
+        <div style="margin-top:.5rem;color:#a1a1a6">$ gt create &nbsp;·&nbsp; $ gt submit</div>
+      </div>
+      <div class="vals">line numbers · AI comment bubble WITH feedback controls · code face ligatures OFF (liga 0) · pastel semantics: error #ffa6b2, success #a0e3a6<br>→ ours: annotated backtest diff / strategy-review bubble; product-verb commands as section anchors (dq backtest · dq optimize)</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 09 — batch 2</div>
+  <h2>Pricing, tables &amp; conversion — precision over persuasion</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — two-path pricing</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair);flex-direction:row;gap:.7rem;align-items:stretch">
+        <div style="flex:1;border:1px solid var(--xa-hair);border-radius:8px;padding:.8rem;background:var(--xa-s)">
+          <div style="font-size:.8rem;font-weight:500;color:var(--xa-ink)">Build on your own</div>
+          <div style="font-family:var(--mono);font-size:.62rem;color:var(--xa-mute);line-height:2;margin-top:.3rem">all models · usage-based pricing<br>auto-increasing rate limits · docs</div>
+        </div>
+        <div style="flex:1;border:1px solid var(--xa-hair);border-radius:8px;padding:.8rem;background:var(--xa-s)">
+          <div style="font-size:.8rem;font-weight:500;color:var(--xa-ink)">Get extra support</div>
+          <div style="font-family:var(--mono);font-size:.62rem;color:var(--xa-mute);line-height:2;margin-top:.3rem">onboarding · custom limits<br>SSO, audit log · <span style="color:var(--xa-ink)">Contact Sales</span></div>
+        </div>
+      </div>
+      <div class="vals">exactly TWO paths, one filled CTA total — the open-core shape: self-hosted vs managed (our live /#pricing already converges here)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — per-unit precision table</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair);font-family:var(--mono);font-size:.66rem">
+        <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:.3rem;color:var(--xa-mute);text-transform:uppercase;letter-spacing:.1em;font-size:.56rem;border-bottom:1px solid var(--xa-hair);padding-bottom:.35rem">model · context · $/M tokens</div>
+        <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:.3rem;padding:.45rem 0;border-bottom:1px solid var(--xa-hair);color:#c9c9c9">grok-4.3 <span>256k</span><span>$3.00</span></div>
+        <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:.3rem;padding:.45rem 0;color:#c9c9c9">grok-build-0.1 <span>128k</span><span>$0.85</span></div>
+      </div>
+      <div class="vals">exact versions + exact units, hairline rows, mono numerals — the tearsheet-table voice; our strategies table already speaks it (8.72 / 75.9% / −30.5%)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — pricing system</span><span class="prov fetch">live fetch 2026-07-02</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="display:flex;gap:.5rem;font-family:var(--mono);font-size:.6rem;flex-wrap:wrap">
+          <span style="border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:.2rem .55rem;color:#a1a1a6">Hobby · Free · "Sign up"</span>
+          <span style="border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:.2rem .55rem;color:#a1a1a6">Starter · $20 · "Get started"</span>
+          <span style="border:1px solid var(--gr-accent);border-radius:999px;padding:.2rem .55rem;color:#e8e8ed">Team · $40 · "Start free trial" · Most popular</span>
+          <span style="border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:.2rem .55rem;color:#a1a1a6">Enterprise · no price · "Request a demo"</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:.62rem;color:#a1a1a6;margin-top:.6rem">matrix cells: ✓ · Limited · Basic · Advanced — grouped rows (PRs, Inbox, Stacking, AI reviews, Admin) · toggle "Annual billing (20% off)"</div>
+      </div>
+      <div class="vals">per-tier CTA verbs escalate with commitment · enterprise never shows a price · billing toggle · grouped comparison matrix — our /#pricing FAQ+matrix (develop) already matches this shape</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">friction-reducer line (all three)</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="font-size:.78rem;color:#a1a1a6">Free for your first 30 days. No credit card required. Synced with your GitHub account.</div>
+        <div style="border-top:1px solid rgba(255,255,255,.1);margin-top:.6rem;padding-top:.6rem;font-family:var(--mono);font-size:.7rem;color:var(--soft)">ours: <span style="color:var(--ink)">open core · self-hosted · BYOK · audit-on by default</span></div>
+      </div>
+      <div class="vals">one muted line of true trust facts directly under the hero CTA — NOT a logo strip, NOT a stat counter · mono-dot-separated fits the v7 label grammar</div>
+    </div>
+  </div>
 </div></section>
 
 <footer style="margin-top:4rem;border-top:1px solid var(--hair)"><div class="wrap" style="padding-top:1.4rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.6rem">
