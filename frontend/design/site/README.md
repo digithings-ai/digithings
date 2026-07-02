@@ -9,7 +9,7 @@ React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
 **StatCounter**, **ChangelogBand**, **CodeSampleBand**, **CapabilityCard**,
 **HorizontalScrollBand**, **ClosingCtaBand**, **FaqAccordion**, **PricingMatrix**,
-**HeroFeaturePicker**, **AnnouncementBar**, `.principles`, and `.footer*`. Terminal-CLI /
+**HeroFeaturePicker**, **AnnouncementBar**, **CaseStudyCard**, `.principles`, and `.footer*`. Terminal-CLI /
 utilitarian aesthetic, light **and** dark, reduced-motion safe. Consumes the
 `[data-theme]` semantic tokens in [`../tokens.css`](../tokens.css).
 
@@ -571,3 +571,40 @@ re-show the bar after users have dismissed a previous one.
 | `.announcement__dismiss` | Optional close button — sits above the overlay (`z-index`), persists dismissal by `id`. |
 
 CSS + `announcement.js`, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+
+## `CaseStudyCard` (CSS-only, EVOLUTION.md Phase E · P3)
+
+Graphite `{org} × product` social-proof card — a flat `--surface` panel (same
+sizing family as `.bento__cell`/`.capability-card`) with a mono `{org} × digithings`
+label, a quote, and an attribution row with an optional logo slot. Drop it into a
+`.bento`, `.capability-grid`, or an `.h-scroll` track (for a horizontal row).
+
+**Content-gated (anti-pattern #2 — no fabricated testimonials).** Ship dormant:
+no card renders until a real quote exists. **Production requires real attribution**
+— a name, title, company, or a public GitHub/OSS reference. Use
+`.case-study--example` for a watermarked placeholder in demos/docs **only**.
+
+**Content shape** (per site): `{ org, quote, name, title?, href?, logo? }`.
+
+```html
+<article class="case-study">
+  <div class="case-study__label">Acme × digithings</div>
+  <blockquote class="case-study__quote">A real, attributable quote.</blockquote>
+  <div class="case-study__attr">
+    <img class="case-study__logo" src="/logos/acme.svg" alt="Acme" />
+    <span><strong>Jane Dev</strong> · Staff Engineer, Acme</span>
+  </div>
+</article>
+```
+
+| Class | Role |
+|-------|------|
+| `.case-study` | Flat `--surface` card, `--hair` border, `--r-lg`; column layout, quote grows to push attribution to the bottom. |
+| `.case-study__label` | Mono `{org} × digithings` eyebrow. |
+| `.case-study__quote` | The quote (`<blockquote>`), `--ink`. |
+| `.case-study__attr` | Attribution row — name (`<strong>`) + title/company, optional `.case-study__logo`. |
+| `.case-study__logo` | Optional 24px grayscale logo (real assets only, with `alt`). |
+| `.case-study--example` | Adds an "EXAMPLE" watermark — demos/docs only, never production. |
+
+CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
+**P3** — defer content until real quotes or OSS adopter stories exist.

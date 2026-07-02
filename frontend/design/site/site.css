@@ -363,6 +363,24 @@ a { color: inherit; text-decoration: none; }
 .announcement__dismiss:hover { color: var(--ink); }
 .announcement__dismiss:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* ── case-study card (Graphite {org} × product social proof) ────────────
+   Flat --surface card (same sizing family as .bento__cell / .capability-card):
+   a mono "{org} × digithings" label, a quote block, and an attribution row with
+   an optional logo slot. Drop into a .bento, .capability-grid, or an .h-scroll
+   track for a horizontal row. CONTENT-GATED (anti-pattern #2): ship dormant —
+   no fabricated testimonials. Real attribution required in production (name,
+   title, company, or a public GitHub/OSS reference). Add .case-study--example
+   for a watermarked placeholder in demos/docs only. Content shape (per site):
+   { org, quote, name, title?, href?, logo? } — see site/README.md.
+   ───────────────────────────────────────────────────────────────────── */
+.case-study { position: relative; display: flex; flex-direction: column; gap: 1rem; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 1.75rem; }
+.case-study__label { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); }
+.case-study__quote { margin: 0; font-size: 1.05rem; line-height: 1.55; color: var(--ink); }
+.case-study__attr { display: flex; align-items: center; gap: 0.6rem; margin-top: auto; font-size: 0.85rem; color: var(--ink-soft); }
+.case-study__attr strong { color: var(--ink); font-weight: 600; }
+.case-study__logo { height: 24px; width: auto; max-width: 120px; filter: grayscale(1); opacity: 0.8; }
+.case-study--example::after { content: "EXAMPLE"; position: absolute; top: 0.85rem; right: 0.85rem; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.12em; color: var(--ink-mute); border: 1px solid var(--hair-2); border-radius: var(--r-sm); padding: 0.15rem 0.4rem; }
+
 /* ── principles ─────────────────────────────────────────────────────── */
 .principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
 .principle { padding-top: 1.4rem; border-top: 1px solid var(--hair-2); }
