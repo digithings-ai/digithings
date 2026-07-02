@@ -331,6 +331,7 @@ From user iteration log + reference analysis:
 | [`references/README.md`](references/README.md) | Index of external scans |
 | [`demos/digiquant-landing/DESIGN_DECISIONS.md`](demos/digiquant-landing/DESIGN_DECISIONS.md) | v7 iteration punchlist |
 | [`site/README.md`](site/README.md) | Theme contract + JS modules |
+| [`references/olympus-subpage-chrome.md`](references/olympus-subpage-chrome.md) | Olympus subpage chrome — tab bar, tabs-vs-sidebar, typography, surfaces (#1220) |
 | [`docs/adr/0009-frontend-umbrella.md`](../../docs/adr/0009-frontend-umbrella.md) | Monorepo layout |
 | `frontend/digithings-web/components/landing/` | DigiThings landing components |
 | `frontend/digiquant-web/components/landing/` | DigiQuant landing components |
