@@ -1,11 +1,7 @@
 import Link from "next/link";
 import { Footer, Reveal } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
-import {
-  CONTACT_MANAGED_FEATURES,
-  CONTACT_SELF_FEATURES,
-  MANAGED_CONTACT_MAILTO,
-} from "./_contact";
+import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
 import { DqNav } from "@/components/landing/DqNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
@@ -94,7 +90,7 @@ export default function Home() {
                   Browse strategies <span aria-hidden="true">→</span>
                 </span>
               </Link>
-              <Link className="bento__cell bento__cell--span-2" href="#contact">
+              <Link className="bento__cell bento__cell--span-2" href="#pricing">
                 <div className="bento__kicker">{"// pricing"}</div>
                 <div className="bento__title">Own it, or have it hosted</div>
                 <p className="bento__body">
@@ -115,50 +111,66 @@ export default function Home() {
 
         <StrategySuite />
 
-        <section className="section" id="contact">
+        <section className="section" id="pricing">
           <div className="wrap">
             <Reveal>
               <div style={{ textAlign: "center" }}>
-                <span className="kicker">{"// contact"}</span>
+                <span className="kicker">{"// pricing"}</span>
                 <h2 className="dq-title">Own it, or have it run for you.</h2>
                 <p className="dq-sub" style={{ marginInline: "auto" }}>
-                  digiquant is open core. Self-manage the whole stack at no cost, or let us manage
-                  Olympus for you. Same engine either way — the difference is who keeps it running.
+                  digiquant is open core. Self-host the whole stack at no cost, join the waitlist for
+                  managed Olympus, or talk to us about enterprise — the same engine either way.
                 </p>
               </div>
             </Reveal>
-            <div className="grid dq-contact" style={{ marginInline: "auto", marginTop: "2.2rem" }}>
-              <Reveal className="price-card">
-                <h3>Self hosted</h3>
-                <p className="price">
-                  open core · <span className="dq-up">free</span>
-                </p>
-                <ul>
-                  {CONTACT_SELF_FEATURES.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
-                <CloneRepoButton />
-              </Reveal>
-              <Reveal className="price-card accent">
-                <h3>Managed</h3>
-                <p className="price">contact us</p>
-                <ul>
-                  {CONTACT_MANAGED_FEATURES.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
-                <a className="btn btn-primary" href={MANAGED_CONTACT_MAILTO}>
-                  Email us <span aria-hidden="true">→</span>
-                </a>
+            <div style={{ marginTop: "2.2rem" }}>
+              <Reveal className="pricing">
+                {PRICING_TIERS.map((tier) => (
+                  <div
+                    key={tier.id}
+                    className={`pricing__tier${tier.featured ? " pricing__tier--featured" : ""}`}
+                  >
+                    <div className="pricing__name">{tier.name}</div>
+                    <div className="pricing__price">
+                      {tier.price}
+                      {tier.cadence ? <small> {tier.cadence}</small> : null}
+                    </div>
+                    <p className="pricing__desc">{tier.desc}</p>
+                    <ul className="pricing__features">
+                      {tier.features.map((feature) => (
+                        <li key={feature}>{feature}</li>
+                      ))}
+                    </ul>
+                    <div className="pricing__cta">
+                      {tier.id === "self" ? (
+                        <CloneRepoButton />
+                      ) : tier.cta ? (
+                        <a className="btn btn-primary" href={tier.cta.href}>
+                          {tier.cta.label} <span aria-hidden="true">→</span>
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
               </Reveal>
             </div>
-            <Reveal>
-              <p className="dq-built" style={{ textAlign: "center", marginTop: "2.2rem" }}>
-                Not sure which fits? Start self-managed — it&rsquo;s the full product — and{" "}
-                <a href={MANAGED_CONTACT_MAILTO}>get in touch</a> if you later want it managed.
-              </p>
-            </Reveal>
+            <div style={{ marginTop: "3rem", textAlign: "center" }}>
+              <Reveal>
+                <h3 className="dq-title" style={{ fontSize: "clamp(1.3rem, 2.4vw, 1.7rem)" }}>
+                  Questions
+                </h3>
+              </Reveal>
+            </div>
+            <div style={{ marginTop: "1.2rem" }}>
+              <Reveal className="faq">
+                {PRICING_FAQ.map((item, i) => (
+                  <details className="faq__item" name="dq-pricing-faq" key={item.q} open={i === 0}>
+                    <summary className="faq__q">{item.q}</summary>
+                    <p className="faq__a">{item.a}</p>
+                  </details>
+                ))}
+              </Reveal>
+            </div>
           </div>
         </section>
 

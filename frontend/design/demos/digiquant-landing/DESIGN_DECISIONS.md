@@ -237,3 +237,17 @@ either regresses a good element. Per sign-off we went **additive**: a
 links to `#olympus` / `/strategies` / `#contact`), with **both** scrollies untouched.
 Two pins is not the anti-pattern (#4 targets *five*). ProductFrame tearsheet crops
 inside the cells remain a possible follow-up.
+
+## #1226 — `/#pricing` (PricingMatrix + FaqAccordion)
+
+The homepage `#contact` section was an ad-hoc two-card price block. Per Phase E we
+**converted it into `#pricing`** using the shared `PricingMatrix` (`.pricing`) +
+`FaqAccordion` (`.faq`) primitives (#1223): three honest open-core tiers —
+**Self-hosted** (Free · MIT, CTA = existing `CloneRepoButton`), **Managed**
+(featured, "Coming soon", waitlist), **Enterprise** (contact) — plus a pricing FAQ
+(self-host requirements · NautilusTrader license · BYOK · **no fake usage caps**).
+Copy is maintainer-approved and lives in `app/_pricing.ts` (source of truth). The
+bento "// pricing" cell and the nav/footer link now target `#pricing` ("Contact" →
+"Pricing"); Managed/Enterprise CTAs use `contact@digiquant.io`. The standalone
+`/contact` route (+ `_contact.ts` two-tier copy) is intentionally left unchanged —
+reconciling it to the 3-tier copy is a follow-up.
