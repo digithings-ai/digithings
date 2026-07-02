@@ -292,7 +292,7 @@ Add to `tokens.css` when implementing primitives:
 
 - [x] Olympus glass → surface migration (#1216) — **audit: already flat**. `.glass-card` is a legacy *name* for a flat `--surface` panel (1px `--hair` border, subtle intentional depth shadow, not glass); `backdrop-blur` is confined to sticky/overlay chrome (nav, mobile app bar, command palette, sidebar), never content. Surface system documented in `frontend/olympus/app/globals.css` (Olympus has no ARCHITECTURE.md/AGENTS.md to update). No visual change — anti-pattern #8 already satisfied.
 - [x] twelve-x xAI utility polish (#1217) — **audit: already there**. Section/table headers use `uppercase tracking-wider` mono-style labels (`ConsensusDataTable`, `IntelligenceTab`, `MoversStrip`); metrics use `font-mono tabular-nums`; chips/panels are flat (`.glass-card` = flat panel, per #1216); `MoversStrip` is already a real-data headline FX metric strip. No mesh/serif/scrolly. Forcing the shared `StatCounter` over the working `MoversStrip` would be churn — left as-is.
-- [ ] DigiChat full token adoption (#240)
+- [x] DigiChat full token adoption (#240, closed) + product-as-hero `/welcome` marketing route with a BYOK/API `CodeSampleBand` (#1218). Public route (frozen chat-UI hero, cyan accent); shared `.code-sample-band` CSS scoped under `.welcome-codeband` with local dark `--term-*` values (digichat doesn't set `:root[data-theme]`). No purple in v2 tokens — cyan only (AC wording flagged).
 
 ### Phase E — Additional primitives & content-gated integration
 
