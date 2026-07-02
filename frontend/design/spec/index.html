@@ -173,6 +173,28 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 .pm-tag{font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;color:var(--em);border:1px solid rgba(79,163,122,.45);border-radius:999px;padding:.05rem .45rem;white-space:nowrap}
 .chip-prop{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--warn);border:1px solid rgba(224,179,65,.4);border-radius:4px;padding:.12rem .45rem;vertical-align:middle}
 
+/* ── OLYMPUS DASHBOARD (§13) — product grammar ── */
+.dash{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));max-width:1000px}
+.panel{border:1px solid var(--hair);border-radius:8px;background:var(--srf);padding:.8rem .95rem}
+.panel h4{font-family:var(--mono);font-weight:400;font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin-bottom:.55rem;display:flex;justify-content:space-between;align-items:baseline;gap:.6rem}
+.prow{display:flex;justify-content:space-between;gap:.8rem;font-family:var(--mono);font-size:.7rem;padding:.32rem 0;border-bottom:1px solid var(--hair);color:var(--soft)}
+.prow:last-child{border-bottom:none}
+
+/* ── IVORY READING MODE (§14) ── */
+.ivory{background:var(--paper);color:#141413;border:1px solid #E8E6DC;border-radius:12px;padding:1.5rem;max-width:760px}
+.ivory .ik{font-family:var(--mono);font-size:.64rem;letter-spacing:.14em;color:#2E6B4E}
+.ivory h3{font-family:var(--serif);font-weight:400;font-size:1.5rem;letter-spacing:-.01em;margin:.5rem 0 .6rem}
+.ivory p{font-family:var(--serif);font-size:.98rem;line-height:1.75;max-width:62ch}
+.ivory a{color:#141413;text-decoration:underline;text-decoration-color:#2E6B4E;text-decoration-thickness:1px;text-underline-offset:3px}
+.ivory code{font-family:var(--mono);font-size:.82em;background:#F0EEE6;border:1px solid #E8E6DC;border-radius:4px;padding:.08em .35em}
+.ivory .icode{background:#F0EEE6;border:1px solid #E8E6DC;border-radius:8px;padding:.9rem 1rem;font-family:var(--mono);font-size:.76rem;line-height:1.9;color:#141413;margin-top:.9rem}
+
+/* ── THE SHIPPING CHECKLIST (§15) ── */
+.check{max-width:760px;counter-reset:ck;list-style:none;padding:0;margin-top:.5rem}
+.check li{counter-increment:ck;display:flex;gap:.9rem;align-items:baseline;padding:.55rem 0;border-bottom:1px solid var(--hair);font-family:var(--mono);font-size:.74rem;color:var(--soft)}
+.check li::before{content:counter(ck,decimal-leading-zero);font-size:.58rem;color:var(--em);letter-spacing:.1em}
+.check li:last-child{border-bottom:none}
+
 /* mythology posters — the sanctioned luminous moment, one per subsystem hero */
 .posters{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));max-width:1000px}
 .poster{position:relative;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:radial-gradient(130% 95% at 50% 115%,rgba(79,163,122,.17),transparent 62%),var(--bg);padding:3rem 1.3rem 1.1rem;min-height:270px;display:flex;flex-direction:column;justify-content:flex-end}
@@ -669,13 +691,111 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   </div>
 </section>
 
+<section class="canon-sec" id="s13">
+  <span class="sec-num">13</span>
+  <div class="kick">// product surface — olympus</div>
+  <h2 class="canon">Density up. <em>Voice down.</em></h2>
+  <p class="sec-note">Olympus is product, not marketing. The serif retreats to the page title; mono runs the room; the instrumentation palette finally does its day job — up and down mean money, emerald means press here. No entrance choreography, no pin, no bloom: the dashboard loads fast and holds still.</p>
+  <div class="lab">
+    <div class="anno">dashboard grammar — <b>panels are srf + hairline + r8 · every panel carries its own as-of timestamp · states below are illustrative, the grammar is not</b></div>
+    <div class="dash">
+      <div class="panel">
+        <h4>positions <span class="num" style="letter-spacing:0;text-transform:none">as of 2026-07-02 14:31</span></h4>
+        <div class="prow"><span>ETH-USD · <span style="color:var(--down)">short</span> TREND</span><span class="num" style="color:var(--up)">+23.67%</span></div>
+        <div class="prow"><span>BTC-USD · flat</span><span class="num" style="color:var(--mute)">—</span></div>
+        <div class="prow"><span>SOL-USD · flat</span><span class="num" style="color:var(--mute)">—</span></div>
+      </div>
+      <div class="panel">
+        <h4>signals <span class="num" style="letter-spacing:0;text-transform:none">trend_xsec</span></h4>
+        <div class="prow"><span>ETH-USD</span><span class="num" style="color:var(--down)">short · 2026-05-19</span></div>
+        <div class="prow"><span>entry</span><span class="num">2,110.06</span></div>
+        <div class="prow"><span>mark</span><span class="num">1,610.62</span></div>
+      </div>
+      <div class="panel">
+        <h4>service health <span class="num" style="letter-spacing:0;text-transform:none">/healthz</span></h4>
+        <div class="prow"><span>digigraph :8000</span><span><i style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--up)"></i></span></div>
+        <div class="prow"><span>digiquant :8001</span><span><i style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--up)"></i></span></div>
+        <div class="prow"><span>digismith :8003</span><span><i style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--warn)"></i></span></div>
+        <div class="prow"><span>digisearch :8002</span><span><i style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--up)"></i></span></div>
+      </div>
+      <div class="panel">
+        <h4>session</h4>
+        <div class="v-mono num" style="font-size:.7rem;line-height:2;color:var(--soft)"><span style="color:var(--em)">❯</span> hermes.risk --check<br><span style="color:var(--up)">✓</span> kill-switch armed · caps ok</div>
+        <div class="prov" style="margin-top:.5rem">empty state = one mono sentence.<br>never an illustration.</div>
+      </div>
+    </div>
+    <div class="prov" style="margin-top:.7rem">rules: type scale caps at 1.5rem — nothing shouts on a dashboard · serif appears once (page title) · the four-state dots (§08) run per service · timestamps on every panel: the as-of discipline is the product's honesty · dense grids over cards-with-air</div>
+  </div>
+</section>
+
+<section class="canon-sec" id="s14">
+  <span class="sec-num">14</span>
+  <div class="kick">// reading mode — docs · blog · legal</div>
+  <h2 class="canon">Dark sells proof. <em>Ivory reads.</em></h2>
+  <p class="sec-note">Long-form surfaces go light: the anthropic-verified ivory stack, unified with fiscal's paper token. On ivory the serif may carry body text — the one place it does. Dark stays for proof and product; the two never mix on a page except where a product frame sits inside a doc.</p>
+  <div class="lab">
+    <div class="anno">the paper stack — <b>warm, never pure white · live emerald fails on paper (2.89:1, measured) so text drops to --em-deep</b></div>
+    <div class="lab-grid" style="max-width:760px">
+      <div class="swatch" style="background:#F9F8F6"><i style="color:#6B7177">--paper #F9F8F6</i></div>
+      <div class="swatch" style="background:#F0EEE6"><i style="color:#6B7177">--paper-2 #F0EEE6</i></div>
+      <div class="swatch" style="background:#E8E6DC"><i style="color:#6B7177">--paper-hair #E8E6DC</i></div>
+      <div class="swatch" style="background:#141413"><i>--paper-ink #141413</i></div>
+      <div class="swatch" style="background:#2E6B4E"><i style="color:#F9F8F6">--em-deep #2E6B4E · 5.94:1 AA</i></div>
+    </div>
+    <div class="anno" style="margin-top:1.6rem">ivory specimen — <b>serif body (anthropic move) · ink links with emerald underline · code blocks sit on paper-2</b></div>
+    <div class="ivory">
+      <div class="ik">// docs · quickstart</div>
+      <h3>Run the first backtest.</h3>
+      <p>The stack ships with three strategies whose tearsheets are public. Clone the repo, bring a <a href="#s14">LiteLLM-supported key</a>, and the first run writes its proof to <code>runs/</code> — dated, reproducible, yours.</p>
+      <div class="icode"><span style="color:#2E6B4E">$</span> make quickstart<br><span style="color:#2E6B4E">❯</span> dq backtest run --strategy trend_xsec<br>✓ tearsheet → runs/2026-07-02/trend_xsec-eth/</div>
+    </div>
+    <div class="prov" style="margin-top:.7rem">rules: ivory is for prose — docs, blog, legal · body links = ink underlined, emerald underline · headings stay fraunces 400 · no blooms, no posters on paper · dark product frames may embed, hairlined in --paper-hair</div>
+  </div>
+</section>
+
+<section class="canon-sec" id="s15">
+  <span class="sec-num">15</span>
+  <div class="kick">// the invisibles — a11y · performance · honesty</div>
+  <h2 class="canon">What you don't see. <em>Still designed.</em></h2>
+  <p class="sec-note">The canon's last section is the part nobody screenshots. Every ratio below was measured, not assumed — and the one failure we found is written down instead of hidden.</p>
+  <div class="lab">
+    <div class="anno">contrast — <b>measured 2026-07-02 (WCAG 2.1 relative luminance) · the --mute finding is a rule, not a bug</b></div>
+    <table class="canon" style="max-width:760px">
+      <tr><th>pair</th><th>ratio</th><th>verdict → rule</th></tr>
+      <tr><td>--ink on --bg</td><td class="num">16.82:1</td><td>AAA — body default</td></tr>
+      <tr><td>--soft on --bg</td><td class="num">7.41:1</td><td>AAA — secondary copy</td></tr>
+      <tr><td>--mute on --bg</td><td class="num" style="color:var(--warn)">3.96:1</td><td>large/decorative only — provenance lines, never load-bearing copy</td></tr>
+      <tr><td>--em on --bg</td><td class="num">6.39:1</td><td>AA — interactive text ok</td></tr>
+      <tr><td>--up / --down on --bg</td><td class="num">7.91 / 5.71</td><td>AA — money colors read</td></tr>
+      <tr><td>--em on --paper</td><td class="num" style="color:var(--down)">2.89:1</td><td>FAIL — ivory text uses --em-deep (5.94:1)</td></tr>
+    </table>
+    <div class="anno" style="margin-top:1.6rem">keyboard &amp; semantics — <b>we don't rebuild what the browser ships</b></div>
+    <div class="prov" style="line-height:2">focus ring: 2px --em, offset 3px, on :focus-visible only (never :focus) · disclosure = native details/summary · slider = native range input · buttons are &lt;button&gt; · skip link first in DOM · dialogs use &lt;dialog&gt; · reduced-motion collapses every animation to its final state (§09, live-tested)</div>
+    <div class="anno" style="margin-top:1.6rem">performance doctrine — <b>the LCP is a sentence, not an image</b></div>
+    <div class="prov" style="line-height:2">fonts load font-display:swap with system fallbacks declared in the tokens · every page renders complete without JavaScript (law 06) · images exist only inside product frames · no layout shift: entrance animates opacity/transform only</div>
+    <div class="anno" style="margin-top:1.8rem">the shipping checklist — <b>ten questions before any page PRs · the canon is the reviewer</b></div>
+    <ol class="check">
+      <li>every number has a date and a source path?</li>
+      <li>at most one pin, on the flagship story only?</li>
+      <li>banned-list scan clean — no bento, logo strip, stat counters, closing-CTA band, glass, glow?</li>
+      <li>two voices only — fraunces never bolded, mono testifies?</li>
+      <li>color quarantine respected — up/down mean money, emerald means press?</li>
+      <li>one entrance, then stillness — reduced-motion collapses clean?</li>
+      <li>renders complete without JavaScript?</li>
+      <li>focus-visible ring on every interactive element?</li>
+      <li>provenance real — paths exist, configs true, nothing invented?</li>
+      <li>screenshot reviewed against this canon before the PR opens?</li>
+    </ol>
+  </div>
+</section>
+
 </main>
 
 <footer class="bloom" style="border-top:1px solid var(--hair);margin-top:5rem;padding:3.5rem 0 2.5rem">
   <div class="wrap" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
     <div>
       <div class="v-mono" style="font-weight:500;font-size:1.15rem">digi<span style="color:var(--em)">things</span></div>
-      <div class="prov" style="margin-top:.5rem">canon v1 · iteration 4 of N · shipped: foundation §00–04 · components §05–08 · motion §09 · page grammars §10–12 · next: olympus + ivory docs + the invisibles</div>
+      <div class="prov" style="margin-top:.5rem">canon v1 · iteration 5 · §00–15 complete · open proposals: warm canvas · convergence hero · stacked declarative · auto-hide nav</div>
     </div>
     <div class="v-mono" style="font-size:.72rem;color:var(--soft)"><span id="sysdot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--up);margin-right:.45rem"></span>all systems yours</div>
   </div>
