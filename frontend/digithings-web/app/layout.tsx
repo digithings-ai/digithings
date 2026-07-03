@@ -34,8 +34,11 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  // suppressHydrationWarning: themeInitScript (and the /docs ivory default)
+  // legitimately flip data-theme + meta pre-hydration; scoped to this
+  // element's attributes only.
   return (
-    <html lang="en" data-theme="dark" className={`${GeistSans.variable} ${GeistMono.variable} ${fraunces.variable}`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable} ${fraunces.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {/* Single fallback; themeInitScript sets it to the active theme pre-paint. */}
