@@ -20,6 +20,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Send, Key, ExternalLink, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +43,12 @@ import {
   useEmbedTenantConfig,
   type EmbedTenantClientConfig,
 } from "@/hooks/use-embed-tenant-config";
+
+const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
+
+function conversationStorageKey(host: string): string {
+  return `${CONVERSATION_STORAGE_PREFIX}${host}`;
+}
 
 type Accent = "digithings" | "digiquant" | "digichat";
 
@@ -150,6 +158,14 @@ function EmbedChat({
               headers["X-BYOK-Model"] = byokModel.trim();
             }
           }
+          try {
+            const conversationId = window.sessionStorage.getItem(
+              conversationStorageKey(gate.host),
+            );
+            if (conversationId) headers["X-External-Conversation"] = conversationId;
+          } catch {
+            /* sessionStorage unavailable (e.g. blocked third-party storage) — start fresh turns */
+          }
           return {
             body: {
               ...(typeof body === "object" && body !== null ? body : {}),
@@ -175,6 +191,23 @@ function EmbedChat({
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, status]);
+
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    for (const part of last.parts) {
+      if (part.type === "data-externalConversation") {
+        const id = (part as { data?: { conversationId?: string } }).data?.conversationId;
+        if (id) {
+          try {
+            window.sessionStorage.setItem(conversationStorageKey(gate.host), id);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+  }, [messages, gate.host]);
 
   const busy = status === "streaming" || status === "submitted";
 
@@ -228,7 +261,10 @@ function EmbedChat({
           </p>
         )}
         {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
+          <div key={m.id}>
+            <MessageBubble message={m} />
+            {m.role === "assistant" && <ActivityBox message={m} />}
+          </div>
         ))}
         {chatError ? (
           <div
@@ -295,7 +331,7 @@ function EmbedChat({
 }
 
 // ---------------------------------------------------------------------------
-// Message bubble — plain text only, intentionally minimal.
+// Message bubble — markdown for assistant replies, plain text for user turns.
 // ---------------------------------------------------------------------------
 
 function MessageBubble({ message }: { message: UIMessage }) {
@@ -313,8 +349,47 @@ function MessageBubble({ message }: { message: UIMessage }) {
             : "bg-muted text-foreground"
         }`}
       >
-        {text || <span className="opacity-60">…</span>}
+        {mine ? (
+          text || <span className="opacity-60">…</span>
+        ) : text ? (
+          <div className="text-sm [&_p]:my-1 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:list-disc">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+          </div>
+        ) : (
+          <span className="opacity-60">…</span>
+        )}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Activity box — renders DigiGraph trace events under assistant messages.
+// ---------------------------------------------------------------------------
+
+type TracePartData = {
+  type?: string;
+  payload?: { label?: unknown; status?: unknown };
+};
+
+function ActivityBox({ message }: { message: UIMessage }) {
+  const traces = message.parts.filter(
+    (part): part is { type: "data-digigraphTrace"; data: TracePartData } =>
+      part.type === "data-digigraphTrace"
+  );
+  if (traces.length === 0) return null;
+  return (
+    <div className="mt-1 max-w-[85%] rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5">
+      {traces.map((t, i) => {
+        const label = t.data?.payload?.label ?? t.data?.type ?? "activity";
+        const done = t.data?.payload?.status === "completed";
+        return (
+          <p key={i} className="font-mono text-[11px] leading-5 text-muted-foreground">
+            {done ? "✓ " : "… "}
+            {String(label)}
+          </p>
+        );
+      })}
     </div>
   );
 }
