@@ -1563,3 +1563,15 @@ html {
   .dqss-library-cta { transform: none !important; visibility: visible; pointer-events: auto; }
   .dqss-chart-skeleton { animation: none; }
 }
+
+/* ---- subsystem poster (canon §12) ----
+   One poster per sub-graph hero: giant lowercase serif italic name, the
+   subsystem's OWN livery blooming from below (the sanctioned luminous
+   moment), an honest epithet, and fine print that is a real path or a
+   real function. Surface fallback first: without color-mix() the bloom
+   drops and the poster stays a plain hairline panel. */
+.sub-poster { position: relative; border: 1px solid var(--hair); border-radius: 12px; overflow: hidden; padding: 4.5rem 1.6rem 1.4rem; margin-bottom: 2rem; background: var(--surface); background: radial-gradient(130% 95% at 50% 115%, color-mix(in srgb, var(--sub-acc) 15%, transparent), transparent 62%), var(--surface); }
+.sub-poster .sub-regmark { position: absolute; top: 0.7rem; left: 0.8rem; font-family: var(--font-mono); font-weight: 300; color: var(--ink-mute); font-size: 0.8rem; user-select: none; }
+.sub-poster-name { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(3rem, 8vw, 5rem); line-height: 0.95; letter-spacing: -0.02em; color: var(--ink); text-transform: lowercase; margin: 0; }
+.sub-poster-epithet { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.14em; color: var(--sub-acc); color: color-mix(in srgb, var(--sub-acc) 75%, var(--ink)); margin-top: 0.8rem; }
+.sub-poster-fine { font-family: var(--font-mono); font-size: 0.6rem; color: var(--ink-mute); margin-top: 0.45rem; line-height: 1.8; }
