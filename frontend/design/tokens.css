@@ -26,9 +26,10 @@
   /* --- Per-module accent palette --------------------------------------- */
   --accent-digigraph:  #e5b765;
   --accent-digiquant:  #3dd6c4; /* ruled 2026-07-03: the terminal phosphor is digiquant's identity
-                                   (matches the live [data-theme] accent below; shared with digichat —
-                                   the flagship and its chat surface speak the same light; emerald
-                                   #4fa37a returns to the unassigned pool) */
+                                   (matches the dark-theme --accent below; the light theme runs its
+                                   deeper #0E8C7F for contrast on paper). Shared with digichat — the
+                                   flagship and its chat surface speak the same light; emerald
+                                   #4fa37a returns to the unassigned pool. */
   --accent-atlas:      #6fbf94;
   --accent-hermes:     #4a8f7b;
   --accent-kairos:     #2f7a65;
