@@ -560,7 +560,9 @@ export function StrategySuite() {
     );
   };
   const applyScrollRef = useRef(applyScroll);
-  applyScrollRef.current = applyScroll;
+  useEffect(() => {
+    applyScrollRef.current = applyScroll;
+  });
 
   useMotionValueEvent(scrollYProgress, "change", () => applyScrollRef.current());
 
