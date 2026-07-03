@@ -54,8 +54,18 @@ a{color:inherit;text-decoration:none}
 .paper-grid{position:relative;background-image:linear-gradient(to right,rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.05) 1px,transparent 1px);background-size:72px 72px}
 .regmark{position:absolute;font-family:var(--mono);font-weight:300;color:var(--mute);font-size:1rem;line-height:1;user-select:none}
 
+/* the canon's own nav — §08 grammar applied to itself (auto-hide = our signature, demoed live) */
+.tocnav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.55rem clamp(1.2rem,4vw,2.75rem);background:transparent;transition:transform .5s var(--glide),background .3s var(--glide),border-color .3s var(--glide);border-bottom:1px solid transparent}
+.tocnav.scrolled{background:rgba(11,12,14,.78);backdrop-filter:blur(10px);border-bottom-color:var(--hair)}
+.tocnav.hid{transform:translateY(-100%)}
+.tocnav .brand{font-family:var(--mono);font-size:.8rem;font-weight:500;white-space:nowrap}
+.tocnav .links{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:flex-end}
+.tocnav .links a{font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;color:rgba(236,238,240,.55);transition:color var(--dur-fast) var(--glide)}
+.tocnav .links a:hover{color:var(--ink)}
+@media (prefers-reduced-motion: reduce){.tocnav{transition:none}.tocnav.hid{transform:none}}
+
 /* section chrome: giant dimmed numeral (fiscal move) + hairline */
-.canon-sec{position:relative;border-top:1px solid var(--hair);padding:4.5rem 0 1rem;margin-top:4.5rem}
+.canon-sec{position:relative;border-top:1px solid var(--hair);padding:4.5rem 0 1rem;margin-top:4.5rem;scroll-margin-top:3.2rem}
 .sec-num{position:absolute;top:1.4rem;right:0;font-family:var(--serif);font-weight:300;font-size:clamp(4rem,9vw,7.5rem);line-height:1;color:var(--ink);opacity:.055;user-select:none}
 h2.canon{font-family:var(--serif);font-weight:400;font-size:clamp(1.7rem,3.2vw,2.5rem);letter-spacing:-.015em;line-height:1.08;margin:.5rem 0 .4rem}
 h2.canon em{font-style:italic;color:var(--em)}
@@ -208,9 +218,16 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 </head>
 <body>
 
+<nav class="tocnav" id="tocnav" aria-label="canon sections">
+  <span class="brand">digi<span style="color:var(--em)">things</span> <span style="color:var(--mute);font-weight:400">· canon</span></span>
+  <span class="links">
+    <a href="#s00">00 laws</a><a href="#s01">01 canvas</a><a href="#s02">02 color</a><a href="#s03">03 type</a><a href="#s04">04 actions</a><a href="#s05">05 frames</a><a href="#s06">06 data</a><a href="#s07">07 forms</a><a href="#s08">08 chrome</a><a href="#s09">09 motion</a><a href="#s10">10 digiquant</a><a href="#s11">11 digithings</a><a href="#s12">12 posters</a><a href="#s13">13 olympus</a><a href="#s14">14 ivory</a><a href="#s15">15 ship</a>
+  </span>
+</nav>
+
 <header class="paper-grid" style="border-bottom:1px solid var(--hair);padding:5.5rem 0 4.5rem;overflow:hidden">
-  <span class="regmark" style="top:1.2rem;left:1.4rem">+</span>
-  <span class="regmark" style="top:1.2rem;right:1.4rem">+</span>
+  <span class="regmark" style="top:3.2rem;left:1.4rem">+</span>
+  <span class="regmark" style="top:3.2rem;right:1.4rem">+</span>
   <span class="regmark" style="bottom:1.2rem;left:1.4rem">+</span>
   <span class="regmark" style="bottom:1.2rem;right:1.4rem">+</span>
   <div class="wrap">
@@ -625,7 +642,20 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <h2 class="canon">Eight services. <em>One argument.</em></h2>
   <p class="sec-note">digithings.ai is the umbrella: black &amp; white, a plain canvas — its live token literally reads <span class="v-mono" style="font-size:.85em">--accent: var(--ink)</span>. It argues that the stack composes, and the modules bring the only color, strictly as identifiers. The copy device is provenance-as-typography taken to its conclusion: the real config is the content.</p>
   <div class="lab">
-    <div class="anno">convergence diagram — <b>candidate hero device: services flow into the supervisor, the supervisor flows into the surfaces · every path wears its module's livery as an identifier (the one color allowed on the umbrella) · the flagship runs brightest</b> <span class="chip-prop">proposal — pending approval</span></div>
+    <div class="anno">the plain canvas — <b>umbrella hero specimen, demonstrated: ink only · the em is italic without color · kickers go soft-gray (emerald kickers belong to modules) · primary = btnPaper</b></div>
+    <div style="border:1px solid var(--hair);border-radius:12px;background:var(--bg);padding:2.2rem 1.6rem 1.8rem;max-width:760px;position:relative;overflow:hidden">
+      <span class="regmark" style="top:.7rem;right:.9rem;font-size:.8rem">+</span>
+      <div class="kick" style="color:var(--soft)">// digithings — the open-core agentic stack</div>
+      <div class="v-serif" style="font-size:clamp(1.9rem,4vw,2.9rem);line-height:1.05;letter-spacing:-.02em;margin-top:.6rem">The stack is <em style="font-style:italic">the proof.</em></div>
+      <div class="v-mono num" style="font-size:.7rem;color:var(--soft);margin-top:.9rem">8 services · MIT · backtests refreshed 2026-06-30</div>
+      <div style="display:flex;gap:.8rem;margin-top:1.3rem;flex-wrap:wrap">
+        <button class="btnPaper">Read the code <span aria-hidden="true">→</span></button>
+        <button class="btnGhost">open the docs</button>
+      </div>
+    </div>
+    <div class="prov" style="margin-top:.5rem">note the absences: no emerald anywhere — the em is italic, unpainted · the kicker is soft, not livery · the only near-color is paper. this is what --accent: var(--ink) looks like.</div>
+
+    <div class="anno" style="margin-top:1.8rem">convergence diagram — <b>candidate hero device: services flow into the supervisor, the supervisor flows into the surfaces · every path wears its module's livery as an identifier (the one color allowed on the umbrella) · the flagship runs brightest</b> <span class="chip-prop">proposal — pending approval</span></div>
     <div style="border:1px solid var(--hair);border-radius:10px;background:var(--bg);padding:1rem;max-width:760px;overflow-x:auto">
       <svg viewBox="0 0 720 290" style="width:100%;min-width:560px;font-family:var(--mono);font-size:11px" role="img" aria-label="seven services converge into digigraph, the supervisor, which serves olympus and digichat">
         <g fill="#9AA0A6">
@@ -812,13 +842,18 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   </div>
 </section>
 
+<div style="border-top:1px solid var(--hair);margin-top:4.5rem;padding-top:2rem">
+  <div class="kick">// the canon's own provenance</div>
+  <div class="prov" style="margin-top:.8rem;line-height:2.2;max-width:90ch"><span class="num">ba9ae63</span> foundation §00–04 · <span class="num">d37be29</span> components §05–08 · <span class="num">9c33b51</span> motion lab §09 · <span class="num">325d1aa</span> page grammars §10–12 · <span class="num">982d031</span> olympus + ivory + invisibles §13–15 · <span class="num">4f499c5</span> mobile polish · <span class="num">f19a40c</span> the livery doctrine (user review, 2026-07-02) — every claim in this document is measured, live-verified on origin/main @ <span class="num">1fba70d</span>, or flagged <span style="color:var(--warn)">PROPOSAL</span></div>
+</div>
+
 </main>
 
 <footer class="bloom" style="border-top:1px solid var(--hair);margin-top:5rem;padding:3.5rem 0 2.5rem">
   <div class="wrap" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
     <div>
       <div class="v-mono" style="font-weight:500;font-size:1.15rem">digi<span style="color:var(--em)">things</span></div>
-      <div class="prov" style="margin-top:.5rem">canon v1 · iteration 6 · §00–15 + the livery doctrine (umbrella black &amp; white · modules wear their tokens.css accents) · open proposals: warm canvas · convergence hero · stacked declarative · auto-hide nav</div>
+      <div class="prov" style="margin-top:.5rem">canon v1 · iteration 7 · §00–15 + livery doctrine + self-navigation (the nav above IS the §08 grammar, auto-hide included) · open proposals: warm canvas · convergence hero · stacked declarative · auto-hide nav</div>
     </div>
     <div class="v-mono" style="font-size:.72rem;color:var(--soft)"><span id="sysdot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--up);margin-right:.45rem"></span>all systems yours</div>
   </div>
@@ -828,6 +863,19 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 (function(){
   document.documentElement.classList.add('js');
   requestAnimationFrame(function(){requestAnimationFrame(function(){document.body.classList.add('entered');});});
+
+  /* canon nav — transparent→blur + auto-hide (our §08 signature, demoed on ourselves) */
+  var nav=document.getElementById('tocnav');
+  if(nav){
+    var rmNav=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var lastY=window.scrollY;
+    addEventListener('scroll',function(){
+      var y=window.scrollY;
+      nav.classList.toggle('scrolled',y>40);
+      if(!rmNav){nav.classList.toggle('hid',y>lastY&&y>260);}
+      lastY=y;
+    },{passive:true});
+  }
   document.querySelectorAll('.tgl').forEach(function(b){
     b.addEventListener('click',function(){
       b.parentElement.querySelectorAll('.tgl').forEach(function(x){x.style.background='none';x.style.color='var(--mute)';});
