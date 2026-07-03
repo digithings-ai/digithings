@@ -685,6 +685,8 @@
     color-adjust: exact;
   }
 
+  /* chrome dies in print (canon §17): nav, footer, decorative layers,
+     toolbars, and toggles — the print brand/footer elements replace them. */
   .grain,
   .glow,
   .site-nav,
@@ -701,7 +703,9 @@
   .ts-hint,
   .ts-mode-bar,
   .nav-toggle,
-  .theme-toggle,
+  .theme-toggle {
+    display: none !important;
+  }
   .ts-strategy-notes {
     break-inside: avoid;
     page-break-inside: avoid;
