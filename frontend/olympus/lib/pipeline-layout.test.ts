@@ -88,4 +88,19 @@ describe('layoutPipeline', () => {
     expect(byId('selection:thesis')?.documentKey).toBeUndefined();
     expect(byId('selection:screener')?.documentKey).toBeUndefined();
   });
+
+  it('#1259: digest node resolves via digest-delta on a delta day (no plain `digest` key)', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: {},
+      fanoutKeys: {},
+      presentKeys: new Set(['digest-delta', 'macro']),
+    };
+    const exp: ExpansionState = {
+      expandedStages: new Set(['synthesis']),
+      expandedFanouts: new Set(),
+    };
+    const l = layoutPipeline(day, exp);
+    const byId = (id: string) => l.nodes.find((n) => n.id === id);
+    expect(byId('synthesis:digest')?.documentKey).toBe('digest-delta');
+  });
 });

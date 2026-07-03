@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useAppShell } from '@/components/app-shell-context';
-import { buildPipelineHref } from '@/lib/pipeline-links';
+import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
 import { buildDocumentSearchItems } from '@/lib/document-search';
 import type { Doc } from '@/lib/types';
 
@@ -116,8 +116,17 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     icon: Brain,
   }));
 
-  // Recent run dates: up to 5 most recent unique dates with a digest
-  const recentDates = [...new Set(docs.filter((d) => d.path === 'digest' || d.path === 'Digest').map((d) => d.date))]
+  // Recent run dates: up to 5 most recent unique dates with a digest. `path` is
+  // the raw `document_key` (see queries.ts) — baseline days publish `digest`,
+  // delta days (the majority) publish `digest-delta`; both must match here or
+  // this list silently drops every non-baseline day.
+  const recentDates = [
+    ...new Set(
+      docs
+        .filter((d) => (DIGEST_DOCUMENT_KEYS as readonly string[]).includes(d.path))
+        .map((d) => d.date),
+    ),
+  ]
     .sort()
     .reverse()
     .slice(0, 5);

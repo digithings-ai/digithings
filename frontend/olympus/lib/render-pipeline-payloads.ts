@@ -437,6 +437,74 @@ export function renderSegmentReportMarkdown(payload: unknown): string {
   return `${out.join('\n').trim()}\n`;
 }
 
+/* ── Macro regime chips (Pipeline summary strip) ─────────────────────────── */
+
+export type RegimeChipColor = 'green' | 'red' | 'amber' | 'blue' | 'muted';
+
+export interface RegimeChip {
+  label: string;
+  value: string;
+  color: RegimeChipColor;
+}
+
+// Directional read for risk assets: green = supportive, red = headwind, amber =
+// transitional/mixed, blue = steady-state neutral. Values are the `MacroRegimeReport`
+// Literal enums (`digiquant/olympus/atlas/phases/phase3_macro.py`).
+const GROWTH_CHIP_COLOR: Record<string, RegimeChipColor> = {
+  expanding: 'green',
+  slowing: 'amber',
+  contracting: 'red',
+};
+const INFLATION_CHIP_COLOR: Record<string, RegimeChipColor> = {
+  cooling: 'green',
+  cold: 'blue',
+  hot: 'red',
+};
+const POLICY_CHIP_COLOR: Record<string, RegimeChipColor> = {
+  easing: 'green',
+  neutral: 'blue',
+  tightening: 'red',
+};
+const RISK_APPETITE_CHIP_COLOR: Record<string, RegimeChipColor> = {
+  risk_on: 'green',
+  mixed: 'amber',
+  risk_off: 'red',
+};
+
+/**
+ * Build the Pipeline summary strip's regime chips from the `macro` segment
+ * document's 4-factor breakdown (`growth`/`inflation`/`policy`/`risk_appetite`
+ * — each a short Literal token, not a nested object). Unknown/future token
+ * values still render (as a `muted` chip) rather than being dropped.
+ */
+export function regimeChipsFromMacroPayload(payload: unknown): RegimeChip[] {
+  const p = asObj(payload);
+  if (!p) return [];
+  const chips: RegimeChip[] = [];
+
+  const growth = s(p.growth).trim();
+  if (growth) chips.push({ label: 'Growth', value: growth, color: GROWTH_CHIP_COLOR[growth] ?? 'muted' });
+
+  const inflation = s(p.inflation).trim();
+  if (inflation) {
+    chips.push({ label: 'Inflation', value: inflation, color: INFLATION_CHIP_COLOR[inflation] ?? 'muted' });
+  }
+
+  const policy = s(p.policy).trim();
+  if (policy) chips.push({ label: 'Policy', value: policy, color: POLICY_CHIP_COLOR[policy] ?? 'muted' });
+
+  const riskAppetite = s(p.risk_appetite).trim();
+  if (riskAppetite) {
+    chips.push({
+      label: 'Risk appetite',
+      value: riskAppetite.replace(/_/g, '-'),
+      color: RISK_APPETITE_CHIP_COLOR[riskAppetite] ?? 'muted',
+    });
+  }
+
+  return chips;
+}
+
 /* ── Analyst specialist report (Phase 7C) ────────────────────────────────── */
 
 /**

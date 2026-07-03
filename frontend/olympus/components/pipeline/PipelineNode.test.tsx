@@ -52,4 +52,64 @@ describe('PipelineNode', () => {
     const rawBlue = 'rgba(' + '59,130,246';
     expect(html).not.toContain(rawBlue);
   });
+
+  describe('inert nodes (#1259 follow-up)', () => {
+    const leafNoData: LaidOutNode = {
+      id: 'selection:thesis',
+      kind: 'substep',
+      stageId: 'selection',
+      label: 'Thesis framing',
+      x: 0,
+      y: 0,
+      width: 160,
+      height: 48,
+      // no documentKey — never resolves, nothing to expand
+    };
+
+    it('renders a leaf substep with no documentKey as visibly inert', () => {
+      const html = renderToStaticMarkup(
+        createElement(PipelineNode, {
+          node: leafNoData,
+          expandable: false,
+          expanded: false,
+          onActivate: () => {},
+        }),
+      );
+      expect(html).toContain('cursor-default');
+      expect(html).toContain('aria-disabled="true"');
+      expect(html).toContain('No output for this step on this day');
+      expect(html).not.toContain('cursor-pointer');
+      // Inline style, not a Tailwind class — the `.glass-card.reveal-in` mount
+      // animation rule (app/globals.css) sets `opacity:1` with higher CSS
+      // specificity than an `opacity-50` utility class would have.
+      expect(html).toContain('opacity:0.5');
+    });
+
+    it('does not render a fanout-parent substep as inert even without a documentKey', () => {
+      const html = renderToStaticMarkup(
+        createElement(PipelineNode, {
+          node: fanoutNode,
+          expandable: true,
+          expanded: false,
+          onActivate: () => {},
+        }),
+      );
+      expect(html).toContain('cursor-pointer');
+      expect(html).not.toContain('cursor-default');
+      expect(html).not.toContain('aria-disabled');
+    });
+
+    it('does not render a leaf substep with a real documentKey as inert', () => {
+      const html = renderToStaticMarkup(
+        createElement(PipelineNode, {
+          node: { ...leafNoData, documentKey: 'macro' },
+          expandable: false,
+          expanded: false,
+          onActivate: () => {},
+        }),
+      );
+      expect(html).toContain('cursor-pointer');
+      expect(html).not.toContain('cursor-default');
+    });
+  });
 });

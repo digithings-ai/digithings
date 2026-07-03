@@ -4,12 +4,17 @@
  * Wide: brand · inline links · theme + GitHub.
  * Narrow: brand · theme + GitHub + hamburger — links + Olympus CTA live in a full-height sheet.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ThemeToggle } from "@digithings/web";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
 import { OlympusMark } from "./OlympusMark";
+
+// Mount gate: server + first (hydration) client render read `false`; the client
+// re-reads `true` post-hydration. Keeps the portal out of the SSR/hydration tree
+// so it can't cause a mismatch — without a setState-in-effect cascade.
+const emptySubscribe = () => () => {};
 
 function GitHubGlyph() {
   return (
@@ -47,15 +52,13 @@ function NavLinks({
 export function DqNav() {
   const navRef = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  // Portal only after hydration — first client render must match SSR (no portal nodes).
-  const [portalReady, setPortalReady] = useState(false);
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount gate for createPortal
-    setPortalReady(true);
-  }, []);
 
   useEffect(() => {
     const nav = navRef.current;
@@ -90,7 +93,7 @@ export function DqNav() {
   }, [menuOpen, closeMenu]);
 
   const menuOverlay =
-    portalReady &&
+    mounted &&
     createPortal(
       <>
         <div

@@ -87,7 +87,11 @@ def _h7_node(state: HermesState) -> dict[str, Any]:
         phase_inputs=phase_inputs,
         shared_context=_shared_context(
             state,
-            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+            # `digest-baseline` is never written by anything — publish_phase.py
+            # writes plain `digest` on baseline runs, `digest-delta` on delta runs.
+            # The old tuple silently dropped the freshest baseline digest from
+            # context every Monday (#1270).
+            context_keys=("pm-rebalance", "digest", "digest-delta"),
             data_layer_scope="portfolio",
         ),
         output_model=PMDirectionMemo,

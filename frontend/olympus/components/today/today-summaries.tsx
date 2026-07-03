@@ -84,7 +84,7 @@ export function TodaySummaries({
       <Doorway
         title="The read"
         cta="Read"
-        href={buildPipelineHref({ date: asOfDate, node: 'digest' })}
+        href={buildPipelineHref({ date: asOfDate, stage: 'synthesis', node: 'digest' })}
         icon={BookOpen}
       >
         <p className="line-clamp-3 text-sm leading-snug text-text-secondary">

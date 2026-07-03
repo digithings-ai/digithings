@@ -72,6 +72,11 @@ SCORE_SKIP_PATH_FRAGMENTS: tuple[str, ...] = (
     "docs/reviews/",
     "digigraph/docs/SECURITY.md",
     "digigraph/src/digigraph/tools/analytics/execute_python.py",
+    # Shared design system (CSS/JS presentation) — score.py's anti-pattern
+    # heuristics are Python-oriented and misfire on CSS/JS (eval/exec/TODO scans
+    # hit all files). This is the source-of-truth design dir we iterate heavily;
+    # secrets are still covered by gitleaks. See #1310.
+    "frontend/design/",
 )
 
 # ── Anti-pattern definitions ──────────────────────────────────────────────────
