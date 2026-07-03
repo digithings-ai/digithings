@@ -20,7 +20,7 @@
   --hair:rgba(255,255,255,.09); --hair2:rgba(255,255,255,.16);
   --ink:#ECEEF0; --soft:#9AA0A6; --mute:#6B7177;
   /* instrumentation — the ONLY colors */
-  --em:#4fa37a; --em-weak:rgba(79,163,122,.14);
+  --em:#3dd6c4; --em-weak:rgba(61,214,196,.14);
   --up:#3FB984; --down:#E0654B; --warn:#E0B341;
   /* paper — warm, never pure white */
   --paper:#F9F8F6;
@@ -43,7 +43,7 @@ html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-weight:400;line-height:1.65;letter-spacing:-.011em;-webkit-font-smoothing:antialiased}
 .wrap{max-width:1180px;margin-inline:auto;padding-inline:clamp(1.2rem,4vw,2.75rem)}
 a{color:inherit;text-decoration:none}
-::selection{background:var(--em);color:#071410}
+::selection{background:var(--em);color:#04201C}
 :focus-visible{outline:2px solid var(--em);outline-offset:3px;border-radius:3px}
 
 /* voices */
@@ -84,13 +84,13 @@ h2.canon em{font-style:italic;color:var(--em)}
 .swatch[role=button]:hover{border-color:var(--em)}
 
 /* ── BUTTON GRAMMAR (canon §04) ─────────────────────────────── */
-.btnP{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--sans);font-weight:500;font-size:.92rem;padding:.7rem 1.35rem;border-radius:6px;border:1px solid var(--em);background:var(--em);color:#071410;cursor:pointer;transition:transform var(--dur-fast) var(--glide),box-shadow var(--dur-fast) var(--glide),background var(--dur-fast) var(--glide)}
-.btnP:hover{transform:translateY(-1px);background:#57b287}
+.btnP{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--sans);font-weight:500;font-size:.92rem;padding:.7rem 1.35rem;border-radius:6px;border:1px solid var(--em);background:var(--em);color:#04201C;cursor:pointer;transition:transform var(--dur-fast) var(--glide),box-shadow var(--dur-fast) var(--glide),background var(--dur-fast) var(--glide)}
+.btnP:hover{transform:translateY(-1px);background:#57ddcd}
 .btnP:active{transform:translateY(0) scale(.985)}
 .btnP span[aria-hidden]{transition:transform var(--dur-fast) var(--glide)}
 .btnP:hover span[aria-hidden]{transform:translateX(3px)}
 .btnGhost{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.8rem;letter-spacing:.06em;padding:.7rem 1.3rem;border-radius:4px;border:1px solid rgba(236,238,240,.35);background:rgba(0,0,0,.35);color:var(--ink);cursor:pointer;transition:background var(--dur) var(--ghost-ease),border-color var(--dur) var(--ghost-ease)}
-.btnGhost:hover{background:rgba(79,163,122,.12);border-color:var(--em)}
+.btnGhost:hover{background:rgba(61,214,196,.12);border-color:var(--em)}
 .btnGhost span[aria-hidden]{transition:transform var(--dur) var(--ghost-ease)}
 .btnGhost:hover span[aria-hidden]{transform:translateX(4px)}
 .btnPaper{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--sans);font-weight:500;font-size:.92rem;padding:.7rem 1.35rem;border-radius:6px;border:1px solid var(--paper);background:var(--paper);color:#0B0C0E;cursor:pointer;transition:transform var(--dur-fast) var(--glide)}
@@ -117,7 +117,7 @@ h2.canon em{font-style:italic;color:var(--em)}
 }
 
 /* footer bloom — the ONE sanctioned atmosphere */
-.bloom{background:radial-gradient(34rem 12rem at 50% 130%,rgba(79,163,122,.22),transparent 65%)}
+.bloom{background:radial-gradient(34rem 12rem at 50% 130%,rgba(61,214,196,.22),transparent 65%)}
 table.canon{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:1rem}
 table.canon th,table.canon td{text-align:left;padding:.55rem .7rem;border-bottom:1px solid var(--hair)}
 table.canon th{font-family:var(--mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);font-weight:400}
@@ -166,9 +166,9 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 .cmp{position:relative;border:1px solid var(--hair);border-radius:10px;overflow:hidden;background:var(--bg);max-width:760px}
 .cmp-top{position:absolute;inset:0;background:var(--bg);clip-path:inset(0 calc(100% - var(--cx,55%)) 0 0)}
 .cmp-handle{position:absolute;top:0;bottom:0;left:var(--cx,55%);width:1px;background:var(--em);pointer-events:none}
-.cmp-handle::after{content:"⇄";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22px;height:22px;display:grid;place-items:center;font-family:var(--mono);font-size:.62rem;color:#071410;background:var(--em);border-radius:999px}
+.cmp-handle::after{content:"⇄";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22px;height:22px;display:grid;place-items:center;font-family:var(--mono);font-size:.62rem;color:#04201C;background:var(--em);border-radius:999px}
 .cmp input[type=range]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:ew-resize;margin:0}
-.cmp input[type=range]:focus-visible~.cmp-handle{box-shadow:0 0 0 2px rgba(79,163,122,.5)}
+.cmp input[type=range]:focus-visible~.cmp-handle{box-shadow:0 0 0 2px rgba(61,214,196,.5)}
 .cmp-tag{position:absolute;top:.6rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;color:var(--soft);background:rgba(11,12,14,.72);padding:.15rem .5rem;border-radius:4px;border:1px solid var(--hair)}
 
 @media (prefers-reduced-motion: reduce){
@@ -185,21 +185,21 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 .pm-blk::before{counter-increment:pm;content:counter(pm,decimal-leading-zero);font-family:var(--mono);font-size:.56rem;color:var(--mute);letter-spacing:.1em}
 .pm-blk b{font-family:var(--mono);font-weight:400;font-size:.68rem;letter-spacing:.08em;color:var(--ink);white-space:nowrap;flex:0 0 auto}
 .pm-blk span{font-family:var(--mono);font-size:.6rem;color:var(--mute);text-align:right;line-height:1.7}
-.pm-blk.hot{border-color:rgba(79,163,122,.45)}
+.pm-blk.hot{border-color:rgba(61,214,196,.45)}
 @media (max-width:640px){.pm-blk{flex-wrap:wrap}.pm-blk span{margin-left:0;flex-basis:100%;text-align:left}}
-.pm-tag{font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;color:var(--em);border:1px solid rgba(79,163,122,.45);border-radius:999px;padding:.05rem .45rem;white-space:nowrap}
+.pm-tag{font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;color:var(--em);border:1px solid rgba(61,214,196,.45);border-radius:999px;padding:.05rem .45rem;white-space:nowrap}
 .ldot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:.45rem;vertical-align:1px}
 
 /* the livery switcher — the scope mechanism, live */
 .liv-chip{font-family:var(--mono);font-size:.62rem;letter-spacing:.06em;padding:.32rem .75rem;border-radius:999px;border:1px solid var(--hair);background:none;color:var(--soft);cursor:pointer;transition:color var(--dur-fast) var(--glide),border-color var(--dur-fast) var(--glide)}
 .liv-chip:hover{color:var(--ink)}
 .liv-chip.on{color:var(--ink)}
-.liv-demo{--acc:#4fa37a;border:1px solid var(--hair);border-radius:10px;background:var(--bg);padding:1.4rem;max-width:760px;margin-top:.9rem}
+.liv-demo{--acc:#3dd6c4;border:1px solid var(--hair);border-radius:10px;background:var(--bg);padding:1.4rem;max-width:760px;margin-top:.9rem}
 .liv-demo .lv-read{font-family:var(--mono);font-size:.64rem;color:var(--mute)}
 .liv-demo .lv-kick{font-family:var(--mono);font-size:.68rem;letter-spacing:.16em;color:var(--acc);margin-top:.9rem;transition:color .35s var(--glide)}
 .liv-demo .lv-em{color:var(--acc);transition:color .35s var(--glide)}
 .liv-demo .lv-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--acc);margin-right:.45rem;transition:background .35s var(--glide)}
-.liv-demo .lv-btn{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--sans);font-weight:500;font-size:.9rem;padding:.65rem 1.25rem;border-radius:6px;border:1px solid var(--acc);background:var(--acc);color:#071410;cursor:pointer;margin-top:1.1rem;transition:background .35s var(--glide),border-color .35s var(--glide),transform var(--dur-fast) var(--glide)}
+.liv-demo .lv-btn{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--sans);font-weight:500;font-size:.9rem;padding:.65rem 1.25rem;border-radius:6px;border:1px solid var(--acc);background:var(--acc);color:#04201C;cursor:pointer;margin-top:1.1rem;transition:background .35s var(--glide),border-color .35s var(--glide),transform var(--dur-fast) var(--glide)}
 .liv-demo .lv-btn:hover{transform:translateY(-1px)}
 
 /* ── OLYMPUS DASHBOARD (§13) — product grammar ── */
@@ -211,10 +211,10 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 
 /* ── IVORY READING MODE (§14) ── */
 .ivory{background:var(--paper);color:#141413;border:1px solid #E8E6DC;border-radius:12px;padding:1.5rem;max-width:760px}
-.ivory .ik{font-family:var(--mono);font-size:.64rem;letter-spacing:.14em;color:#2E6B4E}
+.ivory .ik{font-family:var(--mono);font-size:.64rem;letter-spacing:.14em;color:#106B5E}
 .ivory h3{font-family:var(--serif);font-weight:400;font-size:1.5rem;letter-spacing:-.01em;margin:.5rem 0 .6rem}
 .ivory p{font-family:var(--serif);font-size:.98rem;line-height:1.75;max-width:62ch}
-.ivory a{color:#141413;text-decoration:underline;text-decoration-color:#2E6B4E;text-decoration-thickness:1px;text-underline-offset:3px}
+.ivory a{color:#141413;text-decoration:underline;text-decoration-color:#106B5E;text-decoration-thickness:1px;text-underline-offset:3px}
 .ivory code{font-family:var(--mono);font-size:.82em;background:#F0EEE6;border:1px solid #E8E6DC;border-radius:4px;padding:.08em .35em}
 .ivory .icode{background:#F0EEE6;border:1px solid #E8E6DC;border-radius:8px;padding:.9rem 1rem;font-family:var(--mono);font-size:.76rem;line-height:1.9;color:#141413;margin-top:.9rem}
 
@@ -226,7 +226,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 
 /* mythology posters — the sanctioned luminous moment, one per subsystem hero */
 .posters{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));max-width:1000px}
-.poster{position:relative;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:radial-gradient(130% 95% at 50% 115%,rgba(79,163,122,.17),transparent 62%),var(--bg);padding:3rem 1.3rem 1.1rem;min-height:270px;display:flex;flex-direction:column;justify-content:flex-end}
+.poster{position:relative;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:radial-gradient(130% 95% at 50% 115%,rgba(61,214,196,.17),transparent 62%),var(--bg);padding:3rem 1.3rem 1.1rem;min-height:270px;display:flex;flex-direction:column;justify-content:flex-end}
 .poster .p-name{font-family:var(--serif);font-style:italic;font-weight:300;font-size:clamp(2.4rem,4.5vw,3.4rem);line-height:.95;letter-spacing:-.02em}
 .poster .p-role{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;color:var(--em);margin-top:.75rem}
 .poster .p-fine{font-family:var(--mono);font-size:.56rem;color:var(--mute);margin-top:.4rem;line-height:1.8}
@@ -235,7 +235,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 /* the colophon — the module's name closes the page (§08) */
 .colophon{overflow:hidden;padding:6rem 0 0;user-select:none;pointer-events:none}
 .colo-word{display:block;font-family:var(--mono);font-weight:500;font-size:clamp(3.2rem,15.5vw,15rem);line-height:.82;letter-spacing:-.05em;white-space:nowrap;text-align:center;color:transparent;-webkit-text-stroke:1px rgba(236,238,240,.3)}
-.colo-word b{font-weight:500;color:transparent;-webkit-text-stroke:1px rgba(79,163,122,.7)}
+.colo-word b{font-weight:500;color:transparent;-webkit-text-stroke:1px rgba(61,214,196,.7)}
 @supports (animation-timeline: view()){
   @media (prefers-reduced-motion: no-preference){
     .colo-word{opacity:0;transform:translateY(34%);animation:colo-rise linear both;animation-timeline:view();animation-range:entry 0% entry 100%}
@@ -243,7 +243,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   }
 }
 @keyframes colo-rise{to{opacity:1;transform:none}}
-@keyframes colo-fill{to{color:rgba(79,163,122,.16)}}
+@keyframes colo-fill{to{color:rgba(61,214,196,.16)}}
 </style>
 </head>
 <body>
@@ -268,7 +268,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
       <a class="btnGhost" href="#s04">explore the grammar <span aria-hidden="true">→</span></a>
       <span class="cmd"><b>$</b> git clone github.com/digithings-ai <button class="copy" data-copy="git clone https://github.com/digithings-ai/digithings">copy</button></span>
     </div>
-    <div class="prov enter d3" style="margin-top:2.2rem">// canon v1 · fraunces 400 · geist mono · typeset in the flagship livery (digiquant #4fa37a) — the umbrella itself is black &amp; white</div>
+    <div class="prov enter d3" style="margin-top:2.2rem">// canon v1 · fraunces 400 · geist mono · typeset in the flagship livery (digiquant #3dd6c4) — the umbrella itself is black &amp; white</div>
   </div>
 </header>
 
@@ -285,7 +285,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
         <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">No invented stats, no round marketing numbers, no counters on filler. Every figure carries its provenance: <span class="v-mono num" style="color:var(--ink);font-size:.8rem">PF 8.72 · as of 2026-06-29</span>. The timestamp is the argument.</p></div>
       <div class="lab" style="margin-top:0"><div class="anno">law 02</div>
         <div class="v-serif" style="font-size:1.25rem">Color is instrumentation.</div>
-        <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">Emerald means <em style="color:var(--em)">interactive or alive</em> — and it is digiquant's livery, not the stack's. Green means profit, copper means loss — money only. The umbrella is black &amp; white: on digithings.ai the accent IS the ink (<span class="v-mono" style="font-size:.8em">--accent: var(--ink)</span>, live token). A colored pixel is a gauge reading or a module's flag — never paint.</p></div>
+        <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">The phosphor teal means <em style="color:var(--em)">interactive or alive</em> — and it is digiquant's livery, not the stack's. Green means profit, copper means loss — money only. The umbrella is black &amp; white: on digithings.ai the accent IS the ink (<span class="v-mono" style="font-size:.8em">--accent: var(--ink)</span>, live token). A colored pixel is a gauge reading or a module's flag — never paint.</p></div>
       <div class="lab" style="margin-top:0"><div class="anno">law 03</div>
         <div class="v-serif" style="font-size:1.25rem">Two voices, one page.</div>
         <p style="font-size:.87rem;color:var(--soft);margin-top:.4rem">Fraunces at weight 400 — never bolded, scale does the shouting — for the human claim. Geist Mono for the machine's testimony. Geist Sans is connective tissue and stays out of the way. The ban binds the serif voice only: sans sub-heads may carry 500–600 as UI weight.</p></div>
@@ -333,7 +333,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <h2 class="canon">Five colors have jobs. <em>The rest is silence.</em></h2>
   <table class="canon">
     <tr><th>token</th><th>value</th><th>only job</th><th>never</th></tr>
-    <tr><td>--em</td><td><span class="num" style="color:var(--em)">#4fa37a</span></td><td>interactive · active · alive (CTA fill, focus ring, live dot) — digiquant's livery, worn by this canon</td><td>decoration, backgrounds, borders at rest, umbrella surfaces</td></tr>
+    <tr><td>--em</td><td><span class="num" style="color:var(--em)">#3dd6c4</span></td><td>interactive · active · alive (CTA fill, focus ring, live dot) — digiquant's livery, worn by this canon</td><td>decoration, backgrounds, borders at rest, umbrella surfaces</td></tr>
     <tr><td>--up</td><td><span class="num" style="color:var(--up)">#3FB984</span></td><td>profit, positive delta — money only</td><td>success states of UI chores</td></tr>
     <tr><td>--down</td><td><span class="num" style="color:var(--down)">#E0654B</span></td><td>loss, drawdown, negative delta — money only</td><td>generic errors (forms use pastel validation)</td></tr>
     <tr><td>--warn</td><td><span class="num" style="color:var(--warn)">#E0B341</span></td><td>degraded / stale-data caution</td><td>highlights, accents</td></tr>
@@ -345,25 +345,25 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
     <div class="v-mono num" style="font-size:.72rem;color:var(--soft);line-height:2">frontend/design/tokens.css: <span style="color:var(--ink)">.accent-digiquant { --accent: var(--accent-digiquant) }</span><br>digithings-web/app/globals.css: <span style="color:var(--ink)">--accent: var(--ink)</span> — the umbrella paints with ink only</div>
     <div class="lab-grid" style="grid-template-columns:repeat(auto-fit,minmax(132px,1fr));margin-top:.9rem">
       <div class="swatch" style="background:#ECEEF0"><i style="color:#121417">digithings · var(--ink)</i></div>
-      <div class="swatch" style="background:#e5b765"><i style="color:#071410">digigraph #e5b765</i></div>
-      <div class="swatch" style="background:#4fa37a"><i style="color:#071410">digiquant #4fa37a</i></div>
-      <div class="swatch" style="background:#6fbf94"><i style="color:#071410">atlas #6fbf94</i></div>
-      <div class="swatch" style="background:#4a8f7b"><i style="color:#071410">hermes #4a8f7b</i></div>
+      <div class="swatch" style="background:#e5b765"><i style="color:#04201C">digigraph #e5b765</i></div>
+      <div class="swatch" style="background:#3dd6c4"><i style="color:#04201C">digiquant #3dd6c4</i></div>
+      <div class="swatch" style="background:#6fbf94"><i style="color:#04201C">atlas #6fbf94</i></div>
+      <div class="swatch" style="background:#4a8f7b"><i style="color:#04201C">hermes #4a8f7b</i></div>
       <div class="swatch" style="background:#2f7a65"><i style="color:#F9F8F6">kairos #2f7a65</i></div>
-      <div class="swatch" style="background:#5aa3c4"><i style="color:#071410">digisearch #5aa3c4</i></div>
-      <div class="swatch" style="background:#3DD6C4"><i style="color:#071410">digichat #3DD6C4</i></div>
-      <div class="swatch" style="background:#d97a5a"><i style="color:#071410">digikey #d97a5a</i></div>
-      <div class="swatch" style="background:#6fa3a3"><i style="color:#071410">digismith #6fa3a3</i></div>
-      <div class="swatch" style="background:#b87840"><i style="color:#071410">digiclaw #b87840</i></div>
-      <div class="swatch" style="background:#9ea0a5"><i style="color:#071410">digibase #9ea0a5</i></div>
-      <div class="swatch" style="background:#7b7fc7"><i style="color:#071410">digistore #7b7fc7</i></div>
-      <div class="swatch" style="background:#4fa39b"><i style="color:#071410">digilink #4fa39b</i></div>
+      <div class="swatch" style="background:#5aa3c4"><i style="color:#04201C">digisearch #5aa3c4</i></div>
+      <div class="swatch" style="background:#3DD6C4"><i style="color:#04201C">digichat #3DD6C4</i></div>
+      <div class="swatch" style="background:#d97a5a"><i style="color:#04201C">digikey #d97a5a</i></div>
+      <div class="swatch" style="background:#6fa3a3"><i style="color:#04201C">digismith #6fa3a3</i></div>
+      <div class="swatch" style="background:#b87840"><i style="color:#04201C">digiclaw #b87840</i></div>
+      <div class="swatch" style="background:#9ea0a5"><i style="color:#04201C">digibase #9ea0a5</i></div>
+      <div class="swatch" style="background:#7b7fc7"><i style="color:#04201C">digistore #7b7fc7</i></div>
+      <div class="swatch" style="background:#4fa39b"><i style="color:#04201C">digilink #4fa39b</i></div>
     </div>
     <div class="anno" style="margin-top:1.6rem">the switcher — <b>the scope mechanism live: click a module and everything consuming var(--accent) re-dresses · press digithings and watch the color leave the room</b></div>
     <div style="display:flex;gap:.45rem;flex-wrap:wrap;max-width:760px">
       <button class="liv-chip" data-liv="digithings" data-hex="#ECEEF0">digithings</button>
       <button class="liv-chip" data-liv="digigraph" data-hex="#e5b765">digigraph</button>
-      <button class="liv-chip on" data-liv="digiquant" data-hex="#4fa37a" style="border-color:#4fa37a">digiquant</button>
+      <button class="liv-chip on" data-liv="digiquant" data-hex="#3dd6c4" style="border-color:#3dd6c4">digiquant</button>
       <button class="liv-chip" data-liv="atlas" data-hex="#6fbf94">atlas</button>
       <button class="liv-chip" data-liv="hermes" data-hex="#4a8f7b">hermes</button>
       <button class="liv-chip" data-liv="kairos" data-hex="#2f7a65">kairos</button>
@@ -377,13 +377,13 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
       <button class="liv-chip" data-liv="digilink" data-hex="#4fa39b">digilink</button>
     </div>
     <div class="liv-demo" id="livdemo">
-      <div class="lv-read num" id="livread">scope: .accent-digiquant → --accent: #4fa37a</div>
+      <div class="lv-read num" id="livread">scope: .accent-digiquant → --accent: #3dd6c4</div>
       <div class="lv-kick" id="livkick">// digiquant — module surface</div>
       <div class="v-serif" style="font-size:clamp(1.3rem,2.6vw,1.9rem);line-height:1.12;margin-top:.5rem">One mechanism. <em class="lv-em" style="font-style:italic">Every module.</em></div>
       <div class="v-mono num" style="font-size:.7rem;color:var(--soft);margin-top:.7rem"><span class="lv-dot"></span>backtests refreshed 2026-06-30 · /healthz ok</div>
       <button class="lv-btn">Enter the module <span aria-hidden="true">→</span></button>
     </div>
-    <div class="prov" style="margin-top:.9rem">rules: one livery per scope — liveries never mix on a surface · the core module (digiquant) carries the loudest voice · atlas / hermes / kairos are digiquant's green family · on the umbrella a livery appears only as an identifier — index dot, diagram path, chip — and umbrella CTAs stay ink/paper · digivault: livery unassigned</div>
+    <div class="prov" style="margin-top:.9rem">rules: one livery per scope — liveries never mix on a surface · the core module (digiquant) carries the loudest voice · digiquant and digichat share the terminal phosphor #3DD6C4 — the flagship and its chat surface speak the same light; the one sanctioned share · emerald #4fa37a returns to the unassigned pool · atlas / hermes / kairos are the olympus green family · on the umbrella a livery appears only as an identifier — index dot, diagram path, chip — and umbrella CTAs stay ink/paper · digivault: livery unassigned</div>
   </div>
 </section>
 
@@ -392,7 +392,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <div class="kick">// typography — the two voices</div>
   <h2 class="canon">Fraunces claims. <em>Mono testifies.</em></h2>
   <div class="lab">
-    <div class="anno">display — <b>fraunces 400 · optical 9..144 · −0.025em · lh 1.02–1.08 · em → italic + emerald · NEVER bolded — scale shouts, weight stays literary</b></div>
+    <div class="anno">display — <b>fraunces 400 · optical 9..144 · −0.025em · lh 1.02–1.08 · em → italic + teal · NEVER bolded — scale shouts, weight stays literary</b></div>
     <div class="v-serif" style="font-size:clamp(2.2rem,5vw,3.8rem);line-height:1.04;letter-spacing:-.025em">A quant hedge fund.<br><em style="font-style:italic;color:var(--em)">In a box you own.</em></div>
     <div class="anno" style="margin-top:1.6rem">stacked declarative variant — <b>sanctioned alternate for the flagship hero (§10)</b></div>
     <div class="v-serif" style="font-size:clamp(1.8rem,4vw,3rem);line-height:1.14">Research.<br>Risk.<br><em style="font-style:italic;color:var(--em)">Execution.</em></div>
@@ -405,7 +405,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   </div>
   <table class="canon">
     <tr><th>role</th><th>face · weight</th><th>size</th><th>tracking</th><th>case</th></tr>
-    <tr><td>hero display</td><td>Fraunces 400</td><td class="num">clamp(2.5rem → 4.7rem)</td><td class="num">−0.025em</td><td>sentence, em=italic emerald</td></tr>
+    <tr><td>hero display</td><td>Fraunces 400</td><td class="num">clamp(2.5rem → 4.7rem)</td><td class="num">−0.025em</td><td>sentence, em=italic teal</td></tr>
     <tr><td>section title</td><td>Fraunces 400</td><td class="num">clamp(1.6rem → 2.4rem)</td><td class="num">−0.01em</td><td>sentence</td></tr>
     <tr><td>kicker</td><td>Geist Mono 400</td><td class="num">0.7rem</td><td class="num">+0.16em</td><td>lowercase, // prefix</td></tr>
     <tr><td>data label</td><td>Geist Mono 400</td><td class="num">0.64rem</td><td class="num">+0.14em</td><td>UPPERCASE</td></tr>
@@ -420,12 +420,12 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <h2 class="canon">One loud thing per view. <em>Commands are CTAs.</em></h2>
   <p class="sec-note">Exactly one filled action per viewport. Ghost buttons stay legible over any dark media. Where the next step is a command, the command IS the button — with a working copy affordance.</p>
   <div class="lab">
-    <div class="anno">primary — <b>module-livery fill (shown in digiquant emerald) · r6 · hover lift −1px + arrow nudge · active scale .985 · one per viewport · on the umbrella the primary is btnPaper: ink on paper, never a colored fill</b></div>
+    <div class="anno">primary — <b>module-livery fill (shown in the digiquant teal) · r6 · hover lift −1px + arrow nudge · active scale .985 · one per viewport · on the umbrella the primary is btnPaper: ink on paper, never a colored fill</b></div>
     <div style="display:flex;gap:.9rem;flex-wrap:wrap;align-items:center">
       <button class="btnP">Open Olympus <span aria-hidden="true">→</span></button>
       <button class="btnP btn-disabled">Open Olympus <span aria-hidden="true">→</span></button><span class="statepill">disabled: opacity .38, no pointer</span>
     </div>
-    <div class="anno" style="margin-top:1.5rem">ghost — <b>rgba(0,0,0,.35) fill · 35%-alpha hairline · r4 · mono label · hover: emerald border + 12% emerald wash · .5s expo-out</b></div>
+    <div class="anno" style="margin-top:1.5rem">ghost — <b>rgba(0,0,0,.35) fill · 35%-alpha hairline · r4 · mono label · hover: teal border + 12% teal wash · .5s expo-out</b></div>
     <div style="display:flex;gap:.9rem;flex-wrap:wrap;align-items:center">
       <button class="btnGhost">run backtest <span aria-hidden="true">→</span></button>
       <button class="btnGhost">read the method <span aria-hidden="true">→</span></button>
@@ -441,7 +441,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
       <span class="cmd"><b>$</b> make stack-local <button class="copy" data-copy="make stack-local">copy</button></span>
       <span class="cmd"><b>$</b> uvx digiquant backtest strategies/momentum.yaml <button class="copy" data-copy="uvx digiquant backtest strategies/momentum.yaml">copy</button></span>
     </div>
-    <div class="anno" style="margin-top:1.5rem">focus — <b>keyboard :focus-visible = 2px emerald ring, offset 3px (tab to test) · CTA copy law: name the destination — never bare "Get started"</b></div>
+    <div class="anno" style="margin-top:1.5rem">focus — <b>keyboard :focus-visible = 2px teal ring, offset 3px (tab to test) · CTA copy law: name the destination — never bare "Get started"</b></div>
   </div>
 </section>
 
@@ -513,9 +513,9 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <div class="kick">// forms &amp; disclosure</div>
   <h2 class="canon">Hairline inputs. <em>Honest answers.</em></h2>
   <div class="lab">
-    <div class="anno">text input — <b>transparent fill · 1px --hair2 · r8 · focus = 2px emerald ring · pastel validation (money colors NEVER used for form errors)</b></div>
+    <div class="anno">text input — <b>transparent fill · 1px --hair2 · r8 · focus = 2px teal ring · pastel validation (money colors NEVER used for form errors)</b></div>
     <div style="display:flex;gap:1rem;flex-wrap:wrap;max-width:760px">
-      <input placeholder="api key — sk-…" style="flex:1;min-width:220px;background:transparent;border:1px solid var(--hair2);border-radius:8px;padding:.65rem .85rem;font-family:var(--mono);font-size:.8rem;color:var(--ink);outline:none" onfocus="this.style.boxShadow='0 0 0 2px rgba(79,163,122,.5)'" onblur="this.style.boxShadow='none'">
+      <input placeholder="api key — sk-…" style="flex:1;min-width:220px;background:transparent;border:1px solid var(--hair2);border-radius:8px;padding:.65rem .85rem;font-family:var(--mono);font-size:.8rem;color:var(--ink);outline:none" onfocus="this.style.boxShadow='0 0 0 2px rgba(61,214,196,.5)'" onblur="this.style.boxShadow='none'">
       <span style="flex:1;min-width:220px"><input value="not-an-email" style="width:100%;background:transparent;border:1px solid #f0999b;border-radius:8px;padding:.65rem .85rem;font-family:var(--mono);font-size:.8rem;color:var(--ink);outline:none"><span class="v-mono" style="display:block;font-size:.62rem;color:#f0999b;margin-top:.3rem">enter a valid address — pastel #f0999b, not --down</span></span>
     </div>
     <div class="anno" style="margin-top:1.6rem">disclosure — <b>native details/summary · shared name = exclusive accordion · chevron rotates on the glide · honest topics only</b></div>
@@ -651,7 +651,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
       </svg>
       <div class="cmp-top">
         <svg viewBox="0 0 600 180" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%" aria-hidden="true">
-          <polyline fill="none" stroke="#4fa37a" stroke-width="1.5" points="0,170 60,150 120,155 180,120 240,128 300,95 360,104 420,66 480,74 540,38 600,20"/>
+          <polyline fill="none" stroke="#3dd6c4" stroke-width="1.5" points="0,170 60,150 120,155 180,120 240,128 300,95 360,104 420,66 480,74 540,38 600,20"/>
         </svg>
       </div>
       <span class="cmp-tag" style="left:.6rem">GROSS</span>
@@ -662,7 +662,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
     <div class="prov" style="margin-top:.5rem">curves illustrative for the device demo only — production use requires the real equity series from the shipped tearsheet (law 01)</div>
 
     <div class="anno" style="margin-top:1.8rem">implementation doctrine — <b>css-first · Motion for React only where scrub logic demands JS · heavier rigs rejected by name</b></div>
-    <div class="prov" style="line-height:2.1">transitions + the one curve cover §04–08 with zero JS · scroll scrubbing without a library: CSS scroll-driven animations (<span style="color:var(--soft)">animation-timeline: view()</span>) power the colophon (§08) — @supports-gated, the static name is the fallback · the pins and the entrance orchestration: <span style="color:var(--soft)">Motion for React</span> — the lightest rig that does scrub · GSAP: imperative and heavier, not adopted · Lottie / Rive / Spline / 3D tickers: decorative-motion tools, quarantined by law 05 — nothing animates outside the product frames</div>
+    <div class="prov" style="line-height:2.1">transitions + the one curve cover §04–08 with zero JS · scroll scrubbing without a library: CSS scroll-driven animations (<span style="color:var(--soft)">animation-timeline: view()</span>) power the colophon (§08) — @supports-gated, the static name is the fallback · the pins and the entrance orchestration: <span style="color:var(--soft)">Motion for React</span> (the <span style="color:var(--soft)">motion</span> package, LazyMotion strict) — the lightest rig that does scrub · GSAP: imperative and heavier, not adopted · Lottie / Rive / Spline / 3D tickers: decorative-motion tools, quarantined by law 05 — nothing animates outside the product frames</div>
     <div class="prov" style="margin-top:1.4rem;border-top:1px solid var(--hair);padding-top:.8rem">the five motion laws: one entrance per view · pins — two on the flagship (pipeline · proof), one max anywhere else · diegetic everywhere else · one curve (--glide) plus one quarantined ease · reduced-motion collapses everything to final states</div>
   </div>
 </section>
@@ -673,7 +673,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <h2 class="canon">The hero <em>is</em> the terminal.</h2>
   <p class="sec-note">digiquant.io sells proof, so the product frame does the selling. No screenshot-of-a-screenshot, no abstract illustration: the hero furniture is the live terminal from §05 and the first number the visitor reads has a date on it.</p>
   <div class="lab">
-    <div class="anno">flagship H1 — <b>shown at true size: fraunces 400 · clamp(2.5rem,6vw,4.7rem) · tracking −.025em · em → italic emerald · never bolded (law 03)</b></div>
+    <div class="anno">flagship H1 — <b>shown at true size: fraunces 400 · clamp(2.5rem,6vw,4.7rem) · tracking −.025em · em → italic teal · never bolded (law 03)</b></div>
     <div class="v-serif" style="font-size:clamp(2.5rem,6vw,4.7rem);line-height:1.02;letter-spacing:-.025em;max-width:14ch">Backtests that <em style="color:var(--em)">testify.</em></div>
     <div class="v-mono num" style="font-size:.72rem;color:var(--soft);margin-top:1.1rem"><span style="color:var(--up)">●</span> live · 3 strategies · 3,102 bars · refreshed 2026-06-30</div>
 
@@ -700,7 +700,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <h2 class="canon">Eight services. <em>One argument.</em></h2>
   <p class="sec-note">digithings.ai is the umbrella: black &amp; white, a plain canvas — its live token literally reads <span class="v-mono" style="font-size:.85em">--accent: var(--ink)</span>. It argues that the stack composes, and the modules bring the only color, strictly as identifiers. The copy device is provenance-as-typography taken to its conclusion: the real config is the content.</p>
   <div class="lab">
-    <div class="anno">the plain canvas — <b>umbrella hero specimen, demonstrated: ink only · the em is italic without color · kickers go soft-gray (emerald kickers belong to modules) · primary = btnPaper</b></div>
+    <div class="anno">the plain canvas — <b>umbrella hero specimen, demonstrated: ink only · the em is italic without color · kickers go soft-gray (teal kickers belong to modules) · primary = btnPaper</b></div>
     <div style="border:1px solid var(--hair);border-radius:12px;background:var(--bg);padding:2.2rem 1.6rem 1.8rem;max-width:760px;position:relative;overflow:hidden">
       <span class="regmark" style="top:.7rem;right:.9rem;font-size:.8rem">+</span>
       <div class="kick" style="color:var(--soft)">// digithings — the open-core agentic stack</div>
@@ -711,7 +711,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
         <button class="btnGhost">open the docs</button>
       </div>
     </div>
-    <div class="prov" style="margin-top:.5rem">note the absences: no emerald anywhere — the em is italic, unpainted · the kicker is soft, not livery · the only near-color is paper. this is what --accent: var(--ink) looks like.</div>
+    <div class="prov" style="margin-top:.5rem">note the absences: no teal anywhere — the em is italic, unpainted · the kicker is soft, not livery · the only near-color is paper. this is what --accent: var(--ink) looks like.</div>
 
     <div class="anno" style="margin-top:1.8rem">convergence diagram — <b>THE digithings hero device: services flow into the supervisor, the supervisor flows into the surfaces · every path wears its module's livery as an identifier (the one color allowed on the umbrella) · the flagship runs brightest</b></div>
     <div style="border:1px solid var(--hair);border-radius:10px;background:var(--bg);padding:1rem;max-width:760px;overflow-x:auto">
@@ -726,7 +726,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
           <text x="16" y="244">digibase <tspan fill="#6B7177">· shared lib</tspan></text>
         </g>
         <g fill="none" stroke="rgba(255,255,255,.14)" stroke-width="1">
-          <path d="M150,30 C 220,30 235,135 300,135" stroke="#4fa37a" stroke-opacity=".85"/>
+          <path d="M150,30 C 220,30 235,135 300,135" stroke="#3dd6c4" stroke-opacity=".85"/>
           <path d="M150,65 C 220,65 235,135 300,135" stroke="#5aa3c4" stroke-opacity=".4"/>
           <path d="M150,100 C 220,100 235,135 300,135" stroke="#6fa3a3" stroke-opacity=".4"/>
           <path d="M150,135 C 220,135 235,135 300,135"/>
@@ -750,7 +750,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
     <table class="canon" style="max-width:760px">
       <tr><th>service</th><th>port</th><th>role</th></tr>
       <tr><td><i class="ldot" style="background:#e5b765"></i>digigraph</td><td class="num">8000</td><td>langgraph orchestration — the supervisor</td></tr>
-      <tr><td><i class="ldot" style="background:#4fa37a"></i>digiquant</td><td class="num">8001</td><td>nautilustrader quant · atlas + hermes sub-graphs</td></tr>
+      <tr><td><i class="ldot" style="background:#3dd6c4"></i>digiquant</td><td class="num">8001</td><td>nautilustrader quant · atlas + hermes sub-graphs</td></tr>
       <tr><td><i class="ldot" style="background:#5aa3c4"></i>digisearch</td><td class="num">8002</td><td>retrieval-augmented generation</td></tr>
       <tr><td><i class="ldot" style="background:#6fa3a3"></i>digismith</td><td class="num">8003</td><td>tracing</td></tr>
       <tr><td><i class="ldot" style="background:transparent;border:1px solid var(--hair2)"></i>digivault</td><td class="num">8004</td><td>markdown vault management · livery unassigned</td></tr>
@@ -806,7 +806,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <span class="sec-num">13</span>
   <div class="kick">// product surface — olympus</div>
   <h2 class="canon">Density up. <em>Voice down.</em></h2>
-  <p class="sec-note">Olympus is product, not marketing. The serif retreats to the page title; mono runs the room; the instrumentation palette finally does its day job — up and down mean money, emerald means press here. No pin, no bloom; one calm reveal pass is sanctioned — panels may fade up once as they enter, then the dashboard holds still.</p>
+  <p class="sec-note">Olympus is product, not marketing. The serif retreats to the page title; mono runs the room; the instrumentation palette finally does its day job — up and down mean money, teal means press here. No pin, no bloom; one calm reveal pass is sanctioned — panels may fade up once as they enter, then the dashboard holds still.</p>
   <div class="lab">
     <div class="anno">dashboard grammar — <b>panels are srf + hairline + r8 · every panel carries its own as-of timestamp · states below are illustrative, the grammar is not</b></div>
     <div class="dash">
@@ -845,22 +845,22 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <h2 class="canon">Dark sells proof. <em>Ivory reads.</em></h2>
   <p class="sec-note">Long-form surfaces go light: the warm ivory stack. On ivory the serif may carry body text — the one place it does. Dark stays for proof and product; the two never mix on a page except where a product frame sits inside a doc.</p>
   <div class="lab">
-    <div class="anno">the paper stack — <b>warm, never pure white · live emerald fails on paper (2.89:1, measured) so text drops to --em-deep</b></div>
+    <div class="anno">the paper stack — <b>warm, never pure white · the phosphor teal fails on paper (1.70:1, measured) so text drops to --em-deep</b></div>
     <div class="lab-grid" style="max-width:760px">
       <div class="swatch" style="background:#F9F8F6"><i style="color:#6B7177">--paper #F9F8F6</i></div>
       <div class="swatch" style="background:#F0EEE6"><i style="color:#6B7177">--paper-2 #F0EEE6</i></div>
       <div class="swatch" style="background:#E8E6DC"><i style="color:#6B7177">--paper-hair #E8E6DC</i></div>
       <div class="swatch" style="background:#141413"><i>--paper-ink #141413</i></div>
-      <div class="swatch" style="background:#2E6B4E"><i style="color:#F9F8F6">--em-deep #2E6B4E · 5.94:1 AA</i></div>
+      <div class="swatch" style="background:#106B5E"><i style="color:#F9F8F6">--em-deep #106B5E · 6.02:1 AA</i></div>
     </div>
-    <div class="anno" style="margin-top:1.6rem">ivory specimen — <b>serif body · ink links with emerald underline · code blocks sit on paper-2</b></div>
+    <div class="anno" style="margin-top:1.6rem">ivory specimen — <b>serif body · ink links with teal underline · code blocks sit on paper-2</b></div>
     <div class="ivory">
       <div class="ik">// docs · quickstart</div>
       <h3>Run the first backtest.</h3>
       <p>The stack ships with three strategies whose tearsheets are public. Clone the repo, bring a <a href="#s14">LiteLLM-supported key</a>, and the first run writes its proof to <code>runs/</code> — dated, reproducible, yours.</p>
-      <div class="icode"><span style="color:#2E6B4E">$</span> make quickstart<br><span style="color:#2E6B4E">❯</span> dq backtest run --strategy trend_xsec<br>✓ tearsheet → runs/2026-07-02/trend_xsec-eth/</div>
+      <div class="icode"><span style="color:#106B5E">$</span> make quickstart<br><span style="color:#106B5E">❯</span> dq backtest run --strategy trend_xsec<br>✓ tearsheet → runs/2026-07-02/trend_xsec-eth/</div>
     </div>
-    <div class="prov" style="margin-top:.7rem">rules: ivory is for prose — docs, blog, legal · body links = ink underlined, emerald underline · headings stay fraunces 400 · no blooms, no posters on paper · dark product frames may embed, hairlined in --paper-hair</div>
+    <div class="prov" style="margin-top:.7rem">rules: ivory is for prose — docs, blog, legal · body links = ink underlined, teal underline · headings stay fraunces 400 · no blooms, no posters on paper · dark product frames may embed, hairlined in --paper-hair</div>
   </div>
 </section>
 
@@ -876,9 +876,9 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
       <tr><td>--ink on --bg</td><td class="num">16.70:1</td><td>AAA — body default</td></tr>
       <tr><td>--soft on --bg</td><td class="num">7.36:1</td><td>AAA — secondary copy</td></tr>
       <tr><td>--mute on --bg</td><td class="num" style="color:var(--warn)">3.93:1</td><td>large/decorative only — provenance lines, never load-bearing copy</td></tr>
-      <tr><td>--em on --bg</td><td class="num">6.34:1</td><td>AA — interactive text ok</td></tr>
+      <tr><td>--em on --bg</td><td class="num">10.74:1</td><td>AAA — interactive text</td></tr>
       <tr><td>--up / --down on --bg</td><td class="num">7.85 / 5.67</td><td>AA — money colors read</td></tr>
-      <tr><td>--em on --paper</td><td class="num" style="color:var(--down)">2.89:1</td><td>FAIL — ivory text uses --em-deep (5.94:1)</td></tr>
+      <tr><td>--em on --paper</td><td class="num" style="color:var(--down)">1.70:1</td><td>FAIL — ivory text uses --em-deep (6.02:1)</td></tr>
     </table>
     <div class="anno" style="margin-top:1.6rem">keyboard &amp; semantics — <b>we don't rebuild what the browser ships</b></div>
     <div class="prov" style="line-height:2">focus ring: 2px --em, offset 3px, on :focus-visible only (never :focus) · disclosure = native details/summary · slider = native range input · buttons are &lt;button&gt; · skip link first in DOM · dialogs use &lt;dialog&gt; · reduced-motion collapses every animation to its final state (§09, live-tested)</div>
@@ -917,7 +917,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 
     <div class="anno" style="margin-top:1.8rem">the identity — <b>digichat's livery is cyan · --accent-digichat</b></div>
     <div class="lab-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));max-width:640px">
-      <div class="swatch" style="background:#3DD6C4"><i style="color:#071410">--accent-digichat #3DD6C4</i></div>
+      <div class="swatch" style="background:#3DD6C4"><i style="color:#04201C">--accent-digichat #3DD6C4</i></div>
     </div>
 
     <div class="anno" style="margin-top:1.8rem">rules — <b>semantics are not liveries</b></div>
@@ -935,11 +935,11 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
     <div class="anno">docs sidebar — <b>ivory reading mode's navigation · mono labels, serif content · the current page is a rule, not a fill</b></div>
     <div class="ivory" style="padding:1rem 1.2rem;display:flex;gap:1.4rem;max-width:760px">
       <div style="flex:0 0 180px;border-right:1px solid #E8E6DC;padding-right:1rem;font-family:var(--mono);font-size:.7rem;line-height:2.3">
-        <div style="color:#2E6B4E;letter-spacing:.12em;font-size:.58rem">// QUICKSTART</div>
-        <div style="color:#141413;border-left:2px solid #2E6B4E;padding-left:.5rem">install</div>
+        <div style="color:#106B5E;letter-spacing:.12em;font-size:.58rem">// QUICKSTART</div>
+        <div style="color:#141413;border-left:2px solid #106B5E;padding-left:.5rem">install</div>
         <div style="color:#6B7177;padding-left:.55rem">first backtest</div>
         <div style="color:#6B7177;padding-left:.55rem">bring your keys</div>
-        <div style="color:#2E6B4E;letter-spacing:.12em;font-size:.58rem;margin-top:.7rem">// SERVICES</div>
+        <div style="color:#106B5E;letter-spacing:.12em;font-size:.58rem;margin-top:.7rem">// SERVICES</div>
         <div style="color:#6B7177;padding-left:.55rem">digigraph</div>
         <div style="color:#6B7177;padding-left:.55rem">digiquant</div>
       </div>

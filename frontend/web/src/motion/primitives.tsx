@@ -11,7 +11,7 @@ import {
   useReducedMotion,
   type Variants,
   type Transition,
-} from "framer-motion";
+} from "motion/react";
 import { type ReactNode } from "react";
 
 export const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];

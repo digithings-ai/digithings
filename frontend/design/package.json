@@ -22,7 +22,8 @@
     "./app-shell-terminal/styles.css": "./app-shell-terminal/styles.css",
     "./html-escape.js": "./html-escape.js",
     "./site/site.css": "./site/site.css",
-    "./site/*": "./site/*"
+    "./site/*": "./site/*",
+    "./tearsheet/styles.css": "./tearsheet/styles.css"
   },
   "files": [
     "tokens.css",
@@ -37,6 +38,7 @@
     "typography-motion",
     "quant-native",
     "app-shell-terminal",
-    "site"
+    "site",
+    "tearsheet"
   ]
 }
