@@ -233,7 +233,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 <nav class="tocnav" id="tocnav" aria-label="canon sections">
   <span class="brand">digi<span style="color:var(--em)">things</span> <span style="color:var(--mute);font-weight:400">· canon</span></span>
   <span class="links">
-    <a href="#s00">00 laws</a><a href="#s01">01 canvas</a><a href="#s02">02 color</a><a href="#s03">03 type</a><a href="#s04">04 actions</a><a href="#s05">05 frames</a><a href="#s06">06 data</a><a href="#s07">07 forms</a><a href="#s08">08 chrome</a><a href="#s09">09 motion</a><a href="#s10">10 digiquant</a><a href="#s11">11 digithings</a><a href="#s12">12 posters</a><a href="#s13">13 olympus</a><a href="#s14">14 ivory</a><a href="#s15">15 ship</a>
+    <a href="#s00">00 laws</a><a href="#s01">01 canvas</a><a href="#s02">02 color</a><a href="#s03">03 type</a><a href="#s04">04 actions</a><a href="#s05">05 frames</a><a href="#s06">06 data</a><a href="#s07">07 forms</a><a href="#s08">08 chrome</a><a href="#s09">09 motion</a><a href="#s10">10 digiquant</a><a href="#s11">11 digithings</a><a href="#s12">12 posters</a><a href="#s13">13 olympus</a><a href="#s14">14 ivory</a><a href="#s15">15 ship</a><a href="#s16">16 digichat</a><a href="#s17">17 ledger</a>
   </span>
 </nav>
 
@@ -880,9 +880,56 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   </div>
 </section>
 
+<section class="canon-sec" id="s16">
+  <span class="sec-num">16</span>
+  <div class="kick">// product surface — digichat :3005</div>
+  <h2 class="canon">The terminal, <em>inhabited.</em></h2>
+  <p class="sec-note">DigiChat is where the §05 terminal grammar becomes the whole product: mono markers, streaming carets, collapsible tool work, date-grouped threads. Fonts, spacing, radii and motion are already fully tokenized (live-verified in the digichat sources); what remains are three hardcoded hotspots and one identity conflict — recorded honestly below.</p>
+  <div class="lab">
+    <div class="anno">transcript grammar — <b>&gt; user · ▸ assistant · tool work as accent rows (never amber) · streaming caret · shown here in production cyan</b></div>
+    <div style="border:1px solid var(--hair);border-radius:12px;background:#0B0C0E;padding:1.1rem 1.2rem;max-width:640px;font-family:var(--mono);font-size:.76rem;line-height:2.1;--dc:#3DD6C4">
+      <div style="color:var(--ink)"><span style="color:var(--dc)">&gt;</span> backtest trend_xsec on ETH, last eight years</div>
+      <div style="color:var(--soft)"><span style="color:var(--dc)">▸</span> running it through digiquant · nautilus engine</div>
+      <div class="num" style="color:var(--soft);border:1px solid rgba(61,214,196,.25);border-radius:8px;padding:.15rem .7rem;display:inline-block;margin:.3rem 0 .3rem 1.1rem;font-size:.68rem"><span style="color:var(--dc)">⌄</span> digiquant.backtest — trend_xsec · ETH-USD · 3,102 bars <span style="color:var(--up)">ok</span> <span style="color:var(--mute)">412ms</span></div>
+      <div class="num" style="color:var(--ink)"><span style="color:var(--dc)">▸</span> done. PF <span style="color:var(--dc)">6.62</span> · win 64.91% · maxDD −59.22% · tearsheet saved<span style="display:inline-block;width:7px;height:14px;background:var(--dc);vertical-align:-2px;margin-left:2px" class="tcaret" aria-hidden="true"></span></div>
+    </div>
+    <div class="prov" style="margin-top:.5rem">the tool row above replaces the current hardcoded amber chip (tool-invocation-card.tsx / chat-panel.tsx) — tool work wears the surface's accent, folded closed by default</div>
+
+    <div class="anno" style="margin-top:1.8rem">the identity conflict — <b>production and tokens disagree · one must yield</b> <span class="chip-prop">proposal — your call</span></div>
+    <div class="lab-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));max-width:640px">
+      <div class="swatch" style="background:#3DD6C4"><i style="color:#071410">production — #3DD6C4 · .app-shell override, globals.css</i></div>
+      <div class="swatch" style="background:#9d8fc9"><i style="color:#071410">tokens.css — --accent-digichat #9d8fc9, shadowed today</i></div>
+    </div>
+    <div class="prov" style="margin-top:.5rem">layout.tsx sets accent-digichat on &lt;body&gt;, but .app-shell { --accent: #3dd6c4 } shadows it in the entire shell subtree — the livery mechanism is wired and then overridden. decide: cyan becomes digichat's official token, or the shell drops its override and goes lavender.</div>
+
+    <div class="anno" style="margin-top:1.8rem">rules — <b>semantics are not liveries</b></div>
+    <div class="prov" style="line-height:2.1">tool chips consume var(--accent), never a hardcoded hue · error markers use the §08 four-state system (--down) — chat-panel.tsx currently borrows --accent-digikey as its error red, banned: a livery is an identity, not a semantic · health badges in connections-sheet.tsx hardcode emerald/amber — they are §08 status dots · status semantics are the ONE non-money use of --up/--warn/--down: dots and markers only, never fills · keep, verbatim: the date-grouped sidebar, kbd affordances, the streaming blink, and the .app-shell accent-scoping move — it IS the livery mechanism of §02, already shipping</div>
+  </div>
+</section>
+
+<section class="canon-sec" id="s17">
+  <span class="sec-num">17</span>
+  <div class="kick">// the conformance ledger — live apps vs this canon</div>
+  <h2 class="canon">Where they disagree, <em>someone rules.</em></h2>
+  <p class="sec-note">A full audit of the deployed apps against this canon (2026-07-02, main-reference worktree, every component and CSS file). The live design is liked and respected — so a disagreement below is <i>not</i> automatically an app bug. Each row needs one ruling: <b style="font-weight:500;color:var(--ink)">amend the law, or amend the app.</b> Nothing ships against these rows before a ruling.</p>
+  <div class="lab">
+    <div class="anno">the ledger — <b>8 disagreements across laws 02–05 · coverage ~78% (14 of 17 sections practiced live)</b></div>
+    <table class="canon">
+      <tr><th>live practice</th><th>where</th><th>canon says</th><th>ruling</th></tr>
+      <tr><td>two scroll-pins on the digiquant home (ResearchPipeline + StrategySuite)</td><td class="num">digiquant-web/app/page.tsx</td><td>law 05 — one pin per page</td><td><span class="chip-prop">pending</span></td></tr>
+      <tr><td>display headings at weight 600 (.hero-title, .ts-h1, .dq-flow-step h3, .price-card h3) — the flagship .dqhero-h1 itself is 400, as the law states</td><td class="num">digiquant-web/globals.css:26·70·122·149</td><td>law 03 — fraunces never bolded</td><td><span class="chip-prop">pending</span></td></tr>
+      <tr><td>scroll-cue glow + brand-glyph glows (.dqhero-scroll::after, .dq-glyph, .dt-dot, OlympusMark live-dot)</td><td class="num">both globals.css</td><td>law 04 — flatness; two sanctioned blooms</td><td><span class="chip-prop">pending — candidates for the named luminous-moments list</span></td></tr>
+      <tr><td>tearsheet panel + card-hover shadows, live pulse ring (.ts-panel, .ts-card:hover, .ts-card-pulse)</td><td class="num">digiquant-web/globals.css:170·595·634</td><td>law 04 — no shadows on content</td><td><span class="chip-prop">pending</span></td></tr>
+      <tr><td>accent gradients as decoration (.dq-glyph fill, .price-card.accent wash)</td><td class="num">digiquant-web/globals.css:30·68</td><td>law 02 — accent is signal, not paint</td><td><span class="chip-prop">pending</span></td></tr>
+      <tr><td>digichat wears cyan #3DD6C4 while tokens.css assigns lavender #9d8fc9</td><td class="num">digichat globals.css · tokens.css:33</td><td>§02 — one livery per module</td><td><span class="chip-prop">pending (§16)</span></td></tr>
+    </table>
+    <div class="prov" style="margin-top:.8rem">practiced fully live: §10 + §11 page grammars, §06 tearsheets, §08 chrome, §04 actions · designed here, not yet shipped: §12 posters (intentional — new), §13 full dashboard, §14 full reading mode · backlog gaps the audit surfaced: strategy-library grid detail, docs sidebar grammar, tearsheet print mode, form validation depth</div>
+  </div>
+</section>
+
 <div style="border-top:1px solid var(--hair);margin-top:4.5rem;padding-top:2rem">
   <div class="kick">// the canon's own provenance</div>
-  <div class="prov" style="margin-top:.8rem;line-height:2.2;max-width:90ch"><span class="num">ba9ae63</span> foundation §00–04 · <span class="num">d37be29</span> components §05–08 · <span class="num">9c33b51</span> motion lab §09 · <span class="num">325d1aa</span> page grammars §10–12 · <span class="num">982d031</span> olympus + ivory + invisibles §13–15 · <span class="num">4f499c5</span> mobile polish · <span class="num">f19a40c</span> the livery doctrine (user review, 2026-07-02) — every claim in this document is measured, live-verified on origin/main @ <span class="num">1fba70d</span>, or flagged <span style="color:var(--warn)">PROPOSAL</span></div>
+  <div class="prov" style="margin-top:.8rem;line-height:2.2;max-width:90ch"><span class="num">ba9ae63</span> foundation §00–04 · <span class="num">d37be29</span> components §05–08 · <span class="num">9c33b51</span> motion lab §09 · <span class="num">325d1aa</span> page grammars §10–12 · <span class="num">982d031</span> olympus + ivory + invisibles §13–15 · <span class="num">4f499c5</span> mobile polish · <span class="num">f19a40c</span> the livery doctrine (user review) · <span class="num">9d78d08</span> self-navigation · <span class="num">66796fb</span> the livery switcher · §16–17 digichat grammar + conformance ledger (three-agent parallel audit, 2026-07-02) — every claim in this document is measured, live-verified on origin/main @ <span class="num">1fba70d</span>, or flagged <span style="color:var(--warn)">PROPOSAL</span></div>
 </div>
 
 </main>
