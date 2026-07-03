@@ -403,8 +403,10 @@ a { color: inherit; text-decoration: none; }
    name standing. The <b> suffix reads var(--accent) — livery on module
    sites, ink on the umbrella (which collapses --accent to ink). */
 .colophon { overflow: hidden; padding: 5rem 0 0; user-select: none; pointer-events: none; }
-.colo-word { display: block; font-family: var(--font-mono); font-weight: 500; font-size: clamp(3rem, 15.5vw, 15rem); line-height: 0.82; letter-spacing: -0.05em; white-space: nowrap; text-align: center; color: transparent; -webkit-text-stroke: 1px color-mix(in srgb, var(--ink) 30%, transparent); }
-.colo-word b { font-weight: 500; color: transparent; -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 70%, transparent); }
+/* fallback stroke first: without color-mix() support the refined declaration
+   drops, and transparent fill + no stroke would render nothing. */
+.colo-word { display: block; font-family: var(--font-mono); font-weight: 500; font-size: clamp(3rem, 15.5vw, 15rem); line-height: 0.82; letter-spacing: -0.05em; white-space: nowrap; text-align: center; color: transparent; -webkit-text-stroke: 1px var(--ink); -webkit-text-stroke: 1px color-mix(in srgb, var(--ink) 30%, transparent); }
+.colo-word b { font-weight: 500; color: transparent; -webkit-text-stroke: 1px var(--accent); -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 70%, transparent); }
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     /* entry-based ranges: the colophon sits at the document's end, so
