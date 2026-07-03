@@ -597,3 +597,35 @@ html {
 .doc-tab { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-mute); background: transparent; border: 1px solid transparent; border-radius: 7px 7px 0 0; cursor: pointer; padding: 0.2rem 0.6rem; transition: color 0.15s var(--ease), background 0.15s var(--ease); }
 .doc-tab:hover { color: var(--ink-soft); }
 .doc-tab.is-active { color: var(--ink); background: var(--accent-weak); }
+
+/* ---- convergence diagram (canon §11) ----
+   Services flow into the supervisor, the supervisor into the surfaces.
+   Each path wears its module's livery token as an identifier — the one
+   color allowed on the umbrella; digivault stays a bare hairline (livery
+   unassigned). The draw-in is scroll-scrubbed with zero JS; without
+   animation-timeline support, or under reduced motion, it renders drawn. */
+.dtconv { max-width: 860px; margin: 2.2rem auto 0; overflow-x: auto; }
+.dtconv svg { width: 100%; min-width: 560px; height: auto; display: block; font-family: var(--font-mono); font-size: 11px; }
+.dtconv text { fill: var(--ink-soft); }
+.dtconv .dim { fill: var(--ink-mute); }
+.dtconv .dtconv-p { stroke: var(--hair-2); stroke-width: 1; }
+.dtconv .p-digiquant { stroke: var(--accent-digiquant); stroke-opacity: 0.85; }
+.dtconv .p-digisearch { stroke: var(--accent-digisearch); stroke-opacity: 0.4; }
+.dtconv .p-digismith { stroke: var(--accent-digismith); stroke-opacity: 0.4; }
+.dtconv .p-digikey { stroke: var(--accent-digikey); stroke-opacity: 0.4; }
+.dtconv .p-digiclaw { stroke: var(--accent-digiclaw); stroke-opacity: 0.4; }
+.dtconv .p-digibase { stroke: var(--accent-digibase); stroke-opacity: 0.3; }
+.dtconv .p-digichat { stroke: var(--accent-digichat); stroke-opacity: 0.4; }
+.dtconv .dtconv-node rect { fill: var(--surface); stroke: var(--hair-2); }
+.dtconv .dtconv-node .name { fill: var(--ink); }
+.dtconv .dtconv-node .sub { fill: var(--ink-mute); font-size: 9.5px; }
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .dtconv .dtconv-p { stroke-dasharray: 1; stroke-dashoffset: 1; animation: dtconv-draw linear both; animation-timeline: view(); animation-range: entry 15% entry 85%; }
+    .dtconv .dtconv-out { animation-range: entry 60% cover 35%; }
+    .dtconv .dtconv-labels-in, .dtconv .dtconv-labels-out, .dtconv .dtconv-node { opacity: 0; animation: dtconv-fade linear both; animation-timeline: view(); animation-range: entry 15% entry 70%; }
+    .dtconv .dtconv-labels-out { animation-range: entry 70% cover 40%; }
+  }
+}
+@keyframes dtconv-draw { to { stroke-dashoffset: 0; } }
+@keyframes dtconv-fade { to { opacity: 1; } }

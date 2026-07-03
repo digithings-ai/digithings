@@ -1,5 +1,6 @@
 import { Colophon, Footer, Reveal } from "@digithings/web";
 import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "./_nav";
+import { Convergence } from "@/components/landing/Convergence";
 import { DigiNav } from "@/components/landing/DigiNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ModuleManifest } from "@/components/landing/ModuleManifest";
@@ -42,6 +43,7 @@ export default function Home() {
               <h2>Ten modules, wired into one.</h2>
               <p>A supervisor at the centre routes every request to the right module — chat, quant research, or retrieval. Each one self-hosted, audited, and swappable.</p>
             </Reveal>
+            <Convergence />
             <ModuleManifest />
           </div>
         </section>
