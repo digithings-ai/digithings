@@ -20,10 +20,11 @@
 }
 
 /* Marketing/editorial headings (.hero-title on pipeline + subsystems) render in
-   the v7 serif via --font-display, at a slightly bolder weight than the hero's
-   400. Data surfaces keep sans: the tearsheet/library .ts-h1 sets --font-sans
+   the v7 serif via --font-display at weight 400 — the serif voice is never
+   bolded; scale does the shouting (design canon law 03, ruled 2026-07-02).
+   Data surfaces keep sans: the tearsheet/library .ts-h1 sets --font-sans
    explicitly below, so strategy pages stay in the data tone. */
-.hero-title { font-weight: 600 !important; letter-spacing: -0.025em; }
+.hero-title { font-weight: 400 !important; letter-spacing: -0.025em; }
 .hero-title em { font-style: italic; color: var(--accent); -webkit-text-fill-color: initial; }
 
 /* brand glyph */
@@ -167,7 +168,7 @@
 .is-pos { color: var(--up); }
 .is-neg { color: var(--down); }
 
-.ts-panel { border: 1px solid var(--hair); border-radius: 16px; background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 1.25rem 1.3rem 1.35rem; margin-bottom: 1.1rem; box-shadow: 0 28px 64px -52px rgba(0, 0, 0, 0.55); }
+.ts-panel { border: 1px solid var(--hair); border-radius: 16px; background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 1.25rem 1.3rem 1.35rem; margin-bottom: 1.1rem; }
 .ts-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; padding-bottom: 0.55rem; border-bottom: 1px solid var(--hair); flex-wrap: wrap; }
 .ts-panel-chart-main { padding-bottom: 1rem; }
 .ts-panel-chart-main .ts-panel-head { margin-bottom: 0.65rem; }
@@ -591,8 +592,8 @@
 .ts-card-kind { font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
 .dq-subpage-library { padding-bottom: clamp(4.5rem, 10vw, 7rem); }
 .dq-subpage-library .wrap { padding-bottom: 1.5rem; }
-.ts-card { display: flex; flex-direction: column; gap: 0.7rem; border: 1px solid var(--hair); border-radius: var(--r-md); background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 1rem 1.05rem; transition: transform 0.25s var(--ease), border-color 0.25s var(--ease), box-shadow 0.25s var(--ease); }
-.ts-card:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent); transform: translateY(-2px); box-shadow: 0 20px 44px -36px var(--accent); }
+.ts-card { display: flex; flex-direction: column; gap: 0.7rem; border: 1px solid var(--hair); border-radius: var(--r-md); background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 1rem 1.05rem; transition: transform 0.25s var(--ease), border-color 0.25s var(--ease); }
+.ts-card:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent); transform: translateY(-2px); }
 .ts-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.65rem; }
 .ts-card-title { display: flex; align-items: center; gap: 0.65rem; min-width: 0; flex: 1; }
 .ts-card-title-text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }

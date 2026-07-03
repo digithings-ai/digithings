@@ -30,7 +30,7 @@
   --accent-hermes:     #4a8f7b;
   --accent-kairos:     #2f7a65;
   --accent-digisearch: #5aa3c4;
-  --accent-digichat:   #9d8fc9;
+  --accent-digichat:   #3dd6c4; /* ruled 2026-07-02: production cyan is official (was #9d8fc9) */
   --accent-digikey:    #d97a5a;
   --accent-digismith:  #6fa3a3;
   --accent-digiclaw:   #b87840;
@@ -106,7 +106,7 @@
      the strip behind the mobile address bar) are dark — otherwise they paint
      light by default, leaving a mismatched edge above the page on mobile. */
   color-scheme: dark;
-  --bg:        #0B0C0E;
+  --bg:        #0A0E0C; /* warm canvas, ruled 2026-07-02 (was #0B0C0E) */
   --surface:   #121417;
   --surface-2: #171A1E;
   --hair:      rgba(255, 255, 255, 0.09);

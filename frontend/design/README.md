@@ -126,7 +126,7 @@ value; component rules always reference `var(--accent)`.
 | Hermes      | `--accent-hermes`       | ![](https://readme-swatches.vercel.app/4a8f7b?style=round)                                     | `#4a8f7b` |
 | Kairos      | `--accent-kairos`       | ![](https://readme-swatches.vercel.app/2f7a65?style=round)                                     | `#2f7a65` |
 | DigiSearch  | `--accent-digisearch`   | ![](https://readme-swatches.vercel.app/5aa3c4?style=round)                                     | `#5aa3c4` |
-| DigiChat    | `--accent-digichat`     | ![](https://readme-swatches.vercel.app/9d8fc9?style=round)                                     | `#9d8fc9` |
+| DigiChat    | `--accent-digichat`     | ![](https://readme-swatches.vercel.app/3dd6c4?style=round)                                     | `#3dd6c4` |
 | DigiKey     | `--accent-digikey`      | ![](https://readme-swatches.vercel.app/d97a5a?style=round)                                     | `#d97a5a` |
 | DigiSmith   | `--accent-digismith`    | ![](https://readme-swatches.vercel.app/6fa3a3?style=round)                                     | `#6fa3a3` |
 | DigiClaw    | `--accent-digiclaw`     | ![](https://readme-swatches.vercel.app/b87840?style=round)                                     | `#b87840` |
