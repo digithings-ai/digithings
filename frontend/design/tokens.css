@@ -30,7 +30,7 @@
   --accent-hermes:     #4a8f7b;
   --accent-kairos:     #2f7a65;
   --accent-digisearch: #5aa3c4;
-  --accent-digichat:   #9d8fc9;
+  --accent-digichat:   #3dd6c4; /* ruled 2026-07-02: production cyan is official (was #9d8fc9) */
   --accent-digikey:    #d97a5a;
   --accent-digismith:  #6fa3a3;
   --accent-digiclaw:   #b87840;
