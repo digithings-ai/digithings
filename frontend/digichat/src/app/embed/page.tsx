@@ -37,6 +37,10 @@ import {
   useEmbedGate,
   EMBED_FREE_TURN_LIMIT,
 } from "@/lib/embed-gate";
+import {
+  useEmbedTenantConfig,
+  type EmbedTenantClientConfig,
+} from "@/hooks/use-embed-tenant-config";
 
 type Accent = "digithings" | "digiquant" | "digichat";
 
@@ -69,6 +73,7 @@ type EmbedPageProps = {
 
 export default function EmbedPage({ searchParams }: EmbedPageProps) {
   const [accent, setAccent] = useState<Accent>("digichat");
+  const tenantCfg = useEmbedTenantConfig();
 
   // Next 15/16: searchParams may be a Promise — resolve both shapes.
   useEffect(() => {
@@ -86,12 +91,22 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
     emit("embed_loaded", { accent });
   }, [accent]);
 
+  const accentStyle = tenantCfg.accent
+    ? ({
+        "--accent": tenantCfg.accent.color,
+        "--accent-foreground": tenantCfg.accent.foreground,
+      } as React.CSSProperties)
+    : undefined;
+
   return (
     <>
       <style>{ACCENT_CSS}</style>
       <div className="dc-grain" aria-hidden />
-      <div className={`dark accent-${accent} relative z-10 flex min-h-dvh flex-col`}>
-        <EmbedChat accent={accent} />
+      <div
+        className={`${tenantCfg.theme === "light" ? "" : "dark"} accent-${accent} relative z-10 flex min-h-dvh flex-col`}
+        style={accentStyle}
+      >
+        <EmbedChat accent={accent} tenantCfg={tenantCfg} />
       </div>
     </>
   );
@@ -101,10 +116,17 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
 // Chat
 // ---------------------------------------------------------------------------
 
-function EmbedChat({ accent }: { accent: Accent }) {
+function EmbedChat({
+  accent,
+  tenantCfg,
+}: {
+  accent: Accent;
+  tenantCfg: EmbedTenantClientConfig;
+}) {
   const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } =
     useBYOKKey();
-  const gate = useEmbedGate(byokIsSet);
+  const ungated = tenantCfg.gateMode === "ungated";
+  const gate = useEmbedGate(byokIsSet || ungated);
 
   const transport = useMemo(
     () =>
@@ -161,7 +183,7 @@ function EmbedChat({ accent }: { accent: Accent }) {
       e.preventDefault();
       const t = text.trim();
       if (!t || busy) return;
-      if (gate.locked) return;
+      if (gate.locked && !ungated) return;
 
       sendMessage({
         role: "user",
@@ -172,22 +194,24 @@ function EmbedChat({ accent }: { accent: Accent }) {
         turn: gate.turns + 1,
         byok: byokIsSet,
       });
-      gate.increment();
+      if (!ungated) gate.increment();
       setText("");
     },
-    [text, busy, gate, sendMessage, accent, byokIsSet],
+    [text, busy, gate, sendMessage, accent, byokIsSet, ungated],
   );
 
   return (
     <>
       <header className="flex items-center justify-between border-b border-border px-4 py-2">
-        <span className="text-sm font-semibold tracking-tight">DigiChat</span>
-        <span
-          className="text-[10px] uppercase tracking-wider text-muted-foreground"
-          aria-label={`Turns used: ${gate.turns} of ${gate.limit}`}
-        >
-          {byokIsSet ? "BYOK unlocked" : `${gate.turns}/${gate.limit} free`}
-        </span>
+        <span className="text-sm font-semibold tracking-tight">digichat</span>
+        {ungated ? null : (
+          <span
+            className="text-[10px] uppercase tracking-wider text-muted-foreground"
+            aria-label={`Turns used: ${gate.turns} of ${gate.limit}`}
+          >
+            {byokIsSet ? "BYOK unlocked" : `${gate.turns}/${gate.limit} free`}
+          </span>
+        )}
       </header>
 
       <div
@@ -198,8 +222,9 @@ function EmbedChat({ accent }: { accent: Accent }) {
       >
         {messages.length === 0 && !gate.locked && (
           <p className="text-sm text-muted-foreground">
-            Ask a question to get started. The first {EMBED_FREE_TURN_LIMIT} are
-            free.
+            {ungated
+              ? "Ask a question to get started."
+              : `Ask a question to get started. The first ${EMBED_FREE_TURN_LIMIT} are free.`}
           </p>
         )}
         {messages.map((m) => (
@@ -224,7 +249,7 @@ function EmbedChat({ accent }: { accent: Accent }) {
         ) : null}
       </div>
 
-      {gate.locked ? (
+      {gate.locked && !ungated ? (
         <PaywallCard />
       ) : (
         <form
@@ -248,6 +273,22 @@ function EmbedChat({ accent }: { accent: Accent }) {
             <Send className="size-4" />
           </Button>
         </form>
+      )}
+
+      {tenantCfg.attribution && (
+        <p className="border-t border-border px-4 py-2 text-center text-[11px] text-muted-foreground">
+          powered by digichat — a{" "}
+          <a
+            href="https://digithings.ai"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="underline"
+            style={{ color: "var(--accent)" }}
+          >
+            digithings
+          </a>{" "}
+          product.
+        </p>
       )}
     </>
   );
