@@ -19,6 +19,7 @@ function thesisHref(id: string): string {
  */
 export default function ThesesTab() {
   const { data } = useDashboard();
+  const lastUpdated = data?.portfolio?.meta?.last_updated ?? null;
 
   const theses = useMemo(() => data?.portfolio?.strategy?.theses ?? [], [data]);
   const positions = useMemo(() => data?.positions ?? [], [data]);
@@ -45,7 +46,10 @@ export default function ThesesTab() {
       <section className="space-y-4">
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="font-display text-2xl text-text-primary">Market views</h2>
-          <p className="text-xs text-text-muted">Ordered by conviction</p>
+          <p className="text-xs text-text-muted">
+            Ordered by conviction
+            {lastUpdated ? <span className="font-mono"> · as of {lastUpdated}</span> : null}
+          </p>
         </div>
         {marketSorted.length === 0 ? (
           <div className="glass-card p-6 text-sm text-text-muted">

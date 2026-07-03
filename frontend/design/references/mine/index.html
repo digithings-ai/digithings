@@ -81,7 +81,7 @@ h2{font-family:var(--serif);font-weight:400;font-size:clamp(1.5rem,2.6vw,2.1rem)
 <header class="mine"><div class="wrap">
   <div class="sec-eyebrow">// frontend/design/references/mine</div>
   <h1>The design mine — <em>specimens to converge on.</em></h1>
-  <p class="lede">Extracted design elements from the three north stars, rendered next to the <b>live digiquant.io v7</b> language. Every redesign move gets mined here first: pick a specimen, blend it with a live v7 anchor (class names cited), review the blend, then ship. No move without a specimen; no specimen without provenance.</p>
+  <p class="lede">Extracted design elements from the reference set, rendered next to the <b>live digiquant.io</b> language. Every design move gets mined here first: pick a specimen, blend it with a live anchor (class names cited), review the blend, then ship. No move without a specimen; no specimen without provenance. The distilled rules live in the <a href="../../spec/index.html" style="color:var(--ink);text-decoration:underline;text-decoration-color:var(--em)">canon</a>.</p>
   <div class="legend">
     <span class="prov live">live repo = origin/main @ 1fba70d — the DEPLOYED branch (verified 2026-07-02)</span>
     <span class="prov fetch">live fetch 2026-07-02 — graphite.com</span>
@@ -89,7 +89,6 @@ h2{font-family:var(--serif);font-weight:400;font-size:clamp(1.5rem,2.6vw,2.1rem)
     <span class="prov">approximation — typeface stand-ins labeled</span>
     <span class="prov fetch">extended refs, live 2026-07-02 — hermes-agent.nousresearch.com · figma.com · anthropic.com (CSS tokens via fetch) — §17</span>
   </div>
-  <p class="lede" style="font-size:.82rem;margin-top:1rem;color:var(--mute)">Baseline notes: all v7 values below verified against <b style="color:var(--soft);font-weight:500">origin/main</b> (what Cloudflare Pages deploys) — tokens.css and HeroMesh are identical on develop; the deployed homepage is the scroll-cue hero + #contact price cards. Two known main/develop gaps: the deployed <b style="color:var(--soft);font-weight:500">StrategySuite is NEWER on main</b> (55089f2 scroll-fit layout — not yet back-merged to develop; do not mine StrategySuite from develop), and the approved <b style="color:var(--soft);font-weight:500">/#pricing section exists only on develop</b> (not yet promoted/deployed).</p>
 </div></header>
 
 <section><div class="wrap">
@@ -305,7 +304,7 @@ h2{font-family:var(--serif);font-weight:400;font-size:clamp(1.5rem,2.6vw,2.1rem)
           <span style="display:flex;gap:1rem;font-size:.78rem;color:var(--soft)">Pipeline · Olympus · Strategies · Pricing</span>
         </div>
       </div>
-      <div class="vals">fixed · transparent at top → blur + bg when .scrolled (graphite-verified) · CORRECTION: auto-hide on scroll-down is OURS alone — none of the three references auto-hide (mobile scan, 390×844) — keep or drop as a deliberate v7 signature · graphite hover doctrine: links white @60% → 100% opacity, never a hue change</div>
+      <div class="vals">fixed · transparent at top → blur + bg when .scrolled (graphite-verified) · auto-hide on scroll-down is ours alone — none of the references do it; kept as the house signature (canon §08) · graphite hover doctrine: links white @60% → 100% opacity, never a hue change</div>
     </div>
     <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — mono uppercase wayfinding</span><span class="prov">deep scan</span></div>
       <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair);padding:0">
@@ -322,7 +321,7 @@ h2{font-family:var(--serif);font-weight:400;font-size:clamp(1.5rem,2.6vw,2.1rem)
 <section><div class="wrap">
   <div class="sec-eyebrow">// 07 — the point of the mine</div>
   <h2>Convergence blends — v7 × reference, ready to review</h2>
-  <p class="sec-note">Each blend = a live v7 anchor evolved with exactly one mined move. These are the candidates for the real redesign; approve/kill them individually.</p>
+  <p class="sec-note">Each blend = a live anchor evolved with exactly one mined move. These blends became canon grammar (§04–§10).</p>
   <div class="grid g2">
     <div class="spec" style="grid-column:1/-1"><div class="spec-h"><span class="spec-src">B1 · hero, converged</span><span class="blend-tag">v7 mesh+Fraunces × cursor literal CTAs × x.ai scarcity</span></div>
       <div class="stage" style="background:radial-gradient(60rem 24rem at 70% -20%,rgba(38,120,110,.35),transparent 60%),radial-gradient(40rem 20rem at 10% 120%,rgba(61,214,196,.16),transparent 60%),var(--bg);border:1px solid var(--hair);padding:2.2rem 1.6rem;align-items:center;text-align:center">
@@ -1016,7 +1015,7 @@ chat = client.chat.create(model="grok-4.3")</pre>
   <div class="grid" style="grid-template-columns:1fr;margin-top:1rem">
     <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
       <img src="live/digiquant-deployed-strategysuite.jpg" alt="Deployed StrategySuite: asset cards with live status, dated position panels, P&L colored metrics, Chart/Table toggle" style="width:100%;display:block">
-      <figcaption class="vals" style="padding:.5rem .8rem">the deployed StrategySuite (55089f2 — NOT on develop): dated real positions, P&amp;L metrics, mono labels — the doctrine, already shipping</figcaption>
+      <figcaption class="vals" style="padding:.5rem .8rem">the deployed StrategySuite: dated real positions, P&amp;L metrics, mono labels — the doctrine, already shipping</figcaption>
     </figure>
   </div>
 </div></section>
@@ -1086,8 +1085,8 @@ chat = client.chat.create(model="grok-4.3")</pre>
 </div></section>
 
 <footer style="margin-top:4rem;border-top:1px solid var(--hair)"><div class="wrap" style="padding-top:1.4rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.6rem">
-  <span class="vals">frontend/design/references/mine · baseline: origin/main @ 1fba70d (deployed — Cloudflare Pages) · graphite.com (fetch 2026-07-02) · cursor.com + x.ai (deep scans 2026-06-29, bot-blocked to fetch)</span>
-  <span class="vals">next: approve/kill blends in 07 → apply to reference pages → conform apps</span>
+  <span class="vals">frontend/design/references/mine · 28 references, live-verified where reachable</span>
+  <span class="vals">the distilled rules live in spec/ — the canon</span>
 </div></footer>
 
 <script>

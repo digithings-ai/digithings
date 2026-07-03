@@ -1,4 +1,4 @@
-import { Footer, Reveal } from "@digithings/web";
+import { Colophon, Footer, Reveal } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
 import { DqNav } from "@/components/landing/DqNav";
@@ -106,6 +106,7 @@ export default function Home() {
           </div>
         </section>
       </main>
+      <Colophon name="digi" suffix="quant" />
       <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
     </>
   );
