@@ -13,12 +13,14 @@ import {
   resolveDigigraphUpstreamAuth,
 } from "@/lib/digigraph-upstream";
 import { createDigigraphTraceStreamResponse } from "@/lib/stream-digigraph-trace";
+import { createExternalRelayStreamResponse } from "@/lib/external-relay-stream";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import {
+  embedConfigOf,
   isEmbedChatRequest,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
@@ -104,6 +106,17 @@ export async function POST(req: Request) {
     "X-Digichat-Session": sessionId,
     "X-Request-Id": rid,
   };
+
+  const embedConfig = embedConfigOf(tenantCtx);
+  if (embedConfig?.backend.type === "external-relay") {
+    return await createExternalRelayStreamResponse({
+      relayUrl: embedConfig.backend.url,
+      messages,
+      conversationId: req.headers.get("x-external-conversation"),
+      responseHeaders,
+      signal: req.signal,
+    });
+  }
 
   const coreMessages = await convertToModelMessages(
     messages.map((m) => {

@@ -362,6 +362,31 @@ calls only `useChat` against `POST /api/chat` — it never imports `saveLocalThr
 anonymous request before any read/write — so no Postgres row can be created for
 `ownerUserSub: "embed:anonymous"` (verified by inspection for #1251, not assumed).
 
+### Embed tenant registry & external backends
+
+`DIGICHAT_EMBED_TENANTS` (JSON, keyed by hostname) declares embed tenants:
+per-host `slug`, `backend` (`digigraph` | `external-relay` + https URL),
+`gateMode` (`turn_limited` | `ungated`), `theme` (`dark` | `light`),
+optional `accent` hex pair, `attribution` flag, and `aliases`. Parsed
+fail-fast in `src/lib/embed-tenants.ts`; the same registry feeds
+`/api/chat` tenant resolution (`src/lib/embed-chat-tenant.ts`), the
+client-safe `GET /api/embed/tenant-config` endpoint, and the `/embed`
+CSP frame-ancestors (`src/lib/security-headers.ts` — which means the env
+var must be present at build time, not just runtime).
+
+`external-relay` tenants bypass DigiGraph entirely: `/api/chat` proxies to
+the configured relay via `src/lib/external-relay-stream.ts`, translating
+the relay's SSE contract (`conversation`, `text-delta`, `trace`, `done`,
+`error`) into AI SDK UI message stream parts. Conversation state lives on
+the relay's side (e.g. Azure Foundry conversations); the client echoes the
+relay's conversation id via `X-External-Conversation` (sessionStorage,
+`digichat_embed_conversation:<host>`). Both rate limiters (per-IP embed +
+shared BFF bucket, now keyed by the tenant's real slug) run before the
+backend branch. `X-Embed-Host` is attacker-settable but only selects among
+preconfigured tenants — relay URLs come from config, never the request, so
+there is no open-proxy/SSRF surface. First consumer: DataTapStream
+(datatap-web) via its Azure Function relay.
+
 ---
 
 ## 6. Security Analysis
@@ -666,6 +691,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_ENDPOINT_HOST_ALLOWLIST` | Comma-separated hosts for SSRF guard | Security hardening |
 | `DIGICHAT_EMBED_ENABLED` | Enable the unauthenticated `/embed` chat surface (`1` = on) | For public embed |
 | `DIGICHAT_EMBED_TOKEN` | Alternative to `DIGICHAT_EMBED_ENABLED`: gate `/embed` on `X-Embed-Token` instead | Optional |
+| `DIGICHAT_EMBED_TENANTS` | Optional JSON registry of embed tenants (see "Embed tenant registry & external backends"). Unset = no external embed tenants; first-party embeds behave exactly as before. Must be present at build time for CSP frame-ancestors derivation. | Optional |
 | `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms) | Optional |
 | `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |
