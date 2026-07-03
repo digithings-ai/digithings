@@ -683,11 +683,7 @@ export function StrategySuite() {
               </p>
             </div>
 
-            <div
-              className="dqss-stack-clip"
-              aria-hidden={hydrated ? introPhase : undefined}
-              suppressHydrationWarning
-            >
+            <div className="dqss-stack-clip" aria-hidden={hydrated ? introPhase : undefined}>
               <div
                 className="dqss-stack"
                 role="group"
@@ -718,7 +714,6 @@ export function StrategySuite() {
                         } as CSSProperties
                       }
                       aria-hidden={hydrated ? introPhase || i > activeIndex : undefined}
-                      suppressHydrationWarning
                     >
                       <StrategyTearsheetCard entry={entry} />
                     </div>
