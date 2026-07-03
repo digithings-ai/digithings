@@ -185,6 +185,18 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 .chip-prop{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--warn);border:1px solid rgba(224,179,65,.4);border-radius:4px;padding:.12rem .45rem;vertical-align:middle}
 .ldot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:.45rem;vertical-align:1px}
 
+/* the livery switcher — the scope mechanism, live */
+.liv-chip{font-family:var(--mono);font-size:.62rem;letter-spacing:.06em;padding:.32rem .75rem;border-radius:999px;border:1px solid var(--hair);background:none;color:var(--soft);cursor:pointer;transition:color var(--dur-fast) var(--glide),border-color var(--dur-fast) var(--glide)}
+.liv-chip:hover{color:var(--ink)}
+.liv-chip.on{color:var(--ink)}
+.liv-demo{--acc:#4fa37a;border:1px solid var(--hair);border-radius:10px;background:var(--bg);padding:1.4rem;max-width:760px;margin-top:.9rem}
+.liv-demo .lv-read{font-family:var(--mono);font-size:.64rem;color:var(--mute)}
+.liv-demo .lv-kick{font-family:var(--mono);font-size:.68rem;letter-spacing:.16em;color:var(--acc);margin-top:.9rem;transition:color .35s var(--glide)}
+.liv-demo .lv-em{color:var(--acc);transition:color .35s var(--glide)}
+.liv-demo .lv-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--acc);margin-right:.45rem;transition:background .35s var(--glide)}
+.liv-demo .lv-btn{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--sans);font-weight:500;font-size:.9rem;padding:.65rem 1.25rem;border-radius:6px;border:1px solid var(--acc);background:var(--acc);color:#071410;cursor:pointer;margin-top:1.1rem;transition:background .35s var(--glide),border-color .35s var(--glide),transform var(--dur-fast) var(--glide)}
+.liv-demo .lv-btn:hover{transform:translateY(-1px)}
+
 /* ── OLYMPUS DASHBOARD (§13) — product grammar ── */
 .dash{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));max-width:1000px}
 .panel{border:1px solid var(--hair);border-radius:8px;background:var(--srf);padding:.8rem .95rem}
@@ -335,7 +347,31 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
       <div class="swatch" style="background:#7b7fc7"><i style="color:#071410">digistore #7b7fc7</i></div>
       <div class="swatch" style="background:#4fa39b"><i style="color:#071410">digilink #4fa39b</i></div>
     </div>
-    <div class="prov" style="margin-top:.7rem">rules: one livery per scope — liveries never mix on a surface · the core module (digiquant) carries the loudest voice · atlas / hermes / kairos are digiquant's green family · on the umbrella a livery appears only as an identifier — index dot, diagram path, chip — and umbrella CTAs stay ink/paper · digivault: livery unassigned (honest gap in tokens.css)</div>
+    <div class="anno" style="margin-top:1.6rem">the switcher — <b>the scope mechanism live: click a module and everything consuming var(--accent) re-dresses · press digithings and watch the color leave the room</b></div>
+    <div style="display:flex;gap:.45rem;flex-wrap:wrap;max-width:760px">
+      <button class="liv-chip" data-liv="digithings" data-hex="#ECEEF0">digithings</button>
+      <button class="liv-chip" data-liv="digigraph" data-hex="#e5b765">digigraph</button>
+      <button class="liv-chip on" data-liv="digiquant" data-hex="#4fa37a" style="border-color:#4fa37a">digiquant</button>
+      <button class="liv-chip" data-liv="atlas" data-hex="#6fbf94">atlas</button>
+      <button class="liv-chip" data-liv="hermes" data-hex="#4a8f7b">hermes</button>
+      <button class="liv-chip" data-liv="kairos" data-hex="#2f7a65">kairos</button>
+      <button class="liv-chip" data-liv="digisearch" data-hex="#5aa3c4">digisearch</button>
+      <button class="liv-chip" data-liv="digichat" data-hex="#9d8fc9">digichat</button>
+      <button class="liv-chip" data-liv="digikey" data-hex="#d97a5a">digikey</button>
+      <button class="liv-chip" data-liv="digismith" data-hex="#6fa3a3">digismith</button>
+      <button class="liv-chip" data-liv="digiclaw" data-hex="#b87840">digiclaw</button>
+      <button class="liv-chip" data-liv="digibase" data-hex="#9ea0a5">digibase</button>
+      <button class="liv-chip" data-liv="digistore" data-hex="#7b7fc7">digistore</button>
+      <button class="liv-chip" data-liv="digilink" data-hex="#4fa39b">digilink</button>
+    </div>
+    <div class="liv-demo" id="livdemo">
+      <div class="lv-read num" id="livread">scope: .accent-digiquant → --accent: #4fa37a</div>
+      <div class="lv-kick" id="livkick">// digiquant — module surface</div>
+      <div class="v-serif" style="font-size:clamp(1.3rem,2.6vw,1.9rem);line-height:1.12;margin-top:.5rem">One mechanism. <em class="lv-em" style="font-style:italic">Every module.</em></div>
+      <div class="v-mono num" style="font-size:.7rem;color:var(--soft);margin-top:.7rem"><span class="lv-dot"></span>backtests refreshed 2026-06-30 · /healthz ok</div>
+      <button class="lv-btn">Enter the module <span aria-hidden="true">→</span></button>
+    </div>
+    <div class="prov" style="margin-top:.9rem">rules: one livery per scope — liveries never mix on a surface · the core module (digiquant) carries the loudest voice · atlas / hermes / kairos are digiquant's green family · on the umbrella a livery appears only as an identifier — index dot, diagram path, chip — and umbrella CTAs stay ink/paper · digivault: livery unassigned (honest gap in tokens.css)</div>
   </div>
 </section>
 
@@ -955,6 +991,28 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   if(cmp){
     var rng=cmp.querySelector('input[type=range]');
     rng.addEventListener('input',function(){cmp.style.setProperty('--cx',rng.value+'%')});
+  }
+
+  /* §02 livery switcher — the scope mechanism live */
+  var livDemo=document.getElementById('livdemo');
+  if(livDemo){
+    var livRead=document.getElementById('livread'),livKick=document.getElementById('livkick');
+    var chips=document.querySelectorAll('.liv-chip');
+    chips.forEach(function(c){
+      c.addEventListener('click',function(){
+        var hex=c.getAttribute('data-hex'),name=c.getAttribute('data-liv');
+        livDemo.style.setProperty('--acc',hex);
+        if(name==='digithings'){
+          livRead.textContent='scope: (umbrella) → --accent: var(--ink) — monochrome';
+          livKick.textContent='// digithings — the plain canvas';
+        }else{
+          livRead.textContent='scope: .accent-'+name+' → --accent: '+hex;
+          livKick.textContent='// '+name+' — module surface';
+        }
+        chips.forEach(function(x){x.classList.remove('on');x.style.borderColor='';});
+        c.classList.add('on');c.style.borderColor=hex;
+      });
+    });
   }
 
   if('IntersectionObserver' in window && !rm && race){
