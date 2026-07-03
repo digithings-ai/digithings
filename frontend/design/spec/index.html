@@ -234,7 +234,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 <nav class="tocnav" id="tocnav" aria-label="canon sections">
   <span class="brand">digi<span style="color:var(--em)">things</span> <span style="color:var(--mute);font-weight:400">· canon</span></span>
   <span class="links">
-    <a href="#s00">00 laws</a><a href="#s01">01 canvas</a><a href="#s02">02 color</a><a href="#s03">03 type</a><a href="#s04">04 actions</a><a href="#s05">05 frames</a><a href="#s06">06 data</a><a href="#s07">07 forms</a><a href="#s08">08 chrome</a><a href="#s09">09 motion</a><a href="#s10">10 digiquant</a><a href="#s11">11 digithings</a><a href="#s12">12 posters</a><a href="#s13">13 olympus</a><a href="#s14">14 ivory</a><a href="#s15">15 ship</a><a href="#s16">16 digichat</a><a href="#s17">17 ledger</a>
+    <a href="#s00">00 laws</a><a href="#s01">01 canvas</a><a href="#s02">02 color</a><a href="#s03">03 type</a><a href="#s04">04 actions</a><a href="#s05">05 frames</a><a href="#s06">06 data</a><a href="#s07">07 forms</a><a href="#s08">08 chrome</a><a href="#s09">09 motion</a><a href="#s10">10 digiquant</a><a href="#s11">11 digithings</a><a href="#s12">12 posters</a><a href="#s13">13 olympus</a><a href="#s14">14 ivory</a><a href="#s15">15 ship</a><a href="#s16">16 digichat</a><a href="#s17">17 ledger</a><a href="#s18">18 gaps</a>
   </span>
 </nav>
 
@@ -927,8 +927,50 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
       <tr><td>accent gradients as decoration (.dq-glyph fill, .price-card.accent wash)</td><td class="num">digiquant-web/globals.css:30·68</td><td>law 02 — accent is signal, not paint</td><td><span class="chip-ok">ruled — glyph = brand mark, stays; tier wash = legal active state</span></td></tr>
       <tr><td>digichat wears cyan #3DD6C4 while tokens.css assigns lavender #9d8fc9</td><td class="num">digichat globals.css · tokens.css:33</td><td>§02 — one livery per module</td><td><span class="chip-ok">ruled — cyan wins (§16)</span></td></tr>
     </table>
-    <div class="prov" style="margin-top:.8rem">practiced fully live: §10 + §11 page grammars, §06 tearsheets, §08 chrome, §04 actions · designed here, not yet shipped: §12 posters (intentional — new), §13 full dashboard, §14 full reading mode · backlog gaps the audit surfaced: strategy-library grid detail, docs sidebar grammar, tearsheet print mode, form validation depth</div>
+    <div class="prov" style="margin-top:.8rem">practiced fully live: §10 + §11 page grammars, §06 tearsheets, §08 chrome, §04 actions · designed here, not yet shipped: §12 posters (intentional — new), §13 full dashboard, §14 full reading mode · backlog gaps the audit surfaced: strategy-library grid detail, docs sidebar grammar, tearsheet print mode, form validation depth — all four closed in §18</div>
     <div class="prov" style="margin-top:.5rem">conformance addendum (2026-07-02, post-backmerge): flat-surface shadows removed per row 4 · the 55089f2 card-deck (dqss) shadows are NOT decoration — they are structural depth for the stacked-peek mechanic of the sanctioned proof pin, and stay · the newer suite retired .ts-card-pulse upstream, mooting that half of row 4</div>
+  </div>
+</section>
+
+<section class="canon-sec" id="s18">
+  <span class="sec-num">18</span>
+  <div class="kick">// the remaining grammars — closing the ledger's gaps</div>
+  <h2 class="canon">Four gaps. <em>Closed.</em></h2>
+  <p class="sec-note">The §17 audit named four surfaces the canon hadn't ruled. Here they are — the docs sidebar, validation behavior, the strategy library, and the one print stylesheet we ship. With these, every surface the audit found now has a grammar.</p>
+  <div class="lab">
+
+    <div class="anno">docs sidebar — <b>ivory reading mode's navigation · mono labels, serif content · the current page is a rule, not a fill</b></div>
+    <div class="ivory" style="padding:1rem 1.2rem;display:flex;gap:1.4rem;max-width:760px">
+      <div style="flex:0 0 180px;border-right:1px solid #E8E6DC;padding-right:1rem;font-family:var(--mono);font-size:.7rem;line-height:2.3">
+        <div style="color:#2E6B4E;letter-spacing:.12em;font-size:.58rem">// QUICKSTART</div>
+        <div style="color:#141413;border-left:2px solid #2E6B4E;padding-left:.5rem">install</div>
+        <div style="color:#6B7177;padding-left:.55rem">first backtest</div>
+        <div style="color:#6B7177;padding-left:.55rem">bring your keys</div>
+        <div style="color:#2E6B4E;letter-spacing:.12em;font-size:.58rem;margin-top:.7rem">// SERVICES</div>
+        <div style="color:#6B7177;padding-left:.55rem">digigraph</div>
+        <div style="color:#6B7177;padding-left:.55rem">digiquant</div>
+      </div>
+      <div style="flex:1;min-width:0">
+        <h3 style="font-family:var(--serif);font-weight:400;font-size:1.25rem;margin:0 0 .45rem;color:#141413">Install</h3>
+        <p style="font-family:var(--serif);font-size:.92rem;line-height:1.7;margin:0;color:#141413">One command on your machine. The sidebar never competes with this column — it whispers in mono while the page speaks in serif.</p>
+      </div>
+    </div>
+    <div class="prov" style="margin-top:.5rem">rules: groups are // kickers in em-deep · current page = 2px em-deep left rule, never a background fill · ≤ 2 levels, ever · the sidebar scrolls independently · on mobile it collapses into a native details element (§07 discipline) · link hover = ink, opacity-only</div>
+
+    <div class="anno" style="margin-top:1.8rem">validation — <b>when, not just how · §07 gave the colors; this is the behavior</b></div>
+    <div style="max-width:420px;border:1px solid var(--hair);border-radius:8px;padding:.8rem .95rem;font-family:var(--mono);font-size:.7rem;line-height:2;color:var(--soft)">
+      <span style="color:#f0999b">2 fields need attention</span><br>
+      <a href="#s18" style="text-decoration:underline;text-underline-offset:3px">api key — not a valid sk- key</a><br>
+      <a href="#s18" style="text-decoration:underline;text-underline-offset:3px">email — missing @</a>
+    </div>
+    <div class="prov" style="margin-top:.5rem">rules: validate on blur, never per keystroke · error = pastel #f0999b text + border (never --down — money colors mean money) · three or more errors get the summary box above: mono anchors that jump to their fields · success is quiet — a small --up check beside the label, no green banners · the submit button never disables: it reports ("2 fields need attention") because a disabled button explains nothing · async checks (key validation) run a mono status line — checking… / ok / failed, retry — on the §08 four-state colors</div>
+
+    <div class="anno" style="margin-top:1.8rem">the strategy library — <b>/strategies · the §06 tearsheet strip, compressed to a card</b></div>
+    <div class="prov" style="line-height:2.1">card anatomy: asset mark + strategy name (mono) · three numbers only — PF, win rate, maxDD, zero-slashed tabular · the dated refresh line · the live dot. hover = hairline brightens + 2px lift, no shadow (conformance-ruled 2026-07-02) · filter = mono segmented control (All · Live · Draft) · search = the §07 input · sort defaults live-first, then PF descending · empty state = one mono sentence: "no strategies match — clear filters" · 3-up desktop, 1-up mobile, 1rem gap · masonry never</div>
+
+    <div class="anno" style="margin-top:1.8rem">tearsheet print — <b>the only @media print we ship · law 01 survives paper</b></div>
+    <div class="prov" style="line-height:2.1">print flips to the ivory stack: --bg → --paper, ink #141413, hairlines #E8E6DC — dark pages print as white pages, not toner disasters · chrome dies: nav, toggles, CTAs, blooms all display:none · charts keep their strokes at print-safe weights; up/down keep their hues (they survive grayscale as dark/mid contrast) · every printed page carries the provenance footer: strategy · date range · refreshed date · digiquant.io/strategies/&lt;slug&gt; — the URL makes any printout auditable against the live tearsheet · page numbers in mono</div>
+
   </div>
 </section>
 
@@ -943,7 +985,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
   <div class="wrap" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
     <div>
       <div class="v-mono" style="font-weight:500;font-size:1.15rem">digi<span style="color:var(--em)">things</span></div>
-      <div class="prov" style="margin-top:.5rem">canon v1 · §00–17 · ALL rulings in (2026-07-02): warm canvas #0A0E0C · digichat = cyan · convergence hero · stacked declarative · auto-hide nav · all eight ledger rows · next: the conformance pass, then the single design-lane PR</div>
+      <div class="prov" style="margin-top:.5rem">canon v1 · §00–18 · all rulings in, all audit gaps closed (2026-07-02) · merged to develop (#1317), promoted (#1319) · post-merge additions: deck-at-rest (§09) · the remaining grammars (§18)</div>
     </div>
     <div class="v-mono" style="font-size:.72rem;color:var(--soft)"><span id="sysdot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--up);margin-right:.45rem"></span>all systems yours</div>
   </div>
