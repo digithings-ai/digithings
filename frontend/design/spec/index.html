@@ -231,8 +231,8 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
 .colo-word b{font-weight:500;color:transparent;-webkit-text-stroke:1px rgba(79,163,122,.7)}
 @supports (animation-timeline: view()){
   @media (prefers-reduced-motion: no-preference){
-    .colo-word{opacity:0;transform:translateY(34%);animation:colo-rise linear both;animation-timeline:view();animation-range:entry 0% cover 42%}
-    .colo-word b{animation:colo-fill linear both;animation-timeline:view();animation-range:cover 20% cover 60%}
+    .colo-word{opacity:0;transform:translateY(34%);animation:colo-rise linear both;animation-timeline:view();animation-range:entry 0% entry 100%}
+    .colo-word b{animation:colo-fill linear both;animation-timeline:view();animation-range:entry 55% entry 100%}
   }
 }
 @keyframes colo-rise{to{opacity:1;transform:none}}
@@ -546,7 +546,7 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
     <div style="border:1px solid var(--hair);border-radius:10px;background:var(--bg);overflow:hidden;max-width:760px;padding:1.8rem 0 .6rem">
       <span class="colo-word" style="font-size:clamp(2.4rem,7.5vw,4.8rem)" aria-hidden="true">digi<b>quant</b></span>
     </div>
-    <div class="prov" style="margin-top:.5rem">spec: geist mono 500 · lh .82 · tracking −.05em · 1px stroke, ink @30% — the suffix wears the livery @70% and gains a 16% fill as it settles · scrub: rise over entry→42% cover, fill 20→60% cover · aria-hidden — it is punctuation, not content · the real thing closes this very page</div>
+    <div class="prov" style="margin-top:.5rem">spec: geist mono 500 · lh .82 · tracking −.05em · 1px stroke, ink @30% — the suffix wears the livery @70% and gains a 16% fill as it settles · scrub: entry-based ranges (rise entry 0→100%, fill entry 55→100%) — cover ranges never complete for an element at the document's end · aria-hidden — it is punctuation, not content · the real thing closes this very page</div>
   </div>
 </section>
 

@@ -12,7 +12,7 @@ export {
 export { Emblem, emblems } from "./components/emblems";
 export { StackLogo, StackRow } from "./components/StackLogo";
 export { ScrollyGraph, GraphSVG } from "./components/graph";
-export { Nav, Footer, ModuleCard, type NavLink } from "./components/chrome";
+export { Nav, Footer, Colophon, ModuleCard, type NavLink } from "./components/chrome";
 export { HashScrollManager } from "./navigation/HashScrollManager";
 export {
   hashIdFromHref,

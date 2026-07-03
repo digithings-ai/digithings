@@ -50,6 +50,23 @@ export function Footer({ links, meta }: { links: NavLink[]; meta: string }) {
   );
 }
 
+/** The page's last word (canon §08): the module's name at giant scale,
+ *  1px hairline outline — never a glow. Scroll-scrubbed with zero JS via
+ *  CSS `animation-timeline: view()` (@supports-gated in site.css); under
+ *  reduced motion or without support the name simply stands. The suffix
+ *  wears var(--accent), so each app's livery (or the umbrella's ink)
+ *  dresses it automatically. aria-hidden: punctuation, not content. */
+export function Colophon({ name, suffix }: { name: string; suffix?: string }) {
+  return (
+    <div className="colophon" aria-hidden="true">
+      <span className="colo-word">
+        {name}
+        {suffix ? <b>{suffix}</b> : null}
+      </span>
+    </div>
+  );
+}
+
 export function ModuleCard({ m }: { m: ModuleNode }) {
   return (
     <a className={`mod-card t-${m.tier}`} href={`/modules/${m.id}`}>
