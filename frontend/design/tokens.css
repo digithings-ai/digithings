@@ -106,7 +106,7 @@
      the strip behind the mobile address bar) are dark — otherwise they paint
      light by default, leaving a mismatched edge above the page on mobile. */
   color-scheme: dark;
-  --bg:        #0B0C0E;
+  --bg:        #0A0E0C; /* warm canvas, ruled 2026-07-02 (was #0B0C0E) */
   --surface:   #121417;
   --surface-2: #171A1E;
   --hair:      rgba(255, 255, 255, 0.09);
