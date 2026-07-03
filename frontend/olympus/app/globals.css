@@ -37,7 +37,7 @@
   /* Glass → flat panel (kept var name; shadow softened) */
   --shadow-glass: 0 18px 40px -28px rgba(0, 0, 0, 0.6);
 
-  /* Fonts — Geist Sans + Geist Mono + Instrument Serif display, self-hosted by
+  /* Fonts — Geist Sans + Geist Mono + Fraunces display, self-hosted by
      next/font (layout.tsx). The display family is overridden below to the
      next/font-loaded face (tokens.css names it literally, which the hashed
      next/font family would miss — cf. #684). */

@@ -1552,7 +1552,14 @@ html {
   .dqpipe-step { opacity: 1; transform: none; transition: none; }
   .dqss-scrolly { height: auto !important; }
   .dqss-stack-pin { position: relative; top: auto; min-height: 0; }
-  .dqss-stack-card { transform: none !important; }
+  /* The scrub never runs here, so render the deck at rest: all cards visible,
+     stacked with the base peek offsets so each underlying card keeps its title
+     strip showing, front card fully readable, library CTA in flow below.
+     Grid same-cell stacking replaces the JS-measured absolute layout — the
+     row sizes itself to the cards, and the padding absorbs the peek offsets. */
+  .dqss-stack { height: auto !important; display: grid; padding-bottom: calc(var(--dqss-peek) * 2); }
+  .dqss-stack-card { position: relative !important; grid-area: 1 / 1; top: calc(var(--dqss-peek) * var(--stack-index, 0)); transform: none !important; }
+  .dqss-stack-card[data-state="hidden"] { visibility: visible; pointer-events: auto; }
   .dqss-library-cta { transform: none !important; visibility: visible; pointer-events: auto; }
   .dqss-chart-skeleton { animation: none; }
 }
