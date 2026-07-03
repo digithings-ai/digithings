@@ -22,7 +22,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Key, ExternalLink, Eye, EyeOff } from "lucide-react";
+import { Key, ExternalLink, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,6 +75,34 @@ const ACCENT_CSS = `
 .accent-digichat   { --accent: #1f1f1f; --accent-foreground: #e6e6e6; }
 `;
 
+/**
+ * Terminal idiom (matches digithings.ai/chat — see DigiChatSession.tsx / .dc-*
+ * rules in globals.css). Token mapping routes through the shadcn/Tailwind v4
+ * theme vars this app already uses (--foreground, --muted-foreground,
+ * --border, --accent) rather than digithings-web's --ink/--hair names, so
+ * both the dark (default) and light (tenant) themes stay correct with no raw
+ * hex values.
+ */
+const TERMINAL_CSS = `
+.edc-thread { font-family: var(--font-geist-mono), ui-monospace, monospace; }
+.edc-msg { position: relative; display: grid; grid-template-columns: 0.85rem minmax(0, 1fr); gap: 0.5rem; align-items: start; font-size: 0.8rem; line-height: 1.55; }
+.edc-who { color: var(--muted-foreground); font-weight: 600; user-select: none; }
+.edc-assistant .edc-who { color: var(--accent); }
+.edc-body { min-width: 0; color: color-mix(in srgb, var(--foreground) 86%, transparent); word-break: break-word; }
+.edc-user .edc-body { color: var(--foreground); white-space: pre-wrap; }
+.edc-activities { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.55rem; padding: 0.45rem 0.55rem; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--foreground) 4%, transparent); font-size: 0.72rem; line-height: 1.45; }
+.edc-act-line { margin: 0; color: var(--muted-foreground); }
+.edc-act-line.is-done { color: color-mix(in srgb, var(--foreground) 86%, transparent); }
+.edc-act-check { color: var(--accent); }
+.edc-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.5rem; padding: 0.5rem 0.1rem 0.2rem; border-top: 1px solid var(--border); background: transparent; }
+.edc-input { font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.8rem; line-height: 1.45; background: transparent; border: 0; color: var(--foreground); width: 100%; padding: 0.35rem 0; }
+.edc-input::placeholder { color: var(--muted-foreground); }
+.edc-input:focus { outline: none; }
+.edc-send { font: inherit; font-size: 1rem; align-self: stretch; color: var(--accent); background: transparent; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; padding: 0.3rem 0.65rem; transition: background 0.18s ease; }
+.edc-send:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.edc-send:disabled { opacity: 0.4; cursor: default; }
+`;
+
 type EmbedPageProps = {
   searchParams: Promise<{ accent?: string }> | { accent?: string };
 };
@@ -109,6 +137,7 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
   return (
     <>
       <style>{ACCENT_CSS}</style>
+      <style>{TERMINAL_CSS}</style>
       <div className="dc-grain" aria-hidden />
       <div
         className={`${tenantCfg.theme === "light" ? "light" : "dark"} accent-${accent} relative z-10 flex min-h-dvh flex-col bg-background text-foreground`}
@@ -249,7 +278,7 @@ function EmbedChat({
 
       <div
         ref={scrollRef}
-        className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
+        className="edc-thread flex-1 space-y-3 overflow-y-auto px-4 py-4"
         role="log"
         aria-live="polite"
       >
@@ -261,10 +290,7 @@ function EmbedChat({
           </p>
         )}
         {messages.map((m) => (
-          <div key={m.id}>
-            <MessageBubble message={m} />
-            {m.role === "assistant" && <ActivityBox message={m} />}
-          </div>
+          <MessageRow key={m.id} message={m} />
         ))}
         {chatError ? (
           <div
@@ -288,26 +314,23 @@ function EmbedChat({
       {gate.locked && !ungated ? (
         <PaywallCard />
       ) : (
-        <form
-          onSubmit={onSubmit}
-          className="flex gap-2 border-t border-border p-3"
-        >
-          <Input
+        <form onSubmit={onSubmit} className="edc-form">
+          <input
+            className="edc-input"
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="ask digichat…"
             aria-label="Message"
             disabled={busy}
           />
-          <Button
+          <button
             type="submit"
-            size="icon"
+            className="edc-send"
             disabled={busy || !text.trim()}
             aria-label="Send message"
-            style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
           >
-            <Send className="size-4" />
-          </Button>
+            ↵
+          </button>
         </form>
       )}
 
@@ -331,40 +354,9 @@ function EmbedChat({
 }
 
 // ---------------------------------------------------------------------------
-// Message bubble — markdown for assistant replies, plain text for user turns.
-// ---------------------------------------------------------------------------
-
-function MessageBubble({ message }: { message: UIMessage }) {
-  const text = message.parts
-    .filter((p): p is { type: "text"; text: string } => p.type === "text")
-    .map((p) => p.text)
-    .join("");
-  const mine = message.role === "user";
-  return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-          mine
-            ? "bg-[color:var(--accent)] text-[color:var(--accent-foreground)]"
-            : "bg-muted text-foreground"
-        }`}
-      >
-        {mine ? (
-          text || <span className="opacity-60">…</span>
-        ) : text ? (
-          <div className="text-sm [&_p]:my-1 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:list-disc">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
-          </div>
-        ) : (
-          <span className="opacity-60">…</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Activity box — renders DigiGraph trace events under assistant messages.
+// Message row — terminal idiom: ">" / "·" marker + body. Assistant bodies
+// show activities above the markdown answer; user bodies are plain text
+// (never markdown-rendered).
 // ---------------------------------------------------------------------------
 
 type TracePartData = {
@@ -372,21 +364,51 @@ type TracePartData = {
   payload?: { label?: unknown; status?: unknown };
 };
 
-function ActivityBox({ message }: { message: UIMessage }) {
+function MessageRow({ message }: { message: UIMessage }) {
+  const text = message.parts
+    .filter((p): p is { type: "text"; text: string } => p.type === "text")
+    .map((p) => p.text)
+    .join("");
+  const mine = message.role === "user";
   const traces = message.parts.filter(
     (part): part is { type: "data-digigraphTrace"; data: TracePartData } =>
       part.type === "data-digigraphTrace"
   );
-  if (traces.length === 0) return null;
+
   return (
-    <div className="mt-1 max-w-[85%] rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5">
+    <div className={`edc-msg ${mine ? "edc-user" : "edc-assistant"}`}>
+      <span className="edc-who" aria-hidden="true">
+        {mine ? ">" : "·"}
+      </span>
+      <div className="edc-body">
+        {mine ? (
+          text || <span className="opacity-60">…</span>
+        ) : (
+          <>
+            {traces.length > 0 && <ActivityLines traces={traces} />}
+            {text ? (
+              <div className="text-sm [&_p]:my-1 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:list-disc">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+              </div>
+            ) : (
+              <span className="opacity-60">…</span>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ActivityLines({ traces }: { traces: { data: TracePartData }[] }) {
+  return (
+    <div className="edc-activities">
       {traces.map((t, i) => {
         const label = t.data?.payload?.label ?? t.data?.type ?? "activity";
         const done = t.data?.payload?.status === "completed";
         return (
-          <p key={i} className="font-mono text-[11px] leading-5 text-muted-foreground">
-            {done ? "✓ " : "… "}
-            {String(label)}
+          <p key={i} className={`edc-act-line${done ? " is-done" : ""}`}>
+            {done ? <span className="edc-act-check">✓</span> : "…"} {String(label)}
           </p>
         );
       })}
