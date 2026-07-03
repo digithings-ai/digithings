@@ -17,7 +17,9 @@ export type PricingTier = {
   featured?: boolean;
 };
 
-export const CONTACT_EMAIL = "contact@digiquant.io";
+import { DQ_CONTACT_EMAIL } from "./_nav";
+
+export const CONTACT_EMAIL = DQ_CONTACT_EMAIL;
 export const WAITLIST_MAILTO = `mailto:${CONTACT_EMAIL}?subject=Managed%20Olympus%20waitlist`;
 export const ENTERPRISE_MAILTO = `mailto:${CONTACT_EMAIL}?subject=DigiQuant%20enterprise`;
 

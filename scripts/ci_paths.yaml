@@ -75,7 +75,9 @@ score:
   - digismith/**
   - digikey/**
   - digivault/**
-  - frontend/**
+  # frontend/** intentionally excluded from scoring (#1310): score.py is a
+  # Python-oriented anti-pattern heuristic that misfires on CSS/JS; gitleaks
+  # still runs on frontend PRs for secrets, and app builds still gate breakage.
   - scripts/**
   - tests/**
   - agents.yml
