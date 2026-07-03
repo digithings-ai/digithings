@@ -111,7 +111,7 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
       <style>{ACCENT_CSS}</style>
       <div className="dc-grain" aria-hidden />
       <div
-        className={`${tenantCfg.theme === "light" ? "" : "dark"} accent-${accent} relative z-10 flex min-h-dvh flex-col`}
+        className={`${tenantCfg.theme === "light" ? "light" : "dark"} accent-${accent} relative z-10 flex min-h-dvh flex-col bg-background text-foreground`}
         style={accentStyle}
       >
         <EmbedChat accent={accent} tenantCfg={tenantCfg} />
