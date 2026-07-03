@@ -50,6 +50,14 @@ type PreviewMode = "charts" | "tables";
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+// Cached once — the per-scroll path must not re-query media state (#1322).
+let reducedMq: MediaQueryList | null = null;
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  reducedMq ??= window.matchMedia("(prefers-reduced-motion: reduce)");
+  return reducedMq.matches;
+}
+
 function easeInOutCubic(t: number): number {
   const x = clamp(t, 0, 1);
   return x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
@@ -541,7 +549,7 @@ export function StrategySuite() {
     setIntroPhase(false);
     const scrolledPastHold = scrolled - m.holdPx;
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (prefersReducedMotion()) {
       const idx = stackActiveIndex(scrolledPastHold, m.budgets);
       setActiveIndex(idx);
       setCardOffsets(STRATEGIES.map((_, i) => (i <= idx ? 0 : m.hideOffset)));

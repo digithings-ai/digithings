@@ -27,7 +27,15 @@ export function Terminal({ title, lines }: { title: string; lines: TermLine[] })
   const started = useRef(false);
 
   useEffect(() => {
-    if (!safe || started.current) return;
+    // useMotionSafe resolves after mount (hydration-safe): reduced-motion
+    // users reach here with safe=false on the second pass — show everything
+    // instantly, even if the pre-resolution pass already "started" (its timer
+    // was cleaned up before ever ticking).
+    if (!safe) {
+      setN(lines.length);
+      return;
+    }
+    if (started.current) return;
     started.current = true;
     let i = 0;
     const tick = () => {
