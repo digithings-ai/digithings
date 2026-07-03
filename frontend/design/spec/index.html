@@ -80,6 +80,8 @@ h2.canon em{font-style:italic;color:var(--em)}
 .lab-grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
 .swatch{height:64px;border-radius:8px;border:1px solid var(--hair2);position:relative}
 .swatch i{position:absolute;left:.6rem;bottom:.45rem;font-family:var(--mono);font-style:normal;font-size:.62rem;color:var(--soft)}
+.swatch[role=button]{cursor:copy;transition:border-color var(--dur-fast) var(--glide)}
+.swatch[role=button]:hover{border-color:var(--em)}
 
 /* ── BUTTON GRAMMAR (canon §04) ─────────────────────────────── */
 .btnP{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--sans);font-weight:500;font-size:.92rem;padding:.7rem 1.35rem;border-radius:6px;border:1px solid var(--em);background:var(--em);color:#071410;cursor:pointer;transition:transform var(--dur-fast) var(--glide),box-shadow var(--dur-fast) var(--glide),background var(--dur-fast) var(--glide)}
@@ -1009,6 +1011,21 @@ table.canon td:first-child{font-family:var(--mono);font-size:.76rem;color:var(--
       b.style.background='var(--em-weak)';b.style.color='var(--ink)';
     });
   });
+  /* every hex-labeled swatch is copyable — the canon is a tool, not a picture */
+  document.querySelectorAll('.swatch').forEach(function(s){
+    var label=s.querySelector('i');if(!label)return;
+    var m=(label.textContent||'').match(/#[0-9a-fA-F]{6}/);if(!m)return;
+    var hex=m[0];
+    s.setAttribute('role','button');s.setAttribute('tabindex','0');
+    s.setAttribute('aria-label','copy '+hex);
+    function doCopy(){
+      function ok(){var prev=label.textContent;label.textContent='copied '+hex;setTimeout(function(){label.textContent=prev;},1200);}
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(hex).then(ok,ok);}else{ok();}
+    }
+    s.addEventListener('click',doCopy);
+    s.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();doCopy();}});
+  });
+
   document.querySelectorAll('.copy').forEach(function(b){
     b.addEventListener('click',function(){
       var t=b.getAttribute('data-copy');
