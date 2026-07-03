@@ -5,6 +5,13 @@ export type EmbedChatTenantContext = ChatTenantContext & {
   embedConfig: EmbedTenantConfig | null;
 };
 
+/** Extracts the embed config from either tenant context variant, or null when absent. */
+export function embedConfigOf(
+  ctx: ChatTenantContext | EmbedChatTenantContext
+): EmbedTenantConfig | null {
+  return "embedConfig" in ctx ? ctx.embedConfig : null;
+}
+
 /** The embedding page's origin: explicit X-Embed-Host header, else the referer URL. */
 export function embedHostOf(req: Request): string | null {
   const header = req.headers.get("x-embed-host")?.trim();

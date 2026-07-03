@@ -20,6 +20,7 @@ import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import {
+  embedConfigOf,
   isEmbedChatRequest,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
     "X-Request-Id": rid,
   };
 
-  const embedConfig = "embedConfig" in tenantCtx ? tenantCtx.embedConfig : null;
+  const embedConfig = embedConfigOf(tenantCtx);
   if (embedConfig?.backend.type === "external-relay") {
     return await createExternalRelayStreamResponse({
       relayUrl: embedConfig.backend.url,
