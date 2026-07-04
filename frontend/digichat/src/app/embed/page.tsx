@@ -20,7 +20,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Send, Key, ExternalLink, Eye, EyeOff } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Key, ExternalLink, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +39,16 @@ import {
   useEmbedGate,
   EMBED_FREE_TURN_LIMIT,
 } from "@/lib/embed-gate";
+import {
+  useEmbedTenantConfig,
+  type EmbedTenantClientConfig,
+} from "@/hooks/use-embed-tenant-config";
+
+const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
+
+function conversationStorageKey(host: string): string {
+  return `${CONVERSATION_STORAGE_PREFIX}${host}`;
+}
 
 type Accent = "digithings" | "digiquant" | "digichat";
 
@@ -63,12 +75,41 @@ const ACCENT_CSS = `
 .accent-digichat   { --accent: #1f1f1f; --accent-foreground: #e6e6e6; }
 `;
 
+/**
+ * Terminal idiom (matches digithings.ai/chat — see DigiChatSession.tsx / .dc-*
+ * rules in globals.css). Token mapping routes through the shadcn/Tailwind v4
+ * theme vars this app already uses (--foreground, --muted-foreground,
+ * --border, --accent) rather than digithings-web's --ink/--hair names, so
+ * both the dark (default) and light (tenant) themes stay correct with no raw
+ * hex values.
+ */
+const TERMINAL_CSS = `
+.edc-thread { font-family: var(--font-geist-mono), ui-monospace, monospace; }
+.edc-msg { position: relative; display: grid; grid-template-columns: 0.85rem minmax(0, 1fr); gap: 0.5rem; align-items: start; font-size: 0.8rem; line-height: 1.55; }
+.edc-who { color: var(--muted-foreground); font-weight: 600; user-select: none; }
+.edc-assistant .edc-who { color: var(--accent); }
+.edc-body { min-width: 0; color: color-mix(in srgb, var(--foreground) 86%, transparent); word-break: break-word; }
+.edc-user .edc-body { color: var(--foreground); white-space: pre-wrap; }
+.edc-activities { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.55rem; padding: 0.45rem 0.55rem; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--foreground) 4%, transparent); font-size: 0.72rem; line-height: 1.45; }
+.edc-act-line { margin: 0; color: var(--muted-foreground); }
+.edc-act-line.is-done { color: color-mix(in srgb, var(--foreground) 86%, transparent); }
+.edc-act-check { color: var(--accent); }
+.edc-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.5rem; padding: 0.5rem 0.1rem 0.2rem; border-top: 1px solid var(--border); background: transparent; }
+.edc-input { font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.8rem; line-height: 1.45; background: transparent; border: 0; color: var(--foreground); width: 100%; padding: 0.35rem 0; }
+.edc-input::placeholder { color: var(--muted-foreground); }
+.edc-input:focus { outline: none; }
+.edc-send { font: inherit; font-size: 1rem; align-self: stretch; color: var(--accent); background: transparent; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; padding: 0.3rem 0.65rem; transition: background 0.18s ease; }
+.edc-send:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.edc-send:disabled { opacity: 0.4; cursor: default; }
+`;
+
 type EmbedPageProps = {
   searchParams: Promise<{ accent?: string }> | { accent?: string };
 };
 
 export default function EmbedPage({ searchParams }: EmbedPageProps) {
   const [accent, setAccent] = useState<Accent>("digichat");
+  const tenantCfg = useEmbedTenantConfig();
 
   // Next 15/16: searchParams may be a Promise — resolve both shapes.
   useEffect(() => {
@@ -86,12 +127,23 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
     emit("embed_loaded", { accent });
   }, [accent]);
 
+  const accentStyle = tenantCfg.accent
+    ? ({
+        "--accent": tenantCfg.accent.color,
+        "--accent-foreground": tenantCfg.accent.foreground,
+      } as React.CSSProperties)
+    : undefined;
+
   return (
     <>
       <style>{ACCENT_CSS}</style>
+      <style>{TERMINAL_CSS}</style>
       <div className="dc-grain" aria-hidden />
-      <div className={`dark accent-${accent} relative z-10 flex min-h-dvh flex-col`}>
-        <EmbedChat accent={accent} />
+      <div
+        className={`${tenantCfg.theme === "light" ? "light" : "dark"} accent-${accent} relative z-10 flex min-h-dvh flex-col bg-background text-foreground`}
+        style={accentStyle}
+      >
+        <EmbedChat accent={accent} tenantCfg={tenantCfg} />
       </div>
     </>
   );
@@ -101,10 +153,17 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
 // Chat
 // ---------------------------------------------------------------------------
 
-function EmbedChat({ accent }: { accent: Accent }) {
+function EmbedChat({
+  accent,
+  tenantCfg,
+}: {
+  accent: Accent;
+  tenantCfg: EmbedTenantClientConfig;
+}) {
   const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } =
     useBYOKKey();
-  const gate = useEmbedGate(byokIsSet);
+  const ungated = tenantCfg.gateMode === "ungated";
+  const gate = useEmbedGate(byokIsSet || ungated);
 
   const transport = useMemo(
     () =>
@@ -127,6 +186,14 @@ function EmbedChat({ accent }: { accent: Accent }) {
             if (byokProvider === "openrouter" && byokModel.trim()) {
               headers["X-BYOK-Model"] = byokModel.trim();
             }
+          }
+          try {
+            const conversationId = window.sessionStorage.getItem(
+              conversationStorageKey(gate.host),
+            );
+            if (conversationId) headers["X-External-Conversation"] = conversationId;
+          } catch {
+            /* sessionStorage unavailable (e.g. blocked third-party storage) — start fresh turns */
           }
           return {
             body: {
@@ -154,6 +221,23 @@ function EmbedChat({ accent }: { accent: Accent }) {
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, status]);
 
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    for (const part of last.parts) {
+      if (part.type === "data-externalConversation") {
+        const id = (part as { data?: { conversationId?: string } }).data?.conversationId;
+        if (id) {
+          try {
+            window.sessionStorage.setItem(conversationStorageKey(gate.host), id);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+  }, [messages, gate.host]);
+
   const busy = status === "streaming" || status === "submitted";
 
   const onSubmit = useCallback(
@@ -161,7 +245,7 @@ function EmbedChat({ accent }: { accent: Accent }) {
       e.preventDefault();
       const t = text.trim();
       if (!t || busy) return;
-      if (gate.locked) return;
+      if (gate.locked && !ungated) return;
 
       sendMessage({
         role: "user",
@@ -172,38 +256,41 @@ function EmbedChat({ accent }: { accent: Accent }) {
         turn: gate.turns + 1,
         byok: byokIsSet,
       });
-      gate.increment();
+      if (!ungated) gate.increment();
       setText("");
     },
-    [text, busy, gate, sendMessage, accent, byokIsSet],
+    [text, busy, gate, sendMessage, accent, byokIsSet, ungated],
   );
 
   return (
     <>
       <header className="flex items-center justify-between border-b border-border px-4 py-2">
-        <span className="text-sm font-semibold tracking-tight">DigiChat</span>
-        <span
-          className="text-[10px] uppercase tracking-wider text-muted-foreground"
-          aria-label={`Turns used: ${gate.turns} of ${gate.limit}`}
-        >
-          {byokIsSet ? "BYOK unlocked" : `${gate.turns}/${gate.limit} free`}
-        </span>
+        <span className="text-sm font-semibold tracking-tight">digichat</span>
+        {ungated ? null : (
+          <span
+            className="text-[10px] uppercase tracking-wider text-muted-foreground"
+            aria-label={`Turns used: ${gate.turns} of ${gate.limit}`}
+          >
+            {byokIsSet ? "BYOK unlocked" : `${gate.turns}/${gate.limit} free`}
+          </span>
+        )}
       </header>
 
       <div
         ref={scrollRef}
-        className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
+        className="edc-thread flex-1 space-y-3 overflow-y-auto px-4 py-4"
         role="log"
         aria-live="polite"
       >
         {messages.length === 0 && !gate.locked && (
           <p className="text-sm text-muted-foreground">
-            Ask a question to get started. The first {EMBED_FREE_TURN_LIMIT} are
-            free.
+            {ungated
+              ? "Ask a question to get started."
+              : `Ask a question to get started. The first ${EMBED_FREE_TURN_LIMIT} are free.`}
           </p>
         )}
         {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
+          <MessageRow key={m.id} message={m} />
         ))}
         {chatError ? (
           <div
@@ -224,56 +311,107 @@ function EmbedChat({ accent }: { accent: Accent }) {
         ) : null}
       </div>
 
-      {gate.locked ? (
+      {gate.locked && !ungated ? (
         <PaywallCard />
       ) : (
-        <form
-          onSubmit={onSubmit}
-          className="flex gap-2 border-t border-border p-3"
-        >
-          <Input
+        <form onSubmit={onSubmit} className="edc-form">
+          <input
+            className="edc-input"
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="ask digichat…"
             aria-label="Message"
             disabled={busy}
           />
-          <Button
+          <button
             type="submit"
-            size="icon"
+            className="edc-send"
             disabled={busy || !text.trim()}
             aria-label="Send message"
-            style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
           >
-            <Send className="size-4" />
-          </Button>
+            ↵
+          </button>
         </form>
+      )}
+
+      {tenantCfg.attribution && (
+        <p className="border-t border-border px-4 py-2 text-center text-[11px] text-muted-foreground">
+          powered by digichat — a{" "}
+          <a
+            href="https://digithings.ai"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="underline"
+            style={{ color: "var(--accent)" }}
+          >
+            digithings
+          </a>{" "}
+          product.
+        </p>
       )}
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Message bubble — plain text only, intentionally minimal.
+// Message row — terminal idiom: ">" / "·" marker + body. Assistant bodies
+// show activities above the markdown answer; user bodies are plain text
+// (never markdown-rendered).
 // ---------------------------------------------------------------------------
 
-function MessageBubble({ message }: { message: UIMessage }) {
+type TracePartData = {
+  type?: string;
+  payload?: { label?: unknown; status?: unknown };
+};
+
+function MessageRow({ message }: { message: UIMessage }) {
   const text = message.parts
     .filter((p): p is { type: "text"; text: string } => p.type === "text")
     .map((p) => p.text)
     .join("");
   const mine = message.role === "user";
+  const traces = message.parts.filter(
+    (part): part is { type: "data-digigraphTrace"; data: TracePartData } =>
+      part.type === "data-digigraphTrace"
+  );
+
   return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-          mine
-            ? "bg-[color:var(--accent)] text-[color:var(--accent-foreground)]"
-            : "bg-muted text-foreground"
-        }`}
-      >
-        {text || <span className="opacity-60">…</span>}
+    <div className={`edc-msg ${mine ? "edc-user" : "edc-assistant"}`}>
+      <span className="edc-who" aria-hidden="true">
+        {mine ? ">" : "·"}
+      </span>
+      <div className="edc-body">
+        {mine ? (
+          text || <span className="opacity-60">…</span>
+        ) : (
+          <>
+            {traces.length > 0 && <ActivityLines traces={traces} />}
+            {text ? (
+              <div className="text-sm [&_p]:my-1 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:list-disc">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+              </div>
+            ) : (
+              <span className="opacity-60">…</span>
+            )}
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+function ActivityLines({ traces }: { traces: { data: TracePartData }[] }) {
+  return (
+    <div className="edc-activities">
+      {traces.map((t, i) => {
+        const label = t.data?.payload?.label ?? t.data?.type ?? "activity";
+        const done = t.data?.payload?.status === "completed";
+        return (
+          <p key={i} className={`edc-act-line${done ? " is-done" : ""}`}>
+            {done ? <span className="edc-act-check">✓</span> : "…"} {String(label)}
+          </p>
+        );
+      })}
     </div>
   );
 }
