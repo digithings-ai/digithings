@@ -1,0 +1,33 @@
+# Tracks digichat's version and changelog from Conventional Commits on
+# module/digichat (not main: some develop -> main promotions land as a single
+# squashed "chore: promote develop to main (...)" commit, which would look like
+# a no-op to a Conventional Commits parser and swallow the real feat/fix signal
+# that module/digichat still has, see #1343).
+name: "Release please: digichat"
+
+on:
+  push:
+    branches:
+      - module/digichat
+    paths:
+      - "frontend/digichat/**"
+      - "release-please-config.json"
+      - ".release-please-manifest.json"
+
+concurrency:
+  group: release-please-digichat
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          target-branch: module/digichat
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

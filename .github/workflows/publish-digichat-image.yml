@@ -1,0 +1,59 @@
+# Publishes the digichat image only once a version has actually reached main
+# (passed make score + the promotion PR), decoupled on purpose from when
+# release-please-digichat.yml cuts the tag on module/digichat (see #1343).
+name: "Publish: digichat image"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/digichat/**"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-digichat-image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read digichat version
+        id: version
+        run: echo "version=$(jq -r .version frontend/digichat/package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Check if this version is already published
+        id: check
+        env:
+          IMAGE_TAG: "ghcr.io/digithings-ai/digichat:v${{ steps.version.outputs.version }}"
+        run: |
+          if docker manifest inspect "$IMAGE_TAG" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/digichat/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/digithings-ai/digichat:v${{ steps.version.outputs.version }}
+            ghcr.io/digithings-ai/digichat:latest
