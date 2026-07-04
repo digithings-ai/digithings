@@ -24,7 +24,7 @@
  * Docs note (EVOLUTION.md §9): **max one pinned section per page.**
  */
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { useScroll, useMotionValueEvent } from "framer-motion";
+import { useScroll, useMotionValueEvent } from "motion/react";
 import { progressToIndex, STEPPER_MEDIA_QUERY } from "./scrolly-core";
 
 export { progressToIndex, scrollyTrackHeightVh, STEPPER_MEDIA_QUERY } from "./scrolly-core";

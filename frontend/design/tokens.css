@@ -25,7 +25,11 @@
 
   /* --- Per-module accent palette --------------------------------------- */
   --accent-digigraph:  #e5b765;
-  --accent-digiquant:  #4fa37a;
+  --accent-digiquant:  #3dd6c4; /* ruled 2026-07-03: the terminal phosphor is digiquant's identity
+                                   (matches the dark-theme --accent below; the light theme runs its
+                                   deeper #0E8C7F for contrast on paper). Shared with digichat — the
+                                   flagship and its chat surface speak the same light; emerald
+                                   #4fa37a returns to the unassigned pool. */
   --accent-atlas:      #6fbf94;
   --accent-hermes:     #4a8f7b;
   --accent-kairos:     #2f7a65;
@@ -188,4 +192,16 @@
   --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-reveal: 0.6s;
   --duration-hover: 0.18s;
+}
+
+/* High-fidelity twin of the house curve (canon §09): a spring-shaped
+   linear() with the same fast-attack/soft-settle character as the
+   cubic-bezier above. Adopted behind @supports — browsers without
+   linear() keep the bezier; motion character is identical in kind,
+   richer in settle. */
+@supports (transition-timing-function: linear(0, 1)) {
+  :root[data-theme] {
+    --ease: linear(0, 0.012 0.9%, 0.05 2%, 0.411 9.2%, 0.517 11.8%, 0.611 14.6%, 0.694 17.7%, 0.765 21.1%, 0.824 24.8%, 0.872 28.9%, 0.91 33.4%, 0.939 38.4%, 0.977 50.9%, 0.994 68.4%, 1);
+    --ease-glide: var(--ease);
+  }
 }

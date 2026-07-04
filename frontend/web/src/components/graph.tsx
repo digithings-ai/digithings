@@ -6,7 +6,7 @@
  * v1 graph geometry + activation logic (active node + incident edges + neighbours).
  */
 import { useEffect, useRef, useState } from "react";
-import { useScroll, useMotionValueEvent } from "framer-motion";
+import { useScroll, useMotionValueEvent } from "motion/react";
 import { modules, edges, type ModuleNode } from "../data/modules";
 import { Emblem } from "./emblems";
 import { StackRow } from "./StackLogo";

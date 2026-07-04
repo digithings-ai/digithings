@@ -4,8 +4,16 @@
  *
  * Cards slide in from below as you scroll; the full stack + library CTA scale to
  * fit the viewport when zoom or content height would otherwise clip.
+ *
+ * Scroll handling (#1322): measurement (layout reads + height/scale writes) runs
+ * only when something can actually change size — mount, resize, visualViewport,
+ * ResizeObserver on the pin column/stack, tearsheet data landing — and caches
+ * its results in a ref. The per-scroll path is Motion's `useScroll` progress →
+ * pure math on the cached metrics → setState. Cards are memoized so scroll
+ * frames re-render only the transform wrappers, never the charts.
  */
 import {
+  memo,
   useEffect,
   useMemo,
   useRef,
@@ -14,6 +22,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { useScroll, useMotionValueEvent } from "motion/react";
 import Link from "next/link";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
 import { CurrentPosition } from "@/components/tearsheet/current-position";
@@ -40,6 +49,14 @@ const MIN_FIT_SCALE = 0.68;
 type PreviewMode = "charts" | "tables";
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+// Cached once — the per-scroll path must not re-query media state (#1322).
+let reducedMq: MediaQueryList | null = null;
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  reducedMq ??= window.matchMedia("(prefers-reduced-motion: reduce)");
+  return reducedMq.matches;
+}
 
 function easeInOutCubic(t: number): number {
   const x = clamp(t, 0, 1);
@@ -225,7 +242,11 @@ function Kpi({ label, value, className }: { label: string; value: ReactNode; cla
   );
 }
 
-function StrategyTearsheetCard({ entry }: { entry: StrategyIndexEntry }) {
+const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
+  entry,
+}: {
+  entry: StrategyIndexEntry;
+}) {
   const cardRef = useRef<HTMLDivElement>(null);
   const cardWidth = useElementWidth(cardRef);
   const [mode, setMode] = useState<PreviewMode>("charts");
@@ -379,7 +400,7 @@ function StrategyTearsheetCard({ entry }: { entry: StrategyIndexEntry }) {
       </p>
     </div>
   );
-}
+});
 
 function navHeightPx(): number {
   const raw = getComputedStyle(document.documentElement).getPropertyValue("--dq-nav-h").trim();
@@ -480,90 +501,123 @@ function measureStackMetrics(scrolly: HTMLElement, count: number) {
   return { pinH: pinHAfter, scrollable, hideOffset, ctaHideOffset, stackH };
 }
 
+/** Everything the per-scroll math needs, produced by the measure pass only. */
+type StackMetrics = {
+  scrollable: number;
+  hideOffset: number;
+  ctaHideOffset: number;
+  budgets: number[];
+  ctaBudget: number;
+  holdPx: number;
+  /** Window-scroll distance the scrolly spans (height − viewport) — maps
+   *  Motion's 0..1 progress back to scrolled pixels. */
+  runway: number;
+};
+
 export function StrategySuite() {
   const scrollyRef = useRef<HTMLDivElement>(null);
+  const metricsRef = useRef<StackMetrics | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [cardOffsets, setCardOffsets] = useState<number[]>(() => STRATEGIES.map(() => 9999));
   const [introPhase, setIntroPhase] = useState(true);
   const [libraryCtaOffset, setLibraryCtaOffset] = useState(9999);
   const count = STRATEGIES.length;
 
+  const { scrollYProgress } = useScroll({
+    target: scrollyRef,
+    offset: ["start start", "end end"],
+  });
+
   useEffect(() => {
     prefetchAllTearsheets(STRATEGIES.map((s) => s.strategy));
   }, []);
+
+  // Per-scroll path: pure math on cached metrics — zero layout reads or writes.
+  const applyScroll = () => {
+    const m = metricsRef.current;
+    if (!m) return;
+    const scrolled = clamp(scrollYProgress.get() * m.runway, 0, m.scrollable);
+
+    if (scrolled < m.holdPx) {
+      setIntroPhase(true);
+      setActiveIndex(0);
+      setCardOffsets(STRATEGIES.map(() => m.hideOffset));
+      setLibraryCtaOffset(m.ctaHideOffset);
+      return;
+    }
+
+    setIntroPhase(false);
+    const scrolledPastHold = scrolled - m.holdPx;
+
+    if (prefersReducedMotion()) {
+      const idx = stackActiveIndex(scrolledPastHold, m.budgets);
+      setActiveIndex(idx);
+      setCardOffsets(STRATEGIES.map((_, i) => (i <= idx ? 0 : m.hideOffset)));
+      setLibraryCtaOffset(
+        scrolledPastHold >= totalCardBudgetPx(m.budgets) ? 0 : m.ctaHideOffset,
+      );
+      return;
+    }
+
+    setActiveIndex(stackActiveIndex(scrolledPastHold, m.budgets));
+    setCardOffsets(
+      STRATEGIES.map((_, i) => stackCardOffsetY(i, scrolledPastHold, m.budgets, m.hideOffset)),
+    );
+    setLibraryCtaOffset(
+      libraryCtaOffsetY(scrolledPastHold, m.budgets, m.ctaBudget, m.ctaHideOffset),
+    );
+  };
+  const applyScrollRef = useRef(applyScroll);
+  useEffect(() => {
+    applyScrollRef.current = applyScroll;
+  });
+
+  useMotionValueEvent(scrollYProgress, "change", () => applyScrollRef.current());
 
   useEffect(() => {
     const scrolly = scrollyRef.current;
     if (!scrolly) return;
 
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    const updateFromScroll = () => {
+    // Measure pass: all layout reads + height/scale writes live here. Runs on
+    // mount, viewport changes, pin column / stack resizes, and tearsheet data
+    // landing — never on scroll (#1322).
+    const remeasure = () => {
       const { scrollable, hideOffset, ctaHideOffset } = measureStackMetrics(scrolly, count);
-      const budgets = cardEnterBudgetsPx(scrolly, count);
-      const ctaBudget = libraryCtaBudgetPx(scrolly);
-      const rect = scrolly.getBoundingClientRect();
-      const scrolled = clamp(-rect.top, 0, scrollable);
-      const holdPx = introHoldPx(scrolly);
-
-      if (scrolled < holdPx) {
-        setIntroPhase(true);
-        setActiveIndex(0);
-        setCardOffsets(STRATEGIES.map(() => hideOffset));
-        setLibraryCtaOffset(ctaHideOffset);
-        return;
-      }
-
-      setIntroPhase(false);
-      const scrolledPastHold = scrolled - holdPx;
-
-      if (reduced) {
-        const idx = stackActiveIndex(scrolledPastHold, budgets);
-        setActiveIndex(idx);
-        setCardOffsets(STRATEGIES.map((_, i) => (i <= idx ? 0 : hideOffset)));
-        setLibraryCtaOffset(
-          scrolledPastHold >= totalCardBudgetPx(budgets) ? 0 : ctaHideOffset,
-        );
-        return;
-      }
-
-      setActiveIndex(stackActiveIndex(scrolledPastHold, budgets));
-      setCardOffsets(
-        STRATEGIES.map((_, i) => stackCardOffsetY(i, scrolledPastHold, budgets, hideOffset)),
-      );
-      setLibraryCtaOffset(
-        libraryCtaOffsetY(scrolledPastHold, budgets, ctaBudget, ctaHideOffset),
-      );
+      metricsRef.current = {
+        scrollable,
+        hideOffset,
+        ctaHideOffset,
+        budgets: cardEnterBudgetsPx(scrolly, count),
+        ctaBudget: libraryCtaBudgetPx(scrolly),
+        holdPx: introHoldPx(scrolly),
+        runway: Math.max(1, scrolly.offsetHeight - window.innerHeight),
+      };
+      applyScrollRef.current();
     };
 
     const nudgeStrategiesHash = () => {
       if (window.location.hash !== "#strategies") return;
-      const holdPx = introHoldPx(scrolly);
-      const { scrollable } = measureStackMetrics(scrolly, count);
-      const scrolled = clamp(-scrolly.getBoundingClientRect().top, 0, scrollable);
-      if (scrolled >= holdPx) return;
+      const m = metricsRef.current;
+      if (!m) return;
+      const scrolled = clamp(-scrolly.getBoundingClientRect().top, 0, m.scrollable);
+      if (scrolled >= m.holdPx) return;
       window.scrollTo({
-        top: window.scrollY + (holdPx - scrolled) + 1,
+        top: window.scrollY + (m.holdPx - scrolled) + 1,
         behavior: "instant",
       });
     };
 
-    const onScroll = () => {
-      updateFromScroll();
-    };
-
     const onHashChange = () => {
       requestAnimationFrame(() => {
+        remeasure();
         nudgeStrategiesHash();
-        updateFromScroll();
       });
     };
 
     const onViewportChange = () => {
-      updateFromScroll();
+      remeasure();
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onViewportChange, { passive: true });
     window.addEventListener("hashchange", onHashChange);
     window.visualViewport?.addEventListener("resize", onViewportChange);
@@ -572,30 +626,30 @@ export function StrategySuite() {
     const col = scrolly.querySelector<HTMLElement>(".dqss-pin-col");
     const stack = scrolly.querySelector<HTMLElement>(".dqss-stack");
     const ro = new ResizeObserver(() => {
-      requestAnimationFrame(updateFromScroll);
+      requestAnimationFrame(remeasure);
     });
     if (col) ro.observe(col);
     if (stack) ro.observe(stack);
 
-    updateFromScroll();
+    remeasure();
     requestAnimationFrame(() => {
+      remeasure();
       nudgeStrategiesHash();
-      updateFromScroll();
     });
 
     const unsubCache = subscribeTearsheetCache(() => {
-      requestAnimationFrame(updateFromScroll);
+      requestAnimationFrame(remeasure);
     });
 
     return () => {
       unsubCache();
-      window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onViewportChange);
       window.removeEventListener("hashchange", onHashChange);
       window.visualViewport?.removeEventListener("resize", onViewportChange);
       window.visualViewport?.removeEventListener("scroll", onViewportChange);
       ro.disconnect();
     };
+    // applyScrollRef is stable; remeasure closes over the current count.
   }, [count]);
 
   return (

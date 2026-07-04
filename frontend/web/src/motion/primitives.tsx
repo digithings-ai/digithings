@@ -11,15 +11,22 @@ import {
   useReducedMotion,
   type Variants,
   type Transition,
-} from "framer-motion";
-import { type ReactNode } from "react";
+} from "motion/react";
+import { useEffect, useState, type ReactNode } from "react";
 
 export const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 export const baseTransition: Transition = { duration: 0.6, ease: EASE };
 
-/** True when motion is allowed (not reduced). */
+/** True when motion is allowed (not reduced). Hydration-safe: SSR cannot know
+ *  the media query, so the first client render reports motion-safe to match the
+ *  server markup, then resolves the real preference after mount. For reduced-
+ *  motion users the primitives swap to their static branch one effect-tick
+ *  later — no animation ever plays. */
 export function useMotionSafe(): boolean {
-  return !useReducedMotion();
+  const reduced = useReducedMotion();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted ? !reduced : true;
 }
 
 /** Wrap an app/tree once so `m.*` components have animation features (small bundle). */

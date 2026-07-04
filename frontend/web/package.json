@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@digithings/design": "*",
-    "framer-motion": "^12.23.12",
+    "motion": "^12.23.12",
     "simple-icons": "^15.18.0"
   },
   "devDependencies": {

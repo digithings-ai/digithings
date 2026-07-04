@@ -121,7 +121,7 @@ value; component rules always reference `var(--accent)`.
 | Module      | Token                   | Swatch                                                                                        | Hex       |
 | ----------- | ----------------------- | --------------------------------------------------------------------------------------------- | --------- |
 | DigiGraph   | `--accent-digigraph`    | ![](https://readme-swatches.vercel.app/e5b765?style=round)                                     | `#e5b765` |
-| DigiQuant   | `--accent-digiquant`    | ![](https://readme-swatches.vercel.app/4fa37a?style=round)                                     | `#4fa37a` |
+| DigiQuant   | `--accent-digiquant`    | ![](https://readme-swatches.vercel.app/3dd6c4?style=round)                                     | `#3dd6c4` |
 | Atlas       | `--accent-atlas`        | ![](https://readme-swatches.vercel.app/6fbf94?style=round)                                     | `#6fbf94` |
 | Hermes      | `--accent-hermes`       | ![](https://readme-swatches.vercel.app/4a8f7b?style=round)                                     | `#4a8f7b` |
 | Kairos      | `--accent-kairos`       | ![](https://readme-swatches.vercel.app/2f7a65?style=round)                                     | `#2f7a65` |
@@ -139,7 +139,7 @@ value; component rules always reference `var(--accent)`.
 ```html
 <section class="accent-digiquant">
   <!-- any `.module-card`, `.flow-node.highlight`, etc. inside resolves
-       var(--accent) to #4fa37a -->
+       var(--accent) to #3dd6c4 -->
 </section>
 ```
 
