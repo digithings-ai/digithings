@@ -57,6 +57,7 @@ describe("registry-derived frame-ancestors", () => {
           aliases: ["dev.datatap.stream"],
           backend: { type: "external-relay", url: "https://relay.example.com/api/x" },
           gateMode: "ungated",
+          token: "datatapstream-secret",
         },
       })
     );

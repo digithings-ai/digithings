@@ -18,6 +18,7 @@ const VALID = JSON.stringify({
     theme: "light",
     accent: { color: "#b5562b", foreground: "#fff7f2" },
     attribution: true,
+    token: "datatapstream-secret",
   },
 });
 
@@ -57,7 +58,12 @@ describe("parseEmbedTenants", () => {
   it("defaults theme to dark and attribution to false when omitted", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({
-        "example.com": { slug: "example", backend: { type: "digigraph" }, gateMode: "turn_limited" },
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "turn_limited",
+          token: "shh",
+        },
       })
     );
     expect(reg.get("example.com")?.theme).toBe("dark");
@@ -101,16 +107,47 @@ describe("parseEmbedTenants", () => {
     expect(() =>
       parseEmbedTenants(
         JSON.stringify({
-          "a.example.com": { slug: "a", backend: { type: "digigraph" }, gateMode: "turn_limited" },
+          "a.example.com": {
+            slug: "a",
+            backend: { type: "digigraph" },
+            gateMode: "turn_limited",
+            token: "a-secret",
+          },
           "b.example.com": {
             slug: "b",
             aliases: ["a.example.com"],
             backend: { type: "digigraph" },
             gateMode: "turn_limited",
+            token: "b-secret",
           },
         })
       )
     ).toThrow(/duplicate/);
+  });
+
+  it("throws when a tenant entry is missing a token", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": { slug: "example", backend: { type: "digigraph" }, gateMode: "turn_limited" },
+        })
+      )
+    ).toThrow(/token/);
+  });
+
+  it("throws when a tenant entry's token is an empty string", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: { type: "digigraph" },
+            gateMode: "turn_limited",
+            token: "   ",
+          },
+        })
+      )
+    ).toThrow(/token/);
   });
 
   it("throws on an invalid gateMode or theme", () => {
