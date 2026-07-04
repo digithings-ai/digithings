@@ -179,9 +179,9 @@ Live-trading code requires explicit human approval; set DIGI_ALLOW_PROTECTED=1 i
   for p in "${protected[@]}"; do
     case "$target" in
       "$p"|"$p/"*)
-        if [[ ! "$branch" =~ ^task/[0-9]+- ]]; then
+        if [[ ! "$branch" =~ ^(task/[0-9]+-|feat/|fix/|docs/|chore/) ]]; then
           deny "Bash write to protected path '$target' is blocked. \
-Writes allowed only from a task branch (task/N-slug) or with explicit human approval. Current branch: '$branch'."
+Writes allowed only from a properly-named branch (task/N-slug, feat/, fix/, docs/, chore/) or with explicit human approval. Current branch: '$branch'."
         fi
         ;;
     esac
