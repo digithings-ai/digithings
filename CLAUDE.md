@@ -69,6 +69,8 @@ git fetch origin
 git rev-list --count origin/module/<component>..origin/develop   # 0 = current; >0 = stale, sync before branching
 ```
 
+Don't re-run the full review pipeline at every hop — see [AGENT_WORKFLOW.md §9](docs/agents/AGENT_WORKFLOW.md) for which stage gets the full review vs. a diff-scoped check.
+
 Module branches are guarded by the `module-branch-protection` ruleset: **no force-push, no deletion, PR required (0 approvals)**. So you cannot `git push --force` to refresh a stale module branch. To sync one, open a normal PR into `base=module/<component>` — either `head=develop`, or a `chore/sync-*` branch whose tree equals develop (a `-s ours` merge with the index reset to develop's tree preserves the module branch's prior history) — and merge it (no approval needed). Branch names must match `{feat,fix,docs,chore}/<slug>` or `task/<N>-slug`.
 
 The **Check linkage** CI gate (the `Require Fixes` check) is separate from the branch-name rule: it only auto-links a PR via a `task/<N>-slug` branch **or** a `Fixes/Closes/Resolves #N` keyword in the body. A `feat|fix|docs|chore/<slug>` branch passes the name rule but still **fails linkage** unless the body says `Fixes #N` — so prefer `task/<N>-slug` for issue-linked work (and never `Closes #N` against an umbrella tracking issue you don't want auto-closed).
