@@ -34,10 +34,17 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  // suppressHydrationWarning: themeInitScript (and the /docs ivory default)
+  // legitimately flip data-theme + meta pre-hydration; scoped to this
+  // element's attributes only.
   return (
-    <html lang="en" data-theme="dark" className={`${GeistSans.variable} ${GeistMono.variable} ${fraunces.variable}`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable} ${fraunces.variable} no-js`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* Law 06 (content-first): SSR ships html.no-js so stylesheet rules can
+            neutralize JS-gated hiding (hero entrance, [data-motion] reveals);
+            removed pre-paint when scripts run. */}
+        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
         {/* Single fallback; themeInitScript sets it to the active theme pre-paint. */}
         <meta name="theme-color" content="#0B0C0E" />
       </head>

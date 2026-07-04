@@ -1,4 +1,4 @@
-import { Footer, Reveal } from "@digithings/web";
+import { Colophon, Footer, Reveal } from "@digithings/web";
 import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "./_nav";
 import { DigiNav } from "@/components/landing/DigiNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
@@ -87,6 +87,7 @@ export default function Home() {
         </section>
       </main>
 
+      <Colophon name="digi" suffix="things" />
       <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
     </>
   );

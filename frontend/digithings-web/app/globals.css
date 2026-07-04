@@ -284,6 +284,12 @@ html {
 .dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
 .dqhero-cta { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; margin-top: 2.4rem; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
 .dqhero.loaded .dqhero-cta { opacity: 1; transform: none; }
+
+/* no-JS (law 06): the entrance never gates content — html.no-js renders the
+   hero at rest. Keep in sync with the .loaded rules above. */
+html.no-js .dqhero-h1 .ln > span { transform: none; }
+html.no-js .dqhero-lede,
+html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqhero-scroll-label { margin: 0; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--accent) 78%, var(--ink)); }
 /* scroll-down cue: accent hairline with a pulse travelling down it */
 .dqhero-scroll { position: relative; width: 2px; height: 88px; overflow: hidden; border-radius: 1px; background: linear-gradient(color-mix(in srgb, var(--accent) 52%, var(--hair-2)), transparent); }
@@ -495,12 +501,21 @@ html {
 .docs-main { padding-bottom: clamp(2rem, 5vw, 4rem); }
 .docs-shell { display: grid; grid-template-columns: 1fr; gap: clamp(1.4rem, 3vw, 2.4rem); max-width: 1040px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
 .docs-side { display: none; }
-.docs-side nav { display: flex; flex-direction: column; gap: 0.1rem; }
-.docs-side a { font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-soft); text-decoration: none; padding: 0.28rem 0.6rem; border-radius: 7px; border-left: 2px solid transparent; transition: color 0.16s var(--ease), background 0.16s var(--ease); }
-.docs-side a:hover { color: var(--ink); background: var(--accent-weak); }
-.docs-side a.is-active { color: var(--ink); border-left-color: var(--accent); background: var(--accent-weak); }
-.docs-side a .dt-d { color: inherit; }
-.docs-side a .dt-s { color: var(--accent); }
+.docs-side nav, .docs-side-mobile nav { display: flex; flex-direction: column; gap: 0.1rem; }
+.docs-side a, .docs-side-mobile a { font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-soft); text-decoration: none; padding: 0.28rem 0.6rem; border-radius: 7px; border-left: 2px solid transparent; transition: color 0.16s var(--ease), background 0.16s var(--ease); }
+.docs-side a:hover, .docs-side-mobile a:hover { color: var(--ink); background: var(--accent-weak); }
+.docs-side a.is-active, .docs-side-mobile a.is-active { color: var(--ink); border-left-color: var(--accent); background: var(--accent-weak); }
+.docs-side a .dt-d, .docs-side-mobile a .dt-d { color: inherit; }
+.docs-side a .dt-s, .docs-side-mobile a .dt-s { color: var(--accent); }
+
+/* Mobile: the sidebar collapses into a native details (canon §17). */
+.docs-side-mobile { display: block; margin: 0 0 1.3rem; border: 1px solid var(--hair); border-radius: 10px; padding: 0.55rem 0.85rem; }
+.docs-side-mobile summary { cursor: pointer; list-style: none; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); }
+.docs-side-mobile summary::-webkit-details-marker { display: none; }
+.docs-side-mobile summary::before { content: "▸ "; color: var(--accent); }
+.docs-side-mobile[open] summary::before { content: "▾ "; }
+.docs-side-mobile[open] summary { margin-bottom: 0.5rem; }
+@media (min-width: 860px) { .docs-side-mobile { display: none; } }
 .docs-side-group { display: flex; flex-direction: column; gap: 0.1rem; margin-top: 0.8rem; }
 .docs-side-label { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); padding: 0 0.6rem; margin-bottom: 0.2rem; }
 .docs-content { min-width: 0; display: flex; flex-direction: column; gap: clamp(1.6rem, 3.5vw, 2.6rem); }
@@ -597,3 +612,4 @@ html {
 .doc-tab { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-mute); background: transparent; border: 1px solid transparent; border-radius: 7px 7px 0 0; cursor: pointer; padding: 0.2rem 0.6rem; transition: color 0.15s var(--ease), background 0.15s var(--ease); }
 .doc-tab:hover { color: var(--ink-soft); }
 .doc-tab.is-active { color: var(--ink); background: var(--accent-weak); }
+

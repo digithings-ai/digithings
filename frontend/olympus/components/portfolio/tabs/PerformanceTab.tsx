@@ -77,6 +77,7 @@ export default function PerformanceTab() {
   );
 
   const { data, loading, error } = useDashboard();
+  const lastUpdated = data?.portfolio?.meta?.last_updated ?? null;
   const [comparableOverride, setComparableOverride] = useState<string[] | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(true);
   const [comparableHistory, setComparableHistory] = useState<BenchmarkHistoryMap>({});
@@ -277,7 +278,10 @@ export default function PerformanceTab() {
       <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0 space-y-1">
-            <p className="text-[11px] font-semibold text-text-muted tracking-wide">Summary</p>
+            <p className="text-[11px] font-semibold text-text-muted tracking-wide">
+              Summary
+              {lastUpdated ? <span className="font-mono font-normal"> · as of {lastUpdated}</span> : null}
+            </p>
             {/* Performance summary sentence */}
             {snaps.length >= 2 && (
               <p className="text-sm text-text-secondary">

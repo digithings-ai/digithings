@@ -227,7 +227,9 @@ export function ByokCliFlow({ onClose }: { onClose: () => void }) {
               <p
                 className="text-[12px] font-mono"
                 style={{
-                  color: testResult.ok ? "var(--accent)" : "var(--accent-digikey, #e5484d)",
+                  // error rides the four-state --down (canon §16) — a livery is
+                  // an identity, never a semantic
+                  color: testResult.ok ? "var(--accent)" : "var(--down, #e0654b)",
                 }}
               >
                 {testResult.ok
