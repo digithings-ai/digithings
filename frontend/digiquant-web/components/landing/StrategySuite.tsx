@@ -18,6 +18,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
   type RefObject,
@@ -49,6 +50,8 @@ const MIN_FIT_SCALE = 0.68;
 type PreviewMode = "charts" | "tables";
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+const emptySubscribe = () => () => {};
 
 // Cached once — the per-scroll path must not re-query media state (#1322).
 let reducedMq: MediaQueryList | null = null;
@@ -521,6 +524,15 @@ export function StrategySuite() {
   const [cardOffsets, setCardOffsets] = useState<number[]>(() => STRATEGIES.map(() => 9999));
   const [introPhase, setIntroPhase] = useState(true);
   const [libraryCtaOffset, setLibraryCtaOffset] = useState(9999);
+  // aria-hidden is a JS-driven visual-sync concern: SSR must not ship it, or
+  // no-JS screen-reader users lose the deck entirely (law 06). Applied only
+  // after hydration (the DqNav mount-gate idiom); the wrappers suppress the
+  // attribute-level mismatch.
+  const hydrated = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
   const count = STRATEGIES.length;
 
   const { scrollYProgress } = useScroll({
@@ -671,7 +683,7 @@ export function StrategySuite() {
               </p>
             </div>
 
-            <div className="dqss-stack-clip" aria-hidden={introPhase}>
+            <div className="dqss-stack-clip" aria-hidden={hydrated ? introPhase : undefined}>
               <div
                 className="dqss-stack"
                 role="group"
@@ -701,7 +713,7 @@ export function StrategySuite() {
                           transform: `translate3d(0, ${offset}px, 0)`,
                         } as CSSProperties
                       }
-                      aria-hidden={introPhase || i > activeIndex}
+                      aria-hidden={hydrated ? introPhase || i > activeIndex : undefined}
                     >
                       <StrategyTearsheetCard entry={entry} />
                     </div>

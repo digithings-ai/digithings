@@ -427,6 +427,17 @@ a { color: inherit; text-decoration: none; }
   .principles { grid-template-columns: 1fr; }
 }
 
+/* ── no-JS content-first (law 06) ───────────────────────────────────────
+   SSR ships html.no-js (removed pre-paint by an inline script in each app
+   layout). Motion primitives SSR their hidden initial styles inline, and
+   the [data-motion] children of a Stagger inherit variants — neutralize
+   all of it when scripts never run. */
+html.no-js [data-motion],
+html.no-js [data-motion] * {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .glow { animation: none; }
   .term-cursor { animation: none; }

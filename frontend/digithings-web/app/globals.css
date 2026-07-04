@@ -284,6 +284,12 @@ html {
 .dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
 .dqhero-cta { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; margin-top: 2.4rem; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
 .dqhero.loaded .dqhero-cta { opacity: 1; transform: none; }
+
+/* no-JS (law 06): the entrance never gates content — html.no-js renders the
+   hero at rest. Keep in sync with the .loaded rules above. */
+html.no-js .dqhero-h1 .ln > span { transform: none; }
+html.no-js .dqhero-lede,
+html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqhero-scroll-label { margin: 0; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--accent) 78%, var(--ink)); }
 /* scroll-down cue: accent hairline with a pulse travelling down it */
 .dqhero-scroll { position: relative; width: 2px; height: 88px; overflow: hidden; border-radius: 1px; background: linear-gradient(color-mix(in srgb, var(--accent) 52%, var(--hair-2)), transparent); }

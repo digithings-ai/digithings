@@ -587,6 +587,12 @@ html {
 .dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
 .dqhero-cta { display: flex; gap: 0.8rem; margin-top: 2.4rem; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
 .dqhero.loaded .dqhero-cta { opacity: 1; transform: none; }
+
+/* no-JS (law 06): the entrance never gates content — html.no-js renders the
+   hero at rest. Keep in sync with the .loaded rules above. */
+html.no-js .dqhero-h1 .ln > span { transform: none; }
+html.no-js .dqhero-lede,
+html.no-js .dqhero-cta { opacity: 1; transform: none; }
 /* scroll cue: label + prominent vertical accent line (no primary CTA button) */
 .dqhero-scrollcue { flex-direction: column; align-items: center; gap: 0.85rem; margin-top: 2.6rem; }
 .dqhero-scroll-label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--accent) 78%, var(--ink-mute)); }
@@ -1061,6 +1067,14 @@ html {
   .dqss-library-cta { transform: none !important; visibility: visible; pointer-events: auto; }
   .dqss-chart-skeleton { animation: none; }
 }
+
+/* no-JS (law 06): without scripts the deck renders at rest — the same layout
+   as the reduced-motion block above (keep the two in sync). */
+html.no-js .dqss-scrolly { height: auto !important; }
+html.no-js .dqss-stack { height: auto !important; display: grid; padding-bottom: calc(var(--dqss-peek) * 2); }
+html.no-js .dqss-stack-card { position: relative !important; grid-area: 1 / 1; top: calc(var(--dqss-peek) * var(--stack-index, 0)); transform: none !important; }
+html.no-js .dqss-stack-card[data-state="hidden"] { visibility: visible; pointer-events: auto; }
+html.no-js .dqss-library-cta { transform: none !important; visibility: visible; pointer-events: auto; }
 
 /* ---- subsystem poster (canon §12) ----
    One poster per sub-graph hero: giant lowercase serif italic name, the
