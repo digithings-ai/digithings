@@ -62,6 +62,7 @@ export function Reveal({
   return (
     <Comp
       className={className}
+      data-motion=""
       initial="hidden"
       whileInView="show"
       viewport={{ once: true, margin: "0px 0px -10% 0px" }}
@@ -79,6 +80,7 @@ export function Stagger({ children, className }: { children: ReactNode; classNam
   return (
     <m.div
       className={className}
+      data-motion=""
       initial="hidden"
       whileInView="show"
       viewport={{ once: true, margin: "0px 0px -10% 0px" }}
@@ -94,7 +96,7 @@ export function HeroEntrance({ children, className }: { children: ReactNode; cla
   const safe = useMotionSafe();
   if (!safe) return <div className={className}>{children}</div>;
   return (
-    <m.div className={className} initial="hidden" animate="show" variants={staggerParent}>
+    <m.div className={className} data-motion="" initial="hidden" animate="show" variants={staggerParent}>
       {children}
     </m.div>
   );
