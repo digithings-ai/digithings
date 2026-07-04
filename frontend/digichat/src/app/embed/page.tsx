@@ -104,12 +104,17 @@ const TERMINAL_CSS = `
 `;
 
 type EmbedPageProps = {
-  searchParams: Promise<{ accent?: string }> | { accent?: string };
+  searchParams: Promise<{ accent?: string; token?: string }> | { accent?: string; token?: string };
 };
 
 export default function EmbedPage({ searchParams }: EmbedPageProps) {
   const [accent, setAccent] = useState<Accent>("digichat");
-  const tenantCfg = useEmbedTenantConfig();
+  // Per-tenant secret from the embed snippet's own iframe src (?token=...).
+  // See embed-tenants.ts / resolveVerifiedEmbedTenant — without it, the
+  // server can't tell this caller apart from anyone else claiming the same
+  // (public) host, and falls back to the generic gated config (#1339).
+  const [token, setToken] = useState<string | undefined>(undefined);
+  const tenantCfg = useEmbedTenantConfig(token);
 
   // Next 15/16: searchParams may be a Promise — resolve both shapes.
   useEffect(() => {
@@ -117,6 +122,7 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
     Promise.resolve(searchParams).then((sp) => {
       if (cancelled) return;
       setAccent(resolveAccent(sp?.accent));
+      setToken(sp?.token);
     });
     return () => {
       cancelled = true;
@@ -143,7 +149,7 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
         className={`${tenantCfg.theme === "light" ? "light" : "dark"} accent-${accent} relative z-10 flex min-h-dvh flex-col bg-background text-foreground`}
         style={accentStyle}
       >
-        <EmbedChat accent={accent} tenantCfg={tenantCfg} />
+        <EmbedChat accent={accent} tenantCfg={tenantCfg} token={token} />
       </div>
     </>
   );
@@ -156,9 +162,11 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
 function EmbedChat({
   accent,
   tenantCfg,
+  token,
 }: {
   accent: Accent;
   tenantCfg: EmbedTenantClientConfig;
+  token?: string;
 }) {
   const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } =
     useBYOKKey();
@@ -180,6 +188,7 @@ function EmbedChat({
             "X-Embed-Host": gate.host,
             "X-Embed-Accent": accent,
           };
+          if (token) headers["X-Embed-Token"] = token;
           if (byokKey) {
             headers["X-BYOK-Key"] = byokKey;
             headers["X-BYOK-Provider"] = byokProvider;
@@ -204,7 +213,7 @@ function EmbedChat({
           };
         },
       }),
-    [byokKey, byokProvider, byokModel, gate.host, accent],
+    [byokKey, byokProvider, byokModel, gate.host, accent, token],
   );
 
   const { messages, sendMessage, status, error, regenerate } = useChat<UIMessage>({

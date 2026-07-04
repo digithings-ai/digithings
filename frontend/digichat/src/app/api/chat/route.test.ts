@@ -240,6 +240,7 @@ const RELAY_REGISTRY = JSON.stringify({
     slug: "datatapstream",
     backend: { type: "external-relay", url: "https://relay.example.com/api/digichat" },
     gateMode: "ungated",
+    token: "datatapstream-secret",
   },
 });
 
@@ -288,6 +289,7 @@ describe("external-relay embed tenants", () => {
         headers: {
           "content-type": "application/json",
           "x-embed-host": "https://datatapstream.com",
+          "x-embed-token": "datatapstream-secret",
           "x-external-conversation": "c-prev",
         },
         body: JSON.stringify({
@@ -323,6 +325,7 @@ describe("external-relay embed tenants", () => {
         headers: {
           "content-type": "application/json",
           "x-embed-host": "https://datatapstream.com",
+          "x-embed-token": "datatapstream-secret",
         },
         body: JSON.stringify({
           messages: [{ id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] }],

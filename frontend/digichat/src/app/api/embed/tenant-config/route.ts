@@ -1,9 +1,8 @@
-import { resolveEmbedTenantByHost } from "@/lib/embed-tenants";
-import { embedHostOf } from "@/lib/embed-chat-tenant";
+import { resolveVerifiedEmbedTenant } from "@/lib/embed-chat-tenant";
 
 /** Client-safe embed tenant config. Backend config (relay URLs) never leaves the server. */
 export async function GET(req: Request): Promise<Response> {
-  const cfg = resolveEmbedTenantByHost(embedHostOf(req));
+  const cfg = resolveVerifiedEmbedTenant(req);
   const body = cfg
     ? {
         slug: cfg.slug,

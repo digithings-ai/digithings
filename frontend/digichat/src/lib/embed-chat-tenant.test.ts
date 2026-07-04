@@ -7,6 +7,7 @@ const REGISTRY = JSON.stringify({
     slug: "datatapstream",
     backend: { type: "external-relay", url: "https://relay.example.com/api/digichat" },
     gateMode: "ungated",
+    token: "datatapstream-secret",
   },
 });
 
@@ -30,10 +31,15 @@ describe("embedHostOf", () => {
 });
 
 describe("resolveEmbedChatTenant with a registered host", () => {
-  it("resolves the tenant slug and config, with no env token required", () => {
+  it("resolves the tenant slug and config when the tenant's own token is presented", () => {
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
     resetEmbedTenantRegistryForTests();
-    const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://datatapstream.com" }));
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://datatapstream.com",
+        "x-embed-token": "datatapstream-secret",
+      })
+    );
     expect(result).not.toBeInstanceOf(Response);
     if (result instanceof Response) return;
     expect(result.tenantSlug).toBe("datatapstream");
@@ -42,6 +48,38 @@ describe("resolveEmbedChatTenant with a registered host", () => {
       type: "external-relay",
       url: "https://relay.example.com/api/digichat",
     });
+  });
+
+  it("does NOT resolve tenant-specific config from the host alone — no token means impersonation is possible otherwise (#1339)", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://datatapstream.com" }));
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("does NOT resolve tenant-specific config when the presented token is wrong", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({
+        "x-embed-host": "https://datatapstream.com",
+        "x-embed-token": "guessed-wrong",
+      })
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("falls back to the generic legacy embed tenant (not the registered one) when the token is missing but embed is globally enabled", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    vi.stubEnv("DIGICHAT_EMBED_ENABLED", "1");
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://datatapstream.com" }));
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("embed");
+    expect(result.embedConfig).toBeNull();
   });
 });
 
