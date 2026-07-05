@@ -26,17 +26,33 @@ export const DIGICHAT_APP_CSP = [
   "object-src 'none'",
 ].join("; ");
 
+/** Plain comma-separated hostnames — no secrets, safe to pass as a build arg. */
+function embedHostsFromEnv(): string[] | null {
+  const raw = process.env.DIGICHAT_EMBED_HOSTS?.trim();
+  if (!raw) return null;
+  return raw
+    .split(",")
+    .map((h) => h.trim())
+    .filter(Boolean);
+}
+
 /**
  * First-party origins + one https origin per registered embed-tenant host.
  * Dev/test additionally allow localhost so a local page can iframe /embed.
- * Evaluated when next.config.ts imports this module — DIGICHAT_EMBED_TENANTS
- * must be set at build time for external hosts to appear in the CSP.
+ * Evaluated when next.config.ts imports this module — some source of embed
+ * hosts must be set at build time for external hosts to appear in the CSP.
+ * Prefers the non-secret DIGICHAT_EMBED_HOSTS (just hostnames) over the full
+ * DIGICHAT_EMBED_TENANTS registry (hostname + per-tenant token), since a
+ * Docker build-arg persists in image layer history and cloud-build logs —
+ * the token was never actually read here, only the registry's keys were.
  */
 export function embedFrameAncestors(): string[] {
-  const registryHosts = [...getEmbedTenantRegistry().keys()].map((h) => `https://${h}`);
+  const envHosts = embedHostsFromEnv();
+  const hosts = envHosts ?? [...getEmbedTenantRegistry().keys()];
+  const hostOrigins = hosts.map((h) => `https://${h}`);
   const dev =
     process.env.NODE_ENV !== "production" ? ["http://localhost:*", "http://127.0.0.1:*"] : [];
-  return [...FIRST_PARTY_FRAME_ANCESTORS, ...registryHosts, ...dev];
+  return [...FIRST_PARTY_FRAME_ANCESTORS, ...hostOrigins, ...dev];
 }
 
 export function embedFrameAncestorsCsp(): string {
