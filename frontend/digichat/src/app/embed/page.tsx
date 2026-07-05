@@ -4,6 +4,10 @@
  * /embed — minimal unauthenticated chat surface for iframe embedding.
  *
  *   ?accent=digithings|digiquant|digichat   (default: digichat)
+ *   ?host=<the embedding page's own origin> — see resolveEmbedHost() (#1372):
+ *     the embedding site should always pass its own origin explicitly, since
+ *     it knows it reliably and client-side detection here cannot (a real
+ *     embed is always cross-origin).
  *
  * Policy:
  *   - First N=EMBED_FREE_TURN_LIMIT (3) user turns are free.
@@ -104,7 +108,9 @@ const TERMINAL_CSS = `
 `;
 
 type EmbedPageProps = {
-  searchParams: Promise<{ accent?: string; token?: string }> | { accent?: string; token?: string };
+  searchParams:
+    | Promise<{ accent?: string; token?: string; host?: string }>
+    | { accent?: string; token?: string; host?: string };
 };
 
 export default function EmbedPage({ searchParams }: EmbedPageProps) {
@@ -114,7 +120,9 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
   // server can't tell this caller apart from anyone else claiming the same
   // (public) host, and falls back to the generic gated config (#1339).
   const [token, setToken] = useState<string | undefined>(undefined);
-  const tenantCfg = useEmbedTenantConfig(token);
+  // The embedding page's own origin (?host=...) — see resolveEmbedHost() (#1372).
+  const [host, setHost] = useState<string | undefined>(undefined);
+  const tenantCfg = useEmbedTenantConfig(token, host);
 
   // Next 15/16: searchParams may be a Promise — resolve both shapes.
   useEffect(() => {
@@ -123,6 +131,7 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
       if (cancelled) return;
       setAccent(resolveAccent(sp?.accent));
       setToken(sp?.token);
+      setHost(sp?.host);
     });
     return () => {
       cancelled = true;
@@ -149,7 +158,7 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
         className={`${tenantCfg.theme === "light" ? "light" : "dark"} accent-${accent} relative z-10 flex min-h-dvh flex-col bg-background text-foreground`}
         style={accentStyle}
       >
-        <EmbedChat accent={accent} tenantCfg={tenantCfg} token={token} />
+        <EmbedChat accent={accent} tenantCfg={tenantCfg} token={token} host={host} />
       </div>
     </>
   );
@@ -163,15 +172,17 @@ function EmbedChat({
   accent,
   tenantCfg,
   token,
+  host,
 }: {
   accent: Accent;
   tenantCfg: EmbedTenantClientConfig;
   token?: string;
+  host?: string;
 }) {
   const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } =
     useBYOKKey();
   const ungated = tenantCfg.gateMode === "ungated";
-  const gate = useEmbedGate(byokIsSet || ungated);
+  const gate = useEmbedGate(byokIsSet || ungated, host);
 
   const transport = useMemo(
     () =>
