@@ -1,6 +1,6 @@
 ## Goal
 
-Document **Olympus subpage chrome** (sticky tab bar, breadcrumbs, section headers) in design references so twelve-x and future subpages stay aligned with Cursor literal-nav pattern ([`EVOLUTION.md` §3](../../../frontend/design/EVOLUTION.md)).
+Document **Olympus subpage chrome** (sticky tab bar, breadcrumbs, section headers) in design references so twelve-x and future subpages stay aligned with Cursor literal-nav pattern ([`EVOLUTION.md` §3](../../../../frontend/design/EVOLUTION.md)).
 
 ## Component
 

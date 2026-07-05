@@ -1,6 +1,6 @@
 ## Goal
 
-Add shared **`TrustStrip`** (logo/proof row) and **`reveal-up`** enter-animation utilities — Cursor hero trust line + Graphite friction reducers + Graphite glide reveals ([`copy-patterns.md`](../../../frontend/design/references/scans/copy-patterns.md)).
+Add shared **`TrustStrip`** (logo/proof row) and **`reveal-up`** enter-animation utilities — Cursor hero trust line + Graphite friction reducers + Graphite glide reveals ([`copy-patterns.md`](../../../../frontend/design/references/scans/copy-patterns.md)).
 
 ## Component
 

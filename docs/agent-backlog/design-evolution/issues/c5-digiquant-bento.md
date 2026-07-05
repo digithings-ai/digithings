@@ -1,6 +1,6 @@
 ## Goal
 
-Demote extra digiquant.io scroll sections into a **Cursor bento grid** for Pipeline · Strategies · Pricing — with `ProductFrame` tearsheet/UI crops ([`EVOLUTION.md` §3](../../../frontend/design/EVOLUTION.md)).
+Demote extra digiquant.io scroll sections into a **Cursor bento grid** for Pipeline · Strategies · Pricing — with `ProductFrame` tearsheet/UI crops ([`EVOLUTION.md` §3](../../../../frontend/design/EVOLUTION.md)).
 
 ## Component
 
