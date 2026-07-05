@@ -42,6 +42,19 @@ export function isEmbedChatRequest(req: Request): boolean {
   return Boolean(embedHost || isEmbedReferer(req));
 }
 
+/**
+ * Resolves a registry tenant only when its own X-Embed-Token also matches.
+ * A host string alone is never sufficient: it's the tenant's own public
+ * domain, so registry membership by itself would let any caller claim any
+ * tenant's config/backend routing (see #1339).
+ */
+export function resolveVerifiedEmbedTenant(req: Request): EmbedTenantConfig | null {
+  const registered = resolveEmbedTenantByHost(embedHostOf(req));
+  if (!registered) return null;
+  const token = req.headers.get("x-embed-token")?.trim();
+  return token && token === registered.token ? registered : null;
+}
+
 /** Resolve tenant for embed-only POST /api/chat (unauthenticated). */
 export function resolveEmbedChatTenant(req: Request): EmbedChatTenantContext | Response {
   if (!isEmbedChatRequest(req)) {
@@ -50,9 +63,8 @@ export function resolveEmbedChatTenant(req: Request): EmbedChatTenantContext | R
       headers: { "content-type": "application/json" },
     });
   }
-  const registered = resolveEmbedTenantByHost(embedHostOf(req));
+  const registered = resolveVerifiedEmbedTenant(req);
   if (registered) {
-    // Presence in the registry IS the embed allowance for this host.
     return {
       tenantSlug: registered.slug,
       ownerUserSub: "embed:anonymous",

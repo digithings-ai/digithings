@@ -174,11 +174,12 @@
  * rows, tool chips, sources accordion, streaming caret) on top of the
  * primitive palette.
  * ------------------------------------------------------------------------- */
-/* Brand accent for the DigiChat chrome — unified terminal-phosphor cyan
-   (was the per-module lavender). Scoped to .app-shell so shadcn's neutral
-   --accent hover stays authoritative elsewhere. */
+/* Brand accent for the DigiChat chrome — cyan is the official livery
+   (ruled 2026-07-02; tokens.css --accent-digichat is the single source).
+   Still scoped to .app-shell so shadcn's neutral --accent hover stays
+   authoritative elsewhere. */
 .app-shell {
-  --accent: #3dd6c4;
+  --accent: var(--accent-digichat);
 }
 
 .app-shell .app-input {

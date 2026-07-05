@@ -116,7 +116,7 @@
 .term-tok-str  { color: var(--accent-digisearch); }
 .term-tok-num  { color: var(--accent-digiquant); }
 .term-tok-type { color: var(--accent-digismith); }
-.term-tok-dec  { color: var(--accent-digichat); }
+.term-tok-dec  { color: #9d8fc9; } /* dedicated syntax color — was var(--accent-digichat) until that livery was ruled cyan (2026-07-02); the freed lavender keeps decorators distinct from digichat chrome */
 .term-tok-op   { color: var(--accent-digiclaw); opacity: 0.85; }
 .term-tok-cmt  { color: var(--text-secondary); font-style: italic; }
 

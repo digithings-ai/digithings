@@ -29,6 +29,10 @@ landing referenced them.
 **Deep audits:** [`references/scans/`](references/scans/INDEX.md) — page-by-page,
 components, mobile nav (Playwright), copy patterns.
 
+**Implementation backlog:** [GitHub epic #1200](https://github.com/digithings-ai/digithings/issues/1200) · [`docs/agent-backlog/design-evolution/INDEX.md`](../../docs/agent-backlog/design-evolution/INDEX.md)
+
+**Copy & IA:** [`COPY_GUIDE.md`](COPY_GUIDE.md) — voice, literal CTAs, per-surface section maps.
+
 It does not replace [`README.md`](README.md) (token API) or
 [`demos/digiquant-landing/DESIGN_DECISIONS.md`](demos/digiquant-landing/DESIGN_DECISIONS.md)
 (iteration log). It is the **strategic layer**: what we keep, what we borrow, what
@@ -339,6 +343,7 @@ From user iteration log + reference analysis:
 
 | File | Role |
 |------|------|
+| [`COPY_GUIDE.md`](COPY_GUIDE.md) | Voice, CTAs, section maps, IA templates |
 | [`references/README.md`](references/README.md) | Index of external scans |
 | [`demos/digiquant-landing/DESIGN_DECISIONS.md`](demos/digiquant-landing/DESIGN_DECISIONS.md) | v7 iteration punchlist |
 | [`site/README.md`](site/README.md) | Theme contract + JS modules |

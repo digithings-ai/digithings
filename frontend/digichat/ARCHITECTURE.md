@@ -367,9 +367,9 @@ anonymous request before any read/write — so no Postgres row can be created fo
 `DIGICHAT_EMBED_TENANTS` (JSON, keyed by hostname) declares embed tenants:
 per-host `slug`, `backend` (`digigraph` | `external-relay` + https URL),
 `gateMode` (`turn_limited` | `ungated`), `theme` (`dark` | `light`),
-optional `accent` hex pair, `attribution` flag, and `aliases`. Parsed
-fail-fast in `src/lib/embed-tenants.ts`; the same registry feeds
-`/api/chat` tenant resolution (`src/lib/embed-chat-tenant.ts`), the
+optional `accent` hex pair, `attribution` flag, `aliases`, and a required
+`token`. Parsed fail-fast in `src/lib/embed-tenants.ts`; the same registry
+feeds `/api/chat` tenant resolution (`src/lib/embed-chat-tenant.ts`), the
 client-safe `GET /api/embed/tenant-config` endpoint, and the `/embed`
 CSP frame-ancestors (`src/lib/security-headers.ts` — which means the env
 var must be present at build time, not just runtime).
@@ -382,10 +382,44 @@ the relay's side (e.g. Azure Foundry conversations); the client echoes the
 relay's conversation id via `X-External-Conversation` (sessionStorage,
 `digichat_embed_conversation:<host>`). Both rate limiters (per-IP embed +
 shared BFF bucket, now keyed by the tenant's real slug) run before the
-backend branch. `X-Embed-Host` is attacker-settable but only selects among
-preconfigured tenants — relay URLs come from config, never the request, so
-there is no open-proxy/SSRF surface. First consumer: DataTapStream
-(datatap-web) via its Azure Function relay.
+backend branch. Relay URLs come from config, never the request, so there
+is no open-proxy/SSRF surface. First consumer: DataTapStream (datatap-web)
+via its Azure Function relay.
+
+**`X-Embed-Host` alone is not sufficient authorization (#1339).** A tenant's
+host string is its own public domain, so `resolveEmbedTenantByHost` never
+grants embed access by itself — `resolveVerifiedEmbedTenant`
+(`src/lib/embed-chat-tenant.ts`) additionally requires the request's
+`X-Embed-Token` header to match that tenant's own registry-configured
+`token`. Both `/api/chat` and `GET /api/embed/tenant-config` resolve
+through this verified path; without a matching token a request is treated
+exactly like an unregistered host (generic gated defaults, or the legacy
+`DIGICHAT_EMBED_ENABLED`/`DIGICHAT_EMBED_TOKEN` path), never the specific
+tenant's config or relay. The token is not secret from that tenant's own
+site visitors — it's provisioned out-of-band and baked into the tenant's
+embed snippet as a query param (`<iframe src=".../embed?token=...">`),
+read client-side in `src/app/embed/page.tsx` and forwarded as
+`X-Embed-Token` — the same trust model as a Stripe publishable key or
+reCAPTCHA site key: not guessable by an unrelated caller, but not a bearer
+secret a real visitor needs to protect either.
+
+An Origin/Referer check was considered and rejected: on `/api/chat` and
+`/api/embed/tenant-config` themselves, Origin/Referer always reflect this
+app's own origin (that's how cross-origin iframes work — a script fetch
+from inside the iframe reports the iframe's own origin, never the parent
+page's), so it can't distinguish tenants. A signed session cookie set at
+`/embed` load time (using the real Referer on that top-level navigation)
+was also considered, but rejected because it's a third-party cookie from
+the browser's perspective and would be blocked by Safari ITP / Chrome's
+third-party-cookie phase-out for a meaningful share of real visitors,
+silently degrading them to the generic embed experience.
+
+**Deploy-order dependency:** any tenant already present in a deployed
+`DIGICHAT_EMBED_TENANTS` (e.g. DataTapStream) must have a `token` added to
+its registry entry, and the corresponding site's embed snippet must be
+updated to pass `?token=` on the iframe `src`, in the same deploy that
+picks up this change — otherwise `parseEmbedTenants` throws (registry
+entries without a token are invalid) and that tenant's build/boot fails.
 
 ---
 
@@ -691,7 +725,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_ENDPOINT_HOST_ALLOWLIST` | Comma-separated hosts for SSRF guard | Security hardening |
 | `DIGICHAT_EMBED_ENABLED` | Enable the unauthenticated `/embed` chat surface (`1` = on) | For public embed |
 | `DIGICHAT_EMBED_TOKEN` | Alternative to `DIGICHAT_EMBED_ENABLED`: gate `/embed` on `X-Embed-Token` instead | Optional |
-| `DIGICHAT_EMBED_TENANTS` | Optional JSON registry of embed tenants (see "Embed tenant registry & external backends"). Unset = no external embed tenants; first-party embeds behave exactly as before. Must be present at build time for CSP frame-ancestors derivation. | Optional |
+| `DIGICHAT_EMBED_TENANTS` | Optional JSON registry of embed tenants (see "Embed tenant registry & external backends"). Unset = no external embed tenants; first-party embeds behave exactly as before. Must be present at build time for CSP frame-ancestors derivation. Each entry requires a `token` — the embed snippet passes it back as `?token=` / `X-Embed-Token`; a registered host alone is not sufficient authorization (#1339). | Optional |
 | `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms) | Optional |
 | `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |

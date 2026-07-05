@@ -546,8 +546,9 @@ export function ChatPanel({
 
           {error ? (
             <div className="dc-term-row dc-term-row-assistant">
-              <span className="dc-term-marker" style={{ color: "var(--accent-digikey)" }}>✗</span>
-              <div className="dc-term-body" style={{ color: "var(--accent-digikey)" }}>
+              {/* error state rides the four-state system (--down) — a livery is an identity, never a semantic (canon §16) */}
+              <span className="dc-term-marker" style={{ color: "var(--down)" }}>✗</span>
+              <div className="dc-term-body" style={{ color: "var(--down)" }}>
                 {error.message}
               </div>
             </div>

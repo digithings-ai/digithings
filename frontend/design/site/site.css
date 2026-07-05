@@ -396,12 +396,46 @@ a { color: inherit; text-decoration: none; }
 .footer-links a:hover { color: var(--ink); }
 .footer-meta { font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-mute); }
 
+/* ── colophon — the page's last word (canon §08) ────────────────────────
+   The module's name at giant scale, 1px hairline outline (an outline,
+   never a glow). Scroll-scrubbed with zero JS: CSS scroll-driven
+   animation behind @supports; reduced-motion / no-support renders the
+   name standing. The <b> suffix reads var(--accent) — livery on module
+   sites, ink on the umbrella (which collapses --accent to ink). */
+.colophon { overflow: hidden; padding: 5rem 0 0; user-select: none; pointer-events: none; }
+/* fallback stroke first: without color-mix() support the refined declaration
+   drops, and transparent fill + no stroke would render nothing. */
+.colo-word { display: block; font-family: var(--font-mono); font-weight: 500; font-size: clamp(3rem, 15.5vw, 15rem); line-height: 0.82; letter-spacing: -0.05em; white-space: nowrap; text-align: center; color: transparent; -webkit-text-stroke: 1px var(--ink); -webkit-text-stroke: 1px color-mix(in srgb, var(--ink) 30%, transparent); }
+.colo-word b { font-weight: 500; color: transparent; -webkit-text-stroke: 1px var(--accent); -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 70%, transparent); }
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* entry-based ranges: the colophon sits at the document's end, so
+       cover-based ranges can never complete — entry 100% (fully visible)
+       is reachable at max scroll. */
+    .colo-word { opacity: 0; transform: translateY(34%); animation: colo-rise linear both; animation-timeline: view(); animation-range: entry 0% entry 100%; }
+    .colo-word b { animation: colo-fill linear both; animation-timeline: view(); animation-range: entry 55% entry 100%; }
+  }
+}
+@keyframes colo-rise { to { opacity: 1; transform: none; } }
+@keyframes colo-fill { to { color: color-mix(in srgb, var(--accent) 16%, transparent); } }
+
 /* ── responsive ─────────────────────────────────────────────────────── */
 @media (max-width: 940px) {
   .principles { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 560px) {
   .principles { grid-template-columns: 1fr; }
+}
+
+/* ── no-JS content-first (law 06) ───────────────────────────────────────
+   SSR ships html.no-js (removed pre-paint by an inline script in each app
+   layout). Motion primitives SSR their hidden initial styles inline, and
+   the [data-motion] children of a Stagger inherit variants — neutralize
+   all of it when scripts never run. */
+html.no-js [data-motion],
+html.no-js [data-motion] * {
+  opacity: 1 !important;
+  transform: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

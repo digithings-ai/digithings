@@ -22,7 +22,10 @@ export function initHeroPicker({ selector = '.hero-picker' } = {}) {
   pickers.forEach((root) => {
     const tabs = Array.from(root.querySelectorAll('[role="tab"]'));
     if (!tabs.length) return;
-    const panels = tabs.map((tab) => document.getElementById(tab.getAttribute('aria-controls')));
+    const panels = tabs.map((tab) => {
+      const panelId = tab.getAttribute('aria-controls');
+      return panelId ? document.getElementById(panelId) : null;
+    });
 
     const activate = (index, focus = true) => {
       tabs.forEach((tab, i) => {

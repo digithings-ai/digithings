@@ -14,7 +14,8 @@ static sites).
 **Strategy & external references:** [`EVOLUTION.md`](EVOLUTION.md) synthesizes
 our direction with deep scans of [Graphite](references/graphite.com.md),
 [Cursor](references/cursor.com.md), and [x.ai](references/x.ai.md) — use it
-before major landing or dashboard work. **Deep audits:** [`references/scans/`](references/scans/INDEX.md). Index: [`references/README.md`](references/README.md).
+before major landing or dashboard work. **Copy & IA:** [`COPY_GUIDE.md`](COPY_GUIDE.md).
+**Deep audits:** [`references/scans/`](references/scans/INDEX.md). Index: [`references/README.md`](references/README.md).
 
 See [ADR-0009 — Frontend umbrella](../../docs/adr/0009-frontend-umbrella.md)
 for the layout rationale.
@@ -121,12 +122,12 @@ value; component rules always reference `var(--accent)`.
 | Module      | Token                   | Swatch                                                                                        | Hex       |
 | ----------- | ----------------------- | --------------------------------------------------------------------------------------------- | --------- |
 | DigiGraph   | `--accent-digigraph`    | ![](https://readme-swatches.vercel.app/e5b765?style=round)                                     | `#e5b765` |
-| DigiQuant   | `--accent-digiquant`    | ![](https://readme-swatches.vercel.app/4fa37a?style=round)                                     | `#4fa37a` |
+| DigiQuant   | `--accent-digiquant`    | ![](https://readme-swatches.vercel.app/3dd6c4?style=round)                                     | `#3dd6c4` |
 | Atlas       | `--accent-atlas`        | ![](https://readme-swatches.vercel.app/6fbf94?style=round)                                     | `#6fbf94` |
 | Hermes      | `--accent-hermes`       | ![](https://readme-swatches.vercel.app/4a8f7b?style=round)                                     | `#4a8f7b` |
 | Kairos      | `--accent-kairos`       | ![](https://readme-swatches.vercel.app/2f7a65?style=round)                                     | `#2f7a65` |
 | DigiSearch  | `--accent-digisearch`   | ![](https://readme-swatches.vercel.app/5aa3c4?style=round)                                     | `#5aa3c4` |
-| DigiChat    | `--accent-digichat`     | ![](https://readme-swatches.vercel.app/9d8fc9?style=round)                                     | `#9d8fc9` |
+| DigiChat    | `--accent-digichat`     | ![](https://readme-swatches.vercel.app/3dd6c4?style=round)                                     | `#3dd6c4` |
 | DigiKey     | `--accent-digikey`      | ![](https://readme-swatches.vercel.app/d97a5a?style=round)                                     | `#d97a5a` |
 | DigiSmith   | `--accent-digismith`    | ![](https://readme-swatches.vercel.app/6fa3a3?style=round)                                     | `#6fa3a3` |
 | DigiClaw    | `--accent-digiclaw`     | ![](https://readme-swatches.vercel.app/b87840?style=round)                                     | `#b87840` |
@@ -139,7 +140,7 @@ value; component rules always reference `var(--accent)`.
 ```html
 <section class="accent-digiquant">
   <!-- any `.module-card`, `.flow-node.highlight`, etc. inside resolves
-       var(--accent) to #4fa37a -->
+       var(--accent) to #3dd6c4 -->
 </section>
 ```
 

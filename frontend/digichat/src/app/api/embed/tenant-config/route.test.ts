@@ -7,25 +7,28 @@ afterEach(() => {
   resetEmbedTenantRegistryForTests();
 });
 
+const REGISTRY = JSON.stringify({
+  "datatapstream.com": {
+    slug: "datatapstream",
+    backend: { type: "external-relay", url: "https://relay.example.com/api/digichat" },
+    gateMode: "ungated",
+    theme: "light",
+    accent: { color: "#b5562b", foreground: "#fff7f2" },
+    attribution: true,
+    token: "datatapstream-secret",
+  },
+});
+
 describe("GET /api/embed/tenant-config", () => {
-  it("returns the client-safe config for a registered host — never the backend", async () => {
-    vi.stubEnv(
-      "DIGICHAT_EMBED_TENANTS",
-      JSON.stringify({
-        "datatapstream.com": {
-          slug: "datatapstream",
-          backend: { type: "external-relay", url: "https://relay.example.com/api/digichat" },
-          gateMode: "ungated",
-          theme: "light",
-          accent: { color: "#b5562b", foreground: "#fff7f2" },
-          attribution: true,
-        },
-      })
-    );
+  it("returns the client-safe config for a registered host with a valid token — never the backend", async () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
     resetEmbedTenantRegistryForTests();
     const res = await GET(
       new Request("http://127.0.0.1/api/embed/tenant-config", {
-        headers: { "x-embed-host": "https://datatapstream.com" },
+        headers: {
+          "x-embed-host": "https://datatapstream.com",
+          "x-embed-token": "datatapstream-secret",
+        },
       })
     );
     expect(res.status).toBe(200);
@@ -39,6 +42,24 @@ describe("GET /api/embed/tenant-config", () => {
       attribution: true,
     });
     expect(JSON.stringify(body)).not.toContain("relay.example.com");
+  });
+
+  it("returns legacy defaults for a registered host when the token is missing (#1339)", async () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const res = await GET(
+      new Request("http://127.0.0.1/api/embed/tenant-config", {
+        headers: { "x-embed-host": "https://datatapstream.com" },
+      })
+    );
+    const body = await res.json();
+    expect(body).toEqual({
+      slug: "embed",
+      gateMode: "turn_limited",
+      theme: "dark",
+      accent: null,
+      attribution: false,
+    });
   });
 
   it("returns legacy defaults for unknown hosts", async () => {

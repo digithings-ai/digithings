@@ -36,6 +36,14 @@ Run `make score` on staged changes before every PR. All dimensions must pass.
 
 Rubrics live in `docs/scoring/` (10 criteria each).
 
+**Exception — presentation-only frontend** (`frontend/design/**`, `**.css`, static
+marketing pages): `make score` does **not** apply — its rubrics are Python-oriented
+and misfire on CSS/JS. `frontend/**` is excluded from the `score` CI filter and
+`frontend/design/` is in `score.py`'s skip list. Iterate design on **one branch off
+`develop`** with a live preview (`.claude/launch.json` dev servers) and open a
+single PR when the look is approved. Gates that still apply: gitleaks (secrets),
+app builds, the digithings deploy build-check. (See #1310.)
+
 ## Human gate (always requires human review)
 
 - Auth, JWT, or crypto changes (`digikey/`)
@@ -62,12 +70,16 @@ main ← develop ← module/<component> ← task/<N>-slug
 
 Use `make task ISSUE=N` to create a `task/N-slug` branch from the right module branch. Task branches PR into their module branch; module branches PR into develop. Never do module-specific work on `develop` directly.
 
+**Frontend is one-hop (#1310).** `component:website`, `component:digiquant-web`, and `component:design-system` route **straight to `develop`** (see `scripts/project_routing.json`), skipping the `module/website` hop — frontend/marketing has no auth/live-trading surface to isolate, and the module hop was the source of the redesign epic's sync/conflict churn. Task branches for these still PR into `develop` directly. The two-hop model still applies to backend modules (`module/digiquant`, `module/digikey`, `module/digigraph`, etc.).
+
 **Sync the module branch with develop *before* you branch off it.** Module branches drift behind `develop` fast because we iterate on develop constantly — and a task branch cut from a stale module branch edits dead code. (Real incident, 2026-06-17: `module/digiquant` was ~2 months / ~400 commits behind, predating the `apps/digiquant-atlas → digiquant/src/digiquant/olympus` migration; backend PRs cut from it touched files that no longer exist on develop.) `make task ISSUE=N` does **not** sync for you — check first:
 
 ```bash
 git fetch origin
 git rev-list --count origin/module/<component>..origin/develop   # 0 = current; >0 = stale, sync before branching
 ```
+
+Don't re-run the full review pipeline at every hop — see [AGENT_WORKFLOW.md §9](docs/agents/AGENT_WORKFLOW.md) for which stage gets the full review vs. a diff-scoped check.
 
 Module branches are guarded by the `module-branch-protection` ruleset: **no force-push, no deletion, PR required (0 approvals)**. So you cannot `git push --force` to refresh a stale module branch. To sync one, open a normal PR into `base=module/<component>` — either `head=develop`, or a `chore/sync-*` branch whose tree equals develop (a `-s ours` merge with the index reset to develop's tree preserves the module branch's prior history) — and merge it (no approval needed). Branch names must match `{feat,fix,docs,chore}/<slug>` or `task/<N>-slug`.
 

@@ -20,6 +20,16 @@ export type EmbedTenantConfig = {
   theme: "dark" | "light";
   accent?: { color: string; foreground: string };
   attribution: boolean;
+  /**
+   * Per-tenant secret. Knowing a tenant's host string is public (it's the
+   * tenant's own domain) so registry membership alone must never grant
+   * embed access — callers must also present this value as X-Embed-Token.
+   * Provisioned out-of-band and baked into the tenant's own embed snippet
+   * (e.g. `<iframe src=".../embed?token=...">`), analogous to a Stripe
+   * publishable key: not secret from that tenant's own visitors, but not
+   * guessable by an unrelated caller either.
+   */
+  token: string;
 };
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -101,6 +111,10 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: aliases must be an array of strings`);
   }
 
+  if (typeof v.token !== "string" || !v.token.trim()) {
+    throw new Error(`${ctx}: "token" must be a non-empty string`);
+  }
+
   return {
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
@@ -109,6 +123,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
     accent,
     attribution: v.attribution === true,
+    token: v.token,
   };
 }
 

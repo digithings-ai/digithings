@@ -311,37 +311,45 @@ export function DocsLayout() {
     return () => obs.disconnect();
   }, []);
 
-  return (
-    <div className="docs-shell">
-      <aside className="docs-side">
-        <nav aria-label="docs">
-          <div className="docs-side-group">
-            <span className="docs-side-label">Guides</span>
-            {guides.map((g) => (
-              <a key={g.id} href={`#${g.id}`} className={active === g.id ? "is-active" : ""}>
-                {g.title}
+  // One nav, rendered twice: the sticky desktop sidebar, and a native
+  // details collapse on mobile (canon §17 — the sidebar never just vanishes).
+  const sideNav = (
+    <nav aria-label="docs">
+      <div className="docs-side-group">
+        <span className="docs-side-label">Guides</span>
+        {guides.map((g) => (
+          <a key={g.id} href={`#${g.id}`} className={active === g.id ? "is-active" : ""}>
+            {g.title}
+          </a>
+        ))}
+      </div>
+      {TIERS.map((t) => {
+        const rows = ordered.filter((m) => m.tier === t.key);
+        if (!rows.length) return null;
+        return (
+          <div className="docs-side-group" key={t.key}>
+            <span className="docs-side-label">{t.label}</span>
+            {rows.map((m) => (
+              <a key={m.id} href={`#${m.id}`} className={active === m.id ? "is-active" : ""}>
+                <span className="dt-d">digi</span>
+                <span className="dt-s">{m.id.replace(/^digi/, "")}</span>
               </a>
             ))}
           </div>
-          {TIERS.map((t) => {
-            const rows = ordered.filter((m) => m.tier === t.key);
-            if (!rows.length) return null;
-            return (
-              <div className="docs-side-group" key={t.key}>
-                <span className="docs-side-label">{t.label}</span>
-                {rows.map((m) => (
-                  <a key={m.id} href={`#${m.id}`} className={active === m.id ? "is-active" : ""}>
-                    <span className="dt-d">digi</span>
-                    <span className="dt-s">{m.id.replace(/^digi/, "")}</span>
-                  </a>
-                ))}
-              </div>
-            );
-          })}
-        </nav>
-      </aside>
+        );
+      })}
+    </nav>
+  );
+
+  return (
+    <div className="docs-shell">
+      <aside className="docs-side">{sideNav}</aside>
 
       <div className="docs-content">
+        <details className="docs-side-mobile">
+          <summary>contents</summary>
+          {sideNav}
+        </details>
         <header className="docs-hero">
           <span className="kicker">{"// api docs"}</span>
           <h1>digithings API reference.</h1>

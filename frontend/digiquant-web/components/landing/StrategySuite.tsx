@@ -1,18 +1,29 @@
 "use client";
 /**
- * Homepage strategy spotlight — scroll-pinned card stack (BTC / ETH / SOL).
+ * Homepage strategy spotlight — scroll-pinned peek stack (BTC / ETH / SOL).
  *
- * Scroll progress slides each tearsheet up over the previous one.
+ * Cards slide in from below as you scroll; the full stack + library CTA scale to
+ * fit the viewport when zoom or content height would otherwise clip.
+ *
+ * Scroll handling (#1322): measurement (layout reads + height/scale writes) runs
+ * only when something can actually change size — mount, resize, visualViewport,
+ * ResizeObserver on the pin column/stack, tearsheet data landing — and caches
+ * its results in a ref. The per-scroll path is Motion's `useScroll` progress →
+ * pure math on the cached metrics → setState. Cards are memoized so scroll
+ * frames re-render only the transform wrappers, never the charts.
  */
 import {
+  memo,
   useEffect,
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
   type RefObject,
 } from "react";
+import { useScroll, useMotionValueEvent } from "motion/react";
 import Link from "next/link";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
 import { CurrentPosition } from "@/components/tearsheet/current-position";
@@ -34,18 +45,42 @@ const STRATEGIES = SLAPPER_ORDER.map(
 
 const PREVIEW_PANE_H = 220;
 const PREVIEW_LOOKBACK = "6m" as const;
+const MIN_FIT_SCALE = 0.68;
 
 type PreviewMode = "charts" | "tables";
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-/** Smooth ease — slow start and end so cards glide in rather than snap. */
+const emptySubscribe = () => () => {};
+
+// Cached once — the per-scroll path must not re-query media state (#1322).
+let reducedMq: MediaQueryList | null = null;
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  reducedMq ??= window.matchMedia("(prefers-reduced-motion: reduce)");
+  return reducedMq.matches;
+}
+
 function easeInOutCubic(t: number): number {
   const x = clamp(t, 0, 1);
   return x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
 }
 
-/** Scroll distance (px) allocated to each card's bottom-to-seat entrance. */
+function parseCssLengthPx(raw: string, viewportH: number): number {
+  const trimmed = raw.trim();
+  if (!trimmed) return 0;
+  const n = Number.parseFloat(trimmed);
+  if (!Number.isFinite(n)) return 0;
+  if (trimmed.endsWith("svh") || trimmed.endsWith("vh")) return (n / 100) * viewportH;
+  if (trimmed.endsWith("rem")) return n * 16;
+  return n;
+}
+
+function introHoldPx(scrolly: HTMLElement): number {
+  const raw = getComputedStyle(scrolly).getPropertyValue("--dqss-intro-hold").trim();
+  return parseCssLengthPx(raw, window.innerHeight);
+}
+
 function cardEnterBudgetsPx(scrolly: HTMLElement, count: number): number[] {
   const base = parseCssLengthPx(
     getComputedStyle(scrolly).getPropertyValue("--dqss-enter-scroll").trim() || "80svh",
@@ -53,7 +88,6 @@ function cardEnterBudgetsPx(scrolly: HTMLElement, count: number): number[] {
   );
   if (count <= 0) return [];
   if (count === 1) return [base];
-  // First card still leads, but every entrance gets a long scroll runway.
   return Array.from({ length: count }, (_, i) => (i === 0 ? base * 0.82 : base * 1.12));
 }
 
@@ -112,21 +146,6 @@ function libraryCtaOffsetY(
   return hideOffset * (1 - easeInOutCubic(t));
 }
 
-function parseCssLengthPx(raw: string, viewportH: number): number {
-  const trimmed = raw.trim();
-  if (!trimmed) return 0;
-  const n = Number.parseFloat(trimmed);
-  if (!Number.isFinite(n)) return 0;
-  if (trimmed.endsWith("svh") || trimmed.endsWith("vh")) return (n / 100) * viewportH;
-  if (trimmed.endsWith("rem")) return n * 16;
-  return n;
-}
-
-function introHoldPx(scrolly: HTMLElement): number {
-  const raw = getComputedStyle(scrolly).getPropertyValue("--dqss-intro-hold").trim();
-  return parseCssLengthPx(raw, window.innerHeight);
-}
-
 function useElementWidth(ref: RefObject<HTMLDivElement | null>): number {
   const [width, setWidth] = useState(640);
 
@@ -142,24 +161,6 @@ function useElementWidth(ref: RefObject<HTMLDivElement | null>): number {
   }, [ref]);
 
   return width;
-}
-
-function useElementHeight(ref: RefObject<HTMLElement | null>, fallback = PREVIEW_PANE_H): number {
-  const [height, setHeight] = useState(fallback);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    const ro = new ResizeObserver(([entry]) => {
-      const next = Math.floor(entry.contentRect.height);
-      if (next > 0) setHeight(next);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [ref]);
-
-  return height;
 }
 
 type LoadStatus = "idle" | "loading" | "loaded" | "error";
@@ -244,11 +245,13 @@ function Kpi({ label, value, className }: { label: string; value: ReactNode; cla
   );
 }
 
-function StrategyTearsheetCard({ entry }: { entry: StrategyIndexEntry }) {
+const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
+  entry,
+}: {
+  entry: StrategyIndexEntry;
+}) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const previewPaneRef = useRef<HTMLDivElement>(null);
   const cardWidth = useElementWidth(cardRef);
-  const chartPaneHeight = useElementHeight(previewPaneRef);
   const [mode, setMode] = useState<PreviewMode>("charts");
   const { data, status } = useTearsheetData(entry.strategy);
 
@@ -359,42 +362,37 @@ function StrategyTearsheetCard({ entry }: { entry: StrategyIndexEntry }) {
         className="ts-panel ts-tab-stack dqss-preview-panel"
         aria-label={mode === "charts" ? "Price chart" : "Statistics table"}
       >
-        <div className="dqss-preview-pane" ref={previewPaneRef}>
-          <div
-            className="dqss-preview-pane-layer dqss-preview-chart-pane"
-            hidden={mode !== "charts"}
-            aria-hidden={mode !== "charts"}
-          >
-            <div className="ts-chart dqss-preview-chart">
-              {chartLoading ? (
-                <div className="dqss-chart-skeleton" aria-hidden="true" />
-              ) : chartReady ? (
+        <div className="dqss-preview-pane">
+          {mode === "charts" ? (
+            <div className="dqss-preview-pane-layer dqss-preview-chart-pane">
+              <div className="ts-chart dqss-preview-chart">
+                {chartLoading ? (
+                  <div className="dqss-chart-skeleton" aria-hidden="true" />
+                ) : chartReady ? (
                   <CandlestickChart
                     bars={chartOhlc}
                     trades={previewTrades}
-                    height={chartPaneHeight}
+                    height={PREVIEW_PANE_H}
                     view={view6m}
                     fullSpan={fullSpan}
                     compact
                   />
+                ) : (
+                  <div className="dqss-chart-empty">
+                    {chartUnavailable ? "Chart unavailable" : "Could not load chart"}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="dqss-preview-pane-layer dqss-preview-table-pane">
+              {data ? (
+                <PivotStatsTable data={data} pivot="direction" compact />
               ) : (
-                <div className="dqss-chart-empty">
-                  {chartUnavailable ? "Chart unavailable" : "Could not load chart"}
-                </div>
+                <p className="dqss-chart-empty">Loading statistics…</p>
               )}
             </div>
-          </div>
-          <div
-            className="dqss-preview-pane-layer dqss-preview-table-pane"
-            hidden={mode !== "tables"}
-            aria-hidden={mode !== "tables"}
-          >
-            {data ? (
-              <PivotStatsTable data={data} pivot="direction" compact />
-            ) : (
-              <p className="dqss-chart-empty">Loading statistics…</p>
-            )}
-          </div>
+          )}
         </div>
       </section>
 
@@ -405,7 +403,7 @@ function StrategyTearsheetCard({ entry }: { entry: StrategyIndexEntry }) {
       </p>
     </div>
   );
-}
+});
 
 function navHeightPx(): number {
   const raw = getComputedStyle(document.documentElement).getPropertyValue("--dq-nav-h").trim();
@@ -413,94 +411,257 @@ function navHeightPx(): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function peekHeightPx(scrolly: HTMLElement): number {
-  const stack = scrolly.querySelector<HTMLElement>(".dqss-stack");
-  const raw = getComputedStyle(stack ?? document.documentElement).getPropertyValue("--dqss-peek").trim();
+function peekHeightPx(stack: HTMLElement | null): number {
+  const raw = getComputedStyle(stack ?? document.documentElement)
+    .getPropertyValue("--dqss-peek")
+    .trim();
   const parsed = Number.parseFloat(raw);
   if (!Number.isFinite(parsed)) return 60;
   return raw.endsWith("rem") ? parsed * 16 : parsed;
 }
 
-function measureStackMetrics(scrolly: HTMLElement) {
-  const navH = navHeightPx();
-  const pin = scrolly.querySelector<HTMLElement>(".dqss-stack-pin");
-  const card = scrolly.querySelector<HTMLElement>(".dqss-card");
-  const clip = scrolly.querySelector<HTMLElement>(".dqss-stack-clip");
-  const pinH = pin?.getBoundingClientRect().height ?? Math.max(320, window.innerHeight - navH);
-  const cardH = card?.offsetHeight ?? 620;
-  const clipH = clip?.clientHeight ?? Math.max(280, pinH * 0.55);
-  const peek = peekHeightPx(scrolly);
-  const scrollable = Math.max(1, scrolly.offsetHeight - pinH);
-  // Push cards fully below the clip so nothing peeks before its segment starts.
-  const hideOffset = clipH + peek + 24;
-  const slide = hideOffset;
-  return { pinH, scrollable, slide, hideOffset, cardH };
+function tallestCardHeightPx(scrolly: HTMLElement): number {
+  let tallest = 0;
+  scrolly.querySelectorAll<HTMLElement>(".dqss-card").forEach((card) => {
+    tallest = Math.max(tallest, card.offsetHeight);
+  });
+  return tallest > 0 ? tallest : 620;
 }
+
+function libraryCtaHideOffsetPx(scrolly: HTMLElement): number {
+  const cta = scrolly.querySelector<HTMLElement>(".dqss-library-cta");
+  return (cta?.offsetHeight ?? 52) + 40;
+}
+
+function syncStackHeight(scrolly: HTMLElement, count: number): number {
+  const stack = scrolly.querySelector<HTMLElement>(".dqss-stack");
+  if (!stack) return 620;
+  const cardH = tallestCardHeightPx(scrolly);
+  const peek = peekHeightPx(stack);
+  const stackH = cardH + peek * Math.max(0, count - 1) + 16;
+  stack.style.setProperty("--dqss-card-h", `${cardH}px`);
+  stack.style.height = `${stackH}px`;
+  const clip = scrolly.querySelector<HTMLElement>(".dqss-stack-clip");
+  if (clip) clip.style.height = `${stackH}px`;
+  return stackH;
+}
+
+function applyViewportFit(scrolly: HTMLElement, count: number): void {
+  const col = scrolly.querySelector<HTMLElement>(".dqss-pin-col");
+  const stack = scrolly.querySelector<HTMLElement>(".dqss-stack");
+  if (!col) return;
+
+  col.style.setProperty("--dqss-fit-scale", "1");
+  if (stack) stack.style.removeProperty("--dqss-peek");
+
+  syncStackHeight(scrolly, count);
+
+  const available = window.innerHeight - navHeightPx() - 24;
+  let contentH = col.scrollHeight;
+  if (contentH <= available) return;
+
+  let scale = clamp(available / contentH, MIN_FIT_SCALE, 1);
+  if (stack && scale < 0.92) {
+    stack.style.setProperty("--dqss-peek", scale < 0.8 ? "2.35rem" : "2.75rem");
+    syncStackHeight(scrolly, count);
+    contentH = col.scrollHeight;
+    scale = clamp(available / contentH, MIN_FIT_SCALE, 1);
+  }
+  col.style.setProperty("--dqss-fit-scale", scale.toFixed(4));
+}
+
+function totalScrollyHeightPx(scrolly: HTMLElement, pinH: number, count: number): number {
+  const viewportMin = Math.max(320, window.innerHeight - navHeightPx());
+  const pinRunway = Math.max(pinH, viewportMin);
+  const style = getComputedStyle(scrolly);
+  const introHold = parseCssLengthPx(style.getPropertyValue("--dqss-intro-hold").trim(), window.innerHeight);
+  const ctaScroll = parseCssLengthPx(style.getPropertyValue("--dqss-cta-scroll").trim(), window.innerHeight);
+  const budgetSum = totalCardBudgetPx(cardEnterBudgetsPx(scrolly, count));
+  const tail = 0.32 * window.innerHeight;
+  return Math.ceil(introHold + budgetSum + ctaScroll + pinRunway + tail);
+}
+
+function syncScrollyHeight(scrolly: HTMLElement, pinH: number, count: number): void {
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduced) {
+    scrolly.style.height = "";
+    return;
+  }
+  const heightPx = totalScrollyHeightPx(scrolly, pinH, count);
+  scrolly.style.height = `${heightPx}px`;
+}
+
+function measureStackMetrics(scrolly: HTMLElement, count: number) {
+  const pin = scrolly.querySelector<HTMLElement>(".dqss-stack-pin");
+  const stackH = syncStackHeight(scrolly, count);
+  applyViewportFit(scrolly, count);
+  const pinH = pin?.getBoundingClientRect().height ?? Math.max(320, window.innerHeight - navHeightPx());
+  syncScrollyHeight(scrolly, pinH, count);
+  const pinHAfter = pin?.getBoundingClientRect().height ?? pinH;
+  const scrollable = Math.max(1, scrolly.offsetHeight - pinHAfter);
+  const hideOffset = stackH + 24;
+  const ctaHideOffset = libraryCtaHideOffsetPx(scrolly);
+  return { pinH: pinHAfter, scrollable, hideOffset, ctaHideOffset, stackH };
+}
+
+/** Everything the per-scroll math needs, produced by the measure pass only. */
+type StackMetrics = {
+  scrollable: number;
+  hideOffset: number;
+  ctaHideOffset: number;
+  budgets: number[];
+  ctaBudget: number;
+  holdPx: number;
+  /** Window-scroll distance the scrolly spans (height − viewport) — maps
+   *  Motion's 0..1 progress back to scrolled pixels. */
+  runway: number;
+};
 
 export function StrategySuite() {
   const scrollyRef = useRef<HTMLDivElement>(null);
+  const metricsRef = useRef<StackMetrics | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [cardOffsets, setCardOffsets] = useState<number[]>(() => STRATEGIES.map(() => 9999));
   const [introPhase, setIntroPhase] = useState(true);
   const [libraryCtaOffset, setLibraryCtaOffset] = useState(9999);
+  // aria-hidden is a JS-driven visual-sync concern: SSR must not ship it, or
+  // no-JS screen-reader users lose the deck entirely (law 06). Applied only
+  // after hydration (the DqNav mount-gate idiom); the wrappers suppress the
+  // attribute-level mismatch.
+  const hydrated = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
   const count = STRATEGIES.length;
+
+  const { scrollYProgress } = useScroll({
+    target: scrollyRef,
+    offset: ["start start", "end end"],
+  });
 
   useEffect(() => {
     prefetchAllTearsheets(STRATEGIES.map((s) => s.strategy));
   }, []);
 
+  // Per-scroll path: pure math on cached metrics — zero layout reads or writes.
+  const applyScroll = () => {
+    const m = metricsRef.current;
+    if (!m) return;
+    const scrolled = clamp(scrollYProgress.get() * m.runway, 0, m.scrollable);
+
+    if (scrolled < m.holdPx) {
+      setIntroPhase(true);
+      setActiveIndex(0);
+      setCardOffsets(STRATEGIES.map(() => m.hideOffset));
+      setLibraryCtaOffset(m.ctaHideOffset);
+      return;
+    }
+
+    setIntroPhase(false);
+    const scrolledPastHold = scrolled - m.holdPx;
+
+    if (prefersReducedMotion()) {
+      const idx = stackActiveIndex(scrolledPastHold, m.budgets);
+      setActiveIndex(idx);
+      setCardOffsets(STRATEGIES.map((_, i) => (i <= idx ? 0 : m.hideOffset)));
+      setLibraryCtaOffset(
+        scrolledPastHold >= totalCardBudgetPx(m.budgets) ? 0 : m.ctaHideOffset,
+      );
+      return;
+    }
+
+    setActiveIndex(stackActiveIndex(scrolledPastHold, m.budgets));
+    setCardOffsets(
+      STRATEGIES.map((_, i) => stackCardOffsetY(i, scrolledPastHold, m.budgets, m.hideOffset)),
+    );
+    setLibraryCtaOffset(
+      libraryCtaOffsetY(scrolledPastHold, m.budgets, m.ctaBudget, m.ctaHideOffset),
+    );
+  };
+  const applyScrollRef = useRef(applyScroll);
+  useEffect(() => {
+    applyScrollRef.current = applyScroll;
+  });
+
+  useMotionValueEvent(scrollYProgress, "change", () => applyScrollRef.current());
+
   useEffect(() => {
     const scrolly = scrollyRef.current;
     if (!scrolly) return;
 
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    const updateFromScroll = () => {
-      const { scrollable, hideOffset } = measureStackMetrics(scrolly);
-      const budgets = cardEnterBudgetsPx(scrolly, count);
-      const ctaBudget = libraryCtaBudgetPx(scrolly);
-      const rect = scrolly.getBoundingClientRect();
-      const scrolled = clamp(-rect.top, 0, scrollable);
-      const holdPx = introHoldPx(scrolly);
-
-      if (scrolled < holdPx) {
-        setIntroPhase(true);
-        setActiveIndex(0);
-        setCardOffsets(STRATEGIES.map(() => hideOffset));
-        setLibraryCtaOffset(hideOffset);
-        return;
-      }
-
-      setIntroPhase(false);
-      const scrolledPastHold = scrolled - holdPx;
-
-      if (reduced) {
-        const idx = stackActiveIndex(scrolledPastHold, budgets);
-        setActiveIndex(idx);
-        setCardOffsets(STRATEGIES.map((_, i) => (i <= idx ? 0 : hideOffset)));
-        setLibraryCtaOffset(
-          scrolledPastHold >= totalCardBudgetPx(budgets) ? 0 : hideOffset,
-        );
-        return;
-      }
-
-      setActiveIndex(stackActiveIndex(scrolledPastHold, budgets));
-      setCardOffsets(
-        STRATEGIES.map((_, i) => stackCardOffsetY(i, scrolledPastHold, budgets, hideOffset)),
-      );
-      setLibraryCtaOffset(
-        libraryCtaOffsetY(scrolledPastHold, budgets, ctaBudget, hideOffset),
-      );
+    // Measure pass: all layout reads + height/scale writes live here. Runs on
+    // mount, viewport changes, pin column / stack resizes, and tearsheet data
+    // landing — never on scroll (#1322).
+    const remeasure = () => {
+      const { scrollable, hideOffset, ctaHideOffset } = measureStackMetrics(scrolly, count);
+      metricsRef.current = {
+        scrollable,
+        hideOffset,
+        ctaHideOffset,
+        budgets: cardEnterBudgetsPx(scrolly, count),
+        ctaBudget: libraryCtaBudgetPx(scrolly),
+        holdPx: introHoldPx(scrolly),
+        runway: Math.max(1, scrolly.offsetHeight - window.innerHeight),
+      };
+      applyScrollRef.current();
     };
 
-    window.addEventListener("scroll", updateFromScroll, { passive: true });
-    window.addEventListener("resize", updateFromScroll, { passive: true });
-    updateFromScroll();
+    const nudgeStrategiesHash = () => {
+      if (window.location.hash !== "#strategies") return;
+      const m = metricsRef.current;
+      if (!m) return;
+      const scrolled = clamp(-scrolly.getBoundingClientRect().top, 0, m.scrollable);
+      if (scrolled >= m.holdPx) return;
+      window.scrollTo({
+        top: window.scrollY + (m.holdPx - scrolled) + 1,
+        behavior: "instant",
+      });
+    };
+
+    const onHashChange = () => {
+      requestAnimationFrame(() => {
+        remeasure();
+        nudgeStrategiesHash();
+      });
+    };
+
+    const onViewportChange = () => {
+      remeasure();
+    };
+
+    window.addEventListener("resize", onViewportChange, { passive: true });
+    window.addEventListener("hashchange", onHashChange);
+    window.visualViewport?.addEventListener("resize", onViewportChange);
+    window.visualViewport?.addEventListener("scroll", onViewportChange);
+
+    const col = scrolly.querySelector<HTMLElement>(".dqss-pin-col");
+    const stack = scrolly.querySelector<HTMLElement>(".dqss-stack");
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(remeasure);
+    });
+    if (col) ro.observe(col);
+    if (stack) ro.observe(stack);
+
+    remeasure();
+    requestAnimationFrame(() => {
+      remeasure();
+      nudgeStrategiesHash();
+    });
+
+    const unsubCache = subscribeTearsheetCache(() => {
+      requestAnimationFrame(remeasure);
+    });
 
     return () => {
-      window.removeEventListener("scroll", updateFromScroll);
-      window.removeEventListener("resize", updateFromScroll);
+      unsubCache();
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("hashchange", onHashChange);
+      window.visualViewport?.removeEventListener("resize", onViewportChange);
+      window.visualViewport?.removeEventListener("scroll", onViewportChange);
+      ro.disconnect();
     };
+    // applyScrollRef is stable; remeasure closes over the current count.
   }, [count]);
 
   return (
@@ -522,7 +683,7 @@ export function StrategySuite() {
               </p>
             </div>
 
-            <div className="dqss-stack-clip" aria-hidden={introPhase}>
+            <div className="dqss-stack-clip" aria-hidden={hydrated ? introPhase : undefined}>
               <div
                 className="dqss-stack"
                 role="group"
@@ -531,47 +692,46 @@ export function StrategySuite() {
               >
                 {STRATEGIES.map((entry, i) => {
                   const offset = cardOffsets[i] ?? 0;
-                  const notYetShown =
-                    introPhase || (offset > 8 && i !== activeIndex);
+                  const notYetShown = introPhase || (offset > 8 && i !== activeIndex);
                   return (
-                  <div
-                    key={entry.strategy}
-                    className="dqss-stack-card"
-                    data-stack-index={i}
-                    data-state={
-                      notYetShown
-                        ? "hidden"
-                        : i < activeIndex
-                          ? "buried"
-                          : i === activeIndex
-                            ? "top"
-                            : "below"
-                    }
-                    style={
-                      {
-                        "--stack-index": i,
-                        transform: `translate3d(0, ${offset}px, 0)`,
-                      } as CSSProperties
-                    }
-                    aria-hidden={introPhase || i > activeIndex}
-                  >
-                    <StrategyTearsheetCard entry={entry} />
-                  </div>
+                    <div
+                      key={entry.strategy}
+                      className="dqss-stack-card"
+                      data-stack-index={i}
+                      data-state={
+                        notYetShown
+                          ? "hidden"
+                          : i < activeIndex
+                            ? "buried"
+                            : i === activeIndex
+                              ? "top"
+                              : "below"
+                      }
+                      style={
+                        {
+                          "--stack-index": i,
+                          transform: `translate3d(0, ${offset}px, 0)`,
+                        } as CSSProperties
+                      }
+                      aria-hidden={hydrated ? introPhase || i > activeIndex : undefined}
+                    >
+                      <StrategyTearsheetCard entry={entry} />
+                    </div>
                   );
                 })}
               </div>
-              <div
-                className="dqss-library-cta"
-                data-state={introPhase || libraryCtaOffset > 8 ? "hidden" : "visible"}
-                style={{ transform: `translate3d(0, ${libraryCtaOffset}px, 0)` }}
-              >
-                <Link href="/strategies" className="dqss-library-pill">
-                  Full strategy library
-                  <span className="dqss-library-arrow" aria-hidden="true">
-                    →
-                  </span>
-                </Link>
-              </div>
+            </div>
+            <div
+              className="dqss-library-cta"
+              data-state={introPhase || libraryCtaOffset > 8 ? "hidden" : "visible"}
+              style={{ transform: `translate3d(0, ${libraryCtaOffset}px, 0)` }}
+            >
+              <Link href="/strategies" className="dqss-library-pill">
+                Full strategy library
+                <span className="dqss-library-arrow" aria-hidden="true">
+                  →
+                </span>
+              </Link>
             </div>
           </div>
         </div>
