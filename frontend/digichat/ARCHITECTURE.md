@@ -713,7 +713,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGIQUANT_INTERNAL_URL` | DigiQuant base URL (health probe) | Recommended |
 | `DIGISMITH_INTERNAL_URL` | DigiSmith base URL (health probe) | Recommended |
 | `DIGISEARCH_INTERNAL_URL` | DigiSearch base URL (health probe) | Optional |
-| `DIGICHAT_ENABLED_SERVICES` | Comma-separated active service IDs | Optional |
+| `DIGICHAT_ENABLED_SERVICES` | Comma-separated active service IDs; unset defaults to all four (`digigraph,digisearch,digiquant,digismith`), explicitly set to `""` to enable none | Optional |
 | `DIGICHAT_DATABASE_URL` | PostgreSQL connection URL | For server persistence |
 | `DIGICHAT_AUTO_MIGRATE` | Run Drizzle migrations on startup (`1` = on) | Docker recommended |
 | `DIGICHAT_BOOTSTRAP_API_KEY` | Static machine API key (env bootstrap) | For machine clients |
