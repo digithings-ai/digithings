@@ -1,6 +1,6 @@
 ## Goal
 
-Polish **twelve-x** FX research UI toward x.ai + Cursor utility: mono uppercase stat headers, outline filter pills, key-metric counter strip ([`EVOLUTION.md` §3 twelve-x](../../../frontend/design/EVOLUTION.md)).
+Polish **twelve-x** FX research UI toward x.ai + Cursor utility: mono uppercase stat headers, outline filter pills, key-metric counter strip ([`EVOLUTION.md` §3 twelve-x](../../../../frontend/design/EVOLUTION.md)).
 
 ## Component
 

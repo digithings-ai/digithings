@@ -1,6 +1,6 @@
 ## Goal
 
-Build **`CodeSampleBand`** — x.ai tabbed SDK / Cursor curl row for API and BYOK marketing ([`xai-full.md`](../../../frontend/design/references/scans/xai-full.md)).
+Build **`CodeSampleBand`** — x.ai tabbed SDK / Cursor curl row for API and BYOK marketing ([`xai-full.md`](../../../../frontend/design/references/scans/xai-full.md)).
 
 ## Component
 

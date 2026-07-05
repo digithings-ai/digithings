@@ -1,6 +1,6 @@
 ## Goal
 
-Build shared **`HorizontalScrollBand`** primitive — Cursor-style horizontal snap scroll for changelog cards, testimonial rows, and mobile overflow bands ([`EVOLUTION.md` §6](../../../frontend/design/EVOLUTION.md), [design spec §Layer C](../../../superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md)).
+Build shared **`HorizontalScrollBand`** primitive — Cursor-style horizontal snap scroll for changelog cards, testimonial rows, and mobile overflow bands ([`EVOLUTION.md` §6](../../../../frontend/design/EVOLUTION.md), [design spec §Layer C](../../../superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md)).
 
 ## Component
 

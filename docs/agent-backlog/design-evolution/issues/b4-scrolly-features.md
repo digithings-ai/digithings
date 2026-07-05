@@ -1,6 +1,6 @@
 ## Goal
 
-Extract a reusable **`ScrollyFeatures`** primitive from digiquant's `PipelineScene` / strategy scroll patterns — Graphite-style pinned section + progress rail + N slides ([`graphite-full.md`](../../../frontend/design/references/scans/graphite-full.md)).
+Extract a reusable **`ScrollyFeatures`** primitive from digiquant's `PipelineScene` / strategy scroll patterns — Graphite-style pinned section + progress rail + N slides ([`graphite-full.md`](../../../../frontend/design/references/scans/graphite-full.md)).
 
 ## Component
 

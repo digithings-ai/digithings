@@ -1,6 +1,6 @@
 ## Goal
 
-Build **`CapabilityCard`** — x.ai-style mini UI preview + "Explore →" link, composable inside bento cells or standalone grid ([`components-catalog.md`](../../../frontend/design/references/scans/components-catalog.md)).
+Build **`CapabilityCard`** — x.ai-style mini UI preview + "Explore →" link, composable inside bento cells or standalone grid ([`components-catalog.md`](../../../../frontend/design/references/scans/components-catalog.md)).
 
 ## Component
 

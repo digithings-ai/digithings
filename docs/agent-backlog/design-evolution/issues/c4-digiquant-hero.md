@@ -1,6 +1,6 @@
 ## Goal
 
-Upgrade **digiquant.io** hero with Cursor literal CTAs, Graphite friction trust strip, and x.ai-style stat counters ([`EVOLUTION.md` §3 digiquant](../../../frontend/design/EVOLUTION.md)).
+Upgrade **digiquant.io** hero with Cursor literal CTAs, Graphite friction trust strip, and x.ai-style stat counters ([`EVOLUTION.md` §3 digiquant](../../../../frontend/design/EVOLUTION.md)).
 
 ## Component
 
