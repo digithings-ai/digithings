@@ -1,6 +1,6 @@
 ## Goal
 
-Build a shared **`ProductFrame`** primitive — container-query-scaled ~800px UI embed for marketing pages — inspired by Graphite artboards and Cursor rounded product screenshots ([`components-catalog.md`](../../../frontend/design/references/scans/components-catalog.md)).
+Build a shared **`ProductFrame`** primitive — container-query-scaled ~800px UI embed for marketing pages — inspired by Graphite artboards and Cursor rounded product screenshots ([`components-catalog.md`](../../../../frontend/design/references/scans/components-catalog.md)).
 
 ## Component
 

@@ -1,6 +1,6 @@
 ## Goal
 
-Replace digithings.ai long architecture-only scroll with a **Cursor-style bento module grid** — each cell = module accent + capability card + optional `ProductFrame` UI crop ([`EVOLUTION.md` §3](../../../frontend/design/EVOLUTION.md)).
+Replace digithings.ai long architecture-only scroll with a **Cursor-style bento module grid** — each cell = module accent + capability card + optional `ProductFrame` UI crop ([`EVOLUTION.md` §3](../../../../frontend/design/EVOLUTION.md)).
 
 ## Component
 

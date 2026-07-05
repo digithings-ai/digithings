@@ -10,15 +10,14 @@
  *     hover/selection gray — that stays authoritative site-wide.
  *   - The design primitives want `--accent` to mean the *brand* hue
  *     (violet for DigiChat). We therefore scope the brand `--accent` into
- *     the `.app-shell` subtree only (see bottom of file). Terminal +
- *     app-shell CSS resolve to `--accent-digichat`; shadcn utilities
- *     elsewhere stay on shadcn's gray.
+ *     the `.app-shell` subtree only (see bottom of file). App-shell CSS
+ *     resolves to `--accent-digichat`; shadcn utilities elsewhere stay on
+ *     shadcn's gray.
  *
  * Imports placed first so our `:root` and `.dark` blocks below win the
  * cascade for shadcn's `--accent` override.
  * ------------------------------------------------------------------------- */
 @import "@digithings/design/tokens.css";
-@import "@digithings/design/terminal/styles.css";
 @import "@digithings/design/app-shell-terminal/styles.css";
 
 @custom-variant dark (&:is(.dark *));
@@ -142,8 +141,8 @@
   --sidebar-ring: #3dd6c4;
 
   /* Align the legacy @digithings/design tokens (consumed by the imported
-     terminal + app-shell primitives and the .dc-term-* chrome) to the new
-     palette, and unify the brand accent to cyan. */
+     app-shell primitive and the .dc-term-* chrome) to the new palette,
+     and unify the brand accent to cyan. */
   --bg-primary: #0b0c0e;
   --bg-secondary: #08090b;
   --text-primary: #eceef0;

@@ -1,6 +1,6 @@
 ## Goal
 
-Wire **`PricingMatrix`** + **`FaqAccordion`** (E3) into digiquant.io `/#pricing` section with honest open-core tier copy ([COPY_GUIDE.md §10](../../../frontend/design/COPY_GUIDE.md)).
+Wire **`PricingMatrix`** + **`FaqAccordion`** (E3) into digiquant.io `/#pricing` section with honest open-core tier copy ([COPY_GUIDE.md §10](../../../../frontend/design/COPY_GUIDE.md)).
 
 ## Component
 
