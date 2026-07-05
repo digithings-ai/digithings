@@ -14,12 +14,16 @@ RUN npm ci --workspace frontend/digichat --include-workspace-root
 FROM node:22-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
-# next.config.ts imports security-headers.ts, which reads DIGICHAT_EMBED_TENANTS
+# next.config.ts imports security-headers.ts, which reads DIGICHAT_EMBED_HOSTS
 # once at import time to compute the embed CSP frame-ancestors list — Next.js
 # evaluates this during `next build` and bakes it into the routes manifest, so
 # it must be passed as a build arg, not just a runtime container env var.
-ARG DIGICHAT_EMBED_TENANTS=""
-ENV DIGICHAT_EMBED_TENANTS=$DIGICHAT_EMBED_TENANTS
+# Deliberately DIGICHAT_EMBED_HOSTS (plain hostnames), not DIGICHAT_EMBED_TENANTS
+# (which also carries each tenant's secret token) — build-args persist in image
+# layer history and cloud-build logs (az acr build etc.), and the CSP computation
+# never reads the token anyway. DIGICHAT_EMBED_TENANTS stays runtime-only.
+ARG DIGICHAT_EMBED_HOSTS=""
+ENV DIGICHAT_EMBED_HOSTS=$DIGICHAT_EMBED_HOSTS
 COPY --from=deps /app ./
 COPY frontend/design ./frontend/design
 COPY frontend/digichat ./frontend/digichat

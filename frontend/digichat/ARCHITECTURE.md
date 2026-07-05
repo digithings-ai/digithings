@@ -369,10 +369,23 @@ per-host `slug`, `backend` (`digigraph` | `external-relay` + https URL),
 `gateMode` (`turn_limited` | `ungated`), `theme` (`dark` | `light`),
 optional `accent` hex pair, `attribution` flag, `aliases`, and a required
 `token`. Parsed fail-fast in `src/lib/embed-tenants.ts`; the same registry
-feeds `/api/chat` tenant resolution (`src/lib/embed-chat-tenant.ts`), the
-client-safe `GET /api/embed/tenant-config` endpoint, and the `/embed`
-CSP frame-ancestors (`src/lib/security-headers.ts` — which means the env
-var must be present at build time, not just runtime).
+feeds `/api/chat` tenant resolution (`src/lib/embed-chat-tenant.ts`) and the
+client-safe `GET /api/embed/tenant-config` endpoint — both runtime-only,
+reading `process.env.DIGICHAT_EMBED_TENANTS` fresh per request.
+
+The `/embed` CSP frame-ancestors (`src/lib/security-headers.ts`) is
+different: Next.js evaluates `next.config.ts`'s `headers()` during `next
+build` and bakes the result into the routes manifest, so whatever feeds it
+must be present at **build** time, not just container runtime. `embedFrameAncestors()`
+never reads anything but the registry's hostnames — never the token — so
+it's driven by a separate, non-secret `DIGICHAT_EMBED_HOSTS` env var (plain
+comma-separated hostnames) instead, preferred over deriving hosts from the
+full `DIGICHAT_EMBED_TENANTS` registry when both are set (#1360). This
+matters because a Docker build-arg persists in image layer history and
+cloud-build logs (e.g. `az acr build`) — passing the full token-bearing
+registry there for a value the build never actually reads would leak every
+tenant's token. `DIGICHAT_EMBED_TENANTS` itself stays runtime-only (a
+container env var, never a build-arg).
 
 `external-relay` tenants bypass DigiGraph entirely: `/api/chat` proxies to
 the configured relay via `src/lib/external-relay-stream.ts`, translating
@@ -736,7 +749,8 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_ENDPOINT_HOST_ALLOWLIST` | Comma-separated hosts for SSRF guard | Security hardening |
 | `DIGICHAT_EMBED_ENABLED` | Enable the unauthenticated `/embed` chat surface (`1` = on) | For public embed |
 | `DIGICHAT_EMBED_TOKEN` | Alternative to `DIGICHAT_EMBED_ENABLED`: gate `/embed` on `X-Embed-Token` instead | Optional |
-| `DIGICHAT_EMBED_TENANTS` | Optional JSON registry of embed tenants (see "Embed tenant registry & external backends"). Unset = no external embed tenants; first-party embeds behave exactly as before. Must be present at build time for CSP frame-ancestors derivation. Each entry requires a `token` — the embed snippet passes it back as `?token=` / `X-Embed-Token`; a registered host alone is not sufficient authorization (#1339). | Optional |
+| `DIGICHAT_EMBED_TENANTS` | Optional JSON registry of embed tenants (see "Embed tenant registry & external backends"). Unset = no external embed tenants; first-party embeds behave exactly as before. Runtime-only — never pass as a Docker build-arg, it carries every tenant's secret `token` and build-args persist in image layer history / cloud-build logs (#1360). Each entry requires a `token` — the embed snippet passes it back as `?token=` / `X-Embed-Token`; a registered host alone is not sufficient authorization (#1339). | Optional |
+| `DIGICHAT_EMBED_HOSTS` | Plain comma-separated embed-tenant hostnames, no secrets. Feeds the `/embed` CSP frame-ancestors at **build** time (safe to pass as a Docker build-arg); preferred over deriving hosts from `DIGICHAT_EMBED_TENANTS` when both are set (#1360). | Optional |
 | `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms) | Optional |
 | `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |
