@@ -75,3 +75,54 @@ describe("registry-derived frame-ancestors", () => {
     expect(embedFrameAncestors()).not.toContain("http://localhost:*");
   });
 });
+
+describe("DIGICHAT_EMBED_HOSTS (build-time CSP without the secret registry)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetEmbedTenantRegistryForTests();
+  });
+
+  it("derives frame-ancestors from DIGICHAT_EMBED_HOSTS without DIGICHAT_EMBED_TENANTS set", () => {
+    vi.stubEnv("DIGICHAT_EMBED_HOSTS", "dev.datatapstream.com, dev.datatap.stream");
+    resetEmbedTenantRegistryForTests();
+    const list = embedFrameAncestors();
+    expect(list).toContain("https://dev.datatapstream.com");
+    expect(list).toContain("https://dev.datatap.stream");
+  });
+
+  it("prefers DIGICHAT_EMBED_HOSTS over the registry when both are set", () => {
+    vi.stubEnv("DIGICHAT_EMBED_HOSTS", "hosts-var.example.com");
+    vi.stubEnv(
+      "DIGICHAT_EMBED_TENANTS",
+      JSON.stringify({
+        "registry-var.example.com": {
+          slug: "registryvar",
+          backend: { type: "external-relay", url: "https://relay.example.com/api/x" },
+          gateMode: "ungated",
+          token: "secret",
+        },
+      })
+    );
+    resetEmbedTenantRegistryForTests();
+    const list = embedFrameAncestors();
+    expect(list).toContain("https://hosts-var.example.com");
+    expect(list).not.toContain("https://registry-var.example.com");
+  });
+
+  it("falls back to the registry when DIGICHAT_EMBED_HOSTS is unset", () => {
+    vi.stubEnv(
+      "DIGICHAT_EMBED_TENANTS",
+      JSON.stringify({
+        "registry-var.example.com": {
+          slug: "registryvar",
+          backend: { type: "external-relay", url: "https://relay.example.com/api/x" },
+          gateMode: "ungated",
+          token: "secret",
+        },
+      })
+    );
+    resetEmbedTenantRegistryForTests();
+    const list = embedFrameAncestors();
+    expect(list).toContain("https://registry-var.example.com");
+  });
+});
