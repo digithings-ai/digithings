@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
 vi.mock("@/db", () => ({
@@ -27,6 +27,10 @@ describe("GET /api/health", () => {
     );
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("returns 200 when upstream health checks pass", async () => {
     const res = await GET();
     expect(res.status).toBe(200);
@@ -44,5 +48,35 @@ describe("GET /api/health", () => {
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.ok).toBe(false);
+  });
+
+  it("skips digraph/digiquant/digismith checks and stays healthy when they're not in DIGICHAT_ENABLED_SERVICES (#external-relay-only deploy)", async () => {
+    // "" falls back to the all-enabled default in capabilities.ts (raw || fallback),
+    // so a non-matching placeholder is what actually disables every service.
+    vi.stubEnv("DIGICHAT_ENABLED_SERVICES", "none");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("connection refused"))
+    );
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.checks.digraph).toBeUndefined();
+    expect(body.checks.digiquant).toBeUndefined();
+    expect(body.checks.digismith).toBeUndefined();
+  });
+
+  it("still requires digraph/digiquant/digismith when they are in DIGICHAT_ENABLED_SERVICES", async () => {
+    vi.stubEnv("DIGICHAT_ENABLED_SERVICES", "digigraph,digiquant,digismith");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("connection refused"))
+    );
+    const res = await GET();
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.ok).toBe(false);
+    expect(body.checks.digraph).toBe("unreachable");
   });
 });
