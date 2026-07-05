@@ -1,6 +1,6 @@
 ## Goal
 
-Realign **digithings.ai** hero to Cursor pattern: literal primary CTA, trust strip, and `ProductFrame` product visual — per [`EVOLUTION.md` §3 digithings](../../../frontend/design/EVOLUTION.md).
+Realign **digithings.ai** hero to Cursor pattern: literal primary CTA, trust strip, and `ProductFrame` product visual — per [`EVOLUTION.md` §3 digithings](../../../../frontend/design/EVOLUTION.md).
 
 ## Component
 

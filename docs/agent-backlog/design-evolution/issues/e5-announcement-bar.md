@@ -1,6 +1,6 @@
 ## Goal
 
-Build shared **`AnnouncementBar`** primitive — Graphite 48px full-width clickable bar above nav, content-gated via JSON ([COPY_GUIDE.md §11](../../../frontend/design/COPY_GUIDE.md)).
+Build shared **`AnnouncementBar`** primitive — Graphite 48px full-width clickable bar above nav, content-gated via JSON ([COPY_GUIDE.md §11](../../../../frontend/design/COPY_GUIDE.md)).
 
 ## Component
 

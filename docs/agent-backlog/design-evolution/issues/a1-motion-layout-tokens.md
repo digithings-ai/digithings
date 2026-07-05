@@ -1,6 +1,6 @@
 ## Goal
 
-Add Graphite-inspired motion and layout tokens to `frontend/design/tokens.css` so all surfaces share section rhythm, product-frame sizing, and glide easing — per [`EVOLUTION.md` §5](../../../frontend/design/EVOLUTION.md).
+Add Graphite-inspired motion and layout tokens to `frontend/design/tokens.css` so all surfaces share section rhythm, product-frame sizing, and glide easing — per [`EVOLUTION.md` §5](../../../../frontend/design/EVOLUTION.md).
 
 ## Component
 

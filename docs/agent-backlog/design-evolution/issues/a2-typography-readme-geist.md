@@ -1,6 +1,6 @@
 ## Goal
 
-Align `frontend/design/README.md` typography documentation with reality: **Geist Sans + Geist Mono** are the canonical fonts in Next.js apps; deprecate Inter/JetBrains Mono as documented defaults per [`EVOLUTION.md` §4](../../../frontend/design/EVOLUTION.md).
+Align `frontend/design/README.md` typography documentation with reality: **Geist Sans + Geist Mono** are the canonical fonts in Next.js apps; deprecate Inter/JetBrains Mono as documented defaults per [`EVOLUTION.md` §4](../../../../frontend/design/EVOLUTION.md).
 
 ## Component
 

@@ -1,6 +1,6 @@
 ## Goal
 
-Build a shared **`BentoGrid`** layout primitive — Cursor-style 2×2 (and responsive 1-col) linked feature cells for marketing sections ([`EVOLUTION.md` §6](../../../frontend/design/EVOLUTION.md)).
+Build a shared **`BentoGrid`** layout primitive — Cursor-style 2×2 (and responsive 1-col) linked feature cells for marketing sections ([`EVOLUTION.md` §6](../../../../frontend/design/EVOLUTION.md)).
 
 ## Component
 
