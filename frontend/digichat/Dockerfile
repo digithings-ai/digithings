@@ -14,9 +14,23 @@ RUN npm ci --workspace frontend/digichat --include-workspace-root
 FROM node:22-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+# next.config.ts imports security-headers.ts, which reads DIGICHAT_EMBED_TENANTS
+# once at import time to compute the embed CSP frame-ancestors list — Next.js
+# evaluates this during `next build` and bakes it into the routes manifest, so
+# it must be passed as a build arg, not just a runtime container env var.
+ARG DIGICHAT_EMBED_TENANTS=""
+ENV DIGICHAT_EMBED_TENANTS=$DIGICHAT_EMBED_TENANTS
 COPY --from=deps /app ./
 COPY frontend/design ./frontend/design
 COPY frontend/digichat ./frontend/digichat
+# package-lock.json is macOS-generated; Linux optional natives are not locked
+# (see .github/workflows/test-digichat.yml, which needs the -gnu equivalents
+# on its own non-Alpine runner — this image is musl/Alpine, hence -musl here).
+RUN npm install \
+      @rolldown/binding-linux-x64-musl@1.0.0-rc.16 \
+      lightningcss-linux-x64-musl@1.32.0 \
+      @tailwindcss/oxide-linux-x64-musl@4.2.2 \
+      --no-save --no-audit --no-fund
 RUN npm run build --workspace frontend/digichat
 
 FROM node:22-alpine AS runner
