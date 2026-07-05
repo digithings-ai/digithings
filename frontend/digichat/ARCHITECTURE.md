@@ -663,6 +663,16 @@ secret; only `DIGIKEY_BFF_TOKEN` is needed (a long-lived BFF credential).
 DigiGraph calls DigiSearch internally during workflow execution. The health badge
 in the Ecosystem sheet reflects connectivity only.
 
+DigiGraph and DigiQuant get the same `DIGICHAT_ENABLED_SERVICES` treatment (#1346):
+unlike `digisearchUrl`, `digigraphUrl`/`digiquantUrl`/`digismithUrl` in
+`EcosystemEndpoints` always have a default value (`ecosystem.ts`'s `DEFAULTS`), so
+the health route checks `isServiceCapabilityEnabled(...)` directly rather than URL
+presence — a deployment serving only `external-relay` embed tenants (no DigiGraph
+stack running at all) can omit them from `DIGICHAT_ENABLED_SERVICES` without
+`/api/health` reporting itself unhealthy. Note the `DIGICHAT_ENABLED_SERVICES=""`
+gotcha in `capabilities.ts`: an empty string falls back to the all-enabled default,
+so disabling every service requires a non-matching placeholder value instead.
+
 ### DigiQuant backtest result parsing
 
 DigiChat does not call DigiQuant directly. `BacktestResult`-shaped JSON appears in
@@ -673,9 +683,10 @@ using the extracted `run_id` and metrics.
 
 ### DigiSmith status endpoint
 
-`GET /api/health` probes `{DIGISMITH_INTERNAL_URL}/health`. DigiSmith is not called
-from the chat flow; tracing is handled by DigiGraph emitting `span` trace events in
-the SSE stream. The health badge confirms the tracing service is reachable.
+`GET /api/health` probes `{DIGISMITH_INTERNAL_URL}/health` when `digismith` is in
+`DIGICHAT_ENABLED_SERVICES`. DigiSmith is not called from the chat flow; tracing is
+handled by DigiGraph emitting `span` trace events in the SSE stream. The health
+badge confirms the tracing service is reachable.
 
 ---
 
