@@ -1,6 +1,6 @@
 # DigiThings design evolution
 
-**Status:** Living document · **Last updated:** 2026-07-02
+**Status:** Living document · **Last updated:** 2026-07-05
 
 > **⚠️ 2026-07-02 — landing wiring reverted (design review, #1308).** After review,
 > the epic's live landing/redesign changes were reverted from digithings.ai and
@@ -24,7 +24,13 @@ nav, hero layout, `Reveal` motion, connected graph) that those same apps import
 for everything with real interaction/state. Vanilla-JS equivalents of the
 latter (`site/theme.js`, `ui.js`, `reveal.js`, `terminal.js`, `graph.js`) were
 removed as dead code in #1240 once an import-graph audit confirmed neither
-landing referenced them.
+landing referenced them. The standalone `terminal/` primitive (`initTerminal`,
+unrelated to `site/terminal.js` above) was removed the same way in #1365: the
+2026-07-05 terminal-widget prototype (`design-reference.html`) explicitly
+considered and rejected reviving it in favor of a fresh build, and DigiChat's
+only reference to it was an unused `styles.css` import — no `.term-*` class
+was ever consumed, since DigiChat's real chat UI uses its own `.dc-term-*`
+system instead.
 
 **Deep audits:** [`references/scans/`](references/scans/INDEX.md) — page-by-page,
 components, mobile nav (Playwright), copy patterns.
