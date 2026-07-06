@@ -226,7 +226,10 @@
 .ref-footer-brand {
   position: relative;
   margin: 0 -1.4rem;
-  padding: 1.2rem 0 0;
+  /* Bottom runway so the wordmark is fully in view (not tucked under the
+     fold) while the glow sweeps across it — the sweep is scrubbed against
+     this element's scroll progress in footer-reference.tsx. */
+  padding: 1.2rem 0 26svh;
   /* size container: the colophon scales against the footer box, not the
      viewport, so the demo box gets production proportions at any width. */
   container-type: inline-size;
@@ -286,53 +289,40 @@
 }
 
 /* Glow sweep — a light passing left-to-right across the sign. A duplicate
-   overlay span carries a gradient clipped to its own glyphs; scroll scrubs
-   background-position from off-left to off-right. Hidden by default: it
-   only exists inside the scroll-driven block below, so no-support and
-   reduced-motion both degrade to the static outlined wordmark. */
+   overlay span carries an accent gradient clipped to its own glyphs; the
+   footer component (Motion) scrubs background-position from off-left to
+   off-right against the colophon's scroll progress. Parked off-screen by
+   default (132% ≈ band clear of the left edge), so no-JS and reduced-motion
+   both show just the static outlined wordmark, no glow. */
 .ref-colo-sweep {
-  display: none;
+  display: block;
   position: absolute;
   inset: 0;
   -webkit-text-stroke-width: 0;
   color: transparent;
   background: linear-gradient(
     100deg,
-    transparent 40%,
-    color-mix(in srgb, var(--accent) 55%, transparent) 50%,
-    transparent 60%
+    transparent 38%,
+    color-mix(in srgb, var(--accent) 72%, transparent) 50%,
+    transparent 62%
   );
   background-size: 250% 100%;
   background-repeat: no-repeat;
-  background-position: 100% 0;
+  background-position: 132% 0;
   -webkit-background-clip: text;
   background-clip: text;
 }
 
+/* Word rise as the colophon enters — zero-JS, gated on support + motion
+   preference. Rests fully risen where unsupported. */
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
-    /* entry-based ranges, per the house pattern: the colophon sits at the
-       document's end, so cover-based ranges can never complete — entry
-       100% (fully visible) is reachable at max scroll. */
     .ref-colo-word {
       opacity: 0;
       transform: translateY(34%);
       animation: ref-colo-rise linear both;
       animation-timeline: view();
       animation-range: entry 0% entry 100%;
-    }
-
-    .ref-colo-word b {
-      animation: ref-colo-fill linear both;
-      animation-timeline: view();
-      animation-range: entry 55% entry 100%;
-    }
-
-    .ref-colo-sweep {
-      display: block;
-      animation: ref-colo-sweep linear both;
-      animation-timeline: view();
-      animation-range: entry 35% entry 100%;
     }
   }
 }
@@ -341,24 +331,6 @@
   to {
     opacity: 1;
     transform: none;
-  }
-}
-
-@keyframes ref-colo-fill {
-  to {
-    color: color-mix(in srgb, var(--accent) 16%, transparent);
-  }
-}
-
-@keyframes ref-colo-sweep {
-  /* background-size 250% / no-repeat: position 100% parks the band just
-     off the left edge, 0% carries it past the right — one full traverse. */
-  from {
-    background-position: 100% 0;
-  }
-
-  to {
-    background-position: 0% 0;
   }
 }
 
