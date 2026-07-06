@@ -8,6 +8,18 @@ import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { p } from "@/lib/base-path";
 import { resolveEmbedHost } from "@/lib/embed-gate";
 
+/** Read ?token= / ?host= at send time — useChat transport is frozen on first render (#1339). */
+function readEmbedUrlAuth(): { token?: string; host?: string } {
+  if (typeof window === "undefined") return {};
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token")?.trim();
+  const host = params.get("host")?.trim();
+  return {
+    token: token || undefined,
+    host: host || undefined,
+  };
+}
+
 const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
 
 function conversationStorageKey(host: string): string {
@@ -67,12 +79,16 @@ export function useEmbedDigiChat({
       new DefaultChatTransport({
         api: p("/api/chat"),
         prepareSendMessagesRequest: ({ messages, body }) => {
+          const urlAuth = readEmbedUrlAuth();
+          const effectiveToken = urlAuth.token ?? token;
+          const effectiveHost = urlAuth.host ?? host;
+          const resolvedHost = resolveEmbedHost(effectiveHost) || embedHost;
           const headers: Record<string, string> = {
             "content-type": "application/json",
-            "X-Embed-Host": resolveEmbedHost(host) || embedHost,
+            "X-Embed-Host": resolvedHost,
             "X-Embed-Accent": accent,
           };
-          if (token) headers["X-Embed-Token"] = token;
+          if (effectiveToken) headers["X-Embed-Token"] = effectiveToken;
           if (byokKey) {
             headers["X-BYOK-Key"] = byokKey;
             headers["X-BYOK-Provider"] = byokProvider ?? "openrouter";
@@ -82,7 +98,7 @@ export function useEmbedDigiChat({
           }
           try {
             const conversationId = window.sessionStorage.getItem(
-              conversationStorageKey(embedHost),
+              conversationStorageKey(resolvedHost),
             );
             if (conversationId) headers["X-External-Conversation"] = conversationId;
           } catch {
