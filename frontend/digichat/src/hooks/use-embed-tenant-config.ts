@@ -27,13 +27,18 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
  * param (see embed-tenants.ts). Without it, the server can't tell this caller
  * apart from anyone else claiming the same (public) host, and returns the
  * generic gated defaults instead of this tenant's config (#1339).
+ * @param explicitHost - see resolveEmbedHost(); the embedding page's own
+ * origin, passed via the iframe src's `?host=` param (#1372).
  */
-export function useEmbedTenantConfig(token?: string | null): EmbedTenantClientConfig {
+export function useEmbedTenantConfig(
+  token?: string | null,
+  explicitHost?: string | null,
+): EmbedTenantClientConfig {
   const [config, setConfig] = useState<EmbedTenantClientConfig>(DEFAULT_EMBED_TENANT_CONFIG);
 
   useEffect(() => {
     let cancelled = false;
-    const headers: Record<string, string> = { "X-Embed-Host": resolveEmbedHost() };
+    const headers: Record<string, string> = { "X-Embed-Host": resolveEmbedHost(explicitHost) };
     if (token) headers["X-Embed-Token"] = token;
     fetch(p("/api/embed/tenant-config"), { headers })
       .then((r) => (r.ok ? r.json() : null))
@@ -52,7 +57,7 @@ export function useEmbedTenantConfig(token?: string | null): EmbedTenantClientCo
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, explicitHost]);
 
   return config;
 }
