@@ -1,6 +1,6 @@
 ## Goal
 
-Wire **`ClosingCtaBand`** (E2) on both **digithings.ai** and **digiquant.io** — final conversion section before footer with literal CTAs ([COPY_GUIDE.md §6–10](../../../frontend/design/COPY_GUIDE.md)).
+Wire **`ClosingCtaBand`** (E2) on both **digithings.ai** and **digiquant.io** — final conversion section before footer with literal CTAs ([COPY_GUIDE.md §6–10](../../../../frontend/design/COPY_GUIDE.md)).
 
 ## Component
 

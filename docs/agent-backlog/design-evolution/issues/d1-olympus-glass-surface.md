@@ -1,6 +1,6 @@
 ## Goal
 
-Migrate **Olympus** dashboard from glass morphism to x.ai-style flat surfaces — hairline borders, `--surface` steps, no decorative shadows ([`EVOLUTION.md` §3 Olympus](../../../frontend/design/EVOLUTION.md)).
+Migrate **Olympus** dashboard from glass morphism to x.ai-style flat surfaces — hairline borders, `--surface` steps, no decorative shadows ([`EVOLUTION.md` §3 Olympus](../../../../frontend/design/EVOLUTION.md)).
 
 ## Component
 

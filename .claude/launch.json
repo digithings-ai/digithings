@@ -28,8 +28,8 @@
     {
       "name": "DigiChat (Next.js)",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "digichat"],
-      "port": 3000
+      "runtimeArgs": ["--workspace", "frontend/digichat", "run", "dev", "--", "--port", "3005"],
+      "port": 3005
     },
     {
       "name": "digiquant-web",
