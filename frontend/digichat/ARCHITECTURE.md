@@ -416,6 +416,24 @@ read client-side in `src/app/embed/page.tsx` and forwarded as
 reCAPTCHA site key: not guessable by an unrelated caller, but not a bearer
 secret a real visitor needs to protect either.
 
+**Where `X-Embed-Host` actually comes from client-side (#1372).** The embed
+snippet should pass the embedding page's own origin explicitly via `?host=`
+on the iframe `src` (`resolveEmbedHost()` in `src/lib/embed-gate.ts` prefers
+this over anything else) — the embedding site always knows its own origin
+reliably, and passing it explicitly avoids relying on the iframe trying to
+detect its parent. If `?host=` is absent, `resolveEmbedHost()` falls back to
+`document.referrer`'s origin, then (same-origin dev embeds only)
+`window.parent.location.origin`. **Never** fall back further to
+`window.location.origin` — that's this app's own origin, not a signal about
+who is embedding it, and `window.parent.location.origin` throwing is the
+*expected*, *normal* case for every real cross-origin production embed (that
+throw is the whole point of the browser's same-origin policy). A prior
+version of this fallback did exactly that and shipped for a while — meaning
+`X-Embed-Host` was silently wrong (always this app's own origin) for every
+real production embed, so `resolveVerifiedEmbedTenant` could never match a
+real tenant host; every embed silently degraded to the generic gated
+config regardless of token. Confirmed via a live deployment before this fix.
+
 An Origin/Referer check was considered and rejected: on `/api/chat` and
 `/api/embed/tenant-config` themselves, Origin/Referer always reflect this
 app's own origin (that's how cross-origin iframes work — a script fetch
