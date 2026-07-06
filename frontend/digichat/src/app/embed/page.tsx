@@ -40,8 +40,6 @@ import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { p } from "@/lib/base-path";
 import {
   emit,
-  readEmbedParamsFromLocation,
-  resolveEmbedRequestContext,
   useEmbedGate,
   EMBED_FREE_TURN_LIMIT,
 } from "@/lib/embed-gate";
@@ -90,64 +88,24 @@ const ACCENT_CSS = `
  * hex values.
  */
 const TERMINAL_CSS = `
-.edc-shell { display: flex; flex: 1; min-height: 0; flex-direction: column; }
 .edc-thread { font-family: var(--font-geist-mono), ui-monospace, monospace; }
-.edc-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .edc-msg { position: relative; display: grid; grid-template-columns: 0.85rem minmax(0, 1fr); gap: 0.5rem; align-items: start; font-size: 0.8rem; line-height: 1.55; }
 .edc-who { color: var(--muted-foreground); font-weight: 600; user-select: none; }
-.edc-user .edc-who { color: var(--accent); }
-.edc-assistant .edc-who { color: var(--muted-foreground); }
-.edc-body { min-width: 0; word-break: break-word; }
-.edc-assistant .edc-body { color: color-mix(in srgb, var(--foreground) 72%, transparent); }
-.edc-user .edc-body { color: var(--foreground); font-weight: 600; white-space: pre-wrap; }
-.edc-intro .edc-body { color: color-mix(in srgb, var(--foreground) 78%, transparent); white-space: pre-wrap; font-weight: 400; }
+.edc-assistant .edc-who { color: var(--accent); }
+.edc-body { min-width: 0; color: color-mix(in srgb, var(--foreground) 86%, transparent); word-break: break-word; }
+.edc-user .edc-body { color: var(--foreground); white-space: pre-wrap; }
 .edc-activities { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.55rem; padding: 0.45rem 0.55rem; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--foreground) 4%, transparent); font-size: 0.72rem; line-height: 1.45; }
 .edc-act-line { margin: 0; color: var(--muted-foreground); }
 .edc-act-line.is-done { color: color-mix(in srgb, var(--foreground) 86%, transparent); }
 .edc-act-check { color: var(--accent); }
-.edc-form { position: sticky; bottom: 0; z-index: 10; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.5rem; padding: 0.65rem 0.75rem 0.75rem; border-top: 2px solid var(--accent); background: var(--background); box-shadow: 0 -8px 24px color-mix(in srgb, var(--background) 82%, transparent); }
-.edc-input { font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.85rem; font-weight: 600; line-height: 1.45; background: transparent; border: 0; color: var(--foreground); width: 100%; padding: 0.35rem 0; }
-.edc-input::placeholder { color: color-mix(in srgb, var(--accent) 58%, var(--muted-foreground)); font-weight: 500; }
+.edc-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.5rem; padding: 0.5rem 0.1rem 0.2rem; border-top: 1px solid var(--border); background: transparent; }
+.edc-input { font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.8rem; line-height: 1.45; background: transparent; border: 0; color: var(--foreground); width: 100%; padding: 0.35rem 0; }
+.edc-input::placeholder { color: var(--muted-foreground); }
 .edc-input:focus { outline: none; }
-.edc-send { font: inherit; font-size: 1rem; font-weight: 600; align-self: stretch; color: var(--accent-foreground); background: var(--accent); border: 1px solid var(--accent); border-radius: 8px; cursor: pointer; padding: 0.3rem 0.65rem; transition: opacity 0.18s ease; }
-.edc-send:hover:not(:disabled) { opacity: 0.9; }
+.edc-send { font: inherit; font-size: 1rem; align-self: stretch; color: var(--accent); background: transparent; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; padding: 0.3rem 0.65rem; transition: background 0.18s ease; }
+.edc-send:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 13%, transparent); }
 .edc-send:disabled { opacity: 0.4; cursor: default; }
-.edc-cur { display: inline-block; width: 7px; height: 14px; background: var(--accent); vertical-align: -2px; animation: edc-bl 1.1s steps(1) infinite; }
-@keyframes edc-bl { 50% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .edc-cur { animation: none; } }
-.edc-brand { display: flex; align-items: baseline; gap: 0.35rem; border-bottom: 1px solid var(--border); padding: 0.55rem 0.75rem; font-size: 0.82rem; font-weight: 600; letter-spacing: -0.01em; }
-.edc-brand-by { font-weight: 400; color: var(--muted-foreground); }
-.edc-brand-link { font-weight: 500; color: var(--accent); text-decoration: none; }
-.edc-brand-link:hover { text-decoration: underline; }
 `;
-
-const DEFAULT_WELCOME =
-  "Ask a question at the bottom of the page to get started.\n\nAsk anything — the first few turns are free.";
-
-function useStreamingText(fullText: string): { text: string; done: boolean } {
-  const [text, setText] = useState("");
-
-  useEffect(() => {
-    if (!fullText) {
-      setText("");
-      return;
-    }
-    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setText(fullText);
-      return;
-    }
-    let i = 0;
-    const step = Math.max(2, Math.ceil(fullText.length / 110));
-    const id = window.setInterval(() => {
-      i += step;
-      setText(fullText.slice(0, i));
-      if (i >= fullText.length) window.clearInterval(id);
-    }, 16);
-    return () => window.clearInterval(id);
-  }, [fullText]);
-
-  return { text, done: !fullText || text.length >= fullText.length };
-}
 
 type EmbedPageProps = {
   searchParams:
@@ -155,32 +113,15 @@ type EmbedPageProps = {
     | { accent?: string; token?: string; host?: string };
 };
 
-function readInitialEmbedPageParams(): {
-  accent: Accent;
-  token?: string;
-  host?: string;
-} {
-  if (typeof window === "undefined") {
-    return { accent: "digichat" };
-  }
-  const fromUrl = readEmbedParamsFromLocation(window.location.search);
-  return {
-    accent: resolveAccent(fromUrl.accent),
-    token: fromUrl.token,
-    host: fromUrl.host,
-  };
-}
-
 export default function EmbedPage({ searchParams }: EmbedPageProps) {
-  const [initial] = useState(readInitialEmbedPageParams);
-  const [accent, setAccent] = useState<Accent>(initial.accent);
+  const [accent, setAccent] = useState<Accent>("digichat");
   // Per-tenant secret from the embed snippet's own iframe src (?token=...).
   // See embed-tenants.ts / resolveVerifiedEmbedTenant — without it, the
   // server can't tell this caller apart from anyone else claiming the same
   // (public) host, and falls back to the generic gated config (#1339).
-  const [token, setToken] = useState<string | undefined>(initial.token);
+  const [token, setToken] = useState<string | undefined>(undefined);
   // The embedding page's own origin (?host=...) — see resolveEmbedHost() (#1372).
-  const [host, setHost] = useState<string | undefined>(initial.host);
+  const [host, setHost] = useState<string | undefined>(undefined);
   const tenantCfg = useEmbedTenantConfig(token, host);
 
   // Next 15/16: searchParams may be a Promise — resolve both shapes.
@@ -253,18 +194,12 @@ function EmbedChat({
         // limiting).
         api: p("/api/chat"),
         prepareSendMessagesRequest: ({ messages, body }) => {
-          const { host: embedHost, token: embedToken } = resolveEmbedRequestContext({
-            explicitHost: host,
-            explicitToken: token,
-            locationSearch:
-              typeof window !== "undefined" ? window.location.search : null,
-          });
           const headers: Record<string, string> = {
             "content-type": "application/json",
-            "X-Embed-Host": embedHost,
+            "X-Embed-Host": gate.host,
             "X-Embed-Accent": accent,
           };
-          if (embedToken) headers["X-Embed-Token"] = embedToken;
+          if (token) headers["X-Embed-Token"] = token;
           if (byokKey) {
             headers["X-BYOK-Key"] = byokKey;
             headers["X-BYOK-Provider"] = byokProvider;
@@ -274,7 +209,7 @@ function EmbedChat({
           }
           try {
             const conversationId = window.sessionStorage.getItem(
-              conversationStorageKey(embedHost),
+              conversationStorageKey(gate.host),
             );
             if (conversationId) headers["X-External-Conversation"] = conversationId;
           } catch {
@@ -301,6 +236,12 @@ function EmbedChat({
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [messages, status]);
+
+  useEffect(() => {
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant") return;
     for (const part of last.parts) {
@@ -318,41 +259,6 @@ function EmbedChat({
   }, [messages, gate.host]);
 
   const busy = status === "streaming" || status === "submitted";
-
-  const embedUiParams = useMemo(() => {
-    if (typeof window === "undefined") return {};
-    return readEmbedParamsFromLocation(window.location.search);
-  }, []);
-
-  const welcomeSource = useMemo(() => {
-    if (embedUiParams.welcome) return embedUiParams.welcome;
-    if (ungated) {
-      return "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
-    }
-    return DEFAULT_WELCOME.replace(
-      "the first few turns are free",
-      `the first ${EMBED_FREE_TURN_LIMIT} are free`,
-    );
-  }, [embedUiParams.welcome, ungated]);
-
-  const { text: introText, done: introDone } = useStreamingText(
-    messages.length === 0 && !gate.locked ? welcomeSource : "",
-  );
-
-  const inputPlaceholder = embedUiParams.placeholder ?? "ask digichat…";
-  const showBrandedHeader = Boolean(tenantCfg.title);
-  const headerTitle = tenantCfg.title ?? "Chat for Help";
-
-  const lastMessage = messages[messages.length - 1];
-  const awaitingAssistant =
-    busy &&
-    (messages.length === 0 || lastMessage?.role === "user" || (lastMessage?.role === "assistant" && !messageHasText(lastMessage)));
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages, status, introText, awaitingAssistant]);
 
   const onSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -377,74 +283,35 @@ function EmbedChat({
   );
 
   return (
-    <div className="edc-shell">
-      {showBrandedHeader ? (
-        <header className="edc-brand">
-          <span>{headerTitle}</span>
-          <span className="edc-brand-by">
-            (
-            <a
-              href="https://digithings.ai"
-              target="_blank"
-              rel="noreferrer noopener"
-              className="edc-brand-link"
-            >
-              by digichat
-            </a>
-            )
-          </span>
-          {!ungated ? (
-            <span
-              className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground"
-              aria-label={`Turns used: ${gate.turns} of ${gate.limit}`}
-            >
-              {byokIsSet ? "BYOK unlocked" : `${gate.turns}/${gate.limit} free`}
-            </span>
-          ) : null}
-        </header>
-      ) : !ungated ? (
-        <header className="flex items-center justify-end border-b border-border px-4 py-2">
+    <>
+      <header className="flex items-center justify-between border-b border-border px-4 py-2">
+        <span className="text-sm font-semibold tracking-tight">digichat</span>
+        {ungated ? null : (
           <span
             className="text-[10px] uppercase tracking-wider text-muted-foreground"
             aria-label={`Turns used: ${gate.turns} of ${gate.limit}`}
           >
             {byokIsSet ? "BYOK unlocked" : `${gate.turns}/${gate.limit} free`}
           </span>
-        </header>
-      ) : null}
+        )}
+      </header>
 
       <div
         ref={scrollRef}
-        className="edc-scroll edc-thread space-y-3 px-4 py-4"
+        className="edc-thread flex-1 space-y-3 overflow-y-auto px-4 py-4"
         role="log"
         aria-live="polite"
       >
-        {messages.length === 0 && !gate.locked && welcomeSource ? (
-          <div className="edc-msg edc-assistant edc-intro" aria-live="off">
-            <span className="edc-who" aria-hidden="true">
-              ·
-            </span>
-            <div className="edc-body">
-              {introText}
-              {!introDone && <span className="edc-cur" aria-hidden="true" />}
-            </div>
-          </div>
-        ) : null}
-        {messages.map((m, i) => (
-          <MessageRow
-            key={m.id}
-            message={m}
-            streaming={busy && m.role === "assistant" && i === messages.length - 1}
-          />
+        {messages.length === 0 && !gate.locked && (
+          <p className="text-sm text-muted-foreground">
+            {ungated
+              ? "Ask a question to get started."
+              : `Ask a question to get started. The first ${EMBED_FREE_TURN_LIMIT} are free.`}
+          </p>
+        )}
+        {messages.map((m) => (
+          <MessageRow key={m.id} message={m} />
         ))}
-        {awaitingAssistant ? (
-          <div className="edc-msg edc-assistant" aria-hidden="true">
-            <span className="edc-who">·</span>
-            <div className="edc-body">
-              <span className="edc-cur" />
-            </div>
-          </div>
-        ) : null}
         {chatError ? (
           <div
             className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
@@ -472,7 +339,7 @@ function EmbedChat({
             className="edc-input"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={inputPlaceholder}
+            placeholder="ask digichat…"
             aria-label="Message"
             disabled={busy}
           />
@@ -487,7 +354,7 @@ function EmbedChat({
         </form>
       )}
 
-      {tenantCfg.attribution && !showBrandedHeader ? (
+      {tenantCfg.attribution && (
         <p className="border-t border-border px-4 py-2 text-center text-[11px] text-muted-foreground">
           powered by digichat — a{" "}
           <a
@@ -501,8 +368,8 @@ function EmbedChat({
           </a>{" "}
           product.
         </p>
-      ) : null}
-    </div>
+      )}
+    </>
   );
 }
 
@@ -517,11 +384,7 @@ type TracePartData = {
   payload?: { label?: unknown; status?: unknown };
 };
 
-function messageHasText(message: UIMessage): boolean {
-  return message.parts.some((part) => part.type === "text" && part.text.trim().length > 0);
-}
-
-function MessageRow({ message, streaming = false }: { message: UIMessage; streaming?: boolean }) {
+function MessageRow({ message }: { message: UIMessage }) {
   const text = message.parts
     .filter((p): p is { type: "text"; text: string } => p.type === "text")
     .map((p) => p.text)
@@ -547,10 +410,9 @@ function MessageRow({ message, streaming = false }: { message: UIMessage; stream
               <div className="text-sm [&_p]:my-1 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:list-disc">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
               </div>
-            ) : streaming ? null : (
+            ) : (
               <span className="opacity-60">…</span>
             )}
-            {streaming && <span className="edc-cur" aria-hidden="true" />}
           </>
         )}
       </div>

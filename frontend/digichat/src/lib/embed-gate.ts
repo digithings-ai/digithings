@@ -18,49 +18,6 @@ const STORAGE_PREFIX = "digichat_embed_turns:";
  * (#1372) — kept only as a fallback for embed snippets that predate the
  * `?host=` param.
  */
-/** Read embed iframe query params from the location search string. */
-export function readEmbedParamsFromLocation(search: string): {
-  token?: string;
-  host?: string;
-  accent?: string;
-  welcome?: string;
-  placeholder?: string;
-} {
-  const raw = search.startsWith("?") ? search.slice(1) : search;
-  const sp = new URLSearchParams(raw);
-  const token = sp.get("token")?.trim();
-  const host = sp.get("host")?.trim();
-  const accent = sp.get("accent")?.trim();
-  const welcome = sp.get("welcome")?.trim();
-  const placeholder = sp.get("placeholder")?.trim();
-  return {
-    ...(token ? { token } : {}),
-    ...(host ? { host } : {}),
-    ...(accent ? { accent } : {}),
-    ...(welcome ? { welcome } : {}),
-    ...(placeholder ? { placeholder } : {}),
-  };
-}
-
-/**
- * Resolve the host + token to send on embed POST /api/chat.
- * Always prefers the live iframe URL over React state: useChat keeps the first
- * DefaultChatTransport instance, so closure-captured token/host can be stale
- * when searchParams hydrate after mount.
- */
-export function resolveEmbedRequestContext(options: {
-  explicitHost?: string | null;
-  explicitToken?: string | null;
-  locationSearch?: string | null;
-}): { host: string; token?: string } {
-  const fromUrl = options.locationSearch
-    ? readEmbedParamsFromLocation(options.locationSearch)
-    : {};
-  const host = resolveEmbedHost(fromUrl.host ?? options.explicitHost);
-  const token = fromUrl.token ?? (options.explicitToken?.trim() || undefined);
-  return { host, token };
-}
-
 export function resolveEmbedHost(explicitHost?: string | null): string {
   if (explicitHost) return explicitHost;
   // In SSR / tests, fall back to a stable default.

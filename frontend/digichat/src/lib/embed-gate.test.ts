@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EMBED_FREE_TURN_LIMIT, emit, readTurns, readEmbedParamsFromLocation, resolveEmbedHost, resolveEmbedRequestContext, writeTurns } from "./embed-gate";
+import { EMBED_FREE_TURN_LIMIT, emit, readTurns, resolveEmbedHost, writeTurns } from "./embed-gate";
 
 type Store = Map<string, string>;
 
@@ -65,51 +65,6 @@ describe("embed-gate storage", () => {
     };
     expect(readTurns("x")).toBe(0);
     expect(() => writeTurns("x", 1)).not.toThrow();
-  });
-});
-
-describe("readEmbedParamsFromLocation", () => {
-  it("parses token, host, accent, welcome, and placeholder from a query string", () => {
-    expect(
-      readEmbedParamsFromLocation(
-        "?token=secret&host=https%3A%2F%2Fparent.example&accent=digithings&welcome=Hello&placeholder=ask+me",
-      ),
-    ).toEqual({
-      token: "secret",
-      host: "https://parent.example",
-      accent: "digithings",
-      welcome: "Hello",
-      placeholder: "ask me",
-    });
-  });
-});
-
-describe("resolveEmbedRequestContext", () => {
-  it("prefers the live iframe URL over stale React state", () => {
-    expect(
-      resolveEmbedRequestContext({
-        explicitHost: "https://stale.example",
-        explicitToken: "stale-token",
-        locationSearch:
-          "?token=live-token&host=https%3A%2F%2Fparent.example",
-      }),
-    ).toEqual({
-      host: "https://parent.example",
-      token: "live-token",
-    });
-  });
-
-  it("falls back to explicit props when the URL has no embed params", () => {
-    expect(
-      resolveEmbedRequestContext({
-        explicitHost: "https://parent.example",
-        explicitToken: "secret",
-        locationSearch: "",
-      }),
-    ).toEqual({
-      host: "https://parent.example",
-      token: "secret",
-    });
   });
 });
 

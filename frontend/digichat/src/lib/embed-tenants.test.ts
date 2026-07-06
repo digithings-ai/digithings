@@ -17,7 +17,6 @@ const VALID = JSON.stringify({
     gateMode: "ungated",
     theme: "light",
     accent: { color: "#b5562b", foreground: "#fff7f2" },
-    title: "Chat for Help",
     attribution: true,
     token: "datatapstream-secret",
   },
