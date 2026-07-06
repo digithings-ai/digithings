@@ -19,9 +19,10 @@ export function FooterReference() {
       <p className="kicker">{"// footer & chrome"}</p>
       <h2 className="title">Utility rows, one personality moment.</h2>
       <p className="section-copy">
-        The footer is the one sanctioned zone for color play — a single ambient bloom under the
-        wordmark, quarantined from the rest of the flat chrome above it. Everywhere else stays
-        hairline.
+        The footer is the one sanctioned zone for color play — an ambient bloom under the colophon,
+        the brand name at giant outlined scale as the page&apos;s last word. Scroll into it and the
+        wordmark rises while a glow sweeps left to right across it, all scrubbed by CSS
+        scroll-driven animation, zero JS. Everywhere else stays hairline.
       </p>
 
       <footer className="ref-footer">
@@ -61,11 +62,21 @@ export function FooterReference() {
           <span className="ref-footer-copyright">© 2026 DigiThings · SOC 2 in progress</span>
         </div>
 
+        {/* Colophon — the page's last word (canon §08): the brand at giant
+            scale, 1px hairline outline. Scroll-scrubbed with zero JS via CSS
+            `animation-timeline: view()` (@supports-gated in chrome.css): the
+            word rises as it enters, and a glow sweep passes left-to-right
+            across it once per scroll-through. Reduced motion / no support:
+            the name simply stands. aria-hidden: punctuation, not content —
+            the accessible brand name lives in the utility-row copyright. */}
         <div className="ref-footer-brand">
           <span className="ref-footer-bloom" aria-hidden="true" />
-          <span className="ref-footer-mark">
-            digi<em>things</em>
-          </span>
+          <div className="ref-colophon" aria-hidden="true">
+            <span className="ref-colo-word">
+              digi<b>things</b>
+              <span className="ref-colo-sweep">digithings</span>
+            </span>
+          </div>
         </div>
       </footer>
     </section>

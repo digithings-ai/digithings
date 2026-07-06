@@ -1,0 +1,583 @@
+/* Account page — login, sign-up, payment, settings, profile templates.
+   All classes are .acct- prefixed; shared tokens/buttons come from globals. */
+
+/* ---------- shared: badge, variant labels, cards, fields ---------- */
+
+.acct-badge-row {
+  margin-top: 1rem;
+}
+
+.acct-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  padding: 0.22rem 0.6rem;
+  white-space: nowrap;
+}
+
+.acct-variant {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin-bottom: 0.5rem;
+}
+
+.acct-auth-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 380px));
+  gap: 1.2rem;
+  align-items: start;
+}
+
+.acct-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 1.2rem;
+}
+
+.acct-card-mark {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.acct-card-mark span {
+  color: var(--ink-mute);
+}
+
+.acct-field {
+  margin-top: 0.85rem;
+}
+
+.acct-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.acct-input {
+  width: 100%;
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.acct-input::placeholder {
+  color: var(--ink-mute);
+}
+
+.acct-input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--hair));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.acct-input-error,
+.acct-input-error:focus-visible {
+  border-color: var(--down);
+}
+
+.acct-input-error:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--down) 45%, transparent);
+}
+
+.acct-error {
+  margin-top: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--down);
+}
+
+.acct-btn-block {
+  display: block;
+  width: 100%;
+  margin-top: 1.1rem;
+}
+
+.acct-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 1rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.acct-divider::before,
+.acct-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--hair);
+}
+
+.acct-forgot {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  text-align: center;
+  font-size: 0.7rem;
+}
+
+/* ---------- sign-up: strength meter, terms ---------- */
+
+.acct-strength-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 0.5rem;
+}
+
+.acct-strength {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.acct-strength-seg {
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ink-mute) 22%, transparent);
+  transition: background 0.25s var(--ease);
+}
+
+.acct-strength-word {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+  min-width: 3.6rem;
+  text-align: right;
+}
+
+.acct-terms {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.acct-terms input {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+/* ---------- payment band ---------- */
+
+.acct-pay-band {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 1.2rem;
+  align-items: start;
+}
+
+.acct-pay-form {
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 1.2rem;
+}
+
+.acct-pay-form .acct-field:first-child {
+  margin-top: 0;
+}
+
+.acct-pay-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.acct-pay-actions {
+  margin-top: 1.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.acct-plan {
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 1.1rem;
+}
+
+.acct-plan-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.acct-plan-name {
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.acct-plan-price {
+  margin-top: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-mute);
+}
+
+.acct-plan-items {
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+}
+
+.acct-plan-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--hair);
+}
+
+.acct-plan-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+
+/* ---------- settings ---------- */
+
+.acct-settings {
+  margin-top: 1.2rem;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+}
+
+.acct-setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 1.1rem;
+}
+
+.acct-setting-row + .acct-setting-row {
+  border-top: 1px solid var(--hair);
+}
+
+.acct-setting-name {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+
+.acct-setting-desc {
+  margin-top: 0.18rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  max-width: 46ch;
+}
+
+.acct-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.acct-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--ink-mute);
+  transition: transform 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.acct-toggle[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.acct-toggle[aria-pressed="true"] .acct-toggle-knob {
+  transform: translateX(16px);
+  background: var(--surface-inverse, #06110f);
+}
+
+.acct-segment {
+  display: inline-flex;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.acct-segment button {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  padding: 0.42rem 0.8rem;
+  background: transparent;
+  color: var(--ink-mute);
+  border: 0;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+.acct-segment button + button {
+  border-left: 1px solid var(--hair);
+}
+
+.acct-segment button[aria-pressed="true"] {
+  background: var(--accent-weak);
+  color: var(--ink);
+}
+
+.acct-select-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.acct-select {
+  appearance: none;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  padding: 0.45rem 1.9rem 0.45rem 0.7rem;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.acct-select-wrap::after {
+  content: "▾";
+  position: absolute;
+  right: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 0.7rem;
+  color: var(--ink-mute);
+}
+
+.acct-danger {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.1rem 1.1rem;
+  border-top: 1px solid var(--hair);
+}
+
+.acct-danger-label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--down);
+}
+
+.acct-danger .acct-setting-desc {
+  margin-top: 0.3rem;
+}
+
+/* ---------- profile ---------- */
+
+.acct-profile {
+  margin-top: 1.2rem;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 1.2rem;
+}
+
+.acct-profile-head {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.acct-avatar {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.acct-profile-name {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.35rem;
+  letter-spacing: -0.013em;
+  line-height: 1.1;
+}
+
+.acct-profile-meta {
+  margin-top: 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+}
+
+.acct-stat-strip {
+  margin-top: 1.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+}
+
+.acct-stat-strip span {
+  padding: 0.7rem 1.2rem 0.7rem 0;
+}
+
+.acct-stat-strip span + span {
+  border-left: 1px solid var(--hair);
+  padding-left: 1.2rem;
+}
+
+.acct-stat-strip strong {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.acct-activity-label {
+  margin-top: 1.1rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.acct-activity {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.acct-activity li {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: 0.8rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.acct-activity li:last-child {
+  border-bottom: 0;
+}
+
+.acct-activity-at {
+  color: var(--ink-mute);
+}
+
+.acct-activity-entry {
+  color: var(--ink-soft);
+}
+
+/* ---------- focus & responsive & motion ---------- */
+
+.acct-toggle:focus-visible,
+.acct-segment button:focus-visible,
+.acct-select:focus-visible,
+.acct-terms input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.acct-select:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--hair));
+}
+
+@media (max-width: 900px) {
+  .acct-pay-band {
+    grid-template-columns: 1fr;
+  }
+
+  .acct-setting-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .acct-activity li {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acct-input,
+  .acct-select,
+  .acct-strength-seg,
+  .acct-toggle,
+  .acct-toggle-knob,
+  .acct-segment button {
+    transition: none !important;
+  }
+}

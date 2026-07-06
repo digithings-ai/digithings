@@ -51,12 +51,12 @@
 
 /* Card deck (generic sticky peek stack + rail) */
 
-.strategy-track {
+.deck-track {
   margin-top: 1.2rem;
   min-height: 260vh;
 }
 
-.strategy-pin {
+.deck-pin {
   position: sticky;
   top: 0;
   min-height: 100svh;
@@ -66,13 +66,13 @@
   align-items: center;
 }
 
-.strategy-stack {
+.deck-stack {
   position: relative;
   min-height: 540px;
   padding-bottom: calc(var(--peek) * 2);
 }
 
-.strategy-card {
+.deck-card {
   position: absolute;
   inset-inline: 0;
   background: var(--surface);
@@ -82,40 +82,40 @@
   transition: transform 0.5s var(--ease), border-color 0.3s var(--ease), opacity 0.32s var(--ease);
 }
 
-.strategy-card[aria-hidden="true"] {
+.deck-card[aria-hidden="true"] {
   opacity: 0;
   pointer-events: none;
 }
 
-.strategy-card-head {
+.deck-card-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 0.8rem;
 }
 
-.strategy-card-head h3 {
+.deck-card-head h3 {
   font-size: 1.2rem;
 }
 
-.strategy-card-head span {
+.deck-card-head span {
   font-family: var(--font-mono);
   color: var(--ink-mute);
 }
 
-.strategy-card p {
+.deck-card p {
   margin-top: 0.35rem;
   color: var(--ink-soft);
 }
 
-.strategy-card dl {
+.deck-card dl {
   margin-top: 1rem;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.6rem;
 }
 
-.strategy-card dt {
+.deck-card dt {
   font-family: var(--font-mono);
   font-size: 0.62rem;
   text-transform: uppercase;
@@ -123,21 +123,21 @@
   letter-spacing: 0.08em;
 }
 
-.strategy-card dd {
+.deck-card dd {
   margin-top: 0.15rem;
   font-family: var(--font-mono);
   font-size: 1rem;
 }
 
-.strategy-card dd.up {
+.deck-card dd.up {
   color: var(--up);
 }
 
-.strategy-card dd.down {
+.deck-card dd.down {
   color: var(--down);
 }
 
-.strategy-rail {
+.deck-rail {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -148,7 +148,7 @@
   gap: 0.7rem;
 }
 
-.strategy-rail li {
+.deck-rail li {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -157,17 +157,111 @@
   font-size: 0.7rem;
 }
 
-.strategy-rail .dot {
+.deck-rail .dot {
   width: 7px;
   height: 7px;
 }
 
-.strategy-rail li.on {
+.deck-rail li.on {
   color: var(--ink);
 }
 
-.strategy-rail li.on .dot {
+.deck-rail li.on .dot {
   background: var(--accent);
+}
+
+/* Deck card variants (content-only; the deck stays agnostic) */
+
+.deck-changelog-version {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+}
+
+.deck-changelog ul {
+  margin-top: 1rem;
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.deck-changelog li {
+  position: relative;
+  padding-left: 1.1rem;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.deck-changelog li::before {
+  content: "+";
+  position: absolute;
+  left: 0;
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+}
+
+.deck-quote {
+  margin: 0;
+  padding: 0.4rem 0.2rem;
+}
+
+.deck-quote blockquote {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-style: italic;
+  font-size: clamp(1.25rem, 2.6vw, 1.6rem);
+  letter-spacing: -0.013em;
+  line-height: 1.3;
+}
+
+.deck-quote figcaption {
+  margin-top: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.deck-alert-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+.deck-alert-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--ink-mute);
+}
+
+.deck-alert-status.down .deck-alert-dot {
+  background: var(--down);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--down) 44%, transparent);
+}
+
+.deck-alert-status.up .deck-alert-dot {
+  background: var(--up);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--up) 44%, transparent);
+}
+
+.deck-alert-time {
+  margin-left: auto;
+  color: var(--ink-mute);
+}
+
+.deck-alert h3 {
+  margin-top: 0.8rem;
+  font-size: 1.2rem;
 }
 
 /* Pricing */
@@ -248,7 +342,7 @@
 
 @media (max-width: 900px) {
   .dot-matrix-card,
-  .strategy-pin {
+  .deck-pin {
     grid-template-columns: 1fr;
   }
 
@@ -256,21 +350,21 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .strategy-track {
+  .deck-track {
     min-height: 0;
   }
 
-  .strategy-pin {
+  .deck-pin {
     position: relative;
     min-height: 0;
   }
 
-  .strategy-stack {
+  .deck-stack {
     min-height: 0;
     display: grid;
   }
 
-  .strategy-card {
+  .deck-card {
     position: relative;
     transform: none !important;
     top: calc(var(--peek) * var(--stack-index, 0));
@@ -278,7 +372,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .strategy-card {
+  .deck-card {
     transition: none !important;
   }
 }

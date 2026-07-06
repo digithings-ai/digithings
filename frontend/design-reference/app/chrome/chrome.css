@@ -138,8 +138,10 @@
 .ref-footer-brand {
   position: relative;
   margin: 0 -1.4rem;
-  padding: 2.4rem 1.4rem;
-  text-align: center;
+  padding: 1.2rem 0 0;
+  /* size container: the colophon scales against the footer box, not the
+     viewport, so the demo box gets production proportions at any width. */
+  container-type: inline-size;
 }
 
 .ref-footer-bloom {
@@ -153,17 +155,123 @@
   pointer-events: none;
 }
 
-.ref-footer-mark {
-  position: relative;
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 1.4rem;
-  letter-spacing: -0.01em;
+/* ── colophon — the page's last word (canon §08) ─────────────────────────
+   The brand name at giant scale, 1px hairline outline (an outline, never
+   a glow). Scroll-scrubbed with zero JS: CSS scroll-driven animation
+   behind @supports — the word rises as it enters, the <b> suffix fills
+   with livery, and a glow sweep passes left-to-right across the sign once
+   per scroll-through. Reduced motion / no support: the name simply
+   stands, sweep-free. */
+
+.ref-colophon {
+  position: relative; /* paints above the absolutely-positioned bloom */
+  overflow: hidden;
+  padding: 2.6rem 0 0;
+  user-select: none;
+  pointer-events: none;
 }
 
-.ref-footer-mark em {
-  color: var(--accent);
-  font-style: normal;
+/* fallback stroke first: without color-mix() support the refined
+   declaration drops, and transparent fill + no stroke would render
+   nothing. Same for cqw → vw font sizing. */
+.ref-colo-word {
+  position: relative; /* anchors the sweep overlay */
+  display: block;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: clamp(2.6rem, 15.5vw, 15rem);
+  font-size: clamp(2.6rem, 15.5cqw, 15rem);
+  line-height: 0.82;
+  letter-spacing: -0.05em;
+  white-space: nowrap;
+  text-align: center;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--ink);
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--ink) 30%, transparent);
+}
+
+.ref-colo-word b {
+  font-weight: 500;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--accent);
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+/* Glow sweep — a light passing left-to-right across the sign. A duplicate
+   overlay span carries a gradient clipped to its own glyphs; scroll scrubs
+   background-position from off-left to off-right. Hidden by default: it
+   only exists inside the scroll-driven block below, so no-support and
+   reduced-motion both degrade to the static outlined wordmark. */
+.ref-colo-sweep {
+  display: none;
+  position: absolute;
+  inset: 0;
+  -webkit-text-stroke-width: 0;
+  color: transparent;
+  background: linear-gradient(
+    100deg,
+    transparent 40%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 50%,
+    transparent 60%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* entry-based ranges, per the house pattern: the colophon sits at the
+       document's end, so cover-based ranges can never complete — entry
+       100% (fully visible) is reachable at max scroll. */
+    .ref-colo-word {
+      opacity: 0;
+      transform: translateY(34%);
+      animation: ref-colo-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 100%;
+    }
+
+    .ref-colo-word b {
+      animation: ref-colo-fill linear both;
+      animation-timeline: view();
+      animation-range: entry 55% entry 100%;
+    }
+
+    .ref-colo-sweep {
+      display: block;
+      animation: ref-colo-sweep linear both;
+      animation-timeline: view();
+      animation-range: entry 35% entry 100%;
+    }
+  }
+}
+
+@keyframes ref-colo-rise {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ref-colo-fill {
+  to {
+    color: color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+}
+
+@keyframes ref-colo-sweep {
+  /* background-size 250% / no-repeat: position 100% parks the band just
+     off the left edge, 0% carries it past the right — one full traverse. */
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: 0% 0;
+  }
 }
 
 @media (max-width: 900px) {

@@ -1,3 +1,11 @@
+import "./account.css";
+
+import { LoginCard } from "@/components/account/login-card";
+import { PaymentBand } from "@/components/account/payment-band";
+import { ProfileCard } from "@/components/account/profile-card";
+import { SettingsPanel } from "@/components/account/settings-panel";
+import { SignupCard } from "@/components/account/signup-card";
+
 export default function AccountPage() {
   return (
     <main className="reference-page">
@@ -11,6 +19,12 @@ export default function AccountPage() {
           every product surface eventually needs.
         </p>
       </header>
+
+      <LoginCard />
+      <SignupCard />
+      <PaymentBand />
+      <SettingsPanel />
+      <ProfileCard />
     </main>
   );
 }

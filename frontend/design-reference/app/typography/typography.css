@@ -1,14 +1,42 @@
-/* Typography page — scroll-linked word reveals. */
+/* Typography page — scroll-linked word reveals.
 
-.word-reveal {
-  min-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+   Pinned-track pattern shared by all variants: .wr-track is taller than the
+   viewport (240vh) and .wr-sticky pins the line while scroll progress drives
+   the reveal. Words finish by 70% of track progress and hold fully visible
+   for the remaining 30% (~42vh of scroll) before the line unpins — the text
+   can never leave the viewport half-revealed. */
+
+/* ── shared pinned track ─────────────────────────────────────────────── */
+
+.wr-track {
+  position: relative;
+  height: 240vh;
 }
 
+.wr-sticky {
+  position: sticky;
+  top: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+}
+
+/* reduced-motion static render (set by the useReducedMotion branch) */
+.wr-track.is-static {
+  height: auto;
+}
+
+.wr-track.is-static .wr-sticky {
+  position: static;
+  min-height: 0;
+  padding: 2.5rem 0;
+}
+
+/* ── shared line ─────────────────────────────────────────────────────── */
+
 .word-line {
-  margin-top: 1.1rem;
+  margin: 0;
   font-family: var(--font-display);
   font-size: clamp(1.7rem, 5vw, 3rem);
   letter-spacing: -0.02em;
@@ -16,20 +44,101 @@
   max-width: 24ch;
 }
 
+/* ── variant 1: pinned blur reveal (.word-reveal) ────────────────────── */
+
 .word {
   display: inline-block;
   margin-right: 0.35em;
   will-change: transform, opacity, filter;
 }
 
-.word.final {
-  opacity: 1;
-  filter: none;
-  transform: none;
+/* ── variant 2: muted base (.wr-muted) ───────────────────────────────── */
+
+.wr-muted-word {
+  display: inline-block;
+  margin-right: 0.35em;
+  /* readable resting state; the motion-driven inline color-mix deepens it
+     toward var(--ink). Browsers without color-mix drop the inline value and
+     keep this — the text is always legible. */
+  color: var(--ink-mute);
 }
 
+/* ── variant 3: outline fill (.wr-outline) ───────────────────────────── */
+
+.wr-outline-line {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: clamp(1.5rem, 4.4vw, 2.75rem);
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+  max-width: 22ch;
+}
+
+.wr-outline-word {
+  display: inline-block;
+  margin-right: 0.35em;
+  color: transparent;
+  /* house pattern (frontend/design/site/site.css .colo-word): hairline
+     stroke, color-mix upgrade where supported */
+  -webkit-text-stroke: 1px var(--ink);
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--ink) 30%, transparent);
+}
+
+.wr-outline-word.is-accent {
+  -webkit-text-stroke: 1px var(--accent);
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+/* static final state (reduced-motion branch renders plain spans) */
+.wr-outline-line.is-final .wr-outline-word {
+  color: var(--ink);
+}
+
+.wr-outline-line.is-final .wr-outline-word.is-accent {
+  color: var(--accent);
+}
+
+/* fallback: without text-stroke the outlines would be invisible — show
+   solid readable text. !important beats the motion-driven inline color. */
+@supports not (-webkit-text-stroke: 1px #000) {
+  .wr-outline-word {
+    color: var(--ink) !important;
+  }
+
+  .wr-outline-word.is-accent {
+    color: var(--accent) !important;
+  }
+}
+
+/* ── reduced motion ──────────────────────────────────────────────────────
+   The useReducedMotion hook renders the static branch; this block covers
+   pre-hydration paint and forces final states regardless of inline styles. */
 @media (prefers-reduced-motion: reduce) {
-  .word {
+  .wr-track {
+    height: auto;
+  }
+
+  .wr-sticky {
+    position: static;
+    min-height: 0;
+    padding: 2.5rem 0;
+  }
+
+  .word,
+  .wr-muted-word,
+  .wr-outline-word {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
     transition: none !important;
+  }
+
+  .wr-muted-word,
+  .wr-outline-word {
+    color: var(--ink) !important;
+  }
+
+  .wr-outline-word.is-accent {
+    color: var(--accent) !important;
   }
 }
