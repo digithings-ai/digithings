@@ -10,6 +10,10 @@ export type EmbedTenantClientConfig = {
   theme: "dark" | "light";
   accent: { color: string; foreground: string } | null;
   attribution: boolean;
+  title?: string;
+  welcome?: string;
+  suggestions?: string[];
+  placeholder?: string;
 };
 
 /** Legacy defaults — deliberately the *gated* configuration, so a slow or

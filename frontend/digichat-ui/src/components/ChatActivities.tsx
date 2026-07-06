@@ -1,7 +1,8 @@
 "use client";
-import type { ChatActivity } from "@/lib/chatStream";
 
-function ActivityRow({ activity }: { activity: ChatActivity }) {
+import type { DigiChatActivity } from "../types";
+
+function ActivityRow({ activity }: { activity: DigiChatActivity }) {
   switch (activity.kind) {
     case "status":
       return <p className="dc-act-status">{activity.message}</p>;
@@ -36,8 +37,18 @@ function ActivityRow({ activity }: { activity: ChatActivity }) {
       );
     case "reasoning":
       return <ReasoningBlock text={activity.text} />;
-    default:
+    case "trace": {
+      return (
+        <p className={`dc-act-line${activity.done ? " is-done" : ""}`}>
+          {activity.done ? <span className="dc-act-check">✓</span> : "…"} {activity.label}
+        </p>
+      );
+    }
+    default: {
+      const _exhaustive: never = activity;
+      void _exhaustive;
       return null;
+    }
   }
 }
 
@@ -51,10 +62,11 @@ function ReasoningBlock({ text }: { text: string }) {
   );
 }
 
-export function ChatActivities({ activities }: { activities?: ChatActivity[] }) {
+export function ChatActivities({ activities }: { activities?: DigiChatActivity[] }) {
   if (!activities?.length) return null;
+  const hasTraces = activities.some((a) => a.kind === "trace");
   return (
-    <div className="dc-activities" aria-label="Agent steps">
+    <div className={`dc-activities${hasTraces ? " dc-activities-traces" : ""}`} aria-label="Agent steps">
       {activities.map((a, i) => (
         <ActivityRow key={`${a.kind}-${i}`} activity={a} />
       ))}

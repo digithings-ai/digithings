@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@digithings/design": "*",
+    "@digithings/digichat-ui": "*",
     "@digithings/web": "*",
     "motion": "^12.23.12",
     "geist": "^1.5.1",

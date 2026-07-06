@@ -10,6 +10,10 @@ export async function GET(req: Request): Promise<Response> {
         theme: cfg.theme,
         accent: cfg.accent ?? null,
         attribution: cfg.attribution,
+        title: cfg.title,
+        welcome: cfg.welcome,
+        suggestions: cfg.suggestions,
+        placeholder: cfg.placeholder,
       }
     : { slug: "embed", gateMode: "turn_limited", theme: "dark", accent: null, attribution: false };
   return new Response(JSON.stringify(body), {
