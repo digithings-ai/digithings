@@ -9,7 +9,7 @@
  *   - shadcn/ui consumes `--accent` at `:root` / `.dark` as its neutral
  *     hover/selection gray — that stays authoritative site-wide.
  *   - The design primitives want `--accent` to mean the *brand* hue
- *     (violet for DigiChat). We therefore scope the brand `--accent` into
+ *     (rose for DigiChat). We therefore scope the brand `--accent` into
  *     the `.app-shell` subtree only (see bottom of file). App-shell CSS
  *     resolves to `--accent-digichat`; shadcn utilities elsewhere stay on
  *     shadcn's gray.
@@ -102,10 +102,11 @@
 }
 
 /*
- * Dark theme — unified DigiThings design language (terminal-phosphor cyan on a
- * neutral near-black, matching digithings.ai / digiquant.io / Olympus).
- * shadcn `--primary`/`--ring` carry the cyan accent; `--accent` stays a neutral
- * hover gray. Brand cyan for the DigiChat chrome is scoped in `.app-shell`.
+ * Dark theme — unified DigiThings design language on a neutral near-black,
+ * matching digithings.ai / digiquant.io / Olympus. shadcn `--primary`/`--ring`
+ * carry DigiChat's own rose accent (split off digiquant's shared cyan,
+ * ruled 2026-07-06); `--accent` stays a neutral hover gray. Brand rose for
+ * the DigiChat chrome is scoped in `.app-shell`.
  */
 .dark {
   --background: #0b0c0e;
@@ -114,7 +115,7 @@
   --card-foreground: #eceef0;
   --popover: #121417;
   --popover-foreground: #eceef0;
-  --primary: #3dd6c4;
+  --primary: #e2708a;
   --primary-foreground: #04201c;
   --secondary: #171a1e;
   --secondary-foreground: #eceef0;
@@ -125,31 +126,30 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: #23262b;
   --input: #23262b;
-  --ring: #3dd6c4;
-  --chart-1: #3dd6c4;
+  --ring: #e2708a;
+  --chart-1: #e2708a;
   --chart-2: #6fe3d4;
   --chart-3: #9aa0a6;
   --chart-4: #3fb984;
   --chart-5: #e0654b;
   --sidebar: #0e0e10;
   --sidebar-foreground: #eceef0;
-  --sidebar-primary: #3dd6c4;
+  --sidebar-primary: #e2708a;
   --sidebar-primary-foreground: #04201c;
   --sidebar-accent: #171a1e;
   --sidebar-accent-foreground: #eceef0;
   --sidebar-border: #23262b;
-  --sidebar-ring: #3dd6c4;
+  --sidebar-ring: #e2708a;
 
   /* Align the legacy @digithings/design tokens (consumed by the imported
-     app-shell primitive and the .dc-term-* chrome) to the new palette,
-     and unify the brand accent to cyan. */
+     app-shell primitive and the .dc-term-* chrome) to the new palette. */
   --bg-primary: #0b0c0e;
   --bg-secondary: #08090b;
   --text-primary: #eceef0;
   --text-secondary: #9aa0a6;
   --border-color: #23262b;
   --fg: #eceef0;
-  --accent-digichat: #3dd6c4;
+  --accent-digichat: #e2708a;
 }
 
 @layer base {
@@ -173,10 +173,10 @@
  * rows, tool chips, sources accordion, streaming caret) on top of the
  * primitive palette.
  * ------------------------------------------------------------------------- */
-/* Brand accent for the DigiChat chrome — cyan is the official livery
-   (ruled 2026-07-02; tokens.css --accent-digichat is the single source).
-   Still scoped to .app-shell so shadcn's neutral --accent hover stays
-   authoritative elsewhere. */
+/* Brand accent for the DigiChat chrome — rose is the official livery
+   (ruled 2026-07-06, split off digiquant's shared cyan; tokens.css
+   --accent-digichat is the single source). Still scoped to .app-shell
+   so shadcn's neutral --accent hover stays authoritative elsewhere. */
 .app-shell {
   --accent: var(--accent-digichat);
 }
