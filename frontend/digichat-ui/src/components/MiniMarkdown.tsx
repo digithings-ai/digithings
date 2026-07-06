@@ -4,6 +4,7 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CopyButton } from "./CopyButton";
+import { MermaidBlock } from "./MermaidBlock";
 
 const components: Components = {
   p: ({ children }) => <p className="dc-md-p">{children}</p>,
@@ -38,6 +39,8 @@ const components: Components = {
   td: ({ children }) => <td>{children}</td>,
   code: ({ className, children }) => {
     const raw = String(children).replace(/\n$/, "");
+    const lang = className?.replace(/^language-/, "").toLowerCase() ?? "";
+    if (lang === "mermaid") return <MermaidBlock code={raw} />;
     const inline = !className && !raw.includes("\n");
     if (inline) return <code className="dc-code-inline">{raw}</code>;
     return (

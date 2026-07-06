@@ -283,6 +283,37 @@
   opacity: 1;
 }
 
+.dc-mermaid {
+  margin: 0.7rem 0;
+}
+.dc-mermaid-fig {
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  padding: 0.6rem;
+  border: 1px solid var(--hair);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  overflow-x: auto;
+}
+.dc-mermaid-fig svg {
+  max-width: 100%;
+  height: auto;
+}
+.dc-mermaid-toggle {
+  font: inherit;
+  font-size: 0.7rem;
+  color: var(--ink-mute);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0.2rem 0;
+  letter-spacing: 0.03em;
+}
+.dc-mermaid-toggle:hover {
+  color: var(--ink-soft);
+}
+
 .dc-suggest {
   display: flex;
   flex-wrap: wrap;

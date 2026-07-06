@@ -10,5 +10,6 @@ describe("@digithings/digichat-ui package surface", () => {
     const css = readFileSync(join(root, "src/styles/session.css"), "utf8");
     expect(css).toContain(".dc-session");
     expect(css).toContain(".dc-thread");
+    expect(css).toContain(".dc-mermaid");
   });
 });
