@@ -12,6 +12,7 @@
     "@digithings/design": "*",
     "@digithings/web": "*",
     "geist": "^1.5.1",
+    "lightweight-charts": "^5.2.0",
     "motion": "^12.23.12",
     "next": "16.2.4",
     "react": "^19.2.4",

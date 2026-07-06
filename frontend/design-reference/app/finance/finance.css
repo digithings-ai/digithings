@@ -1,0 +1,181 @@
+/* Finance page — price chart, performance metrics, order book. */
+
+/* Price chart (Lightweight Charts host) */
+
+.pc-frame {
+  margin-top: 1.2rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 0.6rem;
+}
+
+.pc-host {
+  width: 100%;
+  height: 340px;
+}
+
+/* Performance metrics grid */
+
+.perf-grid {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.perf-metric {
+  padding: 1.2rem;
+  border-left: 1px solid var(--hair);
+  border-top: 1px solid var(--hair);
+}
+
+/* first row has no top border; first column no left border */
+.perf-metric:nth-child(-n + 4) {
+  border-top: none;
+}
+
+.perf-metric:nth-child(4n + 1) {
+  border-left: none;
+}
+
+.perf-metric-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+.perf-metric-value {
+  display: block;
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.perf-metric-value.up {
+  color: var(--up);
+}
+
+.perf-metric-value.down {
+  color: var(--down);
+}
+
+/* Order book */
+
+.ob-shell {
+  margin-top: 1.2rem;
+  max-width: 380px;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 0.5rem 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.ob-head {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 1rem 0.5rem;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+  border-bottom: 1px solid var(--hair);
+}
+
+.ob-row {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.28rem 1rem;
+  font-size: 0.78rem;
+  overflow: hidden;
+}
+
+/* depth bar fills from the right, tinted by side */
+.ob-depth {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+}
+
+.ob-ask .ob-depth {
+  background: color-mix(in srgb, var(--down) 14%, transparent);
+}
+
+.ob-bid .ob-depth {
+  background: color-mix(in srgb, var(--up) 14%, transparent);
+}
+
+.ob-price,
+.ob-size {
+  position: relative;
+  z-index: 1;
+}
+
+.ob-ask .ob-price {
+  color: var(--down);
+}
+
+.ob-bid .ob-price {
+  color: var(--up);
+}
+
+.ob-size {
+  color: var(--ink-soft);
+}
+
+.ob-spread {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  margin: 0.2rem 0;
+  border-top: 1px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
+}
+
+.ob-mid {
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.ob-spread-label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+@media (max-width: 720px) {
+  .perf-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .perf-metric:nth-child(-n + 4) {
+    border-top: 1px solid var(--hair);
+  }
+
+  .perf-metric:nth-child(-n + 2) {
+    border-top: none;
+  }
+
+  .perf-metric:nth-child(4n + 1) {
+    border-left: 1px solid var(--hair);
+  }
+
+  .perf-metric:nth-child(2n + 1) {
+    border-left: none;
+  }
+}

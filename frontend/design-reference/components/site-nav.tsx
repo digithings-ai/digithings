@@ -11,6 +11,7 @@ const PAGES = [
   { href: "/layout-patterns", label: "Layout" },
   { href: "/typography", label: "Typography" },
   { href: "/data", label: "Data" },
+  { href: "/finance", label: "Finance" },
   { href: "/effects", label: "Effects" },
   { href: "/chrome", label: "Chrome" },
   { href: "/terminal", label: "Terminal" },
