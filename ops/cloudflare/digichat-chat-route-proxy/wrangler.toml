@@ -1,0 +1,17 @@
+name = "digichat-chat-route-proxy"
+main = "worker.js"
+compatibility_date = "2026-07-06"
+
+# Required at deploy time:
+#   wrangler secret put DIGICHAT_ORIGIN
+# Example value:
+#   https://chat-origin.example.com
+#
+# The worker is expected to run only on /chat* requests. Use per-environment
+# route configuration below (pattern + zone_name) once you're ready to cut over.
+
+[env.dev]
+routes = [{ pattern = "digithings.ai/chat*", zone_name = "digithings.ai" }]
+
+[env.prod]
+routes = [{ pattern = "digithings.ai/chat*", zone_name = "digithings.ai" }]
