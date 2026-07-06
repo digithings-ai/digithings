@@ -4,11 +4,25 @@
   position: relative;
 }
 
+/* Contained scroll frame: the demo nav pins to the TOP OF THIS FRAME, not
+   the page — its own overflow is the scroll context, so it can never float
+   up over the section copy above it. */
+.scroll-nav-stage {
+  margin-top: 1.2rem;
+  position: relative;
+  height: 22rem;
+  overflow-y: auto;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  scroll-padding-top: 0;
+}
+
 .scroll-nav {
   position: sticky;
-  top: 3.4rem;
+  top: 0.6rem;
   z-index: 5;
-  margin-top: 1.2rem;
+  margin: 0.6rem;
   display: flex;
   align-items: center;
   gap: 1.4rem;
@@ -45,6 +59,26 @@
 
 .scroll-nav-cta {
   margin-left: auto;
+}
+
+/* Filler content inside the frame so there's something to scroll past */
+.scroll-nav-page {
+  padding: 0 1.4rem 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.6rem;
+  color: var(--ink-soft);
+  max-width: 46ch;
+}
+
+.scroll-nav-page > :first-child {
+  margin-top: 0.6rem;
+}
+
+.scroll-nav-hero {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  color: var(--ink);
 }
 
 /* Announcement bar */
