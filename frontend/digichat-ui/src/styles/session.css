@@ -136,7 +136,8 @@
   user-select: none;
 }
 .dc-user .dc-who {
-  color: var(--ink-mute);
+  color: var(--accent);
+  font-weight: 700;
 }
 .dc-body {
   min-width: 0;
