@@ -10,6 +10,13 @@
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-display: var(--font-fraunces), "Fraunces", Georgia, serif;
   --peek: 3.2rem;
+  --nav-h: 3.4rem;
+}
+
+/* Anchor jumps clear the sticky nav instead of tucking the target title
+   underneath it. Every id-anchored section inherits the same offset. */
+html {
+  scroll-padding-top: calc(var(--nav-h) + 1rem);
 }
 
 /* Skip link — visually hidden until keyboard focus */
