@@ -1,4 +1,5 @@
 import "./typography.css";
+import { CopyGrammarReference } from "@/components/copy-grammar-reference";
 import { WordRevealReference } from "@/components/word-reveal-reference";
 import { WordRevealMuted } from "@/components/word-reveal-muted";
 import { WordRevealOutline } from "@/components/word-reveal-outline";
@@ -21,6 +22,7 @@ export default function TypographyPage() {
       <WordRevealReference />
       <WordRevealMuted />
       <WordRevealOutline />
+      <CopyGrammarReference />
     </main>
   );
 }
