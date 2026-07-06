@@ -1,0 +1,149 @@
+/* Symbols page — emblem grid, brand marks, QR tiles, vendor chips, glyph set.
+
+   Note: the .stack-row / .stack-chip / .stack-ico / .stack-mono / .stack-name
+   rules used by StackLogo already ship via @digithings/web/styles/web-theme.css,
+   imported in app/globals.css — nothing to duplicate here. */
+
+/* Specimen grid — hairline cards, centered content, mono micro-labels. */
+
+.sym-grid {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: 0.7rem;
+}
+
+.sym-grid--marks {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.sym-cell {
+  margin: 0;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 1.15rem 0.65rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.sym-cell--mark {
+  min-height: 128px;
+  padding: 1.4rem 1rem 1rem;
+}
+
+.sym-label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  overflow-wrap: anywhere;
+}
+
+/* Brand marks — the wordmark grammar shared with the footer colophon:
+   mono weight 500, prefix in ink, suffix wearing the scope's accent. */
+
+.sym-wordmark {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.sym-wordmark em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+.sym-mark {
+  display: inline-flex;
+  color: var(--ink);
+}
+
+.sym-mark--accent {
+  color: var(--accent);
+}
+
+/* QR marks — tile variants carry their own background; mark variants are
+   transparent, so each card fixes its context: one dark, one light (the
+   digithings.ai paper white, #FBFBF9). Colors are intentionally literal —
+   these cards must NOT follow the page theme. */
+
+.sym-qr-set {
+  margin-top: 1.2rem;
+}
+
+.sym-qr-site {
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+
+.sym-qr-row {
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.7rem;
+}
+
+.sym-qr-card {
+  border-radius: 12px;
+  padding: 1.5rem 1rem 1.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1.6rem;
+}
+
+.sym-qr-card--dark {
+  background: #0b0c0e;
+  border: 1px solid rgba(236, 238, 240, 0.1);
+}
+
+.sym-qr-card--light {
+  background: #fbfbf9;
+  border: 1px solid rgba(11, 12, 14, 0.12);
+}
+
+.sym-qr-item {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  max-width: 116px;
+  text-align: center;
+}
+
+.sym-qr-card--dark .sym-label {
+  color: rgba(236, 238, 240, 0.52);
+}
+
+.sym-qr-card--light .sym-label {
+  color: rgba(11, 12, 14, 0.52);
+}
+
+/* Vendor logos */
+
+.sym-sublabel {
+  margin-top: 1.2rem;
+  font-size: 0.66rem;
+}
+
+.sym-sublabel + .stack-row {
+  margin-top: 0.45rem;
+}
+
+/* Utility glyphs — currentColor throughout; ink here, accent inside any
+   livery scope. */
+
+.sym-glyph {
+  display: inline-flex;
+  color: var(--ink);
+}

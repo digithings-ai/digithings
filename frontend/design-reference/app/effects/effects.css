@@ -1,0 +1,185 @@
+/* Effects page — landing-page visual effects gathered as living reference.
+   Class names are kept identical to the shipping sites so the imported and
+   ported components render unchanged; each block cites its source. The dg-*
+   scrolly-graph styles are NOT duplicated here — they ship in
+   @digithings/web/styles/web-theme.css, already imported by app/globals.css. */
+
+/* ── demo framing (page-local) ──────────────────────────────────────── */
+
+.fx-demo {
+  margin-top: 1.6rem;
+}
+
+.fx-term-demo {
+  max-width: 720px;
+}
+
+/* ── typed module terminal ──────────────────────────────────────────────
+   Copied verbatim from frontend/design/site/site.css §"terminal block"
+   (the package exports ./site/site.css, but importing it wholesale would
+   also pull its reset plus .kicker/.btn-* rules that conflict with this
+   app's globals — so only the terminal rules travel). Consumed by the
+   Terminal component imported from @digithings/web. Always dark: reads the
+   --term-* tokens, not the page surface. */
+
+.term { width: 100%; background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 14px; overflow: hidden; box-shadow: 0 44px 100px -50px rgba(0,0,0,0.45); }
+.term-bar { display: flex; align-items: center; gap: 8px; padding: 0.7rem 0.9rem; background: var(--term-fill); border-bottom: 1px solid var(--term-hair); }
+.term-bar i { width: 11px; height: 11px; border-radius: 50%; background: #3a342c; display: inline-block; }
+.term-bar i:nth-child(1) { background: #ec6a5e; } .term-bar i:nth-child(2) { background: #f4bf4f; } .term-bar i:nth-child(3) { background: #61c554; }
+.term-title { margin-left: auto; font-family: var(--font-mono); font-size: 0.72rem; color: var(--term-mute); }
+.term-body { font-family: var(--font-mono); font-size: clamp(0.76rem, 1.2vw, 0.88rem); line-height: 1.95; color: var(--term-ink); padding: 1.2rem 1.3rem 1.4rem; margin: 0; min-height: 17em; white-space: pre-wrap; }
+.tl-cmd { color: var(--term-ink); } .tl-cmd::before { content: "$ "; color: var(--accent); }
+.tl-out { color: var(--term-mute); }
+.tl-ok::before { content: "✓ "; color: var(--up); } .tl-ok { color: var(--term-mute); } .tl-ok b { color: var(--term-ink); font-weight: 500; }
+.tl-mod { color: var(--term-ink); } .tl-mod b { color: var(--accent); font-weight: 500; }
+.tl-install { color: var(--up); }
+.tl-arrow { color: var(--accent); }
+.term-cursor { display: inline-block; width: 0.6em; height: 1.05em; background: var(--accent); vertical-align: -0.16em; animation: blink 1.05s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* No JS: the Terminal component server-renders an empty transcript (playback
+   is client-driven), so hide the live shell and let the <noscript> static
+   transcript beside it carry the content. html.no-js ships in the layout and
+   is removed pre-paint by an inline script when JS runs. */
+html.no-js .fx-term-live {
+  display: none;
+}
+
+/* ── scrolly module graph — no-JS guard ─────────────────────────────────
+   All dg-* styling comes from web-theme.css. Without JS the component
+   server-renders the pinned 900vh track with the first module focused;
+   collapse it to one static graph + panel so the content simply reads. */
+html.no-js .dg-track {
+  height: auto !important;
+}
+
+html.no-js .dg-stage {
+  position: static;
+  height: auto;
+}
+
+html.no-js .dg-rail {
+  display: none;
+}
+
+/* ── digiquant research pipeline ────────────────────────────────────────
+   Copied verbatim from frontend/digiquant-web/app/globals.css §"PIPELINE"
+   (plus the two .dq-flow-* card fragments the step cards reuse). Wears the
+   digiquant teal via the .accent-digiquant livery class on the section. */
+
+.dq-flow-n { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); letter-spacing: 0.1em; }
+.dq-flow-tool { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); border: 1px solid var(--hair); border-radius: 999px; padding: 0.2rem 0.6rem; align-self: flex-start; }
+
+.dqpipe-steps-wrap { position: relative; max-width: 820px; margin: 0 auto; }
+.dqpipe-steps { list-style: none; position: relative; padding: 0.5rem 0 2rem; margin: 0; }
+.dqpipe-track {
+  position: absolute; left: 50%; top: 0; bottom: 2rem; width: 2px; margin-left: -1px;
+  border-radius: 999px; overflow: hidden;
+  background: color-mix(in srgb, var(--hair-2) 75%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.dqpipe-track-fill {
+  position: absolute; top: 0; left: 0; width: 100%; height: 0%;
+  border-radius: 999px;
+  background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 45%, transparent));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 65%, transparent);
+  transition: height 0.15s linear;
+  will-change: height;
+}
+.dqpipe-step {
+  position: relative; display: flex; justify-content: flex-start; width: 50%;
+  padding: 0.65rem 1.4rem 1.8rem 0;
+  opacity: 0;
+  transform: translateX(-52px) translateY(8px);
+  transition: opacity 0.72s var(--ease), transform 0.72s var(--ease);
+}
+.dqpipe-step.is-right {
+  margin-left: 50%; padding: 0.65rem 0 1.8rem 1.4rem; justify-content: flex-end;
+  transform: translateX(52px) translateY(8px);
+}
+.dqpipe-step.is-visible { opacity: 1; transform: none; }
+.dqpipe-card { position: relative; width: min(100%, 340px); background: var(--surface); border: 1px solid var(--hair); border-left: 2px solid var(--accent); border-radius: var(--r-md); padding: 1.25rem 1.3rem 1.15rem; display: flex; flex-direction: column; gap: 0.45rem; box-shadow: 0 24px 48px -36px color-mix(in srgb, var(--accent) 35%, transparent); }
+.dqpipe-card h3 { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.02em; }
+.dqpipe-card p { font-size: 0.9rem; color: var(--ink-soft); line-height: 1.55; }
+.dqpipe-step.is-right .dqpipe-card { border-left: 1px solid var(--hair); border-right: 2px solid var(--accent); }
+.dqpipe-step.is-exec .dqpipe-card { border-left-color: var(--up); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
+.dqpipe-step.is-exec.is-right .dqpipe-card { border-right-color: var(--up); }
+.dqpipe-step.is-exec .dq-flow-n { color: var(--up); }
+.dqpipe-rail {
+  position: absolute; top: 1.6rem; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--hair-2); background: var(--bg);
+  transition: border-color 0.35s var(--ease), background 0.35s var(--ease), box-shadow 0.35s var(--ease);
+}
+.dqpipe-step.is-visible .dqpipe-rail {
+  border-color: var(--accent); background: var(--accent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.dqpipe-step.is-exec.is-visible .dqpipe-rail { border-color: var(--up); background: var(--up); box-shadow: 0 0 14px color-mix(in srgb, var(--up) 55%, transparent); }
+.dqpipe-step:not(.is-right) .dqpipe-rail { right: -1.45rem; }
+.dqpipe-step.is-right .dqpipe-rail { left: -1.45rem; }
+@media (max-width: 720px) {
+  .dqpipe-track { left: 10px; margin-left: 0; }
+  .dqpipe-step, .dqpipe-step.is-right {
+    width: 100%; margin-left: 0; padding: 0.4rem 0 1.4rem 2rem; justify-content: flex-start;
+    transform: translateX(-36px) translateY(8px);
+  }
+  .dqpipe-step.is-right { transform: translateX(-36px) translateY(8px); }
+  .dqpipe-step.is-visible { transform: none; }
+  .dqpipe-step.is-right .dqpipe-card { border-left: 2px solid var(--accent); border-right: 1px solid var(--hair); }
+  .dqpipe-rail { left: 4px !important; right: auto !important; }
+}
+
+/* No JS: the slide-in classes are only ever added by the observer, so show
+   the assembled state (digiquant-web relies on the same html.no-js pattern). */
+html.no-js .dqpipe-step { opacity: 1; transform: none; }
+html.no-js .dqpipe-track-fill { height: 100%; }
+
+/* ── ambient mesh (contained demo panel) ────────────────────────────────
+   Base .dq-ambient rule copied verbatim from
+   frontend/digithings-web/app/globals.css; on the live sites the canvas
+   pins to the top 86svh of the page. Here .fx-mesh-frame contains it in a
+   360px panel so the bloom renders inside a frame instead of behind a page. */
+
+.dq-ambient { position: absolute; top: 0; left: 0; width: 100%; height: 86svh; z-index: 0; pointer-events: none; filter: blur(54px) saturate(1.12); }
+
+.fx-mesh-frame {
+  position: relative;
+  height: 360px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+}
+
+.fx-mesh-frame .dq-ambient {
+  height: 100%;
+}
+
+.fx-mesh-label {
+  position: relative;
+  z-index: 1;
+  padding: 1.1rem 1.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+/* ── reduced motion ─────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .term-cursor {
+    animation: none;
+  }
+
+  .dqpipe-step {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .dqpipe-track-fill {
+    transition: none;
+  }
+}

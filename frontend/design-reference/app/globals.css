@@ -40,7 +40,7 @@
   font-style: normal;
 }
 
-.site-nav ul {
+.site-nav-links {
   list-style: none;
   display: flex;
   flex-wrap: wrap;
@@ -49,7 +49,7 @@
   padding: 0;
 }
 
-.site-nav ul a {
+.site-nav-links a {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   letter-spacing: 0.04em;
@@ -60,13 +60,84 @@
   transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
 }
 
-.site-nav ul a:hover {
+.site-nav-links a:hover {
   color: var(--ink);
 }
 
-.site-nav ul a[aria-current="page"] {
+.site-nav-links a[aria-current="page"] {
   color: var(--ink);
   border-bottom-color: var(--accent);
+}
+
+/* Hamburger + sheet — mobile only. Desktop keeps the inline links. */
+
+.site-nav-burger {
+  display: none;
+  margin-left: auto;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.site-nav-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 18;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.site-nav-sheet {
+  position: fixed;
+  top: 3.4rem;
+  left: 0;
+  right: 0;
+  z-index: 19;
+  border-bottom: 1px solid var(--hair);
+  background: var(--bg);
+}
+
+.site-nav-sheet ul {
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem 0;
+}
+
+.site-nav-sheet a {
+  display: block;
+  padding: 0.85rem clamp(1rem, 3vw, 1.8rem);
+  min-height: 44px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--hair) 55%, transparent);
+}
+
+.site-nav-sheet li:last-child a {
+  border-bottom: none;
+}
+
+.site-nav-sheet a[aria-current="page"] {
+  color: var(--ink);
+  border-left: 2px solid var(--accent);
+}
+
+@media (max-width: 900px) {
+  .site-nav-links {
+    display: none;
+  }
+
+  .site-nav-burger {
+    display: inline-flex;
+  }
 }
 
 /* Page scaffold */
