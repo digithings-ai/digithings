@@ -1,4 +1,5 @@
 import "./finance.css";
+import { DrawdownPlotReference } from "@/components/drawdown-plot-reference";
 import { EquityCurveReference } from "@/components/equity-curve-reference";
 import { MonthlyReturnsReference } from "@/components/monthly-returns-reference";
 import { OrderbookReference } from "@/components/orderbook-reference";
@@ -46,6 +47,19 @@ export default function FinancePage() {
         </p>
         <div className="pc-frame">
           <EquityCurveReference />
+        </div>
+      </section>
+
+      <section className="section-block" id="drawdown">
+        <p className="kicker">{"// drawdown"}</p>
+        <h2 className="title">Underwater, in the red.</h2>
+        <p className="section-copy">
+          The companion to the equity curve: percent below the running peak, hanging under a zero
+          baseline. It only ever reads negative, so it takes the <code>--down</code> money color —
+          the depth and duration of the red is the risk story the CAGR hides.
+        </p>
+        <div className="pc-frame">
+          <DrawdownPlotReference />
         </div>
       </section>
 
