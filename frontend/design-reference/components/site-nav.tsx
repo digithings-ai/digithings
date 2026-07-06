@@ -8,6 +8,7 @@ import { ThemeToggle } from "@digithings/web";
 
 const PAGES = [
   { href: "/", label: "Foundations" },
+  { href: "/layout-patterns", label: "Layout" },
   { href: "/typography", label: "Typography" },
   { href: "/data", label: "Data" },
   { href: "/effects", label: "Effects" },
