@@ -2,7 +2,7 @@ import "./symbols.css";
 import Image from "next/image";
 import { Emblem, emblems, StackRow, type StackItem } from "@digithings/web";
 import { Glyph, glyphNames } from "@/components/symbols/glyph";
-import { DigiChatMark, OlympusMark, Wordmark } from "@/components/symbols/marks";
+import { OlympusMark, Wordmark } from "@/components/symbols/marks";
 
 /* The full ICONS registry from frontend/web/src/components/logos.ts — every
    slug that resolves to a real Simple Icons mark in StackLogo. */
@@ -100,9 +100,9 @@ export default function SymbolsPage() {
         <h2 className="title">Wordmarks and signature marks.</h2>
         <p className="section-copy">
           The text lockup follows the footer colophon grammar: mono at weight 500, prefix in ink,
-          suffix wearing the accent of its scope. DigiChat&apos;s mark is a CLI prompt inside a
-          chat bubble; the Olympus mark is ported from the dashboard&apos;s loader, four strokes
-          in currentColor.
+          suffix wearing the accent of its scope. DigiChat has no separate mark — its module
+          emblem is enough. The Olympus mark is ported from the dashboard&apos;s loader, four
+          strokes in currentColor.
         </p>
         <div className="sym-grid sym-grid--marks">
           <figure className="sym-cell sym-cell--mark">
@@ -112,12 +112,6 @@ export default function SymbolsPage() {
           <figure className="sym-cell sym-cell--mark accent-digiquant">
             <Wordmark suffix="quant" />
             <figcaption className="sym-label">digiquant wordmark</figcaption>
-          </figure>
-          <figure className="sym-cell sym-cell--mark accent-digichat">
-            <span className="sym-mark sym-mark--accent">
-              <DigiChatMark size={40} />
-            </span>
-            <figcaption className="sym-label">digichat mark</figcaption>
           </figure>
           <figure className="sym-cell sym-cell--mark">
             <span className="sym-mark">
