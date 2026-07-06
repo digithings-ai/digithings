@@ -1,6 +1,8 @@
 import { ButtonsCtaReference } from "@/components/buttons-cta-reference";
 import { DotMatrixStat } from "@/components/dot-matrix-stat";
+import { FooterReference } from "@/components/footer-reference";
 import { LiverySwitcher } from "@/components/livery-switcher";
+import { PricingReference } from "@/components/pricing-reference";
 import { ScrollNavReference } from "@/components/scroll-nav-reference";
 import { StrategySuiteReference } from "@/components/strategy-suite-reference";
 import { TerminalBudgetReference } from "@/components/terminal-budget-reference";
@@ -27,6 +29,8 @@ export default function Home() {
       <StrategySuiteReference />
       <TerminalBudgetReference />
       <WordRevealReference />
+      <PricingReference />
+      <FooterReference />
     </main>
   );
 }
