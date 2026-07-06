@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import {
   getTenantSuggestionPool,
   pickRandomEmbedSuggestions,
@@ -15,17 +15,11 @@ export function useEmbedSuggestions(
   urlSuggestions: string[] | undefined,
   tenantCfg: EmbedTenantClientConfig,
 ): string[] {
-  const [suggestions, setSuggestions] = useState<string[]>(() => urlSuggestions ?? []);
-
-  useEffect(() => {
-    if (urlSuggestions?.length) {
-      setSuggestions(urlSuggestions);
-      return;
-    }
+  const randomSuggestions = useMemo(() => {
     const pool = tenantCfg.suggestions ?? getTenantSuggestionPool(tenantCfg.slug) ?? [];
-    if (!pool.length) return;
-    setSuggestions((prev) => (prev.length ? prev : pickRandomEmbedSuggestions(pool)));
-  }, [urlSuggestions, tenantCfg.suggestions, tenantCfg.slug]);
+    if (!pool.length) return [];
+    return pickRandomEmbedSuggestions(pool);
+  }, [tenantCfg.suggestions, tenantCfg.slug]);
 
-  return urlSuggestions?.length ? urlSuggestions : suggestions;
+  return urlSuggestions?.length ? urlSuggestions : randomSuggestions;
 }
