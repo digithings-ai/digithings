@@ -9,6 +9,7 @@ export type EmbedTenantClientConfig = {
   gateMode: "turn_limited" | "ungated";
   theme: "dark" | "light";
   accent: { color: string; foreground: string } | null;
+  title: string | null;
   attribution: boolean;
 };
 
@@ -19,6 +20,7 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   gateMode: "turn_limited",
   theme: "dark",
   accent: null,
+  title: null,
   attribution: false,
 };
 

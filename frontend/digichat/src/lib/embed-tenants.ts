@@ -19,6 +19,8 @@ export type EmbedTenantConfig = {
   gateMode: "turn_limited" | "ungated";
   theme: "dark" | "light";
   accent?: { color: string; foreground: string };
+  /** Header title shown in the embed chrome (e.g. "Chat for Help"). */
+  title?: string;
   attribution: boolean;
   /**
    * Per-tenant secret. Knowing a tenant's host string is public (it's the
@@ -115,6 +117,10 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: "token" must be a non-empty string`);
   }
 
+  if (v.title !== undefined && (typeof v.title !== "string" || !v.title.trim())) {
+    throw new Error(`${ctx}: "title" must be a non-empty string when set`);
+  }
+
   return {
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
@@ -122,6 +128,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     gateMode: v.gateMode,
     theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
     accent,
+    title: typeof v.title === "string" ? v.title.trim() : undefined,
     attribution: v.attribution === true,
     token: v.token,
   };

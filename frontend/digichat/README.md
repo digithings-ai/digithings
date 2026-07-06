@@ -52,3 +52,24 @@ npm run dev
 # renders at http://localhost:3000/embed?accent=digithings
 ```
 
+**DataTapStream local iteration** (two terminals — see datatap-web `README.md` § Local digichat embed iteration):
+
+```bash
+export DIGICHAT_EMBED_ENABLED=1
+export DIGICHAT_EMBED_TENANTS='{"localhost":{"slug":"datatapstream","aliases":["127.0.0.1"],"backend":{"type":"external-relay","url":"https://datatap-digichat-relay.azurewebsites.net/api/digichat"},"gateMode":"ungated","theme":"light","accent":{"color":"#b5562b","foreground":"#fff7f2"},"title":"Chat for Help","attribution":true,"token":"local-dev-token"}}'
+npm run dev
+# datatap-web: NEXT_PUBLIC_DIGICHAT_EMBED_URL=http://127.0.0.1:3000/embed + matching token
+```
+
+Embed URL params (passed by the host site on the iframe `src`):
+
+| Param | Purpose |
+|--------|---------|
+| `token` | Per-tenant secret (required for tenant theme/accent/title) |
+| `host` | Embedding page origin (required for tenant resolution) |
+| `welcome` | Streaming intro text shown before the first message |
+| `placeholder` | Input placeholder text |
+| `accent` | Legacy accent preset (`digithings` / `digiquant` / `digichat`) |
+
+Tenant registry (`DIGICHAT_EMBED_TENANTS`) also supports `title` (header branding), `accent`, `theme`, and `attribution`.
+

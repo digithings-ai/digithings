@@ -14,6 +14,7 @@ const REGISTRY = JSON.stringify({
     gateMode: "ungated",
     theme: "light",
     accent: { color: "#b5562b", foreground: "#fff7f2" },
+    title: "Chat for Help",
     attribution: true,
     token: "datatapstream-secret",
   },
@@ -39,6 +40,7 @@ describe("GET /api/embed/tenant-config", () => {
       gateMode: "ungated",
       theme: "light",
       accent: { color: "#b5562b", foreground: "#fff7f2" },
+      title: "Chat for Help",
       attribution: true,
     });
     expect(JSON.stringify(body)).not.toContain("relay.example.com");
@@ -58,6 +60,7 @@ describe("GET /api/embed/tenant-config", () => {
       gateMode: "turn_limited",
       theme: "dark",
       accent: null,
+      title: null,
       attribution: false,
     });
   });
@@ -69,6 +72,7 @@ describe("GET /api/embed/tenant-config", () => {
       gateMode: "turn_limited",
       theme: "dark",
       accent: null,
+      title: null,
       attribution: false,
     });
   });
