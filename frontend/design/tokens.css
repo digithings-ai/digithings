@@ -27,14 +27,16 @@
   --accent-digigraph:  #e5b765;
   --accent-digiquant:  #3dd6c4; /* ruled 2026-07-03: the terminal phosphor is digiquant's identity
                                    (matches the dark-theme --accent below; the light theme runs its
-                                   deeper #0E8C7F for contrast on paper). Shared with digichat — the
-                                   flagship and its chat surface speak the same light; emerald
-                                   #4fa37a returns to the unassigned pool. */
+                                   deeper #0E8C7F for contrast on paper). emerald #4fa37a returns to
+                                   the unassigned pool. */
   --accent-atlas:      #6fbf94;
   --accent-hermes:     #4a8f7b;
   --accent-kairos:     #2f7a65;
   --accent-digisearch: #5aa3c4;
-  --accent-digichat:   #3dd6c4; /* ruled 2026-07-02: production cyan is official (was #9d8fc9) */
+  --accent-digichat:   #e2708a; /* ruled 2026-07-06: digichat splits off digiquant's shared cyan —
+                                   now a standalone consumer chat surface, it earns its own voice.
+                                   Rose, 6.4:1 on the dark canvas (AA+), distinct from digikey's
+                                   terracotta #d97a5a and every other hue in the livery table. */
   --accent-digikey:    #d97a5a;
   --accent-digismith:  #6fa3a3;
   --accent-digiclaw:   #b87840;
