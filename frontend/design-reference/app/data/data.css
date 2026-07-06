@@ -407,13 +407,20 @@
 .pm-table thead th {
   text-align: left;
   vertical-align: top;
-  padding: 0.8rem 0.8rem 1rem 0;
+  padding: 0.8rem 0.9rem 1rem;
   border-bottom: 1px solid var(--hair);
+}
+
+/* the popular column reads as one continuous tinted band (header + body) */
+.pm-table thead th.popular,
+.pm-table td.pm-pop {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 .pm-table thead th.popular {
   border-top: 2px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
 }
 
 .pm-tier {
@@ -454,15 +461,22 @@
   text-align: left;
   font-weight: 400;
   color: var(--ink-soft);
-  padding: 0.5rem 0.8rem 0.5rem 0;
+  padding: 0.55rem 0.9rem;
   border-bottom: 1px solid color-mix(in srgb, var(--hair) 60%, transparent);
 }
 
 .pm-table tbody td {
   font-family: var(--font-mono);
   font-size: 0.74rem;
-  padding: 0.5rem 0.8rem 0.5rem 0;
+  padding: 0.55rem 0.9rem;
   border-bottom: 1px solid color-mix(in srgb, var(--hair) 60%, transparent);
+}
+
+/* the row-label column and group headers align to the section's left edge */
+.pm-table thead th:first-child,
+.pm-table tbody tr:not(.pm-group) th,
+.pm-group th {
+  padding-left: 0;
 }
 
 .pm-table tbody td.off {

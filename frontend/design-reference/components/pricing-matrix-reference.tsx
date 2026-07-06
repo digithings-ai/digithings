@@ -114,11 +114,16 @@ export function PricingMatrixReference() {
               {g.rows.map((row) => (
                 <tr key={row.label}>
                   <th scope="row">{row.label}</th>
-                  {row.cells.map((cell, i) => (
-                    <td key={i} className={cell === "—" ? "off" : undefined}>
-                      {cell}
-                    </td>
-                  ))}
+                  {row.cells.map((cell, i) => {
+                    const classes = [cell === "—" ? "off" : "", TIERS[i]?.popular ? "pm-pop" : ""]
+                      .filter(Boolean)
+                      .join(" ");
+                    return (
+                      <td key={i} className={classes || undefined}>
+                        {cell}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
