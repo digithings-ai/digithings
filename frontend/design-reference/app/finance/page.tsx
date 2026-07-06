@@ -1,4 +1,6 @@
 import "./finance.css";
+import { EquityCurveReference } from "@/components/equity-curve-reference";
+import { MonthlyReturnsReference } from "@/components/monthly-returns-reference";
 import { OrderbookReference } from "@/components/orderbook-reference";
 import { PerfMetricsReference } from "@/components/perf-metrics-reference";
 import { PriceChartReference } from "@/components/price-chart-reference";
@@ -34,7 +36,21 @@ export default function FinancePage() {
         </div>
       </section>
 
+      <section className="section-block" id="equity-curve">
+        <p className="kicker">{"// equity curve"}</p>
+        <h2 className="title">Cumulative equity, one line.</h2>
+        <p className="section-copy">
+          The tearsheet&apos;s headline: an area series on the same Lightweight Charts engine,
+          tracking cumulative equity from a hundred. It wears the module accent (not the money
+          colors — this is identity, not a single P&amp;L reading) and re-themes live.
+        </p>
+        <div className="pc-frame">
+          <EquityCurveReference />
+        </div>
+      </section>
+
       <PerfMetricsReference />
+      <MonthlyReturnsReference />
       <OrderbookReference />
     </main>
   );
