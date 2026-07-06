@@ -49,42 +49,47 @@
   max-width: 50ch;
 }
 
-/* Card deck (generic sticky peek stack + rail) */
+/* Card deck — sticky stacking (the cavemen.dev pattern). Cards sit in
+   normal flow; on wide screens each pins at a cascaded top offset and the
+   next card slides up over it. Narrow screens drop sticky entirely and the
+   cards simply appear in sequence. */
 
-.deck-track {
+.deck {
   margin-top: 1.2rem;
-  min-height: 260vh;
-}
-
-.deck-pin {
-  position: sticky;
-  top: 0;
-  min-height: 100svh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 220px;
   gap: 1.2rem;
-  align-items: center;
+  align-items: start;
 }
 
-.deck-stack {
-  position: relative;
-  min-height: 540px;
-  padding-bottom: calc(var(--peek) * 2);
+/* Cards are DIRECT children of one shared container: a sticky element can
+   never leave its containing block, so per-card wrappers would drag each
+   card away as its own wrapper scrolls past. Sharing the container keeps
+   every card pinned until the whole deck ends; the gap is the scroll
+   runway between pins. */
+.deck-slots {
+  display: grid;
+  gap: 55svh;
+  /* tail runway: enough scroll after the last card enters for it to ride up
+     to its pinned offset, so the completed stack is the section's final state */
+  padding-bottom: 65svh;
 }
 
 .deck-card {
-  position: absolute;
-  inset-inline: 0;
+  position: sticky;
+  /* site nav (~3.3rem) + breathing room + 2.4rem cascade per card so every
+     pinned card keeps a visible top edge under the one covering it */
+  top: calc(5rem + 2.4rem * var(--stack-index, 0));
   background: var(--surface);
   border: 1px solid var(--hair);
   border-radius: 12px;
   padding: 1rem;
-  transition: transform 0.5s var(--ease), border-color 0.3s var(--ease), opacity 0.32s var(--ease);
+  will-change: transform;
 }
 
-.deck-card[aria-hidden="true"] {
-  opacity: 0;
-  pointer-events: none;
+.deck-rail-pin {
+  position: sticky;
+  top: 38vh;
 }
 
 .deck-card-head {
@@ -342,7 +347,7 @@
 
 @media (max-width: 900px) {
   .dot-matrix-card,
-  .deck-pin {
+  .deck {
     grid-template-columns: 1fr;
   }
 
@@ -350,29 +355,19 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .deck-track {
-    min-height: 0;
-  }
-
-  .deck-pin {
-    position: relative;
-    min-height: 0;
-  }
-
-  .deck-stack {
-    min-height: 0;
-    display: grid;
+  /* Narrow: no stacking — the cards simply appear in sequence. The JS side
+     gates its scale/brightness transforms off below 901px too. */
+  .deck-slots {
+    gap: 0.9rem;
+    padding-bottom: 0;
   }
 
   .deck-card {
     position: relative;
-    transform: none !important;
-    top: calc(var(--peek) * var(--stack-index, 0));
+    top: 0;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .deck-card {
-    transition: none !important;
+  .deck-rail-pin {
+    display: none;
   }
 }

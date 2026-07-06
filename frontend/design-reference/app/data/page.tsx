@@ -4,39 +4,9 @@ import { AlertCard, ChangelogCard, MetricCard, QuoteCard } from "@/components/de
 import { DotMatrixStat } from "@/components/dot-matrix-stat";
 import { PricingReference } from "@/components/pricing-reference";
 
-const STRATEGIES = [
+const DECK: CardDeckItem[] = [
   {
-    name: "BTC Slapper",
-    summary: "Trend-following, 1D bars, long/short.",
-    cagr: "+44.9%",
-    maxDd: "-54.1%",
-    pf: "2.31",
-  },
-  {
-    name: "ETH Slapper",
-    summary: "Cross-regime momentum with flat-state guard.",
-    cagr: "+38.1%",
-    maxDd: "-49.7%",
-    pf: "2.12",
-  },
-  {
-    name: "SOL Slapper",
-    summary: "Higher-volatility profile with tighter risk cap.",
-    cagr: "+52.4%",
-    maxDd: "-59.2%",
-    pf: "2.58",
-  },
-];
-
-const STRATEGY_DECK: CardDeckItem[] = STRATEGIES.map((strategy, idx) => ({
-  id: strategy.name,
-  railLabel: strategy.name,
-  content: <MetricCard {...strategy} ordinal={idx + 1} />,
-}));
-
-const MIXED_DECK: CardDeckItem[] = [
-  {
-    id: "mixed-metric",
+    id: "deck-metric",
     railLabel: "Tearsheet",
     content: (
       <MetricCard
@@ -50,7 +20,7 @@ const MIXED_DECK: CardDeckItem[] = [
     ),
   },
   {
-    id: "mixed-changelog",
+    id: "deck-changelog",
     railLabel: "Changelog",
     content: (
       <ChangelogCard
@@ -65,7 +35,7 @@ const MIXED_DECK: CardDeckItem[] = [
     ),
   },
   {
-    id: "mixed-quote",
+    id: "deck-quote",
     railLabel: "Quote",
     content: (
       <QuoteCard
@@ -75,7 +45,7 @@ const MIXED_DECK: CardDeckItem[] = [
     ),
   },
   {
-    id: "mixed-alert",
+    id: "deck-alert",
     railLabel: "Incident",
     content: (
       <AlertCard
@@ -105,24 +75,15 @@ export default function DataPage() {
 
       <DotMatrixStat />
 
-      <section className="section-block" id="strategy-suite">
-        <p className="kicker">{"// strategy suite"}</p>
-        <h2 className="title">Sticky peek stack + rail, React-native.</h2>
-        <p className="section-copy">
-          Three tearsheets on one generic deck. Scroll promotes the next card to the front, the
-          mono rail tracks position, and below 900px the pin releases into a plain stacked list.
-        </p>
-        <CardDeck ariaLabel="Strategy tearsheet stack" items={STRATEGY_DECK} />
-      </section>
-
-      <section className="section-block" id="mixed-deck">
-        <p className="kicker">{"// mixed deck"}</p>
-        <h2 className="title">Same engine, any content.</h2>
+      <section className="section-block" id="card-deck">
+        <p className="kicker">{"// card deck"}</p>
+        <h2 className="title">Cards stack as you scroll.</h2>
         <p className="section-copy">
           The deck knows nothing about its cards: a tearsheet, a changelog, a pull-quote, and an
-          incident report share one scroll engine, one rail, one degradation path.
+          incident report share one engine. On wide screens each card pins and the next slides
+          over it, edges cascading; on narrow screens they simply appear in sequence.
         </p>
-        <CardDeck ariaLabel="Mixed content stack" items={MIXED_DECK} />
+        <CardDeck ariaLabel="Card stack" items={DECK} />
       </section>
 
       <PricingReference />
