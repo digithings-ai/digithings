@@ -1,0 +1,118 @@
+/* Terminal page — diegetic CLI session + budget sidebar. */
+
+.terminal-layout {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 1rem;
+}
+
+.terminal-shell,
+.budget-shell {
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.terminal-shell header {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.terminal-shell pre {
+  margin-top: 0.7rem;
+  overflow: auto;
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.95;
+  color: var(--term-ink);
+}
+
+.terminal-shell .line {
+  display: block;
+}
+
+.terminal-shell .line.prompt {
+  color: var(--ink);
+}
+
+.terminal-shell .line.comment {
+  color: var(--term-mute);
+}
+
+.terminal-shell .line.tool {
+  color: var(--ink-soft);
+}
+
+.terminal-shell .line.output {
+  color: var(--up);
+}
+
+.terminal-shell .lead {
+  color: var(--accent);
+}
+
+.budget-shell .badge {
+  display: inline-block;
+  padding: 0.16rem 0.5rem;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.budget-title {
+  margin-top: 0.9rem;
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+}
+
+.budget-value {
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+}
+
+.budget-shell ul {
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.budget-shell li {
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  padding: 0.22rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--ink-mute);
+  letter-spacing: 0.08em;
+}
+
+.budget-shell li.on {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+  background: var(--accent-weak);
+}
+
+@media (max-width: 900px) {
+  .terminal-layout {
+    grid-template-columns: 1fr;
+  }
+}

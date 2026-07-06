@@ -5,6 +5,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Fraunces } from "next/font/google";
 import { ThemeProvider, MotionProvider, themeInitScript } from "@digithings/web";
+import { SiteNav } from "@/components/site-nav";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -36,7 +37,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <MotionProvider>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider>
+            <SiteNav />
+            {children}
+          </ThemeProvider>
         </MotionProvider>
       </body>
     </html>

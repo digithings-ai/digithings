@@ -1,14 +1,8 @@
+import "./home.css";
 import { ButtonsCtaReference } from "@/components/buttons-cta-reference";
-import { DotMatrixStat } from "@/components/dot-matrix-stat";
-import { FooterReference } from "@/components/footer-reference";
 import { LiverySwitcher } from "@/components/livery-switcher";
-import { PricingReference } from "@/components/pricing-reference";
-import { ScrollNavReference } from "@/components/scroll-nav-reference";
-import { StrategySuiteReference } from "@/components/strategy-suite-reference";
-import { TerminalBudgetReference } from "@/components/terminal-budget-reference";
-import { WordRevealReference } from "@/components/word-reveal-reference";
 
-export default function Home() {
+export default function FoundationsPage() {
   return (
     <main className="reference-page">
       <header className="hero">
@@ -18,19 +12,13 @@ export default function Home() {
         </h1>
         <p>
           Consolidated, app-native reference surface for frontend sections before migration into
-          digithings-web, digiquant-web, and digichat.
+          digithings-web, digiquant-web, and digichat. Each page in the top bar holds one family
+          of design elements.
         </p>
       </header>
 
       <LiverySwitcher />
-      <DotMatrixStat />
       <ButtonsCtaReference />
-      <ScrollNavReference />
-      <StrategySuiteReference />
-      <TerminalBudgetReference />
-      <WordRevealReference />
-      <PricingReference />
-      <FooterReference />
     </main>
   );
 }

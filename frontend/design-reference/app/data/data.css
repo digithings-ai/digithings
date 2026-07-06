@@ -1,0 +1,284 @@
+/* Data page — dot-matrix stat, card deck, pricing precision table. */
+
+.dot-matrix-card {
+  margin-top: 1.2rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 1.1rem;
+  background: var(--surface);
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 1.1rem;
+}
+
+.dot-matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink-mute) 20%, transparent);
+}
+
+.dot.on {
+  background: var(--accent);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 44%, transparent);
+}
+
+.dot-matrix-copy .label {
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dot-matrix-copy .value {
+  margin-top: 0.2rem;
+  font-family: var(--font-mono);
+  font-size: clamp(2rem, 5vw, 2.8rem);
+}
+
+.dot-matrix-copy .note {
+  margin-top: 0.55rem;
+  color: var(--ink-soft);
+  max-width: 50ch;
+}
+
+/* Card deck (generic sticky peek stack + rail) */
+
+.strategy-track {
+  margin-top: 1.2rem;
+  min-height: 260vh;
+}
+
+.strategy-pin {
+  position: sticky;
+  top: 0;
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 1.2rem;
+  align-items: center;
+}
+
+.strategy-stack {
+  position: relative;
+  min-height: 540px;
+  padding-bottom: calc(var(--peek) * 2);
+}
+
+.strategy-card {
+  position: absolute;
+  inset-inline: 0;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 1rem;
+  transition: transform 0.5s var(--ease), border-color 0.3s var(--ease), opacity 0.32s var(--ease);
+}
+
+.strategy-card[aria-hidden="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.strategy-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.8rem;
+}
+
+.strategy-card-head h3 {
+  font-size: 1.2rem;
+}
+
+.strategy-card-head span {
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+}
+
+.strategy-card p {
+  margin-top: 0.35rem;
+  color: var(--ink-soft);
+}
+
+.strategy-card dl {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.strategy-card dt {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  letter-spacing: 0.08em;
+}
+
+.strategy-card dd {
+  margin-top: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+}
+
+.strategy-card dd.up {
+  color: var(--up);
+}
+
+.strategy-card dd.down {
+  color: var(--down);
+}
+
+.strategy-rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 1px solid var(--hair);
+  padding-left: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.strategy-rail li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.strategy-rail .dot {
+  width: 7px;
+  height: 7px;
+}
+
+.strategy-rail li.on {
+  color: var(--ink);
+}
+
+.strategy-rail li.on .dot {
+  background: var(--accent);
+}
+
+/* Pricing */
+
+.pricing-paths {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.pricing-path {
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 1.1rem;
+  background: var(--surface);
+}
+
+.pricing-path.featured {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.pricing-path-title {
+  font-size: 1rem;
+}
+
+.pricing-path-copy {
+  margin-top: 0.4rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.pricing-path button {
+  margin-top: 0.9rem;
+}
+
+.trust-line {
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--hair);
+  color: var(--ink-mute);
+  font-size: 0.82rem;
+}
+
+.precision-table {
+  margin-top: 1.2rem;
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+}
+
+.precision-table th {
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.6rem;
+  color: var(--ink-mute);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.precision-table td {
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--hair);
+  color: var(--ink-soft);
+}
+
+.precision-table td:first-child {
+  color: var(--ink);
+}
+
+.precision-table td:last-child,
+.precision-table th:last-child {
+  text-align: right;
+}
+
+@media (max-width: 900px) {
+  .dot-matrix-card,
+  .strategy-pin {
+    grid-template-columns: 1fr;
+  }
+
+  .pricing-paths {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .strategy-track {
+    min-height: 0;
+  }
+
+  .strategy-pin {
+    position: relative;
+    min-height: 0;
+  }
+
+  .strategy-stack {
+    min-height: 0;
+    display: grid;
+  }
+
+  .strategy-card {
+    position: relative;
+    transform: none !important;
+    top: calc(var(--peek) * var(--stack-index, 0));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strategy-card {
+    transition: none !important;
+  }
+}

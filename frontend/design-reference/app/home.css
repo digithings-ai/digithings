@@ -1,0 +1,106 @@
+/* Foundations page — livery switcher + buttons/CTA showcase. */
+
+.livery-grid {
+  margin-top: 1.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.livery-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+.livery-chip:hover {
+  color: var(--ink);
+}
+
+.livery-chip.on {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--chip, var(--accent)) 55%, var(--hair));
+  background: color-mix(in srgb, var(--chip, var(--accent)) 12%, var(--surface));
+}
+
+.livery-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--chip, var(--accent));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--chip, var(--accent)) 50%, transparent);
+}
+
+.livery-preview {
+  margin-top: 1.2rem;
+}
+
+.livery-preview-card {
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 1.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem 1.4rem;
+}
+
+.livery-preview-label {
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.livery-preview-hex {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.livery-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.livery-preview-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  margin-left: auto;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: livery-pulse 2.4s ease-out infinite;
+}
+
+@keyframes livery-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .livery-preview-pulse {
+    animation: none !important;
+  }
+}
