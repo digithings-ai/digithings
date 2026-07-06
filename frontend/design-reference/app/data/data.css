@@ -644,3 +644,57 @@
   font-family: var(--font-mono);
   color: var(--ink-mute);
 }
+
+/* Stat counter — count-up metric strip */
+
+.sc-row {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.sc-stat {
+  padding: 1.4rem 1.2rem;
+  border-left: 1px solid var(--hair);
+}
+
+.sc-stat:first-child {
+  border-left: none;
+}
+
+.sc-value {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--accent);
+}
+
+.sc-label {
+  display: block;
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+@media (max-width: 720px) {
+  .sc-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sc-stat:nth-child(3) {
+    border-left: none;
+  }
+
+  .sc-stat:nth-child(n + 3) {
+    border-top: 1px solid var(--hair);
+  }
+}
