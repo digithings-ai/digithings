@@ -1,5 +1,6 @@
 import "./data.css";
 import { CardDeck, type CardDeckItem } from "@/components/card-deck";
+import { ChangelogRailReference } from "@/components/changelog-rail-reference";
 import { AlertCard, ChangelogCard, MetricCard, QuoteCard } from "@/components/deck-cards";
 import { DotMatrixStat } from "@/components/dot-matrix-stat";
 import { PricingMatrixReference } from "@/components/pricing-matrix-reference";
@@ -87,6 +88,7 @@ export default function DataPage() {
         <CardDeck ariaLabel="Card stack" items={DECK} />
       </section>
 
+      <ChangelogRailReference />
       <PricingReference />
       <PricingMatrixReference />
     </main>

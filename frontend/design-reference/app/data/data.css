@@ -495,3 +495,152 @@
     display: none;
   }
 }
+
+/* Changelog rail — horizontal scroll strip with drag, snap, and edge fades */
+
+.cr-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cr-nav {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.cr-arrow {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.cr-arrow:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+/* Edge fades: the rail reads as a strip that continues past both sides */
+.cr-mask {
+  margin-top: 1.2rem;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 2.2rem,
+    #000 calc(100% - 2.2rem),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 2.2rem,
+    #000 calc(100% - 2.2rem),
+    transparent 100%
+  );
+}
+
+.cr-track {
+  display: flex;
+  gap: 0.9rem;
+  overflow-x: auto;
+  padding: 0.2rem 2.2rem;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.cr-track::-webkit-scrollbar {
+  display: none;
+}
+
+.cr-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.cr-card {
+  scroll-snap-align: start;
+  flex: 0 0 16.5rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 1.1rem;
+  user-select: none;
+}
+
+.cr-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cr-version {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.cr-tag {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  color: var(--ink-mute);
+}
+
+.cr-tag-feature {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 40%, var(--hair));
+}
+
+.cr-tag-breaking {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
+}
+
+.cr-date {
+  margin-top: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+}
+
+.cr-title {
+  margin-top: 0.15rem;
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.cr-card ul {
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.cr-card li {
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.cr-card li::before {
+  content: "+";
+  position: absolute;
+  left: 0;
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+}
