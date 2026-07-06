@@ -279,3 +279,24 @@ html.no-js .dqpipe-track-fill { height: 100%; }
     animation: none;
   }
 }
+
+/* ── cursor-follow reveal-field graph ───────────────────────────────────── */
+
+.hg-frame {
+  position: relative;
+  height: 24rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+.hg-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}

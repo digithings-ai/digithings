@@ -1,4 +1,5 @@
 import "./terminal.css";
+import { StreamTranscriptReference } from "@/components/stream-transcript-reference";
 import { TerminalBudgetReference } from "@/components/terminal-budget-reference";
 
 export default function TerminalPage() {
@@ -16,6 +17,7 @@ export default function TerminalPage() {
       </header>
 
       <TerminalBudgetReference />
+      <StreamTranscriptReference />
     </main>
   );
 }

@@ -116,3 +116,84 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Streaming transcript — the DigiChat turn grammar */
+
+.st-shell {
+  margin-top: 1.2rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: #0b0c0e;
+  padding: 1.1rem 1.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 2.1;
+  max-width: 640px;
+}
+
+:root[data-theme="light"] .st-shell {
+  background: var(--surface);
+}
+
+.st-line {
+  display: block;
+}
+
+.st-mark {
+  color: var(--accent);
+  margin-right: 0.55rem;
+}
+
+.st-user {
+  color: var(--ink);
+}
+
+.st-assistant {
+  color: var(--ink-soft);
+}
+
+.st-answer {
+  color: var(--ink);
+}
+
+.st-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.3rem 0 0.3rem 1.1rem;
+  padding: 0.15rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--hair));
+  border-radius: 8px;
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+
+.st-ok {
+  color: var(--up);
+}
+
+.st-ms {
+  color: var(--ink-mute);
+}
+
+.st-caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: var(--accent);
+  vertical-align: -2px;
+  margin-left: 2px;
+  animation: st-blink 1.1s steps(1) infinite;
+}
+
+@keyframes st-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-caret {
+    animation: none;
+  }
+}

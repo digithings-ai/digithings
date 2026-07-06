@@ -2,6 +2,7 @@ import "./effects.css";
 import { ScrollyGraph, Terminal, type TermLine } from "@digithings/web";
 import { AmbientMesh } from "@/components/effects/ambient-mesh";
 import { ClipReveal } from "@/components/effects/clip-reveal";
+import { HeroGraphReference } from "@/components/hero-graph-reference";
 import { ResearchPipeline } from "@/components/effects/research-pipeline";
 import { RotatingPrompts } from "@/components/effects/rotating-prompts";
 
@@ -79,6 +80,22 @@ export default function EffectsPage() {
               <pre className="term-body">{BOOT.map(plainLine).join("\n")}</pre>
             </div>
           </noscript>
+        </div>
+      </section>
+
+      <section className="section-block" id="hero-graph">
+        <p className="kicker">{"// cursor-follow graph"}</p>
+        <h2 className="title">A field that reveals where you look.</h2>
+        <p className="section-copy">
+          The reveal-field graph from the digithings.ai and digiquant.io hero: a fixed field of
+          nodes scattered across the surface, with the cursor as a lens — nearby nodes light up and
+          web together while the trailing side dissolves, a faint ghost keeping a latent trace
+          everywhere. It reads the live <code>--accent</code> token, so switching the theme or a
+          livery re-dresses it; reduced motion paints one static centered frame. Move your cursor
+          across the panel.
+        </p>
+        <div className="fx-demo hg-frame">
+          <HeroGraphReference />
         </div>
       </section>
 
