@@ -181,3 +181,116 @@
     order: 0;
   }
 }
+
+/* Bento grid — asymmetric module grid, livery per cell */
+
+.bento-grid {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: 8.5rem;
+  gap: 0.9rem;
+}
+
+.bento-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 1.1rem;
+  overflow: hidden;
+  transition: border-color 0.25s var(--ease), transform 0.25s var(--ease);
+}
+
+/* accent hairline that fills on hover — the mod-card grammar */
+.bento-cell::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s var(--ease);
+}
+
+.bento-cell:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
+
+.bento-cell:hover::before {
+  transform: scaleX(1);
+}
+
+.bento-hero {
+  grid-column: span 2;
+  grid-row: span 2;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.bento-wide {
+  grid-column: span 2;
+}
+
+.bento-tall {
+  grid-row: span 2;
+}
+
+.bento-cell-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bento-tier {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+.bento-name {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.bento-hero .bento-name {
+  font-size: 1.3rem;
+}
+
+.bento-role {
+  margin-top: 0.3rem;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  max-width: 32ch;
+}
+
+@media (max-width: 760px) {
+  .bento-grid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+  }
+
+  .bento-hero,
+  .bento-wide,
+  .bento-tall {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bento-cell {
+    transition: border-color 0.25s var(--ease);
+  }
+
+  .bento-cell:hover {
+    transform: none;
+  }
+}
