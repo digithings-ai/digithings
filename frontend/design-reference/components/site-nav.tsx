@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ThemeToggle } from "@digithings/web";
 
 const PAGES = [
   { href: "/", label: "Foundations" },
@@ -58,6 +59,8 @@ export function SiteNav() {
           </li>
         ))}
       </ul>
+
+      <ThemeToggle className="site-nav-theme" />
 
       <button
         type="button"

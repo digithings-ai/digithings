@@ -90,11 +90,32 @@
   border-bottom-color: var(--accent);
 }
 
+/* Theme toggle — the live light/dark switch, right-aligned in the bar */
+
+.site-nav-theme {
+  margin-left: auto;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.site-nav-theme:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
 /* Hamburger + sheet — mobile only. Desktop keeps the inline links. */
 
 .site-nav-burger {
   display: none;
-  margin-left: auto;
+  margin-left: 0.5rem;
   width: 40px;
   height: 40px;
   align-items: center;
