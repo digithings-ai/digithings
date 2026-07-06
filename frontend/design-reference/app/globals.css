@@ -12,6 +12,27 @@
   --peek: 3.2rem;
 }
 
+/* Skip link — visually hidden until keyboard focus */
+
+.skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 30;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--surface-inverse, #06110f);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+}
+
 /* Site nav — the one piece of chrome shared across pages */
 
 .site-nav {

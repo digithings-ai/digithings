@@ -1,7 +1,9 @@
 import "./effects.css";
 import { ScrollyGraph, Terminal, type TermLine } from "@digithings/web";
 import { AmbientMesh } from "@/components/effects/ambient-mesh";
+import { ClipReveal } from "@/components/effects/clip-reveal";
 import { ResearchPipeline } from "@/components/effects/research-pipeline";
+import { RotatingPrompts } from "@/components/effects/rotating-prompts";
 
 // The digithings.ai hero boot script (pre-v7 landing, frontend/digithings-web
 // app/page.tsx history) — the signature content the Terminal component plays.
@@ -134,6 +136,9 @@ export default function EffectsPage() {
           <p className="fx-mesh-label">content sits above the wash — z-index 1 over the canvas</p>
         </div>
       </section>
+
+      <RotatingPrompts />
+      <ClipReveal />
     </main>
   );
 }

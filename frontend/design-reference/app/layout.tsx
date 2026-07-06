@@ -38,8 +38,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <MotionProvider>
           <ThemeProvider>
+            <a className="skip-link" href="#main">
+              Skip to content
+            </a>
             <SiteNav />
-            {children}
+            <div id="main">{children}</div>
           </ThemeProvider>
         </MotionProvider>
       </body>

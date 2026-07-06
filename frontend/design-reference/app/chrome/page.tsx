@@ -1,4 +1,5 @@
 import "./chrome.css";
+import { AnnouncementBarReference } from "@/components/announcement-bar-reference";
 import { FooterReference } from "@/components/footer-reference";
 import { ScrollNavReference } from "@/components/scroll-nav-reference";
 
@@ -16,6 +17,7 @@ export default function ChromePage() {
         </p>
       </header>
 
+      <AnnouncementBarReference />
       <ScrollNavReference />
       <FooterReference />
     </main>

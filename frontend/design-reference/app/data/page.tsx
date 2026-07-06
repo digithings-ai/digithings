@@ -2,6 +2,7 @@ import "./data.css";
 import { CardDeck, type CardDeckItem } from "@/components/card-deck";
 import { AlertCard, ChangelogCard, MetricCard, QuoteCard } from "@/components/deck-cards";
 import { DotMatrixStat } from "@/components/dot-matrix-stat";
+import { PricingMatrixReference } from "@/components/pricing-matrix-reference";
 import { PricingReference } from "@/components/pricing-reference";
 
 const DECK: CardDeckItem[] = [
@@ -87,6 +88,7 @@ export default function DataPage() {
       </section>
 
       <PricingReference />
+      <PricingMatrixReference />
     </main>
   );
 }

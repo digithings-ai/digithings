@@ -345,6 +345,130 @@
   text-align: right;
 }
 
+/* Pricing comparison matrix + billing toggle */
+
+.pm-toggle-row {
+  margin-top: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.pm-toggle {
+  width: 38px;
+  height: 21px;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.pm-toggle .pm-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--ink-mute);
+  transition: transform 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+
+.pm-toggle.on {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  background: var(--accent-weak);
+}
+
+.pm-toggle.on .pm-knob {
+  transform: translateX(17px);
+  background: var(--accent);
+}
+
+.pm-toggle-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.pm-scroll {
+  margin-top: 1rem;
+  overflow-x: auto;
+}
+
+.pm-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.pm-table thead th {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.8rem 0.8rem 1rem 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.pm-table thead th.popular {
+  border-top: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.pm-tier {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.pm-price {
+  display: block;
+  margin: 0.25rem 0 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.pm-popular {
+  display: block;
+  margin-top: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.pm-group th {
+  padding: 1rem 0 0.4rem;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+  font-weight: 400;
+}
+
+.pm-table tbody tr:not(.pm-group) th {
+  text-align: left;
+  font-weight: 400;
+  color: var(--ink-soft);
+  padding: 0.5rem 0.8rem 0.5rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--hair) 60%, transparent);
+}
+
+.pm-table tbody td {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  padding: 0.5rem 0.8rem 0.5rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--hair) 60%, transparent);
+}
+
+.pm-table tbody td.off {
+  color: var(--ink-mute);
+}
+
 @media (max-width: 900px) {
   .dot-matrix-card,
   .deck {
