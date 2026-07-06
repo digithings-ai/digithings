@@ -2,6 +2,8 @@
 @import "@digithings/design/tokens.css";
 @import "@digithings/design/site/site.css";
 @import "@digithings/web/styles/web-theme.css";
+@import "@digithings/digichat-ui/styles/cursor.css";
+@import "@digithings/digichat-ui/styles/session.css";
 
 /* Point the token font families at the self-hosted next/font variables. */
 :root[data-theme] {
@@ -367,56 +369,10 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dt-ask:hover { background: var(--accent-weak); color: var(--ink); }
 .dt-ask .dt-s { color: var(--accent); }
 
-/* ---- DigiChat identity: the "Ask DigiChat" nav CTA + the two-tone wordmark ---- */
+/* ---- DigiChat identity: the "Ask DigiChat" nav CTA ---- */
 .dt-askcta { display: inline-flex; align-items: center; gap: 0.4rem; }
 .dt-askcta svg { flex: none; }
-.dc-wordmark { font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.01em; }
-.dc-wordmark .dc-wm-d { color: var(--ink); }
-.dc-wordmark .dc-wm-s { color: var(--accent); }
 
-/* ---- DigiChat signature page (/chat) — full-screen terminal chat. Theme-aware
-   via tokens; reuses .dt-cur (cursor), .dtc-chip (suggestions), .dtc-error. ---- */
-.dc-page { min-height: 100vh; padding: calc(var(--dq-nav-h, 62px) + 0.6rem) clamp(0.7rem, 3vw, 1.4rem) clamp(0.7rem, 3vw, 1.2rem); display: flex; }
-/* Full-page terminal: no border, no box background — the page is the terminal. */
-.dc-session { width: 100%; max-width: min(1080px, 96vw); margin: 0 auto; display: flex; flex-direction: column; height: calc(100vh - var(--dq-nav-h, 62px) - 1.4rem); min-height: 440px; font-family: var(--font-mono); background: transparent; }
-/* Retractable top bar: a single faint status line that collapses to reclaim
-   vertical space. Toggled via .is-collapsed (height/opacity animated). */
-.dc-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.2rem 0.2rem 0.6rem; color: var(--ink-mute); font-size: 0.78rem; overflow: hidden; transition: max-height 0.25s var(--ease), opacity 0.2s var(--ease), padding 0.25s var(--ease); max-height: 3rem; }
-.dc-bar.is-collapsed { max-height: 0; padding: 0; opacity: 0; }
-.dc-bar-meta { color: var(--ink-mute); }
-.dc-bar-model { margin-left: auto; font-size: 0.72rem; color: var(--ink-soft); }
-.dc-bar-key { font: inherit; font-size: 0.72rem; color: var(--ink-mute); background: transparent; border: 1px solid var(--hair); border-radius: 999px; padding: 0.1rem 0.45rem; cursor: pointer; margin-left: auto; transition: color 0.18s var(--ease), border-color 0.18s var(--ease); }
-.dc-bar-key:hover { color: var(--ink-soft); border-color: color-mix(in srgb, var(--ink) 25%, var(--hair)); }
-.dc-bar-model { margin-left: 0.5rem; }
-.dc-bar-toggle { align-self: flex-start; margin: 0 0 0.2rem; font: inherit; font-size: 0.7rem; color: var(--ink-mute); background: transparent; border: 0; cursor: pointer; padding: 0.1rem 0; letter-spacing: 0.04em; }
-.dc-bar-toggle:hover { color: var(--ink-soft); }
-@media (prefers-reduced-motion: reduce) { .dc-bar { transition: none; } }
-.dc-thread { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 0.85rem 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; }
-.dc-msg { position: relative; display: grid; grid-template-columns: 0.85rem minmax(0, 1fr); gap: 0.5rem; align-items: start; font-size: 0.8rem; line-height: 1.55; }
-.dc-who { color: var(--accent); font-weight: 600; user-select: none; }
-.dc-user .dc-who { color: var(--ink-mute); }
-.dc-body { min-width: 0; color: var(--ink-soft); word-break: break-word; }
-.dc-user .dc-body, .dc-intro .dc-body { color: var(--ink); white-space: pre-wrap; }
-.dc-intro-body { font-size: 0.78rem; line-height: 1.5; }
-.dc-intro .dc-body { color: var(--ink-soft); }
-.dc-md { font-size: 0.8rem; line-height: 1.55; }
-.dc-md-p { margin: 0 0 0.55rem; }
-.dc-md-p:last-child { margin-bottom: 0; }
-.dc-md-ul, .dc-md-ol { margin: 0.35rem 0 0.55rem; padding-left: 1.25rem; }
-.dc-md-li { margin: 0.15rem 0; }
-.dc-md-quote { margin: 0.5rem 0; padding-left: 0.75rem; border-left: 2px solid var(--hair); color: var(--ink-mute); }
-.dc-md-h { margin: 0.65rem 0 0.35rem; font-family: var(--font-mono); font-weight: 600; font-size: 0.85rem; color: var(--ink); }
-.dc-md-hr { border: 0; border-top: 1px solid var(--hair); margin: 0.65rem 0; }
-.dc-md-table-wrap { margin: 0.55rem 0; overflow-x: auto; border: 1px solid var(--hair); border-radius: 8px; }
-.dc-md-table { width: 100%; border-collapse: collapse; font-size: 0.76rem; line-height: 1.45; }
-.dc-md-table th, .dc-md-table td { padding: 0.35rem 0.55rem; border-bottom: 1px solid var(--hair); text-align: left; vertical-align: top; }
-.dc-md-table th { font-weight: 600; color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, transparent); }
-.dc-md-table tr:last-child td { border-bottom: 0; }
-.dc-body a { color: var(--accent); text-underline-offset: 2px; }
-.dc-code-inline { font-family: var(--font-mono); font-size: 0.82em; background: color-mix(in srgb, var(--ink) 9%, transparent); border-radius: 5px; padding: 0.05rem 0.3rem; }
-.dc-code-block { position: relative; margin: 0.6rem 0; }
-.dc-code-block pre { margin: 0; background: color-mix(in srgb, var(--ink) 7%, transparent); border: 1px solid var(--hair); border-radius: 9px; padding: 0.7rem 0.8rem; overflow-x: auto; }
-.dc-code-block code { font-family: var(--font-mono); font-size: 0.74rem; color: var(--ink); white-space: pre; }
 /* Mermaid diagrams (MermaidBlock.tsx) — client-rendered SVG for pipeline/architecture
    visualizations. Centered, contained; a view-source toggle reveals the raw code. */
 .dc-mermaid { margin: 0.7rem 0; }
@@ -424,53 +380,8 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dc-mermaid-fig svg { max-width: 100%; height: auto; }
 .dc-mermaid-toggle { font: inherit; font-size: 0.7rem; color: var(--ink-mute); background: transparent; border: 0; cursor: pointer; padding: 0.2rem 0; letter-spacing: 0.03em; }
 .dc-mermaid-toggle:hover { color: var(--ink-soft); }
-.dc-code-copy, .dc-msg-copy { font: inherit; font-size: 0.7rem; color: var(--ink-mute); background: color-mix(in srgb, var(--surface) 80%, transparent); border: 1px solid var(--hair); border-radius: 6px; padding: 0.12rem 0.4rem; cursor: pointer; opacity: 0; transition: opacity 0.15s var(--ease); }
-.dc-code-copy { position: absolute; top: 0.4rem; right: 0.4rem; }
-.dc-msg-copy { position: absolute; top: 0; right: 0; }
-.dc-code-block:hover .dc-code-copy, .dc-msg:hover .dc-msg-copy, .dc-code-copy:focus-visible, .dc-msg-copy:focus-visible { opacity: 1; }
-.dc-suggest { display: flex; flex-wrap: wrap; gap: 0.45rem; padding-left: 1.6rem; }
-.dc-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.5rem; padding: 0.5rem 0.1rem 0.2rem; border-top: 1px solid var(--hair); background: transparent; }
-.dc-textarea { font: inherit; font-size: 0.8rem; line-height: 1.45; background: transparent; border: 0; color: var(--ink); width: 100%; resize: none; max-height: 140px; padding: 0.35rem 0; }
-.dc-textarea::placeholder { color: var(--ink-mute); }
-.dc-textarea:focus { outline: none; }
-.dc-send, .dc-stop { font: inherit; align-self: stretch; color: var(--accent); background: transparent; border: 1px solid var(--hair); border-radius: 8px; cursor: pointer; padding: 0.3rem 0.65rem; transition: background 0.18s var(--ease); }
-.dc-send { font-size: 1rem; }
-.dc-stop { font-size: 0.8rem; color: var(--ink-soft); }
-.dc-send:hover:not(:disabled), .dc-stop:hover { background: color-mix(in srgb, var(--accent) 13%, transparent); }
-.dc-send:disabled { opacity: 0.4; cursor: default; }
-@media (prefers-reduced-motion: reduce) {
-  .dc-code-copy, .dc-msg-copy, .dc-send, .dc-stop { transition: none; }
-}
-/* Suggestion chips + error line — shared by the /chat page (DigiChatSession). */
-.dtc-chip { font: inherit; font-size: 0.72rem; color: var(--ink-soft); background: var(--accent-weak); border: 1px solid var(--hair); border-radius: 999px; padding: 0.18rem 0.55rem; cursor: pointer; transition: background 0.18s var(--ease), color 0.18s var(--ease); }
-.dtc-chip:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--ink); }
-.dtc-chip:disabled { opacity: 0.5; cursor: default; }
-.dtc-error { margin: 0.3rem 0 0; font-size: 0.8rem; color: color-mix(in srgb, #e5484d 80%, var(--ink)); }
-@media (prefers-reduced-motion: reduce) {
-  .dtc-chip { transition: none; }
-}
 
-/* Agentic activity trace (tool calls, vault hits, reasoning). */
-.dc-activities { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.55rem; padding: 0.45rem 0.55rem; border: 1px solid var(--hair); border-radius: 8px; background: color-mix(in srgb, var(--ink) 4%, transparent); font-size: 0.72rem; line-height: 1.45; }
-.dc-act-status { margin: 0; color: var(--ink-mute); }
-.dc-act-tool { margin: 0; color: var(--ink-soft); }
-.dc-act-label { color: var(--accent); font-weight: 600; text-transform: lowercase; }
-.dc-act-code { font-size: 0.9em; color: var(--ink); }
-.dc-act-query { color: var(--ink-mute); }
-.dc-act-hits { margin: 0.25rem 0 0; padding-left: 1rem; list-style: disc; }
-.dc-act-hits li { margin: 0.12rem 0; }
-.dc-act-hit-title { color: var(--ink-soft); }
-.dc-act-hit-path { margin-left: 0.35rem; color: var(--ink-mute); font-size: 0.92em; }
-.dc-act-reasoning { margin: 0.15rem 0 0; }
-.dc-act-reasoning summary { cursor: pointer; color: var(--ink-mute); font-weight: 500; }
-.dc-act-reasoning pre { margin: 0.35rem 0 0; max-height: 10rem; overflow: auto; white-space: pre-wrap; color: var(--ink-mute); font-size: 0.9em; }
-
-/* BYOK settings + quota nudge */
-.dc-inline-link { font: inherit; font-size: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
-.dc-inline-link:hover { color: var(--ink); }
-.dc-intro-byok { display: inline; margin: 0; color: var(--ink-mute); }
-.dc-quota-banner { margin: 0.2rem 0 0 1.6rem; padding: 0.45rem 0.65rem; border: 1px solid color-mix(in srgb, #e5484d 35%, var(--hair)); border-radius: 8px; background: color-mix(in srgb, #e5484d 8%, transparent); font-size: 0.74rem; color: var(--ink-soft); }
-.dc-quota-banner p { margin: 0; }
+/* BYOK settings panel (ProviderSettings.tsx — digithings-web only) */
 .dc-settings-backdrop { position: fixed; inset: 0; z-index: 80; background: color-mix(in srgb, var(--bg) 35%, transparent); backdrop-filter: blur(4px); display: flex; justify-content: flex-end; }
 .dc-settings-panel { width: min(22rem, 92vw); height: 100%; overflow-y: auto; padding: 1rem 1rem 1.25rem; background: var(--surface); border-left: 1px solid var(--hair); box-shadow: -8px 0 24px color-mix(in srgb, var(--ink) 8%, transparent); font-family: var(--font-mono); font-size: 0.78rem; }
 .dc-settings-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.75rem; }
