@@ -1,5 +1,6 @@
 import "./home.css";
 import { ButtonsCtaReference } from "@/components/buttons-cta-reference";
+import { FeaturePickerReference } from "@/components/feature-picker-reference";
 import { LiverySwitcher } from "@/components/livery-switcher";
 
 export default function FoundationsPage() {
@@ -18,6 +19,7 @@ export default function FoundationsPage() {
       </header>
 
       <LiverySwitcher />
+      <FeaturePickerReference />
       <ButtonsCtaReference />
     </main>
   );
