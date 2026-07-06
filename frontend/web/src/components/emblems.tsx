@@ -61,17 +61,11 @@ const DigiSearch = (p: P) => (
     <circle cx="-3" cy="-3" r="2.6" fill="currentColor" stroke="none" />
   </Svg>
 );
-// chat — a terminal prompt (`>_`) inside a soft speech surface
+// chat — a terminal prompt: a chevron and a solid block cursor (no bubble)
 const DigiChat = (p: P) => (
   <Svg {...p}>
-    <path
-      d="M-13 -10h26a2 2 0 0 1 2 2v13a2 2 0 0 1 -2 2H-1l-6 5v-5h-6a2 2 0 0 1 -2 -2V-8a2 2 0 0 1 2 -2z"
-      fill="currentColor"
-      fillOpacity={TINT}
-      stroke="none"
-    />
-    <path d="M-8 -3 -3 1.5 -8 6" />
-    <path d="M1 6 7 6" />
+    <path d="M-9 -5.5 -2 0 -9 5.5" />
+    <rect x="2" y="-5" width="6.5" height="10" rx="1" fill="currentColor" stroke="none" />
   </Svg>
 );
 // auth — a rounded key: soft-filled bow, notched shaft
