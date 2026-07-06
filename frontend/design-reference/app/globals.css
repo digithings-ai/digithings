@@ -90,86 +90,115 @@
   border-bottom-color: var(--accent);
 }
 
-/* Theme toggle — the live light/dark switch, right-aligned in the bar */
+/* Theme toggle + hamburger — the production dqnav grammar: borderless,
+   no fill, glyph/lines only; ink-mute resting, ink on hover. */
 
 .site-nav-theme {
   margin-left: auto;
-  width: 34px;
-  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--hair);
-  border-radius: 8px;
+  padding: 0.5rem;
+  border: none;
   background: transparent;
-  color: var(--ink-soft);
+  color: var(--ink-mute);
   cursor: pointer;
+  transition: color 0.2s var(--ease);
 }
 
 .site-nav-theme:hover {
   color: var(--ink);
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
 }
-
-/* Hamburger + sheet — mobile only. Desktop keeps the inline links. */
 
 .site-nav-burger {
   display: none;
-  margin-left: 0.5rem;
-  width: 40px;
-  height: 40px;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
-  border: 1px solid var(--hair);
-  border-radius: 8px;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 0.5rem;
+  margin: 0 0 0 0.4rem;
+  border: none;
   background: transparent;
-  color: var(--ink);
+  color: var(--ink-mute);
   cursor: pointer;
+  transition: color 0.2s var(--ease);
 }
+
+.site-nav-burger:hover {
+  color: var(--ink);
+}
+
+.site-nav-burger span {
+  display: block;
+  width: 18px;
+  height: 1.5px;
+  background: currentColor;
+  border-radius: 1px;
+  transition: transform 0.25s var(--ease);
+}
+
+.site-nav-burger.is-open span:first-child {
+  transform: translateY(3.25px) rotate(45deg);
+}
+
+.site-nav-burger.is-open span:last-child {
+  transform: translateY(-3.25px) rotate(-45deg);
+}
+
+/* Full-viewport scrim: dims + aggressively blurs the page behind the menu */
 
 .site-nav-scrim {
   position: fixed;
   inset: 0;
   z-index: 18;
-  background: color-mix(in srgb, var(--bg) 55%, transparent);
-  backdrop-filter: blur(4px);
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  backdrop-filter: blur(40px) saturate(1.3);
+  -webkit-backdrop-filter: blur(40px) saturate(1.3);
 }
+
+/* Sheet: transparent over the blurred page, right-aligned serif links */
 
 .site-nav-sheet {
   position: fixed;
-  top: 3.4rem;
-  left: 0;
-  right: 0;
+  inset: 0;
   z-index: 19;
-  border-bottom: 1px solid var(--hair);
-  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 4.6rem clamp(1.25rem, 5vw, 2rem) 1.25rem;
+  pointer-events: none;
 }
 
 .site-nav-sheet ul {
   list-style: none;
   margin: 0;
-  padding: 0.4rem 0;
+  padding: 0;
+  width: min(100%, 20rem);
+  pointer-events: auto;
 }
 
 .site-nav-sheet a {
   display: block;
-  padding: 0.85rem clamp(1rem, 3vw, 1.8rem);
-  min-height: 44px;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
+  width: 100%;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
   color: var(--ink-soft);
+  text-align: right;
   text-decoration: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--hair) 55%, transparent);
+  transition: color 0.2s var(--ease);
 }
 
-.site-nav-sheet li:last-child a {
-  border-bottom: none;
+.site-nav-sheet a:hover,
+.site-nav-sheet a[aria-current="page"] {
+  color: var(--ink);
 }
 
 .site-nav-sheet a[aria-current="page"] {
-  color: var(--ink);
-  border-left: 2px solid var(--accent);
+  border-bottom-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
 }
 
 @media (max-width: 900px) {

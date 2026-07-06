@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ThemeToggle } from "@digithings/web";
 
 const PAGES = [
@@ -64,41 +65,46 @@ export function SiteNav() {
 
       <button
         type="button"
-        className="site-nav-burger"
+        className={`site-nav-burger${open ? " is-open" : ""}`}
         aria-expanded={open}
         aria-controls="site-nav-sheet"
         aria-label={open ? "Close navigation" : "Open navigation"}
         onClick={() => setOpen((v) => !v)}
       >
-        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-          {open ? (
-            <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" />
-          ) : (
-            <path d="M1 4h14M1 8h14M1 12h14" stroke="currentColor" strokeWidth="1.5" />
-          )}
-        </svg>
+        <span aria-hidden="true" />
+        <span aria-hidden="true" />
       </button>
 
-      {open ? (
-        <>
-          <div className="site-nav-scrim" onClick={() => setOpen(false)} aria-hidden="true" />
-          <div id="site-nav-sheet" className="site-nav-sheet" role="dialog" aria-label="Navigation">
-            <ul>
-              {PAGES.map((page) => (
-                <li key={page.href}>
-                  <Link
-                    href={page.href}
-                    aria-current={isActive(page.href) ? "page" : undefined}
-                    onClick={() => setOpen(false)}
-                  >
-                    {page.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </>
-      ) : null}
+      {/* Portaled to body: the nav bar's own backdrop-filter would otherwise
+          become the containing block for these fixed overlays. */}
+      {open
+        ? createPortal(
+            <>
+              <div className="site-nav-scrim" onClick={() => setOpen(false)} aria-hidden="true" />
+              <div
+                id="site-nav-sheet"
+                className="site-nav-sheet"
+                role="dialog"
+                aria-label="Navigation"
+              >
+                <ul>
+                  {PAGES.map((page) => (
+                    <li key={page.href}>
+                      <Link
+                        href={page.href}
+                        aria-current={isActive(page.href) ? "page" : undefined}
+                        onClick={() => setOpen(false)}
+                      >
+                        {page.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
     </nav>
   );
 }
