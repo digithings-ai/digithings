@@ -44,6 +44,12 @@
       "port": 4012
     },
     {
+      "name": "design-reference",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--workspace", "frontend/design-reference", "run", "dev", "--", "--port", "4013"],
+      "port": 4013
+    },
+    {
       "name": "demos",
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": ["-c", "cd \"$(git rev-parse --show-toplevel)\" && .venv/bin/python -m http.server 4020 --directory frontend/design/demos/digiquant-landing"],
