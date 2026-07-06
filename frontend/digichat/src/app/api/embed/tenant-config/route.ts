@@ -1,4 +1,5 @@
 import { resolveVerifiedEmbedTenant } from "@/lib/embed-chat-tenant";
+import { getTenantSuggestionPool } from "@/lib/embed-suggestion-pools";
 
 /** Client-safe embed tenant config. Backend config (relay URLs) never leaves the server. */
 export async function GET(req: Request): Promise<Response> {
@@ -12,7 +13,7 @@ export async function GET(req: Request): Promise<Response> {
         attribution: cfg.attribution,
         title: cfg.title,
         welcome: cfg.welcome,
-        suggestions: cfg.suggestions,
+        suggestions: cfg.suggestions ?? getTenantSuggestionPool(cfg.slug),
         placeholder: cfg.placeholder,
       }
     : { slug: "embed", gateMode: "turn_limited", theme: "dark", accent: null, attribution: false };

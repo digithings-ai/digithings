@@ -30,6 +30,7 @@ import {
   EMBED_FREE_TURN_LIMIT,
 } from "@/lib/embed-gate";
 import { readEmbedUiParams } from "@/lib/embed-ui-params";
+import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
 import {
   useEmbedTenantConfig,
   type EmbedTenantClientConfig,
@@ -148,7 +149,7 @@ function EmbedChat({
   }, [uiParams.welcome, tenantCfg.welcome, ungated]);
 
   const placeholder = uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…";
-  const suggestions = uiParams.suggestions ?? tenantCfg.suggestions ?? [];
+  const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
   const headerTitle = tenantCfg.title;
 
   const wrappedSend = useCallback(
