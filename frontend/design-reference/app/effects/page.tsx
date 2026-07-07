@@ -4,6 +4,7 @@ import { AmbientMesh } from "@/components/effects/ambient-mesh";
 import { ClipReveal } from "@/components/effects/clip-reveal";
 import { CrossfadeSections } from "@/components/effects/crossfade-sections";
 import { HeroGraphReference } from "@/components/hero-graph-reference";
+import { PipelineReference } from "@/components/pipeline-reference";
 import { ResearchPipeline } from "@/components/effects/research-pipeline";
 import { RotatingPrompts } from "@/components/effects/rotating-prompts";
 import { RoutingMap } from "@/components/effects/routing-map";
@@ -138,6 +139,8 @@ export default function EffectsPage() {
         </p>
         <ResearchPipeline />
       </section>
+
+      <PipelineReference />
 
       <section className="section-block" id="ambient-mesh">
         <p className="kicker">{"// ambient mesh"}</p>
