@@ -17,33 +17,51 @@ export function TypeSpecimen() {
         headlines), the body face (reading), and the mono face (data, labels, numerals).
       </p>
 
-      <div className="spec">
-        <div className="spec-row">
-          <span className="spec-role">display</span>
-          <div className="spec-display">
-            <p className="spec-aa">Aa</p>
-            <div className="spec-lines">
-              <p className="spec-headline">Research that ends in an order.</p>
-              <p className="spec-headline spec-italic">
+      {/* Token-backed Tailwind utilities via the @theme bridge: font + colour
+          utilities (font-display, font-sans, font-mono, text-ink, text-accent)
+          emit var(--token), so the specimen re-typesets when the type suite
+          switches. spec-row / spec-italic / spec-mono stay as classes — their
+          :first-child divider and `em` / `p` child styling live in kept
+          combinator rules in the CSS. */}
+      <div className="mt-[1.2rem] overflow-hidden rounded-[12px] border border-hair bg-surface/40">
+        <div className="spec-row grid grid-cols-[5rem_1fr] gap-[1.2rem] border-t border-hair px-[1.3rem] py-[1.4rem] max-[640px]:grid-cols-1 max-[640px]:gap-[0.6rem]">
+          <span className="pt-[0.4rem] font-mono text-[0.58rem] uppercase tracking-[0.12em] text-ink-mute">
+            display
+          </span>
+          <div className="flex flex-wrap items-baseline gap-[1.4rem]">
+            <p className="m-0 font-display text-[clamp(3rem,9vw,5.5rem)] font-normal leading-[0.9] text-ink">
+              Aa
+            </p>
+            <div className="min-w-0">
+              <p className="m-0 font-display text-[clamp(1.5rem,3.4vw,2.4rem)] font-normal leading-[1.1] tracking-[-0.015em] text-ink">
+                Research that ends in an order.
+              </p>
+              <p className="spec-italic m-0 font-display text-[clamp(1.5rem,3.4vw,2.4rem)] font-normal leading-[1.1] tracking-[-0.015em] text-ink">
                 <em>Money-colored, glance-readable.</em>
               </p>
             </div>
           </div>
         </div>
 
-        <div className="spec-row">
-          <span className="spec-role">body</span>
-          <p className="spec-body">
+        <div className="spec-row grid grid-cols-[5rem_1fr] gap-[1.2rem] border-t border-hair px-[1.3rem] py-[1.4rem] max-[640px]:grid-cols-1 max-[640px]:gap-[0.6rem]">
+          <span className="pt-[0.4rem] font-mono text-[0.58rem] uppercase tracking-[0.12em] text-ink-mute">
+            body
+          </span>
+          <p className="m-0 max-w-[56ch] font-sans text-[1rem] leading-[1.65] text-ink-soft">
             A backtest is a rumor; a tearsheet you can re-run is a receipt. The body voice carries
             the argument between the headlines — long enough to trust, quiet enough to read.
           </p>
         </div>
 
-        <div className="spec-row">
-          <span className="spec-role">mono</span>
-          <div className="spec-mono">
+        <div className="spec-row grid grid-cols-[5rem_1fr] gap-[1.2rem] border-t border-hair px-[1.3rem] py-[1.4rem] max-[640px]:grid-cols-1 max-[640px]:gap-[0.6rem]">
+          <span className="pt-[0.4rem] font-mono text-[0.58rem] uppercase tracking-[0.12em] text-ink-mute">
+            mono
+          </span>
+          <div className="spec-mono flex flex-col gap-[0.5rem] font-mono text-[0.95rem] text-ink">
             <p>PF 2.31 · win 64.9% · maxDD −18.4%</p>
-            <p className="spec-nums">0 1 2 3 4 5 6 7 8 9 · $1,284,000 · 63,410.55</p>
+            <p className="[font-variant-numeric:tabular-nums] tracking-[0.02em] text-ink-soft">
+              0 1 2 3 4 5 6 7 8 9 · $1,284,000 · 63,410.55
+            </p>
           </div>
         </div>
       </div>

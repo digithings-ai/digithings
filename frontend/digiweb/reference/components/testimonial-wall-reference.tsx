@@ -38,24 +38,35 @@ export function TestimonialWallReference() {
         numbers and real orgs only, phrased as <code>{"{Org}"} × digiquant</code>, never invented.
         Everything here is illustrative, badged as such.
       </p>
-      <p className="tw-badge">Example data · not live</p>
+      {/* Token-backed Tailwind utilities via the @theme bridge: colour + font
+          utilities emit var(--token) so they live-switch on data-theme / livery.
+          Off-scale rem values stay as arbitrary utilities to preserve the design. */}
+      <p className="mt-[0.9rem] inline-block rounded-full border border-hair px-[0.6rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+        Example data · not live
+      </p>
 
-      <div className="tw-grid">
+      <div className="mt-[1.2rem] grid grid-cols-3 gap-[0.9rem] max-[820px]:grid-cols-1">
         {QUOTES.map((q) => (
-          <figure key={q.name} className="tw-card">
-            <blockquote className="tw-quote">{q.quote}</blockquote>
-            <figcaption className="tw-cite">
-              <span className="tw-avatar" aria-hidden="true">
+          <figure
+            key={q.name}
+            className="m-0 flex flex-col justify-between gap-[1.1rem] rounded-[12px] border border-hair bg-surface p-[1.3rem]"
+          >
+            <blockquote className="m-0 font-display font-normal text-[1.02rem] leading-[1.4] text-ink">{q.quote}</blockquote>
+            <figcaption className="flex items-center gap-[0.7rem]">
+              <span
+                className="flex size-[34px] flex-shrink-0 items-center justify-center rounded-full bg-accent-weak font-mono text-[0.62rem] tracking-[0.04em] text-accent"
+                aria-hidden="true"
+              >
                 {q.name
                   .split(/[.\s]+/)
                   .filter(Boolean)
                   .map((p) => p[0])
                   .join("")}
               </span>
-              <span className="tw-who">
-                <span className="tw-name">{q.name}</span>
-                <span className="tw-role">
-                  {q.role} · {q.org} <span className="tw-x">× digiquant</span>
+              <span className="flex min-w-0 flex-col">
+                <span className="font-mono text-[0.76rem] text-ink">{q.name}</span>
+                <span className="font-mono text-[0.62rem] text-ink-mute">
+                  {q.role} · {q.org} <span className="text-accent">× digiquant</span>
                 </span>
               </span>
             </figcaption>
@@ -63,12 +74,13 @@ export function TestimonialWallReference() {
         ))}
       </div>
 
-      <div className="tw-orgs" aria-label="Illustrative organizations">
-        <span className="tw-orgs-label">trusted by</span>
+      <div
+        className="mt-[1.4rem] flex flex-wrap items-center gap-x-[1.4rem] gap-y-[0.5rem] border-t border-hair pt-[1.1rem] font-mono text-[0.74rem] text-ink-soft"
+        aria-label="Illustrative organizations"
+      >
+        <span className="text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">trusted by</span>
         {ORGS.map((o) => (
-          <span key={o} className="tw-org">
-            {o}
-          </span>
+          <span key={o}>{o}</span>
         ))}
       </div>
     </section>

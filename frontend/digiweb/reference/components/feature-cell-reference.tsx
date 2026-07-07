@@ -43,14 +43,23 @@ export function FeatureCellReference() {
         cropped in a frame with a mono overlay tag. Copy leads; the screenshot proves it.
       </p>
 
-      <div className="fc-grid">
+      {/* Token-backed Tailwind utilities via the @theme bridge; off-scale rem and
+          the clamp() outcome size stay as arbitrary utilities. fc-cell keeps its
+          class for the :nth-child(even) .fc-copy order swap; fc-link keeps its
+          class for the :hover underline. */}
+      <div className="mt-[1.2rem] grid gap-[1.2rem]">
         {CELLS.map((cell) => (
-          <article key={cell.tag} className={`fc-cell accent-${cell.accent}`}>
+          <article
+            key={cell.tag}
+            className={`fc-cell grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-center gap-[1.6rem] rounded-[12px] border border-hair bg-surface p-[1.6rem] max-[760px]:grid-cols-1 accent-${cell.accent}`}
+          >
             <div className="fc-copy">
-              <p className="fc-eyebrow">{cell.eyebrow}</p>
-              <h3 className="fc-outcome">{cell.outcome}</h3>
-              <p className="fc-mechanism">{cell.mechanism}</p>
-              <a className="fc-link" href="#feature-cell">
+              <p className="font-mono text-[0.62rem] uppercase tracking-[0.12em] text-accent">{cell.eyebrow}</p>
+              <h3 className="mt-[0.5rem] font-display font-normal text-[clamp(1.3rem,2.6vw,1.7rem)] tracking-[-0.013em] leading-[1.12] text-ink">
+                {cell.outcome}
+              </h3>
+              <p className="mt-[0.6rem] max-w-[42ch] text-[0.92rem] text-ink-soft">{cell.mechanism}</p>
+              <a className="fc-link mt-[0.9rem] inline-block font-mono text-[0.72rem] text-accent no-underline" href="#feature-cell">
                 Learn more <span aria-hidden="true">→</span>
               </a>
             </div>

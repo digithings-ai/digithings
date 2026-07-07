@@ -36,10 +36,17 @@ export function CopyGrammarReference() {
         infrastructure vendor than a consumer app.
       </p>
 
-      <div className="cg-grid">
-        <div className="cg-card">
-          <p className="cg-card-title">Headline formulas</p>
-          <dl className="cg-list">
+      {/* Token-backed Tailwind utilities via the @theme bridge: colour + font
+          utilities (text-ink, text-accent, border-hair, font-mono) emit
+          var(--token) so they live-switch on data-theme / livery / type suite.
+          cg-row / cg-ours / cg-list--doctrine stay as classes — their dt/dd
+          styling and row dividers live in kept combinator rules in the CSS. */}
+      <div className="mt-[1.2rem] grid grid-cols-2 gap-[0.9rem] max-[760px]:grid-cols-1">
+        <div className="rounded-[12px] border border-hair bg-surface p-[1.2rem]">
+          <p className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-accent">
+            Headline formulas
+          </p>
+          <dl className="mt-[0.9rem] grid gap-[0.7rem]">
             {HEADLINES.map((h) => (
               <div key={h.example} className={h.ours ? "cg-row cg-ours" : "cg-row"}>
                 <dt>{h.pattern}</dt>
@@ -49,14 +56,16 @@ export function CopyGrammarReference() {
           </dl>
         </div>
 
-        <div className="cg-card">
-          <p className="cg-card-title">CTAs name the destination</p>
-          <dl className="cg-list">
+        <div className="rounded-[12px] border border-hair bg-surface p-[1.2rem]">
+          <p className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-accent">
+            CTAs name the destination
+          </p>
+          <dl className="mt-[0.9rem] grid gap-[0.7rem]">
             {CTAS.map((c) => (
               <div key={c.theirs} className="cg-row">
                 <dt>{c.theirs}</dt>
                 <dd>
-                  <span className="cg-arrow" aria-hidden="true">
+                  <span className="text-accent" aria-hidden="true">
                     →{" "}
                   </span>
                   {c.ours}
@@ -64,15 +73,17 @@ export function CopyGrammarReference() {
               </div>
             ))}
           </dl>
-          <p className="cg-note">
+          <p className="mt-[0.9rem] border-t border-hair pt-[0.8rem] text-[0.8rem] text-ink-mute">
             Never &ldquo;Get started&rdquo; without naming where it goes. Per-tier verbs escalate
             with commitment: sign up → get started → start free trial → request a demo.
           </p>
         </div>
 
-        <div className="cg-card cg-card--wide">
-          <p className="cg-card-title">Voice doctrine</p>
-          <dl className="cg-list cg-list--doctrine">
+        <div className="col-span-full rounded-[12px] border border-hair bg-surface p-[1.2rem]">
+          <p className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-accent">
+            Voice doctrine
+          </p>
+          <dl className="cg-list--doctrine mt-[0.9rem] grid gap-[0.7rem]">
             {DOCTRINE.map((d) => (
               <div key={d.label} className="cg-row">
                 <dt>{d.label}</dt>

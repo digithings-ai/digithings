@@ -41,16 +41,21 @@ export function NumberedStagesReference() {
         research → backtest → execute pipeline, each stage wearing its module&apos;s livery.
       </p>
 
-      <ol className="ns-spine">
+      {/* Token-backed Tailwind utilities via the @theme bridge. ns-stage keeps its
+          class for the ::before spine line + :last-child rules; ns-node keeps its
+          class for its two-colour color-mix border/background. */}
+      <ol className="mt-[1.2rem] grid list-none gap-0 p-0">
         {STAGES.map((s) => (
-          <li key={s.num} className={`ns-stage accent-${s.livery}`}>
+          <li key={s.num} className={`ns-stage relative grid grid-cols-[3.4rem_1fr] gap-[1.1rem] pb-[1.8rem] accent-${s.livery}`}>
             <span className="ns-node" aria-hidden="true">
               {s.num}
             </span>
-            <div className="ns-body">
-              <p className="ns-tag">{s.module}</p>
-              <h3 className="ns-title">{s.title}</h3>
-              <p className="ns-mech">{s.mech}</p>
+            <div className="pt-[0.1rem]">
+              <p className="font-mono text-[0.6rem] uppercase tracking-[0.12em] text-accent">{s.module}</p>
+              <h3 className="mt-[0.2rem] font-display font-normal text-[clamp(1.2rem,2.4vw,1.5rem)] tracking-[-0.013em] text-ink">
+                {s.title}
+              </h3>
+              <p className="mt-[0.35rem] max-w-[52ch] text-[0.9rem] text-ink-soft">{s.mech}</p>
             </div>
           </li>
         ))}

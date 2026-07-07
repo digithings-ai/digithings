@@ -31,19 +31,27 @@ export function BentoGridReference() {
         mobile.
       </p>
 
+      {/* Token-backed Tailwind utilities via the @theme bridge. bento-cell keeps
+          its class for the accent ::before hairline, :hover lift, and its
+          var(--ease) transition; bento-name keeps its class for the
+          .bento-hero .bento-name descendant override; bento-hero/wide/tall stay
+          as CSS (color-mix hero bg + grouped responsive reset). */}
       <div className="bento-grid">
         {CELLS.map((cell) => {
           const mod = moduleById(cell.id);
           if (!mod) return null;
           return (
-            <article key={cell.id} className={`bento-cell bento-${cell.span} accent-${cell.id}`}>
-              <div className="bento-cell-top">
+            <article
+              key={cell.id}
+              className={`bento-cell flex flex-col justify-between rounded-[12px] border border-hair p-[1.1rem] bento-${cell.span} accent-${cell.id}`}
+            >
+              <div className="flex items-center justify-between">
                 <Emblem id={cell.id} size={cell.span === "hero" ? 40 : 26} />
-                <span className="bento-tier">{mod.tier}</span>
+                <span className="font-mono text-[0.56rem] uppercase tracking-[0.1em] text-ink-mute">{mod.tier}</span>
               </div>
-              <div className="bento-cell-body">
-                <h3 className="bento-name">{mod.name}</h3>
-                <p className="bento-role">{cell.blurb}</p>
+              <div>
+                <h3 className="bento-name font-mono text-[0.95rem] text-ink">{mod.name}</h3>
+                <p className="mt-[0.3rem] max-w-[32ch] text-[0.8rem] text-ink-soft">{cell.blurb}</p>
               </div>
             </article>
           );
