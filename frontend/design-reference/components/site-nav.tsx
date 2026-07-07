@@ -2,9 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { ThemeToggle } from "@digithings/web";
+import {
+  applyLivery,
+  getLiverySnapshot,
+  getLiveryServerSnapshot,
+  LIVERY_OPTIONS,
+  subscribeLivery,
+} from "@/components/livery-store";
 
 const PAGES = [
   { href: "/", label: "Foundations" },
@@ -45,6 +52,8 @@ export function SiteNav() {
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
+  const livery = useSyncExternalStore(subscribeLivery, getLiverySnapshot, getLiveryServerSnapshot);
+
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   return (
@@ -62,6 +71,17 @@ export function SiteNav() {
           </li>
         ))}
       </ul>
+
+      <label className="site-nav-livery">
+        <span className="sr-only">Page livery</span>
+        <select value={livery} onChange={(e) => applyLivery(e.target.value)}>
+          {LIVERY_OPTIONS.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <ThemeToggle className="site-nav-theme" />
 

@@ -6,6 +6,7 @@ import { GeistMono } from "geist/font/mono";
 import { Fraunces } from "next/font/google";
 import { ThemeProvider, MotionProvider, themeInitScript } from "@digithings/web";
 import { SiteNav } from "@/components/site-nav";
+import { liveryInitScript } from "@/components/livery-store";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script dangerouslySetInnerHTML={{ __html: liveryInitScript }} />
         <script
           dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }}
         />

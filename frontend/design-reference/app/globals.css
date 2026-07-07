@@ -97,11 +97,59 @@ html {
   border-bottom-color: var(--accent);
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Livery selector — persistent, app-wide theme chooser in the bar */
+
+.site-nav-livery {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+.site-nav-livery select {
+  appearance: none;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0.32rem 1.4rem 0.32rem 0.6rem;
+  cursor: pointer;
+  /* mono chevron, tinted with the live accent */
+  background-image: linear-gradient(45deg, transparent 50%, var(--accent) 50%),
+    linear-gradient(135deg, var(--accent) 50%, transparent 50%);
+  background-position: right 0.62rem center, right 0.42rem center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.site-nav-livery select:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.site-nav-livery select option {
+  background: var(--surface);
+  color: var(--ink);
+}
+
 /* Theme toggle + hamburger — the production dqnav grammar: borderless,
    no fill, glyph/lines only; ink-mute resting, ink on hover. */
 
 .site-nav-theme {
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -249,6 +297,12 @@ html {
   color: var(--ink-soft);
   max-width: 62ch;
   margin-top: 0.9rem;
+}
+
+/* the hero eyebrow is accent like every other kicker — outrank `.hero p` */
+.hero .kicker {
+  color: var(--accent);
+  margin-top: 0;
 }
 
 .section-block {
