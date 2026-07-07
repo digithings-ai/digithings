@@ -8,8 +8,8 @@ const CORPUS = [
   "kelly sizing — position cap",
   "Sharpe ratio — risk-adjusted return",
   "maxDD — maximum drawdown",
-  "Atlas — research scheduler",
-  "Hermes — signal messenger",
+  "atlas — research scheduler",
+  "hermes — signal messenger",
   "tearsheet — re-runnable receipt",
 ];
 

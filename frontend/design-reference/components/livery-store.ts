@@ -12,18 +12,18 @@
 export type LiveryOption = { id: string; label: string; hex: string };
 
 export const LIVERY_OPTIONS: LiveryOption[] = [
-  { id: "default", label: "Default", hex: "var(--accent)" },
-  { id: "mono", label: "Monochrome", hex: "var(--ink)" },
-  { id: "digigraph", label: "DigiGraph", hex: "#e5b765" },
-  { id: "digiquant", label: "DigiQuant", hex: "#3dd6c4" },
-  { id: "digisearch", label: "DigiSearch", hex: "#5aa3c4" },
-  { id: "digichat", label: "DigiChat", hex: "#e2708a" },
-  { id: "digikey", label: "DigiKey", hex: "#d97a5a" },
-  { id: "digivault", label: "DigiVault", hex: "#9d8fc9" },
-  { id: "digistore", label: "DigiStore", hex: "#7b7fc7" },
-  { id: "atlas", label: "Atlas", hex: "#6fbf94" },
-  { id: "hermes", label: "Hermes", hex: "#4a8f7b" },
-  { id: "kairos", label: "Kairos", hex: "#2f7a65" },
+  { id: "default", label: "default", hex: "var(--accent)" },
+  { id: "mono", label: "monochrome", hex: "var(--ink)" },
+  { id: "digigraph", label: "digigraph", hex: "#e5b765" },
+  { id: "digiquant", label: "digiquant", hex: "#3dd6c4" },
+  { id: "digisearch", label: "digisearch", hex: "#5aa3c4" },
+  { id: "digichat", label: "digichat", hex: "#e2708a" },
+  { id: "digikey", label: "digikey", hex: "#d97a5a" },
+  { id: "digivault", label: "digivault", hex: "#9d8fc9" },
+  { id: "digistore", label: "digistore", hex: "#7b7fc7" },
+  { id: "atlas", label: "atlas", hex: "#6fbf94" },
+  { id: "hermes", label: "hermes", hex: "#4a8f7b" },
+  { id: "kairos", label: "kairos", hex: "#2f7a65" },
 ];
 
 const KEY = "dr-livery";

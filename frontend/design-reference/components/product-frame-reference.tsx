@@ -40,7 +40,7 @@ export function ProductFrame({ tag, children }: { tag?: string; children: ReactN
   );
 }
 
-/** A mock Atlas tearsheet crop — stand-in for a real product screenshot. */
+/** A mock atlas tearsheet crop — stand-in for a real product screenshot. */
 export function MockTearsheet() {
   return (
     <div className="pf-mock">

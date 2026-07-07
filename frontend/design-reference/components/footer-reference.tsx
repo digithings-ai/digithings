@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { m, useReducedMotion, useScroll, useTransform } from "motion/react";
 
 const COLUMNS = [
-  { title: "Product", links: ["DigiGraph", "DigiQuant", "DigiSearch", "DigiChat"] },
+  { title: "Product", links: ["digigraph", "digiquant", "digisearch", "digichat"] },
   { title: "Company", links: ["About", "Careers", "Blog"] },
   { title: "Resources", links: ["Docs", "Changelog", "Status"] },
   { title: "Connect", links: ["GitHub", "Discord", "X"] },
@@ -77,7 +77,7 @@ export function FooterReference() {
             ))}
           </span>
 
-          <span className="ref-footer-copyright">© 2026 DigiThings · SOC 2 in progress</span>
+          <span className="ref-footer-copyright">© 2026 digithings · SOC 2 in progress</span>
         </div>
 
         {/* Colophon — the page's last word (canon §08): the brand at giant

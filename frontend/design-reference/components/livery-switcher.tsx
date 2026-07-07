@@ -4,14 +4,14 @@ import { useState } from "react";
 import { m, useReducedMotion } from "motion/react";
 
 const LIVERIES = [
-  { id: "digigraph", label: "DigiGraph", hex: "#e5b765" },
-  { id: "digiquant", label: "DigiQuant", hex: "#3dd6c4" },
-  { id: "digisearch", label: "DigiSearch", hex: "#5aa3c4" },
-  { id: "digichat", label: "DigiChat", hex: "#e2708a" },
-  { id: "digikey", label: "DigiKey", hex: "#d97a5a" },
-  { id: "digivault", label: "DigiVault", hex: "#9d8fc9" },
-  { id: "digistore", label: "DigiStore", hex: "#7b7fc7" },
-  { id: "atlas", label: "Atlas", hex: "#6fbf94" },
+  { id: "digigraph", label: "digigraph", hex: "#e5b765" },
+  { id: "digiquant", label: "digiquant", hex: "#3dd6c4" },
+  { id: "digisearch", label: "digisearch", hex: "#5aa3c4" },
+  { id: "digichat", label: "digichat", hex: "#e2708a" },
+  { id: "digikey", label: "digikey", hex: "#d97a5a" },
+  { id: "digivault", label: "digivault", hex: "#9d8fc9" },
+  { id: "digistore", label: "digistore", hex: "#7b7fc7" },
+  { id: "atlas", label: "atlas", hex: "#6fbf94" },
 ] as const;
 
 export function LiverySwitcher() {

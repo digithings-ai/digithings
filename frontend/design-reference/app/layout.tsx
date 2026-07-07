@@ -17,8 +17,8 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "DigiThings frontend design reference",
-  description: "React + Tailwind + Motion design reference for DigiThings frontends.",
+  title: "digithings frontend design reference",
+  description: "React + Tailwind + Motion design reference for digithings frontends.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

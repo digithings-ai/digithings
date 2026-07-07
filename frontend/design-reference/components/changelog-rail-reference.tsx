@@ -36,16 +36,16 @@ const RELEASES: Release[] = [
   {
     version: "v2.1",
     date: "2026-05-02",
-    title: "Atlas research loop",
+    title: "atlas research loop",
     tag: "feature",
-    entries: ["Atlas proposes directions from free data.", "Hermes routes signals to the sizer."],
+    entries: ["atlas proposes directions from free data.", "hermes routes signals to the sizer."],
   },
   {
     version: "v2.0",
     date: "2026-04-14",
-    title: "Olympus sub-graphs",
+    title: "olympus sub-graphs",
     tag: "breaking",
-    entries: ["Split Atlas / Hermes / Kairos into sub-graphs.", "Supervisor rewired around the split."],
+    entries: ["Split atlas / hermes / kairos into sub-graphs.", "Supervisor rewired around the split."],
   },
 ];
 

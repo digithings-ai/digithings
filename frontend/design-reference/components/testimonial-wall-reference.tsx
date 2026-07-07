@@ -15,7 +15,7 @@ const QUOTES: Quote[] = [
     org: "Meridian Desk",
   },
   {
-    quote: "Atlas proposes, digiquant proves, Hermes ships. The loop is the product.",
+    quote: "atlas proposes, digiquant proves, hermes ships. The loop is the product.",
     name: "S. Vance",
     role: "Quant Lead",
     org: "Cedar Street",

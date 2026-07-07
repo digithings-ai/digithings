@@ -1,6 +1,6 @@
 type Stage = { num: string; module: string; livery: string; title: string; mech: string };
 
-// Linear's numbered feature progression, mapped to the real DigiThings pipeline.
+// Linear's numbered feature progression, mapped to the real digithings pipeline.
 const STAGES: Stage[] = [
   {
     num: "1.0",
@@ -21,7 +21,7 @@ const STAGES: Stage[] = [
     module: "hermes",
     livery: "hermes",
     title: "Execute",
-    mech: "A validated signal routes to the sizer; Kairos holds it until the moment the rules actually fire.",
+    mech: "A validated signal routes to the sizer; kairos holds it until the moment the rules actually fire.",
   },
 ];
 

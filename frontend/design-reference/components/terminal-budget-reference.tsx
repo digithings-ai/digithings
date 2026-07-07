@@ -88,9 +88,9 @@ export function TerminalBudgetReference() {
       </div>
 
       <div className="terminal-layout">
-        <article className="terminal-shell" aria-label="Scripted DigiThings terminal">
+        <article className="terminal-shell" aria-label="Scripted digithings terminal">
           <header>
-            <span>DigiThings Session</span>
+            <span>digithings session</span>
             <span className="muted">illustrative</span>
           </header>
           <pre>
@@ -114,7 +114,7 @@ export function TerminalBudgetReference() {
           <ul>
             {MODULES.map((module) => (
               <li key={module} className={lit.has(module) ? "on" : undefined}>
-                {module.toUpperCase()}
+                {module}
               </li>
             ))}
           </ul>

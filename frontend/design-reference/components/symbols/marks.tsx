@@ -2,11 +2,11 @@
  * Product brand marks, ported faithfully for the symbols reference page.
  *
  * - OlympusMark: from frontend/digiquant-web/components/landing/OlympusMark.tsx
- *   (itself ported from the Olympus dashboard's atlas-mark.tsx). Strokes keep
+ *   (itself ported from the olympus dashboard's atlas-mark.tsx). Strokes keep
  *   their `olympus-stroke-N` classes so the dashboard's stroke-draw loader
  *   animation could be replayed via CSS if ever wanted here.
  *
- * DigiChat has no separate brand mark — its module emblem (the `>▮` terminal
+ * digichat has no separate brand mark — its module emblem (the `>▮` terminal
  * prompt in emblems.tsx) is its symbol. Draws in `currentColor` so it sits on
  * any surface and inherits the ink/accent of its livery scope.
  */

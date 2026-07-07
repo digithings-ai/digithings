@@ -15,14 +15,14 @@ const CELLS: Cell[] = [
   {
     eyebrow: "research",
     outcome: "Ideas that arrive already tested",
-    mechanism: "Atlas pulls free macro and market data, proposes directions, and hands each to a backtest before you ever see it.",
+    mechanism: "atlas pulls free macro and market data, proposes directions, and hands each to a backtest before you ever see it.",
     tag: "atlas · research",
     accent: "atlas",
   },
   {
     eyebrow: "execution",
     outcome: "From signal to order, timed",
-    mechanism: "Hermes routes a validated signal to the sizer and Kairos holds it until the moment the rules actually fire.",
+    mechanism: "hermes routes a validated signal to the sizer and kairos holds it until the moment the rules actually fire.",
     tag: "hermes · risk",
     accent: "hermes",
   },

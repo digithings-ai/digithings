@@ -17,7 +17,7 @@ const CTAS: { theirs: string; ours: string }[] = [
 
 const DOCTRINE: { label: string; value: string }[] = [
   { label: "voice", value: "Technical, precise, ownership-oriented — infrastructure, not consumer warmth." },
-  { label: "naming", value: "lowercase products (digithings · digiquant · digichat); proper nouns Olympus, Atlas, Hermes, NautilusTrader." },
+  { label: "naming", value: "every module and sub-graph is lowercase (digithings · digiquant · digichat · atlas · hermes · kairos · olympus); capitals are reserved for third-party tools (NautilusTrader, LangGraph)." },
   { label: "social proof", value: "{NN}% + label, or {Org} × digiquant — real numbers and real orgs only." },
 ];
 

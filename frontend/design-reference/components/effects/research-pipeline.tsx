@@ -60,7 +60,7 @@ const FLOW: { n: string; title: string; body: string; tool: string }[] = [
     n: "07",
     title: "Execution",
     body: "Promote up the ladder: backtest → paper → loopback → live. Every rung is a human gate.",
-    tool: "Kairos · gated",
+    tool: "kairos · gated",
   },
 ];
 

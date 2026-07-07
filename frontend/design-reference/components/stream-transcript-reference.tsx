@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { useInView, useReducedMotion } from "motion/react";
 
 /**
- * Streaming transcript — the DigiChat grammar (canon §16): `>` user turn,
+ * Streaming transcript — the digichat grammar (canon §16): `>` user turn,
  * `▸` assistant turn, a folded tool-work chip, and a streaming caret that types
  * the answer token by token. Wears the digichat rose livery. The answer text is
  * written straight to the DOM node (no per-frame React re-render); SSR / no-JS /

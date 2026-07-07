@@ -15,7 +15,7 @@ export default function FinancePage() {
           Quant surfaces, <em>money-colored.</em>
         </h1>
         <p>
-          The finance-specific grammar behind DigiQuant: price charts on TradingView Lightweight
+          The finance-specific grammar behind digiquant: price charts on TradingView Lightweight
           Charts, order books, and tearsheet metrics. Gains and losses wear the sanctioned
           <code> --up</code> / <code>--down</code> money colors; the module livery stays for
           identity and chrome, never for P&amp;L.

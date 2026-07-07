@@ -7,10 +7,10 @@ type Command = { group: string; label: string; hint: string; livery?: string };
 
 const COMMANDS: Command[] = [
   { group: "Actions", label: "Run a backtest", hint: "B", livery: "digiquant" },
-  { group: "Actions", label: "Ask DigiChat", hint: "C", livery: "digichat" },
+  { group: "Actions", label: "Ask digichat", hint: "C", livery: "digichat" },
   { group: "Actions", label: "Issue an API key", hint: "K", livery: "digikey" },
   { group: "Actions", label: "Search the corpus", hint: "/", livery: "digisearch" },
-  { group: "Navigate", label: "Open Olympus", hint: "O", livery: "atlas" },
+  { group: "Navigate", label: "Open olympus", hint: "O", livery: "atlas" },
   { group: "Navigate", label: "Open the vault", hint: "V", livery: "digivault" },
   { group: "Navigate", label: "View changelog", hint: "L" },
   { group: "Navigate", label: "Toggle theme", hint: "T" },

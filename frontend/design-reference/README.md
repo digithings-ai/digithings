@@ -1,6 +1,6 @@
 # design-reference
 
-The go-to **live** design reference for DigiThings frontend work — a React /
+The go-to **live** design reference for digithings frontend work — a React /
 Next.js / Tailwind / Motion app that renders every reusable pattern (visual
 components, motion, finance surfaces, chrome, account templates) as working
 code, wired to the shared design tokens. When you build a new frontend surface,

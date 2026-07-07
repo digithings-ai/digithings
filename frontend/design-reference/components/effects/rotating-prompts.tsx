@@ -5,7 +5,7 @@ import { m, useReducedMotion } from "motion/react";
 
 /** x.ai's rotating hero teasers + cursor's codebase Q&A, translated: the
  *  prompts are REAL quant questions, and in production each one links into
- *  DigiChat pre-filled — the teaser is a door, not a poster. */
+ *  digichat pre-filled — the teaser is a door, not a poster. */
 const PROMPTS = [
   "size a kelly-capped BTC position at 2x leverage",
   "explain this drawdown against the regime flags",

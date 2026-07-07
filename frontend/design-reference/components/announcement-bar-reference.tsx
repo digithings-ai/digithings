@@ -27,7 +27,7 @@ export function AnnouncementBarReference() {
       ) : (
         <div className="annc-bar" role="region" aria-label="Announcement">
           <a href="#announcement-bar" className="annc-link" onClick={(e) => e.preventDefault()}>
-            <span>DigiQuant v2.4 ships kelly-capped position sizing.</span>
+            <span>digiquant v2.4 ships kelly-capped position sizing.</span>
             <b>Read the changelog →</b>
           </a>
           <button

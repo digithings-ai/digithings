@@ -100,8 +100,8 @@ export default function SymbolsPage() {
         <h2 className="title">Wordmarks and signature marks.</h2>
         <p className="section-copy">
           The text lockup follows the footer colophon grammar: mono at weight 500, prefix in ink,
-          suffix wearing the accent of its scope. DigiChat has no separate mark — its module
-          emblem is enough. The Olympus mark is ported from the dashboard&apos;s loader, four
+          suffix wearing the accent of its scope. digichat has no separate mark — its module
+          emblem is enough. The olympus mark is ported from the dashboard&apos;s loader, four
           strokes in currentColor.
         </p>
         <div className="sym-grid sym-grid--marks">

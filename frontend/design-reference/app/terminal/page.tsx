@@ -14,7 +14,7 @@ export default function TerminalPage() {
         </h1>
         <p>
           Diegetic CLI grammar: mono markers, scripted sessions, explicit illustrative budgets —
-          the §05 frame that becomes the whole product in DigiChat.
+          the §05 frame that becomes the whole product in digichat.
         </p>
       </header>
 
