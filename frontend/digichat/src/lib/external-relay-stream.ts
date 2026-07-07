@@ -72,6 +72,9 @@ export async function createExternalRelayStreamResponse(opts: {
     execute: async ({ writer }) => {
       const textId = "assistant-main";
       let textOpen = false;
+      // Accumulates streamed answer text so we can drop the relay's terminal
+      // full-text re-emit (see the text-delta branch below).
+      let accumulatedText = "";
       const openText = () => {
         if (!textOpen) {
           writer.write({ type: "text-start", id: textId });
@@ -116,8 +119,17 @@ export async function createExternalRelayStreamResponse(opts: {
               data: { conversationId: data.conversationId },
             });
           } else if (event === "text-delta" && typeof data.delta === "string") {
+            // The relay (Foundry Responses API) streams the answer as incremental
+            // deltas, then re-sends the COMPLETE text as one terminal delta — which
+            // duplicated every answer in the client. Drop a delta that equals the
+            // full text streamed so far. (Root cause is relay-side; this is the
+            // container-side guard while that Function is unmaintained/undeployable.)
+            if (accumulatedText.length > 0 && data.delta === accumulatedText) {
+              continue;
+            }
             openText();
             writer.write({ type: "text-delta", id: textId, delta: data.delta });
+            accumulatedText += data.delta;
           } else if (event === "trace") {
             writer.write({
               type: "data-digigraphTrace",

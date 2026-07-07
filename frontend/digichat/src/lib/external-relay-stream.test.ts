@@ -97,6 +97,38 @@ describe("createExternalRelayStreamResponse", () => {
     expect(res.headers.get("X-Request-Id")).toBe("rid-1");
   });
 
+  it("drops the relay's terminal full-text re-emit so the answer is not duplicated", async () => {
+    // The Foundry relay streams incremental deltas, then re-sends the COMPLETE
+    // text as one terminal delta (verified against the live relay). That last
+    // frame must be dropped, not forwarded.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          sseBody([
+            'event: text-delta\ndata: {"type":"text-delta","delta":"Hi "}\n\n',
+            'event: text-delta\ndata: {"type":"text-delta","delta":"there"}\n\n',
+            'event: text-delta\ndata: {"type":"text-delta","delta":"Hi there"}\n\n',
+            'event: done\ndata: {"type":"done"}\n\n',
+          ]),
+          { status: 200 }
+        )
+      )
+    );
+    const out = await drain(
+      await createExternalRelayStreamResponse({
+        relayUrl: "https://relay.example.com/api/digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+      })
+    );
+    expect(out).toContain('"delta":"Hi "');
+    expect(out).toContain('"delta":"there"');
+    // the terminal snapshot equal to the whole answer so far is dropped
+    expect(out).not.toContain('"delta":"Hi there"');
+  });
+
   it("forwards the stored conversationId on subsequent turns", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(sseBody(['event: done\ndata: {"type":"done"}\n\n']), { status: 200 })
