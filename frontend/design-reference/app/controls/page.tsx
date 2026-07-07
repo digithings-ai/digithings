@@ -1,5 +1,6 @@
 import "./controls.css";
 import { DropdownReference } from "@/components/controls/dropdown-reference";
+import { FormFieldsReference } from "@/components/controls/form-fields-reference";
 import { NavButtonsReference } from "@/components/controls/nav-buttons-reference";
 import { SearchBarReference } from "@/components/controls/search-bar-reference";
 
@@ -21,6 +22,7 @@ export default function ControlsPage() {
       <DropdownReference />
       <SearchBarReference />
       <NavButtonsReference />
+      <FormFieldsReference />
     </main>
   );
 }

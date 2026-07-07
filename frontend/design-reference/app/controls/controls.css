@@ -318,3 +318,215 @@
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
+
+/* ── Form fields ──────────────────────────────────────────────────────── */
+
+.ff-grid {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.ff-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.ff-field--wide {
+  grid-column: 1 / -1;
+}
+
+.ff-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+.ff-input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  outline: none;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.ff-input::placeholder {
+  color: var(--ink-mute);
+}
+
+.ff-input:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.ff-textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.ff-help {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--ink-mute);
+}
+
+.ff-err {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--down);
+}
+
+.ff-field.is-error .ff-input {
+  border-color: color-mix(in srgb, var(--down) 60%, var(--hair));
+}
+
+.ff-field.is-error .ff-input:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--down) 22%, transparent);
+}
+
+.ff-field.is-disabled {
+  opacity: 0.55;
+}
+
+.ff-field.is-disabled .ff-input {
+  cursor: not-allowed;
+}
+
+/* selection controls */
+
+.ff-controls {
+  margin-top: 1.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+}
+
+.ff-ctl-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ff-check,
+.ff-radio,
+.ff-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+/* hide native inputs; drive the custom box/dot from :checked via sibling */
+.ff-check input,
+.ff-radio input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.ff-box {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1px solid var(--hair);
+  border-radius: 4px;
+  background: var(--surface);
+  position: relative;
+  transition: border-color 0.15s var(--ease), background-color 0.15s var(--ease);
+}
+
+.ff-check input:checked + .ff-box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.ff-check input:checked + .ff-box::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  color: var(--surface-inverse, #06110f);
+}
+
+.ff-check input:focus-visible + .ff-box,
+.ff-radio input:focus-visible + .ff-dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.ff-dot {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  background: var(--surface);
+  position: relative;
+  transition: border-color 0.15s var(--ease);
+}
+
+.ff-radio input:checked + .ff-dot {
+  border-color: var(--accent);
+}
+
+.ff-radio input:checked + .ff-dot::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.ff-toggle {
+  width: 34px;
+  height: 20px;
+  flex-shrink: 0;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  background: var(--surface);
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.ff-toggle .ff-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--ink-mute);
+  transition: transform 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+
+.ff-toggle.on {
+  background: var(--accent-weak);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+}
+
+.ff-toggle.on .ff-knob {
+  transform: translateX(14px);
+  background: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .ff-grid {
+    grid-template-columns: 1fr;
+  }
+}
