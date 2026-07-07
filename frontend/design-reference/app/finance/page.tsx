@@ -5,6 +5,7 @@ import { MonthlyReturnsReference } from "@/components/monthly-returns-reference"
 import { OrderbookReference } from "@/components/orderbook-reference";
 import { PerfMetricsReference } from "@/components/perf-metrics-reference";
 import { PriceChartReference } from "@/components/price-chart-reference";
+import { StockTickerReference } from "@/components/stock-ticker-reference";
 import { SyncedTearsheetReference } from "@/components/synced-tearsheet-reference";
 
 const CHART_RULES = [
@@ -32,6 +33,8 @@ export default function FinancePage() {
           identity and chrome, never for P&amp;L.
         </p>
       </header>
+
+      <StockTickerReference />
 
       <section className="section-block" id="price-chart">
         <p className="kicker">{"// price chart"}</p>

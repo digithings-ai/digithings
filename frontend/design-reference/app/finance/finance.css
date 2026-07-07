@@ -283,3 +283,72 @@
 .mr-table td.mr-ytd.down {
   color: var(--down);
 }
+
+/* ── stock ticker tape (seamless scrolling market strip) ────────────────── */
+
+.tk {
+  margin-top: 1.2rem;
+  overflow: hidden;
+  border-block: 1px solid var(--hair);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+}
+
+.tk-track {
+  display: inline-flex;
+  width: max-content;
+  animation: tk-scroll 42s linear infinite;
+  will-change: transform;
+}
+
+.tk:hover .tk-track {
+  animation-play-state: paused;
+}
+
+.tk-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.7rem 1.3rem;
+  border-right: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tk-sym {
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
+.tk-px {
+  color: var(--ink-soft);
+}
+
+.tk-chg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  font-size: 0.76rem;
+}
+
+.tk-chg.up {
+  color: var(--up);
+}
+
+.tk-chg.down {
+  color: var(--down);
+}
+
+@keyframes tk-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tk-track {
+    animation: none;
+  }
+}

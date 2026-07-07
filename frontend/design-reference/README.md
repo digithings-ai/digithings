@@ -28,7 +28,7 @@ is the only shared chrome.
 | `/layout-patterns` | Layout      | feature cell, bento grid, container-scaled product frame, phone mockup (olympus app) |
 | `/typography`      | Typography  | scroll-linked word reveals (blur / muted / outline), copy & voice grammar |
 | `/data`            | Data        | dot-matrix stat, count-up stat, marquee ticker, sticky card deck, changelog rail, pricing, comparison matrix |
-| `/finance`         | Finance     | Lightweight-Charts price chart / equity curve / drawdown, synced multi-pane tearsheet, charting rules, performance metrics, monthly-returns heatmap, order book |
+| `/finance`         | Finance     | stock ticker tape, Lightweight-Charts price chart / equity curve / drawdown, synced multi-pane tearsheet, charting rules, performance metrics, monthly-returns heatmap, order book |
 | `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal, section transitions (zoom-morph · stacking · cross-fade, revolut-mined) |
 | `/chrome`          | Chrome      | announcement bar, command palette, tabs (sliding indicator), toast stack, scroll-aware nav, colophon footer with glow sweep |
 | `/terminal`        | Terminal    | diegetic CLI session + budget, streaming chat transcript |
