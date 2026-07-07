@@ -484,3 +484,61 @@ html.no-js .dqpipe-track-fill { height: 100%; }
   opacity: 0;
   pointer-events: none;
 }
+
+/* ── cross-fade + parallax section transition (mined from revolut.com) ──── */
+
+.cf-wrap {
+  margin-top: 1.6rem;
+}
+
+.cf-block {
+  min-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 40rem;
+  will-change: opacity;
+}
+
+/* each child parallaxes from the block's --e by its own --d multiplier */
+.cf-block > * {
+  transform: translateY(calc(var(--e, 0) * var(--d, 1) * 24px));
+  will-change: transform;
+}
+
+.cf-kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.cf-title {
+  margin: 0.5rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--ink);
+}
+
+.cf-body {
+  margin: 0.9rem 0 0;
+  max-width: 44ch;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cf-block {
+    opacity: 1 !important;
+  }
+
+  .cf-block > * {
+    transform: none;
+  }
+}

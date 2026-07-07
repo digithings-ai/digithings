@@ -2,6 +2,7 @@ import "./effects.css";
 import { ScrollyGraph, Terminal, type TermLine } from "@digithings/web";
 import { AmbientMesh } from "@/components/effects/ambient-mesh";
 import { ClipReveal } from "@/components/effects/clip-reveal";
+import { CrossfadeSections } from "@/components/effects/crossfade-sections";
 import { HeroGraphReference } from "@/components/hero-graph-reference";
 import { ResearchPipeline } from "@/components/effects/research-pipeline";
 import { RotatingPrompts } from "@/components/effects/rotating-prompts";
@@ -177,6 +178,18 @@ export default function EffectsPage() {
           behind it. Scroll through the three below. Reduced motion renders a plain stack.
         </p>
         <StackingPanels />
+      </section>
+
+      <section className="section-block" id="crossfade-sections">
+        <p className="kicker">{"// section transition · cross-fade + parallax"}</p>
+        <h2 className="title">Sections that dissolve into each other.</h2>
+        <p className="section-copy">
+          The softest handoff: no pin — each block fades up as it nears the centre of the viewport
+          and fades away as it leaves, its lines rising in at staggered parallax rates so one
+          section melts into the next. Scroll through the three below. Reduced motion shows them all
+          at rest.
+        </p>
+        <CrossfadeSections />
       </section>
 
       <RotatingPrompts />
