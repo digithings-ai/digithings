@@ -28,7 +28,7 @@ is the only shared chrome.
 | `/controls`        | Controls    | custom dropdown pane, search bar, nav buttons, form fields, tooltip (4 placements), range slider (fill + ticks + disabled), tags/chips input, accordion (single-open disclosure), skeleton loading states (shimmer) |
 | `/layout-patterns` | Layout      | feature cell, bento grid, container-scaled product frame, phone mockup (olympus app) |
 | `/typography`      | Typography  | type specimen + live type-suite switcher (5 coordinated suites: display + body + mono), scroll-linked word reveals (blur / muted / outline), copy & voice grammar |
-| `/data`            | Data        | dot-matrix stat, count-up stat, odometer digit-roll, marquee ticker, sticky card deck, changelog rail, pricing, comparison matrix |
+| `/data`            | Data        | dot-matrix stat, count-up stat, odometer digit-roll, marquee ticker, sticky card deck, changelog rail, sortable data table, pricing, comparison matrix |
 | `/finance`         | Finance     | stock ticker tape, Lightweight-Charts price chart / equity curve / drawdown, synced multi-pane tearsheet, performance dashboard, portfolio blotter, charting rules, performance metrics, monthly-returns heatmap, order book |
 | `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal, section transitions (zoom-morph · stacking · cross-fade), arc-flight routing map (revolut-mined), pipeline workflow viz (sequential + parallel, per-step time/token/cost diagnostics; olympus-ported) |
 | `/chrome`          | Chrome      | announcement bar, command palette, tabs (sliding indicator), toast stack, scroll-aware nav, colophon footer with glow sweep |

@@ -8,6 +8,7 @@ import { OdometerReference } from "@/components/odometer-reference";
 import { PricingMatrixReference } from "@/components/pricing-matrix-reference";
 import { PricingReference } from "@/components/pricing-reference";
 import { RoadmapGanttReference } from "@/components/roadmap-gantt-reference";
+import { SortableTableReference } from "@/components/sortable-table-reference";
 import { StatCounterReference } from "@/components/stat-counter-reference";
 
 const DECK: CardDeckItem[] = [
@@ -96,6 +97,7 @@ export default function DataPage() {
       </section>
 
       <ChangelogRailReference />
+      <SortableTableReference />
       <RoadmapGanttReference />
       <PricingReference />
       <PricingMatrixReference />
