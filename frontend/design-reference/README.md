@@ -32,6 +32,7 @@ is the only shared chrome.
 | `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal |
 | `/chrome`          | Chrome      | announcement bar, scroll-aware nav, colophon footer with glow sweep |
 | `/terminal`        | Terminal    | diegetic CLI session + budget, streaming chat transcript |
+| `/chatbot`         | Chatbot     | digichat surface — thinking chain, composer, markdown, inline chart, inline route graph, custom action widgets |
 | `/symbols`         | Symbols     | module emblems, wordmarks, QR marks, vendor logos, utility glyphs |
 | `/account`         | Account     | login, sign-up, payment, settings, profile templates |
 

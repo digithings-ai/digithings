@@ -23,6 +23,7 @@ const PAGES = [
   { href: "/effects", label: "Effects" },
   { href: "/chrome", label: "Chrome" },
   { href: "/terminal", label: "Terminal" },
+  { href: "/chatbot", label: "Chatbot" },
   { href: "/symbols", label: "Symbols" },
   { href: "/account", label: "Account" },
 ] as const;
