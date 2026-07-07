@@ -712,3 +712,97 @@
     border-top: 1px solid var(--hair);
   }
 }
+
+/* Roadmap Gantt — initiative bars across a month axis */
+
+.rg-scroll {
+  margin-top: 1.2rem;
+  overflow-x: auto;
+}
+
+.rg {
+  --rg-label-w: 11rem;
+  min-width: 620px;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 0.9rem 1rem 1rem;
+  font-family: var(--font-mono);
+}
+
+/* header: label spacer + one cell per month */
+.rg-head {
+  display: grid;
+  grid-template-columns: var(--rg-label-w) repeat(var(--rg-cols), 1fr);
+  border-bottom: 1px solid var(--hair);
+  padding-bottom: 0.5rem;
+}
+
+.rg-month {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+  text-align: center;
+}
+
+.rg-body {
+  position: relative;
+  padding-top: 0.7rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.rg-row {
+  display: grid;
+  grid-template-columns: var(--rg-label-w) repeat(var(--rg-cols), 1fr);
+  align-items: center;
+}
+
+.rg-label {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  padding-right: 0.6rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rg-bar {
+  height: 1.5rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--hair));
+  display: flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  overflow: hidden;
+}
+
+.rg-bar-span {
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--accent) 75%, var(--ink));
+  white-space: nowrap;
+}
+
+/* "now" marker: label width + fractional offset across the timeline area */
+.rg-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--rg-label-w) + (var(--rg-now) / var(--rg-cols)) * (100% - var(--rg-label-w)));
+  width: 1px;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+.rg-now::before {
+  content: "now";
+  position: absolute;
+  top: -0.1rem;
+  left: 0.2rem;
+  font-size: 0.52rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}

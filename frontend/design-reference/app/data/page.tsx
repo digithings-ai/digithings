@@ -5,6 +5,7 @@ import { AlertCard, ChangelogCard, MetricCard, QuoteCard } from "@/components/de
 import { DotMatrixStat } from "@/components/dot-matrix-stat";
 import { PricingMatrixReference } from "@/components/pricing-matrix-reference";
 import { PricingReference } from "@/components/pricing-reference";
+import { RoadmapGanttReference } from "@/components/roadmap-gantt-reference";
 import { StatCounterReference } from "@/components/stat-counter-reference";
 
 const DECK: CardDeckItem[] = [
@@ -91,6 +92,7 @@ export default function DataPage() {
       </section>
 
       <ChangelogRailReference />
+      <RoadmapGanttReference />
       <PricingReference />
       <PricingMatrixReference />
     </main>
