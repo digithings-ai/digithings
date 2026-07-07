@@ -1251,3 +1251,61 @@
   color: var(--ink);
   border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
 }
+
+/* ── empty / error states ───────────────────────────────────────────────── */
+
+.es-grid {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.9rem;
+}
+
+.es-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.55rem;
+  padding: 1.8rem 1.3rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+
+.es-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  margin-bottom: 0.15rem;
+}
+
+.es-card--error .es-icon {
+  color: var(--down);
+  background: color-mix(in srgb, var(--down) 12%, transparent);
+}
+
+.es-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+
+.es-msg {
+  margin: 0 0 0.4rem;
+  max-width: 24ch;
+  color: var(--ink-mute);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .es-grid {
+    grid-template-columns: 1fr;
+  }
+}
