@@ -6,6 +6,7 @@ import { CrossfadeSections } from "@/components/effects/crossfade-sections";
 import { HeroGraphReference } from "@/components/hero-graph-reference";
 import { ResearchPipeline } from "@/components/effects/research-pipeline";
 import { RotatingPrompts } from "@/components/effects/rotating-prompts";
+import { RoutingMap } from "@/components/effects/routing-map";
 import { SectionMorph } from "@/components/effects/section-morph";
 import { StackingPanels } from "@/components/effects/stacking-panels";
 
@@ -190,6 +191,18 @@ export default function EffectsPage() {
           at rest.
         </p>
         <CrossfadeSections />
+      </section>
+
+      <section className="section-block" id="routing-map">
+        <p className="kicker">{"// routing map"}</p>
+        <h2 className="title">Orders, crossing the map.</h2>
+        <p className="section-copy">
+          Mined from revolut.com&apos;s globe of money crossing borders, in our register: orders
+          routing across venues. An abstract graticule with venue nodes and arcs — a bright packet
+          flows along each route and the nodes ping. Pure SVG + CSS, re-themes with the livery;
+          reduced motion holds it still.
+        </p>
+        <RoutingMap />
       </section>
 
       <RotatingPrompts />

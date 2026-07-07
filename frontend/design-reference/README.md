@@ -30,7 +30,7 @@ is the only shared chrome.
 | `/typography`      | Typography  | type specimen + live type-theme switcher (5 pairings), scroll-linked word reveals (blur / muted / outline), copy & voice grammar |
 | `/data`            | Data        | dot-matrix stat, count-up stat, odometer digit-roll, marquee ticker, sticky card deck, changelog rail, pricing, comparison matrix |
 | `/finance`         | Finance     | stock ticker tape, Lightweight-Charts price chart / equity curve / drawdown, synced multi-pane tearsheet, charting rules, performance metrics, monthly-returns heatmap, order book |
-| `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal, section transitions (zoom-morph · stacking · cross-fade, revolut-mined) |
+| `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal, section transitions (zoom-morph · stacking · cross-fade), arc-flight routing map (revolut-mined) |
 | `/chrome`          | Chrome      | announcement bar, command palette, tabs (sliding indicator), toast stack, scroll-aware nav, colophon footer with glow sweep |
 | `/terminal`        | Terminal    | diegetic CLI session + budget, streaming chat transcript |
 | `/chatbot`         | Chatbot     | digichat surface — thinking chain, composer, markdown, inline chart, inline route graph, custom action widgets |

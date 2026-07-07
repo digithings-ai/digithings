@@ -542,3 +542,86 @@ html.no-js .dqpipe-track-fill { height: 100%; }
     transform: none;
   }
 }
+
+/* ── arc-flight routing map (mined from revolut.com's globe) ────────────── */
+
+.rm {
+  margin-top: 1.6rem;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+}
+
+.rm-grid line {
+  stroke: color-mix(in srgb, var(--hair) 70%, transparent);
+  stroke-width: 1;
+}
+
+.rm-arc-base {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 26%, transparent);
+  stroke-width: 1.2;
+}
+
+.rm-arc-flow {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-dasharray: 0.14 1;
+  stroke-dashoffset: 1;
+  animation: rm-flow 3s linear infinite;
+}
+
+@keyframes rm-flow {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.rm-node {
+  fill: var(--accent);
+}
+
+.rm-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: rm-ping 2.6s var(--ease) infinite;
+}
+
+@keyframes rm-ping {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.7;
+  }
+  80%,
+  100% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+
+.rm-label {
+  fill: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-arc-flow {
+    animation: none;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+    opacity: 0.5;
+  }
+  .rm-ring {
+    animation: none;
+  }
+}
