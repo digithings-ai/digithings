@@ -162,7 +162,7 @@ export function TabsReference() {
         an underline for content regions, a pill for a compact mode switch.
       </p>
 
-      <div className="tabs-demo">
+      <div className="mt-[1.4rem]">
         <TabStrip
           tabs={VIEWS}
           active={view}
@@ -172,35 +172,47 @@ export function TabsReference() {
         />
 
         <div
-          className="tab-panel"
+          className="min-h-[8.5rem] pt-[1.1rem]"
           role="tabpanel"
           id={`Account-view-panel-${activeId}`}
           aria-labelledby={`Account-view-tab-${activeId}`}
         >
           <m.div key={view} {...panelMotion}>
             {activeId === "overview" && (
-              <div className="tab-overview">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-[0.9rem]">
                 {[
                   { k: "Equity", v: "$1.284M" },
                   { k: "Day P&L", v: "+$5.47K", up: true },
                   { k: "Sharpe", v: "2.31" },
                   { k: "Exposure", v: "0.62×" },
                 ].map((s) => (
-                  <div key={s.k} className="tab-stat">
-                    <span className="tab-stat-k">{s.k}</span>
-                    <span className={`tab-stat-v${s.up ? " up" : ""}`}>{s.v}</span>
+                  <div
+                    key={s.k}
+                    className="flex flex-col gap-[0.25rem] rounded-[9px] border border-hair bg-surface/60 px-[0.85rem] py-[0.7rem]"
+                  >
+                    <span className="font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
+                      {s.k}
+                    </span>
+                    <span className={`font-mono text-[1.05rem] ${s.up ? "text-up" : "text-ink"}`}>
+                      {s.v}
+                    </span>
                   </div>
                 ))}
               </div>
             )}
 
             {activeId === "positions" && (
-              <div className="tab-rows">
+              <div className="flex flex-col">
                 {POSITIONS.map((p) => (
-                  <div key={p.sym} className="tab-row">
-                    <span className="tab-sym">{p.sym}</span>
-                    <span className="tab-qty">{p.qty}</span>
-                    <span className={`tab-pnl ${p.up ? "up" : "down"}`}>
+                  <div
+                    key={p.sym}
+                    className="flex items-center gap-[1rem] border-b border-hair px-[0.2rem] py-[0.5rem] font-mono text-[0.78rem]"
+                  >
+                    <span className="flex-1 text-ink">{p.sym}</span>
+                    <span className="tabular-nums text-ink-soft">{p.qty}</span>
+                    <span
+                      className={`min-w-[5rem] text-right tabular-nums ${p.up ? "text-up" : "text-down"}`}
+                    >
                       {p.up ? "+" : "−"}${Math.abs(p.pnl).toLocaleString()}
                     </span>
                   </div>
@@ -209,22 +221,29 @@ export function TabsReference() {
             )}
 
             {activeId === "orders" && (
-              <div className="tab-rows">
+              <div className="flex flex-col">
                 {ORDERS.map((o) => (
-                  <div key={o.sym} className="tab-row">
-                    <span className={`tab-side ${o.side}`}>{o.side}</span>
-                    <span className="tab-sym">{o.sym}</span>
-                    <span className="tab-qty">{o.qty}</span>
-                    <span className="tab-px">{o.px}</span>
+                  <div
+                    key={o.sym}
+                    className="flex items-center gap-[1rem] border-b border-hair px-[0.2rem] py-[0.5rem] font-mono text-[0.78rem]"
+                  >
+                    <span
+                      className={`min-w-[2.6rem] text-[0.58rem] uppercase tracking-[0.08em] ${o.side === "buy" ? "text-up" : "text-down"}`}
+                    >
+                      {o.side}
+                    </span>
+                    <span className="flex-1 text-ink">{o.sym}</span>
+                    <span className="tabular-nums text-ink-soft">{o.qty}</span>
+                    <span className="tabular-nums text-ink-soft">{o.px}</span>
                   </div>
                 ))}
               </div>
             )}
 
             {activeId === "logs" && (
-              <div className="tab-logs">
+              <div className="flex flex-col gap-[0.35rem]">
                 {LOGS.map((l) => (
-                  <p key={l} className="tab-log">
+                  <p key={l} className="m-0 font-mono text-[0.72rem] text-ink-soft">
                     {l}
                   </p>
                 ))}
@@ -234,7 +253,7 @@ export function TabsReference() {
         </div>
       </div>
 
-      <div className="tabs-demo tabs-demo--pill">
+      <div className="mt-8">
         <TabStrip
           tabs={MODES}
           active={mode}
@@ -242,7 +261,7 @@ export function TabsReference() {
           variant="pill"
           label="Execution mode"
         />
-        <p className="tab-mode-note">{MODE_NOTE[mode]}</p>
+        <p className="mt-[0.9rem] font-mono text-[0.74rem] text-ink-mute">{MODE_NOTE[mode]}</p>
       </div>
     </section>
   );

@@ -12,6 +12,13 @@ const COLUMNS = [
 
 const THEMES = ["System", "Light", "Dark"] as const;
 
+/**
+ * Footer & chrome — utility link columns, a status/theme/copyright row, and the
+ * one sanctioned personality moment: an ambient bloom under a giant outlined
+ * colophon. Scroll into it and an accent glow sweeps left→right across the
+ * wordmark, scrubbed by the colophon's own scroll progress; reduced motion
+ * parks the sweep off-screen so no glow travels.
+ */
 export function FooterReference() {
   const [theme, setTheme] = useState<(typeof THEMES)[number]>("System");
   const brandRef = useRef<HTMLDivElement | null>(null);
@@ -43,22 +50,24 @@ export function FooterReference() {
         scroll progress. Everywhere else stays hairline.
       </p>
 
-      <footer className="ref-footer">
-        <div className="ref-footer-columns">
+      <footer className="mt-[1.2rem] overflow-hidden rounded-[12px] border border-hair px-[1.4rem] pt-[1.4rem]">
+        <div className="grid grid-cols-4 gap-[0.8rem] max-[900px]:grid-cols-2">
           {COLUMNS.map((col) => (
             <div key={col.title}>
-              <p className="ref-footer-col-title">{col.title}</p>
-              <ul>
+              <p className="text-[0.78rem] text-ink">{col.title}</p>
+              <ul className="m-0 mt-[0.6rem] flex list-none flex-col gap-[0.45rem] p-0">
                 {col.links.map((link) => (
-                  <li key={link}>{link}</li>
+                  <li key={link} className="text-[0.76rem] text-ink-mute">
+                    {link}
+                  </li>
                 ))}
               </ul>
             </div>
           ))}
         </div>
 
-        <div className="ref-footer-utility">
-          <span className="ref-footer-status">
+        <div className="mt-[1.2rem] flex flex-wrap items-center gap-[1rem] border-t border-hair py-[0.9rem] font-mono text-[0.68rem]">
+          <span className="inline-flex items-center gap-[0.4rem] text-ink-soft">
             <span className="status-dot" aria-hidden="true" />
             All systems operational
           </span>
@@ -77,7 +86,7 @@ export function FooterReference() {
             ))}
           </span>
 
-          <span className="ref-footer-copyright">© 2026 digithings · SOC 2 in progress</span>
+          <span className="ml-auto text-ink-mute">© 2026 digithings · SOC 2 in progress</span>
         </div>
 
         {/* Colophon — the page's last word (canon §08): the brand at giant

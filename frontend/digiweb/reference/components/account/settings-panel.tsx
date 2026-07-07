@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 
+/**
+ * Settings — every preference stacked in one card: label and consequence on the
+ * left, control (toggle, segmented switch, or select) on the right, a hairline
+ * between each decision. The danger zone sits last behind one more hairline, the
+ * only place red is spent. An interactive display template.
+ */
+
 type Theme = "system" | "light" | "dark";
 
 const THEMES: { value: Theme; label: string }[] = [
@@ -45,10 +52,10 @@ export function SettingsPanel() {
         hairline — red is reserved for it.
       </p>
 
-      <div className="acct-settings">
+      <div className="mt-[1.2rem] rounded-[12px] border border-hair bg-surface">
         <div className="acct-setting-row">
           <div>
-            <p className="acct-setting-name" id="setting-digests">
+            <p className="block text-[0.88rem] text-ink" id="setting-digests">
               Email digests
             </p>
             <p className="acct-setting-desc">Weekly PnL and drift summary, Mondays 07:00.</p>
@@ -62,7 +69,7 @@ export function SettingsPanel() {
 
         <div className="acct-setting-row">
           <div>
-            <p className="acct-setting-name" id="setting-telemetry">
+            <p className="block text-[0.88rem] text-ink" id="setting-telemetry">
               Usage telemetry
             </p>
             <p className="acct-setting-desc">Anonymous counters only — never strategy payloads.</p>
@@ -76,7 +83,7 @@ export function SettingsPanel() {
 
         <div className="acct-setting-row">
           <div>
-            <p className="acct-setting-name" id="setting-theme">
+            <p className="block text-[0.88rem] text-ink" id="setting-theme">
               Theme
             </p>
             <p className="acct-setting-desc">Follows the OS unless pinned.</p>
@@ -97,7 +104,7 @@ export function SettingsPanel() {
 
         <div className="acct-setting-row">
           <div>
-            <label className="acct-setting-name" htmlFor="setting-module">
+            <label className="block text-[0.88rem] text-ink" htmlFor="setting-module">
               Default module
             </label>
             <p className="acct-setting-desc">Where new sessions open.</p>
@@ -114,7 +121,7 @@ export function SettingsPanel() {
 
         <div className="acct-danger">
           <div>
-            <p className="acct-danger-label">danger zone</p>
+            <p className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-down">danger zone</p>
             <p className="acct-setting-desc">
               Deletes every strategy, backtest, and API key in this workspace. No undo.
             </p>

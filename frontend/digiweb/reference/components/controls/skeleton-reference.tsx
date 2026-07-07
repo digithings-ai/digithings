@@ -29,7 +29,7 @@ export function SkeletonReference() {
         only show once there&apos;s a number to color. Replay the load below.
       </p>
 
-      <div className="sk-toolbar">
+      <div className="mt-[1.2rem]">
         <button
           type="button"
           className={`sk-toggle${loading ? " on" : ""}`}
@@ -44,13 +44,13 @@ export function SkeletonReference() {
         </button>
       </div>
 
-      <div className="sk-demo" aria-busy={loading}>
+      <div className="mt-[1.1rem] flex flex-col gap-[1rem]" aria-busy={loading}>
         {/* profile / strategy card */}
-        <article className="sk-card">
+        <article className="flex items-center gap-[0.9rem] rounded-[12px] border border-hair bg-surface px-[1.1rem] py-[1rem]">
           {loading ? (
             <>
               <span className="sk sk-circle" />
-              <div className="sk-card-body">
+              <div className="flex min-w-0 flex-1 flex-col gap-[0.5rem]">
                 <span className="sk sk-line" style={{ width: "55%" }} />
                 <span className="sk sk-line" style={{ width: "38%" }} />
               </div>
@@ -58,12 +58,15 @@ export function SkeletonReference() {
             </>
           ) : (
             <>
-              <span className="sk-avatar" aria-hidden="true">
+              <span
+                className="grid size-10 shrink-0 place-items-center rounded-full bg-accent/16 font-mono text-[1rem] text-accent"
+                aria-hidden="true"
+              >
                 t
               </span>
-              <div className="sk-card-body">
-                <p className="sk-name">trend_xsec</p>
-                <p className="sk-role">cross-sectional momentum</p>
+              <div className="flex min-w-0 flex-1 flex-col gap-[0.5rem]">
+                <p className="m-0 font-mono text-[0.9rem] text-ink">trend_xsec</p>
+                <p className="m-0 font-mono text-[0.72rem] text-ink-mute">cross-sectional momentum</p>
               </div>
               <button type="button" className="btn-ghost">
                 View tearsheet
@@ -73,9 +76,12 @@ export function SkeletonReference() {
         </article>
 
         {/* metric tiles */}
-        <div className="sk-tiles">
+        <div className="grid grid-cols-3 gap-[0.7rem] max-[560px]:grid-cols-1">
           {METRICS.map((m, i) => (
-            <div className="sk-tile" key={m.k}>
+            <div
+              className="flex min-h-[4.4rem] flex-col gap-[0.5rem] rounded-[10px] border border-hair bg-surface px-[1rem] py-[0.9rem]"
+              key={m.k}
+            >
               {loading ? (
                 <>
                   <span className="sk sk-line sk-line--sm" style={{ width: `${40 + i * 8}%` }} />
@@ -83,8 +89,16 @@ export function SkeletonReference() {
                 </>
               ) : (
                 <>
-                  <span className="sk-tile-k">{m.k}</span>
-                  <span className={`sk-tile-v${m.tone ? ` ${m.tone}` : ""}`}>{m.v}</span>
+                  <span className="font-mono text-[0.54rem] uppercase tracking-[0.1em] text-ink-mute">
+                    {m.k}
+                  </span>
+                  <span
+                    className={`font-mono text-[1.3rem] tabular-nums ${
+                      m.tone === "up" ? "text-up" : m.tone === "down" ? "text-down" : "text-ink"
+                    }`}
+                  >
+                    {m.v}
+                  </span>
                 </>
               )}
             </div>

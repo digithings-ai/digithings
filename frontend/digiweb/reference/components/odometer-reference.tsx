@@ -65,11 +65,13 @@ export function OdometerReference() {
         without the roll.
       </p>
 
-      <div className="odo-grid">
+      <div className="mt-[1.2rem] grid grid-cols-4 overflow-hidden rounded-[12px] border border-hair bg-surface max-[720px]:grid-cols-2">
         {STATS.map((s) => (
           <div className="odo-cell" key={s.label}>
             <Odometer value={s.value} />
-            <span className="odo-label">{s.label}</span>
+            <span className="mt-[0.55rem] block font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">
+              {s.label}
+            </span>
           </div>
         ))}
       </div>

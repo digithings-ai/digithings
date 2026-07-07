@@ -65,7 +65,7 @@ export function PricingMatrixReference() {
         never shows a price.
       </p>
 
-      <div className="pm-toggle-row">
+      <div className="mt-[1.2rem] flex items-center gap-[0.6rem]">
         <button
           type="button"
           className={`pm-toggle${annual ? " on" : ""}`}
@@ -75,18 +75,20 @@ export function PricingMatrixReference() {
         >
           <span className="pm-knob" aria-hidden="true" />
         </button>
-        <span className="pm-toggle-label">Annual billing (20% off)</span>
+        <span className="font-mono text-[0.72rem] text-ink-soft">Annual billing (20% off)</span>
       </div>
 
-      <div className="pm-scroll">
+      <div className="mt-4 overflow-x-auto">
         <table className="pm-table">
           <thead>
             <tr>
               <th scope="col" aria-label="Feature" />
               {TIERS.map((tier) => (
                 <th scope="col" key={tier.name} className={tier.popular ? "popular" : undefined}>
-                  <span className="pm-tier">{tier.name}</span>
-                  <span className="pm-price">{price(tier.monthly) ?? "Let's talk"}</span>
+                  <span className="block text-[0.95rem]">{tier.name}</span>
+                  <span className="mt-[0.25rem] mb-[0.7rem] block font-mono text-[0.78rem] text-ink-soft">
+                    {price(tier.monthly) ?? "Let's talk"}
+                  </span>
                   <button
                     type="button"
                     className={
@@ -99,7 +101,11 @@ export function PricingMatrixReference() {
                   >
                     {tier.cta}
                   </button>
-                  {tier.popular ? <span className="pm-popular">Most popular</span> : null}
+                  {tier.popular ? (
+                    <span className="mt-[0.5rem] block font-mono text-[0.58rem] uppercase tracking-[0.08em] text-accent">
+                      Most popular
+                    </span>
+                  ) : null}
                 </th>
               ))}
             </tr>

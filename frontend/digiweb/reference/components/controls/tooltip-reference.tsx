@@ -2,6 +2,13 @@
 
 import { useId, useState, type ReactNode } from "react";
 
+/**
+ * Tooltip — a label that surfaces on hover and keyboard focus, fades in with a
+ * small rise, and points back at its trigger with a rotated-square arrow. Escape
+ * dismisses it; aria-describedby ties it to the control so it's announced. Four
+ * placements, plus a richer one on an info glyph. Static interactive display
+ * template.
+ */
 type Placement = "top" | "right" | "bottom" | "left";
 
 function Tooltip({
@@ -17,7 +24,7 @@ function Tooltip({
   const id = useId();
   return (
     <span
-      className="tt"
+      className="relative inline-flex"
       onPointerEnter={() => setOpen(true)}
       onPointerLeave={() => setOpen(false)}
     >
@@ -54,7 +61,7 @@ export function TooltipReference() {
         the control so it&apos;s announced. Four placements, and a richer one on an info glyph.
       </p>
 
-      <div className="tt-row">
+      <div className="mt-[1.2rem] flex flex-wrap items-center gap-[1.7rem]">
         <Tooltip label="Ships to paper first" placement="top">
           top
         </Tooltip>

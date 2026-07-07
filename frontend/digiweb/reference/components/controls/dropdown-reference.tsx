@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 
+/**
+ * Dropdown — a custom select whose pane is its own surface: an in-pane filter,
+ * grouped options, rich rows (livery dot, description, profit-factor badge), and
+ * a footer action. Type to filter, arrow keys to move, Enter to choose,
+ * click-outside or Escape to close; navigable order mirrors the grouped render
+ * order so keyboard focus stays aligned. Static interactive display template.
+ */
 type Option = { id: string; group: string; label: string; note: string; pf: string; livery: string };
 
 const OPTIONS: Option[] = [
@@ -80,7 +87,7 @@ export function DropdownReference() {
         arrow-keys to move, Enter to choose, click-outside or Escape to close.
       </p>
 
-      <div className="ctl-dropdown" ref={wrapRef}>
+      <div className="relative mt-[1.2rem] w-[min(100%,22rem)]" ref={wrapRef}>
         <button
           type="button"
           className={`dd-trigger${open ? " open" : ""}`}

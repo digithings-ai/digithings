@@ -3,6 +3,10 @@
 import { useRef } from "react";
 import { useInView } from "motion/react";
 
+/**
+ * Inline route graph — a small SVG supervisor→agent flow graph rendered inline in
+ * an assistant turn, drawing its edges when scrolled into view. Static display template.
+ */
 type Node = { id: string; x: number; y: number; w: number; label: string };
 
 const NODES: Node[] = [

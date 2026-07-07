@@ -2,6 +2,13 @@
 
 import type { FormEvent } from "react";
 
+/**
+ * Login — the sign-in card, shown twice: the default state and the error state
+ * side by side. One card holds email, password, a filled CTA, and an SSO fallback
+ * a hairline below; the error variant swaps input borders to the down token and
+ * surfaces one plain-language note. An interactive display template.
+ */
+
 function preventSubmit(event: FormEvent<HTMLFormElement>) {
   event.preventDefault();
 }
@@ -15,19 +22,27 @@ export function LoginCard() {
         One card, one filled CTA, SSO one hairline below. The error state swaps the border to the
         danger token and says exactly what happened — no toast, no shake, no lockout riddle.
       </p>
-      <p className="acct-badge-row">
-        <span className="acct-badge">example data · not live</span>
+      <p className="mt-4">
+        <span className="inline-block whitespace-nowrap rounded-full border border-hair px-[0.6rem] py-[0.22rem] font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+          example data · not live
+        </span>
       </p>
 
-      <div className="acct-auth-grid">
+      <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(280px,380px))] items-start gap-[1.2rem]">
         <div>
-          <p className="acct-variant">{"// default"}</p>
-          <form className="acct-card" onSubmit={preventSubmit} noValidate>
-            <p className="acct-card-mark">
-              digithings <span>· sign in</span>
+          <p className="mb-2 font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
+            {"// default"}
+          </p>
+          <form
+            className="w-full max-w-[380px] rounded-[12px] border border-hair bg-surface p-[1.2rem]"
+            onSubmit={preventSubmit}
+            noValidate
+          >
+            <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
+              digithings <span className="text-ink-mute">· sign in</span>
             </p>
             <div className="acct-field">
-              <label className="acct-label" htmlFor="login-email">
+              <label className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute" htmlFor="login-email">
                 Email
               </label>
               <input
@@ -40,7 +55,7 @@ export function LoginCard() {
               />
             </div>
             <div className="acct-field">
-              <label className="acct-label" htmlFor="login-password">
+              <label className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute" htmlFor="login-password">
                 Password
               </label>
               <input
@@ -68,13 +83,19 @@ export function LoginCard() {
         </div>
 
         <div>
-          <p className="acct-variant">{"// error state"}</p>
-          <form className="acct-card" onSubmit={preventSubmit} noValidate>
-            <p className="acct-card-mark">
-              digithings <span>· sign in</span>
+          <p className="mb-2 font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
+            {"// error state"}
+          </p>
+          <form
+            className="w-full max-w-[380px] rounded-[12px] border border-hair bg-surface p-[1.2rem]"
+            onSubmit={preventSubmit}
+            noValidate
+          >
+            <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
+              digithings <span className="text-ink-mute">· sign in</span>
             </p>
             <div className="acct-field">
-              <label className="acct-label" htmlFor="login-error-email">
+              <label className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute" htmlFor="login-error-email">
                 Email
               </label>
               <input
@@ -89,7 +110,7 @@ export function LoginCard() {
               />
             </div>
             <div className="acct-field">
-              <label className="acct-label" htmlFor="login-error-password">
+              <label className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute" htmlFor="login-error-password">
                 Password
               </label>
               <input

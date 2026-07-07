@@ -3,6 +3,11 @@
 import { useState } from "react";
 import { m, useReducedMotion } from "motion/react";
 
+/**
+ * Livery switcher — a self-contained swatch strip demoing the per-module accent
+ * colours (local state only, not the app-wide store). Shows how a livery
+ * recolours an accented surface. Interactive display template.
+ */
 const LIVERIES = [
   { id: "digigraph", label: "digigraph", hex: "#e5b765" },
   { id: "digiquant", label: "digiquant", hex: "#3dd6c4" },

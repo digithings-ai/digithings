@@ -39,9 +39,9 @@ function Slider({
 }) {
   return (
     <div className={`sl${disabled ? " sl--disabled" : ""}`}>
-      <div className="sl-head">
-        <span className="sl-label">{label}</span>
-        <span className="sl-value">{format(value)}</span>
+      <div className="mb-[0.6rem] flex items-baseline justify-between">
+        <span className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">{label}</span>
+        <span className="font-mono text-[0.86rem] tabular-nums text-ink">{format(value)}</span>
       </div>
       <input
         type="range"
@@ -56,7 +56,7 @@ function Slider({
         onChange={(e) => onChange?.(Number(e.target.value))}
       />
       {ticks ? (
-        <div className="sl-ticks" aria-hidden="true">
+        <div className="mt-[0.55rem] flex justify-between font-mono text-[0.58rem] text-ink-mute" aria-hidden="true">
           {ticks.map((t) => (
             <span key={t}>{format(t)}</span>
           ))}
@@ -80,7 +80,7 @@ export function SliderReference() {
         all for free from the native control. Shown with tick marks and a locked state.
       </p>
 
-      <div className="sl-grid">
+      <div className="mt-[1.2rem] flex max-w-[30rem] flex-col gap-[1.6rem]">
         <Slider
           label="kelly cap"
           min={0}

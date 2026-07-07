@@ -13,6 +13,12 @@ const SNIPPET = `from digiquant import backtest
 result = backtest("trend_xsec", symbol="ETH-USD", years=8)
 print(result.tearsheet())   # PF 6.62 · maxDD -59.2%`;
 
+/**
+ * Code sample — the developer-docs staple: a copyable command with a package-
+ * manager switcher, and a syntax-lit snippet beside it. The command is the call
+ * to action — one tap copies it to the clipboard, with the copy button flipping
+ * to a confirmed state on success. Interactive display template.
+ */
 function CopyButton({ text, k, copied, onCopy }: {
   text: string;
   k: string;
@@ -53,8 +59,12 @@ export function CodeSampleReference() {
         clipboard, honest about what runs.
       </p>
 
-      <div className="cs-block cs-install">
-        <div className="cs-tabs" role="tablist" aria-label="Install method">
+      <div className="cs-block cs-install mt-[1.2rem] max-w-[640px] overflow-hidden rounded-[12px] border border-hair bg-term-bg">
+        <div
+          className="flex items-center gap-[0.2rem] border-b border-hair py-[0.4rem] pl-[0.9rem] pr-[0.5rem]"
+          role="tablist"
+          aria-label="Install method"
+        >
           {INSTALL.map((t) => (
             <button
               key={t.id}
@@ -69,20 +79,24 @@ export function CodeSampleReference() {
           ))}
           <CopyButton text={active.code} k="install" copied={copied} onCopy={onCopy} />
         </div>
-        <pre className="cs-code">
-          <span className="cs-prompt" aria-hidden="true">
+        <pre className="m-0 overflow-x-auto whitespace-pre px-[1rem] py-[0.9rem] font-mono text-[0.8rem] leading-[1.7] text-ink">
+          <span className="text-accent" aria-hidden="true">
             ${" "}
           </span>
           {active.code}
         </pre>
       </div>
 
-      <div className="cs-block">
-        <div className="cs-head">
-          <span className="cs-lang">python</span>
+      <div className="cs-block mt-[1.2rem] max-w-[640px] overflow-hidden rounded-[12px] border border-hair bg-term-bg">
+        <div className="flex items-center gap-[0.2rem] border-b border-hair py-[0.4rem] pl-[0.9rem] pr-[0.5rem]">
+          <span className="font-mono text-[0.62rem] uppercase tracking-[0.1em] text-ink-mute">
+            python
+          </span>
           <CopyButton text={SNIPPET} k="snippet" copied={copied} onCopy={onCopy} />
         </div>
-        <pre className="cs-code cs-multiline">{SNIPPET}</pre>
+        <pre className="m-0 overflow-x-auto whitespace-pre px-[1rem] py-[0.9rem] font-mono text-[0.8rem] leading-[1.7] text-ink-soft">
+          {SNIPPET}
+        </pre>
       </div>
     </section>
   );

@@ -1,3 +1,7 @@
+/**
+ * Testimonial wall — a wall of pull-quotes with attribution (illustrative copy;
+ * production uses real names per the voice doctrine). Static display template.
+ */
 type Quote = { quote: string; name: string; role: string; org: string };
 
 // Illustrative only — production copy uses real names/orgs (voice doctrine).

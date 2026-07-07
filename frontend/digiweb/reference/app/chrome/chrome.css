@@ -1,22 +1,8 @@
-/* Chrome page — scroll-aware nav demo + footer grammar. */
-
-.scroll-nav-demo {
-  position: relative;
-}
-
-/* Contained scroll frame: the demo nav pins to the TOP OF THIS FRAME, not
-   the page — its own overflow is the scroll context, so it can never float
-   up over the section copy above it. */
-.scroll-nav-stage {
-  margin-top: 1.2rem;
-  position: relative;
-  height: 22rem;
-  overflow-y: auto;
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  background: var(--surface);
-  scroll-padding-top: 0;
-}
+/* Chrome page — scroll-aware nav demo + footer grammar.
+   Scroll-nav: the demo frame, mark, link list, CTA and filler page migrated to
+   utilities in scroll-nav-reference.tsx. The bar itself stays as CSS — its
+   settle transition (border/background/backdrop-filter) and the .solid state's
+   backdrop blur + 2-colour color-mix have no single-element utility. */
 
 .scroll-nav {
   position: sticky;
@@ -40,58 +26,10 @@
   backdrop-filter: blur(10px);
 }
 
-.scroll-nav-mark {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: var(--ink);
-}
-
-.scroll-nav ul {
-  list-style: none;
-  display: flex;
-  gap: 1.1rem;
-  margin: 0;
-  padding: 0;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: var(--ink-soft);
-}
-
-.scroll-nav-cta {
-  margin-left: auto;
-}
-
-/* Filler content inside the frame so there's something to scroll past */
-.scroll-nav-page {
-  padding: 0 1.4rem 1.4rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.6rem;
-  color: var(--ink-soft);
-  max-width: 46ch;
-}
-
-.scroll-nav-page > :first-child {
-  margin-top: 0.6rem;
-}
-
-.scroll-nav-hero {
-  font-family: var(--font-display);
-  font-size: 2rem;
-  color: var(--ink);
-}
-
-/* Announcement bar */
-
-.annc-bar {
-  margin-top: 1.2rem;
-  display: flex;
-  align-items: center;
-  min-height: 48px;
-  border: 1px solid var(--hair);
-  border-radius: 10px;
-  background: var(--surface);
-}
+/* Announcement bar — .annc-bar / .annc-close / .annc-restore migrated to
+   utilities in announcement-bar-reference.tsx. The link keeps its class: the
+   parent-hover-descendant rule (.annc-link:hover b) has no single-element
+   utility. */
 
 .annc-link {
   flex: 1;
@@ -115,79 +53,11 @@
   color: var(--accent);
 }
 
-.annc-close {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  margin-right: 0.3rem;
-  border: none;
-  background: transparent;
-  color: var(--ink-mute);
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-
-.annc-close:hover {
-  color: var(--ink);
-}
-
-.annc-restore {
-  margin-top: 1.2rem;
-}
-
-/* Footer */
-
-.ref-footer {
-  margin-top: 1.2rem;
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  padding: 1.4rem 1.4rem 0;
-  overflow: hidden;
-}
-
-.ref-footer-columns {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.8rem;
-}
-
-.ref-footer-col-title {
-  font-size: 0.78rem;
-  color: var(--ink);
-}
-
-.ref-footer-columns ul {
-  list-style: none;
-  margin: 0.6rem 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.ref-footer-columns li {
-  color: var(--ink-mute);
-  font-size: 0.76rem;
-}
-
-.ref-footer-utility {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1rem;
-  border-top: 1px solid var(--hair);
-  margin-top: 1.2rem;
-  padding: 0.9rem 0;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-}
-
-.ref-footer-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--ink-soft);
-}
+/* Footer — .ref-footer wrapper, column grid, titles, link lists, and the
+   utility row (status/copyright) migrated to utilities in footer-reference.tsx.
+   Kept as CSS: .status-dot (box-shadow tint), the .ref-footer-theme segmented
+   control (JS-toggled .on state on descendant buttons), and the colophon
+   mechanics below (scroll-driven animation, masks, gradients). */
 
 .status-dot {
   width: 7px;
@@ -216,11 +86,6 @@
 .ref-footer-theme button.on {
   color: var(--ink);
   background: var(--surface);
-}
-
-.ref-footer-copyright {
-  margin-left: auto;
-  color: var(--ink-mute);
 }
 
 .ref-footer-brand {
@@ -334,16 +199,6 @@
   }
 }
 
-@media (max-width: 900px) {
-  .scroll-nav ul {
-    display: none;
-  }
-
-  .ref-footer-columns {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 /* Command palette (the reusable .kbd keycap lives in globals.css) */
 
 .cp-trigger {
@@ -367,11 +222,6 @@
 .cp-trigger:hover {
   color: var(--ink-soft);
   border-color: color-mix(in srgb, var(--accent) 40%, var(--hair));
-}
-
-.cp-trigger-keys {
-  display: inline-flex;
-  gap: 0.2rem;
 }
 
 .cp-overlay {
@@ -506,15 +356,11 @@
   gap: 0.3rem;
 }
 
-/* Tabs — a sliding active indicator, two dresses */
-
-.tabs-demo {
-  margin-top: 1.4rem;
-}
-
-.tabs-demo--pill {
-  margin-top: 2rem;
-}
+/* Tabs — a sliding active indicator, two dresses. The demo wrappers and all
+   static panel content (overview/positions/orders/logs, mode note) are migrated
+   to utilities in tabs-reference.tsx. The strip / button / sliding-ink machinery
+   stays as CSS: variant combinators, aria/hover/focus states, and the ink whose
+   transform + width are written from a ref and animated by a transition. */
 
 .tab-strip {
   position: relative;
@@ -602,128 +448,10 @@
   }
 }
 
-.tab-panel {
-  min-height: 8.5rem;
-  padding-top: 1.1rem;
-}
-
-.tab-overview {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-  gap: 0.9rem;
-}
-
-.tab-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.7rem 0.85rem;
-  border: 1px solid var(--hair);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
-}
-
-.tab-stat-k {
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-
-.tab-stat-v {
-  font-family: var(--font-mono);
-  font-size: 1.05rem;
-  color: var(--ink);
-}
-
-.tab-stat-v.up {
-  color: var(--up);
-}
-
-.tab-rows {
-  display: flex;
-  flex-direction: column;
-}
-
-.tab-row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.5rem 0.2rem;
-  border-bottom: 1px solid var(--hair);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-}
-
-.tab-sym {
-  flex: 1;
-  color: var(--ink);
-}
-
-.tab-qty,
-.tab-px {
-  color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
-}
-
-.tab-pnl {
-  min-width: 5rem;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.tab-pnl.up {
-  color: var(--up);
-}
-
-.tab-pnl.down {
-  color: var(--down);
-}
-
-.tab-side {
-  min-width: 2.6rem;
-  font-size: 0.58rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.tab-side.buy {
-  color: var(--up);
-}
-
-.tab-side.sell {
-  color: var(--down);
-}
-
-.tab-logs {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.tab-log {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: var(--ink-soft);
-}
-
-.tab-mode-note {
-  margin-top: 0.9rem;
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  color: var(--ink-mute);
-}
-
-/* Toasts — a corner stack that self-dismisses */
-
-.toast-triggers {
-  margin-top: 1.3rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.7rem;
-}
+/* Toasts — a corner stack that self-dismisses. The trigger-button row migrated
+   to utilities in toast-stack-reference.tsx; the stack itself stays as CSS
+   (portal + AnimatePresence transforms, per-type border/icon states, and the
+   spin/drain keyframes with their reduced-motion guard). */
 
 .toast-stack {
   position: fixed;

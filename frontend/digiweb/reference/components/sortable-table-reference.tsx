@@ -66,7 +66,7 @@ export function SortableTableReference() {
         text lexically. Returns wear the up color, drawdown the down.
       </p>
 
-      <div className="srt-scroll">
+      <div className="mt-[1.2rem] overflow-x-auto rounded-[12px] border border-hair bg-surface">
         <table className="srt-table">
           <thead>
             <tr>

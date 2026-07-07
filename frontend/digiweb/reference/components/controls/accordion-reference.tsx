@@ -2,6 +2,13 @@
 
 import { useId, useState } from "react";
 
+/**
+ * Accordion — a single-open disclosure over the FAQ. Each header is a real
+ * button (Enter/Space toggle, aria-expanded/aria-controls), and the open panel
+ * animates its own height via a grid-template-rows transition — no measuring, no
+ * layout jump — while the chevron turns. Reduced motion snaps it open. Static
+ * interactive display template.
+ */
 const ITEMS = [
   {
     q: "Is my data ever sent anywhere?",
@@ -36,12 +43,15 @@ export function AccordionReference() {
         <code>aria-expanded</code> / <code>aria-controls</code>. Reduced motion snaps it open.
       </p>
 
-      <div className="acc">
+      <div className="mt-[1.2rem] overflow-hidden rounded-[12px] border border-hair bg-surface/40">
         {ITEMS.map((it, i) => {
           const isOpen = open === i;
           return (
-            <div className={`acc-item${isOpen ? " open" : ""}`} key={it.q}>
-              <h3 className="acc-h">
+            <div
+              className={`acc-item border-t border-hair first:border-t-0${isOpen ? " open" : ""}`}
+              key={it.q}
+            >
+              <h3 className="m-0 font-normal [font-size:inherit]">
                 <button
                   type="button"
                   className="acc-head"
@@ -60,8 +70,10 @@ export function AccordionReference() {
                 id={`${base}-p-${i}`}
                 aria-labelledby={`${base}-h-${i}`}
               >
-                <div className="acc-panel-inner">
-                  <p className="acc-body">{it.a}</p>
+                <div className="overflow-hidden">
+                  <p className="m-0 max-w-[62ch] px-[1.1rem] pb-[1.1rem] text-[0.86rem] leading-[1.6] text-ink-soft">
+                    {it.a}
+                  </p>
                 </div>
               </div>
             </div>

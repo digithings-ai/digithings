@@ -65,7 +65,7 @@ export function TagsInputReference() {
         ))}
         <input
           ref={inputRef}
-          className="tg-input"
+          className="min-w-[7rem] flex-1 border-none bg-transparent p-[0.2rem] font-mono text-[0.8rem] text-ink outline-none placeholder:text-ink-mute"
           value={draft}
           placeholder={tags.length ? "" : "filter strategies…"}
           aria-label="Add a filter tag"
@@ -75,8 +75,10 @@ export function TagsInputReference() {
       </div>
 
       {remaining.length ? (
-        <div className="tg-suggest">
-          <span className="tg-suggest-label">suggestions</span>
+        <div className="mt-[0.7rem] flex flex-wrap items-center gap-[0.4rem]">
+          <span className="mr-[0.2rem] font-mono text-[0.56rem] uppercase tracking-[0.1em] text-ink-mute">
+            suggestions
+          </span>
           {remaining.map((s) => (
             <button key={s} type="button" className="tg-suggest-chip" onClick={() => add(s)}>
               + {s}

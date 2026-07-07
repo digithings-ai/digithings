@@ -2,6 +2,13 @@
 
 import type { FormEvent } from "react";
 
+/**
+ * Payment band — a checkout pairing: card form on the left, plan receipt on the
+ * right. Every charge is a hairline row with a mono figure and only the total
+ * spends full ink; the loading state reuses the house spinner button rather than
+ * anything bespoke. An interactive display template.
+ */
+
 function preventSubmit(event: FormEvent<HTMLFormElement>) {
   event.preventDefault();
 }
@@ -17,10 +24,13 @@ export function PaymentBand() {
         button, nothing bespoke.
       </p>
 
-      <div className="acct-pay-band">
+      <div className="mt-[1.2rem] grid grid-cols-[minmax(0,1fr)_320px] items-start gap-[1.2rem] max-[900px]:grid-cols-1">
         <form className="acct-pay-form" onSubmit={preventSubmit} noValidate>
           <div className="acct-field">
-            <label className="acct-label" htmlFor="pay-name">
+            <label
+              className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+              htmlFor="pay-name"
+            >
               Cardholder
             </label>
             <input
@@ -33,7 +43,10 @@ export function PaymentBand() {
             />
           </div>
           <div className="acct-field">
-            <label className="acct-label" htmlFor="pay-card">
+            <label
+              className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+              htmlFor="pay-card"
+            >
               Card number
             </label>
             <input
@@ -47,9 +60,12 @@ export function PaymentBand() {
               autoComplete="off"
             />
           </div>
-          <div className="acct-pay-row">
+          <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-[0.8rem]">
             <div className="acct-field">
-              <label className="acct-label" htmlFor="pay-expiry">
+              <label
+                className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+                htmlFor="pay-expiry"
+              >
                 Expiry
               </label>
               <input
@@ -64,7 +80,10 @@ export function PaymentBand() {
               />
             </div>
             <div className="acct-field">
-              <label className="acct-label" htmlFor="pay-cvc">
+              <label
+                className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+                htmlFor="pay-cvc"
+              >
                 CVC
               </label>
               <input
@@ -79,7 +98,7 @@ export function PaymentBand() {
               />
             </div>
           </div>
-          <div className="acct-pay-actions">
+          <div className="mt-[1.2rem] flex flex-wrap items-center gap-[0.8rem]">
             <button type="submit" className="btn-primary">
               Pay $165.56
             </button>
@@ -90,12 +109,17 @@ export function PaymentBand() {
           </div>
         </form>
 
-        <aside className="acct-plan" aria-label="Plan summary">
-          <div className="acct-plan-head">
-            <p className="acct-plan-name">Desk plan</p>
-            <span className="acct-badge">example data · not live</span>
+        <aside
+          className="rounded-[12px] border border-hair bg-surface p-[1.1rem]"
+          aria-label="Plan summary"
+        >
+          <div className="flex items-center justify-between gap-[0.8rem]">
+            <p className="text-[0.95rem] text-ink">Desk plan</p>
+            <span className="inline-block whitespace-nowrap rounded-full border border-hair px-[0.6rem] py-[0.22rem] font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+              example data · not live
+            </span>
           </div>
-          <p className="acct-plan-price">$40 / seat / month</p>
+          <p className="mt-[0.3rem] font-mono text-[0.72rem] text-ink-mute">$40 / seat / month</p>
           <ul className="acct-plan-items">
             <li>
               <span>3 seats × $40</span>
@@ -110,7 +134,7 @@ export function PaymentBand() {
               <span>$21.56</span>
             </li>
           </ul>
-          <p className="acct-plan-total">
+          <p className="flex justify-between gap-4 border-t border-hair pt-[0.6rem] font-mono text-[0.8rem] text-ink">
             <span>due today</span>
             <span>$165.56</span>
           </p>

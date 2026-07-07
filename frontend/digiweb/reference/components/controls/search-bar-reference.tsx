@@ -2,6 +2,12 @@
 
 import { useMemo, useState } from "react";
 
+/**
+ * Search bar — a search field with a leading glyph, a clear affordance that
+ * appears once there's input, and results that resolve live as you type against
+ * a small corpus. Focus lights the accent ring; an empty query shows nothing
+ * rather than everything. Static interactive display template.
+ */
 const CORPUS = [
   "trend_xsec — cross-sectional momentum",
   "mean_rev — intraday mean reversion",
@@ -32,14 +38,14 @@ export function SearchBarReference() {
       </p>
 
       <div className="ctl-search">
-        <span className="sb-glyph" aria-hidden="true">
+        <span className="inline-flex text-ink-mute" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6">
             <circle cx="11" cy="11" r="7" />
             <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
           </svg>
         </span>
         <input
-          className="sb-input"
+          className="sb-input flex-1 border-none bg-transparent font-mono text-[0.82rem] text-ink outline-none placeholder:text-ink-mute"
           type="search"
           placeholder="Search strategies, metrics, modules…"
           value={q}
@@ -47,7 +53,12 @@ export function SearchBarReference() {
           aria-label="Search"
         />
         {q ? (
-          <button type="button" className="sb-clear" aria-label="Clear search" onClick={() => setQ("")}>
+          <button
+            type="button"
+            className="cursor-pointer border-none bg-transparent px-[0.2rem] py-[0.1rem] text-[0.7rem] text-ink-mute hover:text-ink"
+            aria-label="Clear search"
+            onClick={() => setQ("")}
+          >
             ✕
           </button>
         ) : (
@@ -56,19 +67,28 @@ export function SearchBarReference() {
       </div>
 
       {q.trim() ? (
-        <div className="sb-results" role="listbox" aria-label="Results">
+        <div
+          className="mt-[0.5rem] w-[min(100%,26rem)] overflow-hidden rounded-[10px] border border-hair bg-surface"
+          role="listbox"
+          aria-label="Results"
+        >
           {results.length ? (
             results.map((r) => {
               const [head, tail] = r.split(" — ");
               return (
-                <div key={r} className="sb-result" role="option" aria-selected="false">
-                  <span className="sb-result-head">{head}</span>
-                  {tail ? <span className="sb-result-tail">{tail}</span> : null}
+                <div
+                  key={r}
+                  className="flex items-baseline gap-[0.6rem] border-b border-hair/55 px-[0.8rem] py-[0.5rem] font-mono last:border-b-0"
+                  role="option"
+                  aria-selected="false"
+                >
+                  <span className="text-[0.8rem] text-ink">{head}</span>
+                  {tail ? <span className="text-[0.66rem] text-ink-mute">{tail}</span> : null}
                 </div>
               );
             })
           ) : (
-            <p className="sb-empty">No matches for “{q}”.</p>
+            <p className="p-[0.8rem] font-mono text-[0.76rem] text-ink-mute">No matches for “{q}”.</p>
           )}
         </div>
       ) : null}

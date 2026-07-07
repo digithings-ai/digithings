@@ -89,7 +89,10 @@ export function CardDeck({ items, ariaLabel = "Card stack" }: CardDeckProps) {
   const animate = wide && !reduced;
 
   return (
-    <div className="deck" ref={deckRef}>
+    <div
+      className="mt-[1.2rem] grid grid-cols-[minmax(0,1fr)_220px] items-start gap-[1.2rem] max-[900px]:grid-cols-1"
+      ref={deckRef}
+    >
       <div className="deck-slots" role="list" aria-label={ariaLabel}>
         {items.map((item, idx) => (
           <DeckCard

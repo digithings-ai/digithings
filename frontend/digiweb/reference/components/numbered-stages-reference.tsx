@@ -1,3 +1,8 @@
+/**
+ * Numbered stages — a Linear-style numbered progression mapped to the digithings
+ * pipeline, each stage carrying its module livery, title, and mechanism.
+ * Static display template.
+ */
 type Stage = { num: string; module: string; livery: string; title: string; mech: string };
 
 // Linear's numbered feature progression, mapped to the real digithings pipeline.

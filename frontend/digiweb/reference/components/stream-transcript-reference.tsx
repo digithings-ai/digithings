@@ -48,23 +48,23 @@ export function StreamTranscriptReference() {
         work never opens on its own. Reduced motion shows the finished turn.
       </p>
 
-      <div className="st-shell">
-        <div className="st-line st-user">
-          <span className="st-mark">&gt;</span>
+      <div className="st-shell mt-[1.2rem] max-w-[640px] rounded-[12px] border border-hair bg-term-bg p-[1.1rem_1.2rem] font-mono text-[0.78rem] leading-[2.1]">
+        <div className="block text-ink">
+          <span className="mr-[0.55rem] text-accent">&gt;</span>
           backtest trend_xsec on ETH, last eight years
         </div>
-        <div className="st-line st-assistant">
-          <span className="st-mark">▸</span>
+        <div className="block text-ink-soft">
+          <span className="mr-[0.55rem] text-accent">▸</span>
           running it through digiquant · nautilus engine
         </div>
         <div className="st-tool">
-          <span className="st-mark">⌄</span>
+          <span className="mr-[0.55rem] text-accent">⌄</span>
           digiquant.backtest — trend_xsec · ETH-USD · 3,102 bars
-          <span className="st-ok">ok</span>
-          <span className="st-ms">412ms</span>
+          <span className="text-up">ok</span>
+          <span className="text-ink-mute">412ms</span>
         </div>
-        <div className="st-line st-assistant st-answer">
-          <span className="st-mark">▸</span>
+        <div className="block text-ink">
+          <span className="mr-[0.55rem] text-accent">▸</span>
           <span ref={answerRef}>{ANSWER}</span>
           <span ref={caretRef} className="st-caret" aria-hidden="true" />
         </div>

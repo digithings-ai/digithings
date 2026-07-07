@@ -3,6 +3,11 @@
 import { useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { m, useReducedMotion } from "motion/react";
 
+/**
+ * Buttons & CTA states — the button vocabulary (primary / ghost / quiet) plus a
+ * magnetic CTA that eases toward the pointer and settles back on leave (disabled
+ * under reduced motion). A gallery of the interactive states every surface reuses.
+ */
 type MagneticButtonProps = { children: ReactNode };
 
 function MagneticButton({ children }: MagneticButtonProps) {

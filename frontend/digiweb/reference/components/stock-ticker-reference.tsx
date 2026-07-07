@@ -32,13 +32,25 @@ export function StockTickerReference() {
         it still.
       </p>
 
+      {/* .tk (edge-fade mask), .tk-track (scroll animation), :hover pause, and
+          reduced-motion stay in finance.css — they're mask/keyframe mechanics.
+          The item + cell typography migrated to utilities; change wears the
+          money colors (text-up / text-down). */}
       <div className="tk">
         <div className="tk-track">
           {[...TICKS, ...TICKS].map((t, i) => (
-            <span className="tk-item" key={`${t.sym}-${i}`} aria-hidden={i >= TICKS.length || undefined}>
-              <span className="tk-sym">{t.sym}</span>
-              <span className="tk-px">{t.px}</span>
-              <span className={`tk-chg ${t.up ? "up" : "down"}`}>
+            <span
+              className="inline-flex items-baseline gap-2 whitespace-nowrap border-r border-hair px-[1.3rem] py-[0.7rem] font-mono text-[0.82rem] [font-variant-numeric:tabular-nums]"
+              key={`${t.sym}-${i}`}
+              aria-hidden={i >= TICKS.length || undefined}
+            >
+              <span className="tracking-[0.02em] text-ink">{t.sym}</span>
+              <span className="text-ink-soft">{t.px}</span>
+              <span
+                className={`inline-flex items-center gap-[0.28rem] text-[0.76rem] ${
+                  t.up ? "text-up" : "text-down"
+                }`}
+              >
                 <span aria-hidden="true">{t.up ? "▲" : "▼"}</span>
                 {t.chg}
               </span>

@@ -1,3 +1,8 @@
+/**
+ * Contents overview — the home-page index of every design family, each a card
+ * linking to its page with a one-line blurb. The map that mirrors the top nav.
+ * Static display template.
+ */
 import Link from "next/link";
 
 const FAMILIES = [

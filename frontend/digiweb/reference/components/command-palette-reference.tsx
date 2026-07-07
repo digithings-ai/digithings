@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+/**
+ * Command palette — the dev-tool ⌘K signature: a fuzzy command bar over a
+ * blurred page, opened by keystroke or the trigger button. Actions are grouped,
+ * each row carries a livery dot and a shortcut, and arrow keys drive a flat
+ * active index across the groups. Rendered into a portal on the body.
+ */
 type Command = { group: string; label: string; hint: string; livery?: string };
 
 const COMMANDS: Command[] = [
@@ -76,7 +82,7 @@ export function CommandPaletteReference() {
 
       <button type="button" className="cp-trigger" onClick={openPalette}>
         <span>Search commands…</span>
-        <span className="cp-trigger-keys">
+        <span className="inline-flex gap-[0.2rem]">
           <kbd className="kbd">⌘</kbd>
           <kbd className="kbd">K</kbd>
         </span>

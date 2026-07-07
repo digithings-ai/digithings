@@ -45,21 +45,9 @@
   overflow-wrap: anywhere;
 }
 
-/* Brand marks — the wordmark grammar shared with the footer colophon:
-   mono weight 500, prefix in ink, suffix wearing the scope's accent. */
-
-.sym-wordmark {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 1.25rem;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-
-.sym-wordmark em {
-  font-style: normal;
-  color: var(--accent);
-}
+/* Brand marks — the wordmark grammar shared with the footer colophon (mono
+   weight 500, prefix in ink, suffix wearing the scope's accent) migrated to
+   token-backed utilities in marks.tsx (Wordmark). No .sym-wordmark CSS here. */
 
 .sym-mark {
   display: inline-flex;

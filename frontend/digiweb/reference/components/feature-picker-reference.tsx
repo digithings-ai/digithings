@@ -4,6 +4,11 @@ import { useState } from "react";
 import { m, useReducedMotion } from "motion/react";
 import { Emblem, modules } from "@digithings/web";
 
+/**
+ * Feature picker — one viewport that tours the modules: pick one from the rail
+ * and the panel swaps to its emblem + copy, dressing the section in that module's
+ * accent livery. Interactive display template.
+ */
 // The core + support modules make the tour; roadmap ones stay out of it.
 const TOUR = modules.filter((mod) => mod.tier !== "roadmap").slice(0, 7);
 

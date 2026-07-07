@@ -3,6 +3,14 @@
 import { useEffect, useRef } from "react";
 import { animate, useInView, useReducedMotion } from "motion/react";
 
+/**
+ * Stat counter — a metric strip whose figures count up from zero the first time
+ * the strip scrolls into view, the one place a number earns a little motion. The
+ * running value is written straight to the DOM node (no per-frame re-render);
+ * mono, tabular numerals keep the digits from reflowing. Fires once; reduced
+ * motion and no-JS both show the final figure immediately. Interactive display
+ * template.
+ */
 type Stat = {
   value: number;
   decimals?: number;
@@ -47,10 +55,15 @@ function CountUp({ stat }: { stat: Stat }) {
 
   return (
     <div ref={wrapRef} className="sc-stat">
-      <span ref={valueRef} className="sc-value">
+      <span
+        ref={valueRef}
+        className="block font-mono text-[clamp(1.6rem,4vw,2.4rem)] tabular-nums tracking-[-0.01em] text-accent"
+      >
         {format(stat.value, stat)}
       </span>
-      <span className="sc-label">{stat.label}</span>
+      <span className="mt-[0.35rem] block font-mono text-[0.62rem] uppercase tracking-[0.1em] text-ink-mute">
+        {stat.label}
+      </span>
     </div>
   );
 }
@@ -66,7 +79,7 @@ export function StatCounterReference() {
         reflow. Fires once; reduced motion and no-JS both show the final figure immediately.
       </p>
 
-      <div className="sc-row">
+      <div className="mt-[1.2rem] grid grid-cols-4 overflow-hidden rounded-[12px] border border-hair bg-surface max-[720px]:grid-cols-2">
         {STATS.map((stat) => (
           <CountUp key={stat.label} stat={stat} />
         ))}

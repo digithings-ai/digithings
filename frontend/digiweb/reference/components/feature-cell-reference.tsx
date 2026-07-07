@@ -1,3 +1,7 @@
+/**
+ * Feature cell — a feature block pairing an eyebrow / outcome / mechanism copy
+ * column with a scaled product frame. Static layout template.
+ */
 import { MockTearsheet, ProductFrame } from "@/components/product-frame-reference";
 
 type Cell = {

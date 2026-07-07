@@ -16,6 +16,13 @@ const ICONS: Record<ToastType, React.ReactNode> = {
   loading: <path d="M12 4a8 8 0 1 0 8 8" />,
 };
 
+/**
+ * Toast stack — transient notifications that slide in at a corner, stack, and
+ * retire themselves on a watchable timer, or dismiss by hand. A pending action
+ * holds open with a spinner and resolves in place. Status rides the up/down
+ * reads, never a livery; reduced motion drops the slide and progress bar but
+ * keeps the toast. Rendered into a portal on the body.
+ */
 export function ToastStackReference() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [active, setActive] = useState(false);
@@ -134,7 +141,7 @@ export function ToastStackReference() {
         motion drops the slide and the progress bar but keeps the toast.
       </p>
 
-      <div className="toast-triggers">
+      <div className="mt-[1.3rem] flex flex-wrap gap-[0.7rem]">
         <button type="button" className="btn-ghost" onClick={() => push("success", "Backtest complete", "PF 2.31 · saved to vault")}>
           Success
         </button>

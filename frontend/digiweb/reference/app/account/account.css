@@ -3,71 +3,14 @@
 
 /* ---------- shared: badge, variant labels, cards, fields ---------- */
 
-.acct-badge-row {
-  margin-top: 1rem;
-}
-
-.acct-badge {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  border: 1px solid var(--hair);
-  border-radius: 999px;
-  padding: 0.22rem 0.6rem;
-  white-space: nowrap;
-}
-
-.acct-variant {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  margin-bottom: 0.5rem;
-}
-
-.acct-auth-grid {
-  margin-top: 1rem;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 380px));
-  gap: 1.2rem;
-  align-items: start;
-}
-
-.acct-card {
-  width: 100%;
-  max-width: 380px;
-  background: var(--surface);
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  padding: 1.2rem;
-}
-
-.acct-card-mark {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
-  color: var(--ink);
-}
-
-.acct-card-mark span {
-  color: var(--ink-mute);
-}
+/* badge-row, badge, variant labels, auth grid, card frame, card-mark (+ its
+   muted span) migrated to token-backed utilities in login-card.tsx /
+   signup-card.tsx / payment-band.tsx. .acct-field stays: it's pinned by the
+   .acct-pay-form .acct-field:first-child override below. .acct-label likewise
+   migrated to utilities on each <label>. */
 
 .acct-field {
   margin-top: 0.85rem;
-}
-
-.acct-label {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-mute);
 }
 
 .acct-input {
@@ -109,6 +52,11 @@
   color: var(--down);
 }
 
+/* .acct-btn-block / .acct-forgot stay as CSS: they exist to override the
+   unlayered btn-* component classes (globals.css), and layered Tailwind
+   utilities lose to unlayered rules regardless of specificity — so a `block` /
+   `text-[0.7rem]` utility would be beaten by btn-*'s own display/font-size. */
+
 .acct-btn-block {
   display: block;
   width: 100%;
@@ -145,19 +93,9 @@
 
 /* ---------- sign-up: strength meter, terms ---------- */
 
-.acct-strength-row {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  margin-top: 0.5rem;
-}
-
-.acct-strength {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
+/* .acct-strength-row (flex align) and .acct-strength (4-segment grid) migrated
+   to utilities in signup-card.tsx. .acct-strength-seg stays: it's pinned by the
+   reduced-motion transition-reset below and reads the --ease custom prop. */
 
 .acct-strength-seg {
   height: 3px;
@@ -166,15 +104,8 @@
   transition: background 0.25s var(--ease);
 }
 
-.acct-strength-word {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-mute);
-  min-width: 3.6rem;
-  text-align: right;
-}
+/* .acct-strength-word (mono meter caption) migrated to utilities in
+   signup-card.tsx. */
 
 .acct-terms {
   display: flex;
@@ -198,13 +129,9 @@
 
 /* ---------- payment band ---------- */
 
-.acct-pay-band {
-  margin-top: 1.2rem;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 1.2rem;
-  align-items: start;
-}
+/* .acct-pay-band (2-col band + its 900px collapse to one column) migrated to
+   utilities in payment-band.tsx. .acct-pay-form stays: it's pinned by the
+   .acct-pay-form .acct-field:first-child override below. */
 
 .acct-pay-form {
   background: var(--surface);
@@ -217,45 +144,10 @@
   margin-top: 0;
 }
 
-.acct-pay-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem;
-}
-
-.acct-pay-actions {
-  margin-top: 1.2rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.8rem;
-}
-
-.acct-plan {
-  background: var(--surface);
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  padding: 1.1rem;
-}
-
-.acct-plan-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.8rem;
-}
-
-.acct-plan-name {
-  font-size: 0.95rem;
-  color: var(--ink);
-}
-
-.acct-plan-price {
-  margin-top: 0.3rem;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: var(--ink-mute);
-}
+/* .acct-pay-row, .acct-pay-actions, .acct-plan (frame), .acct-plan-head,
+   .acct-plan-name, .acct-plan-price, and .acct-plan-total migrated to utilities
+   in payment-band.tsx. .acct-plan-items stays: it's pinned by its `li` child
+   combinator (hairline rows) below. */
 
 .acct-plan-items {
   list-style: none;
@@ -274,25 +166,11 @@
   border-top: 1px solid var(--hair);
 }
 
-.acct-plan-total {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-top: 0.6rem;
-  border-top: 1px solid var(--hair);
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: var(--ink);
-}
-
 /* ---------- settings ---------- */
 
-.acct-settings {
-  margin-top: 1.2rem;
-  background: var(--surface);
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-}
+/* .acct-settings (card frame) migrated to utilities in settings-panel.tsx.
+   .acct-setting-row stays: pinned by its `+ .acct-setting-row` hairline
+   combinator and the 900px media query below. */
 
 .acct-setting-row {
   display: grid;
@@ -306,11 +184,9 @@
   border-top: 1px solid var(--hair);
 }
 
-.acct-setting-name {
-  display: block;
-  font-size: 0.88rem;
-  color: var(--ink);
-}
+/* .acct-setting-name (row heading) migrated to utilities in settings-panel.tsx.
+   .acct-setting-desc stays: pinned by the .acct-danger .acct-setting-desc
+   override below. */
 
 .acct-setting-desc {
   margin-top: 0.18rem;
@@ -419,13 +295,9 @@
   border-top: 1px solid var(--hair);
 }
 
-.acct-danger-label {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--down);
-}
+/* .acct-danger-label (down-toned caption) migrated to utilities in
+   settings-panel.tsx. .acct-danger stays: pinned by the descendant override
+   below. */
 
 .acct-danger .acct-setting-desc {
   margin-top: 0.3rem;
@@ -433,51 +305,9 @@
 
 /* ---------- profile ---------- */
 
-.acct-profile {
-  margin-top: 1.2rem;
-  background: var(--surface);
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  padding: 1.2rem;
-}
-
-.acct-profile-head {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.acct-avatar {
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent-weak);
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.acct-profile-name {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 1.35rem;
-  letter-spacing: -0.013em;
-  line-height: 1.1;
-}
-
-.acct-profile-meta {
-  margin-top: 0.2rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  color: var(--ink-mute);
-}
+/* .acct-profile (card frame), .acct-profile-head, .acct-avatar, .acct-profile-name,
+   and .acct-profile-meta migrated to token-backed utilities in profile-card.tsx.
+   .acct-stat-strip stays: pinned by its `span + span` / `strong` combinators. */
 
 .acct-stat-strip {
   margin-top: 1.1rem;
@@ -504,14 +334,8 @@
   color: var(--ink);
 }
 
-.acct-activity-label {
-  margin-top: 1.1rem;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-mute);
-}
+/* .acct-activity-label (mono caption) migrated to utilities in profile-card.tsx.
+   .acct-activity stays: pinned by its `li` hairline-row combinator below. */
 
 .acct-activity {
   list-style: none;
@@ -533,13 +357,8 @@
   border-bottom: 0;
 }
 
-.acct-activity-at {
-  color: var(--ink-mute);
-}
-
-.acct-activity-entry {
-  color: var(--ink-soft);
-}
+/* .acct-activity-at (ink-mute timestamp) and .acct-activity-entry (ink-soft
+   verb) migrated to utilities on the spans in profile-card.tsx. */
 
 /* ---------- focus & responsive & motion ---------- */
 
@@ -556,9 +375,8 @@
 }
 
 @media (max-width: 900px) {
-  .acct-pay-band {
-    grid-template-columns: 1fr;
-  }
+  /* .acct-pay-band's collapse migrated to `max-[900px]:grid-cols-1` in
+     payment-band.tsx. */
 
   .acct-setting-row {
     grid-template-columns: 1fr;

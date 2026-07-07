@@ -1,3 +1,10 @@
+/**
+ * Monthly returns — the tearsheet heatmap: months across, years down. Each cell
+ * is tinted by its return, deeper up for stronger gains and down for losses,
+ * empty where there's no data yet; the year column carries the YTD total in the
+ * money colors. The tint magnitude is a computed inline style so the grade reads
+ * at a glance. Static display template.
+ */
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const YEARS = [2022, 2023, 2024, 2025, 2026];
 
@@ -44,7 +51,11 @@ export function MonthlyReturnsReference() {
         the total.
       </p>
 
-      <div className="mr-scroll">
+      {/* The heatmap table itself stays in finance.css — its td tint interacts
+          with the per-cell inline styles from cellStyle(), and the YTD money
+          colors need the .mr-table td.mr-ytd.up/.down descendant specificity to
+          beat the base td color. Only the scroll wrapper migrates here. */}
+      <div className="mt-[1.2rem] overflow-x-auto">
         <table className="mr-table">
           <thead>
             <tr>

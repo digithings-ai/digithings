@@ -1,3 +1,10 @@
+/**
+ * Roadmap Gantt — initiative bars laid across a month axis. Each row is owned
+ * by a module and wears its livery, so the bar hues are identifiers, not
+ * decoration (canon §13); a hairline "now" marker cuts the timeline at a
+ * fractional month offset. Scrolls horizontally when narrow. Static display
+ * template.
+ */
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
 
 // start/end are 1-based month indices (inclusive). Each initiative is owned by
@@ -26,7 +33,7 @@ export function RoadmapGanttReference() {
         decoration (canon §13). A hairline &ldquo;now&rdquo; marker cuts the timeline.
       </p>
 
-      <div className="rg-scroll">
+      <div className="mt-[1.2rem] overflow-x-auto">
         <div className="rg" style={{ ["--rg-cols" as string]: MONTHS.length }}>
           <div className="rg-head">
             <span className="rg-corner" aria-hidden="true" />

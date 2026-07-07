@@ -39,43 +39,75 @@ export function PortfolioReference() {
         neutral. Tabular numerals keep the columns honest.
       </p>
 
-      <div className="pos-scroll">
-        <table className="pos-table">
+      {/* Migrated to token-backed utilities. The .pos-side pill group stays in
+          finance.css (its --short border is a two-color ink+hair mix). Money
+          colors (text-up/text-down) are applied per-row on the unrealized P&L. */}
+      <div className="mt-[1.2rem] overflow-x-auto rounded-[12px] border border-hair bg-surface">
+        <table className="w-full min-w-[560px] border-collapse font-mono text-[0.82rem] [font-variant-numeric:tabular-nums]">
           <thead>
             <tr>
-              <th className="pos-l">instrument</th>
-              <th>side</th>
-              <th className="pos-r">size</th>
-              <th className="pos-r">entry</th>
-              <th className="pos-r">mark</th>
-              <th className="pos-r">unrealized</th>
+              {(
+                [
+                  ["instrument", "text-left"],
+                  ["side", ""],
+                  ["size", "text-right"],
+                  ["entry", "text-right"],
+                  ["mark", "text-right"],
+                  ["unrealized", "text-right"],
+                ] as const
+              ).map(([label, align]) => (
+                <th
+                  key={label}
+                  className={`border-b border-hair px-4 py-[0.7rem] text-[0.58rem] font-normal uppercase tracking-[0.1em] text-ink-mute ${align}`}
+                >
+                  {label}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {POSITIONS.map((p) => (
               <tr key={p.sym}>
-                <td className="pos-l pos-sym">{p.sym}</td>
-                <td>
+                <td className="border-b border-hair/55 px-4 py-[0.62rem] text-left text-ink">
+                  {p.sym}
+                </td>
+                <td className="border-b border-hair/55 px-4 py-[0.62rem] text-ink-soft">
                   <span className={`pos-side pos-side--${p.side}`}>{p.side}</span>
                 </td>
-                <td className="pos-r">{p.size}</td>
-                <td className="pos-r pos-mute">{p.entry.toLocaleString()}</td>
-                <td className="pos-r">{p.mark.toLocaleString()}</td>
-                <td className="pos-r">
-                  <span className={p.pnl >= 0 ? "up" : "down"}>
-                    {money(p.pnl)} <span className="pos-pct">{pctf(p.pct)}</span>
-                  </span>
+                <td className="border-b border-hair/55 px-4 py-[0.62rem] text-right text-ink-soft">
+                  {p.size}
+                </td>
+                <td className="border-b border-hair/55 px-4 py-[0.62rem] text-right text-ink-mute">
+                  {p.entry.toLocaleString()}
+                </td>
+                <td className="border-b border-hair/55 px-4 py-[0.62rem] text-right text-ink-soft">
+                  {p.mark.toLocaleString()}
+                </td>
+                <td
+                  className={`border-b border-hair/55 px-4 py-[0.62rem] text-right ${
+                    p.pnl >= 0 ? "text-up" : "text-down"
+                  }`}
+                >
+                  {money(p.pnl)}{" "}
+                  <span className="text-[0.72rem] opacity-75">{pctf(p.pct)}</span>
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr>
-              <td className="pos-l" colSpan={5}>
+              <td
+                className="border-t border-hair px-4 py-[0.8rem] text-left text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute"
+                colSpan={5}
+              >
                 net unrealized
               </td>
-              <td className="pos-r">
-                <span className={net >= 0 ? "up" : "down"}>{money(net)}</span>
+              <td className="border-t border-hair px-4 py-[0.8rem] text-right">
+                <span
+                  className={`text-[0.9rem] tracking-normal ${net >= 0 ? "text-up" : "text-down"}`}
+                >
+                  {money(net)}
+                </span>
               </td>
             </tr>
           </tfoot>

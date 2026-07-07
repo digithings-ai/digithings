@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * Chat markdown — an assistant turn rendering full markdown (headings, emphasis,
+ * lists, block quotes, fenced code with a copy affordance, tables) on the token
+ * palette. Static display template.
+ */
 export function ChatMarkdownReference() {
   return (
     <section className="section-block">

@@ -2,6 +2,12 @@
 
 import { useState } from "react";
 
+/**
+ * Chat widgets — custom action widgets embedded in the terminal transcript: a
+ * metrics grid (money colors on P&L) and interactive action cards. Interactive
+ * display template.
+ */
+
 const METRICS = [
   { k: "profit factor", v: "2.31" },
   { k: "max drawdown", v: "−18.4%", tone: "down" },

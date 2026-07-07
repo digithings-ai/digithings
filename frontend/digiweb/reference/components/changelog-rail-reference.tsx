@@ -3,6 +3,13 @@
 import { useRef } from "react";
 import { useReducedMotion } from "motion/react";
 
+/**
+ * Changelog rail — a horizontal scroll strip of release cards. Swipe, wheel, or
+ * use the arrow buttons to move; cards snap into place and the edges fade so the
+ * row reads as a continuous strip rather than a cut-off grid. Tags wear the up /
+ * down colours by kind. Doubles as the sanctioned mobile fallback for any band
+ * too wide to stack. Interactive display template.
+ */
 type Release = {
   version: string;
   date: string;
@@ -59,12 +66,12 @@ export function ChangelogRailReference() {
 
   return (
     <section className="section-block changelog-rail">
-      <div className="cr-head">
+      <div className="flex items-end justify-between gap-4">
         <div>
           <p className="kicker">{"// changelog rail"}</p>
           <h2 className="title">Content that scrolls sideways.</h2>
         </div>
-        <div className="cr-nav" aria-hidden="true">
+        <div className="flex gap-[0.4rem]" aria-hidden="true">
           <button type="button" className="cr-arrow" onClick={() => nudge(-1)} aria-label="Scroll left">
             ‹
           </button>
@@ -83,12 +90,12 @@ export function ChangelogRailReference() {
         <div ref={railRef} className="cr-track" role="list" aria-label="Release notes">
           {RELEASES.map((rel) => (
             <article key={rel.version} className="cr-card" role="listitem" tabIndex={0}>
-              <div className="cr-card-head">
-                <span className="cr-version">{rel.version}</span>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[0.95rem] text-ink">{rel.version}</span>
                 <span className={`cr-tag cr-tag-${rel.tag}`}>{rel.tag}</span>
               </div>
-              <p className="cr-date">{rel.date}</p>
-              <h3 className="cr-title">{rel.title}</h3>
+              <p className="mt-[0.5rem] font-mono text-[0.62rem] tracking-[0.06em] text-ink-mute">{rel.date}</p>
+              <h3 className="mt-[0.15rem] text-[1.05rem] text-ink">{rel.title}</h3>
               <ul>
                 {rel.entries.map((entry) => (
                   <li key={entry}>{entry}</li>

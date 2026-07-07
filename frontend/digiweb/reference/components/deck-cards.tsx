@@ -1,5 +1,10 @@
-/* Presentational card variants rendered inside CardDeck items. Each is
-   content-only — the deck owns positioning, stacking, and the rail. */
+/**
+ * Presentational card variants rendered inside CardDeck items — a metric
+ * summary, a changelog, a pull-quote, and an alert. Each is content-only: the
+ * deck owns positioning, stacking, and the rail, so these just lay out their
+ * own body and wear the up / down colours where P&L applies. Static display
+ * templates.
+ */
 
 type MetricCardProps = {
   name: string;

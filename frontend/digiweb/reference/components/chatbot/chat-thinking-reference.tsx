@@ -3,6 +3,10 @@
 import { useRef, useState } from "react";
 import { useInView } from "motion/react";
 
+/**
+ * Thinking chain — the model's reasoning steps streamed into the transcript as it
+ * works, each line revealing when scrolled into view. Interactive display template.
+ */
 const STEPS = [
   "The user wants an 8-year backtest of trend_xsec on ETH.",
   "trend_xsec is cross-sectional, but this is a single symbol — fall back to the time-series variant.",

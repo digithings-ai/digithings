@@ -2,6 +2,11 @@
 
 import { useRef, useState } from "react";
 
+/**
+ * Chat composer — the terminal prompt input: an auto-growing textarea with a live
+ * character counter against a limit and a send affordance; echoes the last sent
+ * line back into the scrollback. Interactive display template.
+ */
 const MAX = 2000;
 
 export function ChatComposerReference() {

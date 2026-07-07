@@ -1,3 +1,10 @@
+/**
+ * Code review — a unified diff inside a document frame, the proof surface behind
+ * an agentic-coding stack. Added and removed lines are pastel washes: the third
+ * color domain, deliberately never the saturated up/down money hues, which stay
+ * reserved for P&L. Mono throughout, with a line gutter and a review status.
+ * Static data — a display template, no diffing engine.
+ */
 type Line =
   | { kind: "ctx"; old: number; now: number; text: string }
   | { kind: "add"; now: number; text: string }
@@ -31,9 +38,9 @@ export function CodeReviewReference() {
       </p>
 
       <article className="rv-frame">
-        <header className="rv-head">
-          <span className="rv-path">digiquant/src/strategy/trend_xsec.py</span>
-          <span className="rv-stat">
+        <header className="flex items-center justify-between gap-[0.8rem] border-b border-hair px-[1rem] py-[0.7rem] font-mono text-[0.72rem]">
+          <span className="text-ink">digiquant/src/strategy/trend_xsec.py</span>
+          <span className="inline-flex items-center gap-[0.6rem] text-[0.68rem]">
             <span className="rv-add-count">+{added}</span>
             <span className="rv-del-count">−{removed}</span>
             <span className="rv-chip">changes requested</span>

@@ -1,3 +1,8 @@
+/**
+ * Bento grid — an asymmetric module bento: the supervisor anchors a 2×2 hero, the
+ * flagship takes a wide cell, the rest fall into units, each wearing its module
+ * livery. Static layout template.
+ */
 import { Emblem, moduleById } from "@digithings/web";
 
 type Cell = { id: string; span: "hero" | "wide" | "tall" | "unit"; blurb: string };

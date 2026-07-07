@@ -2,6 +2,13 @@
 
 import { useState, type FormEvent } from "react";
 
+/**
+ * Sign-up — the account-creation card, same grammar as sign-in with one addition:
+ * a live password-strength meter of four hairline segments scored from length and
+ * character classes, climbing danger → warn → up as you type. An interactive
+ * display template.
+ */
+
 const STRENGTH_WORDS = ["", "weak", "fair", "good", "strong"] as const;
 const STRENGTH_COLORS = ["", "var(--down)", "var(--warn)", "var(--warn)", "var(--up)"] as const;
 
@@ -31,17 +38,26 @@ export function SignupCard() {
         segments scored from length and character classes, climbing danger → warn → up. Type in the
         password field to see it move.
       </p>
-      <p className="acct-badge-row">
-        <span className="acct-badge">example data · not live</span>
+      <p className="mt-4">
+        <span className="inline-block whitespace-nowrap rounded-full border border-hair px-[0.6rem] py-[0.22rem] font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+          example data · not live
+        </span>
       </p>
 
-      <div className="acct-auth-grid">
-        <form className="acct-card" onSubmit={preventSubmit} noValidate>
-          <p className="acct-card-mark">
-            digithings <span>· create account</span>
+      <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(280px,380px))] items-start gap-[1.2rem]">
+        <form
+          className="w-full max-w-[380px] rounded-[12px] border border-hair bg-surface p-[1.2rem]"
+          onSubmit={preventSubmit}
+          noValidate
+        >
+          <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
+            digithings <span className="text-ink-mute">· create account</span>
           </p>
           <div className="acct-field">
-            <label className="acct-label" htmlFor="signup-email">
+            <label
+              className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+              htmlFor="signup-email"
+            >
               Email
             </label>
             <input
@@ -54,7 +70,10 @@ export function SignupCard() {
             />
           </div>
           <div className="acct-field">
-            <label className="acct-label" htmlFor="signup-password">
+            <label
+              className="block font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+              htmlFor="signup-password"
+            >
               Password
             </label>
             <input
@@ -68,8 +87,11 @@ export function SignupCard() {
               onChange={(event) => setPassword(event.target.value)}
               aria-describedby="signup-strength"
             />
-            <div className="acct-strength-row">
-              <div className="acct-strength" aria-hidden="true">
+            <div className="mt-2 flex items-center gap-[0.7rem]">
+              <div
+                className="grid flex-1 grid-cols-[repeat(4,minmax(0,1fr))] gap-[6px]"
+                aria-hidden="true"
+              >
                 {[0, 1, 2, 3].map((index) => (
                   <span
                     key={index}
@@ -78,7 +100,11 @@ export function SignupCard() {
                   />
                 ))}
               </div>
-              <span className="acct-strength-word" id="signup-strength" role="status">
+              <span
+                className="min-w-[3.6rem] text-right font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+                id="signup-strength"
+                role="status"
+              >
                 {STRENGTH_WORDS[score] || "—"}
               </span>
             </div>

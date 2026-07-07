@@ -19,20 +19,24 @@ export function AnnouncementBarReference() {
       </p>
 
       {dismissed ? (
-        <p className="annc-restore">
+        <p className="mt-[1.2rem]">
           <button type="button" className="btn-quiet" onClick={() => setDismissed(false)}>
             Restore the demo bar
           </button>
         </p>
       ) : (
-        <div className="annc-bar" role="region" aria-label="Announcement">
+        <div
+          className="mt-[1.2rem] flex min-h-[48px] items-center rounded-[10px] border border-hair bg-surface"
+          role="region"
+          aria-label="Announcement"
+        >
           <a href="#announcement-bar" className="annc-link" onClick={(e) => e.preventDefault()}>
             <span>digiquant v2.4 ships kelly-capped position sizing.</span>
             <b>Read the changelog →</b>
           </a>
           <button
             type="button"
-            className="annc-close"
+            className="mr-[0.3rem] h-10 w-10 flex-shrink-0 cursor-pointer border-0 bg-transparent text-[0.8rem] text-ink-mute hover:text-ink"
             aria-label="Dismiss announcement"
             onClick={() => setDismissed(true)}
           >

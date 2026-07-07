@@ -9,6 +9,11 @@ import {
   subscribeLivery,
 } from "@/components/livery-store";
 
+/**
+ * Theme gallery — the livery swatches, wired to the same store as the nav's
+ * livery selector, so choosing one dresses the whole app and persists across
+ * navigation. Interactive display template.
+ */
 export function ThemeGallery() {
   // Shared with the nav's livery selector — selecting here dresses the whole
   // app and persists across navigation (see components/livery-store.ts).

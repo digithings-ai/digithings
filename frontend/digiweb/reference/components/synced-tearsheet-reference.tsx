@@ -155,5 +155,5 @@ export function SyncedTearsheetReference() {
     };
   }, []);
 
-  return <div className="pc-host" ref={hostRef} aria-hidden="true" />;
+  return <div className="h-full w-full" ref={hostRef} aria-hidden="true" />;
 }

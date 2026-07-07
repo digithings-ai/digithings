@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 
+/**
+ * Navigation buttons — the wayfinding controls: a segmented range switch (the
+ * selected cell wears an accent-weak wash), a prev/next pager with a disabled
+ * edge state and a current-page marker, and borderless icon buttons. Pills for
+ * chrome, hairline for structure — one loud state per group. Static interactive
+ * display template.
+ */
 const SEGMENTS = ["1D", "1W", "1M", "1Y", "All"];
 const PAGES = 5;
 
@@ -19,9 +26,15 @@ export function NavButtonsReference() {
         chrome, hairline for structure — one loud state per group.
       </p>
 
-      <div className="ctl-nav-row">
-        <p className="ctl-sub">segmented</p>
-        <div className="nb-segmented" role="tablist" aria-label="Range">
+      <div className="mt-[1.4rem]">
+        <p className="mb-[0.5rem] font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
+          segmented
+        </p>
+        <div
+          className="inline-flex overflow-hidden rounded-[8px] border border-hair"
+          role="tablist"
+          aria-label="Range"
+        >
           {SEGMENTS.map((s) => (
             <button
               key={s}
@@ -37,9 +50,11 @@ export function NavButtonsReference() {
         </div>
       </div>
 
-      <div className="ctl-nav-row">
-        <p className="ctl-sub">pager</p>
-        <div className="nb-pager">
+      <div className="mt-[1.4rem]">
+        <p className="mb-[0.5rem] font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
+          pager
+        </p>
+        <div className="inline-flex items-center gap-[0.3rem]">
           <button
             type="button"
             className="nb-page-edge"
@@ -70,9 +85,11 @@ export function NavButtonsReference() {
         </div>
       </div>
 
-      <div className="ctl-nav-row">
-        <p className="ctl-sub">icon buttons</p>
-        <div className="nb-icons">
+      <div className="mt-[1.4rem]">
+        <p className="mb-[0.5rem] font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
+          icon buttons
+        </p>
+        <div className="inline-flex gap-[0.3rem]">
           {[
             { k: "back", d: "M15 5l-7 7 7 7" },
             { k: "fwd", d: "M9 5l7 7-7 7" },

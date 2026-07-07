@@ -1,15 +1,8 @@
 /* Data page — dot-matrix stat, card deck, pricing precision table. */
 
-.dot-matrix-card {
-  margin-top: 1.2rem;
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  padding: 1.1rem;
-  background: var(--surface);
-  display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: 1.1rem;
-}
+/* .dot-matrix-card wrapper (mt / grid-cols-[180px_1fr] / gap / border / radius /
+   bg / padding + max-[900px]:grid-cols-1) → utilities in dot-matrix-stat.tsx.
+   The .dot-matrix-grid + .dot cluster below is the LED-matrix mechanic — CSS. */
 
 .dot-matrix-grid {
   display: grid;
@@ -29,38 +22,19 @@
   box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 44%, transparent);
 }
 
-.dot-matrix-copy .label {
-  font-family: var(--font-mono);
-  color: var(--ink-mute);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.dot-matrix-copy .value {
-  margin-top: 0.2rem;
-  font-family: var(--font-mono);
-  font-size: clamp(2rem, 5vw, 2.8rem);
-}
-
-.dot-matrix-copy .note {
-  margin-top: 0.55rem;
-  color: var(--ink-soft);
-  max-width: 50ch;
-}
+/* .dot-matrix-copy .label / .value / .note → utilities in dot-matrix-stat.tsx */
 
 /* Card deck — sticky stacking (the cavemen.dev pattern). Cards sit in
    normal flow; on wide screens each pins at a cascaded top offset and the
    next card slides up over it. Narrow screens drop sticky entirely and the
    cards simply appear in sequence. */
 
-.deck {
-  margin-top: 1.2rem;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 1.2rem;
-  align-items: start;
-}
+/* .deck wrapper (mt / grid-cols-[minmax(0,1fr)_220px] / gap / items-start +
+   max-[900px]:grid-cols-1) → utilities in card-deck.tsx. Everything below —
+   .deck-slots / .deck-card / .deck-rail and the deck-content variants — stays
+   CSS: sticky + --stack-index mechanics and cross-file descendant / positional
+   selectors (.deck-card p, .deck-rail li.on .dot, .deck-card-head h3) that would
+   lose their ancestor hook or shift specificity if flattened. */
 
 /* Cards are DIRECT children of one shared container: a sticky element can
    never leave its containing block, so per-card wrappers would drag each
@@ -271,12 +245,10 @@
 
 /* Pricing */
 
-.pricing-paths {
-  margin-top: 1.2rem;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.9rem;
-}
+/* .pricing-paths wrapper (mt / grid-cols-2 / gap), .pricing-path-title,
+   .pricing-path-copy, and .trust-line → utilities in pricing-reference.tsx.
+   .pricing-path stays CSS: it is the ancestor of .pricing-path button and pairs
+   with .pricing-path.featured (two-color mix). */
 
 .pricing-path {
   border: 1px solid var(--hair);
@@ -290,26 +262,8 @@
   background: color-mix(in srgb, var(--accent) 6%, var(--surface));
 }
 
-.pricing-path-title {
-  font-size: 1rem;
-}
-
-.pricing-path-copy {
-  margin-top: 0.4rem;
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-}
-
 .pricing-path button {
   margin-top: 0.9rem;
-}
-
-.trust-line {
-  margin-top: 0.9rem;
-  padding-top: 0.9rem;
-  border-top: 1px solid var(--hair);
-  color: var(--ink-mute);
-  font-size: 0.82rem;
 }
 
 .precision-table {
@@ -347,12 +301,9 @@
 
 /* Pricing comparison matrix + billing toggle */
 
-.pm-toggle-row {
-  margin-top: 1.2rem;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
+/* .pm-toggle-row wrapper → utilities in pricing-matrix-reference.tsx. The
+   .pm-toggle switch below stays CSS: it is the ancestor of .pm-knob and pairs
+   with .pm-toggle.on (two-color mix + knob translate). */
 
 .pm-toggle {
   width: 38px;
@@ -386,16 +337,8 @@
   background: var(--accent);
 }
 
-.pm-toggle-label {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: var(--ink-soft);
-}
-
-.pm-scroll {
-  margin-top: 1rem;
-  overflow-x: auto;
-}
+/* .pm-toggle-label + .pm-scroll wrapper → utilities in
+   pricing-matrix-reference.tsx */
 
 .pm-table {
   width: 100%;
@@ -423,28 +366,8 @@
   border-top-right-radius: 8px;
 }
 
-.pm-tier {
-  display: block;
-  font-size: 0.95rem;
-}
-
-.pm-price {
-  display: block;
-  margin: 0.25rem 0 0.7rem;
-  font-family: var(--font-mono);
-  color: var(--ink-soft);
-  font-size: 0.78rem;
-}
-
-.pm-popular {
-  display: block;
-  margin-top: 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--accent);
-}
+/* .pm-tier + .pm-price + .pm-popular cell labels → utilities in
+   pricing-matrix-reference.tsx */
 
 .pm-group th {
   padding: 1rem 0 0.4rem;
@@ -484,14 +407,10 @@
 }
 
 @media (max-width: 900px) {
-  .dot-matrix-card,
-  .deck {
-    grid-template-columns: 1fr;
-  }
-
-  .pricing-paths {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  /* .dot-matrix-card + .deck responsive collapse → max-[900px]:grid-cols-1
+     utilities in dot-matrix-stat.tsx / card-deck.tsx. (The former
+     .pricing-paths override here was a no-op — 2 cols at every width — and is
+     now covered by the base grid-cols-2 utility.) */
 
   /* Narrow: no stacking — the cards simply appear in sequence. The JS side
      gates its scale/brightness transforms off below 901px too. */
@@ -512,17 +431,7 @@
 
 /* Changelog rail — horizontal scroll strip with drag, snap, and edge fades */
 
-.cr-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.cr-nav {
-  display: flex;
-  gap: 0.4rem;
-}
+/* .cr-head + .cr-nav wrappers → utilities in changelog-rail-reference.tsx */
 
 .cr-arrow {
   width: 34px;
@@ -589,17 +498,9 @@
   user-select: none;
 }
 
-.cr-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.cr-version {
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  color: var(--ink);
-}
+/* .cr-card-head + .cr-version → utilities in changelog-rail-reference.tsx.
+   .cr-tag stays CSS: it pairs with .cr-tag-feature / -breaking (specificity tie
+   + two-color mix borders). */
 
 .cr-tag {
   font-family: var(--font-mono);
@@ -622,19 +523,7 @@
   border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
 }
 
-.cr-date {
-  margin-top: 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
-  color: var(--ink-mute);
-}
-
-.cr-title {
-  margin-top: 0.15rem;
-  font-size: 1.05rem;
-  color: var(--ink);
-}
+/* .cr-date + .cr-title → utilities in changelog-rail-reference.tsx */
 
 .cr-card ul {
   margin: 0.7rem 0 0;
@@ -661,15 +550,9 @@
 
 /* Stat counter — count-up metric strip */
 
-.sc-row {
-  margin-top: 1.2rem;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  background: var(--surface);
-  overflow: hidden;
-}
+/* .sc-row wrapper (mt / grid-cols-4 / border / radius / bg / overflow +
+   max-[720px]:grid-cols-2) and .sc-value / .sc-label → utilities in
+   stat-counter-reference.tsx. The .sc-stat nth-child border grid stays CSS. */
 
 .sc-stat {
   padding: 1.4rem 1.2rem;
@@ -680,30 +563,7 @@
   border-left: none;
 }
 
-.sc-value {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: clamp(1.6rem, 4vw, 2.4rem);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-  color: var(--accent);
-}
-
-.sc-label {
-  display: block;
-  margin-top: 0.35rem;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-mute);
-}
-
 @media (max-width: 720px) {
-  .sc-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .sc-stat:nth-child(3) {
     border-left: none;
   }
@@ -715,10 +575,9 @@
 
 /* Roadmap Gantt — initiative bars across a month axis */
 
-.rg-scroll {
-  margin-top: 1.2rem;
-  overflow-x: auto;
-}
+/* .rg-scroll wrapper (mt / overflow-x-auto) → utilities in
+   roadmap-gantt-reference.tsx. The .rg grid below stays CSS: it reads / sets
+   --rg-label-w / --rg-cols / --rg-now, uses calc + two-color mixes + ::before. */
 
 .rg {
   --rg-label-w: 11rem;
@@ -809,12 +668,7 @@
 
 /* ── marquee ticker (infinite "built on" strip) ─────────────────────────── */
 
-.mq {
-  margin-top: 1.4rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-}
+/* .mq wrapper (mt / flex-col / gap) → utilities in marquee-ticker-reference.tsx */
 
 .mq-row {
   overflow: hidden;
@@ -841,22 +695,7 @@
   animation-play-state: paused;
 }
 
-.mq-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.7rem;
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-  color: var(--ink-soft);
-  white-space: nowrap;
-}
-
-.mq-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--accent);
-}
+/* .mq-item + .mq-dot → utilities in marquee-ticker-reference.tsx */
 
 @keyframes mq-left {
   to {
@@ -882,15 +721,9 @@
 
 /* ── odometer (mechanical digit-roll counter) ───────────────────────────── */
 
-.odo-grid {
-  margin-top: 1.2rem;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  background: var(--surface);
-  overflow: hidden;
-}
+/* .odo-grid wrapper (mt / grid-cols-4 / border / radius / bg / overflow +
+   max-[720px]:grid-cols-2) → utilities in odometer-reference.tsx. The .odo-cell
+   nth-child border grid and the .odo reel mechanic below stay CSS. */
 
 .odo-cell {
   padding: 1.3rem;
@@ -939,15 +772,7 @@
   display: inline-block;
 }
 
-.odo-label {
-  display: block;
-  margin-top: 0.55rem;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-mute);
-}
+/* .odo-label → utilities in odometer-reference.tsx */
 
 @media (prefers-reduced-motion: reduce) {
   .odo-strip {
@@ -956,10 +781,6 @@
 }
 
 @media (max-width: 720px) {
-  .odo-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .odo-cell:nth-child(-n + 4) {
     border-top: 1px solid var(--hair);
   }
@@ -979,13 +800,9 @@
 
 /* ── sortable data table (strategy leaderboard) ─────────────────────────── */
 
-.srt-scroll {
-  margin-top: 1.2rem;
-  overflow-x: auto;
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  background: var(--surface);
-}
+/* .srt-scroll wrapper (mt / overflow-x-auto / border / radius / bg) → utilities
+   in sortable-table-reference.tsx. The .srt-table cluster below stays CSS:
+   ancestor of thead th / td, .srt-r .srt-head, :hover / .is-active, td.up/.down. */
 
 .srt-table {
   width: 100%;

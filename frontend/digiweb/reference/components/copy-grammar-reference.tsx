@@ -1,3 +1,7 @@
+/**
+ * Copy & voice grammar — the headline / subhead formulas the product writes to,
+ * each shown as a pattern plus an example, with ours flagged. Static display template.
+ */
 type Formula = { pattern: string; example: string; ours?: boolean };
 
 const HEADLINES: Formula[] = [

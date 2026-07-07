@@ -22,6 +22,21 @@ const LINES: Line[] = [
 
 const MODULES = ["digigraph", "digiquant", "digisearch", "digikey"] as const;
 
+// CLI line colours by kind — migrated from `.terminal-shell .line.<kind>`.
+const LINE_COLOR: Record<Line["kind"], string> = {
+  prompt: "text-ink",
+  comment: "text-term-mute",
+  tool: "text-ink-soft",
+  output: "text-up",
+};
+
+/**
+ * Terminal + budget sidebar — a diegetic `digithings init` CLI session that
+ * types its command and reveals output rows in view, paired with an
+ * illustrative context-budget sidebar that lights up each module as its line
+ * lands. Explicitly labelled example data, not live; reduced motion renders the
+ * finished session with no typing.
+ */
 export function TerminalBudgetReference() {
   const reduced = useReducedMotion();
   const scopeRef = useRef<HTMLDivElement | null>(null);
@@ -87,19 +102,22 @@ export function TerminalBudgetReference() {
         <h2 className="title">Diegetic CLI session with explicit illustrative budget.</h2>
       </div>
 
-      <div className="terminal-layout">
-        <article className="terminal-shell" aria-label="Scripted digithings terminal">
-          <header>
+      <div className="mt-[1.2rem] grid grid-cols-[minmax(0,1fr)_220px] gap-[1rem] max-[900px]:grid-cols-1">
+        <article
+          className="rounded-[12px] border border-hair bg-surface p-[1rem]"
+          aria-label="Scripted digithings terminal"
+        >
+          <header className="flex justify-between font-mono text-[0.68rem] uppercase tracking-[0.08em] text-ink-soft">
             <span>digithings session</span>
             <span className="muted">illustrative</span>
           </header>
-          <pre>
+          <pre className="mt-[0.7rem] max-w-full overflow-auto font-mono text-[0.78rem] leading-[1.95] text-term-ink">
             <code>
-              <span className="line prompt">
-                <span className="lead">❯</span> {COMMAND.slice(0, charCount)}
+              <span className="block text-ink">
+                <span className="text-accent">❯</span> {COMMAND.slice(0, charCount)}
               </span>
               {shown.map((line) => (
-                <span key={line.text} className={`line ${line.kind}`}>
+                <span key={line.text} className={`block ${LINE_COLOR[line.kind]}`}>
                   {line.text}
                 </span>
               ))}

@@ -31,8 +31,12 @@ function Track({ items, dir }: { items: string[]; dir: "a" | "b" }) {
     <div className="mq-row">
       <div className={`mq-track mq-track--${dir}`}>
         {[...items, ...items].map((t, i) => (
-          <span className="mq-item" key={`${t}-${i}`} aria-hidden={i >= items.length || undefined}>
-            <span className="mq-dot" aria-hidden="true" />
+          <span
+            className="inline-flex items-center gap-[0.7rem] font-mono text-[0.82rem] whitespace-nowrap text-ink-soft"
+            key={`${t}-${i}`}
+            aria-hidden={i >= items.length || undefined}
+          >
+            <span className="h-1 w-1 rounded-full bg-accent" aria-hidden="true" />
             {t}
           </span>
         ))}
@@ -52,7 +56,7 @@ export function MarqueeTickerReference() {
         pause and read; reduced motion stops the drift entirely.
       </p>
 
-      <div className="mq">
+      <div className="mt-[1.4rem] flex flex-col gap-[0.85rem]">
         <Track items={ROW_A} dir="a" />
         <Track items={ROW_B} dir="b" />
       </div>

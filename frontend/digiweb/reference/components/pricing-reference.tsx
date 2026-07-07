@@ -1,3 +1,9 @@
+/**
+ * Pricing — the open-core two-path shape (self-hosted vs. managed) with a
+ * single filled CTA, plus a per-unit model price table. The two paths sit
+ * side by side, the featured one tinted; the precision table rides the same
+ * hairline-row, mono-numeral voice as our tearsheets. Static display template.
+ */
 const MODELS = [
   { model: "grok-parity-4.3", context: "256k", price: "$3.00" },
   { model: "grok-build-0.1", context: "128k", price: "$0.85" },
@@ -15,10 +21,10 @@ export function PricingReference() {
         same hairline-row, mono-numeral voice as our tearsheets.
       </p>
 
-      <div className="pricing-paths">
+      <div className="mt-[1.2rem] grid grid-cols-2 gap-[0.9rem]">
         <div className="pricing-path">
-          <p className="pricing-path-title">Self-hosted</p>
-          <p className="pricing-path-copy">
+          <p className="text-[1rem]">Self-hosted</p>
+          <p className="mt-[0.4rem] text-[0.85rem] text-ink-soft">
             Open core · BYOK · audit-on by default. All modules, usage-based inference.
           </p>
           <button type="button" className="btn-ghost">
@@ -26,8 +32,8 @@ export function PricingReference() {
           </button>
         </div>
         <div className="pricing-path featured">
-          <p className="pricing-path-title">Managed</p>
-          <p className="pricing-path-copy">
+          <p className="text-[1rem]">Managed</p>
+          <p className="mt-[0.4rem] text-[0.85rem] text-ink-soft">
             Onboarding, custom limits, SSO, audit log, SLA-backed uptime.
           </p>
           <button type="button" className="btn-primary">
@@ -36,7 +42,7 @@ export function PricingReference() {
         </div>
       </div>
 
-      <p className="trust-line">
+      <p className="mt-[0.9rem] border-t border-hair pt-[0.9rem] text-[0.82rem] text-ink-mute">
         Free for your first 30 days. No credit card required. Synced with your GitHub account.
       </p>
 

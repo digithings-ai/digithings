@@ -65,8 +65,9 @@ export function OlympusMark({ size = 22, className }: { size?: number; className
  */
 export function Wordmark({ suffix }: { suffix: string }) {
   return (
-    <span className="sym-wordmark">
-      digi<em>{suffix}</em>
+    <span className="font-mono text-[1.25rem] font-medium tracking-[-0.01em] text-ink">
+      digi
+      <em className="not-italic text-accent">{suffix}</em>
     </span>
   );
 }

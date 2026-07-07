@@ -5,6 +5,13 @@ import { m, useMotionValueEvent, useReducedMotion, useScroll } from "motion/reac
 
 const LINKS = ["Product", "Pricing", "Docs", "Changelog"];
 
+/**
+ * Scroll-aware nav — a sticky bar that gains a hairline and blurred backdrop
+ * only after the hero clears, and yields to reading direction: it hides on
+ * scroll-down and returns on scroll-up. State is driven from a contained demo
+ * frame's own scroll so the bar pins inside it; reduced motion drops the
+ * slide transition.
+ */
 export function ScrollNavReference() {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [solid, setSolid] = useState(false);
@@ -24,7 +31,7 @@ export function ScrollNavReference() {
   });
 
   return (
-    <section className="section-block scroll-nav-demo">
+    <section className="section-block relative">
       <p className="kicker">{"// nav"}</p>
       <h2 className="title">Quiet, literal, scroll-aware.</h2>
       <p className="section-copy">
@@ -33,25 +40,31 @@ export function ScrollNavReference() {
         drama. Scroll inside the frame below to see it react.
       </p>
 
-      <div className="scroll-nav-stage" ref={stageRef}>
+      <div
+        className="relative mt-[1.2rem] h-[22rem] overflow-y-auto rounded-[12px] border border-hair bg-surface scroll-pt-0"
+        ref={stageRef}
+      >
         <m.div
           className={`scroll-nav${solid ? " solid" : ""}`}
           animate={{ y: hidden ? -72 : 0 }}
           transition={reduce ? { duration: 0 } : { duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
         >
-          <span className="scroll-nav-mark">digithings</span>
-          <ul>
+          <span className="font-mono text-[0.78rem] text-ink">digithings</span>
+          <ul className="m-0 flex list-none gap-[1.1rem] p-0 font-mono text-[0.72rem] text-ink-soft max-[900px]:hidden">
             {LINKS.map((link) => (
               <li key={link}>{link}</li>
             ))}
           </ul>
-          <button type="button" className="btn-quiet scroll-nav-cta">
+          <button type="button" className="btn-quiet ml-auto">
             Sign in
           </button>
         </m.div>
 
-        <div className="scroll-nav-page" aria-hidden="true">
-          <p className="scroll-nav-hero">Scroll ↓</p>
+        <div
+          className="flex max-w-[46ch] flex-col gap-[1.6rem] px-[1.4rem] pb-[1.4rem] text-ink-soft"
+          aria-hidden="true"
+        >
+          <p className="mt-[0.6rem] font-display text-[2rem] text-ink">Scroll ↓</p>
           <p>Past the hero, the bar takes on a hairline and a blurred backdrop.</p>
           <p>Keep scrolling down and it retreats out of the way.</p>
           <p>Scroll back up and it returns — reading direction wins.</p>
