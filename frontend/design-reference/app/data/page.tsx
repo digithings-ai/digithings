@@ -4,6 +4,7 @@ import { ChangelogRailReference } from "@/components/changelog-rail-reference";
 import { AlertCard, ChangelogCard, MetricCard, QuoteCard } from "@/components/deck-cards";
 import { DotMatrixStat } from "@/components/dot-matrix-stat";
 import { MarqueeTickerReference } from "@/components/marquee-ticker-reference";
+import { OdometerReference } from "@/components/odometer-reference";
 import { PricingMatrixReference } from "@/components/pricing-matrix-reference";
 import { PricingReference } from "@/components/pricing-reference";
 import { RoadmapGanttReference } from "@/components/roadmap-gantt-reference";
@@ -80,6 +81,7 @@ export default function DataPage() {
 
       <DotMatrixStat />
       <StatCounterReference />
+      <OdometerReference />
       <MarqueeTickerReference />
 
       <section className="section-block" id="card-deck">

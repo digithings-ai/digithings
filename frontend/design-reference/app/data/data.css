@@ -879,3 +879,100 @@
     animation: none;
   }
 }
+
+/* ── odometer (mechanical digit-roll counter) ───────────────────────────── */
+
+.odo-grid {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.odo-cell {
+  padding: 1.3rem;
+  border-left: 1px solid var(--hair);
+  border-top: 1px solid var(--hair);
+}
+
+.odo-cell:nth-child(-n + 4) {
+  border-top: none;
+}
+
+.odo-cell:nth-child(4n + 1) {
+  border-left: none;
+}
+
+.odo {
+  display: inline-flex;
+  align-items: flex-end;
+  font-family: var(--font-mono);
+  font-size: 1.7rem;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.odo-reel {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+}
+
+.odo-strip {
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.odo-digit {
+  height: 1em;
+  line-height: 1em;
+  text-align: center;
+}
+
+.odo-sep {
+  display: inline-block;
+}
+
+.odo-label {
+  display: block;
+  margin-top: 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odo-strip {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .odo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .odo-cell:nth-child(-n + 4) {
+    border-top: 1px solid var(--hair);
+  }
+
+  .odo-cell:nth-child(-n + 2) {
+    border-top: none;
+  }
+
+  .odo-cell:nth-child(4n + 1) {
+    border-left: 1px solid var(--hair);
+  }
+
+  .odo-cell:nth-child(2n + 1) {
+    border-left: none;
+  }
+}
