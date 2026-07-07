@@ -3,6 +3,7 @@ import { AnnouncementBarReference } from "@/components/announcement-bar-referenc
 import { CommandPaletteReference } from "@/components/command-palette-reference";
 import { FooterReference } from "@/components/footer-reference";
 import { ScrollNavReference } from "@/components/scroll-nav-reference";
+import { TabsReference } from "@/components/tabs-reference";
 
 export default function ChromePage() {
   return (
@@ -20,6 +21,7 @@ export default function ChromePage() {
 
       <AnnouncementBarReference />
       <CommandPaletteReference />
+      <TabsReference />
       <ScrollNavReference />
       <FooterReference />
     </main>
