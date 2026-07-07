@@ -6,6 +6,7 @@ import { HeroGraphReference } from "@/components/hero-graph-reference";
 import { ResearchPipeline } from "@/components/effects/research-pipeline";
 import { RotatingPrompts } from "@/components/effects/rotating-prompts";
 import { SectionMorph } from "@/components/effects/section-morph";
+import { StackingPanels } from "@/components/effects/stacking-panels";
 
 // The digithings.ai hero boot script (pre-v7 landing, frontend/digithings-web
 // app/page.tsx history) — the signature content the Terminal component plays.
@@ -165,6 +166,17 @@ export default function EffectsPage() {
           docked end state, un-pinned.
         </p>
         <SectionMorph />
+      </section>
+
+      <section className="section-block" id="stacking-panels">
+        <p className="kicker">{"// section transition · stacking panels"}</p>
+        <h2 className="title">Panels that stack as you go.</h2>
+        <p className="section-copy">
+          The layered variant: each panel pins, then the next slides up and over it — a rounded top
+          edge and a cast shadow marking the seam — while the covered panel scales back and dims
+          behind it. Scroll through the three below. Reduced motion renders a plain stack.
+        </p>
+        <StackingPanels />
       </section>
 
       <RotatingPrompts />

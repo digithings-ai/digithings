@@ -422,3 +422,65 @@ html.no-js .dqpipe-track-fill { height: 100%; }
     height: clamp(360px, 56vh, 520px);
   }
 }
+
+/* ── stacking panels section transition (mined from revolut.com) ────────── */
+
+.stk-wrap {
+  margin-top: 1.6rem;
+}
+
+.stk-panel {
+  position: sticky;
+  top: calc(var(--nav-h) + 1.2rem);
+  min-height: 52vh;
+  display: flex;
+  align-items: center;
+  padding: clamp(1.6rem, 5vw, 3.2rem);
+  border: 1px solid var(--hair);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 -22px 46px -26px rgba(0, 0, 0, 0.6);
+  transform-origin: center top;
+  will-change: transform;
+  overflow: hidden;
+}
+
+.stk-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 34rem;
+}
+
+.stk-n {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+}
+
+.stk-title {
+  margin: 0.4rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.stk-body {
+  margin: 0.7rem 0 0;
+  max-width: 42ch;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* darkening overlay as a panel is covered — JS drives opacity */
+.stk-dim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--bg);
+  opacity: 0;
+  pointer-events: none;
+}
