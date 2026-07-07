@@ -294,3 +294,84 @@
     transform: none;
   }
 }
+
+/* Numbered stages — a sequential-step spine, one livery per stage */
+
+.ns-spine {
+  margin: 1.2rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0;
+}
+
+.ns-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3.4rem 1fr;
+  gap: 1.1rem;
+  padding: 0 0 1.8rem 0;
+}
+
+.ns-stage:last-child {
+  padding-bottom: 0;
+}
+
+/* the spine line runs through the node column, behind the badges */
+.ns-stage::before {
+  content: "";
+  position: absolute;
+  left: calc(1.7rem - 0.5px);
+  top: 1.9rem;
+  bottom: -0.1rem;
+  width: 1px;
+  background: var(--hair);
+}
+
+.ns-stage:last-child::before {
+  display: none;
+}
+
+.ns-node {
+  position: relative;
+  z-index: 1;
+  width: 3.4rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--hair));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+}
+
+.ns-body {
+  padding-top: 0.1rem;
+}
+
+.ns-tag {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+
+.ns-title {
+  margin-top: 0.2rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.2rem, 2.4vw, 1.5rem);
+  letter-spacing: -0.013em;
+  color: var(--ink);
+}
+
+.ns-mech {
+  margin-top: 0.35rem;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  max-width: 52ch;
+}

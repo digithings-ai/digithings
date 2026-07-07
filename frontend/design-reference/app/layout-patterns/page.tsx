@@ -1,6 +1,7 @@
 import "./layout.css";
 import { BentoGridReference } from "@/components/bento-grid-reference";
 import { FeatureCellReference } from "@/components/feature-cell-reference";
+import { NumberedStagesReference } from "@/components/numbered-stages-reference";
 import { MockTearsheet, ProductFrame } from "@/components/product-frame-reference";
 
 export default function LayoutPage() {
@@ -19,6 +20,7 @@ export default function LayoutPage() {
       </header>
 
       <FeatureCellReference />
+      <NumberedStagesReference />
       <BentoGridReference />
 
       <section className="section-block" id="product-frame">
