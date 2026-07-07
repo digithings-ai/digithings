@@ -4,7 +4,7 @@ import { Emblem, emblems, StackRow, type StackItem } from "@digithings/web";
 import { Glyph, glyphNames } from "@/components/symbols/glyph";
 import { OlympusMark, Wordmark } from "@/components/symbols/marks";
 
-/* The full ICONS registry from frontend/web/src/components/logos.ts — every
+/* The full ICONS registry from frontend/digiweb/web/src/components/logos.ts — every
    slug that resolves to a real Simple Icons mark in StackLogo. */
 const REGISTRY_STACK: StackItem[] = [
   { name: "Drizzle", icon: "drizzle" },

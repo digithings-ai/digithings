@@ -7,8 +7,8 @@ Variable-first, shared components, intentional spacing, no AI-slop tells.
 ## Canonical sources (deployed)
 - digithings.ai → `frontend/digithings-web` (Next.js static export)
 - digiquant.io  → `frontend/digiquant-web` (+ `frontend/olympus` at `/olympus`)
-- Shared design system → `frontend/design` (tokens.css, site/site.css, components.css)
-  and `frontend/web` (`@digithings/web` — ThemeProvider, web-theme.css)
+- Shared design system → `frontend/digiweb/design` (tokens.css, site/site.css, components.css)
+  and `frontend/digiweb/web` (`@digithings/web` — ThemeProvider, web-theme.css)
 - LEGACY / not deployed: `frontend/digithings`, `frontend/digiquant` (old static HTML)
 
 ## Pages
@@ -45,8 +45,8 @@ Variable-first, shared components, intentional spacing, no AI-slop tells.
 ## DESIGN BRIEF (from user, 2026-06-26) — the real direction
 
 **North-star references (2026-06-29):** Deep scans + evolution paths live in
-[`frontend/design/references/`](../references/README.md) and
-[`frontend/design/EVOLUTION.md`](../EVOLUTION.md) — Graphite (scroll/motion),
+[`frontend/digiweb/design/references/`](../references/README.md) and
+[`frontend/digiweb/design/EVOLUTION.md`](../EVOLUTION.md) — Graphite (scroll/motion),
 Cursor (utilitarian bento), x.ai (brutalist dashboard/API). Read before the next
 landing or Olympus/twelve-x pass.
 
@@ -68,7 +68,7 @@ Concrete directives (current sites FAIL these):
 5. Creativity by surface: landing = creative/bold; Olympus + 12x dashboard = professional.
 
 ### In progress: 4 throwaway art-direction demos (parallel subagents) for digiquant.io landing
-Output dir: frontend/design/demos/digiquant-landing/
+Output dir: frontend/digiweb/design/demos/digiquant-landing/
 - 01-bloomberg-terminal.html  (data-dense terminal)
 - 02-linear-vercel.html        (premium dev-tool)
 - 03-generative-data-art.html  (live canvas viz hero)
@@ -101,7 +101,7 @@ Synthesis spec (drives 05-blend.html and ultimately the real build):
   * Ticker wired to REAL data (price-table pipeline + Olympus portfolio returns).
 - Olympus + 12x dashboard stay professional (creativity is for the landing).
 
-Artifacts so far: frontend/design/demos/digiquant-landing/01..04 (screenshotted, reviewed).
+Artifacts so far: frontend/digiweb/design/demos/digiquant-landing/01..04 (screenshotted, reviewed).
 DONE: 05-blend.html built by me (subagent hit session limit) + verified (no console errors,
 desktop 2-col cockpit hero + stacked mobile, all components mount). Awaiting user reaction.
 Open items to push next per brief: harder ASYMMETRIC scroll motion (left moves / right pinned),
@@ -122,7 +122,7 @@ implement system-first (header/section/motion primitives) reusing Olympus compon
 - v7 plan: scroll-driven concept — Stripe-style animated gradient hero that reacts to scroll;
   scroll-PINNED scene where Atlas→Hermes→Kairos assemble as you scroll through; smooth-scroll
   feel; editorial type; keep tape + strategies/tearsheet. Self-contained (no external libs).
-- Build artifacts in frontend/design/demos/digiquant-landing/ (06-frontier.html exists; next 07).
+- Build artifacts in frontend/digiweb/design/demos/digiquant-landing/ (06-frontier.html exists; next 07).
 
 - v7 (07-scroll-driven.html) BUILT + verified: Stripe-style animated mesh-gradient hero that
   reacts to scroll (parallax/fade); scroll-PINNED scene where Atlas→Hermes→Kairos assemble as you
@@ -220,7 +220,7 @@ OPEN CORE section: user unsure what it is → reconsider/repurpose or make it a 
 GENERAL: whole-page scrolling must be smooth/continuous (Apple-like), no pausing/jitter.
 
 ## Next iterations
-1. Read shared `frontend/design/site/site.css` + `frontend/web/styles/web-theme.css`
+1. Read shared `frontend/digiweb/design/site/site.css` + `frontend/digiweb/web/styles/web-theme.css`
    — find the `.glow` gradient + section padding tokens. Fix edge-clipping + spacing.
 2. Run a dev server (preview_start) on each site, screenshot every page at desktop +
    mobile, diff against the Hermès/Linear bar. Capture concrete defects with shots.

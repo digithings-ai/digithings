@@ -79,13 +79,13 @@ is the only shared chrome.
 
 1. Create the component in `components/` (`"use client"` only if it needs
    state/effects). Take content from the reference-mining doc
-   (`frontend/design/references/mine/index.html`) or the canon
-   (`frontend/design/spec/index.html`).
+   (`frontend/digiweb/design/references/mine/index.html`) or the canon
+   (`frontend/digiweb/design/spec/index.html`).
 2. Put its styles in the owning page's `<family>.css` with a unique class prefix.
 3. Import and place it in `app/<family>/page.tsx` using the section grammar:
    `<section className="section-block"><p className="kicker">// label</p>
    <h2 className="title">Claim.</h2><p className="section-copy">…</p>…</section>`.
-4. Verify from `frontend/design-reference/`: `npx tsc --noEmit` and `npx eslint .`
+4. Verify from `frontend/digiweb/reference/`: `npx tsc --noEmit` and `npx eslint .`
    both clean; then check it live in the preview (and toggle theme / mobile).
 
 ## Pitfalls learned the hard way

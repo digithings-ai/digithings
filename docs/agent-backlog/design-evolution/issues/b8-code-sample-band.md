@@ -1,10 +1,10 @@
 ## Goal
 
-Build **`CodeSampleBand`** — x.ai tabbed SDK / Cursor curl row for API and BYOK marketing ([`xai-full.md`](../../../../frontend/design/references/scans/xai-full.md)).
+Build **`CodeSampleBand`** — x.ai tabbed SDK / Cursor curl row for API and BYOK marketing ([`xai-full.md`](../../../../frontend/digiweb/design/references/scans/xai-full.md)).
 
 ## Component
 
-- [x] cross-cutting (`frontend/design/`)
+- [x] cross-cutting (`frontend/digiweb/design/`)
 
 ## Acceptance Criteria
 
@@ -23,8 +23,8 @@ Build **`CodeSampleBand`** — x.ai tabbed SDK / Cursor curl row for API and BYO
 
 ## Documentation to Update
 
-- [ ] `frontend/design/site/README.md`
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/site/README.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

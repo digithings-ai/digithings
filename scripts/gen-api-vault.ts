@@ -13,7 +13,7 @@
  */
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { modules } from "../frontend/web/src/data/modules";
+import { modules } from "../frontend/digiweb/web/src/data/modules";
 import { guides } from "../frontend/digithings-web/lib/sharedDocs";
 import { guideToMarkdown, moduleToMarkdown } from "../frontend/digithings-web/lib/docsSerializers";
 

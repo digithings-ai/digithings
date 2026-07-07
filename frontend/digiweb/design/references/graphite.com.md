@@ -136,7 +136,7 @@ proportionally instead of reflowing UI at every breakpoint.
 would feel off-brand. Respect reduced motion for accessibility.
 
 **Technical note:** Ideal candidate for CSS scroll-driven animations with JS
-fallback (`frontend/design/scroll-trigger.js`).
+fallback (`frontend/digiweb/design/scroll-trigger.js`).
 
 ---
 

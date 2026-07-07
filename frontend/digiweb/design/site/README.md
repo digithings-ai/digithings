@@ -5,7 +5,7 @@ and `frontend/digiquant-web/app/globals.css` — the live Next.js marketing
 sites (digithings.ai, digiquant.io). It supplies the primitives those apps'
 React components still reach for by class name: `.wrap`, `.brand*`, buttons,
 `.kicker`/`.prompt`, the standalone `.hero-title`, the terminal block
-(`.term*`/`.tl-*`, consumed by `frontend/web/src/components/Terminal.tsx`),
+(`.term*`/`.tl-*`, consumed by `frontend/digiweb/web/src/components/Terminal.tsx`),
 sections, **ProductFrame**, **BentoGrid**, **TrustStrip**, **reveal-up**,
 **StatCounter**, **ChangelogBand**, **CodeSampleBand**, **CapabilityCard**,
 **HorizontalScrollBand**, **ClosingCtaBand**, **FaqAccordion**, **PricingMatrix**,
@@ -153,12 +153,12 @@ visible class:
 ```
 
 ```js
-// Option A — vanilla pages: frontend/design/scroll-trigger.js
+// Option A — vanilla pages: frontend/digiweb/design/scroll-trigger.js
 import { initScrollTrigger } from '../scroll-trigger.js';
 initScrollTrigger({ activateSelector: '.reveal-up', activationLineRatio: 0.8 });
 // toggles .active on .reveal-up elements as they cross the scroll line
 
-// Option B — React: frontend/web/src/motion/primitives.tsx's <Reveal>
+// Option B — React: frontend/digiweb/web/src/motion/primitives.tsx's <Reveal>
 // applies its own visibility state via className; pass className="reveal-up"
 // and toggle `is-visible` there instead of `.active`, or wire Reveal to add
 // `.active` for a single shared contract — either satisfies the CSS below.
@@ -214,7 +214,7 @@ same division of responsibility as TrustStrip.
 
 **Data shape** (`{ date, version?, title, href, tag? }[]`) — see
 [`../changelog-example.json`](../changelog-example.json) for a worked
-example and `frontend/design/smoke/index.html` for a vanilla-JS renderer.
+example and `frontend/digiweb/design/smoke/index.html` for a vanilla-JS renderer.
 Source of truth for real content is whatever the consuming app already has
 (a `CHANGELOG.md` excerpt, the GitHub Releases API, or a CMS) — this
 primitive doesn't fetch or own data, only the markup/CSS contract.
@@ -379,7 +379,7 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
 | `.closing-cta__actions` → `.btn.btn-primary` | Primary label + `href` | The single, literal action (e.g. "Start building", "Open Olympus"). |
 | `.closing-cta__secondary` | Optional secondary label + `href` | Mono, arrow-suffix; the `span[aria-hidden]` translates on hover, matching `.btn`/`.bento__cta`. |
 
-**Copy variants** (shown in `frontend/design/smoke/index.html`):
+**Copy variants** (shown in `frontend/digiweb/design/smoke/index.html`):
 
 | Surface | Title | Primary | Secondary |
 |---------|-------|---------|-----------|

@@ -15,32 +15,33 @@ frontend/digiweb/
 ├── MANIFEST.json          generated machine index of every reference component
 ├── scripts/
 │   └── build-manifest.mjs regenerates MANIFEST.json from the reference source
+├── design/                @digithings/design — tokens.css + CSS primitives
+├── web/                   @digithings/web — shared React component layer
 └── reference/             the live showcase app (Next.js 16 / React 19 / Tailwind v4 / Motion)
     ├── app/<family>/       one page per design family (foundations, controls, …)
     ├── components/         the reusable patterns (one file each, docblock-headed)
     └── README.md           the canon: tokens, livery, type, motion, chart rules
 ```
 
-Two shared workspaces the reference builds on live **outside** this directory
-today and are consumed **by package name**, so location is irrelevant to
-resolution:
+The three workspaces are consumed **by package name**, so their on-disk location
+is irrelevant to resolution — every other frontend imports them the same way:
 
-| Package | On-disk (today) | Provides |
-| ------- | --------------- | -------- |
-| `@digithings/design` | `frontend/design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/web` | `frontend/web/` | shared React layer (Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) |
+| Package | Directory | Provides |
+| ------- | --------- | -------- |
+| `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
+| `@digithings/web` | `web/` | shared React layer (Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) |
 
-### Why they aren't (yet) physically under `digiweb/`
+### The move touched deploy config
 
-Folding `frontend/design` and `frontend/web` into `frontend/digiweb/` is pure
-directory bookkeeping — imports resolve by package name and wouldn't change —
-but it touches the **live deploy path**: `scripts/ci_paths.yaml` + five GitHub
-workflow path-filters, `scripts/score.py` (skip list + a per-file rule),
-`scripts/gen-api-vault.ts` (a relative `../frontend/web/...` import), the
-`frontend/design/**` invariant documented in `CLAUDE.md`, and doc links checked
-by `make doc-check`. That's max blast-radius for zero functional gain, so it is
-gated on an explicit deploy-path review rather than bundled with module
-creation. The suite is fully functional without the move.
+Relocating `design/` and `web/` under `digiweb/` was pure directory bookkeeping
+for *resolution* (imports are by package name), but it did touch the **live
+deploy path**, all updated in the relocation commit: `scripts/ci_paths.yaml`
+(regenerating the `ci.yml` filter block via `scripts/generate_ci_path_filters.py`)
++ the two Cloudflare deploy workflows + `agent-claude-review.yml`,
+`scripts/score.py` (skip list + a per-file rule), `scripts/gen-api-vault.ts`
+(a relative `../frontend/digiweb/web/...` import), the `frontend/digiweb/design/**`
+invariant in `CLAUDE.md`, and doc links checked by `make doc-check`. Consumers
+build unchanged.
 
 ## MANIFEST.json — the agent index
 

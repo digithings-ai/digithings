@@ -1,6 +1,6 @@
 ## Goal
 
-Upgrade **digiquant.io** hero with Cursor literal CTAs, Graphite friction trust strip, and x.ai-style stat counters ([`EVOLUTION.md` §3 digiquant](../../../../frontend/design/EVOLUTION.md)).
+Upgrade **digiquant.io** hero with Cursor literal CTAs, Graphite friction trust strip, and x.ai-style stat counters ([`EVOLUTION.md` §3 digiquant](../../../../frontend/digiweb/design/EVOLUTION.md)).
 
 ## Component
 
@@ -29,7 +29,7 @@ Manual: verify `/#strategies` hash scroll still works after #1198 fixes
 ## Documentation to Update
 
 - [ ] `frontend/digiquant-web/README.md`
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

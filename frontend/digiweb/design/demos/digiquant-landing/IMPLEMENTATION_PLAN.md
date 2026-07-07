@@ -1,7 +1,7 @@
 # Port the v7 design language into the real digiquant-web app
 
 ## Context
-We iterated a self-contained HTML prototype (`frontend/design/demos/digiquant-landing/07-scroll-driven.html`) into a locked design direction for **digiquant.io**: a centered editorial "A quant hedge fund. In a box you own." hero over a mouse-following mesh-gradient, a scroll-pinned **Olympus** pipeline (Atlas → Hermes → Kairos, real phases, one continuous horizontal track, Kairos "in development"), a **vertical tearsheet** strategy suite on the **real** BTC/ETH/SOL Slapper backtests, lowercase **digiquant** branding with the **QR** mark, and an open-source closing section. The real Next.js app (`frontend/digiquant-web`) still ships the old, rejected "headline-left + chart-right + marquee ticker + pricing" home. This change replaces the real app's design language with v7, across all pages.
+We iterated a self-contained HTML prototype (`frontend/digiweb/design/demos/digiquant-landing/07-scroll-driven.html`) into a locked design direction for **digiquant.io**: a centered editorial "A quant hedge fund. In a box you own." hero over a mouse-following mesh-gradient, a scroll-pinned **Olympus** pipeline (Atlas → Hermes → Kairos, real phases, one continuous horizontal track, Kairos "in development"), a **vertical tearsheet** strategy suite on the **real** BTC/ETH/SOL Slapper backtests, lowercase **digiquant** branding with the **QR** mark, and an open-source closing section. The real Next.js app (`frontend/digiquant-web`) still ships the old, rejected "headline-left + chart-right + marquee ticker + pricing" home. This change replaces the real app's design language with v7, across all pages.
 
 Decisions (confirmed with user):
 - **No live tape / no live market prices this round.** Ship the v7 design without any live data. (If revisited later, source = the project's Supabase `price_history` table — daily OHLCV, anon-readable, same client pattern as `frontend/olympus/lib/supabase.ts`. Out of scope now.)
@@ -32,7 +32,7 @@ Replace the digiquant-specific blocks (old `.hero-*`, `.dq-tickerbar`, `.dq-tick
 - `Brand`, `DQ_NAV`, `DQ_FOOTER`, `DQ_FOOTER_META` in `app/_nav.tsx` (update link targets; brand already correct).
 - Real data: `public/strategies/index.json` + `*_slapper.json`; `components/tearsheet/{format.ts,types.ts,tearsheet-view.tsx,charts.tsx}`.
 - Real pipeline phase names from `digiquant/src/digiquant/olympus/{atlas,hermes}/phases/`.
-- The working v7 reference: `frontend/design/demos/digiquant-landing/07-scroll-driven.html` (port its CSS/JS into React).
+- The working v7 reference: `frontend/digiweb/design/demos/digiquant-landing/07-scroll-driven.html` (port its CSS/JS into React).
 
 ## Out of scope
 - No edits to `@digithings/web` / `@digithings/design` (would affect digithings.ai).
@@ -40,6 +40,6 @@ Replace the digiquant-specific blocks (old `.hero-*`, `.dq-tickerbar`, `.dq-tick
 
 ## Verification
 1. `npm install` in the worktree if needed, then `npm --workspace frontend/digiquant-web run dev` via the existing `digiquant-web` launch config (port 4011); preview_screenshot the home, `/pipeline`, `/strategies`, a `/strategies/<id>` tearsheet, and a `/subsystems/<id>` page at desktop + mobile; verify scroll-pinned pipeline advances Atlas→Hermes→Kairos, the mesh follows the cursor, the strategy suite swaps tearsheets, and no console errors.
-2. Confirm digithings.ai is untouched: `git status` shows no changes under `frontend/web`, `frontend/design`, or `frontend/digithings-web`.
+2. Confirm digithings.ai is untouched: `git status` shows no changes under `frontend/digiweb/web`, `frontend/digiweb/design`, or `frontend/digithings-web`.
 3. `npm --workspace frontend/digiquant-web run build` (static export) succeeds; check `out/index.html`, `out/strategies/btc_slapper/index.html`, `out/subsystems/atlas/index.html` exist.
 4. Per CLAUDE.md before PR: `ruff`/lint not relevant (frontend), run `make score` on staged changes (Security/Quality/Optimization/Accuracy gate) and update `frontend` docs if an interface changed. Work stays on the current worktree branch.

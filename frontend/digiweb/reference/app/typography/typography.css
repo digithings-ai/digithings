@@ -78,7 +78,7 @@
   display: inline-block;
   margin-right: 0.35em;
   color: transparent;
-  /* house pattern (frontend/design/site/site.css .colo-word): hairline
+  /* house pattern (frontend/digiweb/design/site/site.css .colo-word): hairline
      stroke, color-mix upgrade where supported */
   -webkit-text-stroke: 1px var(--ink);
   -webkit-text-stroke: 1px color-mix(in srgb, var(--ink) 30%, transparent);

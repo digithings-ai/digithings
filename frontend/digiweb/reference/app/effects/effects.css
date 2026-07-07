@@ -15,7 +15,7 @@
 }
 
 /* ── typed module terminal ──────────────────────────────────────────────
-   Copied verbatim from frontend/design/site/site.css §"terminal block"
+   Copied verbatim from frontend/digiweb/design/site/site.css §"terminal block"
    (the package exports ./site/site.css, but importing it wholesale would
    also pull its reset plus .kicker/.btn-* rules that conflict with this
    app's globals — so only the terminal rules travel). Consumed by the

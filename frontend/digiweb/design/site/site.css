@@ -162,7 +162,7 @@ a { color: inherit; text-decoration: none; }
    CSS-only: owns the two visual states only. Trigger it either with
    ../scroll-trigger.js's `activateSelector` (toggles `.active` when the
    element crosses the scroll line) or from the React `Reveal` component's
-   className (frontend/web/src/motion/primitives.tsx) — both are valid
+   className (frontend/digiweb/web/src/motion/primitives.tsx) — both are valid
    drivers, so both class names are wired below. ───────────────────────── */
 .reveal-up { opacity: 0; transform: translateY(1rem); transition: opacity var(--duration-reveal) var(--ease-glide), transform var(--duration-reveal) var(--ease-glide); }
 .reveal-up.is-visible, .reveal-up.active { opacity: 1; transform: none; }

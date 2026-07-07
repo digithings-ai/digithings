@@ -6,7 +6,7 @@ utilitarian, dark-first aesthetic with per-module accent colors and a
 cross-brand starfield signature.
 
 This document is the authoritative reference. The canonical implementation
-lives in `frontend/design/tokens.css` + `frontend/design/components.css`,
+lives in `frontend/digiweb/design/tokens.css` + `frontend/digiweb/design/components.css`,
 packaged as the `@digithings/design` npm workspace. Consumers
 import the package (or reference the files via relative paths for the
 static sites).
@@ -32,7 +32,7 @@ for the layout rationale.
 ## Tokens
 
 All tokens are declared as CSS custom properties on `:root` in
-`frontend/design/tokens.css`.
+`frontend/digiweb/design/tokens.css`.
 
 ### Base palette (dark)
 
@@ -155,7 +155,7 @@ Or directly in CSS:
 
 ## Component primitives
 
-Primitives live in `frontend/design/components.css` and take their visual values
+Primitives live in `frontend/digiweb/design/components.css` and take their visual values
 from tokens.
 
 ### `.nav`
@@ -258,7 +258,7 @@ picks up the surrounding `--accent`.
 
 ## Starfield API
 
-`frontend/design/starfield.js`:
+`frontend/digiweb/design/starfield.js`:
 
 ```js
 import { initStarfield } from './starfield.js';
@@ -279,7 +279,7 @@ Behavior:
 
 ## Scroll-trigger API
 
-`frontend/design/scroll-trigger.js`:
+`frontend/digiweb/design/scroll-trigger.js`:
 
 ```js
 import { initScrollTrigger } from './scroll-trigger.js';
@@ -306,12 +306,12 @@ consumes it — see the `data-direction="bottom|left|right|zoom"` rules in
 DigiChat already uses the same base palette in `digichat/src/app/globals.css`.
 To formally adopt the design system:
 
-1. Vendor the tokens. Add a make target that copies `frontend/design/tokens.css`
+1. Vendor the tokens. Add a make target that copies `frontend/digiweb/design/tokens.css`
    into `digichat/src/app/tokens.css`:
 
    ```make
    sync-tokens:
-   	cp frontend/design/tokens.css frontend/digichat/src/app/tokens.css
+   	cp frontend/digiweb/design/tokens.css frontend/digichat/src/app/tokens.css
    ```
 
 2. Import it from `globals.css`:

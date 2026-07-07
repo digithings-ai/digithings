@@ -18,7 +18,7 @@ navigation, layout rhythm, typography roles, motion, and product framing.
 
 **Olympus subpage chrome (tab bar, tabs-vs-sidebar, typography, surfaces):** [`olympus-subpage-chrome.md`](olympus-subpage-chrome.md)
 
-**The design mine (extracted specimens + convergence blends, static page):** [`mine/index.html`](mine/index.html) — serve `frontend/design/` and open `/references/mine/index.html`
+**The design mine (extracted specimens + convergence blends, static page):** [`mine/index.html`](mine/index.html) — serve `frontend/digiweb/design/` and open `/references/mine/index.html`
 
 ---
 
@@ -62,7 +62,7 @@ Last full pass: **2026-06-29** (deep layer in [`scans/`](scans/INDEX.md)).
 | DigiChat | `frontend/digichat/` | Product-as-landing (terminal chat) |
 | Olympus | `frontend/olympus/` | Professional dashboard |
 | twelve-x | `frontend/olympus/components/twelve-x/` | Data-dense research utility |
-| Shared system | `frontend/design/`, `frontend/web/` | Tokens, primitives, motion |
+| Shared system | `frontend/digiweb/design/`, `frontend/digiweb/web/` | Tokens, primitives, motion |
 
 Legacy static sites (`frontend/digithings/`, `frontend/digiquant/`) are not
 deployment targets; do not extend them.

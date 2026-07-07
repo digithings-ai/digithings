@@ -3,8 +3,8 @@
 **Date:** 2026-06-30  
 **Status:** Draft for review  
 **Parent epic:** [#1200](https://github.com/digithings-ai/digithings/issues/1200)  
-**Strategy:** [`frontend/design/EVOLUTION.md`](../../../frontend/design/EVOLUTION.md)  
-**References:** [`frontend/design/references/scans/`](../../../frontend/design/references/scans/INDEX.md)
+**Strategy:** [`frontend/digiweb/design/EVOLUTION.md`](../../../frontend/digiweb/design/EVOLUTION.md)  
+**References:** [`frontend/digiweb/design/references/scans/`](../../../frontend/digiweb/design/references/scans/INDEX.md)
 
 This document extends epic #1200 with patterns from Graphite, Cursor, and x.ai that were identified in brainstorming but not yet filed as issues. It covers four layers: marketing landings (A), product surfaces (B), shared primitives & motion (C), copy & IA (D).
 
@@ -276,7 +276,7 @@ ProductFrame, BentoGrid, TrustStrip, reveal-up, ScrollyFeatures, StatCounter, Ch
 
 ## Layer D — Copy & information architecture
 
-### Voice guide (→ `frontend/design/COPY_GUIDE.md`)
+### Voice guide (→ `frontend/digiweb/design/COPY_GUIDE.md`)
 
 | Principle | Rule |
 |-----------|------|
@@ -368,7 +368,7 @@ ProductFrame, BentoGrid, TrustStrip, reveal-up, ScrollyFeatures, StatCounter, Ch
 
 | Item | Type | Issue needed? |
 |------|------|---------------|
-| `frontend/design/COPY_GUIDE.md` | New doc | Yes — docs issue |
+| `frontend/digiweb/design/COPY_GUIDE.md` | New doc | Yes — docs issue |
 | Per-surface section maps | Section in COPY_GUIDE | No — part of above |
 | Landing copy implementation | Code | Covered by #1210–#1213 |
 
@@ -385,7 +385,7 @@ ProductFrame, BentoGrid, TrustStrip, reveal-up, ScrollyFeatures, StatCounter, Ch
 | E5 | Shared AnnouncementBar primitive (content-gated) | C | P3 | #1201 |
 | E6 | digiquant.io — pricing FAQ + tier matrix at `/#pricing` | A | P2 | E3, #1214 |
 | E7 | digithings.ai + digiquant.io — closing CTA band wiring | A | P1 | E2, #1210, #1213 |
-| E8 | `frontend/design/COPY_GUIDE.md` | D | P1 | none (docs) |
+| E8 | `frontend/digiweb/design/COPY_GUIDE.md` | D | P1 | none (docs) |
 | E9 | TrustStrip integration logo variant | A/C | P2 | #1204 |
 | E10 | Shared CaseStudyCard (content-gated) | C | P3 | #1203, E1 |
 | E11 | Olympus footer status dot → DigiSmith | B | P3 | #1216 |
@@ -411,7 +411,7 @@ ProductFrame, BentoGrid, TrustStrip, reveal-up, ScrollyFeatures, StatCounter, Ch
 
 1. **User review** this spec.
 2. File Phase E issues (E1–E11) under epic [#1200](https://github.com/digithings-ai/digithings/issues/1200).
-3. ~~Write `frontend/design/COPY_GUIDE.md` from §Layer D (E8).~~ Done — see [`COPY_GUIDE.md`](../../../frontend/design/COPY_GUIDE.md).
+3. ~~Write `frontend/digiweb/design/COPY_GUIDE.md` from §Layer D (E8).~~ Done — see [`COPY_GUIDE.md`](../../../frontend/digiweb/design/COPY_GUIDE.md).
 4. Begin implementation per synthesis order: #1201 → #1202 → … → Phase E.
 
 ---

@@ -9,7 +9,7 @@
 > trust-strip + ProductFrame + 4-module bento (#1210/#1211), digiquant hero CTAs +
 > trust-strip + stat row + feature bento (#1213/#1214), the closing-CTA wiring on
 > both sites (#1227), the DigiChat `/welcome` route (#1218), and the Olympus status
-> dot (#1231). The shared CSS/JS **primitives below still exist** in `frontend/design/`
+> dot (#1231). The shared CSS/JS **primitives below still exist** in `frontend/digiweb/design/`
 > (unused except by `/#pricing`); the checklist marks reflect what was *built*, not
 > what is currently wired live. See #1308.
 
@@ -226,13 +226,13 @@ Add to `tokens.css` when implementing primitives:
 
 ---
 
-## 6. Primitives to build (shared `frontend/design/`)
+## 6. Primitives to build (shared `frontend/digiweb/design/`)
 
 | Primitive | Purpose | References |
 |-----------|---------|------------|
 | `BentoGrid` / `.bento` ✅ | 2×2 feature cells ([`site/README.md`](site/README.md#bentogrid-css-only-evolutionmd-phase-b)) | Cursor |
 | `ProductFrame` ✅ | CQ-scaled 800px UI embed ([`site/README.md`](site/README.md#productframe-css-only-evolutionmd-phase-b)) | Graphite, Cursor |
-| `ScrollyFeatures` ✅ | Pinned section + progress rail + N slides — React hook `useScrollyFeatures` in `@digithings/web` (`frontend/web/src/motion/scrolly.tsx`); live `PipelineScene` adoption deferred (see below) | Graphite |
+| `ScrollyFeatures` ✅ | Pinned section + progress rail + N slides — React hook `useScrollyFeatures` in `@digithings/web` (`frontend/digiweb/web/src/motion/scrolly.tsx`); live `PipelineScene` adoption deferred (see below) | Graphite |
 | `TrustStrip` ✅ | Logo / proof row ([`site/README.md`](site/README.md#truststrip-css-only-evolutionmd-phase-b)) | Cursor, Graphite |
 | `StatCounter` ✅ | Scroll-triggered metrics ([`site/README.md`](site/README.md#statcounter-css--stat-counterjs-evolutionmd-phase-b)) | xAI |
 | `CapabilityCard` ✅ | Mini UI + “Explore →” ([`site/README.md`](site/README.md#capabilitycard-css-only-evolutionmd-phase-b)) | xAI |
@@ -243,9 +243,9 @@ Add to `tokens.css` when implementing primitives:
 
 **Implementation order:** `ProductFrame` → `BentoGrid` → `TrustStrip` → `ScrollyFeatures` refactor → `StatCounter`.
 
-> **ScrollyFeatures landed as a React hook, not vanilla `frontend/design/`.** #1205's
-> original spec ("shared module JS+CSS under `frontend/design/`, built on
-> `scroll-trigger.js`") predated the finding that the vanilla `frontend/design/site/*.js`
+> **ScrollyFeatures landed as a React hook, not vanilla `frontend/digiweb/design/`.** #1205's
+> original spec ("shared module JS+CSS under `frontend/digiweb/design/`, built on
+> `scroll-trigger.js`") predated the finding that the vanilla `frontend/digiweb/design/site/*.js`
 > layer + `scroll-trigger.js` are dead (removed in #1240; zero importers) and both live
 > marketing sites are React. The only two hand-rolled scrollies —
 > `ScrollyGraph` (`@digithings/web`) and digiquant-web's `PipelineScene` — are React, so
