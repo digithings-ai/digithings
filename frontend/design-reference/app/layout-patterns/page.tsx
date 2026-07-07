@@ -2,6 +2,7 @@ import "./layout.css";
 import { BentoGridReference } from "@/components/bento-grid-reference";
 import { FeatureCellReference } from "@/components/feature-cell-reference";
 import { NumberedStagesReference } from "@/components/numbered-stages-reference";
+import { PhoneOlympus } from "@/components/phone-olympus";
 import { MockTearsheet, ProductFrame } from "@/components/product-frame-reference";
 import { TestimonialWallReference } from "@/components/testimonial-wall-reference";
 
@@ -37,6 +38,21 @@ export default function LayoutPage() {
           <ProductFrame tag="atlas · research">
             <MockTearsheet />
           </ProductFrame>
+        </div>
+      </section>
+
+      <section className="section-block" id="phone">
+        <p className="kicker">{"// phone · olympus app"}</p>
+        <h2 className="title">The app, on the device.</h2>
+        <p className="section-copy">
+          The companion to the cropped desktop surface: a phone frame — matte bezel, dynamic island,
+          side buttons — showcasing the olympus mobile dashboard. Same product grammar as the frame
+          above (an inline SVG sparkline, no charting engine); P&amp;L wears the money colors, the
+          accent dresses the chrome and re-themes with the livery. It floats gently; reduced motion
+          holds it still.
+        </p>
+        <div className="phone-stage">
+          <PhoneOlympus />
         </div>
       </section>
     </main>
