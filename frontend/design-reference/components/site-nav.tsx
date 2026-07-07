@@ -17,7 +17,7 @@ import {
   getTypeServerSnapshot,
   getTypeSnapshot,
   subscribeType,
-  TYPE_THEMES,
+  TYPE_SUITES,
 } from "@/components/type-store";
 
 const PAGES = [
@@ -124,10 +124,10 @@ export function SiteNav() {
         </select>
       </label>
 
-      <label className="site-nav-type">
-        <span className="sr-only">Type theme</span>
+      <label className="site-nav-suite">
+        <span className="sr-only">Type suite</span>
         <select value={typeTheme} onChange={(e) => applyType(e.target.value)}>
-          {TYPE_THEMES.map((o) => (
+          {TYPE_SUITES.map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}
             </option>

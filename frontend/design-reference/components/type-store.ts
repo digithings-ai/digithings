@@ -1,64 +1,86 @@
 /**
- * Shared, persistent type-theme selection — the typographic sibling of
- * livery-store. A theme overrides `--font-display` and `--font-mono` inline on
- * <html> (the body face stays Geist Sans across all themes, so the comparison
- * isolates the display + mono choice — where the character lives). The choice
- * persists in localStorage and survives client navigation; the nav selector and
- * the Typography specimen both read it via useSyncExternalStore.
+ * Shared, persistent type-SUITE selection — the typographic sibling of
+ * livery-store. Each suite is a coordinated trio (display + body + mono) chosen
+ * to work together; picking one overrides `--font-display`, `--font-sans`, and
+ * `--font-mono` inline on <html>, so the whole reference re-typesets — headline,
+ * body, and data all move together, not just the headline. The choice persists
+ * in localStorage and survives navigation; the nav selector and the Typography
+ * specimen read it via useSyncExternalStore.
  *
- * "default" removes the overrides and falls back to the globals.css defaults
- * (Fraunces + Geist Mono). Fonts are loaded in app/layout.tsx via next/font.
+ * "default" removes the overrides and falls back to the globals.css defaults.
+ * Fonts are loaded in app/layout.tsx via next/font.
  */
 
-export type TypeTheme = { id: string; label: string; display: string; mono: string };
+export type TypeSuite = {
+  id: string;
+  label: string;
+  note: string;
+  display: string;
+  body: string;
+  mono: string;
+};
 
-export const TYPE_THEMES: TypeTheme[] = [
+const GEIST_SANS = "var(--font-geist-sans), system-ui, -apple-system, sans-serif";
+const GEIST_MONO = "var(--font-geist-mono), ui-monospace, monospace";
+
+export const TYPE_SUITES: TypeSuite[] = [
   {
     id: "default",
     label: "default",
+    note: "Fraunces · Geist Sans · Geist Mono",
     display: "var(--font-fraunces), Georgia, serif",
-    mono: "var(--font-geist-mono), ui-monospace, monospace",
+    body: GEIST_SANS,
+    mono: GEIST_MONO,
   },
   {
-    id: "instrument",
-    label: "instrument",
-    display: "var(--font-instrument), Georgia, serif",
-    mono: "var(--font-geist-mono), ui-monospace, monospace",
+    id: "plex",
+    label: "plex",
+    note: "IBM Plex superfamily — serif · sans · mono",
+    display: "var(--font-plex-serif), Georgia, serif",
+    body: "var(--font-plex-sans), system-ui, sans-serif",
+    mono: "var(--font-plex-mono), ui-monospace, monospace",
   },
   {
-    id: "newsreader",
-    label: "newsreader",
+    id: "editorial",
+    label: "editorial",
+    note: "Newsreader display + text · Geist Mono",
     display: "var(--font-newsreader), Georgia, serif",
-    mono: "var(--font-geist-mono), ui-monospace, monospace",
+    body: "var(--font-newsreader), Georgia, serif",
+    mono: GEIST_MONO,
+  },
+  {
+    id: "grotesk",
+    label: "grotesk",
+    note: "Bricolage Grotesque · Geist Sans · Geist Mono",
+    display: "var(--font-bricolage), system-ui, sans-serif",
+    body: GEIST_SANS,
+    mono: GEIST_MONO,
   },
   {
     id: "terminal",
     label: "terminal",
+    note: "JetBrains Mono display + mono · Geist Sans",
     display: "var(--font-jetbrains), ui-monospace, monospace",
+    body: GEIST_SANS,
     mono: "var(--font-jetbrains), ui-monospace, monospace",
-  },
-  {
-    id: "bricolage",
-    label: "bricolage",
-    display: "var(--font-bricolage), system-ui, sans-serif",
-    mono: "var(--font-geist-mono), ui-monospace, monospace",
   },
 ];
 
 const KEY = "dr-type";
 const EVENT = "dr-type-change";
 
-/** Apply a type theme by overriding --font-display / --font-mono inline on
- *  <html>. Inline beats the `:root[data-theme]` declarations on the same
- *  element; "default" removes the overrides so the globals defaults win. */
+/** Apply a type suite by overriding --font-display / --font-sans / --font-mono
+ *  inline on <html>. "default" removes the overrides so the globals win. */
 export function applyType(id: string) {
   const el = document.documentElement;
-  const t = TYPE_THEMES.find((x) => x.id === id);
+  const t = TYPE_SUITES.find((x) => x.id === id);
   if (!t || id === "default") {
     el.style.removeProperty("--font-display");
+    el.style.removeProperty("--font-sans");
     el.style.removeProperty("--font-mono");
   } else {
     el.style.setProperty("--font-display", t.display);
+    el.style.setProperty("--font-sans", t.body);
     el.style.setProperty("--font-mono", t.mono);
   }
   try {
@@ -86,10 +108,10 @@ export function getTypeServerSnapshot() {
   return "default";
 }
 
-/** Pre-paint init: applies the stored type theme before first paint (no flash).
- *  The id→stack map is generated from TYPE_THEMES so there's one source. */
+/** Pre-paint init: applies the stored suite before first paint (no flash).
+ *  The id→[display, body, mono] map is generated from TYPE_SUITES (one source). */
 const MAP = Object.fromEntries(
-  TYPE_THEMES.filter((t) => t.id !== "default").map((t) => [t.id, [t.display, t.mono]]),
+  TYPE_SUITES.filter((t) => t.id !== "default").map((t) => [t.id, [t.display, t.body, t.mono]]),
 );
 
-export const typeInitScript = `(function(){try{var m=${JSON.stringify(MAP)};var v=localStorage.getItem('${KEY}');if(!v||v==='default')return;var t=m[v];if(!t)return;var el=document.documentElement;el.style.setProperty('--font-display',t[0]);el.style.setProperty('--font-mono',t[1]);}catch(e){}})();`;
+export const typeInitScript = `(function(){try{var m=${JSON.stringify(MAP)};var v=localStorage.getItem('${KEY}');if(!v||v==='default')return;var t=m[v];if(!t)return;var el=document.documentElement;el.style.setProperty('--font-display',t[0]);el.style.setProperty('--font-sans',t[1]);el.style.setProperty('--font-mono',t[2]);}catch(e){}})();`;

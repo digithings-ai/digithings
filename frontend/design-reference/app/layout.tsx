@@ -6,7 +6,9 @@ import { GeistMono } from "geist/font/mono";
 import {
   Bricolage_Grotesque,
   Fraunces,
-  Instrument_Serif,
+  IBM_Plex_Mono,
+  IBM_Plex_Sans,
+  IBM_Plex_Serif,
   JetBrains_Mono,
   Newsreader,
 } from "next/font/google";
@@ -23,13 +25,28 @@ const fraunces = Fraunces({
   variable: "--font-fraunces",
 });
 
-// Candidate display/mono faces for the live type-theme switcher (type-store).
-const instrument = Instrument_Serif({
+// Candidate faces for the live type-suite switcher (type-store). Each suite
+// coordinates display + body + mono; the IBM Plex trio is a true superfamily.
+const plexSerif = IBM_Plex_Serif({
   subsets: ["latin"],
-  weight: "400",
+  weight: ["400", "600"],
   style: ["normal", "italic"],
   display: "swap",
-  variable: "--font-instrument",
+  variable: "--font-plex-serif",
+});
+
+const plexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+  variable: "--font-plex-sans",
+});
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  display: "swap",
+  variable: "--font-plex-mono",
 });
 
 const newsreader = Newsreader({
@@ -62,7 +79,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       lang="en"
       data-theme="dark"
       suppressHydrationWarning
-      className={`${GeistSans.variable} ${GeistMono.variable} ${fraunces.variable} ${instrument.variable} ${newsreader.variable} ${jetbrains.variable} ${bricolage.variable} no-js`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${fraunces.variable} ${plexSerif.variable} ${plexSans.variable} ${plexMono.variable} ${newsreader.variable} ${jetbrains.variable} ${bricolage.variable} no-js`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />

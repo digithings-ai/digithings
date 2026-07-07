@@ -1,20 +1,20 @@
 /**
- * Type specimen — a canonical surface for evaluating the live type theme
+ * Type specimen — a canonical surface for evaluating the live type suite
  * (switch it in the nav). Shows the three roles at judging scale: the display
  * face big (upright + italic), the body face at reading size, and the mono
- * face with tabular numerals. Everything reads from the --font-* tokens, so it
- * re-typesets with the chosen theme. Body stays Geist Sans across themes, so
- * this compares the display + mono choice.
+ * face with tabular numerals. Everything reads from the --font-* tokens, so the
+ * whole specimen re-typesets with the chosen suite — display, body, and mono
+ * move together.
  */
 export function TypeSpecimen() {
   return (
     <section className="section-block">
       <p className="kicker">{"// type specimen"}</p>
-      <h2 className="title">Three voices, one switch.</h2>
+      <h2 className="title">One suite, three voices.</h2>
       <p className="section-copy">
-        Swap the type theme in the nav and the whole reference re-typesets — judge each pairing
-        here. The body stays Geist Sans across themes, so you&apos;re comparing the display face
-        (claims, headlines) and the mono face (data, labels), which is where the character lives.
+        Swap the type suite in the nav and the whole reference re-typesets — display, body, and
+        mono move together as a coordinated set. Judge each here: the display face (claims,
+        headlines), the body face (reading), and the mono face (data, labels, numerals).
       </p>
 
       <div className="spec">

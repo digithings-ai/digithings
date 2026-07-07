@@ -142,14 +142,15 @@ html {
   align-items: center;
 }
 
-.site-nav-type {
+.site-nav-suite {
   display: inline-flex;
   align-items: center;
 }
 
 .site-nav-livery select,
-.site-nav-type select {
+.site-nav-suite select {
   appearance: none;
+  -webkit-appearance: none;
   border: 1px solid var(--hair);
   border-radius: 8px;
   background: transparent;
@@ -168,13 +169,13 @@ html {
 }
 
 .site-nav-livery select:hover,
-.site-nav-type select:hover {
+.site-nav-suite select:hover {
   color: var(--ink);
   border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
 }
 
 .site-nav-livery select option,
-.site-nav-type select option {
+.site-nav-suite select option {
   background: var(--surface);
   color: var(--ink);
 }

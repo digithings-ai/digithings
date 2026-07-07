@@ -27,7 +27,7 @@ is the only shared chrome.
 | `/`                | Foundations | contents map, livery switcher, feature picker, button/CTA states |
 | `/controls`        | Controls    | custom dropdown pane, search bar, nav buttons, form fields, tooltip (4 placements), accordion (single-open disclosure) |
 | `/layout-patterns` | Layout      | feature cell, bento grid, container-scaled product frame, phone mockup (olympus app) |
-| `/typography`      | Typography  | type specimen + live type-theme switcher (5 pairings), scroll-linked word reveals (blur / muted / outline), copy & voice grammar |
+| `/typography`      | Typography  | type specimen + live type-suite switcher (5 coordinated suites: display + body + mono), scroll-linked word reveals (blur / muted / outline), copy & voice grammar |
 | `/data`            | Data        | dot-matrix stat, count-up stat, odometer digit-roll, marquee ticker, sticky card deck, changelog rail, pricing, comparison matrix |
 | `/finance`         | Finance     | stock ticker tape, Lightweight-Charts price chart / equity curve / drawdown, synced multi-pane tearsheet, charting rules, performance metrics, monthly-returns heatmap, order book |
 | `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal, section transitions (zoom-morph · stacking · cross-fade), arc-flight routing map (revolut-mined) |
@@ -47,10 +47,11 @@ is the only shared chrome.
   `--accent` for everything inside it. Money colours (`--up`/`--down`) are for
   P&L only — never a livery. The umbrella is monochrome (`--accent: var(--ink)`).
 - **Two voices.** `--font-display` (Fraunces serif by default) for human claims,
-  never bolded; `--font-mono` (Geist Mono) for data, labels, and micro-caps. The
-  body stays Geist Sans. Both display + mono are swappable live from the nav's
-  type-theme selector (see `type-store.ts`; 5 pairings) — the body is held
-  constant so the comparison isolates the display/mono choice.
+  never bolded; `--font-mono` (Geist Mono) for data, labels, and micro-caps;
+  `--font-sans` (Geist Sans) for body. All three swap together as a coordinated
+  **type suite** from the nav's suite selector (see `type-store.ts`; 5 suites:
+  default, plex, editorial, grotesk, terminal) — display + body + mono move as a
+  set so you evaluate the whole pairing.
 - **Motion laws.** One motion moment per surface; always honour
   `prefers-reduced-motion` (render the final state); content must read without
   JS. Import Motion as `m` etc. from `motion/react` (LazyMotion is provided
