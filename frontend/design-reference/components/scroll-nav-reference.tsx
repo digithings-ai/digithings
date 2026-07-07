@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { m, useMotionValueEvent, useScroll } from "motion/react";
+import { m, useMotionValueEvent, useReducedMotion, useScroll } from "motion/react";
 
 const LINKS = ["Product", "Pricing", "Docs", "Changelog"];
 
@@ -10,6 +10,7 @@ export function ScrollNavReference() {
   const [solid, setSolid] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [lastY, setLastY] = useState(0);
+  const reduce = useReducedMotion();
 
   // Drive the scroll-aware state from the demo frame's own scroll, not the
   // page — so the sticky nav pins inside the frame and can never float up
@@ -36,7 +37,7 @@ export function ScrollNavReference() {
         <m.div
           className={`scroll-nav${solid ? " solid" : ""}`}
           animate={{ y: hidden ? -72 : 0 }}
-          transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+          transition={reduce ? { duration: 0 } : { duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
         >
           <span className="scroll-nav-mark">digithings</span>
           <ul>
