@@ -65,7 +65,12 @@ export function TagsInputReference() {
         ))}
         <input
           ref={inputRef}
-          className="min-w-[7rem] flex-1 border-none bg-transparent p-[0.2rem] font-mono text-[0.8rem] text-ink outline-none placeholder:text-ink-mute"
+          // flex-1 only on the empty field (so the placeholder gets full width);
+          // once chips exist the input sits compact after the last one instead of
+          // stretching across the row's empty trailing space.
+          className={`min-w-[7rem] border-none bg-transparent p-[0.2rem] font-mono text-[0.8rem] text-ink outline-none placeholder:text-ink-mute${
+            tags.length ? "" : " flex-1"
+          }`}
           value={draft}
           placeholder={tags.length ? "" : "filter strategies…"}
           aria-label="Add a filter tag"
