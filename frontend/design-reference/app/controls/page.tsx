@@ -1,4 +1,5 @@
 import "./controls.css";
+import { AccordionReference } from "@/components/controls/accordion-reference";
 import { DropdownReference } from "@/components/controls/dropdown-reference";
 import { FormFieldsReference } from "@/components/controls/form-fields-reference";
 import { NavButtonsReference } from "@/components/controls/nav-buttons-reference";
@@ -25,6 +26,7 @@ export default function ControlsPage() {
       <NavButtonsReference />
       <FormFieldsReference />
       <TooltipReference />
+      <AccordionReference />
     </main>
   );
 }
