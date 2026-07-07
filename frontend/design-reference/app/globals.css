@@ -53,6 +53,11 @@ html {
   border-bottom: 1px solid var(--hair);
   background: color-mix(in srgb, var(--bg) 86%, transparent);
   backdrop-filter: blur(10px);
+  /* stay a single row — JS collapses to the hamburger the moment the inline
+     links would overflow (see SiteNav). overflow:clip contains any transient
+     pre-hydration overflow so the bar never grows to a second line. */
+  flex-wrap: nowrap;
+  overflow: clip;
 }
 
 .site-nav-mark {
@@ -71,8 +76,8 @@ html {
 .site-nav-links {
   list-style: none;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 1rem;
+  flex-wrap: nowrap;
+  gap: 1rem;
   margin: 0;
   padding: 0;
 }
@@ -275,14 +280,15 @@ html {
   border-bottom-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
 }
 
-@media (max-width: 900px) {
-  .site-nav-links {
-    display: none;
-  }
+/* Collapsed state — driven by JS fit-detection (SiteNav), not a fixed
+   breakpoint: the inline links give way to the hamburger the instant they
+   would no longer fit on one row, whatever the viewport width. */
+.site-nav.is-collapsed .site-nav-links {
+  display: none;
+}
 
-  .site-nav-burger {
-    display: inline-flex;
-  }
+.site-nav.is-collapsed .site-nav-burger {
+  display: inline-flex;
 }
 
 /* Page scaffold */

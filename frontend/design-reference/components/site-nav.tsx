@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { ThemeToggle } from "@digithings/web";
 import {
@@ -56,10 +56,41 @@ export function SiteNav() {
 
   const livery = useSyncExternalStore(subscribeLivery, getLiverySnapshot, getLiveryServerSnapshot);
 
+  // Collapse to the hamburger whenever the inline links stop fitting — at any
+  // width, not a hardcoded breakpoint (the item count grows as pages are
+  // added). We compare the bar's content width (scrollWidth, which exceeds
+  // clientWidth once the nowrap row overflows) against the space available,
+  // and freeze the "required" width while collapsed so re-expanding uses the
+  // real requirement (+8px hysteresis) instead of the shrunken collapsed row.
+  const navRef = useRef<HTMLElement | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const collapsedRef = useRef(false);
+  const requiredRef = useRef(0);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const ro = new ResizeObserver(() => {
+      if (!collapsedRef.current) requiredRef.current = nav.scrollWidth;
+      const threshold = collapsedRef.current ? requiredRef.current + 8 : requiredRef.current;
+      const next = nav.clientWidth < threshold;
+      if (next !== collapsedRef.current) {
+        collapsedRef.current = next;
+        setCollapsed(next);
+      }
+    });
+    ro.observe(nav);
+    return () => ro.disconnect();
+  }, []);
+
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   return (
-    <nav className="site-nav" aria-label="Design reference sections">
+    <nav
+      ref={navRef}
+      className={`site-nav${collapsed ? " is-collapsed" : ""}`}
+      aria-label="Design reference sections"
+    >
       <Link href="/" className="site-nav-mark">
         design<em>ref</em>
       </Link>
