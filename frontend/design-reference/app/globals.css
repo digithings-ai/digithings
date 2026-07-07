@@ -133,7 +133,8 @@ html {
   vertical-align: middle;
 }
 
-/* Livery selector — persistent, app-wide theme chooser in the bar */
+/* Livery (color) + type (font) selectors — persistent, app-wide choosers in
+   the bar. The livery starts the right-aligned control group. */
 
 .site-nav-livery {
   margin-left: auto;
@@ -141,7 +142,13 @@ html {
   align-items: center;
 }
 
-.site-nav-livery select {
+.site-nav-type {
+  display: inline-flex;
+  align-items: center;
+}
+
+.site-nav-livery select,
+.site-nav-type select {
   appearance: none;
   border: 1px solid var(--hair);
   border-radius: 8px;
@@ -160,12 +167,14 @@ html {
   transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
 }
 
-.site-nav-livery select:hover {
+.site-nav-livery select:hover,
+.site-nav-type select:hover {
   color: var(--ink);
   border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
 }
 
-.site-nav-livery select option {
+.site-nav-livery select option,
+.site-nav-type select option {
   background: var(--surface);
   color: var(--ink);
 }

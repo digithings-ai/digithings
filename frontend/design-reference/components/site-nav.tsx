@@ -12,6 +12,13 @@ import {
   LIVERY_OPTIONS,
   subscribeLivery,
 } from "@/components/livery-store";
+import {
+  applyType,
+  getTypeServerSnapshot,
+  getTypeSnapshot,
+  subscribeType,
+  TYPE_THEMES,
+} from "@/components/type-store";
 
 const PAGES = [
   { href: "/", label: "Foundations" },
@@ -55,6 +62,7 @@ export function SiteNav() {
   }, [open]);
 
   const livery = useSyncExternalStore(subscribeLivery, getLiverySnapshot, getLiveryServerSnapshot);
+  const typeTheme = useSyncExternalStore(subscribeType, getTypeSnapshot, getTypeServerSnapshot);
 
   // Collapse to the hamburger whenever the inline links stop fitting — at any
   // width, not a hardcoded breakpoint (the item count grows as pages are
@@ -109,6 +117,17 @@ export function SiteNav() {
         <span className="sr-only">Page livery</span>
         <select value={livery} onChange={(e) => applyLivery(e.target.value)}>
           {LIVERY_OPTIONS.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="site-nav-type">
+        <span className="sr-only">Type theme</span>
+        <select value={typeTheme} onChange={(e) => applyType(e.target.value)}>
+          {TYPE_THEMES.map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}
             </option>
