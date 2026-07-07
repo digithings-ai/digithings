@@ -303,3 +303,98 @@
 .rv-del .rv-code {
   color: color-mix(in srgb, var(--rv-del) 70%, var(--ink));
 }
+
+/* Code sample — copyable command switcher + snippet */
+
+.cs-block {
+  margin-top: 1.2rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: #0b0c0e;
+  overflow: hidden;
+  max-width: 640px;
+}
+
+:root[data-theme="light"] .cs-block {
+  background: var(--surface);
+}
+
+.cs-tabs,
+.cs-head {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.4rem 0.5rem 0.4rem 0.9rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.cs-tab {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-mute);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 0.22rem 0.55rem;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+
+.cs-tab:hover {
+  color: var(--ink-soft);
+}
+
+.cs-tab.on {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.cs-lang {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+.cs-copy {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--ink-mute);
+  background: transparent;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.cs-copy:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.cs-copy.is-copied {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 45%, var(--hair));
+}
+
+.cs-code {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.7;
+  color: var(--ink);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.cs-prompt {
+  color: var(--accent);
+}
+
+.cs-multiline {
+  color: var(--ink-soft);
+}

@@ -1,5 +1,6 @@
 import "./terminal.css";
 import { CodeReviewReference } from "@/components/code-review-reference";
+import { CodeSampleReference } from "@/components/code-sample-reference";
 import { StreamTranscriptReference } from "@/components/stream-transcript-reference";
 import { TerminalBudgetReference } from "@/components/terminal-budget-reference";
 
@@ -20,6 +21,7 @@ export default function TerminalPage() {
       <TerminalBudgetReference />
       <StreamTranscriptReference />
       <CodeReviewReference />
+      <CodeSampleReference />
     </main>
   );
 }
