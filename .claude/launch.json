@@ -46,7 +46,7 @@
     {
       "name": "design-reference",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--workspace", "frontend/design-reference", "run", "dev", "--", "--port", "4013"],
+      "runtimeArgs": ["--workspace", "design-reference", "run", "dev", "--", "--port", "4013"],
       "port": 4013
     },
     {
