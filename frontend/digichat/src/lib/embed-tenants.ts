@@ -20,6 +20,14 @@ export type EmbedTenantConfig = {
   theme: "dark" | "light";
   accent?: { color: string; foreground: string };
   attribution: boolean;
+  /** Branded embed header title (e.g. "Chat for Help"). */
+  title?: string;
+  /** Default welcome intro when the iframe URL has no ?welcome= */
+  welcome?: string;
+  /** Default suggestion chips (URL ?suggestions= wins). */
+  suggestions?: string[];
+  /** Default input placeholder (URL ?placeholder= wins). */
+  placeholder?: string;
   /**
    * Per-tenant secret. Knowing a tenant's host string is public (it's the
    * tenant's own domain) so registry membership alone must never grant
@@ -115,6 +123,24 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: "token" must be a non-empty string`);
   }
 
+  let suggestions: string[] | undefined;
+  if (v.suggestions !== undefined) {
+    if (!Array.isArray(v.suggestions) || v.suggestions.some((x) => typeof x !== "string")) {
+      throw new Error(`${ctx}: suggestions must be an array of strings`);
+    }
+    suggestions = (v.suggestions as string[]).map((s) => s.trim()).filter(Boolean);
+  }
+
+  if (v.title !== undefined && typeof v.title !== "string") {
+    throw new Error(`${ctx}: title must be a string`);
+  }
+  if (v.welcome !== undefined && typeof v.welcome !== "string") {
+    throw new Error(`${ctx}: welcome must be a string`);
+  }
+  if (v.placeholder !== undefined && typeof v.placeholder !== "string") {
+    throw new Error(`${ctx}: placeholder must be a string`);
+  }
+
   return {
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
@@ -124,6 +150,10 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     accent,
     attribution: v.attribution === true,
     token: v.token,
+    title: typeof v.title === "string" ? v.title : undefined,
+    welcome: typeof v.welcome === "string" ? v.welcome : undefined,
+    suggestions,
+    placeholder: typeof v.placeholder === "string" ? v.placeholder : undefined,
   };
 }
 

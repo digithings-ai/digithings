@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { GET } from "./route";
+import { DATATAPSTREAM_SUGGESTION_POOL } from "@/lib/embed-suggestion-pools";
 import { resetEmbedTenantRegistryForTests } from "@/lib/embed-tenants";
 
 afterEach(() => {
@@ -40,6 +41,7 @@ describe("GET /api/embed/tenant-config", () => {
       theme: "light",
       accent: { color: "#b5562b", foreground: "#fff7f2" },
       attribution: true,
+      suggestions: [...DATATAPSTREAM_SUGGESTION_POOL],
     });
     expect(JSON.stringify(body)).not.toContain("relay.example.com");
   });
