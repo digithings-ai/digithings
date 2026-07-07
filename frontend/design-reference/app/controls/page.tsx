@@ -3,6 +3,7 @@ import { DropdownReference } from "@/components/controls/dropdown-reference";
 import { FormFieldsReference } from "@/components/controls/form-fields-reference";
 import { NavButtonsReference } from "@/components/controls/nav-buttons-reference";
 import { SearchBarReference } from "@/components/controls/search-bar-reference";
+import { TooltipReference } from "@/components/controls/tooltip-reference";
 
 export default function ControlsPage() {
   return (
@@ -23,6 +24,7 @@ export default function ControlsPage() {
       <SearchBarReference />
       <NavButtonsReference />
       <FormFieldsReference />
+      <TooltipReference />
     </main>
   );
 }

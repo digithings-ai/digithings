@@ -616,3 +616,131 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── tooltip (hover + focus, four placements, animated reveal) ──────────── */
+
+.tt-row {
+  margin-top: 1.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.7rem;
+  align-items: center;
+}
+
+.tt {
+  position: relative;
+  display: inline-flex;
+}
+
+.tt-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.95rem;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  cursor: default;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+.tt-trigger:has(.tt-glyph) {
+  padding: 0.45rem;
+}
+
+.tt-trigger:hover,
+.tt-trigger:focus-visible {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.tt-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.tt-glyph {
+  display: inline-flex;
+  color: var(--ink-mute);
+}
+
+.tt-bubble {
+  position: absolute;
+  z-index: 10;
+  width: max-content;
+  max-width: 15rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 96%, var(--bg));
+  box-shadow: 0 12px 30px -14px rgba(0, 0, 0, 0.6);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s var(--ease), transform 0.16s var(--ease);
+}
+
+.tt-bubble.open {
+  opacity: 1;
+}
+
+.tt-bubble::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: color-mix(in srgb, var(--surface) 96%, var(--bg));
+  border: 1px solid var(--hair);
+  transform: rotate(45deg);
+}
+
+/* placements — the closed state offsets toward the trigger; .open settles */
+.tt--top {
+  bottom: 100%;
+  left: 50%;
+  margin-bottom: 9px;
+  transform: translate(-50%, 6px);
+}
+.tt--top.open { transform: translate(-50%, 0); }
+.tt--top::after { top: 100%; left: 50%; margin: -5px 0 0 -4px; border-width: 0 1px 1px 0; }
+
+.tt--bottom {
+  top: 100%;
+  left: 50%;
+  margin-top: 9px;
+  transform: translate(-50%, -6px);
+}
+.tt--bottom.open { transform: translate(-50%, 0); }
+.tt--bottom::after { bottom: 100%; left: 50%; margin: 0 0 -5px -4px; border-width: 1px 0 0 1px; }
+
+.tt--left {
+  right: 100%;
+  top: 50%;
+  margin-right: 9px;
+  transform: translate(6px, -50%);
+}
+.tt--left.open { transform: translate(0, -50%); }
+.tt--left::after { left: 100%; top: 50%; margin: -4px 0 0 -5px; border-width: 0 0 1px 1px; }
+
+.tt--right {
+  left: 100%;
+  top: 50%;
+  margin-left: 9px;
+  transform: translate(-6px, -50%);
+}
+.tt--right.open { transform: translate(0, -50%); }
+.tt--right::after { right: 100%; top: 50%; margin: -4px -5px 0 0; border-width: 1px 1px 0 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* keep the placement transforms (they carry the centering); just don't
+     animate them — only the fade remains, so nothing slides */
+  .tt-bubble {
+    transition: opacity 0.16s var(--ease);
+  }
+}
