@@ -11,8 +11,10 @@
 
 export type LiveryOption = { id: string; label: string; hex: string };
 
+// Monochrome is the default (black + white); color is opt-in per product.
+// atlas/hermes/kairos are backend langgraph names, not colored products — they
+// are intentionally absent (and their accent tokens collapse to ink anyway).
 export const LIVERY_OPTIONS: LiveryOption[] = [
-  { id: "default", label: "default", hex: "var(--accent)" },
   { id: "mono", label: "monochrome", hex: "var(--ink)" },
   { id: "digigraph", label: "digigraph", hex: "#e5b765" },
   { id: "digiquant", label: "digiquant", hex: "#3dd6c4" },
@@ -21,9 +23,6 @@ export const LIVERY_OPTIONS: LiveryOption[] = [
   { id: "digikey", label: "digikey", hex: "#d97a5a" },
   { id: "digivault", label: "digivault", hex: "#9d8fc9" },
   { id: "digistore", label: "digistore", hex: "#7b7fc7" },
-  { id: "atlas", label: "atlas", hex: "#6fbf94" },
-  { id: "hermes", label: "hermes", hex: "#4a8f7b" },
-  { id: "kairos", label: "kairos", hex: "#2f7a65" },
 ];
 
 const KEY = "dr-livery";
@@ -34,9 +33,7 @@ const EVENT = "dr-livery-change";
  *  element), and works pre-paint since documentElement exists in <head>. */
 export function applyLivery(id: string) {
   const el = document.documentElement;
-  if (id === "mono") el.style.setProperty("--accent", "var(--ink)");
-  else if (id !== "default") el.style.setProperty("--accent", `var(--accent-${id})`);
-  else el.style.removeProperty("--accent");
+  el.style.setProperty("--accent", id === "mono" ? "var(--ink)" : `var(--accent-${id})`);
   try {
     localStorage.setItem(KEY, id);
   } catch {
@@ -52,16 +49,19 @@ export function subscribeLivery(callback: () => void) {
 
 export function getLiverySnapshot() {
   try {
-    return localStorage.getItem(KEY) || "default";
+    const v = localStorage.getItem(KEY);
+    // migrate the retired "default" (theme cyan) selection to monochrome
+    return !v || v === "default" ? "mono" : v;
   } catch {
-    return "default";
+    return "mono";
   }
 }
 
-/** Server render (and first hydration frame) always sees the default. */
+/** Server render (and first hydration frame) sees the monochrome default. */
 export function getLiveryServerSnapshot() {
-  return "default";
+  return "mono";
 }
 
-/** Pre-paint init: applies the stored livery before first paint (no flash). */
-export const liveryInitScript = `(function(){try{var v=localStorage.getItem('${KEY}');if(!v||v==='default')return;var el=document.documentElement;el.style.setProperty('--accent',v==='mono'?'var(--ink)':'var(--accent-'+v+')')}catch(e){}})();`;
+/** Pre-paint init: applies the stored livery before first paint (no flash).
+ *  Monochrome is the default, so a missing/legacy value resolves to ink. */
+export const liveryInitScript = `(function(){try{var v=localStorage.getItem('${KEY}');if(v==='default')v=null;v=v||'mono';var el=document.documentElement;el.style.setProperty('--accent',v==='mono'?'var(--ink)':'var(--accent-'+v+')')}catch(e){}})();`;

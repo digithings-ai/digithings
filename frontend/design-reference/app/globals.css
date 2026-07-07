@@ -13,6 +13,26 @@
   --nav-h: 3.4rem;
 }
 
+/* Reference-only color canon — overrides the shared tokens.css AFTER its
+   @import (equal specificity, later source order wins). tokens.css itself is
+   left untouched: its --up/--down and --accent-atlas/hermes/kairos carry dated,
+   human-approved rulings and ship to the live sites. Promote any of this into
+   tokens.css only on explicit approval. */
+:root[data-theme] {
+  /* Money colors are the one always-on color domain: digiquant's phosphor teal
+     is the positive/up read, a paired red the negative/down. Fixed to the
+     digiquant *token* (not the live --accent), so P&L never follows a livery. */
+  --up: var(--accent-digiquant);
+  --down: #e5533e;
+
+  /* atlas · hermes · kairos name backend langgraphs, not colored products —
+     collapse their accent tokens to ink so every scope, livery, or stale
+     persisted selection resolves to monochrome. */
+  --accent-atlas: var(--ink);
+  --accent-hermes: var(--ink);
+  --accent-kairos: var(--ink);
+}
+
 /* Anchor jumps clear the sticky nav instead of tucking the target title
    underneath it. Every id-anchored section inherits the same offset. */
 html {

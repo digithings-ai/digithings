@@ -43,9 +43,15 @@ is the only shared chrome.
   `--ink` / `--ink-soft` / `--ink-mute`, `--surface`, `--bg`, `--hair`,
   `--accent`, `--up` / `--down` (money colours only), `--ease`. Use
   `color-mix(in srgb, var(--token) N%, …)` for tints.
-- **Livery.** A scope class (`accent-digiquant`, `accent-digichat`, …) sets
-  `--accent` for everything inside it. Money colours (`--up`/`--down`) are for
-  P&L only — never a livery. The umbrella is monochrome (`--accent: var(--ink)`).
+- **Livery.** **Monochrome is the default** (`--accent: var(--ink)`, black +
+  white); colour is opt-in per product via a scope class (`accent-digiquant`,
+  `accent-digichat`, …) or the nav selector. atlas/hermes/kairos are backend
+  langgraph names, **not** coloured products — their accent tokens collapse to
+  ink (reference-only). Money colours (`--up`/`--down`) are P&L-only and never
+  follow a livery: `--up` is the fixed digiquant phosphor teal, `--down` a
+  paired red — the single always-on colour domain. **These colour overrides
+  live in the reference's `globals.css` only; `tokens.css` (which the live sites
+  build from) is untouched.**
 - **Two voices.** `--font-display` (Fraunces serif by default) for human claims,
   never bolded; `--font-mono` (Geist Mono) for data, labels, and micro-caps;
   `--font-sans` (Geist Sans) for body. All three swap together as a coordinated

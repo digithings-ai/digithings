@@ -11,7 +11,6 @@ const LIVERIES = [
   { id: "digikey", label: "digikey", hex: "#d97a5a" },
   { id: "digivault", label: "digivault", hex: "#9d8fc9" },
   { id: "digistore", label: "digistore", hex: "#7b7fc7" },
-  { id: "atlas", label: "atlas", hex: "#6fbf94" },
 ] as const;
 
 export function LiverySwitcher() {
