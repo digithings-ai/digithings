@@ -47,6 +47,12 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Read embed CSP hostnames
+        id: embed_hosts
+        run: |
+          hosts=$(grep -v '^\s*#' frontend/digichat/embed-hosts.txt | grep -v '^\s*$' | paste -sd, -)
+          echo "value=${hosts}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         if: steps.check.outputs.exists == 'false'
         uses: docker/build-push-action@v6
@@ -54,6 +60,8 @@ jobs:
           context: .
           file: frontend/digichat/Dockerfile
           push: true
+          build-args: |
+            DIGICHAT_EMBED_HOSTS=${{ steps.embed_hosts.outputs.value }}
           tags: |
             ghcr.io/digithings-ai/digichat:v${{ steps.version.outputs.version }}
             ghcr.io/digithings-ai/digichat:latest
