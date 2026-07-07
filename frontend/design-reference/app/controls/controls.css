@@ -1045,3 +1045,106 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── range slider ───────────────────────────────────────────────────────── */
+
+.sl-grid {
+  margin-top: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.6rem;
+  max-width: 30rem;
+}
+
+.sl-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.sl-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+.sl-value {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.sl-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.sl-input:focus-visible {
+  outline: none;
+}
+
+/* webkit thumb */
+.sl-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 999px;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--hair);
+  cursor: pointer;
+  transition: box-shadow 0.15s var(--ease);
+}
+
+.sl-input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* firefox thumb + track */
+.sl-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--hair);
+  cursor: pointer;
+}
+
+.sl-input:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.sl-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--ink-mute);
+}
+
+.sl--disabled {
+  opacity: 0.5;
+}
+
+.sl--disabled .sl-input {
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sl-input::-webkit-slider-thumb {
+    transition: none;
+  }
+}

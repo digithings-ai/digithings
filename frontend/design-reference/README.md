@@ -25,7 +25,7 @@ is the only shared chrome.
 | Route              | Family      | Holds |
 | ------------------ | ----------- | ----- |
 | `/`                | Foundations | contents map, livery switcher, feature picker, button/CTA states |
-| `/controls`        | Controls    | custom dropdown pane, search bar, nav buttons, form fields, tooltip (4 placements), accordion (single-open disclosure), skeleton loading states (shimmer) |
+| `/controls`        | Controls    | custom dropdown pane, search bar, nav buttons, form fields, tooltip (4 placements), range slider (fill + ticks + disabled), accordion (single-open disclosure), skeleton loading states (shimmer) |
 | `/layout-patterns` | Layout      | feature cell, bento grid, container-scaled product frame, phone mockup (olympus app) |
 | `/typography`      | Typography  | type specimen + live type-suite switcher (5 coordinated suites: display + body + mono), scroll-linked word reveals (blur / muted / outline), copy & voice grammar |
 | `/data`            | Data        | dot-matrix stat, count-up stat, odometer digit-roll, marquee ticker, sticky card deck, changelog rail, pricing, comparison matrix |
