@@ -27,6 +27,9 @@ export function DropdownReference() {
       o.note.toLowerCase().includes(query.toLowerCase()),
   );
   const groups = Array.from(new Set(filtered.map((o) => o.group)));
+  // Navigable order mirrors the grouped render order below, so ArrowUp/Down and
+  // Enter stay aligned even if OPTIONS is reordered to interleave groups.
+  const ordered = groups.flatMap((g) => filtered.filter((o) => o.group === g));
 
   useEffect(() => {
     if (!open) return;
@@ -37,13 +40,13 @@ export function DropdownReference() {
       if (e.key === "Escape") setOpen(false);
       else if (e.key === "ArrowDown") {
         e.preventDefault();
-        setActive((i) => Math.min(filtered.length - 1, i + 1));
+        setActive((i) => Math.min(ordered.length - 1, i + 1));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setActive((i) => Math.max(0, i - 1));
-      } else if (e.key === "Enter" && filtered[active]) {
+      } else if (e.key === "Enter" && ordered[active]) {
         e.preventDefault();
-        setSelected(filtered[active].id);
+        setSelected(ordered[active].id);
         setOpen(false);
       }
     };
@@ -53,11 +56,14 @@ export function DropdownReference() {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, active, filtered]);
+  }, [open, active, ordered]);
 
   const openMenu = () => {
     setQuery("");
-    setActive(Math.max(0, OPTIONS.findIndex((o) => o.id === selected)));
+    // index into the same grouped order the pane renders, not raw OPTIONS order
+    const allGroups = Array.from(new Set(OPTIONS.map((o) => o.group)));
+    const allOrdered = allGroups.flatMap((g) => OPTIONS.filter((o) => o.group === g));
+    setActive(Math.max(0, allOrdered.findIndex((o) => o.id === selected)));
     setOpen(true);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
