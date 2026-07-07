@@ -82,7 +82,13 @@ export function PipelineReference() {
         full cost. Reduced to a display template here.
       </p>
 
-      <div className="pl-summary" role="list">
+      {/* Only the outer wrappers migrate to token-backed Tailwind utilities via
+          the @theme bridge — the pl-summary/pl-flow/pl-colwrap/pl-col boxes.
+          Their classes stay on the elements because combinators (.pl-summary >
+          span) still style the children; everything inside the nodes, detail,
+          io and diag grids keeps its CSS (state variants, @keyframes pulse,
+          tabular-nums, media queries). bg-surface/55 emits the color-mix. */}
+      <div className="pl-summary mt-[1.4rem] flex flex-wrap gap-x-[2rem] gap-y-0 rounded-[10px] border border-hair bg-surface/55 px-[1.1rem] py-[0.85rem]" role="list">
         <span role="listitem">
           <span className="pl-sum-k">wall time</span>
           <span className="pl-sum-v">8.4s</span>
@@ -105,10 +111,10 @@ export function PipelineReference() {
         </span>
       </div>
 
-      <div className="pl-flow">
+      <div className="pl-flow mt-[1rem] flex items-center gap-0 overflow-x-auto pt-[0.4rem] px-[0.1rem] pb-[0.8rem]">
         {COLUMNS.map((col, i) => (
-          <div key={col.id} className="pl-colwrap">
-            <div className={`pl-col${col.kind === "parallel" ? " pl-col--par" : ""}`}>
+          <div key={col.id} className="pl-colwrap flex items-center shrink-0">
+            <div className={`pl-col flex flex-col gap-[0.5rem]${col.kind === "parallel" ? " pl-col--par" : ""}`}>
               {col.label ? <span className="pl-col-tag">{col.label}</span> : null}
               {col.nodes.map((n) => (
                 <button

@@ -4,17 +4,14 @@
    affordances (embedded charts/widgets/markdown, colour, collapse). Builder-
    first: clear hierarchy, minimal chrome, everything monospace-anchored. */
 
+/* Chat shell — surface, turn, mark, stack, bubble, and lead migrated to
+   token-backed Tailwind utilities across the seven chatbot-reference.tsx files
+   (the @theme bridge in globals.css: bg-term-bg, border-term-hair, text-term-ink,
+   text-accent, text-ink-soft). Two mechanics stay in CSS below: .chat-surface
+   keeps its class for the box-shadow (no shadow token) + the ::before session
+   header, and .chat-bubble--user keeps its class for the `> ` prompt ::before. */
+
 .chat-surface {
-  margin-top: 1.3rem;
-  max-width: 760px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
-  border: 1px solid var(--term-hair);
-  border-radius: 12px;
-  background: var(--term-bg);
-  padding: 1rem 1.15rem 1.2rem;
-  font-family: var(--font-mono);
   box-shadow: 0 30px 60px -42px rgba(0, 0, 0, 0.65);
 }
 
@@ -31,71 +28,10 @@
   color: var(--term-mute);
 }
 
-.chat-turn {
-  display: flex;
-  gap: 0.55rem;
-  align-items: baseline;
-}
-
-/* user turn is a left-aligned CLI prompt, not a right bubble */
-.chat-turn--user {
-  justify-content: flex-start;
-}
-
-.chat-mark {
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 0.86rem;
-  line-height: 1.5;
-  color: var(--accent);
-}
-
-.chat-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  min-width: 0;
-  flex: 1;
-}
-
-/* assistant output: flush terminal output, no bubble */
-.chat-bubble {
-  border: none;
-  background: transparent;
-  border-radius: 0;
-  padding: 0;
-  color: var(--ink-soft);
-  font-size: 0.88rem;
-  line-height: 1.6;
-  min-width: 0;
-}
-
-/* user input echoed as a prompt line */
-.chat-bubble--user {
-  max-width: none;
-  border: none;
-  background: transparent;
-  padding: 0;
-  color: var(--term-ink);
-  font-family: var(--font-mono);
-  font-size: 0.84rem;
-}
-
+/* user input echoed as a prompt line — the `> ` prompt glyph stays as CSS */
 .chat-bubble--user::before {
   content: "> ";
   color: var(--accent);
-}
-
-.chat-bubble--bare {
-  border: none;
-  background: transparent;
-  padding: 0;
-}
-
-.chat-bubble-lead {
-  margin: 0 0 0.55rem;
-  color: var(--ink-soft);
-  font-size: 0.85rem;
 }
 
 /* ── thinking chain ─────────────────────────────────────────────────── */
@@ -201,11 +137,12 @@
 
 /* ── composer ───────────────────────────────────────────────────────── */
 
+/* Composer — layout, spacing, and token colours migrated to utilities in
+   chat-composer-reference.tsx. What stays here is mechanics: the focus-within
+   color-mix border, the ::placeholder colour, hover color-mixes, and the send
+   button's surface-inverse custom-prop colour + transitions. */
+
 .composer {
-  border: 1px solid var(--hair);
-  border-radius: 14px;
-  background: var(--surface);
-  padding: 0.75rem 0.85rem 0.6rem;
   transition: border-color 0.2s var(--ease);
 }
 
@@ -213,45 +150,11 @@
   border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
 }
 
-.composer-input {
-  width: 100%;
-  border: none;
-  background: transparent;
-  resize: none;
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 0.9rem;
-  line-height: 1.5;
-  outline: none;
-  min-height: 1.5rem;
-}
-
 .composer-input::placeholder {
   color: var(--ink-mute);
 }
 
-.composer-tray {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
-}
-
-.composer-tools {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
 .composer-icon {
-  display: inline-flex;
-  padding: 0.35rem;
-  border: none;
-  background: transparent;
-  color: var(--ink-mute);
-  cursor: pointer;
   transition: color 0.2s var(--ease);
 }
 
@@ -260,17 +163,6 @@
 }
 
 .composer-model {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.28rem 0.6rem;
-  border: 1px solid var(--hair);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-soft);
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  cursor: pointer;
   transition: border-color 0.2s var(--ease);
 }
 
@@ -278,51 +170,8 @@
   border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
 }
 
-.composer-model-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--accent);
-}
-
-.composer-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--ink-mute);
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-}
-
-.composer-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-shrink: 0;
-}
-
-.composer-count {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  color: var(--ink-mute);
-  font-variant-numeric: tabular-nums;
-}
-
-.composer-count.warn {
-  color: var(--down);
-}
-
 .composer-send {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border: none;
-  border-radius: 999px;
-  background: var(--accent);
   color: var(--surface-inverse, #06110f);
-  cursor: pointer;
   transition: opacity 0.2s var(--ease), transform 0.15s var(--ease);
 }
 
@@ -498,21 +347,15 @@
 }
 
 /* ── inline chart ───────────────────────────────────────────────────── */
-
-.chat-inline-chart {
-  width: 100%;
-  height: 180px;
-  border: 1px solid var(--hair);
-  border-radius: 8px;
-  overflow: hidden;
-}
+/* The .chat-inline-chart canvas-host wrapper migrated to utilities in
+   chat-inline-chart-reference.tsx (w-full, h-[180px], border-hair, rounded,
+   overflow). The Lightweight-Charts instance itself is created in the tsx. */
 
 /* ── inline graph ───────────────────────────────────────────────────── */
-
-.route-graph {
-  width: 100%;
-  height: auto;
-}
+/* .route-graph width/height migrated to utilities (w-full h-auto) in
+   chat-inline-graph-reference.tsx; the class stays on the <svg> for the
+   .route-graph.in .route-edge draw animation. Everything below is SVG paint,
+   color-mix, and keyframes — kept as CSS. */
 
 .route-edge {
   fill: none;
@@ -584,151 +427,19 @@
 
 /* ── custom widgets ─────────────────────────────────────────────────── */
 
-.widget {
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  background: var(--surface);
-  overflow: hidden;
-}
-
-.widget-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.85rem 1rem;
-  border-bottom: 1px solid var(--hair);
-}
-
-.widget-eyebrow {
-  margin: 0 0 0.2rem;
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--accent);
-}
-
-.widget-title {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.86rem;
-  color: var(--ink);
-}
-
-.widget-badge {
-  flex-shrink: 0;
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.widget-badge.ok {
-  background: color-mix(in srgb, var(--up) 15%, transparent);
-  color: var(--up);
-}
-
-.widget-lock {
-  flex-shrink: 0;
-  color: var(--ink-mute);
-}
-
-.widget-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1px;
-  background: var(--hair);
-}
-
-.widget-metric {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.8rem 0.9rem;
-  background: var(--surface);
-}
-
-.widget-metric-k {
-  font-family: var(--font-mono);
-  font-size: 0.54rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-mute);
-}
-
-.widget-metric-v {
-  font-family: var(--font-mono);
-  font-size: 1.1rem;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.widget-metric-v.down {
-  color: var(--down);
-}
-
-.widget-order {
-  display: flex;
-  gap: 1.6rem;
-  margin: 0;
-  padding: 0.85rem 1rem;
-}
-
-.widget-order div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.widget-order dt {
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-mute);
-}
-
-.widget-order dd {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.92rem;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.widget-order dd.up {
-  color: var(--up);
-}
-
-.widget-actions {
-  display: flex;
-  gap: 0.6rem;
-  padding: 0.8rem 1rem;
-  border-top: 1px solid var(--hair);
-}
+/* Widgets — frame, head, metrics grid, order list, badges, and money-tone
+   colours all migrated to token-backed utilities in chat-widgets-reference.tsx
+   (including the max-[560px] two-column reflow). What stays as CSS are button
+   mechanics only: the .widget-btn transition, the .primary surface-inverse
+   custom-prop colour, the .danger color-mix border, and the two color-mix
+   :hover states. */
 
 .widget-btn {
-  padding: 0.5rem 1rem;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  cursor: pointer;
   transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
 }
 
 .widget-btn.primary {
-  background: var(--accent);
   color: var(--surface-inverse, #06110f);
-}
-
-.widget-btn.ghost {
-  background: transparent;
-  color: var(--ink);
-  border-color: var(--hair);
 }
 
 .widget-btn.ghost:hover {
@@ -736,54 +447,11 @@
 }
 
 .widget-btn.danger {
-  background: transparent;
-  color: var(--down);
   border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
 }
 
 .widget-btn.danger:hover {
   background: color-mix(in srgb, var(--down) 10%, transparent);
-}
-
-.widget-resolved {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  margin: 0;
-  padding: 0.8rem 1rem;
-  border-top: 1px solid var(--hair);
-  font-family: var(--font-mono);
-  font-size: 0.76rem;
-}
-
-.widget-resolved.approved {
-  color: var(--up);
-}
-
-.widget-resolved.declined {
-  color: var(--down);
-}
-
-.widget-undo {
-  margin-left: auto;
-  border: none;
-  background: transparent;
-  color: var(--ink-mute);
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-
-.widget-undo:hover {
-  color: var(--ink);
-}
-
-@media (max-width: 560px) {
-  .widget-metrics {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 /* ── collapsible tool-call blocks (terminal tool chain) ─────────────────── */

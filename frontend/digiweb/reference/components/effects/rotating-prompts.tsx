@@ -33,13 +33,20 @@ export function RotatingPrompts() {
         stops on the first prompt.
       </p>
 
-      <div className="prompt-shell" aria-live="polite">
-        <span className="prompt-mark" aria-hidden="true">
+      {/* Token-backed Tailwind utilities via the @theme bridge: the static shell
+          (layout + border/surface + mono type) and the mark/text colours migrate
+          cleanly. Off-scale rem values stay arbitrary to preserve the exact look.
+          The blinking caret keeps its @keyframes rule in effects.css. */}
+      <div
+        className="mt-[1.2rem] flex items-baseline gap-[0.55rem] rounded-[12px] border border-hair bg-surface px-[1.2rem] py-[1rem] font-mono text-[0.9rem] min-h-[3.4rem]"
+        aria-live="polite"
+      >
+        <span className="text-accent" aria-hidden="true">
           &gt;
         </span>
         <m.span
           key={reduced ? "static" : index}
-          className="prompt-text"
+          className="text-ink"
           initial={reduced ? false : { opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}

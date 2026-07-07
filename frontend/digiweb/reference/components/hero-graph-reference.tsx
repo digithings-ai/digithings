@@ -179,5 +179,14 @@ export function HeroGraphReference() {
     };
   }, []);
 
-  return <canvas className="hg-canvas" ref={canvasRef} aria-hidden="true" />;
+  // .hg-canvas (positioning/sizing) migrates to Tailwind utilities; the
+  // decorative canvas paints via the 2D context above, and its .hg-frame
+  // wrapper (crosshair cursor, overflow clip) lives in the page markup + CSS.
+  return (
+    <canvas
+      className="absolute inset-0 w-full h-full block pointer-events-none"
+      ref={canvasRef}
+      aria-hidden="true"
+    />
+  );
 }

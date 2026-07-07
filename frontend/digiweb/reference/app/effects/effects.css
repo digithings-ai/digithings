@@ -185,28 +185,9 @@ html.no-js .dqpipe-track-fill { height: 100%; }
 }
 
 /* ── rotating prompts ───────────────────────────────────────────────── */
-
-.prompt-shell {
-  margin-top: 1.2rem;
-  display: flex;
-  align-items: baseline;
-  gap: 0.55rem;
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  background: var(--surface);
-  padding: 1rem 1.2rem;
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  min-height: 3.4rem;
-}
-
-.prompt-mark {
-  color: var(--accent);
-}
-
-.prompt-text {
-  color: var(--ink);
-}
+/* .prompt-shell / .prompt-mark / .prompt-text migrated to token-backed
+   Tailwind utilities on rotating-prompts.tsx. The blinking caret stays here —
+   it owns an @keyframes animation. */
 
 .prompt-caret {
   width: 7px;
@@ -223,34 +204,9 @@ html.no-js .dqpipe-track-fill { height: 100%; }
 }
 
 /* ── clip-path section reveal ───────────────────────────────────────── */
-
-.clip-band {
-  margin-top: 1.2rem;
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  background: var(--surface);
-  padding: 2.2rem 1.4rem;
-}
-
-.clip-band-label {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--accent);
-}
-
-.clip-band-copy {
-  margin-top: 0.5rem;
-  color: var(--ink-soft);
-  max-width: 56ch;
-}
-
-.clip-band-copy code {
-  font-family: var(--font-mono);
-  font-size: 0.82em;
-  color: var(--ink);
-}
+/* .clip-band's static box + its label/copy/code type migrated to token-backed
+   Tailwind utilities on clip-reveal.tsx. The .clip-band class is kept on the
+   element because the @supports scroll-driven clip-wipe below hooks it. */
 
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
@@ -292,14 +248,8 @@ html.no-js .dqpipe-track-fill { height: 100%; }
   cursor: crosshair;
 }
 
-.hg-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  pointer-events: none;
-}
+/* .hg-canvas positioning migrated to Tailwind utilities on
+   hero-graph-reference.tsx; .hg-frame (page markup) stays above. */
 
 /* ── pinned zoom-morph section transition (mined from revolut.com) ──────── */
 
@@ -424,10 +374,10 @@ html.no-js .dqpipe-track-fill { height: 100%; }
 }
 
 /* ── stacking panels section transition (mined from revolut.com) ────────── */
-
-.stk-wrap {
-  margin-top: 1.6rem;
-}
+/* .stk-wrap / .stk-inner / .stk-n / .stk-title / .stk-body migrated to
+   token-backed Tailwind utilities on stacking-panels.tsx. .stk-panel (sticky
+   pin, layered shadow, transform-origin) and .stk-dim (JS-driven overlay)
+   stay here as mechanics. */
 
 .stk-panel {
   position: sticky;
@@ -445,36 +395,6 @@ html.no-js .dqpipe-track-fill { height: 100%; }
   overflow: hidden;
 }
 
-.stk-inner {
-  position: relative;
-  z-index: 1;
-  max-width: 34rem;
-}
-
-.stk-n {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.14em;
-  color: var(--accent);
-}
-
-.stk-title {
-  margin: 0.4rem 0 0;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(1.8rem, 4vw, 2.8rem);
-  letter-spacing: -0.015em;
-  color: var(--ink);
-}
-
-.stk-body {
-  margin: 0.7rem 0 0;
-  max-width: 42ch;
-  color: var(--ink-soft);
-  font-size: 0.95rem;
-  line-height: 1.6;
-}
-
 /* darkening overlay as a panel is covered — JS drives opacity */
 .stk-dim {
   position: absolute;
@@ -486,10 +406,10 @@ html.no-js .dqpipe-track-fill { height: 100%; }
 }
 
 /* ── cross-fade + parallax section transition (mined from revolut.com) ──── */
-
-.cf-wrap {
-  margin-top: 1.6rem;
-}
+/* .cf-wrap margin + the .cf-kicker/.cf-title/.cf-body type migrated to
+   token-backed Tailwind utilities on crossfade-sections.tsx. .cf-block stays
+   as CSS — JS writes its live opacity/--e, the > * combinator drives the
+   per-child parallax, and reduced motion resets both. */
 
 .cf-block {
   min-height: 88vh;
@@ -506,33 +426,6 @@ html.no-js .dqpipe-track-fill { height: 100%; }
   will-change: transform;
 }
 
-.cf-kicker {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.cf-title {
-  margin: 0.5rem 0 0;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(2rem, 5vw, 3.4rem);
-  letter-spacing: -0.02em;
-  line-height: 1.05;
-  color: var(--ink);
-}
-
-.cf-body {
-  margin: 0.9rem 0 0;
-  max-width: 44ch;
-  color: var(--ink-soft);
-  font-size: 1rem;
-  line-height: 1.6;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .cf-block {
     opacity: 1 !important;
@@ -545,15 +438,8 @@ html.no-js .dqpipe-track-fill { height: 100%; }
 
 /* ── arc-flight routing map (mined from revolut.com's globe) ────────────── */
 
-.rm {
-  margin-top: 1.6rem;
-  width: 100%;
-  height: auto;
-  border: 1px solid var(--hair);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--surface) 40%, transparent);
-}
-
+/* .rm frame migrated to token-backed Tailwind utilities on routing-map.tsx.
+   The animated SVG children below stay as CSS. */
 .rm-grid line {
   stroke: color-mix(in srgb, var(--hair) 70%, transparent);
   stroke-width: 1;
@@ -628,17 +514,9 @@ html.no-js .dqpipe-track-fill { height: 100%; }
 
 /* ── pipeline workflow viz (ported from the olympus dashboard) ──────────── */
 
-.pl-summary {
-  margin-top: 1.4rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 2rem;
-  padding: 0.85rem 1.1rem;
-  border: 1px solid var(--hair);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface) 55%, transparent);
-}
-
+/* .pl-summary / .pl-flow / .pl-colwrap / .pl-col outer-box props migrated to
+   token-backed Tailwind utilities on pipeline-reference.tsx; their classes stay
+   on the elements for the combinator/modifier rules below. */
 .pl-summary > span {
   display: flex;
   flex-direction: column;
@@ -662,27 +540,6 @@ html.no-js .dqpipe-track-fill { height: 100%; }
 
 .pl-running {
   color: var(--accent);
-}
-
-.pl-flow {
-  margin-top: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0;
-  overflow-x: auto;
-  padding: 0.4rem 0.1rem 0.8rem;
-}
-
-.pl-colwrap {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.pl-col {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
 }
 
 .pl-col--par {

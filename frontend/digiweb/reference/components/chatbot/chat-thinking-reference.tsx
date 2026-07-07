@@ -31,18 +31,18 @@ export function ChatThinkingReference() {
         whole chain at rest.
       </p>
 
-      <div className="chat-surface">
-        <div className="chat-turn chat-turn--user">
-          <div className="chat-bubble chat-bubble--user">
+      <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-[12px] border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
+        <div className="flex gap-[0.55rem] items-baseline justify-start">
+          <div className="chat-bubble--user min-w-0 border-0 bg-transparent p-0 font-mono text-[0.84rem] leading-[1.6] text-term-ink">
             backtest trend_xsec on ETH, last eight years
           </div>
         </div>
 
-        <div className="chat-turn chat-turn--assistant">
-          <span className="chat-mark" aria-hidden="true">
+        <div className="flex gap-[0.55rem] items-baseline chat-turn--assistant">
+          <span className="shrink-0 font-mono text-[0.86rem] leading-[1.5] text-accent" aria-hidden="true">
             ▸
           </span>
-          <div className="chat-stack">
+          <div className="chat-stack flex flex-col gap-[0.55rem] min-w-0 flex-1">
             <button
               type="button"
               className={`think-chip${open ? " open" : ""}`}
@@ -65,7 +65,7 @@ export function ChatThinkingReference() {
               </ol>
             ) : null}
 
-            <div className="chat-bubble">
+            <div className="min-w-0 border-0 rounded-none bg-transparent p-0 text-ink-soft text-[0.88rem] leading-[1.6]">
               Done — trend_xsec (time-series), 8y ETH-USD, Kelly-capped 0.5×. PF 2.31, max drawdown
               −18.4%. Tearsheet below.
             </div>

@@ -115,17 +115,21 @@ export function ChatInlineChartReference() {
         and wears the digichat accent — identity, not a P&amp;L read.
       </p>
 
-      <div className="chat-surface">
-        <div className="chat-turn chat-turn--user">
-          <div className="chat-bubble chat-bubble--user">show me the equity curve</div>
+      <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-[12px] border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
+        <div className="flex gap-[0.55rem] items-baseline justify-start">
+          <div className="chat-bubble--user min-w-0 border-0 bg-transparent p-0 font-mono text-[0.84rem] leading-[1.6] text-term-ink">
+            show me the equity curve
+          </div>
         </div>
-        <div className="chat-turn chat-turn--assistant">
-          <span className="chat-mark" aria-hidden="true">
+        <div className="flex gap-[0.55rem] items-baseline chat-turn--assistant">
+          <span className="shrink-0 font-mono text-[0.86rem] leading-[1.5] text-accent" aria-hidden="true">
             ▸
           </span>
-          <div className="chat-bubble">
-            <p className="chat-bubble-lead">Cumulative equity, last 90 sessions:</p>
-            <div className="chat-inline-chart" ref={hostRef} aria-hidden="true" />
+          <div className="min-w-0 border-0 rounded-none bg-transparent p-0 text-ink-soft text-[0.88rem] leading-[1.6]">
+            <p className="m-0 mb-[0.55rem] text-ink-soft text-[0.85rem]">
+              Cumulative equity, last 90 sessions:
+            </p>
+            <div className="w-full h-[180px] border border-hair rounded-[8px] overflow-hidden" ref={hostRef} aria-hidden="true" />
           </div>
         </div>
       </div>

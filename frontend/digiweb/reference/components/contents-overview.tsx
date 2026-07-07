@@ -30,12 +30,12 @@ export function ContentsOverview() {
         motion laws. Start anywhere — the top bar carries the same map.
       </p>
 
-      <div className="co-grid">
+      <div className="mt-[1.2rem] grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-[0.7rem]">
         {FAMILIES.map((f, i) => (
           <Link key={f.href + f.label} href={f.href} className="co-card">
-            <span className="co-index">{String(i).padStart(2, "0")}</span>
-            <span className="co-label">{f.label}</span>
-            <span className="co-blurb">{f.blurb}</span>
+            <span className="font-mono text-[0.6rem] tracking-[0.1em] text-accent">{String(i).padStart(2, "0")}</span>
+            <span className="font-mono text-[0.95rem] text-ink">{f.label}</span>
+            <span className="text-[0.8rem] leading-[1.4] text-ink-soft">{f.blurb}</span>
           </Link>
         ))}
       </div>

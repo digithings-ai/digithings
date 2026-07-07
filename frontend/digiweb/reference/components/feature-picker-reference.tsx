@@ -54,13 +54,15 @@ export function FeaturePickerReference() {
         <div className="fp-panel-mark" aria-hidden="true">
           <Emblem id={current.id} size={40} />
         </div>
-        <div className="fp-panel-body">
-          <p className="fp-panel-tier">{current.tier}</p>
-          <h3 className="fp-panel-name">{current.name}</h3>
-          <p className="fp-panel-role">{current.role}</p>
-          <p className="fp-panel-tagline">{current.tagline}</p>
+        <div className="relative">
+          <p className="font-mono text-[0.6rem] uppercase tracking-[0.12em] text-accent">{current.tier}</p>
+          <h3 className="mt-[0.3rem] font-mono text-[1.2rem] text-ink">{current.name}</h3>
+          <p className="mt-[0.3rem] text-[0.92rem] text-ink">{current.role}</p>
+          <p className="mt-[0.2rem] text-[0.85rem] text-ink-soft">{current.tagline}</p>
         </div>
-        <span className="fp-panel-tag">{current.tier === "core" ? "core module" : "supporting"}</span>
+        <span className="absolute right-[1rem] top-[1rem] rounded-full border border-hair px-[0.5rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+          {current.tier === "core" ? "core module" : "supporting"}
+        </span>
       </m.div>
     </section>
   );

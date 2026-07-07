@@ -1,11 +1,6 @@
 /* Foundations page — livery switcher + buttons/CTA showcase. */
 
-.livery-grid {
-  margin-top: 1.2rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
+/* .livery-grid migrated to Tailwind utilities on livery-switcher.tsx */
 
 .livery-chip {
   display: inline-flex;
@@ -41,41 +36,9 @@
   box-shadow: 0 0 8px color-mix(in srgb, var(--chip, var(--accent)) 50%, transparent);
 }
 
-.livery-preview {
-  margin-top: 1.2rem;
-}
-
-.livery-preview-card {
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  background: var(--surface);
-  padding: 1.2rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.9rem 1.4rem;
-}
-
-.livery-preview-label {
-  font-family: var(--font-mono);
-  color: var(--ink-mute);
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.livery-preview-hex {
-  font-family: var(--font-mono);
-  color: var(--accent);
-  font-size: 0.9rem;
-}
-
-.livery-preview-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  width: 100%;
-}
+/* .livery-preview, .livery-preview-card, .livery-preview-label,
+   .livery-preview-hex, .livery-preview-row migrated to Tailwind utilities
+   on livery-switcher.tsx */
 
 .livery-preview-pulse {
   width: 8px;
@@ -184,50 +147,9 @@
   background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
 
-.fp-panel-body {
-  position: relative;
-}
-
-.fp-panel-tier {
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--accent);
-}
-
-.fp-panel-name {
-  margin-top: 0.3rem;
-  font-family: var(--font-mono);
-  font-size: 1.2rem;
-  color: var(--ink);
-}
-
-.fp-panel-role {
-  margin-top: 0.3rem;
-  color: var(--ink);
-  font-size: 0.92rem;
-}
-
-.fp-panel-tagline {
-  margin-top: 0.2rem;
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-}
-
-.fp-panel-tag {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-mute);
-  border: 1px solid var(--hair);
-  border-radius: 999px;
-  padding: 0.15rem 0.5rem;
-}
+/* .fp-panel-body, .fp-panel-tier, .fp-panel-name, .fp-panel-role,
+   .fp-panel-tagline, .fp-panel-tag migrated to Tailwind utilities on
+   feature-picker-reference.tsx */
 
 @media (max-width: 600px) {
   .fp-panel {
@@ -237,12 +159,7 @@
 
 /* Contents overview — the reference's front door */
 
-.co-grid {
-  margin-top: 1.2rem;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 0.7rem;
-}
+/* .co-grid migrated to Tailwind utilities on contents-overview.tsx */
 
 .co-card {
   display: flex;
@@ -278,24 +195,8 @@
   transform: scaleX(1);
 }
 
-.co-index {
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.1em;
-  color: var(--accent);
-}
-
-.co-label {
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  color: var(--ink);
-}
-
-.co-blurb {
-  color: var(--ink-soft);
-  font-size: 0.8rem;
-  line-height: 1.4;
-}
+/* .co-index, .co-label, .co-blurb migrated to Tailwind utilities on
+   contents-overview.tsx */
 
 @media (prefers-reduced-motion: reduce) {
   .co-card {
@@ -309,12 +210,7 @@
 
 /* Theme gallery — global livery chooser */
 
-.tg-grid {
-  margin-top: 1.2rem;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 0.6rem;
-}
+/* .tg-grid migrated to Tailwind utilities on theme-gallery-reference.tsx */
 
 .tg-swatch {
   display: flex;

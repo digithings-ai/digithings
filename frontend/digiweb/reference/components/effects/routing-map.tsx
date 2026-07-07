@@ -44,7 +44,16 @@ export function RoutingMap() {
   const arcs = LINKS.map(([f, t]) => ({ id: `${f}-${t}`, d: arc(byId(f), byId(t)) }));
 
   return (
-    <svg className="rm" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Orders routing across trading venues">
+    // The static frame (spacing + border/surface) migrates to token-backed
+    // Tailwind utilities via the @theme bridge; bg-surface/40 emits the same
+    // color-mix. Every rm-* SVG child rule (strokes, animated dash, ping ring)
+    // stays in effects.css — that's the genuine animation mechanics.
+    <svg
+      className="mt-[1.6rem] w-full h-auto rounded-[14px] border border-hair bg-surface/40"
+      viewBox={`0 0 ${W} ${H}`}
+      role="img"
+      aria-label="Orders routing across trading venues"
+    >
       {/* graticule — faint latitude/longitude lines suggesting a map */}
       <g className="rm-grid" aria-hidden="true">
         {Array.from({ length: 7 }, (_, i) => (

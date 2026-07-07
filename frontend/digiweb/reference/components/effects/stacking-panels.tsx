@@ -54,8 +54,13 @@ export function StackingPanels() {
     };
   }, []);
 
+  // Token-backed Tailwind via the @theme bridge covers the static bits: the
+  // wrapper margin, the inner content box, and the label/title/body type +
+  // colour. .stk-panel stays as CSS — sticky positioning off calc(var(--nav-h)…),
+  // the layered box-shadow, and transform-origin are pinned mechanics — and
+  // .stk-dim stays because the scroll handler grabs it via querySelector.
   return (
-    <div className="stk-wrap">
+    <div className="mt-[1.6rem]">
       {PANELS.map((p, i) => (
         <section
           key={p.n}
@@ -64,10 +69,14 @@ export function StackingPanels() {
             panelRefs.current[i] = el;
           }}
         >
-          <div className="stk-inner">
-            <span className="stk-n">{p.n}</span>
-            <h3 className="stk-title">{p.title}</h3>
-            <p className="stk-body">{p.body}</p>
+          <div className="relative z-[1] max-w-[34rem]">
+            <span className="font-mono text-[0.7rem] tracking-[0.14em] text-accent">{p.n}</span>
+            <h3 className="mt-[0.4rem] font-display font-normal text-[clamp(1.8rem,4vw,2.8rem)] tracking-[-0.015em] text-ink">
+              {p.title}
+            </h3>
+            <p className="mt-[0.7rem] max-w-[42ch] text-[0.95rem] leading-[1.6] text-ink-soft">
+              {p.body}
+            </p>
           </div>
           <span className="stk-dim" aria-hidden="true" />
         </section>

@@ -51,8 +51,13 @@ export function CrossfadeSections() {
     };
   }, []);
 
+  // The wrapper margin and the kicker/title/body type migrate to token-backed
+  // Tailwind utilities via the @theme bridge. .cf-block stays as CSS: the JS
+  // writes its opacity + --e live, the .cf-block > * combinator drives the
+  // per-child parallax, and the reduced-motion !important resets both — all
+  // genuine mechanics that must not become utilities.
   return (
-    <div className="cf-wrap">
+    <div className="mt-[1.6rem]">
       {BLOCKS.map((b, i) => (
         <section
           key={b.k}
@@ -61,13 +66,22 @@ export function CrossfadeSections() {
             blockRefs.current[i] = el;
           }}
         >
-          <p className="cf-kicker" style={{ "--d": 1 } as React.CSSProperties}>
+          <p
+            className="m-0 font-mono text-[0.7rem] tracking-[0.14em] uppercase text-accent"
+            style={{ "--d": 1 } as React.CSSProperties}
+          >
             {b.k}
           </p>
-          <h3 className="cf-title" style={{ "--d": 1.7 } as React.CSSProperties}>
+          <h3
+            className="mt-[0.5rem] font-display font-normal text-[clamp(2rem,5vw,3.4rem)] tracking-[-0.02em] leading-[1.05] text-ink"
+            style={{ "--d": 1.7 } as React.CSSProperties}
+          >
             {b.t}
           </h3>
-          <p className="cf-body" style={{ "--d": 2.6 } as React.CSSProperties}>
+          <p
+            className="mt-[0.9rem] max-w-[44ch] text-[1rem] leading-[1.6] text-ink-soft"
+            style={{ "--d": 2.6 } as React.CSSProperties}
+          >
             {b.b}
           </p>
         </section>

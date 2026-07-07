@@ -30,7 +30,11 @@ export function ThemeGallery() {
         toggle beside it; the two compose.
       </p>
 
-      <div className="tg-grid" role="radiogroup" aria-label="Page livery">
+      <div
+        className="mt-[1.2rem] grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-[0.6rem]"
+        role="radiogroup"
+        aria-label="Page livery"
+      >
         {LIVERY_OPTIONS.map((o) => (
           <button
             key={o.id}

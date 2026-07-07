@@ -54,15 +54,17 @@ export function ChatInlineGraphReference() {
         accent when it enters view; reduced motion renders it settled.
       </p>
 
-      <div className="chat-surface">
-        <div className="chat-turn chat-turn--assistant">
-          <span className="chat-mark" aria-hidden="true">
+      <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-[12px] border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
+        <div className="flex gap-[0.55rem] items-baseline chat-turn--assistant">
+          <span className="shrink-0 font-mono text-[0.86rem] leading-[1.5] text-accent" aria-hidden="true">
             ▸
           </span>
-          <div className="chat-bubble">
-            <p className="chat-bubble-lead">Here&apos;s how I routed that request:</p>
+          <div className="min-w-0 border-0 rounded-none bg-transparent p-0 text-ink-soft text-[0.88rem] leading-[1.6]">
+            <p className="m-0 mb-[0.55rem] text-ink-soft text-[0.85rem]">
+              Here&apos;s how I routed that request:
+            </p>
             <svg
-              className={`route-graph${inView ? " in" : ""}`}
+              className={`route-graph w-full h-auto${inView ? " in" : ""}`}
               viewBox="0 0 448 192"
               role="img"
               aria-label="Request routed from you to the supervisor, out to digiquant and digisearch, then saved to the vault"

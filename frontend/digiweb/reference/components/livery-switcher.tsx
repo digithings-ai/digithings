@@ -33,7 +33,7 @@ export function LiverySwitcher() {
         different livery, live.
       </p>
 
-      <div className="livery-grid">
+      <div className="mt-[1.2rem] flex flex-wrap gap-2">
         {LIVERIES.map((livery) => (
           <button
             key={livery.id}
@@ -49,17 +49,17 @@ export function LiverySwitcher() {
         ))}
       </div>
 
-      <div className="livery-preview">
+      <div className="mt-[1.2rem]">
         <m.div
           key={active}
-          className="livery-preview-card"
+          className="flex flex-wrap items-center gap-y-[0.9rem] gap-x-[1.4rem] rounded-[12px] border border-hair bg-surface p-[1.2rem]"
           initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         >
-          <span className="livery-preview-label">{activeLivery.label} / accent</span>
-          <span className="livery-preview-hex">{activeLivery.hex}</span>
-          <div className="livery-preview-row">
+          <span className="font-mono text-[0.68rem] uppercase tracking-[0.08em] text-ink-mute">{activeLivery.label} / accent</span>
+          <span className="font-mono text-[0.9rem] text-accent">{activeLivery.hex}</span>
+          <div className="flex w-full items-center gap-[0.6rem]">
             <button type="button" className="btn-primary">
               Primary action
             </button>
