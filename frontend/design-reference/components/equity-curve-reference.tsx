@@ -51,8 +51,7 @@ export function EquityCurveReference() {
     let p = palette();
 
     const chart: IChartApi = createChart(host, {
-      width: host.clientWidth,
-      height: 260,
+      autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: p.inkMute,
@@ -102,12 +101,10 @@ export function EquityCurveReference() {
     };
     const themeObs = new MutationObserver(retheme);
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    const ro = new ResizeObserver(() => chart.applyOptions({ width: host.clientWidth }));
-    ro.observe(host);
+    // autoSize tracks width + height from the host, so the chart fills the pane.
 
     return () => {
       themeObs.disconnect();
-      ro.disconnect();
       chart.remove();
     };
   }, []);

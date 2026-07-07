@@ -2,41 +2,51 @@
 
 import { useEffect, useRef } from "react";
 import {
+  AreaSeries,
   BaselineSeries,
   ColorType,
   createChart,
   CrosshairMode,
+  type AreaData,
   type BaselineData,
   type IChartApi,
   type Time,
 } from "lightweight-charts";
 
-/** Deterministic drawdown series: run an equity walk, measure % below the
- *  running peak. Every value is ≤ 0 — the classic "underwater" curve. */
+/**
+ * One Lightweight Charts instance, two panes sharing a single time axis:
+ * cumulative equity on top, the underwater drawdown below. Both series are
+ * derived from the *same* walk, so a dip in equity is the same bar as the red
+ * beneath it — and because they live in one chart, the x-axis, crosshair and
+ * zoom are synced natively (no cross-chart plumbing). Equity wears the module
+ * accent (identity); drawdown wears --down (it only ever reads negative).
+ */
 function generate(n: number) {
-  let seed = 5150;
+  let seed = 730217;
   const rnd = () => {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
     return seed / 0x7fffffff;
   };
-  const data: BaselineData[] = [];
-  let equity = 100;
+  const equity: AreaData[] = [];
+  const drawdown: BaselineData[] = [];
+  let eq = 100;
   let peak = 100;
   const start = new Date(Date.UTC(2022, 0, 1));
   for (let i = 0; i < n; i++) {
     const date = new Date(start);
     date.setUTCDate(start.getUTCDate() + i * 7);
     const time = date.toISOString().slice(0, 10) as unknown as Time;
-    equity *= 1 + (rnd() - 0.44) * 0.05;
-    peak = Math.max(peak, equity);
-    data.push({ time, value: Math.round((equity / peak - 1) * 1000) / 10 });
+    eq = Math.max(40, eq * (1 + (rnd() - 0.44) * 0.05));
+    peak = Math.max(peak, eq);
+    equity.push({ time, value: eq });
+    drawdown.push({ time, value: Math.round((eq / peak - 1) * 1000) / 10 });
   }
-  return data;
+  return { equity, drawdown };
 }
 
 const DATA = generate(210);
 
-export function DrawdownPlotReference() {
+export function SyncedTearsheetReference() {
   const hostRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -53,6 +63,7 @@ export function DrawdownPlotReference() {
     const palette = () => ({
       inkMute: cssVar("--ink-mute", "#8A9097"),
       hair: cssVar("--hair", "rgba(255,255,255,0.1)"),
+      accent: cssVar("--accent", "#3dd6c4"),
       down: cssVar("--down", "#E0654B"),
       mono: cssVar("--font-mono", "monospace"),
     });
@@ -72,23 +83,48 @@ export function DrawdownPlotReference() {
       timeScale: { borderColor: p.hair, timeVisible: false },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: p.inkMute, labelBackgroundColor: p.down },
-        horzLine: { color: p.inkMute, labelBackgroundColor: p.down },
+        vertLine: { color: p.inkMute, labelBackgroundColor: p.accent },
+        horzLine: { color: p.inkMute, labelBackgroundColor: p.accent },
       },
     });
 
-    const series = chart.addSeries(BaselineSeries, {
-      baseValue: { type: "price", price: 0 },
-      topLineColor: "transparent",
-      topFillColor1: "transparent",
-      topFillColor2: "transparent",
-      bottomLineColor: p.down,
-      bottomFillColor1: toRgba(p.down, 0.05),
-      bottomFillColor2: toRgba(p.down, 0.32),
-      lineWidth: 2,
-      priceLineVisible: false,
-    });
-    series.setData(DATA);
+    // pane 0 — cumulative equity (identity accent)
+    const equity = chart.addSeries(
+      AreaSeries,
+      {
+        lineColor: p.accent,
+        topColor: toRgba(p.accent, 0.28),
+        bottomColor: toRgba(p.accent, 0.02),
+        lineWidth: 2,
+        priceLineVisible: false,
+      },
+      0,
+    );
+    equity.setData(DATA.equity);
+
+    // pane 1 — underwater drawdown (money --down)
+    const drawdown = chart.addSeries(
+      BaselineSeries,
+      {
+        baseValue: { type: "price", price: 0 },
+        topLineColor: "transparent",
+        topFillColor1: "transparent",
+        topFillColor2: "transparent",
+        bottomLineColor: p.down,
+        bottomFillColor1: toRgba(p.down, 0.05),
+        bottomFillColor2: toRgba(p.down, 0.32),
+        lineWidth: 2,
+        priceLineVisible: false,
+      },
+      1,
+    );
+    drawdown.setData(DATA.drawdown);
+
+    // give the equity pane the lion's share of the height
+    const panes = chart.panes();
+    panes[0]?.setStretchFactor(2.4);
+    panes[1]?.setStretchFactor(1);
+
     chart.timeScale().fitContent();
 
     const retheme = () => {
@@ -99,7 +135,12 @@ export function DrawdownPlotReference() {
         rightPriceScale: { borderColor: p.hair },
         timeScale: { borderColor: p.hair },
       });
-      series.applyOptions({
+      equity.applyOptions({
+        lineColor: p.accent,
+        topColor: toRgba(p.accent, 0.28),
+        bottomColor: toRgba(p.accent, 0.02),
+      });
+      drawdown.applyOptions({
         bottomLineColor: p.down,
         bottomFillColor1: toRgba(p.down, 0.05),
         bottomFillColor2: toRgba(p.down, 0.32),
@@ -107,7 +148,6 @@ export function DrawdownPlotReference() {
     };
     const themeObs = new MutationObserver(retheme);
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    // autoSize tracks width + height from the host, so the chart fills the pane.
 
     return () => {
       themeObs.disconnect();
@@ -115,5 +155,5 @@ export function DrawdownPlotReference() {
     };
   }, []);
 
-  return <div className="pc-host dd-host" ref={hostRef} aria-hidden="true" />;
+  return <div className="pc-host" ref={hostRef} aria-hidden="true" />;
 }

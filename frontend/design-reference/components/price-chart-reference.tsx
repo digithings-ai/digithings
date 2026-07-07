@@ -65,8 +65,7 @@ export function PriceChartReference() {
     let p = palette();
 
     const chart: IChartApi = createChart(host, {
-      width: host.clientWidth,
-      height: 340,
+      autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: p.inkMute,
@@ -128,12 +127,11 @@ export function PriceChartReference() {
     const themeObs = new MutationObserver(retheme);
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
-    const ro = new ResizeObserver(() => chart.applyOptions({ width: host.clientWidth }));
-    ro.observe(host);
+    // autoSize (set above) tracks width + height from the host via its own
+    // ResizeObserver, so the chart fills whatever the .pc-frame pane gives it.
 
     return () => {
       themeObs.disconnect();
-      ro.disconnect();
       chart.remove();
     };
   }, []);

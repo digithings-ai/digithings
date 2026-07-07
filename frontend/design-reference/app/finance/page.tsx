@@ -5,6 +5,17 @@ import { MonthlyReturnsReference } from "@/components/monthly-returns-reference"
 import { OrderbookReference } from "@/components/orderbook-reference";
 import { PerfMetricsReference } from "@/components/perf-metrics-reference";
 import { PriceChartReference } from "@/components/price-chart-reference";
+import { SyncedTearsheetReference } from "@/components/synced-tearsheet-reference";
+
+const CHART_RULES = [
+  "Lightweight Charts (TradingView's open-source engine) is the only price/series primitive — custom SVG candles are retired.",
+  "We feed it our own backtest data. No external feed, no market connection; attributionLogo is off, so there's no TradingView branding.",
+  "The canvas background is always transparent and every color is read from a design token (--up/--down, --hair, --accent, --font-mono) — never hard-coded.",
+  "A MutationObserver on data-theme re-applies the palette, so charts re-theme live on light/dark and livery changes.",
+  "autoSize is on — the chart fills its pane's width and height; give the pane a definite height for it to fill.",
+  "Money colors (--up/--down) are for P&L only. The module accent is identity/chrome, never a single gain or loss read.",
+  "Multi-series views use panes with one shared time axis (or distinguishable hues as identifiers) — never money hues to tell series apart.",
+];
 
 export default function FinancePage() {
   return (
@@ -61,6 +72,35 @@ export default function FinancePage() {
         <div className="pc-frame">
           <DrawdownPlotReference />
         </div>
+      </section>
+
+      <section className="section-block" id="synced-tearsheet">
+        <p className="kicker">{"// synced tearsheet"}</p>
+        <h2 className="title">Two panes, one time axis.</h2>
+        <p className="section-copy">
+          Equity and its underwater drawdown in a single chart, split into stacked panes. Because
+          they share one time scale, the x-axis, crosshair and zoom move together — hover the top
+          pane and the drawdown reads the same bar. Both series come from the same walk, so every
+          dip lines up with the red beneath it. This is the multi-chart primitive; add a pane per
+          series rather than stacking separate charts.
+        </p>
+        <div className="pc-frame pc-frame--tall">
+          <SyncedTearsheetReference />
+        </div>
+      </section>
+
+      <section className="section-block" id="charting-rules">
+        <p className="kicker">{"// charting rules"}</p>
+        <h2 className="title">How we embed TradingView charts.</h2>
+        <p className="section-copy">
+          The house rules for every embedded Lightweight Charts surface — follow these and a chart
+          drops into any page, any theme, any livery without a second thought.
+        </p>
+        <ol className="chart-rules">
+          {CHART_RULES.map((rule) => (
+            <li key={rule}>{rule}</li>
+          ))}
+        </ol>
       </section>
 
       <PerfMetricsReference />

@@ -28,7 +28,7 @@ is the only shared chrome.
 | `/layout-patterns` | Layout      | feature cell, bento grid, container-scaled product frame |
 | `/typography`      | Typography  | scroll-linked word reveals (blur / muted / outline), copy & voice grammar |
 | `/data`            | Data        | dot-matrix stat, count-up stat, sticky card deck, changelog rail, pricing, comparison matrix |
-| `/finance`         | Finance     | Lightweight-Charts price chart / equity curve / drawdown, performance metrics, monthly-returns heatmap, order book |
+| `/finance`         | Finance     | Lightweight-Charts price chart / equity curve / drawdown, synced multi-pane tearsheet, charting rules, performance metrics, monthly-returns heatmap, order book |
 | `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal |
 | `/chrome`          | Chrome      | announcement bar, scroll-aware nav, colophon footer with glow sweep |
 | `/terminal`        | Terminal    | diegetic CLI session + budget, streaming chat transcript |
@@ -53,7 +53,12 @@ is the only shared chrome.
 - **Charts.** Prices/candles/equity use TradingView **Lightweight Charts**
   (`lightweight-charts`, self-hosted, our own data, `attributionLogo` off),
   themed from the tokens and re-themed live on `data-theme` change. Static hero
-  crops stay lightweight SVG. Do not build custom candle renderers.
+  crops stay lightweight SVG. Do not build custom candle renderers. The full
+  house rules render as a callout on `/finance` (`CHART_RULES`); in short:
+  transparent canvas, token colours only, `autoSize:true` so the chart fills a
+  pane with a definite height, money colours (`--up`/`--down`) for P&L only, and
+  multi-series views use **panes with one shared time axis** (see
+  `synced-tearsheet-reference.tsx`) rather than stacked separate charts.
 - **CSS.** Shared base + nav live in `app/globals.css`; each page keeps its
   family styles in `app/<family>/<family>.css`, prefixed per component. Prefix
   new classes to avoid collisions across the global sheet.
