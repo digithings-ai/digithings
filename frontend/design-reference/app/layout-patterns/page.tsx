@@ -3,6 +3,7 @@ import { BentoGridReference } from "@/components/bento-grid-reference";
 import { FeatureCellReference } from "@/components/feature-cell-reference";
 import { NumberedStagesReference } from "@/components/numbered-stages-reference";
 import { MockTearsheet, ProductFrame } from "@/components/product-frame-reference";
+import { TestimonialWallReference } from "@/components/testimonial-wall-reference";
 
 export default function LayoutPage() {
   return (
@@ -22,6 +23,7 @@ export default function LayoutPage() {
       <FeatureCellReference />
       <NumberedStagesReference />
       <BentoGridReference />
+      <TestimonialWallReference />
 
       <section className="section-block" id="product-frame">
         <p className="kicker">{"// product frame"}</p>
