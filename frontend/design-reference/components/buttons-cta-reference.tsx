@@ -28,7 +28,7 @@ function MagneticButton({ children }: MagneticButtonProps) {
       animate={{ x: offset.x, y: offset.y }}
       transition={{ type: "spring", stiffness: 220, damping: 18, mass: 0.4 }}
     >
-      Deploy strategy
+      {children}
     </m.button>
   );
 }

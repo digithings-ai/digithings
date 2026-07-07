@@ -2,13 +2,15 @@ import Link from "next/link";
 
 const FAMILIES = [
   { href: "/", label: "Foundations", blurb: "Livery system, feature picker, button & CTA states." },
+  { href: "/controls", label: "Controls", blurb: "Custom dropdown pane, search, nav buttons, form fields." },
   { href: "/layout-patterns", label: "Layout", blurb: "Feature cell, bento grid, scaled product frames." },
   { href: "/typography", label: "Typography", blurb: "Scroll-linked word reveals and the copy & voice grammar." },
   { href: "/data", label: "Data", blurb: "Dot matrix, count-up stats, card deck, pricing, matrix." },
   { href: "/finance", label: "Finance", blurb: "Lightweight-Charts tearsheet, order book, money metrics." },
   { href: "/effects", label: "Effects", blurb: "Cursor-follow graph, terminals, pipeline, ambient mesh." },
-  { href: "/chrome", label: "Chrome", blurb: "Announcement bar, scroll-aware nav, colophon footer." },
+  { href: "/chrome", label: "Chrome", blurb: "Announcement bar, scroll-aware nav, tabs, colophon footer." },
   { href: "/terminal", label: "Terminal", blurb: "Diegetic CLI session and streaming chat transcript." },
+  { href: "/chatbot", label: "Chatbot", blurb: "Thinking chain, composer, markdown, inline chart & graph, widgets." },
   { href: "/symbols", label: "Symbols", blurb: "Module emblems, wordmarks, QR, vendor logos, glyphs." },
   { href: "/account", label: "Account", blurb: "Login, sign-up, payment, settings, profile templates." },
 ] as const;
