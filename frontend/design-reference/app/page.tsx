@@ -3,6 +3,7 @@ import { ButtonsCtaReference } from "@/components/buttons-cta-reference";
 import { ContentsOverview } from "@/components/contents-overview";
 import { FeaturePickerReference } from "@/components/feature-picker-reference";
 import { LiverySwitcher } from "@/components/livery-switcher";
+import { ThemeGallery } from "@/components/theme-gallery-reference";
 
 export default function FoundationsPage() {
   return (
@@ -20,6 +21,7 @@ export default function FoundationsPage() {
       </header>
 
       <ContentsOverview />
+      <ThemeGallery />
       <LiverySwitcher />
       <FeaturePickerReference />
       <ButtonsCtaReference />
