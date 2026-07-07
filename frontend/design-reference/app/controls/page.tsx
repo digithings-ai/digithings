@@ -4,6 +4,7 @@ import { DropdownReference } from "@/components/controls/dropdown-reference";
 import { FormFieldsReference } from "@/components/controls/form-fields-reference";
 import { NavButtonsReference } from "@/components/controls/nav-buttons-reference";
 import { SearchBarReference } from "@/components/controls/search-bar-reference";
+import { SkeletonReference } from "@/components/controls/skeleton-reference";
 import { TooltipReference } from "@/components/controls/tooltip-reference";
 
 export default function ControlsPage() {
@@ -27,6 +28,7 @@ export default function ControlsPage() {
       <FormFieldsReference />
       <TooltipReference />
       <AccordionReference />
+      <SkeletonReference />
     </main>
   );
 }
