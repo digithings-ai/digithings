@@ -1,60 +1,89 @@
-/* Chatbot page — the digichat surface. One conversation grammar shared across
-   every capability section; each component brings only its own content. */
+/* Chatbot page — the digichat surface, staged as a terminal CLI (Claude Code /
+   opencode register): one mono scrollback per demo, a `>` prompt for the user,
+   flush assistant output, collapsible tool-call blocks — but with modern
+   affordances (embedded charts/widgets/markdown, colour, collapse). Builder-
+   first: clear hierarchy, minimal chrome, everything monospace-anchored. */
 
 .chat-surface {
   margin-top: 1.3rem;
-  max-width: 660px;
+  max-width: 760px;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.7rem;
+  border: 1px solid var(--term-hair);
+  border-radius: 12px;
+  background: var(--term-bg);
+  padding: 1rem 1.15rem 1.2rem;
+  font-family: var(--font-mono);
+  box-shadow: 0 30px 60px -42px rgba(0, 0, 0, 0.65);
+}
+
+/* a faint terminal session header */
+.chat-surface::before {
+  content: "digichat — session";
+  display: block;
+  padding-bottom: 0.7rem;
+  margin-bottom: 0.2rem;
+  border-bottom: 1px solid var(--term-hair);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--term-mute);
 }
 
 .chat-turn {
   display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
+  gap: 0.55rem;
+  align-items: baseline;
 }
 
+/* user turn is a left-aligned CLI prompt, not a right bubble */
 .chat-turn--user {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .chat-mark {
   flex-shrink: 0;
-  margin-top: 0.35rem;
   font-family: var(--font-mono);
-  font-size: 0.9rem;
-  line-height: 1;
+  font-size: 0.86rem;
+  line-height: 1.5;
   color: var(--accent);
 }
 
 .chat-stack {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.55rem;
   min-width: 0;
   flex: 1;
 }
 
+/* assistant output: flush terminal output, no bubble */
 .chat-bubble {
-  border: 1px solid var(--hair);
-  border-radius: 4px 12px 12px 12px;
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-  padding: 0.85rem 1rem;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
   color: var(--ink-soft);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   line-height: 1.6;
   min-width: 0;
 }
 
+/* user input echoed as a prompt line */
 .chat-bubble--user {
-  max-width: 82%;
-  border-radius: 12px 12px 4px 12px;
-  border-color: color-mix(in srgb, var(--accent) 32%, var(--hair));
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--ink);
+  max-width: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--term-ink);
   font-family: var(--font-mono);
-  font-size: 0.82rem;
+  font-size: 0.84rem;
+}
+
+.chat-bubble--user::before {
+  content: "> ";
+  color: var(--accent);
 }
 
 .chat-bubble--bare {
@@ -64,7 +93,7 @@
 }
 
 .chat-bubble-lead {
-  margin: 0 0 0.6rem;
+  margin: 0 0 0.55rem;
   color: var(--ink-soft);
   font-size: 0.85rem;
 }
@@ -754,5 +783,99 @@
 @media (max-width: 560px) {
   .widget-metrics {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ── collapsible tool-call blocks (terminal tool chain) ─────────────────── */
+
+.tc {
+  border-left: 2px solid color-mix(in srgb, var(--accent) 40%, var(--term-hair));
+  padding-left: 0.7rem;
+}
+
+.tc--err {
+  border-left-color: color-mix(in srgb, var(--down) 55%, var(--term-hair));
+}
+
+.tc-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.2rem 0;
+  border: none;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+  color: var(--term-ink);
+}
+
+.tc-caret {
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-left: 4px solid var(--term-mute);
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  transition: transform 0.18s var(--ease);
+}
+
+.tc-head[aria-expanded="true"] .tc-caret {
+  transform: rotate(90deg);
+}
+
+.tc-tool {
+  color: var(--accent);
+}
+
+.tc-args {
+  color: var(--term-mute);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tc-status {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.tc-status.up {
+  color: var(--up);
+}
+.tc-status.down {
+  color: var(--down);
+}
+
+.tc-ms {
+  flex-shrink: 0;
+  color: var(--term-mute);
+  font-size: 0.7rem;
+  min-width: 3rem;
+  text-align: right;
+}
+
+.tc-out {
+  padding: 0.15rem 0 0.4rem 0.75rem;
+}
+
+.tc-line {
+  margin: 0.12rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--term-mute);
+}
+
+.tc-line.down {
+  color: var(--down);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-caret {
+    transition: none;
   }
 }

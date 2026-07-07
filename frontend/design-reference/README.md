@@ -33,7 +33,7 @@ is the only shared chrome.
 | `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal, section transitions (zoom-morph · stacking · cross-fade), arc-flight routing map (revolut-mined) |
 | `/chrome`          | Chrome      | announcement bar, command palette, tabs (sliding indicator), toast stack, scroll-aware nav, colophon footer with glow sweep |
 | `/terminal`        | Terminal    | diegetic CLI session + budget, streaming chat transcript |
-| `/chatbot`         | Chatbot     | digichat surface — thinking chain, composer, markdown, inline chart, inline route graph, custom action widgets |
+| `/chatbot`         | Chatbot     | digichat as a terminal CLI (mono scrollback, `>` prompt) — thinking chain, collapsible tool-call chain, composer, markdown, inline chart, inline route graph, custom action widgets embedded in the terminal |
 | `/symbols`         | Symbols     | module emblems, wordmarks, QR marks, vendor logos, utility glyphs |
 | `/account`         | Account     | login, sign-up, payment, settings, profile templates |
 
