@@ -6,6 +6,7 @@ import { NavButtonsReference } from "@/components/controls/nav-buttons-reference
 import { SearchBarReference } from "@/components/controls/search-bar-reference";
 import { SkeletonReference } from "@/components/controls/skeleton-reference";
 import { SliderReference } from "@/components/controls/slider-reference";
+import { TagsInputReference } from "@/components/controls/tags-input-reference";
 import { TooltipReference } from "@/components/controls/tooltip-reference";
 
 export default function ControlsPage() {
@@ -29,6 +30,7 @@ export default function ControlsPage() {
       <FormFieldsReference />
       <TooltipReference />
       <SliderReference />
+      <TagsInputReference />
       <AccordionReference />
       <SkeletonReference />
     </main>

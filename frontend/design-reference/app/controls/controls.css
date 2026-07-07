@@ -1148,3 +1148,106 @@
     transition: none;
   }
 }
+
+/* ── tags / chips input ─────────────────────────────────────────────────── */
+
+.tg-field {
+  margin-top: 1.2rem;
+  width: min(100%, 30rem);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: text;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.tg-field:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.tg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.35rem 0.22rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--hair));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.tg-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem;
+  border: none;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  border-radius: 999px;
+  transition: color 0.15s var(--ease);
+}
+
+.tg-x:hover {
+  color: var(--ink);
+}
+
+.tg-input {
+  flex: 1;
+  min-width: 7rem;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  outline: none;
+  padding: 0.2rem;
+}
+
+.tg-input::placeholder {
+  color: var(--ink-mute);
+}
+
+.tg-suggest {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tg-suggest-label {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+  margin-right: 0.2rem;
+}
+
+.tg-suggest-chip {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+.tg-suggest-chip:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
