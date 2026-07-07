@@ -67,21 +67,36 @@ export function EmptyStatesReference() {
         forward. The error is the only one that spends the down color.
       </p>
 
-      <div className="es-grid">
-        {STATES.map((s) => (
-          <article key={s.id} className={`es-card${s.tone === "error" ? " es-card--error" : ""}`}>
-            <span className="es-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
-                {s.icon}
-              </svg>
-            </span>
-            <h3 className="es-title">{s.title}</h3>
-            <p className="es-msg">{s.msg}</p>
-            <button type="button" className={s.primary ? "btn-primary" : "btn-ghost"}>
-              {s.action}
-            </button>
-          </article>
-        ))}
+      {/* Token-backed Tailwind utilities via the @theme bridge: colour + font
+          utilities (text-ink, bg-surface, border-hair, text-down, font-mono)
+          emit var(--token), so they live-switch on data-theme / livery. Off-scale
+          rem values stay as arbitrary utilities to preserve the exact design. */}
+      <div className="mt-[1.2rem] grid grid-cols-3 gap-[0.9rem] max-[720px]:grid-cols-1">
+        {STATES.map((s) => {
+          const error = s.tone === "error";
+          return (
+            <article
+              key={s.id}
+              className="flex flex-col items-center gap-[0.55rem] rounded-[12px] border border-hair bg-surface/55 px-[1.3rem] py-[1.8rem] text-center"
+            >
+              <span
+                className={`mb-[0.15rem] grid size-11 place-items-center rounded-full ${
+                  error ? "bg-down/[0.12] text-down" : "bg-ink/[0.08] text-ink-mute"
+                }`}
+                aria-hidden="true"
+              >
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+                  {s.icon}
+                </svg>
+              </span>
+              <h3 className="m-0 font-mono text-[0.86rem] text-ink">{s.title}</h3>
+              <p className="m-0 mb-[0.4rem] max-w-[24ch] text-[0.8rem] leading-[1.5] text-ink-mute">{s.msg}</p>
+              <button type="button" className={s.primary ? "btn-primary" : "btn-ghost"}>
+                {s.action}
+              </button>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
