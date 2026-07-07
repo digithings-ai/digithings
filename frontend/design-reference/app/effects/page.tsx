@@ -5,6 +5,7 @@ import { ClipReveal } from "@/components/effects/clip-reveal";
 import { HeroGraphReference } from "@/components/hero-graph-reference";
 import { ResearchPipeline } from "@/components/effects/research-pipeline";
 import { RotatingPrompts } from "@/components/effects/rotating-prompts";
+import { TiltCard } from "@/components/effects/tilt-card";
 
 // The digithings.ai hero boot script (pre-v7 landing, frontend/digithings-web
 // app/page.tsx history) — the signature content the Terminal component plays.
@@ -151,6 +152,20 @@ export default function EffectsPage() {
         <div className="fx-demo fx-mesh-frame">
           <AmbientMesh />
           <p className="fx-mesh-label">content sits above the wash — z-index 1 over the canvas</p>
+        </div>
+      </section>
+
+      <section className="section-block" id="tilt-card">
+        <p className="kicker">{"// 3d tilt card"}</p>
+        <h2 className="title">A card that leans toward you.</h2>
+        <p className="section-copy">
+          Mined from revolut.com&apos;s signature interactive card: the surface tilts in perspective
+          toward the pointer while a specular glare tracks the cursor, then springs back flat on
+          leave. We take the technique, not the loud gradients — a matte card on our tokens where
+          the moving shine is the one accent read. Reduced motion holds it flat and drops the glare.
+        </p>
+        <div className="fx-demo">
+          <TiltCard />
         </div>
       </section>
 
