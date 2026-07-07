@@ -213,7 +213,11 @@ html.no-js .dqpipe-track-fill { height: 100%; }
     .clip-band {
       animation: clip-wipe linear both;
       animation-timeline: view();
-      animation-range: entry 0% entry 90%;
+      /* Complete the wipe early in the element's entry, so a flush-bottom last
+         section fully reveals during normal scroll rather than only at max
+         scroll. entry% has headroom here (reaches ~100% at the scroll end);
+         cover% would not (a last section never exits, capping cover low). */
+      animation-range: entry 0% entry 40%;
     }
   }
 }
