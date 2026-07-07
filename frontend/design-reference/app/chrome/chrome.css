@@ -715,3 +715,148 @@
   font-size: 0.74rem;
   color: var(--ink-mute);
 }
+
+/* Toasts — a corner stack that self-dismisses */
+
+.toast-triggers {
+  margin-top: 1.3rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.toast-stack {
+  position: fixed;
+  inset: auto 1.25rem 1.25rem auto;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(22rem, calc(100vw - 2.5rem));
+  pointer-events: none;
+}
+
+.toast {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.7rem;
+  align-items: start;
+  padding: 0.8rem 0.85rem;
+  border: 1px solid var(--hair);
+  border-left-width: 2px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 96%, var(--bg));
+  box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.toast-success {
+  border-left-color: var(--up);
+}
+.toast-error {
+  border-left-color: var(--down);
+}
+.toast-info {
+  border-left-color: var(--accent);
+}
+.toast-loading {
+  border-left-color: var(--ink-mute);
+}
+
+.toast-icon {
+  display: inline-flex;
+  margin-top: 0.05rem;
+}
+
+.toast-success .toast-icon {
+  color: var(--up);
+}
+.toast-error .toast-icon {
+  color: var(--down);
+}
+.toast-info .toast-icon {
+  color: var(--accent);
+}
+.toast-loading .toast-icon {
+  color: var(--ink-mute);
+}
+
+.toast-spin {
+  animation: toast-spin 0.8s linear infinite;
+}
+
+@keyframes toast-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.toast-body {
+  min-width: 0;
+}
+
+.toast-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+
+.toast-msg {
+  margin: 0.15rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--ink-mute);
+}
+
+.toast-close {
+  display: inline-flex;
+  padding: 0.15rem;
+  border: none;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: color 0.2s var(--ease);
+}
+
+.toast-close:hover {
+  color: var(--ink);
+}
+
+.toast-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  transform-origin: left;
+  background: color-mix(in srgb, currentColor 55%, var(--hair));
+  animation: toast-drain linear forwards;
+}
+
+.toast-success .toast-progress {
+  color: var(--up);
+}
+.toast-error .toast-progress {
+  color: var(--down);
+}
+.toast-info .toast-progress {
+  color: var(--accent);
+}
+
+@keyframes toast-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-spin {
+    animation: none;
+  }
+}

@@ -4,6 +4,7 @@ import { CommandPaletteReference } from "@/components/command-palette-reference"
 import { FooterReference } from "@/components/footer-reference";
 import { ScrollNavReference } from "@/components/scroll-nav-reference";
 import { TabsReference } from "@/components/tabs-reference";
+import { ToastStackReference } from "@/components/toast-stack-reference";
 
 export default function ChromePage() {
   return (
@@ -22,6 +23,7 @@ export default function ChromePage() {
       <AnnouncementBarReference />
       <CommandPaletteReference />
       <TabsReference />
+      <ToastStackReference />
       <ScrollNavReference />
       <FooterReference />
     </main>
