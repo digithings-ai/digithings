@@ -5,6 +5,7 @@ import { ClipReveal } from "@/components/effects/clip-reveal";
 import { HeroGraphReference } from "@/components/hero-graph-reference";
 import { ResearchPipeline } from "@/components/effects/research-pipeline";
 import { RotatingPrompts } from "@/components/effects/rotating-prompts";
+import { SectionMorph } from "@/components/effects/section-morph";
 
 // The digithings.ai hero boot script (pre-v7 landing, frontend/digithings-web
 // app/page.tsx history) — the signature content the Terminal component plays.
@@ -152,6 +153,18 @@ export default function EffectsPage() {
           <AmbientMesh />
           <p className="fx-mesh-label">content sits above the wash — z-index 1 over the canvas</p>
         </div>
+      </section>
+
+      <section className="section-block" id="section-morph">
+        <p className="kicker">{"// section transition · zoom-morph"}</p>
+        <h2 className="title">One section morphs into the next.</h2>
+        <p className="section-copy">
+          Mined from revolut.com&apos;s between-sections scroll: a full-bleed panel pins, then scales
+          and rounds down into a docked card as the next section&apos;s copy rises in beside it — a
+          continuous handoff rather than a cut. Scroll the panel below. Reduced motion renders the
+          docked end state, un-pinned.
+        </p>
+        <SectionMorph />
       </section>
 
       <RotatingPrompts />
