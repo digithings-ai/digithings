@@ -109,6 +109,25 @@ html {
   border: 0;
 }
 
+/* Reusable keycap — command palette, search hint, footer hints */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--hair);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  line-height: 1;
+  color: var(--ink-soft);
+  vertical-align: middle;
+}
+
 /* Livery selector — persistent, app-wide theme chooser in the bar */
 
 .site-nav-livery {

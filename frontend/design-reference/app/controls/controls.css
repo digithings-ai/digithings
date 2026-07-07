@@ -1,0 +1,320 @@
+/* Controls page — dropdown, search, navigation buttons, form fields. */
+
+.ctl-sub {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+  margin-bottom: 0.5rem;
+}
+
+/* ── Dropdown ─────────────────────────────────────────────────────────── */
+
+.ctl-dropdown {
+  position: relative;
+  margin-top: 1.2rem;
+  width: min(100%, 22rem);
+}
+
+.dd-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease);
+}
+
+.dd-trigger:hover,
+.dd-trigger.open {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.dd-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.dd-label {
+  font-size: 0.86rem;
+}
+
+.dd-note {
+  font-size: 0.62rem;
+  color: var(--ink-mute);
+}
+
+.dd-caret {
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid var(--ink-mute);
+  border-bottom: 1.5px solid var(--ink-mute);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform 0.2s var(--ease);
+  flex-shrink: 0;
+}
+
+.dd-trigger.open .dd-caret {
+  transform: rotate(-135deg) translate(-2px, -2px);
+}
+
+.dd-menu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  margin: 0;
+  padding: 0.3rem;
+  list-style: none;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--bg));
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.5);
+}
+
+.dd-option {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1.1rem auto 1fr;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.45rem 0.5rem;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dd-option.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--ink);
+}
+
+.dd-check {
+  color: var(--accent);
+  font-size: 0.72rem;
+}
+
+.dd-opt-note {
+  font-size: 0.62rem;
+  color: var(--ink-mute);
+  text-align: right;
+}
+
+.dd-option.selected .dd-opt-label {
+  color: var(--ink);
+}
+
+/* ── Search ───────────────────────────────────────────────────────────── */
+
+.ctl-search {
+  margin-top: 1.2rem;
+  width: min(100%, 26rem);
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--surface);
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.ctl-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.sb-glyph {
+  color: var(--ink-mute);
+  display: inline-flex;
+}
+
+.sb-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  outline: none;
+}
+
+.sb-input::placeholder {
+  color: var(--ink-mute);
+}
+
+.sb-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.sb-clear {
+  border: none;
+  background: transparent;
+  color: var(--ink-mute);
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 0.1rem 0.2rem;
+}
+
+.sb-clear:hover {
+  color: var(--ink);
+}
+
+.sb-hint {
+  color: var(--ink-mute);
+}
+
+.sb-results {
+  margin-top: 0.5rem;
+  width: min(100%, 26rem);
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.sb-result {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--hair) 55%, transparent);
+  font-family: var(--font-mono);
+}
+
+.sb-result:last-child {
+  border-bottom: none;
+}
+
+.sb-result-head {
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+
+.sb-result-tail {
+  font-size: 0.66rem;
+  color: var(--ink-mute);
+}
+
+.sb-empty {
+  padding: 0.8rem;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--ink-mute);
+}
+
+/* ── Navigation buttons ───────────────────────────────────────────────── */
+
+.ctl-nav-row {
+  margin-top: 1.4rem;
+}
+
+.nb-segmented {
+  display: inline-flex;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.nb-seg {
+  padding: 0.4rem 0.85rem;
+  border: none;
+  border-left: 1px solid var(--hair);
+  background: var(--surface);
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+
+.nb-seg:first-child {
+  border-left: none;
+}
+
+.nb-seg:hover {
+  color: var(--ink-soft);
+}
+
+.nb-seg.on {
+  color: var(--ink);
+  background: var(--accent-weak);
+}
+
+.nb-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.nb-page,
+.nb-page-edge {
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.nb-page:hover:not(.on),
+.nb-page-edge:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
+
+.nb-page.on {
+  color: var(--surface-inverse, #06110f);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.nb-page-edge:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nb-icons {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
+.nb-icon {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+
+.nb-icon:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}

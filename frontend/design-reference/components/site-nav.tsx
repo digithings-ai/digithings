@@ -15,6 +15,7 @@ import {
 
 const PAGES = [
   { href: "/", label: "Foundations" },
+  { href: "/controls", label: "Controls" },
   { href: "/layout-patterns", label: "Layout" },
   { href: "/typography", label: "Typography" },
   { href: "/data", label: "Data" },
