@@ -204,7 +204,9 @@ export function DigiChatSession({
                   m.content
                 )}
               </div>
-              {m.role === "assistant" && !streaming && m.content ? (
+              {/* No copy button on embed: the clipboard API is unavailable in a
+                  cross-origin iframe, so the button silently no-ops. */}
+              {layout !== "embed" && m.role === "assistant" && !streaming && m.content ? (
                 <CopyButton text={m.content} className="dc-msg-copy" ariaLabel="Copy answer" />
               ) : null}
             </div>
