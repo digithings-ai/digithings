@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "@digithings/design/tokens.css";
-@import "@digithings/design/site/site.css";
+/* layer(components): site.css ships a global reset (* { margin: 0 }); unlayered
+   it outranks @layer utilities and silently kills every margin utility —
+   including NavShell's mx-auto centering. Same fix as digiquant-web (#1401). */
+@import "@digithings/design/site/site.css" layer(components);
 @import "@digithings/web/styles/web-theme.css";
 @import "@digithings/web/styles/nav-shell.css";
 @import "@digithings/web/styles/docs.css";
