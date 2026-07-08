@@ -1,4 +1,4 @@
-import { Colophon, Footer, Reveal } from "@digithings/web";
+import { Colophon, Footer, PricingTierCard, Reveal } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
 import { SiteNav } from "@/components/landing/SiteNav";
@@ -55,34 +55,38 @@ export default function Home() {
                 </p>
               </div>
             </Reveal>
+            {/* Tier cards are the shared PricingTierCard (hero voice, #1417) —
+                one grammar with the /contact tiers; the featured tier wears the
+                shared flat accent wash. The app owns the grid (three-up from
+                768px, the old site.css .pricing breakpoint). */}
             <div style={{ marginTop: "2.2rem" }}>
-              <Reveal className="pricing">
+              <Reveal className="grid grid-cols-1 gap-[1.25rem] min-[768px]:grid-cols-3">
                 {PRICING_TIERS.map((tier) => (
-                  <div
+                  <PricingTierCard
                     key={tier.id}
-                    className={`pricing__tier${tier.featured ? " pricing__tier--featured" : ""}`}
-                  >
-                    <div className="pricing__name">{tier.name}</div>
-                    <div className="pricing__price">
-                      {tier.price}
-                      {tier.cadence ? <small> {tier.cadence}</small> : null}
-                    </div>
-                    <p className="pricing__desc">{tier.desc}</p>
-                    <ul className="pricing__features">
-                      {tier.features.map((feature) => (
-                        <li key={feature}>{feature}</li>
-                      ))}
-                    </ul>
-                    <div className="pricing__cta">
-                      {tier.id === "self" ? (
+                    variant="hero"
+                    nameAs="h3"
+                    className="h-full"
+                    accent={tier.featured}
+                    name={tier.name}
+                    priceLine={
+                      <>
+                        {tier.price}
+                        {tier.cadence ? <span className="text-ink-mute"> {tier.cadence}</span> : null}
+                      </>
+                    }
+                    description={tier.desc}
+                    features={[...tier.features]}
+                    cta={
+                      tier.id === "self" ? (
                         <CloneRepoButton />
                       ) : tier.cta ? (
                         <a className="btn btn-primary" href={tier.cta.href}>
                           {tier.cta.label} <span aria-hidden="true">→</span>
                         </a>
-                      ) : null}
-                    </div>
-                  </div>
+                      ) : null
+                    }
+                  />
                 ))}
               </Reveal>
             </div>
