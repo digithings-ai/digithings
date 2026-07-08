@@ -11,7 +11,7 @@ type Theme = "light" | "dark";
 const KEY = "dt-theme";
 
 /** Browser-chrome colour per theme; must match --bg in tokens.css. */
-const THEME_BG: Record<Theme, string> = { light: "#FBFBF9", dark: "#0B0C0E" };
+const THEME_BG: Record<Theme, string> = { light: "#FBFBF9", dark: "#0A0E0C" };
 
 /**
  * Point the single <meta name="theme-color"> at the active theme's --bg so the
@@ -33,7 +33,7 @@ function applyThemeColor(t: Theme) {
 
 /** Inline in <head> before paint: <script dangerouslySetInnerHTML={{__html: themeInitScript}}/> */
 export const themeInitScript =
-  "try{var s=localStorage.getItem('dt-theme');var t=s||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);var c=t==='light'?'#FBFBF9':'#0B0C0E';var m=document.querySelector('meta[name=\"theme-color\"]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content',c)}catch(e){document.documentElement.setAttribute('data-theme','dark')}";
+  "try{var s=localStorage.getItem('dt-theme');var t=s||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);var c=t==='light'?'#FBFBF9':'#0A0E0C';var m=document.querySelector('meta[name=\"theme-color\"]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content',c)}catch(e){document.documentElement.setAttribute('data-theme','dark')}";
 
 const ThemeCtx = createContext<{ theme: Theme; toggle: () => void } | null>(null);
 

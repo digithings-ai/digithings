@@ -7,6 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./styles/web-theme.css": "./src/styles/web-theme.css",
+    "./styles/docs.css": "./src/styles/docs.css",
+    "./styles/nav-shell.css": "./src/styles/nav-shell.css",
     "./data/modules": "./src/data/modules.ts",
     "./data/subsystems": "./src/data/subsystems.ts"
   },
