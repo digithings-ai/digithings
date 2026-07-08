@@ -1,18 +1,27 @@
 "use client";
-import { useEffect, useState } from "react";
-import { modules, type ModuleNode } from "@digithings/web";
+import { useState } from "react";
+import {
+  TerminalManifest,
+  modules,
+  type ModuleNode,
+  type TerminalManifestRow,
+} from "@digithings/web";
 import { writeHandoff } from "@/lib/chatHandoff";
 
 /**
  * Terminal-manifest display of the ten DigiThings modules — a `digithings ps`
- * process list. Each row: a status dot (online vs roadmap), the lowercase
- * two-tone name (`digi` ink + suffix accent), the port, and the role.
+ * process list rendered by the shared <TerminalManifest> primitive
+ * (@digithings/web, promoted from this component in #1415). Each row: a
+ * status dot (online vs roadmap), the lowercase two-tone name (`digi` ink +
+ * suffix accent), and the role.
  *
  * Clicking a row runs `digithings show <module>` and the module's description
  * (the prose that used to live on its own page) types out live at the cursor,
  * terminal-style — so the per-module pages fold into the manifest itself.
- * prefers-reduced-motion reveals the output instantly. Renders from the shared
- * `modules` data (single source of truth), sorted by graphOrder.
+ * prefers-reduced-motion reveals the output instantly (primitive behavior).
+ * Renders from the shared `modules` data (single source of truth), sorted by
+ * graphOrder. Selection is controlled here so the "ask digichat" footer knows
+ * which module to hand off.
  */
 function buildOutput(m: ModuleNode): string {
   const stack = m.stack.map((s) => s.name).join("  ·  ");
@@ -28,98 +37,42 @@ function askAbout(m: ModuleNode | null): void {
 }
 
 export function ModuleManifest() {
-  const rows = [...modules].sort((a, b) => a.graphOrder - b.graphOrder);
-  const online = rows.filter((m) => m.tier !== "roadmap").length;
-  const road = rows.length - online;
+  const mods = [...modules].sort((a, b) => a.graphOrder - b.graphOrder);
+  const online = mods.filter((m) => m.tier !== "roadmap").length;
+  const road = mods.length - online;
+
+  const rows: TerminalManifestRow[] = mods.map((m) => ({
+    id: m.id,
+    name: m.id,
+    status: m.tier === "roadmap" ? "roadmap" : "online",
+    blurb: m.role,
+    detail: buildOutput(m),
+  }));
 
   const [sel, setSel] = useState<string | null>(null);
-  const [shown, setShown] = useState(0);
-  const selMod = sel ? rows.find((m) => m.id === sel) ?? null : null;
-  const out = selMod ? buildOutput(selMod) : "";
-
-  // The summary types out character-by-character: this effect resets and then drives
-  // `shown` as an animation, so synchronous setState in the effect body is intentional.
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (!selMod) {
-      setShown(0);
-      return;
-    }
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setShown(out.length);
-      return;
-    }
-    setShown(0);
-    let i = 0;
-    const stepN = Math.max(2, Math.ceil(out.length / 90)); // ~1.5s regardless of length
-    const id = window.setInterval(() => {
-      i += stepN;
-      if (i >= out.length) {
-        i = out.length;
-        window.clearInterval(id);
-      }
-      setShown(i);
-    }, 16);
-    return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sel]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  const selMod = sel ? (mods.find((m) => m.id === sel) ?? null) : null;
 
   return (
-    <div className="dt-manifest" aria-label="digithings module manifest">
-      <div className="dt-manifest-head">
-        <span className="dt-mh-prompt">$</span> digithings ps
-        <span className="dt-mh-meta"> · {online} online · {road} on the roadmap</span>
-      </div>
-      <div className="dt-manifest-body">
-      <ol className="dt-manifest-rows">
-        {rows.map((m, i) => {
-          const isRoad = m.tier === "roadmap";
-          const suffix = m.id.replace(/^digi/, "");
-          const isSel = sel === m.id;
-          return (
-            <li
-              key={m.id}
-              className={`dt-mrow${isRoad ? " is-road" : ""}${isSel ? " is-sel" : ""}`}
-              style={{ animationDelay: `${i * 55}ms` }}
-            >
-              <button
-                type="button"
-                className="dt-mrow-link"
-                aria-expanded={isSel}
-                onClick={() => setSel(isSel ? null : m.id)}
-              >
-                <span className={`dt-dot${isRoad ? " off" : ""}`} aria-hidden="true" />
-                <span className="dt-mname">
-                  <span className="dt-d">digi</span>
-                  <span className="dt-s">{suffix}</span>
-                </span>
-                <span className="dt-mrole">{m.role}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-      <div className="dt-out">
-        <div className="dt-out-show" aria-live="polite">
-          {selMod ? (
-            <pre className="dt-out-body">
-              {out.slice(0, shown)}
-              <span className="dt-cur" />
-            </pre>
-          ) : (
-            <p className="dt-out-hint">
-              select a module
-              <span className="dt-cur" />
-            </p>
-          )}
-        </div>
-        <button type="button" className="dt-ask" onClick={() => askAbout(selMod)}>
-          ask <span className="dt-d">digi</span>
-          <span className="dt-s">chat</span> →
+    <TerminalManifest
+      className="mx-auto max-w-[980px]"
+      command="digithings ps"
+      meta={`· ${online} online · ${road} on the roadmap`}
+      rows={rows}
+      namePrefix="digi"
+      hint="select a module"
+      selectedId={sel}
+      onSelect={setSel}
+      aria-label="digithings module manifest"
+      footer={
+        <button
+          type="button"
+          className="mt-auto cursor-pointer self-end rounded-[7px] border border-hair bg-transparent px-[0.6rem] py-[0.3rem] font-mono text-[0.78rem] text-ink-soft transition-colors hover:bg-accent-weak hover:text-ink"
+          onClick={() => askAbout(selMod)}
+        >
+          ask <span className="text-ink">digi</span>
+          <span className="text-accent">chat</span> →
         </button>
-      </div>
-      </div>
-    </div>
+      }
+    />
   );
 }
