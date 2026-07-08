@@ -30,8 +30,8 @@ export function BookStrip({ positions, investedPct }: BookStripProps) {
     <section className="glass-card px-5 py-4 sm:px-6">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Wallet size={14} className="text-text-muted" />
-          <h2 className="text-xs font-bold uppercase tracking-widest text-text-muted">
+          <Wallet size={14} className="text-ink-mute" />
+          <h2 className="text-xs font-bold uppercase tracking-widest text-ink-mute">
             The book today
           </h2>
         </div>
@@ -42,28 +42,28 @@ export function BookStrip({ positions, investedPct }: BookStripProps) {
 
       {/* Reconciled Invested / Cash header (F3) */}
       <div className="mb-3 flex gap-6 font-mono text-xs tabular-nums">
-        <span className="text-text-secondary">
-          Invested <span className="text-text-primary">{invested.toFixed(0)}%</span>
+        <span className="text-ink-soft">
+          Invested <span className="text-ink">{invested.toFixed(0)}%</span>
         </span>
-        <span className="text-text-secondary">
-          Cash <span className="text-text-primary">{cashPct.toFixed(0)}%</span>
+        <span className="text-ink-soft">
+          Cash <span className="text-ink">{cashPct.toFixed(0)}%</span>
         </span>
       </div>
 
       {held.length === 0 ? (
-        <p className="text-sm text-text-muted">No positions held yet — the book is all cash.</p>
+        <p className="text-sm text-ink-mute">No positions held yet — the book is all cash.</p>
       ) : (
-        <ul className="divide-y divide-border-subtle/60">
+        <ul className="divide-y divide-hair/60">
           {held.map((r, i) => {
             const dc = r.day_change_pct;
             const dcColor =
-              dc == null ? 'text-text-muted' : dc >= 0 ? 'text-fin-green' : 'text-fin-red';
+              dc == null ? 'text-ink-mute' : dc >= 0 ? 'text-up' : 'text-down';
             return (
               <li key={`${r.ticker}-${i}`} className="flex items-center gap-3 py-2">
-                <span className="w-12 shrink-0 font-mono text-xs font-bold text-text-primary">
+                <span className="w-12 shrink-0 font-mono text-xs font-bold text-ink">
                   {r.ticker}
                 </span>
-                <span className="w-12 shrink-0 font-mono text-xs tabular-nums text-text-secondary">
+                <span className="w-12 shrink-0 font-mono text-xs tabular-nums text-ink-soft">
                   {r.normalizedWeight.toFixed(1)}%
                 </span>
                 <span className="shrink-0">

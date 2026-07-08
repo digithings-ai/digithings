@@ -1,10 +1,12 @@
 'use client';
 
 import { Line, LineChart, ResponsiveContainer } from 'recharts';
+import { useChartColors } from '@/lib/chart-colors';
 import type { NavChartPoint } from '@/lib/types';
 
 /** Minimal NAV sparkline for overview (no axes). */
 export function NavSparkline({ snaps }: { snaps: NavChartPoint[] }) {
+  const chart = useChartColors();
   if (snaps.length < 2) return null;
   const data = snaps.map((s) => ({ nav: s.nav }));
   return (
@@ -13,7 +15,7 @@ export function NavSparkline({ snaps }: { snaps: NavChartPoint[] }) {
         <Line
           type="monotone"
           dataKey="nav"
-          stroke="#3b82f6"
+          stroke={chart.accent}
           strokeWidth={1.5}
           dot={false}
           isAnimationActive={false}

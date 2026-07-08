@@ -43,15 +43,15 @@ export default function DecisionQuality({
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-1">
-        <h2 className="font-display text-2xl tracking-tight text-text-primary">Decision quality</h2>
-        <p className="text-sm text-text-muted">
+        <h2 className="font-display text-2xl tracking-tight text-ink">Decision quality</h2>
+        <p className="text-sm text-ink-mute">
           Are high-conviction calls paying off? Realized alpha vs SPY by conviction bucket.
         </p>
       </div>
       {loading ? (
         <AtlasLoader fullScreen={false} />
       ) : error ? (
-        <p className="text-sm text-fin-red">{error}</p>
+        <p className="text-sm text-down">{error}</p>
       ) : (
         <DecisionScorecardTab decisions={decisions ?? []} />
       )}

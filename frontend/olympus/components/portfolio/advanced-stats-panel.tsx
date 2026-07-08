@@ -20,12 +20,12 @@ interface MetricProps {
 
 function MetricCard({ label, value, fmt, color, sub }: MetricProps) {
   return (
-    <div className="bg-bg-secondary rounded-lg p-4 border border-border-subtle">
-      <span className="text-xs text-text-muted block mb-1">{label}</span>
+    <div className="bg-term-bg rounded-lg p-4 border border-hair">
+      <span className="text-xs text-ink-mute block mb-1">{label}</span>
       <span className={`text-lg font-bold tabular-nums ${color || ''}`}>
         {fmt && value != null ? fmt(value as number) : value}
       </span>
-      {sub && <span className="text-xs text-text-muted block mt-1">{sub}</span>}
+      {sub && <span className="text-xs text-ink-mute block mt-1">{sub}</span>}
     </div>
   );
 }
@@ -205,7 +205,7 @@ export function AdvancedStatsPanel({
 
   if (!stats) {
     return (
-      <div className="px-6 py-8 text-center text-text-muted text-sm">
+      <div className="px-6 py-8 text-center text-ink-mute text-sm">
         Insufficient data for advanced statistics
       </div>
     );
@@ -214,12 +214,12 @@ export function AdvancedStatsPanel({
   const fPct = (v: number) => (v != null ? `${v >= 0 ? '+' : ''}${v.toFixed(2)}%` : '—');
   const fNum = (v: number) => (v != null ? v.toFixed(2) : '—');
   const pcol = (v: number | null | undefined) =>
-    v != null ? (v >= 0 ? 'text-fin-green' : 'text-fin-red') : '';
+    v != null ? (v >= 0 ? 'text-up' : 'text-down') : '';
 
   return (
     <div className="px-6 pb-6 space-y-6">
       <div>
-        <h4 className="text-sm font-semibold text-text-secondary mb-3">Returns</h4>
+        <h4 className="text-sm font-semibold text-ink-soft mb-3">Returns</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <MetricCard
             label="Total Return"
@@ -233,13 +233,13 @@ export function AdvancedStatsPanel({
             fmt={fPct}
             color={pcol(stats.annReturn)}
           />
-          <MetricCard label="Best Day" value={stats.bestDay} fmt={fPct} color="text-fin-green" />
-          <MetricCard label="Worst Day" value={stats.worstDay} fmt={fPct} color="text-fin-red" />
+          <MetricCard label="Best Day" value={stats.bestDay} fmt={fPct} color="text-up" />
+          <MetricCard label="Worst Day" value={stats.worstDay} fmt={fPct} color="text-down" />
         </div>
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-text-secondary mb-3">
+        <h4 className="text-sm font-semibold text-ink-soft mb-3">
           Risk
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -248,7 +248,7 @@ export function AdvancedStatsPanel({
             label="Max Drawdown"
             value={stats.maxDd}
             fmt={fPct}
-            color="text-fin-red"
+            color="text-down"
             sub={`${stats.ddStart} → ${stats.ddEnd}`}
           />
           <MetricCard
@@ -262,7 +262,7 @@ export function AdvancedStatsPanel({
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-text-secondary mb-3">
+        <h4 className="text-sm font-semibold text-ink-soft mb-3">
           Risk-Adjusted
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -274,20 +274,20 @@ export function AdvancedStatsPanel({
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold text-text-secondary mb-3">
+        <h4 className="text-sm font-semibold text-ink-soft mb-3">
           Win / Loss
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <MetricCard label="Win Rate" value={stats.winRate} fmt={fPct} />
           <MetricCard label="Up Days" value={stats.upDays} />
-          <MetricCard label="Avg Win" value={stats.avgWin} fmt={fPct} color="text-fin-green" />
-          <MetricCard label="Avg Loss" value={stats.avgLoss} fmt={fPct} color="text-fin-red" />
+          <MetricCard label="Avg Win" value={stats.avgWin} fmt={fPct} color="text-up" />
+          <MetricCard label="Avg Loss" value={stats.avgLoss} fmt={fPct} color="text-down" />
         </div>
       </div>
 
       {stats.beta != null && (
         <div>
-          <h4 className="text-sm font-semibold text-text-secondary mb-3">
+          <h4 className="text-sm font-semibold text-ink-soft mb-3">
             vs SPY
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

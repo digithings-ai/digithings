@@ -130,15 +130,15 @@ describe('TodayConsensusChart', () => {
   it('renders momentum direction (▲ green for a bull ccy, ▼ red for a bear ccy)', () => {
     const html = render(tenCurrencySeries());
     // The fixture's even-indexed currencies (USD, ci=0) ascend to a positive
-    // actual above their trailing average → momentum +0.40 (▲, fin-green).
-    // Odd-indexed (EUR, ci=1) descend → momentum -0.40 (▼, fin-red). This pins
+    // actual above their trailing average → momentum +0.40 (▲, up).
+    // Odd-indexed (EUR, ci=1) descend → momentum -0.40 (▼, down). This pins
     // the actual-vs-average rate-of-change semantics + arrow direction + sign.
     // The momentum cell is the only span carrying the "rate of change" title.
     expect(html).toMatch(
-      /class="[^"]*text-fin-green"[^>]*rate of change[^>]*>▲ \+0\.40<\/span>/,
+      /class="[^"]*text-up"[^>]*rate of change[^>]*>▲ \+0\.40<\/span>/,
     );
     expect(html).toMatch(
-      /class="[^"]*text-fin-red"[^>]*rate of change[^>]*>▼ -0\.40<\/span>/,
+      /class="[^"]*text-down"[^>]*rate of change[^>]*>▼ -0\.40<\/span>/,
     );
   });
 

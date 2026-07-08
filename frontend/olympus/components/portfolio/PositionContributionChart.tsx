@@ -22,6 +22,7 @@ import { fetchPositionPriceChart } from '@/lib/queries';
 import { buildEventContributionSteps } from '@/lib/position-contribution-event-steps';
 import { buildPositionContributionToNavSeries, type PositionContributionPoint } from '@/lib/position-contribution-series';
 import type { NavChartPoint, PositionHistoryRow, PositionPriceChartData, PositionPriceChartEvent } from '@/lib/types';
+import { EVENT_COLORS, useChartColors, withAlpha } from '@/lib/chart-colors';
 
 function subtractIsoDays(iso: string, days: number): string {
   const parts = iso.split('-').map(Number);
@@ -36,19 +37,20 @@ const ENTRY_PADDING_DAYS = 45;
 const FALLBACK_LOOKBACK_DAYS = 730;
 
 function eventDotColor(ev: PositionPriceChartEvent['event']): string {
-  if (ev === 'OPEN') return '#22c55e';
-  if (ev === 'EXIT') return '#ef4444';
-  if (ev === 'ADD') return '#38bdf8';
-  if (ev === 'TRIM') return '#f59e0b';
-  return '#71717a';
+  // Fixed marker hues from the sanctioned allowlist (lib/chart-colors.ts).
+  if (ev === 'OPEN') return EVENT_COLORS.OPEN;
+  if (ev === 'EXIT') return EVENT_COLORS.EXIT;
+  if (ev === 'ADD') return EVENT_COLORS.ADD;
+  if (ev === 'TRIM') return EVENT_COLORS.TRIM;
+  return EVENT_COLORS.DEFAULT;
 }
 
 function eventLabelClass(ev: PositionPriceChartEvent['event']): string {
-  if (ev === 'OPEN') return 'text-fin-green';
-  if (ev === 'EXIT') return 'text-fin-red';
-  if (ev === 'ADD') return 'text-fin-blue';
-  if (ev === 'TRIM') return 'text-fin-amber';
-  return 'text-text-muted';
+  if (ev === 'OPEN') return 'text-up';
+  if (ev === 'EXIT') return 'text-down';
+  if (ev === 'ADD') return 'text-accent';
+  if (ev === 'TRIM') return 'text-warn';
+  return 'text-ink-mute';
 }
 
 function rowOnOrAfter(rows: PositionContributionPoint[], iso: string): PositionContributionPoint | null {
@@ -80,31 +82,31 @@ function ContribTooltip({
   const px = closeByDate?.get(p.date);
   if ('event' in p && p.event) {
     return (
-      <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-[0.82rem] shadow-lg max-w-xs">
+      <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-xs">
         <p className={`font-mono font-semibold ${eventLabelClass(p.event)}`}>
           {p.event}
         </p>
-        <p className="text-text-secondary mt-1 font-mono">{p.date}</p>
-        <p className="text-text-primary tabular-nums mt-0.5">
+        <p className="text-ink-soft mt-1 font-mono">{p.date}</p>
+        <p className="text-ink tabular-nums mt-0.5">
           Cumulative: {p.cumPp.toFixed(3)} ppt
         </p>
         {px != null ? (
-          <p className="text-text-muted tabular-nums text-[11px] mt-1">Close (proxy day): ${px.toFixed(2)}</p>
+          <p className="text-ink-mute tabular-nums text-[11px] mt-1">Close (proxy day): ${px.toFixed(2)}</p>
         ) : null}
         {p.weight_pct != null ? (
-          <p className="text-text-muted mt-1 tabular-nums">Weight after: {p.weight_pct.toFixed(2)}%</p>
+          <p className="text-ink-mute mt-1 tabular-nums">Weight after: {p.weight_pct.toFixed(2)}%</p>
         ) : null}
-        {p.reason ? <p className="text-text-muted mt-1.5 text-[11px] leading-snug">{p.reason}</p> : null}
+        {p.reason ? <p className="text-ink-mute mt-1.5 text-[11px] leading-snug">{p.reason}</p> : null}
       </div>
     );
   }
   return (
-    <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-[0.82rem] shadow-lg">
-      <p className="font-mono text-text-secondary">{p.date}</p>
-      <p className="text-text-primary tabular-nums mt-0.5">Cumulative: {p.cumPp.toFixed(3)} ppt</p>
-      <p className="text-text-muted tabular-nums text-[11px] mt-1">Step: {p.dailyPp.toFixed(4)} ppt</p>
+    <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg">
+      <p className="font-mono text-ink-soft">{p.date}</p>
+      <p className="text-ink tabular-nums mt-0.5">Cumulative: {p.cumPp.toFixed(3)} ppt</p>
+      <p className="text-ink-mute tabular-nums text-[11px] mt-1">Step: {p.dailyPp.toFixed(4)} ppt</p>
       {px != null ? (
-        <p className="text-text-muted tabular-nums text-[11px] mt-1">Close: ${px.toFixed(2)}</p>
+        <p className="text-ink-mute tabular-nums text-[11px] mt-1">Close: ${px.toFixed(2)}</p>
       ) : null}
     </div>
   );
@@ -129,6 +131,7 @@ function ContribChartBrushPanel({
   eventBarData: Array<{ name: string; deltaPp: number; fill: string }>;
   contribTickDecimals: number;
 }) {
+  const chart = useChartColors();
   const containerRef = useRef<HTMLDivElement>(null);
   const gradientId = useId().replace(/:/g, '');
   const { brushStart, brushEnd, setBrushStart, setBrushEnd } = useBrushRange(chartRows.length);
@@ -265,16 +268,16 @@ function ContribChartBrushPanel({
   }, [visibleRows, chartRows]);
 
   return (
-    <div ref={containerRef} className="rounded-xl border border-border-subtle bg-bg-secondary/20 overflow-hidden">
+    <div ref={containerRef} className="rounded-xl border border-hair bg-term-bg/20 overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-2 px-4 pt-3 pb-1">
         <div>
-          <p className="text-[11px] text-text-muted uppercase tracking-wider">Contribution to portfolio</p>
-          <p className="text-sm font-medium text-text-primary mt-0.5">
-            <span className="font-mono text-fin-blue">{ticker}</span>
-            <span className="text-text-muted font-normal"> · </span>
-            <span className="text-text-secondary text-xs font-mono">{rangeLabel}</span>
+          <p className="text-[11px] text-ink-mute uppercase tracking-wider">Contribution to portfolio</p>
+          <p className="text-sm font-medium text-ink mt-0.5">
+            <span className="font-mono text-accent">{ticker}</span>
+            <span className="text-ink-mute font-normal"> · </span>
+            <span className="text-ink-soft text-xs font-mono">{rangeLabel}</span>
           </p>
-          <p className="text-[10px] text-text-muted mt-1 font-mono">
+          <p className="text-[10px] text-ink-mute mt-1 font-mono">
             {chartRows[0].date} → {chartEnd}
           </p>
         </div>
@@ -282,7 +285,7 @@ function ContribChartBrushPanel({
           <button
             type="button"
             onClick={resetView}
-            className="text-[11px] px-2.5 py-1 rounded-lg border border-border-subtle text-text-secondary hover:bg-white/[0.04] hover:text-text-primary transition-colors"
+            className="text-[11px] px-2.5 py-1 rounded-lg border border-hair text-ink-soft hover:bg-ink/[0.04] hover:text-ink transition-colors"
           >
             Fit all
           </button>
@@ -294,20 +297,20 @@ function ContribChartBrushPanel({
           <ComposedChart data={visibleRows} margin={{ top: 12, right: 14, left: 4, bottom: 4 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                <stop offset="0%" stopColor={chart.accent} stopOpacity={0.35} />
+                <stop offset="100%" stopColor={chart.accent} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+            <CartesianGrid stroke={chart.hair} vertical={false} />
             <XAxis
               dataKey="date"
-              tick={{ fill: '#71717a', fontSize: 11 }}
+              tick={{ fill: chart.axis, fontSize: 11 }}
               tickFormatter={(d: string) => (d?.length >= 10 ? d.slice(5) : d)}
               minTickGap={32}
             />
             <YAxis
               domain={contributionYDomain}
-              tick={{ fill: '#71717a', fontSize: 11 }}
+              tick={{ fill: chart.axis, fontSize: 11 }}
               width={58}
               tickFormatter={(v) =>
                 typeof v === 'number' ? v.toFixed(contribTickDecimals) : String(v)
@@ -316,7 +319,7 @@ function ContribChartBrushPanel({
                 value: 'ppt (portfolio)',
                 angle: -90,
                 position: 'insideLeft',
-                fill: '#71717a',
+                fill: chart.axis,
                 fontSize: 10,
               }}
             />
@@ -330,15 +333,15 @@ function ContribChartBrushPanel({
                   closeByDate={closeByDate}
                 />
               )}
-              cursor={{ stroke: 'rgba(255,255,255,0.12)' }}
+              cursor={{ stroke: withAlpha(chart.ink, 0.12) }}
             />
-            <ReferenceLine y={0} stroke="rgba(255,255,255,0.12)" strokeDasharray="3 3" />
+            <ReferenceLine y={0} stroke={withAlpha(chart.ink, 0.12)} strokeDasharray="3 3" />
             {entryLineDate ? (
               <ReferenceLine
                 x={entryLineDate}
-                stroke="rgba(34,197,94,0.45)"
+                stroke={withAlpha(chart.up, 0.45)}
                 strokeDasharray="4 4"
-                label={{ value: 'Entry', fill: '#71717a', fontSize: 10 }}
+                label={{ value: 'Entry', fill: chart.axis, fontSize: 10 }}
               />
             ) : null}
             <Area
@@ -351,7 +354,7 @@ function ContribChartBrushPanel({
             <Line
               type="monotone"
               dataKey="cumPp"
-              stroke="#3b82f6"
+              stroke={chart.accent}
               dot={false}
               strokeWidth={2}
               name="Cumulative pp"
@@ -360,7 +363,7 @@ function ContribChartBrushPanel({
             <Scatter
               data={scatterInView}
               dataKey="cumPp"
-              fill="#3b82f6"
+              fill={chart.accent}
               isAnimationActive={false}
               shape={(raw: unknown) => {
                 const props = raw as { cx?: number; cy?: number; payload?: ScatterRow };
@@ -373,7 +376,7 @@ function ContribChartBrushPanel({
                     cy={cy}
                     r={r}
                     fill={eventDotColor(payload.event)}
-                    stroke="#0a0a0a"
+                    stroke={chart.bg}
                     strokeWidth={1.5}
                   />
                 );
@@ -391,7 +394,8 @@ function ContribChartBrushPanel({
             <Line
               type="monotone"
               dataKey="cumPp"
-              stroke="#3b82f666"
+              stroke={chart.accent}
+              strokeOpacity={0.4}
               dot={false}
               strokeWidth={1}
               isAnimationActive={false}
@@ -399,8 +403,8 @@ function ContribChartBrushPanel({
             <Brush
               dataKey="date"
               height={28}
-              stroke="#3b82f6"
-              fill="rgba(59,130,246,0.08)"
+              stroke={chart.accent}
+              fill={withAlpha(chart.accent, 0.08)}
               travellerWidth={10}
               startIndex={brushStart}
               endIndex={brushEnd}
@@ -412,9 +416,9 @@ function ContribChartBrushPanel({
       </div>
 
       {eventBarData.length > 0 ? (
-        <div className="border-t border-border-subtle px-4 py-4">
-          <p className="text-[11px] text-text-muted uppercase tracking-wider">Δ ppt between activity dates</p>
-          <p className="text-[11px] text-text-muted mt-1 mb-3 leading-snug">
+        <div className="border-t border-hair px-4 py-4">
+          <p className="text-[11px] text-ink-mute uppercase tracking-wider">Δ ppt between activity dates</p>
+          <p className="text-[11px] text-ink-mute mt-1 mb-3 leading-snug">
             Each bar is the change in cumulative portfolio attribution (ppt) from the prior step to this activity
             (NAV-aligned). Green / red = contribution added or lost in that leg.
           </p>
@@ -430,25 +434,25 @@ function ContribChartBrushPanel({
               >
                 <XAxis
                   type="number"
-                  tick={{ fill: '#71717a', fontSize: 10 }}
+                  tick={{ fill: chart.axis, fontSize: 10 }}
                   tickFormatter={(v) => (typeof v === 'number' ? v.toFixed(contribTickDecimals) : String(v))}
                 />
                 <YAxis
                   type="category"
                   dataKey="name"
                   width={200}
-                  tick={{ fill: '#a1a1aa', fontSize: 10 }}
+                  tick={{ fill: chart.inkSoft, fontSize: 10 }}
                   interval={0}
                 />
                 <Tooltip
-                  cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                  cursor={{ fill: withAlpha(chart.ink, 0.03) }}
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
                     const row = payload[0].payload as { name: string; deltaPp: number };
                     return (
-                      <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-[0.82rem] shadow-lg max-w-sm">
-                        <p className="text-text-secondary text-[11px] leading-snug">{row.name}</p>
-                        <p className="text-text-primary tabular-nums mt-1 font-mono">
+                      <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-sm">
+                        <p className="text-ink-soft text-[11px] leading-snug">{row.name}</p>
+                        <p className="text-ink tabular-nums mt-1 font-mono">
                           Δ {row.deltaPp >= 0 ? '+' : ''}
                           {row.deltaPp.toFixed(4)} ppt
                         </p>
@@ -456,7 +460,7 @@ function ContribChartBrushPanel({
                     );
                   }}
                 />
-                <ReferenceLine x={0} stroke="rgba(255,255,255,0.12)" />
+                <ReferenceLine x={0} stroke={withAlpha(chart.ink, 0.12)} />
                 <Bar dataKey="deltaPp" radius={[0, 2, 2, 0]} isAnimationActive={false}>
                   {eventBarData.map((entry, i) => (
                     <Cell key={`cell-${i}`} fill={entry.fill} />
@@ -491,6 +495,7 @@ function ChartBody({
   /** When set (Performance tab range), NAV contribution starts here instead of entry−pad. */
   navWindowStart?: string | null;
 }) {
+  const chart = useChartColors();
   const [data, setData] = useState<PositionPriceChartData | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -566,27 +571,27 @@ function ChartBody({
       name:
         s.kind === 'tail' && s.label.length > 42 ? `${s.label.slice(0, 40)}…` : s.label,
       deltaPp: s.deltaPp,
-      fill: s.deltaPp >= 0 ? 'rgba(34,197,94,0.75)' : 'rgba(239,68,68,0.75)',
+      fill: s.deltaPp >= 0 ? withAlpha(chart.up, 0.75) : withAlpha(chart.down, 0.75),
     }));
-  }, [eventStepRows]);
+  }, [eventStepRows, chart]);
 
   if (loading) {
     return (
-      <div className="h-[240px] rounded-xl border border-border-subtle bg-bg-secondary/30 animate-pulse flex items-center justify-center text-xs text-text-muted">
+      <div className="h-[240px] rounded-xl border border-hair bg-term-bg/30 animate-pulse flex items-center justify-center text-xs text-ink-mute">
         Loading series…
       </div>
     );
   }
   if (err) {
     return (
-      <div className="h-[200px] rounded-xl border border-border-subtle bg-bg-secondary/30 flex items-center justify-center text-xs text-fin-red px-4 text-center">
+      <div className="h-[200px] rounded-xl border border-hair bg-term-bg/30 flex items-center justify-center text-xs text-down px-4 text-center">
         {err}
       </div>
     );
   }
   if (!chartRows.length) {
     return (
-      <div className="h-[160px] rounded-xl border border-border-subtle bg-bg-secondary/30 flex items-center justify-center text-xs text-text-muted px-4 text-center">
+      <div className="h-[160px] rounded-xl border border-hair bg-term-bg/30 flex items-center justify-center text-xs text-ink-mute px-4 text-center">
         Not enough overlapping NAV steps and price history to plot contribution.
       </div>
     );

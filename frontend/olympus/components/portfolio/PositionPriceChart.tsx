@@ -17,13 +17,15 @@ import {
 } from 'recharts';
 import { fetchPositionPriceChart } from '@/lib/queries';
 import type { PositionHistoryRow, PositionPriceChartData, PositionPriceChartEvent } from '@/lib/types';
+import { EVENT_COLORS, useChartColors, withAlpha } from '@/lib/chart-colors';
 
 function eventDotColor(ev: PositionPriceChartEvent['event']): string {
-  if (ev === 'OPEN') return '#22c55e';
-  if (ev === 'EXIT') return '#ef4444';
-  if (ev === 'ADD') return '#38bdf8';
-  if (ev === 'TRIM') return '#f59e0b';
-  return '#71717a';
+  // Fixed marker hues from the sanctioned allowlist (lib/chart-colors.ts).
+  if (ev === 'OPEN') return EVENT_COLORS.OPEN;
+  if (ev === 'EXIT') return EVENT_COLORS.EXIT;
+  if (ev === 'ADD') return EVENT_COLORS.ADD;
+  if (ev === 'TRIM') return EVENT_COLORS.TRIM;
+  return EVENT_COLORS.DEFAULT;
 }
 
 function subtractIsoDays(iso: string, days: number): string {
@@ -71,35 +73,35 @@ function ChartTooltip({
   const p = payload[0].payload as ScatterRow;
   if ('event' in p && p.event) {
     return (
-      <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-[0.82rem] shadow-lg max-w-xs">
+      <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-xs">
         <p className="font-mono font-semibold" style={{ color: eventDotColor(p.event) }}>
           {p.event}
         </p>
-        <p className="text-text-secondary mt-1 font-mono">{p.date}</p>
-        <p className="text-text-secondary tabular-nums mt-0.5">
+        <p className="text-ink-soft mt-1 font-mono">{p.date}</p>
+        <p className="text-ink-soft tabular-nums mt-0.5">
           Price:{' '}
           {p.markPrice != null ? `$${p.markPrice.toFixed(2)}` : p.close != null ? `$${p.close.toFixed(2)}` : '—'}
         </p>
         {p.weight_pct != null ? (
-          <p className="text-text-muted mt-1 tabular-nums">Weight after: {p.weight_pct.toFixed(2)}%</p>
+          <p className="text-ink-mute mt-1 tabular-nums">Weight after: {p.weight_pct.toFixed(2)}%</p>
         ) : null}
         {p.weight_change_pct != null ? (
-          <p className="text-text-muted tabular-nums">
+          <p className="text-ink-mute tabular-nums">
             Δ weight: {p.weight_change_pct > 0 ? '+' : ''}
             {p.weight_change_pct.toFixed(2)}pp
           </p>
         ) : null}
-        {p.reason ? <p className="text-text-muted mt-1.5 text-[11px] leading-snug">{p.reason}</p> : null}
+        {p.reason ? <p className="text-ink-mute mt-1.5 text-[11px] leading-snug">{p.reason}</p> : null}
       </div>
     );
   }
   const w = weightByDate?.get(p.date);
   return (
-    <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-[0.82rem] shadow-lg">
-      <p className="font-mono text-text-secondary">{p.date}</p>
-      <p className="text-text-primary tabular-nums mt-0.5">${Number(p.close).toFixed(2)}</p>
+    <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg">
+      <p className="font-mono text-ink-soft">{p.date}</p>
+      <p className="text-ink tabular-nums mt-0.5">${Number(p.close).toFixed(2)}</p>
       {typeof w === 'number' ? (
-        <p className="text-text-muted tabular-nums mt-1 text-[11px]">Weight (portfolio): {w.toFixed(2)}%</p>
+        <p className="text-ink-mute tabular-nums mt-1 text-[11px]">Weight (portfolio): {w.toFixed(2)}%</p>
       ) : null}
     </div>
   );
@@ -120,6 +122,7 @@ function PriceChartBrushPanel({
   events: PositionPriceChartEvent[];
   firstEntryDate: string | null;
 }) {
+  const chart = useChartColors();
   const containerRef = useRef<HTMLDivElement>(null);
   const gradientId = useId().replace(/:/g, '');
   const { brushStart, brushEnd, setBrushStart, setBrushEnd } = useBrushRange(chartRows.length);
@@ -242,16 +245,16 @@ function PriceChartBrushPanel({
   const chartEnd = chartRows[chartRows.length - 1].date;
 
   return (
-    <div ref={containerRef} className="rounded-xl border border-border-subtle bg-bg-secondary/20 overflow-hidden">
+    <div ref={containerRef} className="rounded-xl border border-hair bg-term-bg/20 overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-2 px-4 pt-3 pb-1">
         <div>
-          <p className="text-[11px] text-text-muted uppercase tracking-wider">Price</p>
-          <p className="text-sm font-medium text-text-primary mt-0.5">
-            <span className="font-mono text-fin-blue">{ticker}</span>
-            <span className="text-text-muted font-normal"> · </span>
-            <span className="text-text-secondary text-xs font-mono">{rangeLabel}</span>
+          <p className="text-[11px] text-ink-mute uppercase tracking-wider">Price</p>
+          <p className="text-sm font-medium text-ink mt-0.5">
+            <span className="font-mono text-accent">{ticker}</span>
+            <span className="text-ink-mute font-normal"> · </span>
+            <span className="text-ink-soft text-xs font-mono">{rangeLabel}</span>
           </p>
-          <p className="text-[10px] text-text-muted mt-1 font-mono">
+          <p className="text-[10px] text-ink-mute mt-1 font-mono">
             {chartRows[0].date} → {chartEnd}
           </p>
         </div>
@@ -259,7 +262,7 @@ function PriceChartBrushPanel({
           <button
             type="button"
             onClick={resetView}
-            className="text-[11px] px-2.5 py-1 rounded-lg border border-border-subtle text-text-secondary hover:bg-white/[0.04] hover:text-text-primary transition-colors"
+            className="text-[11px] px-2.5 py-1 rounded-lg border border-hair text-ink-soft hover:bg-ink/[0.04] hover:text-ink transition-colors"
           >
             Fit all
           </button>
@@ -271,20 +274,20 @@ function PriceChartBrushPanel({
           <ComposedChart data={visibleRows} margin={{ top: 12, right: 14, left: 4, bottom: 4 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                <stop offset="0%" stopColor={chart.accent} stopOpacity={0.35} />
+                <stop offset="100%" stopColor={chart.accent} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+            <CartesianGrid stroke={chart.hair} vertical={false} />
             <XAxis
               dataKey="date"
-              tick={{ fill: '#71717a', fontSize: 11 }}
+              tick={{ fill: chart.axis, fontSize: 11 }}
               tickFormatter={(d: string) => (d?.length >= 10 ? d.slice(5) : d)}
               minTickGap={32}
             />
             <YAxis
               domain={['auto', 'auto']}
-              tick={{ fill: '#71717a', fontSize: 11 }}
+              tick={{ fill: chart.axis, fontSize: 11 }}
               width={52}
               tickFormatter={(v) => (typeof v === 'number' ? v.toFixed(0) : String(v))}
             />
@@ -296,14 +299,14 @@ function PriceChartBrushPanel({
                   weightByDate={weightByDate}
                 />
               )}
-              cursor={{ stroke: 'rgba(255,255,255,0.12)' }}
+              cursor={{ stroke: withAlpha(chart.ink, 0.12) }}
             />
             {entryLineDate ? (
               <ReferenceLine
                 x={entryLineDate}
-                stroke="rgba(34,197,94,0.45)"
+                stroke={withAlpha(chart.up, 0.45)}
                 strokeDasharray="4 4"
-                label={{ value: 'Entry', fill: '#71717a', fontSize: 10 }}
+                label={{ value: 'Entry', fill: chart.axis, fontSize: 10 }}
               />
             ) : null}
             <Area
@@ -316,7 +319,7 @@ function PriceChartBrushPanel({
             <Line
               type="monotone"
               dataKey="close"
-              stroke="#3b82f6"
+              stroke={chart.accent}
               dot={false}
               strokeWidth={2}
               name="Close"
@@ -325,7 +328,7 @@ function PriceChartBrushPanel({
             <Scatter
               data={scatterInView}
               dataKey="close"
-              fill="#3b82f6"
+              fill={chart.accent}
               isAnimationActive={false}
               shape={(raw: unknown) => {
                 const props = raw as { cx?: number; cy?: number; payload?: ScatterRow };
@@ -338,7 +341,7 @@ function PriceChartBrushPanel({
                     cy={cy}
                     r={r}
                     fill={eventDotColor(payload.event)}
-                    stroke="#0a0a0a"
+                    stroke={chart.bg}
                     strokeWidth={1.5}
                   />
                 );
@@ -353,12 +356,12 @@ function PriceChartBrushPanel({
           <ComposedChart data={chartRows} margin={{ top: 2, right: 14, left: 4, bottom: 2 }}>
             <XAxis dataKey="date" hide />
             <YAxis hide domain={['auto', 'auto']} />
-            <Line type="monotone" dataKey="close" stroke="#3b82f666" dot={false} strokeWidth={1} isAnimationActive={false} />
+            <Line type="monotone" dataKey="close" stroke={chart.accent} strokeOpacity={0.4} dot={false} strokeWidth={1} isAnimationActive={false} />
             <Brush
               dataKey="date"
               height={28}
-              stroke="#3b82f6"
-              fill="rgba(59,130,246,0.08)"
+              stroke={chart.accent}
+              fill={withAlpha(chart.accent, 0.08)}
               travellerWidth={10}
               startIndex={brushStart}
               endIndex={brushEnd}
@@ -444,21 +447,21 @@ function ChartBody({
 
   if (loading) {
     return (
-      <div className="h-[240px] rounded-xl border border-border-subtle bg-bg-secondary/30 animate-pulse flex items-center justify-center text-xs text-text-muted">
+      <div className="h-[240px] rounded-xl border border-hair bg-term-bg/30 animate-pulse flex items-center justify-center text-xs text-ink-mute">
         Loading price history…
       </div>
     );
   }
   if (err) {
     return (
-      <div className="h-[200px] rounded-xl border border-border-subtle bg-bg-secondary/30 flex items-center justify-center text-xs text-fin-red px-4 text-center">
+      <div className="h-[200px] rounded-xl border border-hair bg-term-bg/30 flex items-center justify-center text-xs text-down px-4 text-center">
         {err}
       </div>
     );
   }
   if (!chartRows.length) {
     return (
-      <div className="h-[160px] rounded-xl border border-border-subtle bg-bg-secondary/30 flex items-center justify-center text-xs text-text-muted">
+      <div className="h-[160px] rounded-xl border border-hair bg-term-bg/30 flex items-center justify-center text-xs text-ink-mute">
         No price history for this range.
       </div>
     );

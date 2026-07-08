@@ -14,7 +14,7 @@ export default function DeltaChip({ delta, decimals = 2, isNew, className }: Del
   if (isNew) {
     return (
       <span
-        className={`text-[10px] rounded bg-fin-blue/15 text-fin-blue px-1${
+        className={`text-[10px] rounded bg-accent/15 text-accent px-1${
           className ? ` ${className}` : ''
         }`}
       >
@@ -27,7 +27,7 @@ export default function DeltaChip({ delta, decimals = 2, isNew, className }: Del
   const isUp = value > 0.005;
   const isDown = value < -0.005;
   const glyph = isUp ? '▲' : isDown ? '▼' : '■';
-  const tone = isUp ? 'text-fin-green' : isDown ? 'text-fin-red' : 'text-text-muted';
+  const tone = isUp ? 'text-up' : isDown ? 'text-down' : 'text-ink-mute';
   const sign = isUp ? '+' : '';
   const label = `${glyph}${sign}${value.toFixed(decimals)}`;
 

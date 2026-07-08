@@ -13,10 +13,8 @@ import {
 } from 'recharts';
 import type { TableRow } from '@/lib/database.types';
 import { EmptyState, SectionCard, StatTile, fmtPct, signColorClass } from './shared';
+import { useChartColors, withAlpha } from '@/lib/chart-colors';
 
-const FIN_GREEN = '#3fb984';
-const FIN_RED = '#e0654b';
-const AXIS = '#71717a';
 const TOP_N = 14;
 
 function sum(values: Array<number | null | undefined>): number {
@@ -30,6 +28,7 @@ export default function AttributionTab({
   attribution: TableRow<'position_attribution'>[];
   date: string | null;
 }) {
+  const chart = useChartColors();
   const summary = useMemo(() => {
     if (!attribution.length) return null;
     // Exclude the synthetic CASH row from all return sums — its total_attribution_pct
@@ -88,7 +87,7 @@ export default function AttributionTab({
       </div>
 
       {summary.unpriced > 0 ? (
-        <p className="text-xs text-fin-amber">
+        <p className="text-xs text-warn">
           {summary.unpriced} holding{summary.unpriced === 1 ? '' : 's'} lack a priced window, so the
           active-return total is partial and does not fully reconcile to portfolio − benchmark.
         </p>
@@ -102,14 +101,14 @@ export default function AttributionTab({
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="ticker" tick={{ fill: AXIS, fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={50} />
-                <YAxis tick={{ fill: AXIS, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
+                <CartesianGrid stroke={chart.hair} vertical={false} />
+                <XAxis dataKey="ticker" tick={{ fill: chart.axis, fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={50} />
+                <YAxis tick={{ fill: chart.axis, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
                 <Tooltip
-                  cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                  cursor={{ fill: withAlpha(chart.ink, 0.04) }}
                   contentStyle={{
-                    background: 'rgba(13,17,23,0.95)',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'var(--term-bg)',
+                    border: '1px solid var(--hair)',
                     borderRadius: 8,
                     fontSize: 12,
                   }}
@@ -117,14 +116,14 @@ export default function AttributionTab({
                 />
                 <Bar dataKey="contribution" radius={[3, 3, 0, 0]} isAnimationActive={false}>
                   {chartData.map((d) => (
-                    <Cell key={d.ticker} fill={d.contribution >= 0 ? FIN_GREEN : FIN_RED} />
+                    <Cell key={d.ticker} fill={d.contribution >= 0 ? chart.up : chart.down} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         ) : (
-          <p className="text-xs text-text-muted">No priced contributions to chart.</p>
+          <p className="text-xs text-ink-mute">No priced contributions to chart.</p>
         )}
       </SectionCard>
 
@@ -135,7 +134,7 @@ export default function AttributionTab({
         <div className="overflow-x-auto">
           <table className="w-full text-sm tabular-nums">
             <thead>
-              <tr className="text-left text-xs text-text-muted border-b border-border-subtle">
+              <tr className="text-left text-xs text-ink-mute border-b border-hair">
                 <th className="py-2 pr-4 font-medium">Ticker</th>
                 <th className="py-2 pr-4 font-medium">Sector</th>
                 <th className="py-2 pr-4 font-medium text-right">Weight</th>
@@ -147,10 +146,10 @@ export default function AttributionTab({
             </thead>
             <tbody>
               {attribution.map((r) => (
-                <tr key={r.id} className="border-b border-border-subtle/50">
-                  <td className="py-2 pr-4 text-text-primary">{r.ticker}</td>
-                  <td className="py-2 pr-4 text-text-muted truncate max-w-[160px]">{r.sector_bucket ?? '—'}</td>
-                  <td className="py-2 pr-4 text-right text-text-secondary">{fmtPct(r.weight_pct, 1)}</td>
+                <tr key={r.id} className="border-b border-hair/50">
+                  <td className="py-2 pr-4 text-ink">{r.ticker}</td>
+                  <td className="py-2 pr-4 text-ink-mute truncate max-w-[160px]">{r.sector_bucket ?? '—'}</td>
+                  <td className="py-2 pr-4 text-right text-ink-soft">{fmtPct(r.weight_pct, 1)}</td>
                   <td className={`py-2 pr-4 text-right ${signColorClass(r.position_return_pct)}`}>
                     {fmtPct(r.position_return_pct)}
                   </td>

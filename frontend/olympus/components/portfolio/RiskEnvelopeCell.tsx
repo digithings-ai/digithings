@@ -18,7 +18,7 @@ export default function RiskEnvelopeCell({
   const hasTarget = targetPctGain != null;
   const hasHorizon = horizonDays != null;
   if (!hasStop && !hasTarget && !hasHorizon) {
-    return <span className="text-text-muted">—</span>;
+    return <span className="text-ink-mute">—</span>;
   }
   // Position the entry (0%) tick proportionally between the stop and target ends.
   const down = hasStop ? Math.abs(stopLossPct as number) : 0;
@@ -29,20 +29,20 @@ export default function RiskEnvelopeCell({
     <div className="flex items-center justify-end gap-2">
       <div className="flex flex-col items-end gap-1">
         <div className="flex items-center gap-2 font-mono text-[11px] tabular-nums">
-          <span className={hasStop ? 'text-fin-red' : 'text-text-muted'}>
+          <span className={hasStop ? 'text-down' : 'text-ink-mute'}>
             {hasStop
               ? `${(stopLossPct as number) >= 0 ? '+' : ''}${(stopLossPct as number).toFixed(1)}%`
               : '—'}
           </span>
-          <span className="text-text-muted">↔</span>
-          <span className={hasTarget ? 'text-fin-green' : 'text-text-muted'}>
+          <span className="text-ink-mute">↔</span>
+          <span className={hasTarget ? 'text-up' : 'text-ink-mute'}>
             {hasTarget ? `+${(targetPctGain as number).toFixed(1)}%` : '—'}
           </span>
         </div>
         {(hasStop || hasTarget) && (
-          <div className="relative h-1 w-24 rounded-full bg-bg-secondary">
-            <div className="absolute inset-y-0 left-0 w-1/2 rounded-l-full bg-fin-red/40" />
-            <div className="absolute inset-y-0 right-0 w-1/2 rounded-r-full bg-fin-green/40" />
+          <div className="relative h-1 w-24 rounded-full bg-term-bg">
+            <div className="absolute inset-y-0 left-0 w-1/2 rounded-l-full bg-down/40" />
+            <div className="absolute inset-y-0 right-0 w-1/2 rounded-r-full bg-up/40" />
             <div
               className="absolute -top-0.5 h-2 w-0.5 bg-[var(--accent)]"
               style={{ left: `${entryPct}%` }}
@@ -52,7 +52,7 @@ export default function RiskEnvelopeCell({
         )}
       </div>
       {hasHorizon && (
-        <span className="rounded border border-fin-amber/30 bg-fin-amber/10 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-fin-amber">
+        <span className="rounded border border-warn/30 bg-warn/10 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-warn">
           {horizonDays}d
         </span>
       )}

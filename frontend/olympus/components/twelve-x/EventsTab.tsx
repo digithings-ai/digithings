@@ -21,9 +21,9 @@ const VIEWS: { key: EventsView; label: string }[] = [
 /** Impact → .fin-* color + dot styling. */
 function impactClass(impact: string): { text: string; dot: string } {
   const i = impact.trim().toLowerCase();
-  if (i === 'high') return { text: 'text-fin-red', dot: 'bg-fin-red' };
-  if (i === 'medium') return { text: 'text-fin-amber', dot: 'bg-fin-amber' };
-  return { text: 'text-text-muted', dot: 'bg-text-muted/60' };
+  if (i === 'high') return { text: 'text-down', dot: 'bg-down' };
+  if (i === 'medium') return { text: 'text-warn', dot: 'bg-warn' };
+  return { text: 'text-ink-mute', dot: 'bg-ink-mute/60' };
 }
 
 function impactLabel(impact: string): string {
@@ -141,7 +141,7 @@ function EventRow({
     <div
       ref={rowRef}
       className={`overflow-hidden transition-colors ${
-        highlight ? 'bg-fin-blue/10 ring-1 ring-inset ring-fin-blue/40' : ''
+        highlight ? 'bg-accent/10 ring-1 ring-inset ring-accent/40' : ''
       }`}
     >
       <button
@@ -149,14 +149,14 @@ function EventRow({
         // Every row opens the event-detail slide-over so the list and the timeline
         // behave identically — one click, same popup, opinions or not.
         onClick={() => onSelect(event)}
-        className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.02]"
+        className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-ink/[0.02]"
       >
         {/* Time column */}
         <div className="w-14 shrink-0 text-right">
-          <span className="qn-metric block tabular-nums text-sm text-text-primary">
+          <span className="qn-metric block tabular-nums text-sm text-ink">
             {!resolvedTime && time ? (
               <span
-                className="mr-0.5 text-text-muted/70"
+                className="mr-0.5 text-ink-mute/70"
                 title="Venue-local time — could not convert to your timezone"
               >
                 ≈
@@ -172,7 +172,7 @@ function EventRow({
         {/* Event detail */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1 font-mono text-[11px] uppercase text-text-muted">
+            <span className="flex items-center gap-1 font-mono text-[11px] uppercase text-ink-mute">
               <Globe size={11} aria-hidden />
               {event.country}
             </span>
@@ -180,24 +180,24 @@ function EventRow({
               {impactLabel(event.impact)}
             </span>
           </div>
-          <p className="truncate text-sm text-text-primary">{event.event_name}</p>
+          <p className="truncate text-sm text-ink">{event.event_name}</p>
         </div>
 
         {/* Prior / forecast / actual */}
         <div className="hidden w-52 shrink-0 items-center justify-end gap-3 text-right sm:flex">
           {event.prior != null && event.prior !== '' ? (
-            <span className="text-[11px] text-text-muted">
-              Prior <span className="tabular-nums text-text-secondary">{event.prior}</span>
+            <span className="text-[11px] text-ink-mute">
+              Prior <span className="tabular-nums text-ink-soft">{event.prior}</span>
             </span>
           ) : null}
           {event.forecast != null && event.forecast !== '' ? (
-            <span className="text-[11px] text-text-muted">
-              Fcst <span className="tabular-nums text-text-secondary">{event.forecast}</span>
+            <span className="text-[11px] text-ink-mute">
+              Fcst <span className="tabular-nums text-ink-soft">{event.forecast}</span>
             </span>
           ) : null}
           {event.actual != null && event.actual !== '' ? (
-            <span className="text-[11px] text-text-muted">
-              Act <span className="tabular-nums text-text-primary">{event.actual}</span>
+            <span className="text-[11px] text-ink-mute">
+              Act <span className="tabular-nums text-ink">{event.actual}</span>
             </span>
           ) : null}
         </div>
@@ -205,12 +205,12 @@ function EventRow({
         {/* Opinions count + open-detail affordance */}
         <div className="flex w-24 shrink-0 items-center justify-end gap-1.5">
           {hasOpinions ? (
-            <span className="flex items-center gap-1 text-[11px] text-text-muted">
+            <span className="flex items-center gap-1 text-[11px] text-ink-mute">
               <Users size={12} aria-hidden />
-              <span className="tabular-nums text-text-secondary">{opinions!.mentions}</span>
+              <span className="tabular-nums text-ink-soft">{opinions!.mentions}</span>
             </span>
           ) : null}
-          <ChevronRight size={14} aria-hidden className="text-text-muted" />
+          <ChevronRight size={14} aria-hidden className="text-ink-mute" />
         </div>
       </button>
     </div>
@@ -351,11 +351,11 @@ export default function EventsTab({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
-        <CalendarClock size={18} className="shrink-0 text-fin-blue" aria-hidden />
-        <h2 className="text-base font-semibold text-text-primary md:text-lg">Upcoming catalysts</h2>
+        <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
+        <h2 className="text-base font-semibold text-ink md:text-lg">Upcoming catalysts</h2>
         {/* List | Timeline segmented control (demo's #evtSubnav). */}
         <div
-          className="ml-auto inline-flex overflow-hidden rounded-md border border-white/10 text-[11px]"
+          className="ml-auto inline-flex overflow-hidden rounded-md border border-hair text-[11px]"
           role="group"
           aria-label="Events view"
         >
@@ -369,7 +369,7 @@ export default function EventsTab({
                 aria-pressed={active}
                 onClick={() => setView(v.key)}
                 className={`px-3 py-1 transition-colors ${
-                  active ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:text-text-secondary'
+                  active ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:text-ink-soft'
                 }`}
               >
                 {v.label}
@@ -378,13 +378,13 @@ export default function EventsTab({
           })}
         </div>
         {runDate ? (
-          <span className="font-mono text-[10px] text-text-muted">opinions as of {runDate}</span>
+          <span className="font-mono text-[10px] text-ink-mute">opinions as of {runDate}</span>
         ) : null}
       </div>
 
-      <p className="max-w-2xl px-1 text-xs text-text-muted">
+      <p className="max-w-2xl px-1 text-xs text-ink-mute">
         The next 14 days of macro events — times in your local timezone where a precise release
-        instant is known; <span className="text-text-muted/70">≈</span> marks venue-local times we
+        instant is known; <span className="text-ink-mute/70">≈</span> marks venue-local times we
         could not convert. Open any event — in the list or on the timeline — to see which desks
         weighed in, what they expect, and the FX impact they flag.
       </p>
@@ -394,13 +394,13 @@ export default function EventsTab({
           <div className="space-y-4">
             {grouped.map(([dateStr, rows]) => (
               <div key={dateStr} className="glass-card overflow-hidden p-0">
-                <div className="flex items-center gap-3 border-b border-border-subtle bg-bg-secondary px-4 py-2.5">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                <div className="flex items-center gap-3 border-b border-hair bg-term-bg px-4 py-2.5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
                     {formatDateLabel(dateStr)}
                   </h3>
-                  <span className="ml-auto font-mono text-[10px] text-text-muted">{dateStr}</span>
+                  <span className="ml-auto font-mono text-[10px] text-ink-mute">{dateStr}</span>
                 </div>
-                <div className="divide-y divide-border-subtle">
+                <div className="divide-y divide-hair">
                   {rows.map((event) => (
                     <EventRow
                       key={event.id}
@@ -415,7 +415,7 @@ export default function EventsTab({
             ))}
           </div>
         ) : (
-          <div className="glass-card p-10 text-center text-sm text-text-muted">
+          <div className="glass-card p-10 text-center text-sm text-ink-mute">
             No upcoming economic events in the next 14 days.
           </div>
         )
@@ -430,7 +430,7 @@ export default function EventsTab({
               onSelect={(id) => setSelected(events.find((e) => String(e.id) === id) ?? null)}
             />
           ) : (
-            <p className="text-sm text-text-muted">No upcoming economic events in the next 14 days.</p>
+            <p className="text-sm text-ink-mute">No upcoming economic events in the next 14 days.</p>
           )}
         </div>
       ) : null}

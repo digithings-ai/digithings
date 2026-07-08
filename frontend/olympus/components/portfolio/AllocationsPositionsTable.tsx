@@ -112,9 +112,9 @@ export default function AllocationsPositionsTable(props: {
 
   return (
     <div className="glass-card p-0 overflow-hidden">
-      <div className="border-b border-border-subtle bg-bg-secondary px-4 py-4 md:px-6 md:py-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="border-b border-hair bg-term-bg px-4 py-4 md:px-6 md:py-5 flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-lg font-semibold">Positions</h3>
-        <label className="flex items-center gap-2 text-[11px] text-text-muted select-none">
+        <label className="flex items-center gap-2 text-[11px] text-ink-mute select-none">
           <input
             type="checkbox"
             className="accent-[var(--accent)]"
@@ -127,7 +127,7 @@ export default function AllocationsPositionsTable(props: {
       <div className="overflow-x-auto">
         <table className="w-full min-w-0 text-sm md:min-w-[920px]">
           <thead>
-            <tr className="text-text-muted text-xs uppercase tracking-wider">
+            <tr className="text-ink-mute text-xs uppercase tracking-wider">
               <th className="pl-2 pr-2 py-3 text-left md:pl-4">Ticker</th>
               <th className="px-2 py-3 text-right md:px-3">Weight</th>
               <th className="px-2 py-3 text-center md:px-3">Conviction</th>
@@ -145,16 +145,16 @@ export default function AllocationsPositionsTable(props: {
               <th className="w-8 px-2 py-3 md:px-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-border-subtle">
+          <tbody className="divide-y divide-hair">
             {grouped.map(([sector, rows]) => (
               <Fragment key={sector}>
-                <tr className="bg-bg-secondary/60">
+                <tr className="bg-term-bg/60">
                   <td
                     colSpan={colCount}
-                    className="px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-text-secondary md:px-4"
+                    className="px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink-soft md:px-4"
                   >
                     {sector}
-                    <span className="ml-2 font-mono text-text-muted">
+                    <span className="ml-2 font-mono text-ink-mute">
                       {rows.reduce((s, p) => s + p.normalizedWeight, 0).toFixed(1)}%
                     </span>
                   </td>
@@ -171,12 +171,12 @@ export default function AllocationsPositionsTable(props: {
                     <Fragment key={p.ticker}>
                       <tr
                         onClick={() => setExpandedTicker(isExpanded ? null : p.ticker)}
-                        className={`cursor-pointer transition-colors hover:bg-white/[0.03] ${
-                          isExpanded ? 'bg-white/[0.02]' : ''
+                        className={`cursor-pointer transition-colors hover:bg-ink/[0.03] ${
+                          isExpanded ? 'bg-ink/[0.02]' : ''
                         }`}
                       >
                         <td className="pl-2 pr-2 py-3 md:pl-4">
-                          <span className="font-mono font-semibold text-text-primary">
+                          <span className="font-mono font-semibold text-ink">
                             {p.ticker}
                           </span>
                         </td>
@@ -186,7 +186,7 @@ export default function AllocationsPositionsTable(props: {
                               {p.normalizedWeight.toFixed(1)}%
                             </span>
                             <span
-                              className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-bg-secondary md:inline-block"
+                              className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-term-bg md:inline-block"
                               aria-hidden
                             >
                               <span
@@ -206,7 +206,7 @@ export default function AllocationsPositionsTable(props: {
                               />
                             </div>
                           ) : (
-                            <span className="text-text-muted">—</span>
+                            <span className="text-ink-mute">—</span>
                           )}
                         </td>
                         <td
@@ -236,14 +236,14 @@ export default function AllocationsPositionsTable(props: {
                         </td>
                         {hasTargets && (
                           <>
-                            <td className="hidden px-3 py-3 text-right font-mono tabular-nums text-xs text-text-secondary md:table-cell">
+                            <td className="hidden px-3 py-3 text-right font-mono tabular-nums text-xs text-ink-soft md:table-cell">
                               {p.weight_target != null ? `${p.weight_target.toFixed(1)}%` : '—'}
                             </td>
                             <td
                               className={`hidden px-3 py-3 text-right font-mono tabular-nums text-xs md:table-cell ${
                                 vsTarget != null && Math.abs(vsTarget) >= 0.05
                                   ? pnlColor(-vsTarget)
-                                  : 'text-text-muted'
+                                  : 'text-ink-mute'
                               }`}
                             >
                               {vsTarget != null && Math.abs(vsTarget) >= 0.05
@@ -252,7 +252,7 @@ export default function AllocationsPositionsTable(props: {
                             </td>
                           </>
                         )}
-                        <td className="hidden max-w-[200px] px-3 py-3 text-xs text-text-secondary xl:table-cell">
+                        <td className="hidden max-w-[200px] px-3 py-3 text-xs text-ink-soft xl:table-cell">
                           {thesisNames(p.thesis_ids, thesisById)}
                         </td>
                         <td className="px-2 py-3 text-center md:px-3">
@@ -271,15 +271,15 @@ export default function AllocationsPositionsTable(props: {
                               <ExternalLink size={12} aria-hidden />
                             </a>
                           ) : (
-                            <span className="text-text-muted">—</span>
+                            <span className="text-ink-mute">—</span>
                           )}
                         </td>
-                        <td className="px-2 py-3 text-text-muted md:px-3">
+                        <td className="px-2 py-3 text-ink-mute md:px-3">
                           {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                         </td>
                       </tr>
                       {isExpanded && (
-                        <tr className="bg-white/[0.02]">
+                        <tr className="bg-ink/[0.02]">
                           <td colSpan={colCount} className="px-4 py-5 md:px-6 md:py-6">
                             <PositionDrilldown
                               key={p.ticker}
@@ -300,7 +300,7 @@ export default function AllocationsPositionsTable(props: {
             ))}
             {reconciliation.rows.length === 0 && (
               <tr>
-                <td colSpan={colCount} className="text-center py-10 text-text-muted">
+                <td colSpan={colCount} className="text-center py-10 text-ink-mute">
                   No active positions
                 </td>
               </tr>
@@ -309,7 +309,7 @@ export default function AllocationsPositionsTable(props: {
         </table>
       </div>
       {!hasTargets && (
-        <p className="px-4 py-3 text-xs text-text-muted md:px-6">
+        <p className="px-4 py-3 text-xs text-ink-mute md:px-6">
           No target book yet — runs without a PM rebalance leave targets unset.
         </p>
       )}
