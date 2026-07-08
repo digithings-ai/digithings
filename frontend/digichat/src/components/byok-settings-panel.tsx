@@ -219,7 +219,7 @@ function ByokSettingsForm({
         <div
           className={`mb-4 rounded-lg border px-3 py-2 text-[12px] ${
             testResult.ok
-              ? "border-emerald-950/40 bg-emerald-950/15 text-emerald-200"
+              ? "border-up/40 bg-up/15 text-up"
               : "border-destructive/40 bg-destructive/10 text-destructive-foreground"
           }`}
         >
@@ -310,7 +310,7 @@ export function BYOKSettingsPanel({ inline = false }: { inline?: boolean } = {})
           {isSet ? "BYOK" : "Use my key"}
         </span>
         {isSet && (
-          <span className="ml-0.5 size-2 rounded-full bg-emerald-400" aria-hidden />
+          <span className="ml-0.5 size-2 rounded-full bg-up" aria-hidden />
         )}
       </SheetTrigger>
       <SheetContent side="right" className="w-full max-w-md">

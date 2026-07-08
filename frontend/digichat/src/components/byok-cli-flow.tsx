@@ -175,7 +175,7 @@ export function ByokCliFlow({ onClose }: { onClose: () => void }) {
                 }
                 autoComplete="off"
                 spellCheck={false}
-                className="w-full max-w-md rounded-md border border-border/50 bg-black/20 px-3 py-2 font-mono text-sm outline-none focus:border-[var(--accent)]"
+                className="w-full max-w-md rounded-md border border-border/50 bg-term-bg px-3 py-2 font-mono text-sm outline-none focus:border-accent"
                 aria-invalid={!!validationError}
                 aria-describedby={validationError ? "byok-cli-error" : undefined}
               />
@@ -215,7 +215,7 @@ export function ByokCliFlow({ onClose }: { onClose: () => void }) {
                   placeholder="openai/gpt-4o-mini"
                   autoComplete="off"
                   spellCheck={false}
-                  className="w-full max-w-md rounded-md border border-border/50 bg-black/20 px-3 py-2 font-mono text-sm outline-none focus:border-[var(--accent)]"
+                  className="w-full max-w-md rounded-md border border-border/50 bg-term-bg px-3 py-2 font-mono text-sm outline-none focus:border-accent"
                 />
                 <p className="mt-1.5 text-[11px]" style={{ color: "var(--text-secondary)" }}>
                   OpenRouter model slug (provider/model), e.g. anthropic/claude-sonnet-4

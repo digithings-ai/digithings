@@ -481,9 +481,9 @@
 .dc-quota-banner {
   margin: 0.2rem 0 0 1.6rem;
   padding: 0.45rem 0.65rem;
-  border: 1px solid color-mix(in srgb, #e5484d 35%, var(--hair));
+  border: 1px solid color-mix(in srgb, var(--down) 35%, var(--hair));
   border-radius: 8px;
-  background: color-mix(in srgb, #e5484d 8%, transparent);
+  background: color-mix(in srgb, var(--down) 8%, transparent);
   font-size: 0.74rem;
   color: var(--ink-soft);
 }
