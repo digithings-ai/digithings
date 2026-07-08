@@ -13,57 +13,10 @@
   --nav-h: 3.4rem;
 }
 
-/* Token → Tailwind bridge. `@theme inline` makes utilities emit `var(--token)`
-   at the use site (e.g. `text-ink` → `color: var(--ink)`) instead of baking the
-   literal value, so every utility stays live-switchable on `data-theme` / livery
-   and never drifts from tokens.css. This is how Tailwind utilities are allowed to
-   coexist with the tokens-never-literals rule: use `bg-surface`, `text-ink-mute`,
-   `border-hair`, `font-mono` — never `bg-[#121417]`. */
-@theme inline {
-  --color-ink: var(--ink);
-  --color-ink-soft: var(--ink-soft);
-  --color-ink-mute: var(--ink-mute);
-  --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-bg: var(--bg);
-  --color-hair: var(--hair);
-  --color-hair-2: var(--hair-2);
-  --color-accent: var(--accent);
-  --color-accent-weak: var(--accent-weak);
-  --color-on-accent: var(--on-accent);
-  --color-up: var(--up);
-  --color-down: var(--down);
-  --color-warn: var(--warn);
-  --color-term-bg: var(--term-bg);
-  --color-term-ink: var(--term-ink);
-  --color-term-hair: var(--term-hair);
-  --color-term-fill: var(--term-fill);
-  --color-term-mute: var(--term-mute);
-
-  --font-display: var(--font-display);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-}
-
-/* Reference-only color canon — overrides the shared tokens.css AFTER its
-   @import (equal specificity, later source order wins). tokens.css itself is
-   left untouched: its --up/--down and --accent-atlas/hermes/kairos carry dated,
-   human-approved rulings and ship to the live sites. Promote any of this into
-   tokens.css only on explicit approval. */
-:root[data-theme] {
-  /* Money colors are the one always-on color domain: digiquant's phosphor teal
-     is the positive/up read, a paired red the negative/down. Fixed to the
-     digiquant *token* (not the live --accent), so P&L never follows a livery. */
-  --up: var(--accent-digiquant);
-  --down: #e5533e;
-
-  /* atlas · hermes · kairos name backend langgraphs, not colored products —
-     collapse their accent tokens to ink so every scope, livery, or stale
-     persisted selection resolves to monochrome. */
-  --accent-atlas: var(--ink);
-  --accent-hermes: var(--ink);
-  --accent-kairos: var(--ink);
-}
+/* Token → Tailwind bridge: supplied by @digithings/web/styles/web-theme.css
+   (the single `@theme inline` canon — see its header). The former local bridge
+   and the reference-only color rulings (--up/--down phosphor money colors,
+   atlas/hermes/kairos → ink) were promoted into the shared files 2026-07-08. */
 
 /* Anchor jumps clear the sticky nav instead of tucking the target title
    underneath it. Every id-anchored section inherits the same offset. */

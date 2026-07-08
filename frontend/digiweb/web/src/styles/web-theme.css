@@ -1,13 +1,19 @@
 /* ==========================================================================
-   @digithings/web — Tailwind v4 theme mapping.
+   @digithings/web — THE Tailwind v4 token bridge. One definition, every app.
    Bridges the [data-theme] semantic tokens (from @digithings/design/tokens.css)
-   to Tailwind color/font utilities so all three surfaces share ONE definition.
-   Import order in an app's globals.css:
+   to Tailwind color/font utilities. Import order in an app's globals.css:
      @import "tailwindcss";
      @import "@digithings/design/tokens.css";
      @import "@digithings/web/styles/web-theme.css";
+
+   `@theme inline` (not plain `@theme`) is load-bearing: utilities emit
+   `var(--token)` at the use site (`text-ink` → `color: var(--ink)`), so a
+   scoped livery (`.accent-digiquant { --accent: … }`) or a `data-theme` flip
+   re-resolves inside every utility. Plain `@theme` freezes the var at :root
+   and scoped overrides never reach the utility. Apps must not declare their
+   own bridge — extend this one.
    ========================================================================== */
-@theme {
+@theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -26,8 +32,10 @@
   --color-down: var(--down);
   --color-warn: var(--warn);
 
-  --color-term: var(--term-bg);
+  --color-term-bg: var(--term-bg);
   --color-term-ink: var(--term-ink);
+  --color-term-hair: var(--term-hair);
+  --color-term-fill: var(--term-fill);
   --color-term-mute: var(--term-mute);
 
   --font-sans: var(--font-sans);

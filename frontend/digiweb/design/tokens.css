@@ -130,8 +130,11 @@
   --accent-weak: rgba(61, 214, 196, 0.14);
   --on-accent:   #04201C;
 
-  --up:   #3FB984;
-  --down: #E0654B;
+  /* ruled 2026-07-08 (promoted from design-reference): money-up wears the
+     digiquant phosphor — fixed to the *token*, never the live --accent, so
+     P&L colors cannot follow a livery scope. Down is its paired red. */
+  --up:   var(--accent-digiquant);
+  --down: #E5533E;
   --warn: #E0B341;
 
   --term-bg:   #08090B;
@@ -160,7 +163,10 @@
   --accent-weak: rgba(14, 140, 127, 0.12);
   --on-accent:   #FFFFFF;
 
-  --up:   #2F9E70;
+  /* ruled 2026-07-08: light runs the deeper phosphor #0E8C7F for contrast on
+     paper (same convention as --accent, line ~28) — a literal, not
+     var(--accent), so P&L stays livery-proof. Down keeps the deeper paper red. */
+  --up:   #0E8C7F;
   --down: #C9533B;
   --warn: #B5832A;
 
@@ -177,6 +183,15 @@
 
 /* Shared (theme-independent) tokens for the redesign. */
 :root[data-theme] {
+  /* ruled 2026-07-08 (promoted from design-reference): atlas · hermes · kairos
+     name backend langgraphs, not colored products — on redesigned surfaces
+     their accents collapse to ink so any scope, livery, or stale persisted
+     selection resolves monochrome. Scoped to [data-theme] so legacy pages
+     (no data-theme attr) keep the :root greens until they migrate. */
+  --accent-atlas: var(--ink);
+  --accent-hermes: var(--ink);
+  --accent-kairos: var(--ink);
+
   --font-sans: "Geist", system-ui, -apple-system, sans-serif;
   --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
   --font-display: "Instrument Serif", Georgia, serif;
