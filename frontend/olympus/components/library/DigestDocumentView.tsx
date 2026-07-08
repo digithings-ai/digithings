@@ -87,7 +87,7 @@ function WordSwapBlock({ oldText, newText }: { oldText: string; newText: string 
   const mono = isTableLine(oldText) || isTableLine(newText);
   return (
     <div
-      className={`whitespace-pre-wrap px-3 py-1 border-l-2 border-amber-500/50 bg-term-bg/60 leading-relaxed text-ink-soft/95 ${
+      className={`whitespace-pre-wrap px-3 py-1 border-l-2 border-warn/50 bg-term-bg/60 leading-relaxed text-ink-soft/95 ${
         mono ? 'font-mono text-[12px]' : 'text-sm font-sans'
       }`}
     >
@@ -96,7 +96,7 @@ function WordSwapBlock({ oldText, newText }: { oldText: string; newText: string 
           return (
             <span
               key={j}
-              className="bg-emerald-950/55 text-emerald-100 rounded-sm px-0.5 border-b border-emerald-500/60"
+              className="bg-up/15 text-up rounded-sm px-0.5 border-b border-up/60"
             >
               {w.value}
             </span>
@@ -106,7 +106,7 @@ function WordSwapBlock({ oldText, newText }: { oldText: string; newText: string 
           return (
             <span
               key={j}
-              className="bg-red-950/50 text-red-100/95 line-through decoration-red-300/50 rounded-sm px-0.5"
+              className="bg-down/15 text-down line-through decoration-down/50 rounded-sm px-0.5"
             >
               {w.value}
             </span>
@@ -184,7 +184,7 @@ function DigestCompareDropdown({
         <ChevronDown size={14} className={`opacity-70 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,20rem)] rounded-lg border border-hair bg-[#141414] shadow-xl overflow-hidden">
+        <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,20rem)] rounded-lg border border-hair bg-term-bg shadow-xl overflow-hidden">
           <div role="listbox" aria-label="Compare digest to" className="max-h-52 overflow-y-auto py-1">
             <button
               type="button"
@@ -581,7 +581,7 @@ export default function DigestDocumentView({
                 return (
                   <span
                     key={i}
-                    className={`block whitespace-pre-wrap px-3 py-0.5 bg-emerald-950/50 text-emerald-100 border-l-2 border-emerald-500/80 ${fontClass}`}
+                    className={`block whitespace-pre-wrap px-3 py-0.5 bg-up/10 text-up border-l-2 border-up/70 ${fontClass}`}
                   >
                     {item.text}
                   </span>
@@ -591,7 +591,7 @@ export default function DigestDocumentView({
                 return (
                   <span
                     key={i}
-                    className={`block whitespace-pre-wrap px-3 py-0.5 bg-red-950/45 text-red-100/95 border-l-2 border-red-500/70 line-through decoration-red-300/50 ${fontClass}`}
+                    className={`block whitespace-pre-wrap px-3 py-0.5 bg-down/10 text-down border-l-2 border-down/60 line-through decoration-down/50 ${fontClass}`}
                   >
                     {item.text}
                   </span>
