@@ -6,23 +6,24 @@ import { DQ_FOOTER, DQ_FOOTER_META } from "../../_nav";
 import { SiteNav } from "@/components/landing/SiteNav";
 
 // Poster grammar (canon §12): epithet ≤ 6 words, honest to function; fine
-// print is a real repo path or a real function plus the livery token. The
-// livery blooms only here — nowhere else on the page.
-const POSTER: Record<string, { epithet: string; fine: string; acc: string }> = {
+// print is a real repo path or a real function plus the livery. Posters wear
+// the standard accent-<module> scope — and atlas · hermes · kairos are
+// backend langgraphs, so their accents resolve to ink under [data-theme]
+// (tokens.css ruling, 2026-07-08): the poster reads monochrome by design,
+// and the digiquant phosphor on these pages is reserved for the terminal
+// moments below it (cmdline, init codeblock, CTAs).
+const POSTER: Record<string, { epithet: string; fine: string }> = {
   atlas: {
     epithet: "he carries the data.",
-    fine: "digiquant/src/digiquant/olympus/atlas/ · --accent-atlas #6fbf94",
-    acc: "var(--accent-atlas)",
+    fine: "digiquant/src/digiquant/olympus/atlas/ · accent-atlas → ink",
   },
   hermes: {
     epithet: "he carries the orders.",
-    fine: "digiquant/src/digiquant/olympus/hermes/ · --accent-hermes #4a8f7b",
-    acc: "var(--accent-hermes)",
+    fine: "digiquant/src/digiquant/olympus/hermes/ · accent-hermes → ink",
   },
   kairos: {
     epithet: "he knows the moment.",
-    fine: "searches the research library · constrains idea generation · --accent-kairos #2f7a65",
-    acc: "var(--accent-kairos)",
+    fine: "executes on NautilusTrader · human-gated · accent-kairos → ink",
   },
 };
 
@@ -53,7 +54,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
             <Emblem id={s.emblem} size={48} /><span className="dg-tier t-core">{s.step}</span>
           </div>
           {POSTER[s.id] ? (
-            <div className="sub-poster" style={{ "--sub-acc": POSTER[s.id].acc } as React.CSSProperties}>
+            <div className={`sub-poster accent-${s.id}`}>
               <span className="sub-regmark" aria-hidden="true">+</span>
               <h1 className="sub-poster-name">{s.name}</h1>
               <p className="sub-poster-epithet">{POSTER[s.id].epithet}</p>
