@@ -49,7 +49,8 @@ export function HeroMesh({ children }: { children: ReactNode }) {
     }
 
     const readBg = () =>
-      getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#0B0C0E";
+      // fallback literal = tokens.css dark --bg, for the pre-style edge case
+      getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#0A0E0C";
     const readInk = () =>
       hexToRgb(getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || "#ECEEF0");
     const readLight = () => document.documentElement.getAttribute("data-theme") === "light";

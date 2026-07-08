@@ -61,8 +61,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             neutralize JS-gated hiding (hero entrance, [data-motion] reveals);
             removed pre-paint when scripts run. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
-        {/* Single fallback; themeInitScript sets it to the active theme pre-paint. */}
-        <meta name="theme-color" content="#0B0C0E" />
+        {/* Single fallback; themeInitScript sets it to the active theme pre-paint.
+            Literal = tokens.css dark --bg (metas can't read CSS vars). */}
+        <meta name="theme-color" content="#0A0E0C" />
       </head>
       <body>
         <div className="grain" aria-hidden="true" />

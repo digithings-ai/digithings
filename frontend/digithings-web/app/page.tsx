@@ -1,6 +1,6 @@
 import { Colophon, Footer, Reveal } from "@digithings/web";
 import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "./_nav";
-import { DigiNav } from "@/components/landing/DigiNav";
+import { DtNav } from "@/components/DtNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ModuleManifest } from "@/components/landing/ModuleManifest";
 
@@ -11,7 +11,7 @@ import { ModuleManifest } from "@/components/landing/ModuleManifest";
 export default function Home() {
   return (
     <>
-      <DigiNav />
+      <DtNav />
 
       <main>
         <HeroMesh>
@@ -58,15 +58,19 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="section dqcta" id="contact">
+        <section className="section text-center" id="contact">
           <Reveal className="wrap">
-            <div className="dq-eyebrow">Contact</div>
-            <h2 className="dq-title">Questions, enterprise, or partnership.</h2>
-            <p className="dq-sub">
+            <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">
+              Contact
+            </div>
+            <h2 className="mt-[0.6rem] font-display text-[clamp(1.6rem,3vw,2.4rem)] font-normal leading-[1.12] tracking-[-0.01em] text-ink">
+              Questions, enterprise, or partnership.
+            </h2>
+            <p className="mx-auto mt-[0.8rem] max-w-[60ch] leading-[1.6] text-ink-soft">
               The stack is open core — reach out for managed deployments, on-prem setups, or
               anything else about the platform.
             </p>
-            <div className="dqcta-actions">
+            <div className="mt-[2rem] flex flex-wrap justify-center gap-[0.8rem]">
               <a
                 className="btn btn-primary"
                 href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20inquiry`}
@@ -80,8 +84,13 @@ export default function Home() {
                 Enterprise
               </a>
             </div>
-            <p className="dt-contact-email">
-              <a href={`mailto:${DT_CONTACT_EMAIL}`}>{DT_CONTACT_EMAIL}</a>
+            <p className="mt-[1.4rem] font-mono text-[0.88rem] text-ink-mute">
+              <a
+                className="text-accent [text-underline-offset:2px] hover:text-ink"
+                href={`mailto:${DT_CONTACT_EMAIL}`}
+              >
+                {DT_CONTACT_EMAIL}
+              </a>
             </p>
           </Reveal>
         </section>
