@@ -243,168 +243,11 @@
   font-size: 1.2rem;
 }
 
-/* Pricing */
-
-/* .pricing-paths wrapper (mt / grid-cols-2 / gap), .pricing-path-title,
-   .pricing-path-copy, and .trust-line → utilities in pricing-reference.tsx.
-   .pricing-path stays CSS: it is the ancestor of .pricing-path button and pairs
-   with .pricing-path.featured (two-color mix). */
-
-.pricing-path {
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  padding: 1.1rem;
-  background: var(--surface);
-}
-
-.pricing-path.featured {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
-}
-
-.pricing-path button {
-  margin-top: 0.9rem;
-}
-
-.precision-table {
-  margin-top: 1.2rem;
-  width: 100%;
-  border-collapse: collapse;
-  font-family: var(--font-mono);
-  font-size: 0.76rem;
-}
-
-.precision-table th {
-  text-align: left;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.6rem;
-  color: var(--ink-mute);
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--hair);
-}
-
-.precision-table td {
-  padding: 0.55rem 0;
-  border-bottom: 1px solid var(--hair);
-  color: var(--ink-soft);
-}
-
-.precision-table td:first-child {
-  color: var(--ink);
-}
-
-.precision-table td:last-child,
-.precision-table th:last-child {
-  text-align: right;
-}
-
-/* Pricing comparison matrix + billing toggle */
-
-/* .pm-toggle-row wrapper → utilities in pricing-matrix-reference.tsx. The
-   .pm-toggle switch below stays CSS: it is the ancestor of .pm-knob and pairs
-   with .pm-toggle.on (two-color mix + knob translate). */
-
-.pm-toggle {
-  width: 38px;
-  height: 21px;
-  border-radius: 999px;
-  border: 1px solid var(--hair);
-  background: var(--surface);
-  position: relative;
-  cursor: pointer;
-  transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
-}
-
-.pm-toggle .pm-knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 15px;
-  height: 15px;
-  border-radius: 999px;
-  background: var(--ink-mute);
-  transition: transform 0.2s var(--ease), background-color 0.2s var(--ease);
-}
-
-.pm-toggle.on {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
-  background: var(--accent-weak);
-}
-
-.pm-toggle.on .pm-knob {
-  transform: translateX(17px);
-  background: var(--accent);
-}
-
-/* .pm-toggle-label + .pm-scroll wrapper → utilities in
-   pricing-matrix-reference.tsx */
-
-.pm-table {
-  width: 100%;
-  min-width: 640px;
-  border-collapse: collapse;
-  font-size: 0.82rem;
-}
-
-.pm-table thead th {
-  text-align: left;
-  vertical-align: top;
-  padding: 0.8rem 0.9rem 1rem;
-  border-bottom: 1px solid var(--hair);
-}
-
-/* the popular column reads as one continuous tinted band (header + body) */
-.pm-table thead th.popular,
-.pm-table td.pm-pop {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
-
-.pm-table thead th.popular {
-  border-top: 2px solid var(--accent);
-  border-top-left-radius: 8px;
-  border-top-right-radius: 8px;
-}
-
-/* .pm-tier + .pm-price + .pm-popular cell labels → utilities in
-   pricing-matrix-reference.tsx */
-
-.pm-group th {
-  padding: 1rem 0 0.4rem;
-  text-align: left;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-mute);
-  font-weight: 400;
-}
-
-.pm-table tbody tr:not(.pm-group) th {
-  text-align: left;
-  font-weight: 400;
-  color: var(--ink-soft);
-  padding: 0.55rem 0.9rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--hair) 60%, transparent);
-}
-
-.pm-table tbody td {
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  padding: 0.55rem 0.9rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--hair) 60%, transparent);
-}
-
-/* the row-label column and group headers align to the section's left edge */
-.pm-table thead th:first-child,
-.pm-table tbody tr:not(.pm-group) th,
-.pm-group th {
-  padding-left: 0;
-}
-
-.pm-table tbody td.off {
-  color: var(--ink-mute);
-}
+/* Pricing + comparison matrix — promoted to @digithings/web (#1415).
+   Structure/behavior live in web/src/components/pricing/Pricing.tsx and
+   PricingMatrix.tsx (token-backed utilities); the CSS leave-rules (accent
+   tier wash, ✓ feature markers, billing-toggle state machinery) live in
+   @digithings/web/styles/pricing.css, imported via globals.css. */
 
 @media (max-width: 900px) {
   /* .dot-matrix-card + .deck responsive collapse → max-[900px]:grid-cols-1
@@ -548,30 +391,10 @@
   color: var(--ink-mute);
 }
 
-/* Stat counter — count-up metric strip */
-
-/* .sc-row wrapper (mt / grid-cols-4 / border / radius / bg / overflow +
-   max-[720px]:grid-cols-2) and .sc-value / .sc-label → utilities in
-   stat-counter-reference.tsx. The .sc-stat nth-child border grid stays CSS. */
-
-.sc-stat {
-  padding: 1.4rem 1.2rem;
-  border-left: 1px solid var(--hair);
-}
-
-.sc-stat:first-child {
-  border-left: none;
-}
-
-@media (max-width: 720px) {
-  .sc-stat:nth-child(3) {
-    border-left: none;
-  }
-
-  .sc-stat:nth-child(n + 3) {
-    border-top: 1px solid var(--hair);
-  }
-}
+/* Stat counter — promoted to @digithings/web (#1415): the <StatCounter/>
+   primitive (components/metrics/StatCounter.tsx) carries the utilities; the
+   .sc-stat nth-child border grid lives in @digithings/web/styles/metrics.css,
+   imported from globals.css. */
 
 /* Roadmap Gantt — initiative bars across a month axis */
 

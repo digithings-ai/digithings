@@ -59,46 +59,13 @@
   letter-spacing: 0.04em;
 }
 
-/* Performance metrics grid — container + label/value typography migrated to
-   utilities in perf-metrics-reference.tsx. Only the :nth-child hairline-border
-   rules stay in CSS (Tailwind can't express the sibling-index selector). */
-
-.perf-metric {
-  border-left: 1px solid var(--hair);
-  border-top: 1px solid var(--hair);
-}
-
-/* first row has no top border; first column no left border */
-.perf-metric:nth-child(-n + 4) {
-  border-top: none;
-}
-
-.perf-metric:nth-child(4n + 1) {
-  border-left: none;
-}
+/* Performance metrics grid — promoted to @digithings/web (#1415): the
+   <PerfMetrics/> primitive (components/metrics/PerfMetrics.tsx) carries the
+   utilities; the .perf-metric nth-child hairline grid lives in
+   @digithings/web/styles/metrics.css, imported from globals.css. */
 
 /* Order book migrated to token-backed utilities in orderbook-reference.tsx
    (border-hair, bg-surface, text-up/down for the price side + depth tints). */
-
-@media (max-width: 720px) {
-  /* .perf-grid → max-[720px]:grid-cols-2 utility; the nth-child border
-     overrides below stay in CSS. */
-  .perf-metric:nth-child(-n + 4) {
-    border-top: 1px solid var(--hair);
-  }
-
-  .perf-metric:nth-child(-n + 2) {
-    border-top: none;
-  }
-
-  .perf-metric:nth-child(4n + 1) {
-    border-left: 1px solid var(--hair);
-  }
-
-  .perf-metric:nth-child(2n + 1) {
-    border-left: none;
-  }
-}
 
 /* Monthly returns heatmap */
 /* Only the scroll wrapper migrated (→ `mt-[1.2rem] overflow-x-auto`). The
