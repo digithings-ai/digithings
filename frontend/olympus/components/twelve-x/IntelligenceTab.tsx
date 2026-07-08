@@ -9,10 +9,11 @@ import type {
   IntelligenceWhyItem,
 } from '@/lib/twelve-x/types';
 import { resolveCatalyst } from '@/lib/twelve-x/fetch';
+import { SIGNAL_SERIES } from '@/lib/chart-colors';
 import { useTwelveX } from './context';
 import IntelligenceWhyPanel from './IntelligenceWhyPanel';
 
-/** Map a confluence direction/lean string to a .fin-* text color class. */
+/** Map a confluence direction/lean string to a P&L text color class. */
 function directionColorClass(direction: string): string {
   const d = direction.trim().toLowerCase();
   if (d === 'bullish' || d === 'long' || d === 'buy') return 'text-up';
@@ -33,9 +34,9 @@ function directionLabel(direction: string): string {
  * surfaced as labels rather than score legs.
  */
 const COMPONENT_SEGMENTS = [
-  { key: 'consensus_strength', label: 'Consensus', color: '#3B82F6' },
-  { key: 'event_alignment', label: 'Event', color: '#10B981' },
-  { key: 'breadth', label: 'Breadth', color: '#8B5CF6' },
+  { key: 'consensus_strength', label: 'Consensus', color: SIGNAL_SERIES.consensus },
+  { key: 'event_alignment', label: 'Event', color: SIGNAL_SERIES.event },
+  { key: 'breadth', label: 'Breadth', color: SIGNAL_SERIES.breadth },
 ] as const;
 
 function asNumber(v: unknown): number | null {

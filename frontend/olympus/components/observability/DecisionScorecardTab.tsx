@@ -14,10 +14,8 @@ import {
 import { computeDecisionScorecard } from '@/lib/decision-scorecard';
 import type { TableRow } from '@/lib/database.types';
 import { EmptyState, SectionCard, StatTile, fmtPct, signColorClass } from './shared';
+import { useChartColors, withAlpha } from '@/lib/chart-colors';
 
-const FIN_GREEN = '#3fb984';
-const FIN_RED = '#e0654b';
-const AXIS = '#71717a';
 // Buckets use |conviction| thresholds (magnitude), matching decision-scorecard.ts and backtest.py:
 //   low    |conv| < 2
 //   medium |conv| ≥ 2 and < 4
@@ -69,6 +67,7 @@ export default function DecisionScorecardTab({
 }: {
   decisions: TableRow<'decision_log'>[];
 }) {
+  const chart = useChartColors();
   const scorecard = useMemo(() => computeDecisionScorecard(decisions), [decisions]);
   // Resolved decisions only — the PM cares about calls that have a known outcome.
   const resolved = useMemo(
@@ -135,17 +134,17 @@ export default function DecisionScorecardTab({
           <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="bucket" tick={{ fill: AXIS, fontSize: 11 }} />
+                <CartesianGrid stroke={chart.hair} vertical={false} />
+                <XAxis dataKey="bucket" tick={{ fill: chart.axis, fontSize: 11 }} />
                 <YAxis
-                  tick={{ fill: AXIS, fontSize: 11 }}
+                  tick={{ fill: chart.axis, fontSize: 11 }}
                   tickFormatter={(v: number) => `${v}%`}
                 />
                 <Tooltip
-                  cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                  cursor={{ fill: withAlpha(chart.ink, 0.04) }}
                   contentStyle={{
-                    background: 'rgba(13,17,23,0.95)',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'var(--term-bg)',
+                    border: '1px solid var(--hair)',
                     borderRadius: 8,
                     fontSize: 12,
                   }}
@@ -156,7 +155,7 @@ export default function DecisionScorecardTab({
                 />
                 <Bar dataKey="meanAlphaPct" radius={[3, 3, 0, 0]} isAnimationActive={false}>
                   {chartData.map((d) => (
-                    <Cell key={d.bucket} fill={d.meanAlphaPct >= 0 ? FIN_GREEN : FIN_RED} />
+                    <Cell key={d.bucket} fill={d.meanAlphaPct >= 0 ? chart.up : chart.down} />
                   ))}
                 </Bar>
               </BarChart>

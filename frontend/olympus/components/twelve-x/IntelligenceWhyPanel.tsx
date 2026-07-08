@@ -8,6 +8,7 @@ import type {
   IntelligenceWhyItem,
 } from '@/lib/twelve-x/types';
 import { scoreColorClass, scoreLabel } from '@/lib/twelve-x/consensus-bar';
+import { LEG_COLORS } from '@/lib/chart-colors';
 import { ConsensusScoreBar } from './ConsensusScoreBars';
 
 /* ------------------------------------------------------------------ *
@@ -74,15 +75,16 @@ function recencyLabel(days: number | null): string {
   return days === 1 ? '1 day' : `${days} days`;
 }
 
-/** The 0.50/0.30/0.20 leg-bar colors (consensus / event / breadth). */
-const LEG_COLOR = ['#3B82F6', '#6db6ff', '#8B5CF6'] as const;
+/** The 0.50/0.30/0.20 leg-bar colors (consensus / event / breadth) —
+ * fixed hues from the sanctioned allowlist (lib/chart-colors.ts). */
+const LEG_COLOR = LEG_COLORS;
 
 /** Tier-2 split-bar segments, in the spec's order (Bull / Neutral / Watch / Bear). */
 const SPLIT_SEGMENTS = [
-  { key: 'bullish_pct', label: 'Bull', color: 'rgba(63,185,132,0.75)' },
-  { key: 'neutral_pct', label: 'Neutral', color: 'rgba(148,163,184,0.6)' },
-  { key: 'watch_pct', label: 'Watch', color: 'rgba(224,179,65,0.7)' },
-  { key: 'bearish_pct', label: 'Bear', color: 'rgba(224,101,75,0.75)' },
+  { key: 'bullish_pct', label: 'Bull', color: 'color-mix(in srgb, var(--up) 75%, transparent)' },
+  { key: 'neutral_pct', label: 'Neutral', color: 'color-mix(in srgb, var(--ink-mute) 60%, transparent)' },
+  { key: 'watch_pct', label: 'Watch', color: 'color-mix(in srgb, var(--warn) 70%, transparent)' },
+  { key: 'bearish_pct', label: 'Bear', color: 'color-mix(in srgb, var(--down) 75%, transparent)' },
 ] as const;
 
 /** classification → badge color classes (active/confirmed/invalidated/superseded). */

@@ -17,13 +17,15 @@ import {
 } from 'recharts';
 import { fetchPositionPriceChart } from '@/lib/queries';
 import type { PositionHistoryRow, PositionPriceChartData, PositionPriceChartEvent } from '@/lib/types';
+import { EVENT_COLORS, useChartColors, withAlpha } from '@/lib/chart-colors';
 
 function eventDotColor(ev: PositionPriceChartEvent['event']): string {
-  if (ev === 'OPEN') return '#22c55e';
-  if (ev === 'EXIT') return '#ef4444';
-  if (ev === 'ADD') return '#38bdf8';
-  if (ev === 'TRIM') return '#f59e0b';
-  return '#71717a';
+  // Fixed marker hues from the sanctioned allowlist (lib/chart-colors.ts).
+  if (ev === 'OPEN') return EVENT_COLORS.OPEN;
+  if (ev === 'EXIT') return EVENT_COLORS.EXIT;
+  if (ev === 'ADD') return EVENT_COLORS.ADD;
+  if (ev === 'TRIM') return EVENT_COLORS.TRIM;
+  return EVENT_COLORS.DEFAULT;
 }
 
 function subtractIsoDays(iso: string, days: number): string {
@@ -71,7 +73,7 @@ function ChartTooltip({
   const p = payload[0].payload as ScatterRow;
   if ('event' in p && p.event) {
     return (
-      <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-[0.82rem] shadow-lg max-w-xs">
+      <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-xs">
         <p className="font-mono font-semibold" style={{ color: eventDotColor(p.event) }}>
           {p.event}
         </p>
@@ -95,7 +97,7 @@ function ChartTooltip({
   }
   const w = weightByDate?.get(p.date);
   return (
-    <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-[0.82rem] shadow-lg">
+    <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg">
       <p className="font-mono text-ink-soft">{p.date}</p>
       <p className="text-ink tabular-nums mt-0.5">${Number(p.close).toFixed(2)}</p>
       {typeof w === 'number' ? (
@@ -120,6 +122,7 @@ function PriceChartBrushPanel({
   events: PositionPriceChartEvent[];
   firstEntryDate: string | null;
 }) {
+  const chart = useChartColors();
   const containerRef = useRef<HTMLDivElement>(null);
   const gradientId = useId().replace(/:/g, '');
   const { brushStart, brushEnd, setBrushStart, setBrushEnd } = useBrushRange(chartRows.length);
@@ -271,20 +274,20 @@ function PriceChartBrushPanel({
           <ComposedChart data={visibleRows} margin={{ top: 12, right: 14, left: 4, bottom: 4 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                <stop offset="0%" stopColor={chart.accent} stopOpacity={0.35} />
+                <stop offset="100%" stopColor={chart.accent} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+            <CartesianGrid stroke={chart.hair} vertical={false} />
             <XAxis
               dataKey="date"
-              tick={{ fill: '#71717a', fontSize: 11 }}
+              tick={{ fill: chart.axis, fontSize: 11 }}
               tickFormatter={(d: string) => (d?.length >= 10 ? d.slice(5) : d)}
               minTickGap={32}
             />
             <YAxis
               domain={['auto', 'auto']}
-              tick={{ fill: '#71717a', fontSize: 11 }}
+              tick={{ fill: chart.axis, fontSize: 11 }}
               width={52}
               tickFormatter={(v) => (typeof v === 'number' ? v.toFixed(0) : String(v))}
             />
@@ -296,14 +299,14 @@ function PriceChartBrushPanel({
                   weightByDate={weightByDate}
                 />
               )}
-              cursor={{ stroke: 'rgba(255,255,255,0.12)' }}
+              cursor={{ stroke: withAlpha(chart.ink, 0.12) }}
             />
             {entryLineDate ? (
               <ReferenceLine
                 x={entryLineDate}
-                stroke="rgba(34,197,94,0.45)"
+                stroke={withAlpha(chart.up, 0.45)}
                 strokeDasharray="4 4"
-                label={{ value: 'Entry', fill: '#71717a', fontSize: 10 }}
+                label={{ value: 'Entry', fill: chart.axis, fontSize: 10 }}
               />
             ) : null}
             <Area
@@ -316,7 +319,7 @@ function PriceChartBrushPanel({
             <Line
               type="monotone"
               dataKey="close"
-              stroke="#3b82f6"
+              stroke={chart.accent}
               dot={false}
               strokeWidth={2}
               name="Close"
@@ -325,7 +328,7 @@ function PriceChartBrushPanel({
             <Scatter
               data={scatterInView}
               dataKey="close"
-              fill="#3b82f6"
+              fill={chart.accent}
               isAnimationActive={false}
               shape={(raw: unknown) => {
                 const props = raw as { cx?: number; cy?: number; payload?: ScatterRow };
@@ -338,7 +341,7 @@ function PriceChartBrushPanel({
                     cy={cy}
                     r={r}
                     fill={eventDotColor(payload.event)}
-                    stroke="#0a0a0a"
+                    stroke={chart.bg}
                     strokeWidth={1.5}
                   />
                 );
@@ -353,12 +356,12 @@ function PriceChartBrushPanel({
           <ComposedChart data={chartRows} margin={{ top: 2, right: 14, left: 4, bottom: 2 }}>
             <XAxis dataKey="date" hide />
             <YAxis hide domain={['auto', 'auto']} />
-            <Line type="monotone" dataKey="close" stroke="#3b82f666" dot={false} strokeWidth={1} isAnimationActive={false} />
+            <Line type="monotone" dataKey="close" stroke={chart.accent} strokeOpacity={0.4} dot={false} strokeWidth={1} isAnimationActive={false} />
             <Brush
               dataKey="date"
               height={28}
-              stroke="#3b82f6"
-              fill="rgba(59,130,246,0.08)"
+              stroke={chart.accent}
+              fill={withAlpha(chart.accent, 0.08)}
               travellerWidth={10}
               startIndex={brushStart}
               endIndex={brushEnd}

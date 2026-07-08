@@ -9,12 +9,14 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { useChartColors, withAlpha } from '@/lib/chart-colors';
 
 export function PerformanceDrawdownChart({
   data,
 }: {
   data: Array<{ date: string; drawdown: number }>;
 }) {
+  const chart = useChartColors();
   if (data.length < 2) {
     return (
       <div className="h-[240px] flex items-center justify-center text-ink-mute text-sm">
@@ -26,14 +28,14 @@ export function PerformanceDrawdownChart({
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="rgba(255,255,255,0.05)" />
+        <CartesianGrid stroke={chart.hair} />
         <XAxis
           dataKey="date"
-          tick={{ fill: '#71717a', fontSize: 11 }}
+          tick={{ fill: chart.axis, fontSize: 11 }}
           tickFormatter={(d: string) => d?.slice(5)}
         />
         <YAxis
-          tick={{ fill: '#71717a', fontSize: 11 }}
+          tick={{ fill: chart.axis, fontSize: 11 }}
           domain={['auto', 0]}
           tickFormatter={(v: number) => `${v.toFixed(0)}%`}
         />
@@ -51,8 +53,8 @@ export function PerformanceDrawdownChart({
           type="monotone"
           dataKey="drawdown"
           name="Drawdown"
-          stroke="#ef4444"
-          fill="rgba(239,68,68,0.15)"
+          stroke={chart.down}
+          fill={withAlpha(chart.down, 0.15)}
           strokeWidth={2}
           dot={false}
           connectNulls

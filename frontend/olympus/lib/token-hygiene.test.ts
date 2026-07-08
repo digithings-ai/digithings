@@ -12,18 +12,6 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-// The recharts/wash fills below carry the SAME rgba(59,130,246) literal but are
-// owned by later phases (Phase-3 Performance + Phase-2 Documents). Phase 0 purges
-// only the Holdings table bar + the drilldown line; the guard is widened to these
-// files when those phases land. Until then they are deliberately exempted so an
-// untouched surface does not fail this gate. (Plan note, Task 12.)
-const PHASE_DEFERRED = [
-  'DeltaDaySummary.tsx',
-  'performance-chart-workspace.tsx',
-  'PositionPriceChart.tsx',
-  'PositionContributionChart.tsx',
-];
-
 describe('canon token hygiene (#1402)', () => {
   const files = walk(join(__dirname, '..', 'components'));
   it('no pre-canon vocabulary survives in components (text-text-*, bg-bg-*, fin-*)', () => {
@@ -40,13 +28,14 @@ describe('canon token hygiene (#1402)', () => {
       .filter((f) => legacy.test(readFileSync(f, 'utf8')));
     expect(offenders).toEqual([]);
   });
-  it('no #a78bfa or raw rgba(59,130,246) literal survives in components (Phase-0 scope)', () => {
-    const offenders = files
-      .filter((f) => !PHASE_DEFERRED.some((d) => f.endsWith(d)))
-      .filter((f) => {
-        const s = readFileSync(f, 'utf8');
-        return s.includes('#a78bfa') || s.includes('rgba(59,130,246') || s.includes('rgba(59, 130, 246');
-      });
+  it('no #a78bfa or raw rgba(59,130,246) literal survives in components', () => {
+    // The Phase-0 PHASE_DEFERRED exemptions (workspace + price/contribution
+    // charts + DeltaDaySummary) are gone: every chart now draws from
+    // lib/chart-colors.ts (#1402), the single sanctioned color source.
+    const offenders = files.filter((f) => {
+      const s = readFileSync(f, 'utf8');
+      return s.includes('#a78bfa') || s.includes('rgba(59,130,246') || s.includes('rgba(59, 130, 246');
+    });
     expect(offenders).toEqual([]);
   });
 });

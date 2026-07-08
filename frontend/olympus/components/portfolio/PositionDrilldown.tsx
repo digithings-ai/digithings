@@ -33,18 +33,21 @@ import type { DashboardPositionEvent, Position, PositionHistoryRow, Thesis } fro
 import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
 import { normalizeThesisId } from '@/lib/thesis-id';
 import { pnlColor } from '@/components/ui';
+import { EVENT_COLORS, useChartColors } from '@/lib/chart-colors';
 
 function thesisNames(ids: string[], thesisById: Map<string, Thesis>): string {
   if (!ids.length) return '—';
   return ids.map((id) => thesisById.get(normalizeThesisId(id))?.name ?? id).join(', ');
 }
 
+// Fixed marker hues from the sanctioned allowlist (lib/chart-colors.ts) —
+// ADD unifies with the sibling price/contribution charts' sky blue.
 function eventMarkerColor(ev: DashboardPositionEvent['event']): string {
-  if (ev === 'OPEN') return '#22c55e';
-  if (ev === 'EXIT') return '#ef4444';
-  if (ev === 'ADD') return 'var(--accent)';
-  if (ev === 'TRIM') return '#f59e0b';
-  return '#71717a';
+  if (ev === 'OPEN') return EVENT_COLORS.OPEN;
+  if (ev === 'EXIT') return EVENT_COLORS.EXIT;
+  if (ev === 'ADD') return EVENT_COLORS.ADD;
+  if (ev === 'TRIM') return EVENT_COLORS.TRIM;
+  return EVENT_COLORS.DEFAULT;
 }
 
 function eventLabelClass(ev: DashboardPositionEvent['event']): string {
@@ -81,6 +84,7 @@ export default function PositionDrilldown({
   mode,
 }: Props) {
   const gradientId = useId().replace(/:/g, '');
+  const chart = useChartColors();
   const contribId = useId().replace(/:/g, '');
 
   const displayEnd = performanceRange?.end ?? asOfDate ?? isoToday();
@@ -276,12 +280,12 @@ export default function PositionDrilldown({
                     <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#71717a" minTickGap={24} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.hair} />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke={chart.axis} minTickGap={24} />
                 <YAxis
                   yAxisId="w"
                   tick={{ fontSize: 10 }}
-                  stroke="#71717a"
+                  stroke={chart.axis}
                   domain={[0, 'auto']}
                   tickFormatter={(v) => `${v}%`}
                   width={44}
@@ -290,7 +294,7 @@ export default function PositionDrilldown({
                   yAxisId="p"
                   orientation="right"
                   tick={{ fontSize: 10 }}
-                  stroke="#71717a"
+                  stroke={chart.axis}
                   domain={['auto', 'auto']}
                   tickFormatter={(v) => `$${v}`}
                   width={56}
@@ -346,7 +350,7 @@ export default function PositionDrilldown({
                     yAxisId="p"
                     r={5}
                     fill={eventMarkerColor(m.event)}
-                    stroke="rgba(0,0,0,0.35)"
+                    stroke={chart.bg}
                     strokeWidth={1}
                     isFront
                   />
@@ -369,13 +373,13 @@ export default function PositionDrilldown({
               <ComposedChart data={contributionSeries} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id={contribId} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="rgb(34,197,94)" stopOpacity={0.2} />
-                    <stop offset="100%" stopColor="rgb(34,197,94)" stopOpacity={0} />
+                    <stop offset="0%" stopColor={chart.up} stopOpacity={0.2} />
+                    <stop offset="100%" stopColor={chart.up} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#71717a" minTickGap={24} />
-                <YAxis tick={{ fontSize: 10 }} stroke="#71717a" width={48} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.hair} />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke={chart.axis} minTickGap={24} />
+                <YAxis tick={{ fontSize: 10 }} stroke={chart.axis} width={48} />
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
@@ -408,7 +412,7 @@ export default function PositionDrilldown({
                 <Area
                   type="monotone"
                   dataKey="cumPp"
-                  stroke="#22c55e"
+                  stroke={chart.up}
                   strokeWidth={1.5}
                   fill={`url(#${contribId})`}
                   isAnimationActive={false}

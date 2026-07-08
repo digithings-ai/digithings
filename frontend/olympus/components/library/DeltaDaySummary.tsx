@@ -20,7 +20,7 @@ export default function DeltaDaySummary({
 
   return (
     <div
-      className="rounded-xl border border-accent/35 bg-gradient-to-br from-accent/[0.12] via-accent/[0.06] to-transparent px-5 py-5 text-sm shadow-[0_0_48px_-12px_rgba(59,130,246,0.35)] ring-1 ring-inset ring-white/[0.06]"
+      className="rounded-xl border border-accent/35 bg-gradient-to-br from-accent/[0.12] via-accent/[0.06] to-transparent px-5 py-5 text-sm shadow-[0_0_48px_-12px_color-mix(in_srgb,var(--accent)_35%,transparent)] ring-1 ring-inset ring-white/[0.06]"
       role="region"
       aria-label="Delta run summary"
     >

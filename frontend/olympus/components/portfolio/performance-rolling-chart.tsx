@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import type { NavChartPoint } from '@/lib/types';
 import { computeRiskRatiosFromNavSnaps } from '@/lib/portfolio-risk-metrics';
+import { ROLLING_SERIES, useChartColors } from '@/lib/chart-colors';
 
 function PeriodRiskSummary({
   sharpe,
@@ -49,6 +50,7 @@ export function PerformanceRollingChart({
   snaps: NavChartPoint[];
   rollingWindow: number;
 }) {
+  const chart = useChartColors();
   const period = computeRiskRatiosFromNavSnaps(snaps);
   const hasRollingSharpe = data.some((d) => d.sharpe != null && !Number.isNaN(d.sharpe));
   const rollingPoints = data.filter((d) => d.sharpe != null && !Number.isNaN(d.sharpe)).length;
@@ -75,27 +77,27 @@ export function PerformanceRollingChart({
           <div className="h-[min(400px,50vh)] min-h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.05)" />
+                <CartesianGrid stroke={chart.hair} />
                 <XAxis
                   dataKey="date"
-                  tick={{ fill: '#71717a', fontSize: 11 }}
+                  tick={{ fill: chart.axis, fontSize: 11 }}
                   tickFormatter={(d: string) => d?.slice(5)}
                 />
                 <YAxis
                   yAxisId="sharpe"
-                  tick={{ fill: '#71717a', fontSize: 11 }}
-                  label={{ value: 'Sharpe', angle: -90, position: 'insideLeft', fill: '#71717a', fontSize: 10 }}
+                  tick={{ fill: chart.axis, fontSize: 11 }}
+                  label={{ value: 'Sharpe', angle: -90, position: 'insideLeft', fill: chart.axis, fontSize: 10 }}
                 />
                 <YAxis
                   yAxisId="vol"
                   orientation="right"
-                  tick={{ fill: '#71717a', fontSize: 11 }}
+                  tick={{ fill: chart.axis, fontSize: 11 }}
                   tickFormatter={(v) => `${v}%`}
                   label={{
                     value: 'Ann. vol',
                     angle: 90,
                     position: 'insideRight',
-                    fill: '#71717a',
+                    fill: chart.axis,
                     fontSize: 10,
                   }}
                 />
@@ -121,7 +123,7 @@ export function PerformanceRollingChart({
                   type="monotone"
                   dataKey="sharpe"
                   name={`Rolling Sharpe (${rollingWindow}d)`}
-                  stroke="#8b5cf6"
+                  stroke={ROLLING_SERIES.sharpe}
                   strokeWidth={2}
                   dot={false}
                   connectNulls
@@ -131,7 +133,7 @@ export function PerformanceRollingChart({
                   type="monotone"
                   dataKey="volAnn"
                   name="Rolling vol (ann.)"
-                  stroke="#06b6d4"
+                  stroke={ROLLING_SERIES.vol}
                   strokeWidth={1.5}
                   dot={false}
                   connectNulls

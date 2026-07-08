@@ -21,19 +21,11 @@ import { PerformanceDrawdownChart } from '@/components/portfolio/performance-dra
 import { PerformanceRollingChart } from '@/components/portfolio/performance-rolling-chart';
 import type { PerformanceChartView } from '@/lib/performance-series';
 import { buildDailyReturnsWithNavIndex } from '@/lib/performance-series';
+import { BENCHMARK_COLORS, EVENT_COLORS, useChartColors, withAlpha } from '@/lib/chart-colors';
 
-const BENCH_COLORS: Record<string, string> = {
-  SPY: '#a1a1aa',
-  QQQ: '#8b5cf6',
-  IWM: '#f472b6',
-  EEM: '#22c55e',
-  TLT: '#06b6d4',
-  GLD: '#f59e0b',
-  IBIT: '#f97316',
-};
-
+// Benchmark hues live in the sanctioned fixed allowlist (lib/chart-colors.ts).
 function lineColorForTicker(t: string): string {
-  if (BENCH_COLORS[t]) return BENCH_COLORS[t];
+  if (BENCHMARK_COLORS[t]) return BENCHMARK_COLORS[t];
   let h = 0;
   for (let i = 0; i < t.length; i++) {
     h = t.charCodeAt(i) + ((h << 5) - h);
@@ -74,6 +66,7 @@ function NavComparableChart({
   /** Pre-aggregated events per date for tooltip enrichment. */
   activityEventsByDate?: Record<string, { ticker: string; event: string }[]>;
 }) {
+  const chart = useChartColors();
   if (data.length < 2) {
     return (
       <div className="h-full min-h-[280px] flex items-center justify-center text-ink-mute text-sm">
@@ -95,7 +88,7 @@ function NavComparableChart({
                 key="portfolio"
                 className="inline-flex items-center gap-1.5 text-[11px] text-ink-mute shrink-0"
               >
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#3B82F6]/90 shrink-0" />
+                <span className="w-2.5 h-2.5 rounded-sm bg-accent/90 shrink-0" />
                 Portfolio
               </span>
             );
@@ -132,20 +125,20 @@ function NavComparableChart({
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="rgba(255,255,255,0.05)" />
+        <CartesianGrid stroke={chart.hair} />
         <XAxis
           dataKey="date"
-          tick={{ fill: '#71717a', fontSize: 11 }}
+          tick={{ fill: chart.axis, fontSize: 11 }}
           tickFormatter={(d: string) => d?.slice(5)}
         />
         <YAxis
-          tick={{ fill: '#71717a', fontSize: 11 }}
+          tick={{ fill: chart.axis, fontSize: 11 }}
           domain={['auto', 'auto']}
           label={{
             value: 'Indexed (100 = window start)',
             angle: -90,
             position: 'insideLeft',
-            fill: '#71717a',
+            fill: chart.axis,
             fontSize: 10,
           }}
         />
@@ -156,21 +149,21 @@ function NavComparableChart({
             return (
               <div
                 style={{
-                  background: '#1a1a1a',
-                  border: '1px solid #2a2a2a',
+                  background: 'var(--term-bg)',
+                  border: '1px solid var(--hair)',
                   borderRadius: '8px',
                   fontSize: '0.82rem',
                   padding: '8px 12px',
                   maxWidth: 220,
                 }}
               >
-                <p style={{ color: '#a1a1aa', marginBottom: 4, fontSize: '0.75rem' }}>
+                <p style={{ color: 'var(--ink-soft)', marginBottom: 4, fontSize: '0.75rem' }}>
                   {String(label)}
                 </p>
                 {payload.map((item) => (
                   <div key={String(item.dataKey)} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                    <span style={{ color: item.color ?? '#a1a1aa' }}>{String(item.name ?? item.dataKey)}</span>
-                    <span style={{ fontFamily: 'monospace', color: '#f4f4f5' }}>
+                    <span style={{ color: item.color ?? 'var(--ink-soft)' }}>{String(item.name ?? item.dataKey)}</span>
+                    <span style={{ fontFamily: 'monospace', color: 'var(--ink)' }}>
                       {item.value != null && !Number.isNaN(Number(item.value))
                         ? Number(item.value).toFixed(2)
                         : '—'}
@@ -178,21 +171,21 @@ function NavComparableChart({
                   </div>
                 ))}
                 {events.length > 0 && (
-                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #2a2a2a' }}>
+                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--hair)' }}>
                     {events.map((ev, i) => (
-                      <div key={i} style={{ color: '#a1a1aa', fontSize: '0.72rem', display: 'flex', gap: 6 }}>
+                      <div key={i} style={{ color: 'var(--ink-soft)', fontSize: '0.72rem', display: 'flex', gap: 6 }}>
                         <span
                           style={{
                             color:
                               ev.event === 'OPEN'
-                                ? '#22c55e'
+                                ? EVENT_COLORS.OPEN
                                 : ev.event === 'EXIT'
-                                  ? '#ef4444'
+                                  ? EVENT_COLORS.EXIT
                                   : ev.event === 'ADD'
-                                    ? '#38bdf8'
+                                    ? EVENT_COLORS.ADD
                                     : ev.event === 'TRIM'
-                                      ? '#f59e0b'
-                                      : '#a1a1aa',
+                                      ? EVENT_COLORS.TRIM
+                                      : 'var(--ink-soft)',
                           }}
                         >
                           {ev.event}
@@ -210,7 +203,7 @@ function NavComparableChart({
           <ReferenceLine
             key={d}
             x={d}
-            stroke="rgba(255,255,255,0.14)"
+            stroke={withAlpha(chart.ink, 0.14)}
             strokeDasharray="4 5"
           />
         ))}
@@ -224,8 +217,8 @@ function NavComparableChart({
           type="monotone"
           dataKey="portfolio"
           name="Portfolio NAV"
-          stroke="#3B82F6"
-          fill="rgba(59,130,246,0.12)"
+          stroke={chart.accent}
+          fill={withAlpha(chart.accent, 0.12)}
           strokeWidth={2}
           dot={false}
           connectNulls
@@ -332,7 +325,7 @@ function ComparableDropdown({
         </button>
 
         {open && (
-          <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,18rem)] rounded-lg border border-hair bg-[#141414] shadow-xl overflow-hidden">
+          <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,18rem)] rounded-lg border border-hair bg-term-bg shadow-xl overflow-hidden">
             <input
               id="comparable-ticker-search"
               type="search"
@@ -401,6 +394,7 @@ function ComparableDropdown({
 }
 
 function DailyReturnsComboChart({ snaps }: { snaps: NavChartPoint[] }) {
+  const chart = useChartColors();
   const data = buildDailyReturnsWithNavIndex(snaps);
   if (data.length < 2) {
     return (
@@ -412,28 +406,28 @@ function DailyReturnsComboChart({ snaps }: { snaps: NavChartPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
-        <CartesianGrid stroke="rgba(255,255,255,0.05)" />
+        <CartesianGrid stroke={chart.hair} />
         <XAxis
           dataKey="date"
-          tick={{ fill: '#71717a', fontSize: 11 }}
+          tick={{ fill: chart.axis, fontSize: 11 }}
           tickFormatter={(d: string) => d?.slice(5)}
         />
         <YAxis
           yAxisId="left"
-          tick={{ fill: '#71717a', fontSize: 11 }}
+          tick={{ fill: chart.axis, fontSize: 11 }}
           tickFormatter={(v) => `${v}%`}
-          label={{ value: 'Daily %', angle: -90, position: 'insideLeft', fill: '#71717a', fontSize: 10 }}
+          label={{ value: 'Daily %', angle: -90, position: 'insideLeft', fill: chart.axis, fontSize: 10 }}
         />
         <YAxis
           yAxisId="right"
           orientation="right"
-          tick={{ fill: '#71717a', fontSize: 11 }}
+          tick={{ fill: chart.axis, fontSize: 11 }}
           domain={['auto', 'auto']}
           label={{
             value: 'NAV index',
             angle: 90,
             position: 'insideRight',
-            fill: '#71717a',
+            fill: chart.axis,
             fontSize: 10,
           }}
         />
@@ -453,10 +447,10 @@ function DailyReturnsComboChart({ snaps }: { snaps: NavChartPoint[] }) {
               key={i}
               fill={
                 entry.dailyPct == null
-                  ? '#3f3f46'
+                  ? withAlpha(chart.axis, 0.45)
                   : entry.dailyPct >= 0
-                    ? 'rgba(34,197,94,0.75)'
-                    : 'rgba(239,68,68,0.75)'
+                    ? withAlpha(chart.up, 0.75)
+                    : withAlpha(chart.down, 0.75)
               }
             />
           ))}
@@ -466,7 +460,7 @@ function DailyReturnsComboChart({ snaps }: { snaps: NavChartPoint[] }) {
           type="monotone"
           dataKey="navIndex"
           name="NAV (indexed)"
-          stroke="#3B82F6"
+          stroke={chart.accent}
           strokeWidth={2}
           dot={false}
           connectNulls

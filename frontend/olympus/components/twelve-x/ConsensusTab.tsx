@@ -23,6 +23,7 @@ import {
   currencyColor,
 } from '@/lib/twelve-x/consensus-bar';
 import { G10_CURRENCIES } from '@/lib/twelve-x/types';
+import { useChartColors, withAlpha } from '@/lib/chart-colors';
 import type { ConsensusDeltaSet, FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
 import { ConsensusDataTable } from './ConsensusDataTable';
 import DeltaChip from './DeltaChip';
@@ -115,6 +116,7 @@ export default function ConsensusTab({
   /** Initial line-chart smoothing (Raw default). Exposed for SSR tests. */
   initialSmooth?: SmoothMode;
 }) {
+  const chart = useChartColors();
   const [view, setView] = useState<ConsensusView>(initialView);
   const [smoothMode, setSmoothMode] = useState<SmoothMode>(initialSmooth);
 
@@ -348,25 +350,25 @@ export default function ConsensusTab({
                 <div className="h-[min(420px,55vh)] min-h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={scoreSeries} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                      <CartesianGrid stroke="rgba(255,255,255,0.05)" />
+                      <CartesianGrid stroke={chart.hair} />
                       {/* Strong-conviction bands */}
-                      <ReferenceArea y1={STRONG_BAND} y2={SCORE_MAX} fill="#3fb984" fillOpacity={0.06} />
-                      <ReferenceArea y1={SCORE_MIN} y2={-STRONG_BAND} fill="#e0654b" fillOpacity={0.06} />
-                      <ReferenceLine y={STRONG_BAND} stroke="#3fb984" strokeOpacity={0.5} strokeDasharray="4 4" />
-                      <ReferenceLine y={LEAN_BAND} stroke="#3fb984" strokeOpacity={0.3} strokeDasharray="2 4" />
-                      <ReferenceLine y={0} stroke="rgba(255,255,255,0.25)" />
-                      <ReferenceLine y={-LEAN_BAND} stroke="#e0654b" strokeOpacity={0.3} strokeDasharray="2 4" />
-                      <ReferenceLine y={-STRONG_BAND} stroke="#e0654b" strokeOpacity={0.5} strokeDasharray="4 4" />
+                      <ReferenceArea y1={STRONG_BAND} y2={SCORE_MAX} fill={chart.up} fillOpacity={0.06} />
+                      <ReferenceArea y1={SCORE_MIN} y2={-STRONG_BAND} fill={chart.down} fillOpacity={0.06} />
+                      <ReferenceLine y={STRONG_BAND} stroke={chart.up} strokeOpacity={0.5} strokeDasharray="4 4" />
+                      <ReferenceLine y={LEAN_BAND} stroke={chart.up} strokeOpacity={0.3} strokeDasharray="2 4" />
+                      <ReferenceLine y={0} stroke={withAlpha(chart.ink, 0.25)} />
+                      <ReferenceLine y={-LEAN_BAND} stroke={chart.down} strokeOpacity={0.3} strokeDasharray="2 4" />
+                      <ReferenceLine y={-STRONG_BAND} stroke={chart.down} strokeOpacity={0.5} strokeDasharray="4 4" />
                       <XAxis
                         dataKey="run_date"
-                        tick={{ fill: '#71717a', fontSize: 11 }}
+                        tick={{ fill: chart.axis, fontSize: 11 }}
                         tickFormatter={(d: string) => d?.slice(5)}
-                        label={{ value: 'Run date', position: 'insideBottom', offset: -4, fill: '#71717a', fontSize: 10 }}
+                        label={{ value: 'Run date', position: 'insideBottom', offset: -4, fill: chart.axis, fontSize: 10 }}
                       />
                       <YAxis
                         domain={[SCORE_MIN, SCORE_MAX]}
                         ticks={[-2, -1.25, -0.35, 0, 0.35, 1.25, 2]}
-                        tick={{ fill: '#71717a', fontSize: 11 }}
+                        tick={{ fill: chart.axis, fontSize: 11 }}
                         width={44}
                       />
                       <Tooltip
@@ -433,15 +435,15 @@ export default function ConsensusTab({
                 <div className="h-[min(320px,45vh)] min-h-[240px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={splitSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                      <CartesianGrid stroke="rgba(255,255,255,0.05)" />
+                      <CartesianGrid stroke={chart.hair} />
                       <XAxis
                         dataKey="run_date"
-                        tick={{ fill: '#71717a', fontSize: 11 }}
+                        tick={{ fill: chart.axis, fontSize: 11 }}
                         tickFormatter={(d: string) => d?.slice(5)}
                       />
                       <YAxis
                         domain={[0, 100]}
-                        tick={{ fill: '#71717a', fontSize: 11 }}
+                        tick={{ fill: chart.axis, fontSize: 11 }}
                         tickFormatter={(v) => `${v}%`}
                         width={44}
                       />
@@ -459,10 +461,10 @@ export default function ConsensusTab({
                         }}
                       />
                       <Legend formatter={(value: string) => <span className="text-ink-soft text-xs">{value}</span>} />
-                      <Area type="monotone" dataKey="bullish" stackId="split" name="Bullish" stroke="#3fb984" fill="#3fb984" fillOpacity={0.6} />
-                      <Area type="monotone" dataKey="neutral" stackId="split" name="Neutral" stroke="#94a3b8" fill="#94a3b8" fillOpacity={0.45} />
-                      <Area type="monotone" dataKey="watch" stackId="split" name="Watch" stroke="#e0b341" fill="#e0b341" fillOpacity={0.5} />
-                      <Area type="monotone" dataKey="bearish" stackId="split" name="Bearish" stroke="#e0654b" fill="#e0654b" fillOpacity={0.6} />
+                      <Area type="monotone" dataKey="bullish" stackId="split" name="Bullish" stroke={chart.up} fill={chart.up} fillOpacity={0.6} />
+                      <Area type="monotone" dataKey="neutral" stackId="split" name="Neutral" stroke={chart.axis} fill={chart.axis} fillOpacity={0.45} />
+                      <Area type="monotone" dataKey="watch" stackId="split" name="Watch" stroke={chart.warn} fill={chart.warn} fillOpacity={0.5} />
+                      <Area type="monotone" dataKey="bearish" stackId="split" name="Bearish" stroke={chart.down} fill={chart.down} fillOpacity={0.6} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>

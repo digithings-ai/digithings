@@ -11,19 +11,10 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
+import { CATEGORICAL_SERIES, useChartColors, withAlpha } from '@/lib/chart-colors';
 
-const PALETTE = [
-  '#3B82F6',
-  '#10B981',
-  '#F59E0B',
-  '#EF4444',
-  '#8B5CF6',
-  '#06B6D4',
-  '#F97316',
-  '#EC4899',
-  '#6366F1',
-  '#14B8A6',
-];
+// Hues live in the sanctioned fixed allowlist (lib/chart-colors.ts, #1402).
+const PALETTE = CATEGORICAL_SERIES;
 
 function SleeveTooltipBody({
   active,
@@ -49,7 +40,7 @@ function SleeveTooltipBody({
   if (!entries.length) return null;
 
   return (
-    <div className="rounded-lg border border-hair bg-[#141414] px-3 py-2 text-xs shadow-lg min-w-[160px]">
+    <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-xs shadow-lg min-w-[160px]">
       <p className="font-medium text-ink mb-1.5 font-mono">{date}</p>
       <ul className="space-y-0.5 max-h-48 overflow-y-auto">
         {entries.map(({ k, v }) => (
@@ -85,6 +76,7 @@ export function SleeveStackedChart({
   selectedDate,
   onChartDateSelect,
 }: SleeveStackedChartProps) {
+  const chart = useChartColors();
   if (!data.length || !keys.length) {
     return (
       <div className="h-[320px] flex items-center justify-center text-ink-mute text-sm">
@@ -118,13 +110,13 @@ export function SleeveStackedChart({
         margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
         onClick={onChartDateSelect ? handleChartClick : undefined}
       >
-        <CartesianGrid stroke="rgba(255,255,255,0.05)" />
+        <CartesianGrid stroke={chart.hair} />
         <XAxis
           dataKey="date"
-          tick={{ fill: '#71717a', fontSize: 11 }}
+          tick={{ fill: chart.axis, fontSize: 11 }}
           tickFormatter={(d: string) => d?.slice(5)}
         />
-        <YAxis tick={{ fill: '#71717a', fontSize: 11 }} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+        <YAxis tick={{ fill: chart.axis, fontSize: 11 }} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
         <Tooltip
           content={(props) => (
             <SleeveTooltipBody {...props} seriesKeys={keys} formatKey={formatKey} />
@@ -134,7 +126,7 @@ export function SleeveStackedChart({
         {selectedDate && dateSet.has(selectedDate) ? (
           <ReferenceLine
             x={selectedDate}
-            stroke="rgba(96, 165, 250, 0.9)"
+            stroke={withAlpha(chart.accent, 0.9)}
             strokeDasharray="4 4"
             strokeWidth={1}
           />

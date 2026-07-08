@@ -13,10 +13,8 @@ import {
 } from 'recharts';
 import type { TableRow } from '@/lib/database.types';
 import { EmptyState, SectionCard, StatTile, fmtPct, signColorClass } from './shared';
+import { useChartColors, withAlpha } from '@/lib/chart-colors';
 
-const FIN_GREEN = '#3fb984';
-const FIN_RED = '#e0654b';
-const AXIS = '#71717a';
 const TOP_N = 14;
 
 function sum(values: Array<number | null | undefined>): number {
@@ -30,6 +28,7 @@ export default function AttributionTab({
   attribution: TableRow<'position_attribution'>[];
   date: string | null;
 }) {
+  const chart = useChartColors();
   const summary = useMemo(() => {
     if (!attribution.length) return null;
     // Exclude the synthetic CASH row from all return sums — its total_attribution_pct
@@ -102,14 +101,14 @@ export default function AttributionTab({
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="ticker" tick={{ fill: AXIS, fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={50} />
-                <YAxis tick={{ fill: AXIS, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
+                <CartesianGrid stroke={chart.hair} vertical={false} />
+                <XAxis dataKey="ticker" tick={{ fill: chart.axis, fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={50} />
+                <YAxis tick={{ fill: chart.axis, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
                 <Tooltip
-                  cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                  cursor={{ fill: withAlpha(chart.ink, 0.04) }}
                   contentStyle={{
-                    background: 'rgba(13,17,23,0.95)',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'var(--term-bg)',
+                    border: '1px solid var(--hair)',
                     borderRadius: 8,
                     fontSize: 12,
                   }}
@@ -117,7 +116,7 @@ export default function AttributionTab({
                 />
                 <Bar dataKey="contribution" radius={[3, 3, 0, 0]} isAnimationActive={false}>
                   {chartData.map((d) => (
-                    <Cell key={d.ticker} fill={d.contribution >= 0 ? FIN_GREEN : FIN_RED} />
+                    <Cell key={d.ticker} fill={d.contribution >= 0 ? chart.up : chart.down} />
                   ))}
                 </Bar>
               </BarChart>
