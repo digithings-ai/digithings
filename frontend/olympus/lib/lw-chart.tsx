@@ -14,6 +14,7 @@
  */
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -80,11 +81,12 @@ export interface UseLightweightChartResult {
   /** Theme-reactive resolved token colors (re-renders on data-theme flips). */
   colors: ChartColors;
   /**
-   * False once the chart has been disposed. Series-owning effects must guard
-   * their cleanup with this: React may run the hook's unmount cleanup
-   * (`chart.remove()`) before a later-declared effect's cleanup.
+   * Returns false once the chart has been disposed. Series-owning effects
+   * must guard their cleanup with this: React may run the hook's unmount
+   * cleanup (`chart.remove()`) before a later-declared effect's cleanup.
+   * Stable identity — safe in dependency arrays.
    */
-  alive: RefObject<boolean>;
+  isAlive: () => boolean;
   /** prefers-reduced-motion, read at mount. */
   reducedMotion: boolean;
 }
@@ -102,6 +104,7 @@ export function useLightweightChart(
   const [chart, setChart] = useState<IChartApi | null>(null);
   const colors = useChartColors();
   const alive = useRef(false);
+  const isAlive = useCallback(() => alive.current, []);
   const [reducedMotion] = useState(
     () =>
       typeof window !== 'undefined' &&
@@ -134,7 +137,7 @@ export function useLightweightChart(
     chart.applyOptions(themedChartOptions(colors, hostMonoFont(containerRef.current)));
   }, [chart, colors]);
 
-  return { containerRef, chart, colors, alive, reducedMotion };
+  return { containerRef, chart, colors, isAlive, reducedMotion };
 }
 
 /* ── Data adapters ─────────────────────────────────────────────────────── */
@@ -196,7 +199,7 @@ const TIP_OFFSET = 14;
 export function useChartTip(
   chart: IChartApi | null,
   containerRef: RefObject<HTMLDivElement | null>,
-  alive: RefObject<boolean>
+  isAlive: () => boolean
 ): ChartTip | null {
   const [tip, setTip] = useState<ChartTip | null>(null);
 
@@ -224,9 +227,9 @@ export function useChartTip(
     };
     chart.subscribeCrosshairMove(onMove);
     return () => {
-      if (alive.current) chart.unsubscribeCrosshairMove(onMove);
+      if (isAlive()) chart.unsubscribeCrosshairMove(onMove);
     };
-  }, [chart, containerRef, alive]);
+  }, [chart, containerRef, isAlive]);
 
   return tip;
 }
