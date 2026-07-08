@@ -4,7 +4,7 @@ Build shared **`HeroFeaturePicker`** primitive — Graphite icon row below hero 
 
 ## Component
 
-- [x] cross-cutting (`frontend/design/`)
+- [x] cross-cutting (`frontend/digiweb/design/`)
 
 ## Acceptance Criteria
 
@@ -14,7 +14,7 @@ Build shared **`HeroFeaturePicker`** primitive — Graphite icon row below hero 
 - [ ] Keyboard accessible: arrow keys or tab + enter; `aria-controls` on panels
 - [ ] 3 tabs minimum in demo: Olympus · Strategies · Pipeline
 - [ ] Integrates with `ProductFrame` (#1202) without clipping at browser zoom
-- [ ] Document in `frontend/design/site/README.md`
+- [ ] Document in `frontend/digiweb/design/site/README.md`
 
 ## Test Requirements
 
@@ -23,8 +23,8 @@ Build shared **`HeroFeaturePicker`** primitive — Graphite icon row below hero 
 
 ## Documentation to Update
 
-- [ ] `frontend/design/site/README.md`
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/site/README.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

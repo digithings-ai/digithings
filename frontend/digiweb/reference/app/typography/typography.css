@@ -1,0 +1,226 @@
+/* Typography page — scroll-linked word reveals.
+
+   Pinned-track pattern shared by all variants: .wr-track is taller than the
+   viewport (240vh) and .wr-sticky pins the line while scroll progress drives
+   the reveal. Words finish by 70% of track progress and hold fully visible
+   for the remaining 30% (~42vh of scroll) before the line unpins — the text
+   can never leave the viewport half-revealed. */
+
+/* ── shared pinned track ─────────────────────────────────────────────── */
+
+.wr-track {
+  position: relative;
+  height: 240vh;
+}
+
+.wr-sticky {
+  position: sticky;
+  top: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+}
+
+/* reduced-motion static render (set by the useReducedMotion branch) */
+.wr-track.is-static {
+  height: auto;
+}
+
+.wr-track.is-static .wr-sticky {
+  position: static;
+  min-height: 0;
+  padding: 2.5rem 0;
+}
+
+/* ── shared line ─────────────────────────────────────────────────────── */
+
+.word-line {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 5vw, 3rem);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  max-width: 24ch;
+}
+
+/* ── variant 1: pinned blur reveal (.word-reveal) ────────────────────── */
+
+.word {
+  display: inline-block;
+  margin-right: 0.35em;
+  will-change: transform, opacity, filter;
+}
+
+/* ── variant 2: muted base (.wr-muted) ───────────────────────────────── */
+
+.wr-muted-word {
+  display: inline-block;
+  margin-right: 0.35em;
+  /* readable resting state; the motion-driven inline color-mix deepens it
+     toward var(--ink). Browsers without color-mix drop the inline value and
+     keep this — the text is always legible. */
+  color: var(--ink-mute);
+}
+
+/* ── variant 3: outline fill (.wr-outline) ───────────────────────────── */
+
+.wr-outline-line {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: clamp(1.5rem, 4.4vw, 2.75rem);
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+  max-width: 22ch;
+}
+
+.wr-outline-word {
+  display: inline-block;
+  margin-right: 0.35em;
+  color: transparent;
+  /* house pattern (frontend/digiweb/design/site/site.css .colo-word): hairline
+     stroke, color-mix upgrade where supported */
+  -webkit-text-stroke: 1px var(--ink);
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--ink) 30%, transparent);
+}
+
+.wr-outline-word.is-accent {
+  -webkit-text-stroke: 1px var(--accent);
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+/* static final state (reduced-motion branch renders plain spans) */
+.wr-outline-line.is-final .wr-outline-word {
+  color: var(--ink);
+}
+
+.wr-outline-line.is-final .wr-outline-word.is-accent {
+  color: var(--accent);
+}
+
+/* fallback: without text-stroke the outlines would be invisible — show
+   solid readable text. !important beats the motion-driven inline color. */
+@supports not (-webkit-text-stroke: 1px #000) {
+  .wr-outline-word {
+    color: var(--ink) !important;
+  }
+
+  .wr-outline-word.is-accent {
+    color: var(--accent) !important;
+  }
+}
+
+/* ── reduced motion ──────────────────────────────────────────────────────
+   The useReducedMotion hook renders the static branch; this block covers
+   pre-hydration paint and forces final states regardless of inline styles. */
+@media (prefers-reduced-motion: reduce) {
+  .wr-track {
+    height: auto;
+  }
+
+  .wr-sticky {
+    position: static;
+    min-height: 0;
+    padding: 2.5rem 0;
+  }
+
+  .word,
+  .wr-muted-word,
+  .wr-outline-word {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
+  }
+
+  .wr-muted-word,
+  .wr-outline-word {
+    color: var(--ink) !important;
+  }
+
+  .wr-outline-word.is-accent {
+    color: var(--accent) !important;
+  }
+}
+
+/* Copy & voice grammar — layout / card / title / grid / arrow / note migrated to
+   token-backed Tailwind utilities on the tsx (see copy-grammar-reference.tsx).
+   Kept below: combinator + :last-child + modifier rules that can't be expressed
+   as element utilities (row divider, dt/dd typography, the doctrine grid). */
+
+.cg-row {
+  display: grid;
+  gap: 0.1rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--hair) 60%, transparent);
+}
+
+.cg-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.cg-row dt {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+}
+
+.cg-row dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.cg-ours dt {
+  color: var(--accent);
+}
+
+.cg-ours dd {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.05rem;
+}
+
+.cg-list--doctrine .cg-row {
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: baseline;
+}
+
+.cg-list--doctrine dt {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cg-list--doctrine dd {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 760px) {
+  .cg-list--doctrine .cg-row {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+}
+
+/* ── type specimen (evaluate the live type theme) ─────────────────────────
+   Container / row / role / display / body / mono layout migrated to token-backed
+   Tailwind utilities on the tsx (see type-specimen.tsx). Kept below: the
+   :first-child divider reset and the `em` / `p` child rules — combinator/pseudo
+   selectors that can't be element utilities. */
+
+.spec-row:first-child {
+  border-top: none;
+}
+
+.spec-italic em {
+  font-style: italic;
+  color: var(--accent);
+}
+
+.spec-mono p {
+  margin: 0;
+}

@@ -1,0 +1,590 @@
+/* Chrome page — scroll-aware nav demo + footer grammar.
+   Scroll-nav: the demo frame, mark, link list, CTA and filler page migrated to
+   utilities in scroll-nav-reference.tsx. The bar itself stays as CSS — its
+   settle transition (border/background/backdrop-filter) and the .solid state's
+   backdrop blur + 2-colour color-mix have no single-element utility. */
+
+.scroll-nav {
+  position: sticky;
+  top: 0.6rem;
+  z-index: 5;
+  margin: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: border-color 0.3s var(--ease), background-color 0.3s var(--ease),
+    backdrop-filter 0.3s var(--ease);
+}
+
+.scroll-nav.solid {
+  border-color: var(--hair);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+/* Announcement bar — .annc-bar / .annc-close / .annc-restore migrated to
+   utilities in announcement-bar-reference.tsx. The link keeps its class: the
+   parent-hover-descendant rule (.annc-link:hover b) has no single-element
+   utility. */
+
+.annc-link {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem 0.6rem;
+  padding: 0.55rem 1rem;
+  font-size: 0.8rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.annc-link:hover b {
+  text-decoration: underline;
+}
+
+.annc-link b {
+  font-weight: 400;
+  color: var(--accent);
+}
+
+/* Footer — .ref-footer wrapper, column grid, titles, link lists, and the
+   utility row (status/copyright) migrated to utilities in footer-reference.tsx.
+   Kept as CSS: .status-dot (box-shadow tint), the .ref-footer-theme segmented
+   control (JS-toggled .on state on descendant buttons), and the colophon
+   mechanics below (scroll-driven animation, masks, gradients). */
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--up);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--up) 55%, transparent);
+}
+
+.ref-footer-theme {
+  display: inline-flex;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ref-footer-theme button {
+  padding: 0.3rem 0.6rem;
+  color: var(--ink-mute);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  cursor: pointer;
+}
+
+.ref-footer-theme button.on {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.ref-footer-brand {
+  position: relative;
+  margin: 0 -1.4rem;
+  /* Bottom runway so the wordmark is fully in view (not tucked under the
+     fold) while the glow sweeps across it — the sweep is scrubbed against
+     this element's scroll progress in footer-reference.tsx. */
+  padding: 1.2rem 0 26svh;
+  /* size container: the colophon scales against the footer box, not the
+     viewport, so the demo box gets production proportions at any width. */
+  container-type: inline-size;
+}
+
+.ref-footer-bloom {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    30rem 10rem at 50% 130%,
+    color-mix(in srgb, var(--accent) 28%, transparent),
+    transparent 65%
+  );
+  pointer-events: none;
+}
+
+/* ── colophon — the page's last word (canon §08) ─────────────────────────
+   The brand name at giant scale, 1px hairline outline (an outline, never
+   a glow). Scroll-scrubbed with zero JS: CSS scroll-driven animation
+   behind @supports — the word rises as it enters, the <b> suffix fills
+   with livery, and a glow sweep passes left-to-right across the sign once
+   per scroll-through. Reduced motion / no support: the name simply
+   stands, sweep-free. */
+
+.ref-colophon {
+  position: relative; /* paints above the absolutely-positioned bloom */
+  overflow: hidden;
+  padding: 2.6rem 0 0;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* fallback stroke first: without color-mix() support the refined
+   declaration drops, and transparent fill + no stroke would render
+   nothing. Same for cqw → vw font sizing. */
+.ref-colo-word {
+  position: relative; /* anchors the sweep overlay */
+  display: block;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: clamp(2.6rem, 15.5vw, 15rem);
+  font-size: clamp(2.6rem, 15.5cqw, 15rem);
+  line-height: 0.82;
+  letter-spacing: -0.05em;
+  white-space: nowrap;
+  text-align: center;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--ink);
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--ink) 30%, transparent);
+}
+
+.ref-colo-word b {
+  font-weight: 500;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--accent);
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+/* Glow sweep — a light passing left-to-right across the sign. A duplicate
+   overlay span carries an accent gradient clipped to its own glyphs; the
+   footer component (Motion) scrubs background-position from off-left to
+   off-right against the colophon's scroll progress. Parked off-screen by
+   default (132% ≈ band clear of the left edge), so no-JS and reduced-motion
+   both show just the static outlined wordmark, no glow. */
+.ref-colo-sweep {
+  display: block;
+  position: absolute;
+  inset: 0;
+  -webkit-text-stroke-width: 0;
+  color: transparent;
+  background: linear-gradient(
+    100deg,
+    transparent 38%,
+    color-mix(in srgb, var(--accent) 72%, transparent) 50%,
+    transparent 62%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  background-position: 132% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* Word rise as the colophon enters — zero-JS, gated on support + motion
+   preference. Rests fully risen where unsupported. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .ref-colo-word {
+      opacity: 0;
+      transform: translateY(34%);
+      animation: ref-colo-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 100%;
+    }
+  }
+}
+
+@keyframes ref-colo-rise {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Command palette (the reusable .kbd keycap lives in globals.css) */
+
+.cp-trigger {
+  margin-top: 1.2rem;
+  width: min(100%, 26rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.8rem 0.7rem 1rem;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+.cp-trigger:hover {
+  color: var(--ink-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--hair));
+}
+
+.cp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 14vh;
+}
+
+.cp-scrim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.cp-panel {
+  position: relative;
+  width: min(92vw, 34rem);
+  max-height: 62vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--bg));
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.cp-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.cp-search-glyph {
+  color: var(--ink-mute);
+  display: inline-flex;
+}
+
+.cp-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.cp-input::placeholder {
+  color: var(--ink-mute);
+}
+
+.cp-results {
+  overflow-y: auto;
+  padding: 0.4rem;
+}
+
+.cp-group-label {
+  padding: 0.5rem 0.6rem 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+.cp-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cp-row.on {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--ink);
+}
+
+.cp-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--accent);
+}
+
+.cp-label {
+  flex: 1;
+}
+
+.cp-row-key {
+  color: var(--ink-mute);
+}
+
+.cp-empty {
+  padding: 1.4rem 0.6rem;
+  text-align: center;
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.cp-foot {
+  display: flex;
+  gap: 1.2rem;
+  padding: 0.6rem 0.9rem;
+  border-top: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--ink-mute);
+}
+
+.cp-foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* Tabs — a sliding active indicator, two dresses. The demo wrappers and all
+   static panel content (overview/positions/orders/logs, mode note) are migrated
+   to utilities in tabs-reference.tsx. The strip / button / sliding-ink machinery
+   stays as CSS: variant combinators, aria/hover/focus states, and the ink whose
+   transform + width are written from a ref and animated by a transition. */
+
+.tab-strip {
+  position: relative;
+  display: inline-flex;
+  gap: 0.2rem;
+}
+
+.tab-strip.underline {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.tab-strip.pill {
+  padding: 0.25rem;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 90%, var(--bg));
+}
+
+.tab-btn {
+  position: relative;
+  z-index: 1;
+  border: none;
+  background: transparent;
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.2s var(--ease);
+}
+
+.tab-strip.underline .tab-btn {
+  padding: 0.55rem 0.7rem 0.7rem;
+}
+
+.tab-strip.pill .tab-btn {
+  padding: 0.4rem 0.95rem;
+}
+
+.tab-btn:hover {
+  color: var(--ink-soft);
+}
+
+.tab-btn[aria-selected="true"] {
+  color: var(--ink);
+}
+
+.tab-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* the slider — transform/width written from JS, animated by this transition */
+.tab-ink {
+  position: absolute;
+  transition:
+    transform 0.28s var(--ease),
+    width 0.28s var(--ease);
+  pointer-events: none;
+}
+
+.tab-ink.underline {
+  left: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+}
+
+.tab-ink.pill {
+  z-index: 0;
+  top: 0.25rem;
+  bottom: 0.25rem;
+  left: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-ink {
+    transition: none;
+  }
+}
+
+/* Toasts — a corner stack that self-dismisses. The trigger-button row migrated
+   to utilities in toast-stack-reference.tsx; the stack itself stays as CSS
+   (portal + AnimatePresence transforms, per-type border/icon states, and the
+   spin/drain keyframes with their reduced-motion guard). */
+
+.toast-stack {
+  position: fixed;
+  inset: auto 1.25rem 1.25rem auto;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(22rem, calc(100vw - 2.5rem));
+  pointer-events: none;
+}
+
+.toast {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.7rem;
+  align-items: start;
+  padding: 0.8rem 0.85rem;
+  border: 1px solid var(--hair);
+  border-left-width: 2px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 96%, var(--bg));
+  box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.toast-success {
+  border-left-color: var(--up);
+}
+.toast-error {
+  border-left-color: var(--down);
+}
+.toast-info {
+  border-left-color: var(--accent);
+}
+.toast-loading {
+  border-left-color: var(--ink-mute);
+}
+
+.toast-icon {
+  display: inline-flex;
+  margin-top: 0.05rem;
+}
+
+.toast-success .toast-icon {
+  color: var(--up);
+}
+.toast-error .toast-icon {
+  color: var(--down);
+}
+.toast-info .toast-icon {
+  color: var(--accent);
+}
+.toast-loading .toast-icon {
+  color: var(--ink-mute);
+}
+
+.toast-spin {
+  animation: toast-spin 0.8s linear infinite;
+}
+
+@keyframes toast-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.toast-body {
+  min-width: 0;
+}
+
+.toast-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+
+.toast-msg {
+  margin: 0.15rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--ink-mute);
+}
+
+.toast-close {
+  display: inline-flex;
+  padding: 0.15rem;
+  border: none;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: color 0.2s var(--ease);
+}
+
+.toast-close:hover {
+  color: var(--ink);
+}
+
+.toast-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  transform-origin: left;
+  background: color-mix(in srgb, currentColor 55%, var(--hair));
+  animation: toast-drain linear forwards;
+}
+
+.toast-success .toast-progress {
+  color: var(--up);
+}
+.toast-error .toast-progress {
+  color: var(--down);
+}
+.toast-info .toast-progress {
+  color: var(--accent);
+}
+
+@keyframes toast-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-spin {
+    animation: none;
+  }
+}

@@ -1,10 +1,10 @@
 ## Goal
 
-Build shared **`ClosingCtaBand`** primitive — full-width section before footer with headline + literal primary CTA + optional secondary ([Graphite/Cursor pattern](../../../../frontend/design/references/scans/copy-patterns.md), [COPY_GUIDE.md §6](../../../../frontend/design/COPY_GUIDE.md)).
+Build shared **`ClosingCtaBand`** primitive — full-width section before footer with headline + literal primary CTA + optional secondary ([Graphite/Cursor pattern](../../../../frontend/digiweb/design/references/scans/copy-patterns.md), [COPY_GUIDE.md §6](../../../../frontend/digiweb/design/COPY_GUIDE.md)).
 
 ## Component
 
-- [x] cross-cutting (`frontend/design/`)
+- [x] cross-cutting (`frontend/digiweb/design/`)
 
 ## Acceptance Criteria
 
@@ -13,7 +13,7 @@ Build shared **`ClosingCtaBand`** primitive — full-width section before footer
 - [ ] Copy slots documented (headline, primary label+href, secondary label+href)
 - [ ] `reveal-up` enter on scroll (respect reduced motion)
 - [ ] Demo in smoke page with digithings + digiquant copy variants
-- [ ] Document in `frontend/design/site/README.md`
+- [ ] Document in `frontend/digiweb/design/site/README.md`
 
 ## Test Requirements
 
@@ -22,8 +22,8 @@ Build shared **`ClosingCtaBand`** primitive — full-width section before footer
 
 ## Documentation to Update
 
-- [ ] `frontend/design/site/README.md`
-- [ ] `frontend/design/COPY_GUIDE.md` — reference primitive
+- [ ] `frontend/digiweb/design/site/README.md`
+- [ ] `frontend/digiweb/design/COPY_GUIDE.md` — reference primitive
 
 ## Out of Scope
 

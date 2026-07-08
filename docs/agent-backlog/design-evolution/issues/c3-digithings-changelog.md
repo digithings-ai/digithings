@@ -1,6 +1,6 @@
 ## Goal
 
-Add a **changelog/releases band** to digithings.ai landing using the shared `ChangelogBand` primitive ([`cursor-full.md`](../../../../frontend/design/references/scans/cursor-full.md)).
+Add a **changelog/releases band** to digithings.ai landing using the shared `ChangelogBand` primitive ([`cursor-full.md`](../../../../frontend/digiweb/design/references/scans/cursor-full.md)).
 
 ## Component
 
@@ -22,7 +22,7 @@ Add a **changelog/releases band** to digithings.ai landing using the shared `Cha
 ## Documentation to Update
 
 - [ ] `frontend/digithings-web/README.md` — how to update release entries
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

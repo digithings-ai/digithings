@@ -357,7 +357,7 @@
 
 /* ==========================================================================
    v7 LANDING — ported from
-   frontend/design/demos/digiquant-landing/07-scroll-driven.html
+   frontend/digiweb/design/demos/digiquant-landing/07-scroll-driven.html
    Namespaced (dqnav / dqhero / dqp / dqss) so nothing collides with shared
    site.css (.hero, .nav, .node, .stage, .brand, .section) or the .ts-* tearsheet
    classes above. Consumes [data-theme] tokens only → light/dark safe.

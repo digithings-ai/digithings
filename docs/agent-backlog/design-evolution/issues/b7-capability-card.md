@@ -1,10 +1,10 @@
 ## Goal
 
-Build **`CapabilityCard`** — x.ai-style mini UI preview + "Explore →" link, composable inside bento cells or standalone grid ([`components-catalog.md`](../../../../frontend/design/references/scans/components-catalog.md)).
+Build **`CapabilityCard`** — x.ai-style mini UI preview + "Explore →" link, composable inside bento cells or standalone grid ([`components-catalog.md`](../../../../frontend/digiweb/design/references/scans/components-catalog.md)).
 
 ## Component
 
-- [x] cross-cutting (`frontend/design/`)
+- [x] cross-cutting (`frontend/digiweb/design/`)
 
 ## Acceptance Criteria
 
@@ -22,8 +22,8 @@ Build **`CapabilityCard`** — x.ai-style mini UI preview + "Explore →" link, 
 
 ## Documentation to Update
 
-- [ ] `frontend/design/site/README.md`
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/site/README.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

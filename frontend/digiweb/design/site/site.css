@@ -1,0 +1,447 @@
+/* ==========================================================================
+   DigiThings site foundation — shared component layer for the redesign.
+   Consumes the [data-theme] semantic tokens in ../tokens.css. Terminal-CLI,
+   utilitarian, spacious; light + dark; reduced-motion safe.
+   Page-specific overrides live in each site's local style.css.
+
+   Nav shell, hero layout, cards, pills/stage, connected graph, and scroll
+   reveal were reimplemented as React components in @digithings/web after
+   the Dec 2025 migration (commit 681273a) — those selectors were removed
+   here (#1240). What remains is what digithings-web / digiquant-web still
+   import directly: brand mark, theme toggle, buttons, kicker/prompt, the
+   standalone hero title, the terminal block, sections, ProductFrame,
+   principles, and footer.
+   ========================================================================== */
+
+/* ── reset ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; }
+html { scroll-behavior: auto; -webkit-text-size-adjust: 100%; background: var(--bg); }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.65;
+  font-weight: 400;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+  transition: background 0.4s var(--ease), color 0.4s var(--ease);
+}
+img, svg { max-width: 100%; display: block; }
+a { color: inherit; text-decoration: none; }
+::selection { background: var(--accent); color: var(--on-accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+
+/* ── atmosphere ─────────────────────────────────────────────────────── */
+.grain {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  opacity: var(--grain-opacity, 0.03); mix-blend-mode: var(--grain-blend, screen);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.glow {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(48rem 30rem at 72% -8%, var(--accent-weak), transparent 60%);
+  animation: glow-drift 18s var(--ease) infinite alternate;
+}
+@keyframes glow-drift { to { transform: translate(-5%, 2%); } }
+
+/* ── layout ─────────────────────────────────────────────────────────── */
+.wrap { width: 100%; max-width: var(--wrap); margin-inline: auto; padding-inline: var(--gutter); position: relative; z-index: 1; }
+
+/* ── brand mark + theme toggle (nav shell lives in React DigiNav/DqNav) ─ */
+.brand { display: inline-flex; align-items: center; gap: 0.6rem; font-weight: 600; letter-spacing: -0.02em; }
+.brand-mark { width: 26px; height: 26px; border-radius: 7px; }
+.brand-word { font-size: 1.05rem; }
+.brand-word b { color: var(--accent); font-weight: 600; }
+
+.theme-toggle { display: inline-grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--hair); border-radius: 10px; background: var(--surface); color: var(--ink-soft); cursor: pointer; transition: color 0.18s var(--ease), border-color 0.18s var(--ease), transform 0.18s var(--ease); }
+.theme-toggle:hover { color: var(--ink); border-color: var(--hair-2); transform: translateY(-1px); }
+.theme-toggle svg { width: 17px; height: 17px; }
+
+/* ── buttons ────────────────────────────────────────────────────────── */
+.btn { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--font-sans); font-size: 0.95rem; font-weight: 500; padding: 0.72rem 1.25rem; border-radius: 10px; border: 1px solid var(--hair-2); cursor: pointer; white-space: nowrap; transition: transform 0.18s var(--ease), background 0.18s var(--ease), border-color 0.18s var(--ease), box-shadow 0.18s var(--ease); }
+.btn span[aria-hidden] { transition: transform 0.18s var(--ease); }
+.btn:hover span[aria-hidden] { transform: translateX(3px); }
+.btn-sm { padding: 0.5rem 0.95rem; font-size: 0.88rem; }
+.btn-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; box-shadow: 0 10px 30px -14px var(--accent); }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 16px 40px -14px var(--accent); }
+.btn-ghost { background: transparent; color: var(--ink); }
+.btn-ghost:hover { background: var(--surface); border-color: var(--hair-2); transform: translateY(-2px); }
+
+/* ── kicker / prompt ────────────────────────────────────────────────── */
+.prompt { color: var(--accent); font-weight: 600; font-family: var(--font-mono); }
+.kicker { font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.02em; color: var(--accent); }
+
+/* ── hero title (standalone, e.g. subsystem/module detail pages) ─────── */
+.hero-title { font-family: var(--font-display); font-weight: 400; font-size: clamp(2.8rem, 6.4vw, 5rem); line-height: 1.02; letter-spacing: -0.02em; margin: 1.4rem 0 1.2rem; max-width: 16ch; }
+.hero-title em { font-style: italic; color: var(--accent); }
+
+/* ── terminal block (always dark) ───────────────────────────────────── */
+.term { width: 100%; background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 14px; overflow: hidden; box-shadow: 0 44px 100px -50px rgba(0,0,0,0.45); }
+.term-bar { display: flex; align-items: center; gap: 8px; padding: 0.7rem 0.9rem; background: var(--term-fill); border-bottom: 1px solid var(--term-hair); }
+.term-bar i { width: 11px; height: 11px; border-radius: 50%; background: #3a342c; display: inline-block; }
+.term-bar i:nth-child(1) { background: #ec6a5e; } .term-bar i:nth-child(2) { background: #f4bf4f; } .term-bar i:nth-child(3) { background: #61c554; }
+.term-title { margin-left: auto; font-family: var(--font-mono); font-size: 0.72rem; color: var(--term-mute); }
+.term-body { font-family: var(--font-mono); font-size: clamp(0.76rem, 1.2vw, 0.88rem); line-height: 1.95; color: var(--term-ink); padding: 1.2rem 1.3rem 1.4rem; margin: 0; min-height: 17em; white-space: pre-wrap; }
+.tl-cmd { color: var(--term-ink); } .tl-cmd::before { content: "$ "; color: var(--accent); }
+.tl-out { color: var(--term-mute); }
+.tl-ok::before { content: "✓ "; color: var(--up); } .tl-ok { color: var(--term-mute); } .tl-ok b { color: var(--term-ink); font-weight: 500; }
+.tl-mod { color: var(--term-ink); } .tl-mod b { color: var(--accent); font-weight: 500; }
+.tl-install { color: var(--up); }
+.tl-arrow { color: var(--accent); }
+.term-cursor { display: inline-block; width: 0.6em; height: 1.05em; background: var(--accent); vertical-align: -0.16em; animation: blink 1.05s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* inline install/clone command chip */
+.cmdline { display: inline-flex; align-items: center; gap: 0.7rem; background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 10px; padding: 0.55rem 0.65rem 0.55rem 1rem; font-family: var(--font-mono); font-size: 0.82rem; color: var(--term-ink); max-width: 100%; overflow-x: auto; }
+.cmdline .prompt { color: var(--accent); }
+
+/* ── sections ───────────────────────────────────────────────────────── */
+.section { padding: clamp(4rem, 9vw, 7.5rem) 0; }
+.section-alt { background: var(--surface-2); border-block: 1px solid var(--hair); }
+.section-head { max-width: 56ch; margin-bottom: clamp(2.5rem, 5vw, 4rem); }
+.section-head h2 { font-size: clamp(1.9rem, 4vw, 3rem); font-weight: 600; letter-spacing: -0.03em; line-height: 1.08; margin: 0.7rem 0 0.9rem; }
+.section-head.center { margin-inline: auto; text-align: center; }
+.section-head p { color: var(--ink-soft); font-size: clamp(1rem, 1.4vw, 1.12rem); }
+.grid { display: grid; gap: 1rem; }
+
+/* ── product frame (Graphite artboard / Cursor product screenshot) ────
+   Flat, CQ-scaled UI embed for marketing pages. "Atmospheric outside,
+   surgical inside" (EVOLUTION.md §7) — no mesh/glow/grain on the surface
+   itself; those live on the page background around the frame.
+   CQ scaling: `container-type: inline-size` on .product-frame turns its
+   own box into a query container, and .product-frame__surface sizes its
+   type in `cqi` (container-query inline-size units) clamped between a
+   floor and ceiling. That means UI text inside the frame shrinks with
+   the *frame's* width (e.g. a narrower column on mobile), not the
+   viewport — a screenshot-like embed stays legible without overflowing
+   at any breakpoint. ────────────────────────────────────────────────── */
+.product-frame { width: 100%; max-width: var(--product-frame-w); margin-inline: auto; container-type: inline-size; }
+.product-frame__surface { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-lg); overflow: hidden; padding: clamp(0.85rem, 4cqi, 1.6rem); font-size: clamp(0.72rem, 2.4cqi, 1rem); line-height: 1.5; }
+.product-frame__caption { margin-top: 0.75rem; font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-mute); text-align: center; }
+
+/* ── bento grid (Cursor-style linked feature cells) ───────────────────
+   Mobile-first: single column, 2×2 from 768px. Flat --surface panels,
+   no glass morphism (EVOLUTION.md §10 anti-pattern #8). ─────────────── */
+.bento { display: grid; grid-template-columns: 1fr; gap: 1.25rem; width: 100%; max-width: var(--wrap-wide); margin-inline: auto; }
+.bento__cell { display: flex; flex-direction: column; gap: 0.5rem; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 1.5rem; transition: transform var(--duration-hover) var(--ease-glide), border-color var(--duration-hover) var(--ease-glide); }
+.bento__cell:not(.bento__cell--static):hover { transform: translateY(-3px); border-color: var(--hair-2); }
+.bento__cell--static { cursor: default; }
+.bento__cell--span-2 { grid-column: span 2; }
+.bento__thumb { border-radius: var(--r-md); overflow: hidden; }
+.bento__kicker { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.02em; color: var(--accent); }
+.bento__title { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.02em; }
+.bento__body { font-size: 0.9rem; color: var(--ink-soft); line-height: 1.5; }
+.bento__cta { margin-top: auto; padding-top: 0.5rem; display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--accent); font-weight: 500; }
+.bento__cta span[aria-hidden] { transition: transform var(--duration-hover) var(--ease-glide); }
+.bento__cell:hover .bento__cta span[aria-hidden] { transform: translateX(3px); }
+@media (min-width: 768px) {
+  .bento { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── trust strip (proof / logo row) ───────────────────────────────────── */
+.trust-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: clamp(1.25rem, 4vw, 2.5rem); }
+.trust-strip__item { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 0.85rem; color: var(--ink-mute); }
+.trust-strip__item img { height: 28px; width: auto; max-width: 140px; filter: grayscale(1); opacity: 0.7; }
+/* --logos: integration-mark row (x.ai partner-mark pattern, #1229). Real
+   integrations only — no stock/generic logos. Marks are muted/grayscale by
+   default and lift to full color on hover; wrap each logo as
+   <span class="trust-strip__item"><img alt="Name"></span> (decorative-only
+   logos use alt=""). Works alongside the base text friction variant. */
+.trust-strip--logos { gap: clamp(1.5rem, 4vw, 2.75rem); }
+.trust-strip--logos .trust-strip__item { font-size: 0.95rem; color: var(--ink-soft); }
+.trust-strip--logos .trust-strip__item img { transition: filter var(--duration-hover) var(--ease-glide), opacity var(--duration-hover) var(--ease-glide); }
+.trust-strip--logos .trust-strip__item:hover { color: var(--ink); }
+.trust-strip--logos .trust-strip__item:hover img { filter: grayscale(0); opacity: 1; }
+
+/* ── reveal-up (scroll-triggered enter) ────────────────────────────────
+   CSS-only: owns the two visual states only. Trigger it either with
+   ../scroll-trigger.js's `activateSelector` (toggles `.active` when the
+   element crosses the scroll line) or from the React `Reveal` component's
+   className (frontend/digiweb/web/src/motion/primitives.tsx) — both are valid
+   drivers, so both class names are wired below. ───────────────────────── */
+.reveal-up { opacity: 0; transform: translateY(1rem); transition: opacity var(--duration-reveal) var(--ease-glide), transform var(--duration-reveal) var(--ease-glide); }
+.reveal-up.is-visible, .reveal-up.active { opacity: 1; transform: none; }
+/* No-JS fallback: the visible state is only ever added by a JS trigger, so
+   without scripting .reveal-up content would be permanently hidden. Show it. */
+@media (scripting: none) {
+  .reveal-up { opacity: 1; transform: none; }
+}
+
+/* ── stat counter (xAI-style scroll-triggered metrics strip) ───────────
+   No-fake-data policy (EVOLUTION.md §10 anti-pattern #2): stat-counter.js
+   only counts up to whatever data-target says — placeholders must be
+   labeled as such, real wiring is just setting data-target. ────────────── */
+.stat-counter-row { display: flex; flex-wrap: wrap; justify-content: center; gap: clamp(1.5rem, 5vw, 3.5rem); }
+.stat-counter { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; text-align: center; }
+.stat-counter__value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: clamp(1.7rem, 4vw, 2.5rem); font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
+.stat-counter__label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); }
+
+/* ── changelog band (Cursor-style dated release rows) ───────────────────
+   Mobile: stacked (date above title). Desktop: fixed date column + title
+   row, from 640px. Data shape: { date, version?, title, href, tag? }[] —
+   see site/README.md for the documented contract and rendering is left to
+   the consumer (vanilla or React), same as TrustStrip. ─────────────────── */
+.changelog-band { display: flex; flex-direction: column; max-width: var(--wrap-wide); margin-inline: auto; }
+.changelog-row { display: grid; grid-template-columns: 1fr; gap: 0.3rem; padding: 1.1rem 0; border-bottom: 1px solid var(--hair); }
+.changelog-row:last-child { border-bottom: none; }
+.changelog-row__date { font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-mute); }
+.changelog-row__title { font-size: 0.98rem; color: var(--ink); }
+.changelog-row__title a { color: inherit; }
+.changelog-row__title a:hover { color: var(--accent); }
+.changelog-row__tag { display: inline-flex; align-items: center; margin-left: 0.6rem; padding: 0.15rem 0.5rem; border-radius: 999px; border: 1px solid var(--hair-2); font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+.changelog-band__footer { margin-top: 1.2rem; text-align: center; }
+.changelog-band__footer a { font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent); }
+@media (min-width: 640px) {
+  .changelog-row { grid-template-columns: 8rem 1fr; align-items: baseline; gap: 1.5rem; }
+}
+
+/* ── code sample band (tabbed SDK / curl snippets) ──────────────────────
+   WAI-ARIA tabs pattern, keyboard-navigable (../code-sample-band.js).
+   Always dark, reusing the terminal block's --term-* tokens regardless of
+   page theme (matches .term). ───────────────────────────────────────────── */
+.code-sample-band { background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 14px; overflow: hidden; }
+/* __bar holds the tablist + copy button as siblings — the copy button must NOT
+   live inside role="tablist" (a tablist owns only role="tab" children). */
+.code-sample-band__bar { display: flex; align-items: center; gap: 0.25rem; padding: 0.5rem 0.6rem; background: var(--term-fill); border-bottom: 1px solid var(--term-hair); }
+.code-sample-band__tabs { display: flex; align-items: center; gap: 0.25rem; }
+.code-sample-band__tab { font-family: var(--font-mono); font-size: 0.8rem; color: var(--term-mute); background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 0.35rem 0.7rem; cursor: pointer; }
+.code-sample-band__tab[aria-selected="true"] { color: var(--term-ink); background: var(--term-bg); border-color: var(--term-hair); }
+.code-sample-band__tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.code-sample-band__copy { margin-left: auto; font-family: var(--font-mono); font-size: 0.7rem; color: var(--term-mute); background: var(--term-fill); border: 1px solid var(--term-hair); border-radius: 7px; padding: 0.3rem 0.6rem; cursor: pointer; }
+.code-sample-band__copy:hover { color: var(--term-ink); }
+.code-sample-band__copy.is-ok { color: var(--up); }
+.code-sample-band__panel { margin: 0; padding: 1.1rem 1.2rem; font-family: var(--font-mono); font-size: clamp(0.76rem, 1.2vw, 0.86rem); line-height: 1.7; color: var(--term-ink); white-space: pre-wrap; overflow-x: auto; }
+
+/* ── capability card (xAI-style mini-UI preview + "Explore →") ──────────
+   Flat --surface panel, hairline border — no decorative eyebrow pills
+   (EVOLUTION.md §10 anti-pattern #3). Composes standalone (.capability-grid),
+   or drop a .capability-card inside a .bento__cell. The __preview slot takes
+   an <img>, a .product-frame child, or a .term snippet. ─────────────────── */
+.capability-grid { display: grid; grid-template-columns: 1fr; gap: 1.25rem; width: 100%; max-width: var(--wrap-wide); margin-inline: auto; }
+.capability-card { display: flex; flex-direction: column; gap: 0.6rem; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 1.5rem; transition: transform var(--duration-hover) var(--ease-glide), border-color var(--duration-hover) var(--ease-glide); }
+.capability-card:hover { transform: translateY(-3px); border-color: var(--hair-2); }
+.capability-card__preview { border-radius: var(--r-md); overflow: hidden; margin-bottom: 0.4rem; }
+.capability-card__title { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.02em; }
+.capability-card__body { font-size: 0.9rem; color: var(--ink-soft); line-height: 1.5; }
+.capability-card__cta { margin-top: auto; padding-top: 0.5rem; display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--accent); font-weight: 500; }
+.capability-card__cta span[aria-hidden] { transition: transform var(--duration-hover) var(--ease-glide); }
+.capability-card:hover .capability-card__cta span[aria-hidden] { transform: translateX(3px); }
+@media (min-width: 768px) {
+  .capability-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── horizontal scroll band (Cursor-style snap row) ─────────────────────
+   Overflow-x snap row for changelog cards, testimonial rows, and mobile
+   overflow bands. .h-scroll masks the edges; .h-scroll__track is the
+   focusable scroll container; .h-scroll__card are ~262px snap children
+   (Cursor changelog card width). CSS-only: keyboard access comes from the
+   track being a focusable (tabindex="0") native scroll container — arrow
+   keys scroll it — so no horizontal-scroll.js is needed (see site/README.md).
+   prefers-reduced-motion: reduce → cards stack vertically (no horizontal
+   scroll), so all content is reachable without horizontal gestures. ────── */
+.h-scroll { position: relative; -webkit-mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent); mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent); }
+.h-scroll__track { display: flex; gap: 1.25rem; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 1.25rem; padding: 0.25rem 1.25rem; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.h-scroll__track::-webkit-scrollbar { display: none; }
+.h-scroll__track:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-md); }
+.h-scroll__card { flex: 0 0 auto; min-width: 262px; max-width: 262px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 0.5rem; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 1.5rem; }
+@media (prefers-reduced-motion: reduce) {
+  .h-scroll { -webkit-mask-image: none; mask-image: none; }
+  .h-scroll__track { flex-direction: column; overflow-x: visible; scroll-snap-type: none; padding-inline: 0; }
+  .h-scroll__card { min-width: 0; max-width: none; }
+}
+
+/* ── closing CTA band (Graphite/Cursor pre-footer conversion) ───────────
+   Full-width centered band placed directly above the footer: one headline,
+   one literal primary .btn, and an optional mono secondary link. Compose
+   with .reveal-up (above) for a scroll-in enter — reduced-motion is already
+   honored there. Copy slots (see site/README.md for digithings + digiquant
+   variants and references/scans/copy-patterns.md for tone):
+     .closing-cta__title      headline — literal, ≤ ~20ch reads best
+     .closing-cta__sub        optional one-line support — ≤ ~48ch
+     .closing-cta__actions    primary:  <a class="btn btn-primary" href>label</a>
+     .closing-cta__secondary  optional: <a href>label <span aria-hidden>&rarr;</span></a>
+   ───────────────────────────────────────────────────────────────────── */
+.closing-cta { padding-block: var(--section-y); text-align: center; }
+.closing-cta__inner { max-width: var(--wrap-wide); margin-inline: auto; display: flex; flex-direction: column; align-items: center; gap: 1.1rem; }
+.closing-cta__title { font-size: clamp(1.8rem, 4vw, 2.75rem); font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; max-width: 20ch; }
+.closing-cta__sub { font-size: 1rem; color: var(--ink-soft); max-width: 48ch; line-height: 1.6; }
+.closing-cta__actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 1rem; margin-top: 0.4rem; }
+.closing-cta__secondary { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--font-mono); font-size: 0.88rem; color: var(--ink-soft); }
+.closing-cta__secondary:hover { color: var(--ink); }
+.closing-cta__secondary span[aria-hidden] { transition: transform var(--duration-hover) var(--ease-glide); }
+.closing-cta__secondary:hover span[aria-hidden] { transform: translateX(3px); }
+
+/* ── FAQ accordion (Graphite/Cursor pricing-page Q&A) ───────────────────
+   Native <details>/<summary> — no JS. For an exclusive "one open at a time"
+   accordion, give every .faq__item the same name attribute
+   (<details class="faq__item" name="pricing-faq">) — a modern-browser native
+   exclusive-accordion feature; omit name and each item toggles independently.
+   The disclosure chevron rotates on [open]; its transition is dropped under
+   reduced motion (shared block below). Data-driven content shape (per site):
+   { q, a }[] — see site/README.md.
+   ───────────────────────────────────────────────────────────────────── */
+.faq { max-width: 760px; width: 100%; margin-inline: auto; }
+.faq__item { border-bottom: 1px solid var(--hair); }
+.faq__q { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.15rem 0; font-size: 1rem; font-weight: 500; color: var(--ink); cursor: pointer; list-style: none; }
+.faq__q::-webkit-details-marker { display: none; }
+.faq__q::after { content: ""; flex: 0 0 auto; width: 0.55rem; height: 0.55rem; border-right: 1.5px solid var(--ink-mute); border-bottom: 1.5px solid var(--ink-mute); transform: rotate(45deg); transition: transform var(--duration-hover) var(--ease-glide); }
+.faq__item[open] .faq__q::after { transform: rotate(-135deg); }
+.faq__q:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--r-sm); }
+.faq__a { max-width: 60ch; margin: 0; padding: 0 0 1.25rem; color: var(--ink-soft); font-size: 0.95rem; line-height: 1.6; }
+
+/* ── pricing matrix (open-core tiers + optional comparison table) ───────
+   3 honest open-core tiers — no invented usage caps or fake "limited AI
+   requests" (EVOLUTION.md §10, anti-pattern #2). Tier content shape (per
+   site): { name, price, cadence?, desc, features: string[], cta: {label, href},
+   featured?: bool }[] — see site/README.md. .pricing__tier--featured lifts one
+   card with an --accent ring. The optional .pricing-table gives a feature ×
+   tier comparison grid with ✓ (--up) / — (--ink-mute) cells.
+   ───────────────────────────────────────────────────────────────────── */
+.pricing { display: grid; grid-template-columns: 1fr; gap: 1.25rem; width: 100%; max-width: var(--wrap-wide); margin-inline: auto; }
+.pricing__tier { display: flex; flex-direction: column; gap: 0.9rem; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 1.75rem; }
+.pricing__tier--featured { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pricing__name { font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); }
+.pricing__price { font-size: clamp(1.6rem, 3vw, 2.1rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+.pricing__price small { font-size: 0.9rem; font-weight: 400; color: var(--ink-mute); letter-spacing: 0; }
+.pricing__desc { font-size: 0.9rem; color: var(--ink-soft); line-height: 1.55; }
+.pricing__features { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; font-size: 0.9rem; color: var(--ink-soft); }
+.pricing__features li { display: flex; align-items: flex-start; gap: 0.55rem; }
+.pricing__features li::before { content: "✓"; flex: 0 0 auto; color: var(--up); font-weight: 600; line-height: 1.4; }
+.pricing__cta { margin-top: auto; }
+.pricing__cta .btn { width: 100%; justify-content: center; }
+@media (min-width: 768px) {
+  .pricing { grid-template-columns: repeat(3, 1fr); }
+}
+.pricing-table { width: 100%; max-width: var(--wrap-wide); margin-inline: auto; border-collapse: collapse; font-size: 0.9rem; }
+.pricing-table th, .pricing-table td { padding: 0.8rem 1rem; text-align: left; border-bottom: 1px solid var(--hair); }
+.pricing-table thead th { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
+.pricing-table th + th, .pricing-table td + td { text-align: center; }
+.pricing-table tbody th { font-weight: 500; color: var(--ink); }
+.pricing-table .is-yes { color: var(--up); font-weight: 600; }
+.pricing-table .is-no { color: var(--ink-mute); }
+
+/* ── hero feature picker (Graphite icon-tab row swapping a ProductFrame) ─
+   Icon tablist below the hero that swaps which ProductFrame preview shows
+   (e.g. Olympus / Strategies / Pipeline). WAI-ARIA tabs — wire with
+   hero-picker.js (roving tabindex, ArrowLeft/Right/Home/End). Static UI crops
+   only (no video). Each panel wraps a .product-frame, so it inherits the
+   CQ-scaled sizing and never clips at browser zoom. Icon buttons are ~53×53px
+   (Graphite reference); use aria-label per button since they are icon-only.
+   ───────────────────────────────────────────────────────────────────── */
+.hero-picker { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; width: 100%; }
+.hero-picker__tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; }
+.hero-picker__tab { display: inline-flex; align-items: center; justify-content: center; width: 53px; height: 53px; padding: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); color: var(--ink-soft); cursor: pointer; transition: color var(--duration-hover) var(--ease-glide), border-color var(--duration-hover) var(--ease-glide); }
+.hero-picker__tab:hover { color: var(--ink); border-color: var(--hair-2); }
+.hero-picker__tab[aria-selected="true"] { color: var(--accent); border-color: var(--accent); }
+.hero-picker__tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hero-picker__tab svg { width: 22px; height: 22px; }
+.hero-picker__panels { width: 100%; display: flex; justify-content: center; }
+.hero-picker__panel[hidden] { display: none; }
+
+/* ── announcement bar (Graphite full-width clickable notice above nav) ──
+   48px full-width bar, content-gated by announcement.js: it renders only when
+   handed enabled content, so the bar is OFF by default (empty / {enabled:false}
+   → nothing). When href is set the whole bar is the link (stretched-link
+   overlay); the optional dismiss button sits above the overlay and can persist
+   a per-id dismissal in localStorage. No slide-in animation (reduced-motion
+   friendly by design). Content shape: { enabled, id?, text, href?, linkLabel? }
+   — see site/README.md and ../announcement-example.json.
+   ───────────────────────────────────────────────────────────────────── */
+.announcement { position: relative; display: flex; align-items: center; justify-content: center; gap: 0.6rem; min-height: 48px; padding: 0.5rem 2.75rem; background: var(--surface); border-bottom: 1px solid var(--hair); color: var(--ink-soft); font-size: 0.88rem; text-align: center; }
+.announcement[hidden] { display: none; }
+.announcement__text { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem; }
+.announcement__link { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--accent); font-weight: 500; }
+.announcement__link span[aria-hidden] { transition: transform var(--duration-hover) var(--ease-glide); }
+.announcement--link .announcement__link::after { content: ""; position: absolute; inset: 0; }
+.announcement--link:hover .announcement__link span[aria-hidden] { transform: translateX(3px); }
+.announcement__dismiss { position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%); z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--ink-mute); cursor: pointer; }
+.announcement__dismiss:hover { color: var(--ink); }
+.announcement__dismiss:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── case-study card (Graphite {org} × product social proof) ────────────
+   Flat --surface card (same sizing family as .bento__cell / .capability-card):
+   a mono "{org} × digithings" label, a quote block, and an attribution row with
+   an optional logo slot. Drop into a .bento, .capability-grid, or an .h-scroll
+   track for a horizontal row. CONTENT-GATED (anti-pattern #2): ship dormant —
+   no fabricated testimonials. Real attribution required in production (name,
+   title, company, or a public GitHub/OSS reference). Add .case-study--example
+   for a watermarked placeholder in demos/docs only. Content shape (per site):
+   { org, quote, name, title?, href?, logo? } — see site/README.md.
+   ───────────────────────────────────────────────────────────────────── */
+.case-study { position: relative; display: flex; flex-direction: column; gap: 1rem; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 1.75rem; }
+.case-study__label { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); }
+.case-study__quote { margin: 0; font-size: 1.05rem; line-height: 1.55; color: var(--ink); }
+.case-study__attr { display: flex; align-items: center; gap: 0.6rem; margin-top: auto; font-size: 0.85rem; color: var(--ink-soft); }
+.case-study__attr strong { color: var(--ink); font-weight: 600; }
+.case-study__logo { height: 24px; width: auto; max-width: 120px; filter: grayscale(1); opacity: 0.8; }
+.case-study--example::after { content: "EXAMPLE"; position: absolute; top: 0.85rem; right: 0.85rem; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.12em; color: var(--ink-mute); border: 1px solid var(--hair-2); border-radius: var(--r-sm); padding: 0.15rem 0.4rem; }
+
+/* ── principles ─────────────────────────────────────────────────────── */
+.principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+.principle { padding-top: 1.4rem; border-top: 1px solid var(--hair-2); }
+.principle-num { font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent); }
+.principle h3 { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.02em; margin: 0.7rem 0 0.5rem; }
+.principle p { font-size: 0.9rem; color: var(--ink-soft); }
+
+/* ── footer ─────────────────────────────────────────────────────────── */
+.footer { border-top: 1px solid var(--hair); padding: 2.5rem 0; }
+.footer-inner { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
+.footer-links { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.footer-links a { font-size: 0.9rem; color: var(--ink-soft); transition: color 0.18s var(--ease); }
+.footer-links a:hover { color: var(--ink); }
+.footer-meta { font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-mute); }
+
+/* ── colophon — the page's last word (canon §08) ────────────────────────
+   The module's name at giant scale, 1px hairline outline (an outline,
+   never a glow). Scroll-scrubbed with zero JS: CSS scroll-driven
+   animation behind @supports; reduced-motion / no-support renders the
+   name standing. The <b> suffix reads var(--accent) — livery on module
+   sites, ink on the umbrella (which collapses --accent to ink). */
+.colophon { overflow: hidden; padding: 5rem 0 0; user-select: none; pointer-events: none; }
+/* fallback stroke first: without color-mix() support the refined declaration
+   drops, and transparent fill + no stroke would render nothing. */
+.colo-word { display: block; font-family: var(--font-mono); font-weight: 500; font-size: clamp(3rem, 15.5vw, 15rem); line-height: 0.82; letter-spacing: -0.05em; white-space: nowrap; text-align: center; color: transparent; -webkit-text-stroke: 1px var(--ink); -webkit-text-stroke: 1px color-mix(in srgb, var(--ink) 30%, transparent); }
+.colo-word b { font-weight: 500; color: transparent; -webkit-text-stroke: 1px var(--accent); -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 70%, transparent); }
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* entry-based ranges: the colophon sits at the document's end, so
+       cover-based ranges can never complete — entry 100% (fully visible)
+       is reachable at max scroll. */
+    .colo-word { opacity: 0; transform: translateY(34%); animation: colo-rise linear both; animation-timeline: view(); animation-range: entry 0% entry 100%; }
+    .colo-word b { animation: colo-fill linear both; animation-timeline: view(); animation-range: entry 55% entry 100%; }
+  }
+}
+@keyframes colo-rise { to { opacity: 1; transform: none; } }
+@keyframes colo-fill { to { color: color-mix(in srgb, var(--accent) 16%, transparent); } }
+
+/* ── responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 940px) {
+  .principles { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .principles { grid-template-columns: 1fr; }
+}
+
+/* ── no-JS content-first (law 06) ───────────────────────────────────────
+   SSR ships html.no-js (removed pre-paint by an inline script in each app
+   layout). Motion primitives SSR their hidden initial styles inline, and
+   the [data-motion] children of a Stagger inherit variants — neutralize
+   all of it when scripts never run. */
+html.no-js [data-motion],
+html.no-js [data-motion] * {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glow { animation: none; }
+  .term-cursor { animation: none; }
+  .reveal-up { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .faq__q::after { transition: none; }
+  * { scroll-behavior: auto !important; }
+}

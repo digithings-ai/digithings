@@ -7,9 +7,9 @@ on:
   pull_request:
     paths:
       - "frontend/digiquant-web/**"
-      - "frontend/web/**"
+      - "frontend/digiweb/web/**"
       - "frontend/olympus/**"
-      - "frontend/design/**"
+      - "frontend/digiweb/design/**"
       - "scripts/build-digiquant.sh"
       - ".github/workflows/deploy-digiquant-cloudflare.yml"
   workflow_dispatch:
