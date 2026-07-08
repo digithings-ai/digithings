@@ -2,10 +2,13 @@
 
 import { useRef } from "react";
 import { useInView } from "motion/react";
+import { ChatWidgetFrame } from "@digithings/web";
 
 /**
  * Inline route graph — a small SVG supervisor→agent flow graph rendered inline in
- * an assistant turn, drawing its edges when scrolled into view. Static display template.
+ * an assistant turn, drawing its edges when scrolled into view. The term-surface
+ * frame is the shared <ChatWidgetFrame variant="embed"> (@digithings/web); the
+ * SVG internals (.route-* paint + draw keyframes, chatbot.css) stay specimen-side.
  */
 type Node = { id: string; x: number; y: number; w: number; label: string };
 
@@ -63,24 +66,26 @@ export function ChatInlineGraphReference() {
             <p className="m-0 mb-[0.55rem] text-ink-soft text-[0.85rem]">
               Here&apos;s how I routed that request:
             </p>
-            <svg
-              className={`route-graph w-full h-auto${inView ? " in" : ""}`}
-              viewBox="0 0 448 192"
-              role="img"
-              aria-label="Request routed from you to the supervisor, out to digiquant and digisearch, then saved to the vault"
-            >
-              {EDGES.map(([f, t]) => (
-                <path key={`${f}-${t}`} className="route-edge" d={edge(f, t)} />
-              ))}
-              {NODES.map((n) => (
-                <g key={n.id} className={`route-node route-node--${n.id}`}>
-                  <rect x={n.x} y={n.y} width={n.w} height={NODE_H} rx={8} />
-                  <text x={n.x + n.w / 2} y={n.y + NODE_H / 2 + 3.5}>
-                    {n.label}
-                  </text>
-                </g>
-              ))}
-            </svg>
+            <ChatWidgetFrame variant="embed">
+              <svg
+                className={`route-graph w-full h-auto${inView ? " in" : ""}`}
+                viewBox="0 0 448 192"
+                role="img"
+                aria-label="Request routed from you to the supervisor, out to digiquant and digisearch, then saved to the vault"
+              >
+                {EDGES.map(([f, t]) => (
+                  <path key={`${f}-${t}`} className="route-edge" d={edge(f, t)} />
+                ))}
+                {NODES.map((n) => (
+                  <g key={n.id} className={`route-node route-node--${n.id}`}>
+                    <rect x={n.x} y={n.y} width={n.w} height={NODE_H} rx={8} />
+                    <text x={n.x + n.w / 2} y={n.y + NODE_H / 2 + 3.5}>
+                      {n.label}
+                    </text>
+                  </g>
+                ))}
+              </svg>
+            </ChatWidgetFrame>
           </div>
         </div>
       </div>

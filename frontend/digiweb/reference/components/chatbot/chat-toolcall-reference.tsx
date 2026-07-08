@@ -1,6 +1,4 @@
-"use client";
-
-import { useState } from "react";
+import { ChatToolCall, type ChatToolCallLine } from "@digithings/web";
 
 /**
  * Collapsible tool-call blocks — the terminal-CLI tool chain (the Claude Code /
@@ -8,8 +6,10 @@ import { useState } from "react";
  * timing) that folds its output away. The builder scans the chain, expands the
  * one that matters. Success/error wear the money-adjacent up/down reads; the
  * tool name takes the digichat accent. Reduced motion still toggles (display).
+ * Consumes the shared <ChatToolCall> primitive (@digithings/web); the calls
+ * here are illustrative example data.
  */
-type Call = { tool: string; args: string; ms: string; ok: boolean; out: string[] };
+type Call = { tool: string; args: string; ms: string; ok: boolean; out: ChatToolCallLine[] };
 
 const CALLS: Call[] = [
   {
@@ -36,38 +36,9 @@ const CALLS: Call[] = [
     args: "scope=live:read",
     ms: "—",
     ok: false,
-    out: ["✕ token revoked — reissue with `digithings key new`"],
+    out: [{ text: "✕ token revoked — reissue with `digithings key new`", tone: "down" }],
   },
 ];
-
-function ToolCall({ call, defaultOpen }: { call: Call; defaultOpen: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className={`tc${call.ok ? "" : " tc--err"}`}>
-      <button
-        type="button"
-        className="tc-head"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="tc-caret" aria-hidden="true" />
-        <span className="tc-tool">{call.tool}</span>
-        <span className="tc-args">({call.args})</span>
-        <span className={`tc-status ${call.ok ? "up" : "down"}`}>{call.ok ? "✓" : "✕"}</span>
-        <span className="tc-ms">{call.ms}</span>
-      </button>
-      {open ? (
-        <div className="tc-out">
-          {call.out.map((line) => (
-            <p key={line} className={line.startsWith("✕") ? "tc-line down" : "tc-line"}>
-              {line}
-            </p>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 export function ChatToolCallReference() {
   return (
@@ -93,7 +64,15 @@ export function ChatToolCallReference() {
           <div className="chat-stack flex flex-col gap-[0.55rem] min-w-0 flex-1">
             <p className="m-0 mb-[0.55rem] text-ink-soft text-[0.85rem]">running the chain —</p>
             {CALLS.map((c, i) => (
-              <ToolCall key={c.tool} call={c} defaultOpen={i === 0} />
+              <ChatToolCall
+                key={c.tool}
+                name={c.tool}
+                args={c.args}
+                duration={c.ms}
+                status={c.ok ? "ok" : "error"}
+                lines={c.out}
+                defaultOpen={i === 0}
+              />
             ))}
             <div className="min-w-0 border-0 rounded-none bg-transparent p-0 text-ink-soft text-[0.88rem] leading-[1.6]">
               Backtest passed and the funding notes are attached — but digikey needs a fresh token

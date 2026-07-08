@@ -63,49 +63,23 @@
   background: var(--accent-weak);
 }
 
-/* Streaming transcript — the digichat turn grammar. The shell box, turn lines,
-   accent mark, and ok/ms tokens are migrated to utilities in
-   stream-transcript-reference.tsx. Kept as CSS: the light-theme surface override
-   (its combinator specificity is the point — it wins over bg-term-bg under
-   light), the .st-tool chip (2-colour color-mix border), and the .st-caret
-   blink keyframes with their reduced-motion guard. */
-
-:root[data-theme="light"] .st-shell {
-  background: var(--surface);
-}
+/* Streaming transcript — the digichat turn grammar. Promoted (#1418): the
+   pane, turn rows, and blink caret are <ChatTranscript>/<ChatMessage>/
+   <ChatStreamCursor> from @digithings/web — chat-core.css owns the shell
+   shadow, the light-theme surface override, and the caret keyframes. Kept
+   here: the .st-tool chip, a page-local flourish with a 2-colour color-mix
+   border (indent matches the chat-msg grid body: 1.25rem col + 0.55rem gap). */
 
 .st-tool {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  margin: 0.3rem 0 0.3rem 1.1rem;
+  margin: 0.3rem 0 0.3rem 1.8rem;
   padding: 0.15rem 0.7rem;
   border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--hair));
   border-radius: 8px;
   font-size: 0.68rem;
   color: var(--ink-soft);
-}
-
-.st-caret {
-  display: inline-block;
-  width: 7px;
-  height: 14px;
-  background: var(--accent);
-  vertical-align: -2px;
-  margin-left: 2px;
-  animation: st-blink 1.1s steps(1) infinite;
-}
-
-@keyframes st-blink {
-  50% {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .st-caret {
-    animation: none;
-  }
 }
 
 /* Code review — unified diff. The diff colorway is the THIRD color domain

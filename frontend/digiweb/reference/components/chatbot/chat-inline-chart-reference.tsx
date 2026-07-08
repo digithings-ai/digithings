@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { ChatWidgetFrame } from "@digithings/web";
 import {
   AreaSeries,
   ColorType,
@@ -32,7 +33,9 @@ function generate(n: number) {
 const DATA = generate(90);
 
 /** A chart the assistant can drop straight into a turn — same engine and token
- *  discipline as the Finance surfaces, just compact and bubble-framed. */
+ *  discipline as the Finance surfaces, just compact and bubble-framed. The
+ *  frame is the shared <ChatWidgetFrame variant="embed"> (@digithings/web);
+ *  the Lightweight-Charts internals stay specimen-side. */
 export function ChatInlineChartReference() {
   const hostRef = useRef<HTMLDivElement | null>(null);
 
@@ -129,7 +132,9 @@ export function ChatInlineChartReference() {
             <p className="m-0 mb-[0.55rem] text-ink-soft text-[0.85rem]">
               Cumulative equity, last 90 sessions:
             </p>
-            <div className="w-full h-[180px] border border-hair rounded-[8px] overflow-hidden" ref={hostRef} aria-hidden="true" />
+            <ChatWidgetFrame variant="embed">
+              <div className="w-full h-[180px]" ref={hostRef} aria-hidden="true" />
+            </ChatWidgetFrame>
           </div>
         </div>
       </div>

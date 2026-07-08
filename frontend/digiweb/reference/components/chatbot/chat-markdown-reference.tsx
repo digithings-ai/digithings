@@ -1,10 +1,18 @@
-"use client";
-
 /**
  * Chat markdown — an assistant turn rendering full markdown (headings, emphasis,
  * lists, block quotes, fenced code with a copy affordance, tables) on the token
- * palette. Static display template.
+ * palette. Consumes the shared chat-core primitives from @digithings/web
+ * (<ChatTranscript>/<ChatMessage>/<ChatMarkdown>/<ChatCodeBlock>) — bare
+ * markdown elements pick up the .chat-md grammar, no per-node classes. Static
+ * display template.
  */
+import { ChatCodeBlock, ChatMarkdown, ChatMessage, ChatTranscript } from "@digithings/web";
+
+const SNIPPET = `bt = Backtest("trend_xsec", symbol="ETH-USD")
+bt.fees = venue.schedule("binance")
+bt.sizing = Kelly(cap=0.5)
+report = bt.run(years=8)`;
+
 export function ChatMarkdownReference() {
   return (
     <section className="section-block">
@@ -16,12 +24,12 @@ export function ChatMarkdownReference() {
         it reads as one surface. This shows the rendered result, not the raw source.
       </p>
 
-      <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-[12px] border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
-        <div className="flex gap-[0.55rem] items-baseline chat-turn--assistant">
-          <span className="shrink-0 font-mono text-[0.86rem] leading-[1.5] text-accent" aria-hidden="true">
-            ▸
-          </span>
-          <div className="md-body min-w-0 border-0 rounded-none bg-transparent p-0 text-[0.88rem] leading-[1.6]">
+      <ChatTranscript
+        session="digichat — session"
+        className="mt-[1.3rem] max-w-[760px] gap-[0.7rem]"
+      >
+        <ChatMessage role="assistant" className="text-[0.86rem] leading-[1.5]">
+          <ChatMarkdown>
             <h3>Backtest summary</h3>
             <p>
               <code>trend_xsec</code> on <strong>ETH-USD</strong> over eight years returns a{" "}
@@ -41,23 +49,8 @@ export function ChatMarkdownReference() {
             <blockquote>
               Never route to a broker without human approval — live paths are gated for a reason.
             </blockquote>
-            <figure className="md-code">
-              <figcaption>
-                <span>python</span>
-                <button type="button" className="md-copy">
-                  copy
-                </button>
-              </figcaption>
-              <pre>
-                <code>
-                  {`bt = Backtest("trend_xsec", symbol="ETH-USD")
-bt.fees = venue.schedule("binance")
-bt.sizing = Kelly(cap=0.5)
-report = bt.run(years=8)`}
-                </code>
-              </pre>
-            </figure>
-            <table className="md-table">
+            <ChatCodeBlock code={SNIPPET} lang="python" />
+            <table>
               <thead>
                 <tr>
                   <th>metric</th>
@@ -80,15 +73,11 @@ report = bt.run(years=8)`}
               </tbody>
             </table>
             <p>
-              Full methodology in the{" "}
-              <a href="#" className="md-link">
-                vault tearsheet
-              </a>
-              .
+              Full methodology in the <a href="#">vault tearsheet</a>.
             </p>
-          </div>
-        </div>
-      </div>
+          </ChatMarkdown>
+        </ChatMessage>
+      </ChatTranscript>
     </section>
   );
 }

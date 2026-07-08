@@ -38,5 +38,22 @@ export {
   type TerminalManifestStatus,
   type TerminalManifestProps,
 } from "./components/TerminalManifest";
+// chat family (#1418)
+export { ChatTranscript, type ChatTranscriptProps } from "./components/chat/ChatTranscript";
+export { ChatMessage, type ChatMessageProps, type ChatRole, type ChatTone } from "./components/chat/ChatMessage";
+export { ChatStreamCursor, type ChatStreamCursorProps } from "./components/chat/ChatStreamCursor";
+export { ChatMarkdown, type ChatMarkdownProps } from "./components/chat/ChatMarkdown";
+export { ChatCodeBlock, ChatCopyButton, type ChatCodeBlockProps, type ChatCopyButtonProps } from "./components/chat/ChatCodeBlock";
+export { ChatToolCall, type ChatToolCallProps, type ChatToolCallStatus, type ChatToolCallLine } from "./components/chat/ChatToolCall";
+export { ChatThinking, type ChatThinkingProps } from "./components/chat/ChatThinking";
+export {
+  ChatWidgetFrame,
+  ChatWidgetButton,
+  type ChatWidgetFrameProps,
+  type ChatWidgetFrameVariant,
+  type ChatWidgetButtonProps,
+  type ChatWidgetButtonTone,
+} from "./components/chat/ChatWidgetFrame";
+
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
 export { subsystems, subsystemById, type Subsystem } from "./data/subsystems";
