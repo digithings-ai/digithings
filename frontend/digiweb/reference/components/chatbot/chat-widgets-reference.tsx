@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { ChatWidgetButton, ChatWidgetFrame } from "@digithings/web";
 
 /**
  * Chat widgets — custom action widgets embedded in the terminal transcript: a
- * metrics grid (money colors on P&L) and interactive action cards. Interactive
- * display template.
+ * metrics grid (money colors on P&L) and interactive action cards. Consumes
+ * the shared <ChatWidgetFrame> / <ChatWidgetButton> primitives
+ * (@digithings/web); the metrics grid and order detail stay specimen-side as
+ * frame content.
  */
 
 const METRICS = [
@@ -36,21 +39,22 @@ export function ChatWidgetsReference() {
             ▸
           </span>
           <div className="min-w-0 border-0 rounded-none bg-transparent p-0 text-ink-soft text-[0.88rem] leading-[1.6]">
-            <article className="widget-result border border-hair rounded-[12px] bg-surface overflow-hidden">
-              <header className="widget-head flex items-start justify-between gap-[1rem] px-[1rem] py-[0.85rem] border-b border-hair">
-                <div>
-                  <p className="m-0 mb-[0.2rem] font-mono text-[0.58rem] uppercase tracking-[0.1em] text-accent">
-                    backtest complete
-                  </p>
-                  <h4 className="widget-title m-0 font-mono text-[0.86rem] text-ink">
-                    trend_xsec · ETH-USD · 8y
-                  </h4>
-                </div>
-                <span className="shrink-0 px-[0.55rem] py-[0.2rem] rounded-full font-mono text-[0.6rem] uppercase tracking-[0.06em] bg-up/15 text-up">
+            <ChatWidgetFrame
+              eyebrow="backtest complete"
+              title="trend_xsec · ETH-USD · 8y"
+              badge={
+                <span className="px-[0.55rem] py-[0.2rem] rounded-full font-mono text-[0.6rem] uppercase tracking-[0.06em] bg-up/15 text-up">
                   passed
                 </span>
-              </header>
-              <div className="widget-metrics grid grid-cols-4 gap-px bg-hair max-[560px]:grid-cols-2">
+              }
+              actions={
+                <>
+                  <ChatWidgetButton tone="primary">View tearsheet</ChatWidgetButton>
+                  <ChatWidgetButton>Save to vault</ChatWidgetButton>
+                </>
+              }
+            >
+              <div className="grid grid-cols-4 gap-px bg-hair max-[560px]:grid-cols-2">
                 {METRICS.map((m) => (
                   <div key={m.k} className="flex flex-col gap-[0.25rem] px-[0.9rem] py-[0.8rem] bg-surface">
                     <span className="font-mono text-[0.54rem] uppercase tracking-[0.08em] text-ink-mute">
@@ -62,15 +66,7 @@ export function ChatWidgetsReference() {
                   </div>
                 ))}
               </div>
-              <footer className="widget-actions flex gap-[0.6rem] px-[1rem] py-[0.8rem] border-t border-hair">
-                <button type="button" className="widget-btn primary px-[1rem] py-[0.5rem] rounded-full border border-transparent font-mono text-[0.72rem] cursor-pointer bg-accent">
-                  View tearsheet
-                </button>
-                <button type="button" className="widget-btn ghost px-[1rem] py-[0.5rem] rounded-full border border-hair font-mono text-[0.72rem] cursor-pointer bg-transparent text-ink">
-                  Save to vault
-                </button>
-              </footer>
-            </article>
+            </ChatWidgetFrame>
           </div>
         </div>
 
@@ -80,23 +76,30 @@ export function ChatWidgetsReference() {
             ▸
           </span>
           <div className="min-w-0 border-0 rounded-none bg-transparent p-0 text-ink-soft text-[0.88rem] leading-[1.6]">
-            <article className={`widget-approve state-${decision} border border-hair rounded-[12px] bg-surface overflow-hidden`}>
-              <header className="widget-head flex items-start justify-between gap-[1rem] px-[1rem] py-[0.85rem] border-b border-hair">
-                <div>
-                  <p className="m-0 mb-[0.2rem] font-mono text-[0.58rem] uppercase tracking-[0.1em] text-accent">
-                    requires approval
-                  </p>
-                  <h4 className="widget-title m-0 font-mono text-[0.86rem] text-ink">
-                    Route live order → binance
-                  </h4>
-                </div>
-                <span className="shrink-0 text-ink-mute" aria-hidden="true">
+            <ChatWidgetFrame
+              eyebrow="requires approval"
+              title="Route live order → binance"
+              badge={
+                <span className="text-ink-mute" aria-hidden="true">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="5" y="11" width="14" height="9" rx="2" />
                     <path d="M8 11V8a4 4 0 0 1 8 0v3" />
                   </svg>
                 </span>
-              </header>
+              }
+              actions={
+                decision === "pending" ? (
+                  <>
+                    <ChatWidgetButton tone="primary" onClick={() => setDecision("approved")}>
+                      Approve
+                    </ChatWidgetButton>
+                    <ChatWidgetButton tone="danger" onClick={() => setDecision("declined")}>
+                      Decline
+                    </ChatWidgetButton>
+                  </>
+                ) : undefined
+              }
+            >
               <dl className="flex gap-[1.6rem] m-0 px-[1rem] py-[0.85rem]">
                 <div className="flex flex-col gap-[0.2rem]">
                   <dt className="font-mono text-[0.56rem] uppercase tracking-[0.08em] text-ink-mute">side</dt>
@@ -111,24 +114,7 @@ export function ChatWidgetsReference() {
                   <dd className="m-0 font-mono text-[0.92rem] text-ink tabular-nums">63,410</dd>
                 </div>
               </dl>
-              {decision === "pending" ? (
-                <footer className="widget-actions flex gap-[0.6rem] px-[1rem] py-[0.8rem] border-t border-hair">
-                  <button
-                    type="button"
-                    className="widget-btn primary px-[1rem] py-[0.5rem] rounded-full border border-transparent font-mono text-[0.72rem] cursor-pointer bg-accent"
-                    onClick={() => setDecision("approved")}
-                  >
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    className="widget-btn danger px-[1rem] py-[0.5rem] rounded-full border font-mono text-[0.72rem] cursor-pointer bg-transparent text-down"
-                    onClick={() => setDecision("declined")}
-                  >
-                    Decline
-                  </button>
-                </footer>
-              ) : (
+              {decision !== "pending" ? (
                 <p className={`flex items-center gap-[0.7rem] m-0 px-[1rem] py-[0.8rem] border-t border-hair font-mono text-[0.76rem] ${decision === "approved" ? "text-up" : "text-down"}`}>
                   {decision === "approved"
                     ? "✓ Approved — order routed to binance."
@@ -141,8 +127,8 @@ export function ChatWidgetsReference() {
                     reset
                   </button>
                 </p>
-              )}
-            </article>
+              ) : null}
+            </ChatWidgetFrame>
           </div>
         </div>
       </div>

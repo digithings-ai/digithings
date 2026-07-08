@@ -35,105 +35,10 @@
 }
 
 /* ── thinking chain ─────────────────────────────────────────────────── */
-
-.think-chip {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.7rem;
-  border: 1px solid var(--hair);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
-  color: var(--ink-mute);
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  cursor: pointer;
-  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
-}
-
-.think-chip:hover {
-  color: var(--ink-soft);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--hair));
-}
-
-.think-caret {
-  width: 0;
-  height: 0;
-  border-left: 4px solid currentColor;
-  border-top: 3px solid transparent;
-  border-bottom: 3px solid transparent;
-  transition: transform 0.2s var(--ease);
-}
-
-.think-chip.open .think-caret {
-  transform: rotate(90deg);
-}
-
-.think-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
-  animation: think-pulse 1.8s var(--ease) infinite;
-}
-
-@keyframes think-pulse {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
-  }
-  70% {
-    box-shadow: 0 0 0 5px transparent;
-  }
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
-}
-
-.think-count {
-  padding-left: 0.5rem;
-  margin-left: 0.1rem;
-  border-left: 1px solid var(--hair);
-  color: var(--ink-mute);
-}
-
-.think-steps {
-  margin: 0;
-  padding: 0 0 0 1.4rem;
-  border-left: 2px solid color-mix(in srgb, var(--accent) 30%, var(--hair));
-  margin-left: 0.35rem;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.think-steps li {
-  position: relative;
-  color: var(--ink-mute);
-  font-size: 0.8rem;
-  line-height: 1.5;
-  opacity: 0;
-  transform: translateY(4px);
-  transition: opacity 0.4s var(--ease), transform 0.4s var(--ease);
-}
-
-.think-steps li::before {
-  content: "";
-  position: absolute;
-  left: -1.62rem;
-  top: 0.5rem;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 55%, var(--hair));
-}
-
-.think-steps.in li {
-  opacity: 1;
-  transform: none;
-}
+/* Promoted to @digithings/web (#1418): <ChatThinking> in
+   web/src/components/chat/ChatThinking.tsx carries the utilities; the chip
+   background/hover, caret art, pulse keyframe, step rail, and reveal
+   transitions live in @digithings/web/styles/chat-widgets.css. */
 
 /* ── composer ───────────────────────────────────────────────────────── */
 
@@ -185,166 +90,12 @@
 }
 
 /* ── markdown ───────────────────────────────────────────────────────── */
-
-.md-body {
-  color: var(--ink-soft);
-}
-
-.md-body > *:first-child {
-  margin-top: 0;
-}
-
-.md-body > *:last-child {
-  margin-bottom: 0;
-}
-
-.md-body h3 {
-  margin: 0 0 0.5rem;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 1.15rem;
-  color: var(--ink);
-}
-
-.md-body p {
-  margin: 0.6rem 0;
-}
-
-.md-body strong {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.md-body em {
-  color: var(--ink);
-}
-
-.md-body code {
-  font-family: var(--font-mono);
-  font-size: 0.82em;
-  padding: 0.1rem 0.35rem;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink);
-}
-
-.md-body ul,
-.md-body ol {
-  margin: 0.6rem 0;
-  padding-left: 1.3rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.md-body li {
-  padding-left: 0.2rem;
-}
-
-.md-body ul li::marker {
-  color: var(--accent);
-}
-
-.md-body ol li::marker {
-  color: var(--ink-mute);
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-}
-
-.md-body blockquote {
-  margin: 0.8rem 0;
-  padding: 0.5rem 0.9rem;
-  border-left: 2px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  color: var(--ink-soft);
-  font-style: italic;
-}
-
-.md-link {
-  color: var(--accent);
-  text-underline-offset: 2px;
-}
-
-.md-code {
-  margin: 0.8rem 0;
-  border: 1px solid var(--hair);
-  border-radius: 9px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-}
-
-.md-code figcaption {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.4rem 0.7rem;
-  border-bottom: 1px solid var(--hair);
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-mute);
-}
-
-.md-copy {
-  border: none;
-  background: transparent;
-  color: var(--ink-mute);
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: color 0.2s var(--ease);
-}
-
-.md-copy:hover {
-  color: var(--accent);
-}
-
-.md-code pre {
-  margin: 0;
-  padding: 0.75rem 0.9rem;
-  overflow-x: auto;
-}
-
-.md-code code {
-  background: none;
-  padding: 0;
-  font-family: var(--font-mono);
-  font-size: 0.76rem;
-  line-height: 1.6;
-  color: var(--ink);
-  white-space: pre;
-}
-
-.md-table {
-  width: 100%;
-  margin: 0.8rem 0;
-  border-collapse: collapse;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-}
-
-.md-table th,
-.md-table td {
-  text-align: left;
-  padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid var(--hair);
-}
-
-.md-table thead th {
-  font-weight: 400;
-  font-size: 0.6rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-mute);
-}
-
-.md-table td {
-  color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
-}
+/* Promoted to @digithings/web (#1418): the markdown frame is
+   <ChatMarkdown>/<ChatCodeBlock> in web/src/components/chat/ —
+   chat-markdown-reference.tsx renders bare elements inside the .chat-md
+   scope, and the element combinators (color-mix washes, ::marker accents,
+   code figure + copy mechanics) live in
+   @digithings/web/styles/chat-core.css. */
 
 /* ── inline chart ───────────────────────────────────────────────────── */
 /* The .chat-inline-chart canvas-host wrapper migrated to utilities in
@@ -415,135 +166,18 @@
     animation: none;
     stroke-dashoffset: 0;
   }
-  .think-steps li {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
-  .think-dot {
-    animation: none;
-  }
 }
 
 /* ── custom widgets ─────────────────────────────────────────────────── */
-
-/* Widgets — frame, head, metrics grid, order list, badges, and money-tone
-   colours all migrated to token-backed utilities in chat-widgets-reference.tsx
-   (including the max-[560px] two-column reflow). What stays as CSS are button
-   mechanics only: the .widget-btn transition, the .primary surface-inverse
-   custom-prop colour, the .danger color-mix border, and the two color-mix
-   :hover states. */
-
-.widget-btn {
-  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
-}
-
-.widget-btn.primary {
-  color: var(--surface-inverse, #06110f);
-}
-
-.widget-btn.ghost:hover {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
-}
-
-.widget-btn.danger {
-  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
-}
-
-.widget-btn.danger:hover {
-  background: color-mix(in srgb, var(--down) 10%, transparent);
-}
+/* Promoted to @digithings/web (#1418): the frame/actions grammar is
+   <ChatWidgetFrame> / <ChatWidgetButton> in
+   web/src/components/chat/ChatWidgetFrame.tsx; the button transition and
+   color-mix hovers live in @digithings/web/styles/chat-widgets.css (.cw-btn).
+   The metrics grid and order detail stay in chat-widgets-reference.tsx as
+   token-backed utilities — frame content, not frame. */
 
 /* ── collapsible tool-call blocks (terminal tool chain) ─────────────────── */
-
-.tc {
-  border-left: 2px solid color-mix(in srgb, var(--accent) 40%, var(--term-hair));
-  padding-left: 0.7rem;
-}
-
-.tc--err {
-  border-left-color: color-mix(in srgb, var(--down) 55%, var(--term-hair));
-}
-
-.tc-head {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.2rem 0;
-  border: none;
-  background: transparent;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  text-align: left;
-  cursor: pointer;
-  color: var(--term-ink);
-}
-
-.tc-caret {
-  flex-shrink: 0;
-  width: 0;
-  height: 0;
-  border-left: 4px solid var(--term-mute);
-  border-top: 3px solid transparent;
-  border-bottom: 3px solid transparent;
-  transition: transform 0.18s var(--ease);
-}
-
-.tc-head[aria-expanded="true"] .tc-caret {
-  transform: rotate(90deg);
-}
-
-.tc-tool {
-  color: var(--accent);
-}
-
-.tc-args {
-  color: var(--term-mute);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tc-status {
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
-.tc-status.up {
-  color: var(--up);
-}
-.tc-status.down {
-  color: var(--down);
-}
-
-.tc-ms {
-  flex-shrink: 0;
-  color: var(--term-mute);
-  font-size: 0.7rem;
-  min-width: 3rem;
-  text-align: right;
-}
-
-.tc-out {
-  padding: 0.15rem 0 0.4rem 0.75rem;
-}
-
-.tc-line {
-  margin: 0.12rem 0;
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  line-height: 1.5;
-  color: var(--term-mute);
-}
-
-.tc-line.down {
-  color: var(--down);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tc-caret {
-    transition: none;
-  }
-}
+/* Promoted to @digithings/web (#1418): <ChatToolCall> in
+   web/src/components/chat/ChatToolCall.tsx carries the utilities; the
+   color-mix rails, caret art, aria-expanded rotate, and running pulse live
+   in @digithings/web/styles/chat-widgets.css (.tc*). */

@@ -1,11 +1,10 @@
-"use client";
-
-import { useRef, useState } from "react";
-import { useInView } from "motion/react";
+import { ChatThinking } from "@digithings/web";
 
 /**
- * Thinking chain — the model's reasoning steps streamed into the transcript as it
- * works, each line revealing when scrolled into view. Interactive display template.
+ * Thinking chain — the model's reasoning steps streamed into the transcript as
+ * it works, each line revealing when scrolled into view. Consumes the shared
+ * <ChatThinking> primitive (@digithings/web); the steps here are illustrative
+ * example data.
  */
 const STEPS = [
   "The user wants an 8-year backtest of trend_xsec on ETH.",
@@ -16,12 +15,8 @@ const STEPS = [
 ];
 
 export function ChatThinkingReference() {
-  const [open, setOpen] = useState(true);
-  const scopeRef = useRef<HTMLDivElement | null>(null);
-  const inView = useInView(scopeRef, { amount: 0.4, once: true });
-
   return (
-    <section className="section-block" ref={scopeRef}>
+    <section className="section-block">
       <p className="kicker">{"// thinking chain"}</p>
       <h2 className="title">Reasoning, folded by default.</h2>
       <p className="section-copy">
@@ -43,27 +38,7 @@ export function ChatThinkingReference() {
             ▸
           </span>
           <div className="chat-stack flex flex-col gap-[0.55rem] min-w-0 flex-1">
-            <button
-              type="button"
-              className={`think-chip${open ? " open" : ""}`}
-              aria-expanded={open}
-              onClick={() => setOpen((v) => !v)}
-            >
-              <span className="think-caret" aria-hidden="true" />
-              <span className="think-dot" aria-hidden="true" />
-              Thought for 4.2s
-              <span className="think-count">{STEPS.length} steps</span>
-            </button>
-
-            {open ? (
-              <ol className={`think-steps${inView ? " in" : ""}`}>
-                {STEPS.map((s, i) => (
-                  <li key={s} style={{ transitionDelay: `${i * 90}ms` }}>
-                    {s}
-                  </li>
-                ))}
-              </ol>
-            ) : null}
+            <ChatThinking label="Thought for 4.2s" steps={STEPS} live defaultOpen />
 
             <div className="min-w-0 border-0 rounded-none bg-transparent p-0 text-ink-soft text-[0.88rem] leading-[1.6]">
               Done — trend_xsec (time-series), 8y ETH-USD, Kelly-capped 0.5×. PF 2.31, max drawdown

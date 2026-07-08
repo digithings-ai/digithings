@@ -13,6 +13,8 @@
     "./styles/stages.css": "./src/styles/stages.css",
     "./styles/metrics.css": "./src/styles/metrics.css",
     "./styles/terminal-manifest.css": "./src/styles/terminal-manifest.css",
+    "./styles/chat-core.css": "./src/styles/chat-core.css",
+    "./styles/chat-widgets.css": "./src/styles/chat-widgets.css",
     "./data/modules": "./src/data/modules.ts",
     "./data/subsystems": "./src/data/subsystems.ts"
   },
