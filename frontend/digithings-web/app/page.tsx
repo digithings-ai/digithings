@@ -1,6 +1,6 @@
 import { Colophon, Footer, Reveal } from "@digithings/web";
 import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "./_nav";
-import { DigiNav } from "@/components/landing/DigiNav";
+import { DtNav } from "@/components/DtNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ModuleManifest } from "@/components/landing/ModuleManifest";
 
@@ -11,7 +11,7 @@ import { ModuleManifest } from "@/components/landing/ModuleManifest";
 export default function Home() {
   return (
     <>
-      <DigiNav />
+      <DtNav />
 
       <main>
         <HeroMesh>
