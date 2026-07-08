@@ -1,18 +1,16 @@
 'use client';
 
-import { useCallback, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAsyncData } from '@/lib/hooks/use-async-data';
 import {
-  Area,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ReferenceDot,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+  AreaSeries,
+  LineSeries,
+  createSeriesMarkers,
+  type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarker,
+  type Time,
+} from 'lightweight-charts';
 import { fetchPositionPriceChart } from '@/lib/queries';
 import {
   buildDrilldownChartRows,
@@ -26,6 +24,7 @@ import {
   netWeightChangeFromChartRows,
   resolveDrilldownRange,
   resolveInceptionDate,
+  type ContributionPptPoint,
   type DrilldownChartRow,
   type DrilldownWindow,
 } from '@/lib/position-drilldown';
@@ -33,7 +32,8 @@ import type { DashboardPositionEvent, Position, PositionHistoryRow, Thesis } fro
 import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
 import { normalizeThesisId } from '@/lib/thesis-id';
 import { pnlColor } from '@/components/ui';
-import { EVENT_COLORS, useChartColors } from '@/lib/chart-colors';
+import { EVENT_COLORS, withAlpha } from '@/lib/chart-colors';
+import { ChartTipShell, toLineData, useChartTip, useLightweightChart } from '@/lib/lw-chart';
 
 function thesisNames(ids: string[], thesisById: Map<string, Thesis>): string {
   if (!ids.length) return '—';
@@ -62,6 +62,159 @@ function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Weight-% area (left scale) + close-$ line (right scale) with event dots — lightweight-charts (#1420). */
+function DrilldownWeightPricePane({
+  chartRows,
+  markerPoints,
+}: {
+  chartRows: DrilldownChartRow[];
+  markerPoints: Array<{ date: string; close: number; event: DashboardPositionEvent['event']; label: string }>;
+}) {
+  const { containerRef, chart, colors, isAlive } = useLightweightChart({
+    leftPriceScale: { visible: true },
+  });
+  const tip = useChartTip(chart, containerRef, isAlive);
+  const weightRef = useRef<ISeriesApi<'Area'> | null>(null);
+  const priceRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+
+  const byDate = useMemo(() => new Map(chartRows.map((r) => [r.date, r])), [chartRows]);
+
+  useEffect(() => {
+    if (!chart || chartRows.length < 2) return;
+    const weight = chart.addSeries(AreaSeries, {
+      priceScaleId: 'left',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceFormat: { type: 'custom', formatter: (v: number) => `${v.toFixed(0)}%`, minMove: 0.01 },
+    });
+    weight.setData(toLineData(chartRows, (r) => r.date, (r) => r.weightPct));
+    const price = chart.addSeries(LineSeries, {
+      priceScaleId: 'right',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceFormat: { type: 'custom', formatter: (v: number) => `$${v.toFixed(0)}`, minMove: 0.01 },
+    });
+    price.setData(toLineData(chartRows, (r) => r.date, (r) => r.close));
+    weightRef.current = weight;
+    priceRef.current = price;
+    markersRef.current = createSeriesMarkers(price, []);
+    chart.timeScale().fitContent();
+    return () => {
+      weightRef.current = null;
+      priceRef.current = null;
+      markersRef.current = null;
+      if (isAlive()) {
+        chart.removeSeries(weight);
+        chart.removeSeries(price);
+      }
+    };
+  }, [chart, chartRows, isAlive]);
+
+  // Token colors + event markers (re-applied on theme flips).
+  useEffect(() => {
+    weightRef.current?.applyOptions({
+      lineColor: colors.accent,
+      topColor: withAlpha(colors.accent, 0.25),
+      bottomColor: withAlpha(colors.accent, 0),
+    });
+    priceRef.current?.applyOptions({ color: colors.accent });
+    markersRef.current?.setMarkers(
+      markerPoints.map(
+        (m): SeriesMarker<Time> => ({
+          time: m.date as Time,
+          position: 'inBar',
+          shape: 'circle',
+          color: eventMarkerColor(m.event),
+          size: 2,
+        })
+      )
+    );
+  }, [colors, chartRows, markerPoints]);
+
+  const row = tip ? byDate.get(tip.iso) : undefined;
+
+  return (
+    <div ref={containerRef} className="relative h-full w-full">
+      {tip && row ? (
+        <ChartTipShell tip={tip}>
+          <p className="font-mono text-ink-soft text-xs">{row.date}</p>
+          <p className="text-ink tabular-nums mt-1">Close ${row.close.toFixed(2)}</p>
+          <p className="text-ink-mute tabular-nums text-xs mt-0.5">Weight {row.weightPct.toFixed(2)}%</p>
+          {row.dayEvents.length > 0 ? (
+            <ul className="mt-2 space-y-1 text-xs">
+              {row.dayEvents.map((ev, i) => (
+                <li key={i} className={eventLabelClass(ev.event)}>
+                  {ev.event}
+                  {ev.weight_change_pct != null
+                    ? ` · Δ ${ev.weight_change_pct >= 0 ? '+' : ''}${ev.weight_change_pct.toFixed(2)}pp`
+                    : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </ChartTipShell>
+      ) : null}
+    </div>
+  );
+}
+
+/** Cumulative contribution (ppt) mini pane — lightweight-charts (#1420). */
+function DrilldownContributionPane({ series }: { series: ContributionPptPoint[] }) {
+  const { containerRef, chart, colors, isAlive } = useLightweightChart();
+  const tip = useChartTip(chart, containerRef, isAlive);
+  const areaRef = useRef<ISeriesApi<'Area'> | null>(null);
+
+  const byDate = useMemo(() => new Map(series.map((r) => [r.date, r])), [series]);
+
+  useEffect(() => {
+    if (!chart || series.length < 2) return;
+    const area = chart.addSeries(AreaSeries, {
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceFormat: { type: 'custom', formatter: (v: number) => v.toFixed(3), minMove: 0.0001 },
+    });
+    area.setData(toLineData(series, (r) => r.date, (r) => r.cumPp));
+    areaRef.current = area;
+    chart.timeScale().fitContent();
+    return () => {
+      areaRef.current = null;
+      if (isAlive()) chart.removeSeries(area);
+    };
+  }, [chart, series, isAlive]);
+
+  useEffect(() => {
+    areaRef.current?.applyOptions({
+      lineColor: colors.up,
+      topColor: withAlpha(colors.up, 0.2),
+      bottomColor: withAlpha(colors.up, 0),
+    });
+  }, [colors, series]);
+
+  const row = tip ? byDate.get(tip.iso) : undefined;
+
+  return (
+    <div ref={containerRef} className="relative h-full w-full">
+      {tip && row ? (
+        <ChartTipShell tip={tip}>
+          <p className="font-mono text-ink-soft text-xs">{row.date}</p>
+          <p className="text-ink tabular-nums mt-1">
+            Cumulative: {row.cumPp >= 0 ? '+' : ''}
+            {row.cumPp.toFixed(4)} ppt
+          </p>
+          <p className="text-ink-mute tabular-nums text-xs mt-0.5">
+            Daily: {row.dailyPp >= 0 ? '+' : ''}
+            {row.dailyPp.toFixed(4)} ppt
+          </p>
+        </ChartTipShell>
+      ) : null}
+    </div>
+  );
+}
+
 type Props = {
   position: Position;
   positionEvents: DashboardPositionEvent[];
@@ -83,10 +236,6 @@ export default function PositionDrilldown({
   performanceRange,
   mode,
 }: Props) {
-  const gradientId = useId().replace(/:/g, '');
-  const chart = useChartColors();
-  const contribId = useId().replace(/:/g, '');
-
   const displayEnd = performanceRange?.end ?? asOfDate ?? isoToday();
   const inceptionDate = useMemo(
     () => resolveInceptionDate(position.ticker, position, positionHistory, positionEvents),
@@ -272,91 +421,7 @@ export default function PositionDrilldown({
         <div className="space-y-2">
           <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Weight &amp; price</p>
           <div className="h-[280px] w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartRows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={chart.hair} />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke={chart.axis} minTickGap={24} />
-                <YAxis
-                  yAxisId="w"
-                  tick={{ fontSize: 10 }}
-                  stroke={chart.axis}
-                  domain={[0, 'auto']}
-                  tickFormatter={(v) => `${v}%`}
-                  width={44}
-                />
-                <YAxis
-                  yAxisId="p"
-                  orientation="right"
-                  tick={{ fontSize: 10 }}
-                  stroke={chart.axis}
-                  domain={['auto', 'auto']}
-                  tickFormatter={(v) => `$${v}`}
-                  width={56}
-                />
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const row = payload[0].payload as DrilldownChartRow;
-                    return (
-                      <div className="rounded-lg border border-hair bg-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-sm">
-                        <p className="font-mono text-ink-soft text-xs">{row.date}</p>
-                        <p className="text-ink tabular-nums mt-1">Close ${row.close.toFixed(2)}</p>
-                        <p className="text-ink-mute tabular-nums text-xs mt-0.5">Weight {row.weightPct.toFixed(2)}%</p>
-                        {row.dayEvents.length > 0 ? (
-                          <ul className="mt-2 space-y-1 text-xs">
-                            {row.dayEvents.map((ev, i) => (
-                              <li key={i} className={eventLabelClass(ev.event)}>
-                                {ev.event}
-                                {ev.weight_change_pct != null
-                                  ? ` · Δ ${ev.weight_change_pct >= 0 ? '+' : ''}${ev.weight_change_pct.toFixed(2)}pp`
-                                  : null}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-                    );
-                  }}
-                />
-                <Area
-                  yAxisId="w"
-                  type="monotone"
-                  dataKey="weightPct"
-                  stroke="var(--accent)"
-                  strokeWidth={1.5}
-                  fill={`url(#${gradientId})`}
-                  isAnimationActive={false}
-                />
-                <Line
-                  yAxisId="p"
-                  type="monotone"
-                  dataKey="close"
-                  stroke="var(--accent)"
-                  strokeWidth={1.5}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-                {markerPoints.map((m) => (
-                  <ReferenceDot
-                    key={m.date}
-                    x={m.date}
-                    y={m.close}
-                    yAxisId="p"
-                    r={5}
-                    fill={eventMarkerColor(m.event)}
-                    stroke={chart.bg}
-                    strokeWidth={1}
-                    isFront
-                  />
-                ))}
-              </ComposedChart>
-            </ResponsiveContainer>
+            <DrilldownWeightPricePane chartRows={chartRows} markerPoints={markerPoints} />
           </div>
         </div>
       ) : (
@@ -369,57 +434,7 @@ export default function PositionDrilldown({
         <div className="space-y-2">
           <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Cumulative contribution (ppt)</p>
           <div className="h-[160px] w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={contributionSeries} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id={contribId} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={chart.up} stopOpacity={0.2} />
-                    <stop offset="100%" stopColor={chart.up} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={chart.hair} />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke={chart.axis} minTickGap={24} />
-                <YAxis tick={{ fontSize: 10 }} stroke={chart.axis} width={48} />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload?.length) return null;
-                    const cum = payload.find((p) => p.dataKey === 'cumPp')?.value;
-                    const daily = payload.find((p) => p.dataKey === 'dailyPp')?.value;
-                    return (
-                      <div className="rounded-lg border border-hair bg-bg px-3 py-2 text-[0.82rem] shadow-lg">
-                        <p className="font-mono text-ink-soft text-xs">{String(label)}</p>
-                        <p className="text-ink tabular-nums mt-1">
-                          Cumulative:{' '}
-                          {typeof cum === 'number' ? `${cum >= 0 ? '+' : ''}${cum.toFixed(4)} ppt` : '—'}
-                        </p>
-                        <p className="text-ink-mute tabular-nums text-xs mt-0.5">
-                          Daily:{' '}
-                          {typeof daily === 'number' ? `${daily >= 0 ? '+' : ''}${daily.toFixed(4)} ppt` : '—'}
-                        </p>
-                      </div>
-                    );
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="dailyPp"
-                  stroke="transparent"
-                  dot={false}
-                  strokeWidth={0}
-                  isAnimationActive={false}
-                  name="Daily ppt"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="cumPp"
-                  stroke={chart.up}
-                  strokeWidth={1.5}
-                  fill={`url(#${contribId})`}
-                  isAnimationActive={false}
-                  name="Cumulative ppt"
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
+            <DrilldownContributionPane series={contributionSeries} />
           </div>
         </div>
       ) : null}

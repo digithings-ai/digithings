@@ -1,21 +1,18 @@
 'use client';
 
-import { useMemo, useState, useRef, useEffect, type ComponentProps } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { ChevronDown } from 'lucide-react';
 import {
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  Area,
-  ComposedChart,
-  Line,
-  Bar,
-  Cell,
-  ReferenceLine,
-} from 'recharts';
+  AreaSeries,
+  HistogramSeries,
+  LineSeries,
+  LineStyle,
+  createSeriesMarkers,
+  type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarker,
+  type Time,
+} from 'lightweight-charts';
 import type { NavChartPoint, PerfChartPoint } from '@/lib/types';
 import { PerformanceDrawdownChart } from '@/components/portfolio/performance-drawdown-chart';
 import { PerformanceRollingChart } from '@/components/portfolio/performance-rolling-chart';
@@ -24,9 +21,9 @@ import { buildDailyReturnsWithNavIndex } from '@/lib/performance-series';
 import {
   EVENT_COLORS,
   comparableLineColor as lineColorForTicker,
-  useChartColors,
   withAlpha,
 } from '@/lib/chart-colors';
+import { ChartTipShell, toLineData, useChartTip, useLightweightChart } from '@/lib/lw-chart';
 
 const VIEW_OPTIONS: { id: PerformanceChartView; label: string; hint: string }[] = [
   { id: 'nav', label: 'NAV vs comparables', hint: 'Indexed series; legend removes an overlay' },
@@ -39,11 +36,13 @@ const VIEW_OPTIONS: { id: PerformanceChartView; label: string; hint: string }[] 
   },
 ];
 
-type LegendPayloadItem = {
-  value?: string;
-  dataKey?: string | number;
-  color?: string;
-};
+function eventColorFor(event: string): string {
+  if (event === 'OPEN') return EVENT_COLORS.OPEN;
+  if (event === 'EXIT') return EVENT_COLORS.EXIT;
+  if (event === 'ADD') return EVENT_COLORS.ADD;
+  if (event === 'TRIM') return EVENT_COLORS.TRIM;
+  return EVENT_COLORS.DEFAULT;
+}
 
 function NavComparableChart({
   data,
@@ -55,12 +54,85 @@ function NavComparableChart({
   data: PerfChartPoint[];
   comparableKeys: string[];
   onLegendRemoveComparable: (ticker: string) => void;
-  /** Dates in range with OPEN/EXIT/TRIM/ADD — vertical guides on the NAV chart. */
+  /** Dates in range with OPEN/EXIT/TRIM/ADD — muted markers on the NAV series. */
   activityMarkerDates?: string[];
   /** Pre-aggregated events per date for tooltip enrichment. */
   activityEventsByDate?: Record<string, { ticker: string; event: string }[]>;
 }) {
-  const chart = useChartColors();
+  const { containerRef, chart, colors, isAlive } = useLightweightChart();
+  const tip = useChartTip(chart, containerRef, isAlive);
+  const portfolioRef = useRef<ISeriesApi<'Area'> | null>(null);
+  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+
+  const byDate = useMemo(() => new Map(data.map((d) => [d.date, d])), [data]);
+
+  /** Activity dates that land on a plotted portfolio point (markers need a value). */
+  const markerDates = useMemo(() => {
+    if (!activityMarkerDates?.length) return [];
+    return activityMarkerDates.filter((d) => typeof byDate.get(d)?.portfolio === 'number').sort();
+  }, [activityMarkerDates, byDate]);
+
+  // Series + data — recreated when the range or overlay set changes.
+  useEffect(() => {
+    if (!chart || data.length < 2) return;
+    const portfolio = chart.addSeries(AreaSeries, {
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceFormat: { type: 'custom', formatter: (v: number) => v.toFixed(2), minMove: 0.01 },
+    });
+    portfolio.setData(toLineData(data, (d) => d.date, (d) => d.portfolio));
+    portfolioRef.current = portfolio;
+    markersRef.current = createSeriesMarkers(portfolio, []);
+
+    const overlays: ISeriesApi<'Line'>[] = comparableKeys.map((key) => {
+      const line = chart.addSeries(LineSeries, {
+        color: lineColorForTicker(key),
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      line.setData(
+        toLineData(data, (d) => d.date, (d) => {
+          const v = d[key];
+          return typeof v === 'number' ? v : null;
+        })
+      );
+      return line;
+    });
+
+    chart.timeScale().fitContent();
+    return () => {
+      portfolioRef.current = null;
+      markersRef.current = null;
+      if (isAlive()) {
+        chart.removeSeries(portfolio);
+        for (const line of overlays) chart.removeSeries(line);
+      }
+    };
+  }, [chart, data, comparableKeys, isAlive]);
+
+  // Token colors + activity markers — re-applied on theme flips too.
+  useEffect(() => {
+    portfolioRef.current?.applyOptions({
+      lineColor: colors.accent,
+      topColor: withAlpha(colors.accent, 0.24),
+      bottomColor: withAlpha(colors.accent, 0.02),
+    });
+    markersRef.current?.setMarkers(
+      markerDates.map(
+        (d): SeriesMarker<Time> => ({
+          time: d as Time,
+          position: 'inBar',
+          shape: 'circle',
+          color: withAlpha(colors.ink, 0.35),
+          size: 1,
+        })
+      )
+    );
+  }, [colors, data, comparableKeys, markerDates]);
+
   if (data.length < 2) {
     return (
       <div className="h-full min-h-[280px] flex items-center justify-center text-ink-mute text-sm">
@@ -69,169 +141,74 @@ function NavComparableChart({
     );
   }
 
-  const legendContent = (props: { payload?: LegendPayloadItem[] }) => {
-    const { payload } = props;
-    if (!payload?.length) return null;
-    return (
-      <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 w-full pr-1">
-        {payload.map((item) => {
-          const key = String(item.dataKey ?? item.value ?? '');
-          if (key === 'portfolio') {
-            return (
-              <span
-                key="portfolio"
-                className="inline-flex items-center gap-1.5 text-[11px] text-ink-mute shrink-0"
-              >
-                <span className="w-2.5 h-2.5 rounded-sm bg-accent/90 shrink-0" />
-                Portfolio
-              </span>
-            );
-          }
-          if (!comparableKeys.includes(key)) return null;
-          const stroke = item.color ?? lineColorForTicker(key);
-          return (
-            <button
-              key={key}
-              type="button"
-              title="Remove from chart"
-              onClick={() => onLegendRemoveComparable(key)}
-              className="inline-flex items-center gap-1.5 text-[11px] text-ink-soft hover:text-ink transition-colors shrink-0 cursor-pointer font-mono"
-            >
-              <svg width={18} height={8} className="shrink-0 overflow-visible" aria-hidden>
-                <line
-                  x1={0}
-                  y1={4}
-                  x2={18}
-                  y2={4}
-                  stroke={stroke}
-                  strokeWidth={2}
-                  strokeDasharray="4 3"
-                />
-              </svg>
-              {item.value ?? key}
-            </button>
-          );
-        })}
-      </div>
-    );
-  };
+  const tipRow = tip ? byDate.get(tip.iso) : undefined;
+  const tipEvents = tip ? activityEventsByDate?.[tip.iso] ?? [] : [];
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke={chart.hair} />
-        <XAxis
-          dataKey="date"
-          tick={{ fill: chart.axis, fontSize: 11 }}
-          tickFormatter={(d: string) => d?.slice(5)}
-        />
-        <YAxis
-          tick={{ fill: chart.axis, fontSize: 11 }}
-          domain={['auto', 'auto']}
-          label={{
-            value: 'Indexed (100 = window start)',
-            angle: -90,
-            position: 'insideLeft',
-            fill: chart.axis,
-            fontSize: 10,
-          }}
-        />
-        <Tooltip
-          content={({ active, payload, label }) => {
-            if (!active || !payload?.length) return null;
-            const events = activityEventsByDate?.[String(label)] ?? [];
-            return (
-              <div
-                style={{
-                  background: 'var(--term-bg)',
-                  border: '1px solid var(--hair)',
-                  borderRadius: '8px',
-                  fontSize: '0.82rem',
-                  padding: '8px 12px',
-                  maxWidth: 220,
-                }}
-              >
-                <p style={{ color: 'var(--ink-soft)', marginBottom: 4, fontSize: '0.75rem' }}>
-                  {String(label)}
-                </p>
-                {payload.map((item) => (
-                  <div key={String(item.dataKey)} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                    <span style={{ color: item.color ?? 'var(--ink-soft)' }}>{String(item.name ?? item.dataKey)}</span>
-                    <span style={{ fontFamily: 'monospace', color: 'var(--ink)' }}>
-                      {item.value != null && !Number.isNaN(Number(item.value))
-                        ? Number(item.value).toFixed(2)
-                        : '—'}
-                    </span>
+    <div className="h-full w-full flex flex-col gap-1.5">
+      <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 w-full pr-1">
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-mute shrink-0">
+          <span className="w-2.5 h-2.5 rounded-sm bg-accent/90 shrink-0" />
+          Portfolio
+        </span>
+        {comparableKeys.map((key) => (
+          <button
+            key={key}
+            type="button"
+            title="Remove from chart"
+            onClick={() => onLegendRemoveComparable(key)}
+            className="inline-flex items-center gap-1.5 text-[11px] text-ink-soft hover:text-ink transition-colors shrink-0 cursor-pointer font-mono"
+          >
+            <svg width={18} height={8} className="shrink-0 overflow-visible" aria-hidden>
+              <line
+                x1={0}
+                y1={4}
+                x2={18}
+                y2={4}
+                stroke={lineColorForTicker(key)}
+                strokeWidth={2}
+                strokeDasharray="4 3"
+              />
+            </svg>
+            {key}
+          </button>
+        ))}
+      </div>
+      <div ref={containerRef} className="relative flex-1 min-h-0">
+        {tip && tipRow ? (
+          <ChartTipShell tip={tip}>
+            <p className="text-ink-soft text-[0.75rem] mb-1">{tip.iso}</p>
+            <div className="flex justify-between gap-3">
+              <span style={{ color: colors.accent }}>Portfolio NAV</span>
+              <span className="font-mono text-ink tabular-nums">
+                {typeof tipRow.portfolio === 'number' ? tipRow.portfolio.toFixed(2) : '—'}
+              </span>
+            </div>
+            {comparableKeys.map((key) => {
+              const v = tipRow[key];
+              return (
+                <div key={key} className="flex justify-between gap-3">
+                  <span style={{ color: lineColorForTicker(key) }}>{key}</span>
+                  <span className="font-mono text-ink tabular-nums">
+                    {typeof v === 'number' ? v.toFixed(2) : '—'}
+                  </span>
+                </div>
+              );
+            })}
+            {tipEvents.length > 0 ? (
+              <div className="mt-1.5 pt-1.5 border-t border-hair">
+                {tipEvents.map((ev, i) => (
+                  <div key={i} className="flex gap-1.5 text-[0.72rem] text-ink-soft">
+                    <span style={{ color: eventColorFor(ev.event) }}>{ev.event}</span>
+                    <span className="font-mono">{ev.ticker}</span>
                   </div>
                 ))}
-                {events.length > 0 && (
-                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--hair)' }}>
-                    {events.map((ev, i) => (
-                      <div key={i} style={{ color: 'var(--ink-soft)', fontSize: '0.72rem', display: 'flex', gap: 6 }}>
-                        <span
-                          style={{
-                            color:
-                              ev.event === 'OPEN'
-                                ? EVENT_COLORS.OPEN
-                                : ev.event === 'EXIT'
-                                  ? EVENT_COLORS.EXIT
-                                  : ev.event === 'ADD'
-                                    ? EVENT_COLORS.ADD
-                                    : ev.event === 'TRIM'
-                                      ? EVENT_COLORS.TRIM
-                                      : 'var(--ink-soft)',
-                          }}
-                        >
-                          {ev.event}
-                        </span>
-                        <span style={{ fontFamily: 'monospace' }}>{ev.ticker}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
-            );
-          }}
-        />
-        {(activityMarkerDates ?? []).map((d) => (
-          <ReferenceLine
-            key={d}
-            x={d}
-            stroke={withAlpha(chart.ink, 0.14)}
-            strokeDasharray="4 5"
-          />
-        ))}
-        <Legend
-          verticalAlign="top"
-          align="right"
-          content={legendContent as ComponentProps<typeof Legend>['content']}
-          wrapperStyle={{ top: 0, width: '100%' }}
-        />
-        <Area
-          type="monotone"
-          dataKey="portfolio"
-          name="Portfolio NAV"
-          stroke={chart.accent}
-          fill={withAlpha(chart.accent, 0.12)}
-          strokeWidth={2}
-          dot={false}
-          connectNulls
-        />
-        {comparableKeys.map((b) => (
-          <Line
-            key={b}
-            type="monotone"
-            dataKey={b}
-            name={b}
-            stroke={lineColorForTicker(b)}
-            strokeDasharray="4 4"
-            strokeWidth={1.5}
-            dot={false}
-            connectNulls
-          />
-        ))}
-      </ComposedChart>
-    </ResponsiveContainer>
+            ) : null}
+          </ChartTipShell>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -388,8 +365,61 @@ function ComparableDropdown({
 }
 
 function DailyReturnsComboChart({ snaps }: { snaps: NavChartPoint[] }) {
-  const chart = useChartColors();
-  const data = buildDailyReturnsWithNavIndex(snaps);
+  const { containerRef, chart, colors, isAlive } = useLightweightChart({
+    leftPriceScale: { visible: true },
+  });
+  const tip = useChartTip(chart, containerRef, isAlive);
+  const barsRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const navRef = useRef<ISeriesApi<'Line'> | null>(null);
+
+  const data = useMemo(() => buildDailyReturnsWithNavIndex(snaps), [snaps]);
+  const byDate = useMemo(() => new Map(data.map((d) => [d.date, d])), [data]);
+
+  useEffect(() => {
+    if (!chart || data.length < 2) return;
+    const bars = chart.addSeries(HistogramSeries, {
+      priceScaleId: 'left',
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceFormat: { type: 'custom', formatter: (v: number) => `${v.toFixed(1)}%`, minMove: 0.01 },
+    });
+    const nav = chart.addSeries(LineSeries, {
+      lineWidth: 2,
+      priceScaleId: 'right',
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceFormat: { type: 'custom', formatter: (v: number) => v.toFixed(2), minMove: 0.01 },
+    });
+    nav.setData(toLineData(data, (d) => d.date, (d) => d.navIndex));
+    barsRef.current = bars;
+    navRef.current = nav;
+    chart.timeScale().fitContent();
+    return () => {
+      barsRef.current = null;
+      navRef.current = null;
+      if (isAlive()) {
+        chart.removeSeries(bars);
+        chart.removeSeries(nav);
+      }
+    };
+  }, [chart, data, isAlive]);
+
+  // Per-bar up/down colors + NAV accent — reset on theme flips.
+  useEffect(() => {
+    barsRef.current?.setData(
+      data.map((d) =>
+        d.dailyPct == null
+          ? { time: d.date as Time }
+          : {
+              time: d.date as Time,
+              value: d.dailyPct,
+              color: d.dailyPct >= 0 ? withAlpha(colors.up, 0.75) : withAlpha(colors.down, 0.75),
+            }
+      )
+    );
+    navRef.current?.applyOptions({ color: colors.accent });
+  }, [colors, data]);
+
   if (data.length < 2) {
     return (
       <div className="h-full min-h-[280px] flex items-center justify-center text-ink-mute text-sm">
@@ -397,70 +427,45 @@ function DailyReturnsComboChart({ snaps }: { snaps: NavChartPoint[] }) {
       </div>
     );
   }
+
+  const tipRow = tip ? byDate.get(tip.iso) : undefined;
+
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
-        <CartesianGrid stroke={chart.hair} />
-        <XAxis
-          dataKey="date"
-          tick={{ fill: chart.axis, fontSize: 11 }}
-          tickFormatter={(d: string) => d?.slice(5)}
-        />
-        <YAxis
-          yAxisId="left"
-          tick={{ fill: chart.axis, fontSize: 11 }}
-          tickFormatter={(v) => `${v}%`}
-          label={{ value: 'Daily %', angle: -90, position: 'insideLeft', fill: chart.axis, fontSize: 10 }}
-        />
-        <YAxis
-          yAxisId="right"
-          orientation="right"
-          tick={{ fill: chart.axis, fontSize: 11 }}
-          domain={['auto', 'auto']}
-          label={{
-            value: 'NAV index',
-            angle: 90,
-            position: 'insideRight',
-            fill: chart.axis,
-            fontSize: 10,
-          }}
-        />
-        <Tooltip
-          contentStyle={{
-            background: 'var(--term-bg)',
-            border: '1px solid var(--hair)',
-            color: 'var(--ink)',
-            borderRadius: '8px',
-            fontSize: '0.85rem',
-          }}
-        />
-        <Legend />
-        <Bar yAxisId="left" dataKey="dailyPct" name="Daily return %" maxBarSize={16} radius={[2, 2, 0, 0]}>
-          {data.map((entry, i) => (
-            <Cell
-              key={i}
-              fill={
-                entry.dailyPct == null
-                  ? withAlpha(chart.axis, 0.45)
-                  : entry.dailyPct >= 0
-                    ? withAlpha(chart.up, 0.75)
-                    : withAlpha(chart.down, 0.75)
-              }
-            />
-          ))}
-        </Bar>
-        <Line
-          yAxisId="right"
-          type="monotone"
-          dataKey="navIndex"
-          name="NAV (indexed)"
-          stroke={chart.accent}
-          strokeWidth={2}
-          dot={false}
-          connectNulls
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+    <div className="h-full w-full flex flex-col gap-1.5">
+      <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 text-[11px] text-ink-soft pr-1">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-flex gap-0.5 shrink-0" aria-hidden>
+            <span className="w-2.5 h-2.5 rounded-sm bg-up/75" />
+            <span className="w-2.5 h-2.5 rounded-sm bg-down/75" />
+          </span>
+          Daily return %
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-3 h-0.5 rounded-full bg-accent shrink-0" aria-hidden />
+          NAV (indexed)
+        </span>
+      </div>
+      <div ref={containerRef} className="relative flex-1 min-h-0">
+        {tip && tipRow ? (
+          <ChartTipShell tip={tip}>
+            <p className="text-ink-soft text-[0.75rem] font-mono">{tip.iso}</p>
+            <div className="flex justify-between gap-3 mt-0.5">
+              <span className="text-ink-soft">Daily return</span>
+              <span
+                className="font-mono tabular-nums"
+                style={{ color: tipRow.dailyPct == null ? colors.inkSoft : tipRow.dailyPct >= 0 ? colors.up : colors.down }}
+              >
+                {tipRow.dailyPct != null ? `${tipRow.dailyPct >= 0 ? '+' : ''}${tipRow.dailyPct.toFixed(2)}%` : '—'}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-ink-soft">NAV (indexed)</span>
+              <span className="font-mono tabular-nums text-ink">{tipRow.navIndex.toFixed(2)}</span>
+            </div>
+          </ChartTipShell>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
