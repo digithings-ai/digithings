@@ -33,13 +33,13 @@ const BUCKET_LABEL: Record<string, string> = {
 function ReasoningExpander({ thesis, reflection }: { thesis: string | null; reflection: string | null }) {
   const [open, setOpen] = useState(false);
   if (!thesis && !reflection) {
-    return <span className="text-text-muted/50 text-xs italic">none recorded</span>;
+    return <span className="text-ink-mute/50 text-xs italic">none recorded</span>;
   }
   return (
     <div className="flex flex-col gap-1">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="text-xs text-text-secondary underline underline-offset-2 decoration-dotted hover:text-text-primary text-left"
+        className="text-xs text-ink-soft underline underline-offset-2 decoration-dotted hover:text-ink text-left"
         aria-expanded={open}
       >
         {open ? 'hide' : 'show reasoning'}
@@ -48,14 +48,14 @@ function ReasoningExpander({ thesis, reflection }: { thesis: string | null; refl
         <div className="flex flex-col gap-2 text-xs mt-1 max-w-prose">
           {thesis && (
             <div>
-              <span className="text-text-muted font-medium">Thesis: </span>
-              <span className="text-text-secondary">{thesis}</span>
+              <span className="text-ink-mute font-medium">Thesis: </span>
+              <span className="text-ink-soft">{thesis}</span>
             </div>
           )}
           {reflection && (
             <div>
-              <span className="text-text-muted font-medium">Reflection: </span>
-              <span className="text-text-secondary">{reflection}</span>
+              <span className="text-ink-mute font-medium">Reflection: </span>
+              <span className="text-ink-soft">{reflection}</span>
             </div>
           )}
         </div>
@@ -99,7 +99,7 @@ export default function DecisionScorecardTab({
           label="Hit rate"
           value={`${scorecard.hitRatePct.toFixed(1)}%`}
           sub="positive alpha"
-          color={scorecard.hitRatePct >= 50 ? 'text-fin-green' : 'text-fin-red'}
+          color={scorecard.hitRatePct >= 50 ? 'text-up' : 'text-down'}
         />
         <StatTile
           label="Mean alpha"
@@ -118,10 +118,10 @@ export default function DecisionScorecardTab({
           sub="conviction → alpha"
           color={
             scorecard.buckets.length < 2
-              ? 'text-text-secondary'
+              ? 'text-ink-soft'
               : scorecard.calibrated
-                ? 'text-fin-green'
-                : 'text-fin-amber'
+                ? 'text-up'
+                : 'text-warn'
           }
         />
         <StatTile label="Buckets" value={scorecard.buckets.length} sub="with data" />
@@ -163,7 +163,7 @@ export default function DecisionScorecardTab({
             </ResponsiveContainer>
           </div>
         ) : (
-          <p className="text-xs text-text-muted">
+          <p className="text-xs text-ink-mute">
             Resolved decisions exist but none carry a recorded conviction, so calibration buckets
             cannot be formed.
           </p>
@@ -174,7 +174,7 @@ export default function DecisionScorecardTab({
         <div className="overflow-x-auto">
           <table className="w-full text-sm tabular-nums">
             <thead>
-              <tr className="text-left text-xs text-text-muted border-b border-border-subtle">
+              <tr className="text-left text-xs text-ink-mute border-b border-hair">
                 <th className="py-2 pr-4 font-medium">Bucket</th>
                 <th className="py-2 pr-4 font-medium text-right">N</th>
                 <th className="py-2 pr-4 font-medium text-right">Mean alpha</th>
@@ -184,14 +184,14 @@ export default function DecisionScorecardTab({
             </thead>
             <tbody>
               {scorecard.buckets.map((b) => (
-                <tr key={b.bucket} className="border-b border-border-subtle/50">
-                  <td className="py-2 pr-4 text-text-primary">{BUCKET_LABEL[b.bucket] ?? b.bucket}</td>
-                  <td className="py-2 pr-4 text-right text-text-secondary">{b.n}</td>
+                <tr key={b.bucket} className="border-b border-hair/50">
+                  <td className="py-2 pr-4 text-ink">{BUCKET_LABEL[b.bucket] ?? b.bucket}</td>
+                  <td className="py-2 pr-4 text-right text-ink-soft">{b.n}</td>
                   <td className={`py-2 pr-4 text-right ${signColorClass(b.meanAlphaPct)}`}>
                     {fmtPct(b.meanAlphaPct)}
                   </td>
-                  <td className="py-2 pr-4 text-right text-text-secondary">{b.hitRatePct.toFixed(1)}%</td>
-                  <td className="py-2 text-right text-text-secondary">{b.meanConviction.toFixed(2)}</td>
+                  <td className="py-2 pr-4 text-right text-ink-soft">{b.hitRatePct.toFixed(1)}%</td>
+                  <td className="py-2 text-right text-ink-soft">{b.meanConviction.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -210,7 +210,7 @@ export default function DecisionScorecardTab({
           <div className="overflow-x-auto">
             <table className="w-full text-sm tabular-nums">
               <thead>
-                <tr className="text-left text-xs text-text-muted border-b border-border-subtle">
+                <tr className="text-left text-xs text-ink-mute border-b border-hair">
                   <th className="py-2 pr-4 font-medium">Date</th>
                   <th className="py-2 pr-4 font-medium">Ticker</th>
                   <th className="py-2 pr-4 font-medium">Stance</th>
@@ -222,11 +222,11 @@ export default function DecisionScorecardTab({
               </thead>
               <tbody>
                 {resolved.map((d) => (
-                  <tr key={d.id} className="border-b border-border-subtle/50 align-top">
-                    <td className="py-2 pr-4 text-text-muted text-xs">{d.run_date ?? '—'}</td>
-                    <td className="py-2 pr-4 text-text-primary font-medium">{d.ticker}</td>
-                    <td className="py-2 pr-4 text-text-secondary capitalize">{d.stance ?? '—'}</td>
-                    <td className="py-2 pr-4 text-right text-text-secondary">
+                  <tr key={d.id} className="border-b border-hair/50 align-top">
+                    <td className="py-2 pr-4 text-ink-mute text-xs">{d.run_date ?? '—'}</td>
+                    <td className="py-2 pr-4 text-ink font-medium">{d.ticker}</td>
+                    <td className="py-2 pr-4 text-ink-soft capitalize">{d.stance ?? '—'}</td>
+                    <td className="py-2 pr-4 text-right text-ink-soft">
                       {d.conviction != null ? d.conviction.toFixed(1) : '—'}
                     </td>
                     <td className={`py-2 pr-4 text-right ${signColorClass(d.actual_return != null ? d.actual_return * 100 : null)}`}>
@@ -244,7 +244,7 @@ export default function DecisionScorecardTab({
             </table>
           </div>
         ) : (
-          <p className="text-xs text-text-muted">No resolved decisions yet.</p>
+          <p className="text-xs text-ink-mute">No resolved decisions yet.</p>
         )}
       </SectionCard>
     </div>

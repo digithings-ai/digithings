@@ -18,8 +18,8 @@ export default function BriefsSlideshow({
   if (briefs.length === 0) {
     return (
       <section className="glass-card p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Today&rsquo;s briefs</h2>
-        <p className="mt-2 text-sm text-text-muted">No research briefs for today yet.</p>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">Today&rsquo;s briefs</h2>
+        <p className="mt-2 text-sm text-ink-mute">No research briefs for today yet.</p>
       </section>
     );
   }
@@ -31,30 +31,30 @@ export default function BriefsSlideshow({
   return (
     <section className="glass-card flex flex-col gap-3 p-5">
       <header className="flex items-baseline gap-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Today&rsquo;s briefs</h2>
-        <span className="font-mono text-[10px] text-text-muted">{idx + 1}/{briefs.length}</span>
-        <button type="button" className="ml-auto text-[11px] text-fin-blue hover:underline" onClick={onSeeMore}>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">Today&rsquo;s briefs</h2>
+        <span className="font-mono text-[10px] text-ink-mute">{idx + 1}/{briefs.length}</span>
+        <button type="button" className="ml-auto text-[11px] text-accent hover:underline" onClick={onSeeMore}>
           see all →
         </button>
       </header>
 
       <div className="flex items-center gap-2">
-        <button type="button" aria-label="Previous brief" className="rounded-md border border-border-subtle p-1 text-text-muted hover:text-fin-blue" onClick={() => go(-1)}>
+        <button type="button" aria-label="Previous brief" className="rounded-md border border-hair p-1 text-ink-mute hover:text-accent" onClick={() => go(-1)}>
           <ChevronLeft size={16} />
         </button>
         <button
           type="button"
-          className="min-w-0 flex-1 rounded-lg border border-border-subtle p-3 text-left transition-colors hover:border-fin-blue/50"
+          className="min-w-0 flex-1 rounded-lg border border-hair p-3 text-left transition-colors hover:border-accent/50"
           onClick={() => openBrief(b.source_file, b.run_date)}
         >
-          <div className="flex items-center gap-2 text-[11px] text-text-muted">
-            <span className="font-semibold text-text-secondary">{b.broker_name ?? 'Unknown desk'}</span>
+          <div className="flex items-center gap-2 text-[11px] text-ink-mute">
+            <span className="font-semibold text-ink-soft">{b.broker_name ?? 'Unknown desk'}</span>
             {b.trader_relevance ? <span className="uppercase">· {b.trader_relevance}</span> : null}
           </div>
-          <p className="mt-1 truncate text-sm font-medium text-text-primary">{b.document_title ?? b.source_file}</p>
-          {b.central_thesis ? <p className="mt-1 line-clamp-2 text-xs text-text-secondary">{b.central_thesis}</p> : null}
+          <p className="mt-1 truncate text-sm font-medium text-ink">{b.document_title ?? b.source_file}</p>
+          {b.central_thesis ? <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{b.central_thesis}</p> : null}
         </button>
-        <button type="button" aria-label="Next brief" className="rounded-md border border-border-subtle p-1 text-text-muted hover:text-fin-blue" onClick={() => go(1)}>
+        <button type="button" aria-label="Next brief" className="rounded-md border border-hair p-1 text-ink-mute hover:text-accent" onClick={() => go(1)}>
           <ChevronRight size={16} />
         </button>
       </div>
@@ -65,7 +65,7 @@ export default function BriefsSlideshow({
             key={`${bb.source_file}-${bb.run_date}-${n}`}
             type="button"
             aria-label={`Go to brief ${n + 1}`}
-            className={`h-1.5 w-1.5 rounded-full ${n === idx ? 'bg-fin-blue' : 'bg-white/20'}`}
+            className={`h-1.5 w-1.5 rounded-full ${n === idx ? 'bg-accent' : 'bg-white/20'}`}
             onClick={() => setI(n)}
           />
         ))}

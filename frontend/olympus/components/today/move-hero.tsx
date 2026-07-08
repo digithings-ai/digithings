@@ -23,45 +23,45 @@ type RegimeAccent = {
 
 const REGIME_ACCENT: Record<string, RegimeAccent> = {
   strong_bullish: {
-    border: 'border-fin-green/60',
-    bg: 'bg-gradient-to-br from-fin-green/[0.10] via-transparent to-transparent',
-    label: 'text-fin-green',
+    border: 'border-up/60',
+    bg: 'bg-gradient-to-br from-up/[0.10] via-transparent to-transparent',
+    label: 'text-up',
     badge: 'green',
   },
   bullish: {
-    border: 'border-fin-green/45',
-    bg: 'bg-gradient-to-br from-fin-green/[0.07] via-transparent to-transparent',
-    label: 'text-fin-green',
+    border: 'border-up/45',
+    bg: 'bg-gradient-to-br from-up/[0.07] via-transparent to-transparent',
+    label: 'text-up',
     badge: 'green',
   },
   bearish: {
-    border: 'border-fin-red/45',
-    bg: 'bg-gradient-to-br from-fin-red/[0.07] via-transparent to-transparent',
-    label: 'text-fin-red',
+    border: 'border-down/45',
+    bg: 'bg-gradient-to-br from-down/[0.07] via-transparent to-transparent',
+    label: 'text-down',
     badge: 'red',
   },
   strong_bearish: {
-    border: 'border-fin-red/60',
-    bg: 'bg-gradient-to-br from-fin-red/[0.10] via-transparent to-transparent',
-    label: 'text-fin-red',
+    border: 'border-down/60',
+    bg: 'bg-gradient-to-br from-down/[0.10] via-transparent to-transparent',
+    label: 'text-down',
     badge: 'red',
   },
   caution: {
-    border: 'border-fin-amber/50',
-    bg: 'bg-gradient-to-br from-fin-amber/[0.07] via-transparent to-transparent',
-    label: 'text-fin-amber',
+    border: 'border-warn/50',
+    bg: 'bg-gradient-to-br from-warn/[0.07] via-transparent to-transparent',
+    label: 'text-warn',
     badge: 'amber',
   },
   mixed: {
-    border: 'border-fin-amber/40',
-    bg: 'bg-gradient-to-br from-fin-amber/[0.05] via-transparent to-transparent',
-    label: 'text-fin-amber',
+    border: 'border-warn/40',
+    bg: 'bg-gradient-to-br from-warn/[0.05] via-transparent to-transparent',
+    label: 'text-warn',
     badge: 'amber',
   },
   neutral: {
-    border: 'border-fin-blue/40',
-    bg: 'bg-gradient-to-br from-fin-blue/[0.06] via-transparent to-transparent',
-    label: 'text-fin-blue',
+    border: 'border-accent/40',
+    bg: 'bg-gradient-to-br from-accent/[0.06] via-transparent to-transparent',
+    label: 'text-accent',
     badge: 'blue',
   },
 };
@@ -113,11 +113,11 @@ export function MoveHero({
       ? 'No rebalance today — holding the book'
       : `${changeCount} change${changeCount === 1 ? '' : 's'} today`;
   const sinceColor =
-    nav.sincePct == null ? 'text-text-muted' : nav.sincePct >= 0 ? 'text-fin-green' : 'text-fin-red';
+    nav.sincePct == null ? 'text-ink-mute' : nav.sincePct >= 0 ? 'text-up' : 'text-down';
   const dailyColor =
-    nav.dailyPct == null ? 'text-text-muted' : nav.dailyPct >= 0 ? 'text-fin-green' : 'text-fin-red';
+    nav.dailyPct == null ? 'text-ink-mute' : nav.dailyPct >= 0 ? 'text-up' : 'text-down';
   const excessColor =
-    nav.excessPct == null ? 'text-text-muted' : nav.excessPct >= 0 ? 'text-fin-green' : 'text-fin-red';
+    nav.excessPct == null ? 'text-ink-mute' : nav.excessPct >= 0 ? 'text-up' : 'text-down';
 
   return (
     <section className={`glass-card border ${accent.border} ${accent.bg} overflow-hidden`}>
@@ -128,7 +128,7 @@ export function MoveHero({
             <span className={`text-[10px] font-bold uppercase tracking-widest ${accent.label}`}>
               Regime
             </span>
-            <span className="text-xs text-text-secondary truncate">{regime}</span>
+            <span className="text-xs text-ink-soft truncate">{regime}</span>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <AsOfBadge date={asOf} />
@@ -142,27 +142,27 @@ export function MoveHero({
         </div>
 
         {/* THE READ — the marquee */}
-        <p className="mt-4 text-[11px] font-bold uppercase tracking-widest text-text-muted">
+        <p className="mt-4 text-[11px] font-bold uppercase tracking-widest text-ink-mute">
           Brief · {asOf ?? '—'}
         </p>
-        <h1 className="font-display text-3xl sm:text-4xl leading-tight tracking-tight mt-1 text-text-primary">
+        <h1 className="font-display text-3xl sm:text-4xl leading-tight tracking-tight mt-1 text-ink">
           {headline ?? regime}
         </h1>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {confidence != null ? (
-            <span className="rounded-md border border-border-subtle px-2 py-0.5 font-mono text-[11px] tabular-nums text-text-secondary">
+            <span className="rounded-md border border-hair px-2 py-0.5 font-mono text-[11px] tabular-nums text-ink-soft">
               {confidence.toFixed(1)} confidence
             </span>
           ) : null}
-          <span className="text-xs text-text-secondary">{regime}</span>
+          <span className="text-xs text-ink-soft">{regime}</span>
         </div>
 
         {/* The move — demoted to a one-line status */}
         {changeCount === 0 ? (
-          <p className="mt-4 text-sm text-text-secondary">{moveStatus}</p>
+          <p className="mt-4 text-sm text-ink-soft">{moveStatus}</p>
         ) : (
           <details className="mt-4">
-            <summary className="cursor-pointer text-sm text-text-secondary marker:text-text-muted">
+            <summary className="cursor-pointer text-sm text-ink-soft marker:text-ink-mute">
               {moveStatus}
             </summary>
             <div className="mt-3">
@@ -173,14 +173,14 @@ export function MoveHero({
 
         {/* NAV status line — honest for one point */}
         <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-sm tabular-nums">
-          <span className="text-[11px] uppercase tracking-widest text-text-muted">NAV</span>
-          <span className="text-base font-semibold text-text-primary">
+          <span className="text-[11px] uppercase tracking-widest text-ink-mute">NAV</span>
+          <span className="text-base font-semibold text-ink">
             {nav.index == null ? '—' : nav.index.toFixed(1)}
           </span>
           {nav.sincePct != null ? (
             <span className={sinceColor}>
               {signedPct(nav.sincePct)} since inception
-              {nav.sinceDate ? <span className="text-text-muted"> ({nav.sinceDate})</span> : null}
+              {nav.sinceDate ? <span className="text-ink-mute"> ({nav.sinceDate})</span> : null}
             </span>
           ) : null}
           {nav.dailyPct != null ? (

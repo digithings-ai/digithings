@@ -15,10 +15,10 @@ import IntelligenceWhyPanel from './IntelligenceWhyPanel';
 /** Map a confluence direction/lean string to a .fin-* text color class. */
 function directionColorClass(direction: string): string {
   const d = direction.trim().toLowerCase();
-  if (d === 'bullish' || d === 'long' || d === 'buy') return 'text-fin-green';
-  if (d === 'bearish' || d === 'short' || d === 'sell') return 'text-fin-red';
-  if (d === 'watch') return 'text-fin-amber';
-  return 'text-text-secondary';
+  if (d === 'bullish' || d === 'long' || d === 'buy') return 'text-up';
+  if (d === 'bearish' || d === 'short' || d === 'sell') return 'text-down';
+  if (d === 'watch') return 'text-warn';
+  return 'text-ink-soft';
 }
 
 function directionLabel(direction: string): string {
@@ -93,10 +93,10 @@ function ComponentBar({ components }: { components: Record<string, number> }) {
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-0.5">
         {segments.map((s) => (
-          <span key={s.key} className="flex items-center gap-1 text-[10px] text-text-muted">
+          <span key={s.key} className="flex items-center gap-1 text-[10px] text-ink-mute">
             <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: s.color }} />
             {s.label}
-            <span className="tabular-nums text-text-secondary">{s.value.toFixed(2)}</span>
+            <span className="tabular-nums text-ink-soft">{s.value.toFixed(2)}</span>
           </span>
         ))}
       </div>
@@ -136,17 +136,17 @@ function IntelligenceCard({
   return (
     <div
       data-focus-ccy={focused ? idea.currency : undefined}
-      className={`glass-card flex flex-col gap-3 p-4${focused ? ' ring-2 ring-fin-blue' : ''}`}
+      className={`glass-card flex flex-col gap-3 p-4${focused ? ' ring-2 ring-accent' : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 rounded border border-border-subtle bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
+          <span className="shrink-0 rounded border border-hair bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-ink-mute">
             #{idea.rank}
           </span>
           <button
             type="button"
             onClick={() => crossLink({ kind: 'currency', currency: idea.currency })}
-            className="truncate font-mono text-sm font-semibold text-text-primary hover:text-fin-blue hover:underline transition-colors"
+            className="truncate font-mono text-sm font-semibold text-ink hover:text-accent hover:underline transition-colors"
             title={`See ${idea.currency} consensus`}
           >
             {idea.currency}
@@ -157,10 +157,10 @@ function IntelligenceCard({
         </span>
       </div>
 
-      <p className="text-sm leading-snug text-text-primary">{idea.title}</p>
+      <p className="text-sm leading-snug text-ink">{idea.title}</p>
 
       <div className="flex items-center justify-between pt-0.5">
-        <span className="text-[11px] uppercase tracking-wider text-text-muted">Confluence score</span>
+        <span className="text-[11px] uppercase tracking-wider text-ink-mute">Confluence score</span>
         <span className={`qn-metric tabular-nums ${colorClass}`}>
           {Number.isFinite(idea.score) ? idea.score.toFixed(2) : '—'}
         </span>
@@ -169,19 +169,19 @@ function IntelligenceCard({
       {Object.keys(components).length > 0 ? <ComponentBar components={components} /> : null}
 
       {(nBrokers != null || daysToCatalyst != null || catalyst.eventName != null || supportingDesks.length > 0) ? (
-        <div className="mt-auto flex flex-col gap-1.5 border-t border-border-subtle/60 pt-2 text-[11px] text-text-muted">
+        <div className="mt-auto flex flex-col gap-1.5 border-t border-hair/60 pt-2 text-[11px] text-ink-mute">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
             {nBrokers != null ? (
               <span className="flex items-center gap-1.5">
                 <Users size={12} aria-hidden />
-                <span className="qn-metric tabular-nums text-text-secondary">{nBrokers}</span>
+                <span className="qn-metric tabular-nums text-ink-soft">{nBrokers}</span>
                 desks
               </span>
             ) : null}
             {daysToCatalyst != null ? (
               <span className="flex items-center gap-1.5">
                 <CalendarClock size={12} aria-hidden />
-                <span className="qn-metric tabular-nums text-text-secondary">
+                <span className="qn-metric tabular-nums text-ink-soft">
                   {hedged ? '~' : ''}
                   {daysToCatalyst}
                 </span>
@@ -203,7 +203,7 @@ function IntelligenceCard({
                     externalId: catalyst.calendarExternalId,
                   })
                 }
-                className="max-w-full truncate font-medium text-fin-blue hover:underline"
+                className="max-w-full truncate font-medium text-accent hover:underline"
                 title={`${hedged ? 'Likely catalyst: ' : 'Catalyst: '}${catalyst.eventName}`}
               >
                 {hedged ? '~' : ''}
@@ -212,8 +212,8 @@ function IntelligenceCard({
             ) : null}
           </div>
           {whyItem == null && supportingDesks.length > 0 ? (
-            <p className="truncate text-text-muted" title={supportingDesks.join(', ')}>
-              <span className="text-text-secondary">Desks:</span> {supportingDesks.join(', ')}
+            <p className="truncate text-ink-mute" title={supportingDesks.join(', ')}>
+              <span className="text-ink-soft">Desks:</span> {supportingDesks.join(', ')}
             </p>
           ) : null}
         </div>
@@ -262,21 +262,21 @@ export default function IntelligenceTab({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
-        <Layers size={18} className="shrink-0 text-fin-blue" aria-hidden />
-        <h2 className="text-base font-semibold text-text-primary md:text-lg">
+        <Layers size={18} className="shrink-0 text-accent" aria-hidden />
+        <h2 className="text-base font-semibold text-ink md:text-lg">
           Confluence trade ideas
         </h2>
         {runDate ? (
-          <span className="ml-auto font-mono text-[10px] text-text-muted">{runDate}</span>
+          <span className="ml-auto font-mono text-[10px] text-ink-mute">{runDate}</span>
         ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
-        <p className="max-w-2xl text-xs text-text-muted">
+        <p className="max-w-2xl text-xs text-ink-mute">
           A directional cross-desk read meeting a near-term catalyst. Each idea&apos;s score blends
           consensus strength, event alignment and broker breadth — each shown as its own [0,1] leg.
         </p>
-        <span className="font-mono text-[10px] text-text-muted">score 0–1 · higher = stronger</span>
+        <span className="font-mono text-[10px] text-ink-mute">score 0–1 · higher = stronger</span>
       </div>
 
       {confluence.length > 0 ? (
@@ -293,7 +293,7 @@ export default function IntelligenceTab({
           ))}
         </div>
       ) : (
-        <div className="glass-card p-10 text-center text-sm text-text-muted">
+        <div className="glass-card p-10 text-center text-sm text-ink-mute">
           No confluence trade ideas{runDate ? ` for ${runDate}` : ''} yet.
         </div>
       )}

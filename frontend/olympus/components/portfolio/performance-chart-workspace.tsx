@@ -76,7 +76,7 @@ function NavComparableChart({
 }) {
   if (data.length < 2) {
     return (
-      <div className="h-full min-h-[280px] flex items-center justify-center text-text-muted text-sm">
+      <div className="h-full min-h-[280px] flex items-center justify-center text-ink-mute text-sm">
         Need at least two NAV points in this range.
       </div>
     );
@@ -93,7 +93,7 @@ function NavComparableChart({
             return (
               <span
                 key="portfolio"
-                className="inline-flex items-center gap-1.5 text-[11px] text-text-muted shrink-0"
+                className="inline-flex items-center gap-1.5 text-[11px] text-ink-mute shrink-0"
               >
                 <span className="w-2.5 h-2.5 rounded-sm bg-[#3B82F6]/90 shrink-0" />
                 Portfolio
@@ -108,7 +108,7 @@ function NavComparableChart({
               type="button"
               title="Remove from chart"
               onClick={() => onLegendRemoveComparable(key)}
-              className="inline-flex items-center gap-1.5 text-[11px] text-text-secondary hover:text-text-primary transition-colors shrink-0 cursor-pointer font-mono"
+              className="inline-flex items-center gap-1.5 text-[11px] text-ink-soft hover:text-ink transition-colors shrink-0 cursor-pointer font-mono"
             >
               <svg width={18} height={8} className="shrink-0 overflow-visible" aria-hidden>
                 <line
@@ -304,13 +304,13 @@ function ComparableDropdown({
       {selected.map((t) => (
         <span
           key={t}
-          className="inline-flex items-center gap-0.5 pl-2 pr-1 py-0.5 rounded-md text-[11px] font-mono font-medium border border-fin-blue/35 bg-fin-blue/10 text-fin-blue"
+          className="inline-flex items-center gap-0.5 pl-2 pr-1 py-0.5 rounded-md text-[11px] font-mono font-medium border border-accent/35 bg-accent/10 text-accent"
         >
           {t}
           <button
             type="button"
             onClick={() => onRemove(t)}
-            className="p-0.5 rounded hover:bg-white/10 text-text-secondary hover:text-text-primary leading-none"
+            className="p-0.5 rounded hover:bg-white/10 text-ink-soft hover:text-ink leading-none"
             aria-label={`Remove ${t}`}
           >
             ×
@@ -322,7 +322,7 @@ function ComparableDropdown({
         <button
           type="button"
           onClick={toggleOpen}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-border-subtle bg-bg-secondary text-text-secondary hover:border-fin-blue/40 hover:text-text-primary transition-colors"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-hair bg-term-bg text-ink-soft hover:border-accent/40 hover:text-ink transition-colors"
           aria-expanded={open ? 'true' : 'false'}
           aria-haspopup="listbox"
           aria-controls="comparable-ticker-listbox"
@@ -332,7 +332,7 @@ function ComparableDropdown({
         </button>
 
         {open && (
-          <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,18rem)] rounded-lg border border-border-subtle bg-[#141414] shadow-xl overflow-hidden">
+          <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,18rem)] rounded-lg border border-hair bg-[#141414] shadow-xl overflow-hidden">
             <input
               id="comparable-ticker-search"
               type="search"
@@ -340,7 +340,7 @@ function ComparableDropdown({
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search all tickers…"
               aria-label="Search tickers in price history"
-              className="w-full px-2.5 py-2 text-sm bg-bg-secondary border-b border-border-subtle text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-inset focus:ring-fin-blue/30"
+              className="w-full px-2.5 py-2 text-sm bg-term-bg border-b border-hair text-ink placeholder:text-ink-mute focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent/30"
               autoComplete="off"
               autoFocus
             />
@@ -348,7 +348,7 @@ function ComparableDropdown({
               <div
                 id="comparable-ticker-listbox"
                 role="status"
-                className="text-xs text-text-muted px-3 py-4 text-center"
+                className="text-xs text-ink-mute px-3 py-4 text-center"
               >
                 No matches
               </div>
@@ -378,10 +378,10 @@ function ComparableDropdown({
                       }}
                       className={`w-full text-left px-3 py-1.5 text-xs font-mono transition-colors ${
                         on
-                          ? 'bg-fin-blue/15 text-fin-blue'
+                          ? 'bg-accent/15 text-accent'
                           : disabled
-                            ? 'text-text-muted opacity-40 cursor-not-allowed'
-                            : 'text-text-secondary hover:bg-white/[0.06] hover:text-text-primary'
+                            ? 'text-ink-mute opacity-40 cursor-not-allowed'
+                            : 'text-ink-soft hover:bg-white/[0.06] hover:text-ink'
                       }`}
                     >
                       {t}
@@ -394,8 +394,8 @@ function ComparableDropdown({
         )}
       </div>
 
-      {loading && <span className="text-[11px] text-text-muted" aria-hidden="true">&nbsp;</span>}
-      {error && !open && <span className="text-[11px] text-fin-red/90 max-w-[220px] truncate" title={error}>{error}</span>}
+      {loading && <span className="text-[11px] text-ink-mute" aria-hidden="true">&nbsp;</span>}
+      {error && !open && <span className="text-[11px] text-down/90 max-w-[220px] truncate" title={error}>{error}</span>}
     </div>
   );
 }
@@ -404,7 +404,7 @@ function DailyReturnsComboChart({ snaps }: { snaps: NavChartPoint[] }) {
   const data = buildDailyReturnsWithNavIndex(snaps);
   if (data.length < 2) {
     return (
-      <div className="h-full min-h-[280px] flex items-center justify-center text-text-muted text-sm">
+      <div className="h-full min-h-[280px] flex items-center justify-center text-ink-mute text-sm">
         Need at least two NAV points in this range.
       </div>
     );
@@ -439,9 +439,9 @@ function DailyReturnsComboChart({ snaps }: { snaps: NavChartPoint[] }) {
         />
         <Tooltip
           contentStyle={{
-            background: 'var(--color-bg-secondary)',
-            border: '1px solid var(--color-border-subtle)',
-            color: 'var(--color-text-primary)',
+            background: 'var(--term-bg)',
+            border: '1px solid var(--hair)',
+            color: 'var(--ink)',
             borderRadius: '8px',
             fontSize: '0.85rem',
           }}
@@ -513,9 +513,9 @@ export function PerformanceChartWorkspace({
 }) {
   return (
     <div className="glass-card p-0 overflow-hidden">
-      <div className="p-4 border-b border-border-subtle bg-bg-secondary/60 space-y-3">
+      <div className="p-4 border-b border-hair bg-term-bg/60 space-y-3">
         <div className="flex flex-col gap-2">
-          <span className="text-[10px] text-text-muted uppercase tracking-wider">Chart</span>
+          <span className="text-[10px] text-ink-mute uppercase tracking-wider">Chart</span>
           <div className="flex flex-wrap gap-2">
             {VIEW_OPTIONS.map((opt) => (
               <button
@@ -525,8 +525,8 @@ export function PerformanceChartWorkspace({
                 title={opt.hint}
                 className={`text-left px-3 py-2 rounded-lg text-xs font-medium border transition-colors max-w-[200px] ${
                   view === opt.id
-                    ? 'border-fin-blue bg-fin-blue/15 text-fin-blue'
-                    : 'border-border-subtle text-text-secondary hover:bg-white/[0.04] hover:text-text-primary'
+                    ? 'border-accent bg-accent/15 text-accent'
+                    : 'border-hair text-ink-soft hover:bg-white/[0.04] hover:text-ink'
                 }`}
               >
                 <span className="block">{opt.label}</span>
@@ -536,7 +536,7 @@ export function PerformanceChartWorkspace({
         </div>
 
         {view === 'nav' && (
-          <div className="pt-2 border-t border-border-subtle/80">
+          <div className="pt-2 border-t border-hair/80">
             <ComparableDropdown
               universe={tickerUniverse}
               selected={selectedComparables}

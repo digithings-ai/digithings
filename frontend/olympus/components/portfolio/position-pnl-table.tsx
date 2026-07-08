@@ -29,9 +29,9 @@ export function PositionPnlTable({
 
   return (
     <div className="glass-card p-0 overflow-hidden">
-      <div className="border-b border-border-subtle bg-bg-secondary px-4 py-4 md:px-6 md:py-5">
+      <div className="border-b border-hair bg-term-bg px-4 py-4 md:px-6 md:py-5">
         <h3 className="text-lg font-semibold">Position P&amp;L</h3>
-        <p className="text-text-muted text-sm mt-1">
+        <p className="text-ink-mute text-sm mt-1">
           Unrealized vs entry.
           {showCharts ? ' Expand a row for NAV contribution and activity.' : null}
         </p>
@@ -39,7 +39,7 @@ export function PositionPnlTable({
       <div className="overflow-x-auto">
         <table className="w-full min-w-0 text-sm md:min-w-[720px]">
           <thead>
-            <tr className="text-text-muted text-xs uppercase tracking-wider">
+            <tr className="text-ink-mute text-xs uppercase tracking-wider">
               <th className="px-4 py-4 text-left md:px-6">Ticker</th>
               <th className="px-4 py-4 text-right md:px-6">Weight</th>
               <th className="hidden px-6 py-4 text-right md:table-cell">Entry</th>
@@ -51,7 +51,7 @@ export function PositionPnlTable({
               {showCharts ? <th className="w-10 px-3 py-4 md:px-6" aria-label="Expand" /> : null}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border-subtle">
+          <tbody className="divide-y divide-hair">
             {positions.map((p, i) => {
               const entry = p.entry_price;
               const curr = p.current_price;
@@ -87,7 +87,7 @@ export function PositionPnlTable({
                     <td className="px-4 py-3 text-right font-mono tabular-nums md:px-6">
                       {p.weight_actual?.toFixed(1)}%
                     </td>
-                    <td className="hidden px-6 py-3 text-right font-mono tabular-nums text-text-secondary md:table-cell">
+                    <td className="hidden px-6 py-3 text-right font-mono tabular-nums text-ink-soft md:table-cell">
                       {entry ? `$${entry.toFixed(2)}` : '—'}
                     </td>
                     <td className="hidden px-6 py-3 text-right font-mono tabular-nums md:table-cell">
@@ -95,23 +95,23 @@ export function PositionPnlTable({
                     </td>
                     <td
                       className={`px-4 py-3 text-right font-mono tabular-nums font-semibold md:px-6 ${
-                        pnlPct != null ? (pnlPct >= 0 ? 'text-fin-green' : 'text-fin-red') : ''
+                        pnlPct != null ? (pnlPct >= 0 ? 'text-up' : 'text-down') : ''
                       }`}
                     >
                       {pnlPct != null ? `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%` : '—'}
                     </td>
-                    <td className="hidden px-6 py-3 text-right font-mono tabular-nums text-text-secondary sm:table-cell">
+                    <td className="hidden px-6 py-3 text-right font-mono tabular-nums text-ink-soft sm:table-cell">
                       {contrib != null ? `${contrib >= 0 ? '+' : ''}${contrib.toFixed(3)} ppt` : '—'}
                     </td>
                     {showCharts ? (
-                      <td className="px-3 py-3 text-text-muted md:px-6">
+                      <td className="px-3 py-3 text-ink-mute md:px-6">
                         {skipChart ? null : isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                       </td>
                     ) : null}
                   </tr>
                   {isOpen && priceChartAnchorDate && !skipChart ? (
                     <tr className="bg-white/[0.02]">
-                      <td colSpan={7} className="border-t border-border-subtle px-4 py-5 md:px-6">
+                      <td colSpan={7} className="border-t border-hair px-4 py-5 md:px-6">
                         <PositionDrilldown
                           key={`${p.ticker}-${priceChartAnchorDate}`}
                           position={p}

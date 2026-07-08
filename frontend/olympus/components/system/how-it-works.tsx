@@ -18,10 +18,10 @@ export function HowItWorks() {
   return (
     <div className="space-y-6">
       <SectionCard title="How it works">
-        <p className="max-w-3xl text-sm leading-relaxed text-text-secondary">
-          Each run, <span className="text-text-primary">Atlas</span> researches the market across
+        <p className="max-w-3xl text-sm leading-relaxed text-ink-soft">
+          Each run, <span className="text-ink">Atlas</span> researches the market across
           parallel phases — alternative data, institutional flows, macro, asset classes, and sectors —
-          and synthesizes a daily read. <span className="text-text-primary">Hermes</span> then
+          and synthesizes a daily read. <span className="text-ink">Hermes</span> then
           deliberates: it frames theses, screens candidates, runs per-ticker analysts and PM⇄analyst
           debates, and sizes risk. The result is a booked portfolio with a signed decision behind every
           position.
@@ -42,7 +42,7 @@ export function HowItWorks() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border-subtle text-left text-xs text-text-muted">
+              <tr className="border-b border-hair text-left text-xs text-ink-mute">
                 <th className="py-2 pr-4 font-medium">What</th>
                 <th className="py-2 pr-4 font-medium">Where</th>
                 <th className="py-2 font-medium">Notes</th>
@@ -50,10 +50,10 @@ export function HowItWorks() {
             </thead>
             <tbody>
               {PERSISTS.map((r) => (
-                <tr key={r.what} className="border-b border-border-subtle/50">
-                  <td className="py-2 pr-4 text-text-primary">{r.what}</td>
-                  <td className="py-2 pr-4 font-mono text-xs text-text-secondary">{r.where}</td>
-                  <td className="py-2 text-text-muted">{r.note}</td>
+                <tr key={r.what} className="border-b border-hair/50">
+                  <td className="py-2 pr-4 text-ink">{r.what}</td>
+                  <td className="py-2 pr-4 font-mono text-xs text-ink-soft">{r.where}</td>
+                  <td className="py-2 text-ink-mute">{r.note}</td>
                 </tr>
               ))}
             </tbody>

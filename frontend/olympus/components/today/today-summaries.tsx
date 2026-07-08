@@ -36,10 +36,10 @@ export interface TodaySummariesProps {
 
 function statusDot(s: string): string {
   const sl = (s || '').toLowerCase();
-  if (sl.includes('confirmed')) return 'bg-fin-green';
-  if (sl.includes('monitor') || sl.includes('watch')) return 'bg-fin-amber';
-  if (sl.includes('invalid') || sl.includes('broken')) return 'bg-fin-red';
-  return 'bg-text-muted';
+  if (sl.includes('confirmed')) return 'bg-up';
+  if (sl.includes('monitor') || sl.includes('watch')) return 'bg-warn';
+  if (sl.includes('invalid') || sl.includes('broken')) return 'bg-down';
+  return 'bg-ink-mute';
 }
 
 function Doorway({
@@ -62,8 +62,8 @@ function Doorway({
     >
       <div className="mb-2.5 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Icon size={14} className="text-text-muted" />
-          <h3 className="text-xs font-bold uppercase tracking-widest text-text-muted">{title}</h3>
+          <Icon size={14} className="text-ink-mute" />
+          <h3 className="text-xs font-bold uppercase tracking-widest text-ink-mute">{title}</h3>
         </div>
         <span className="text-[10px] font-medium text-accent">{cta} →</span>
       </div>
@@ -87,7 +87,7 @@ export function TodaySummaries({
         href={buildPipelineHref({ date: asOfDate, stage: 'synthesis', node: 'digest' })}
         icon={BookOpen}
       >
-        <p className="line-clamp-3 text-sm leading-snug text-text-secondary">
+        <p className="line-clamp-3 text-sm leading-snug text-ink-soft">
           {readSummary ?? 'The latest research digest will appear here after the next run.'}
         </p>
       </Doorway>
@@ -95,16 +95,16 @@ export function TodaySummaries({
       {/* Holdings */}
       <Doorway title="Holdings" cta="All holdings" href="/portfolio" icon={Wallet}>
         {positions.length === 0 ? (
-          <p className="text-sm text-text-muted">No positions yet.</p>
+          <p className="text-sm text-ink-mute">No positions yet.</p>
         ) : (
           <ul className="space-y-1">
             {positions.slice(0, 6).map((p, i) => (
               <li key={`${p.ticker}-${i}`} className="flex items-center justify-between gap-2 text-xs">
-                <span className="font-mono font-semibold text-text-primary">{p.ticker}</span>
+                <span className="font-mono font-semibold text-ink">{p.ticker}</span>
                 <span className="flex items-center gap-2 font-mono tabular-nums">
-                  <span className="text-text-secondary">{(p.weight_actual ?? 0).toFixed(1)}%</span>
+                  <span className="text-ink-soft">{(p.weight_actual ?? 0).toFixed(1)}%</span>
                   {typeof p.weight_delta === 'number' && p.weight_delta !== 0 ? (
-                    <span className={p.weight_delta > 0 ? 'text-fin-green' : 'text-fin-red'}>
+                    <span className={p.weight_delta > 0 ? 'text-up' : 'text-down'}>
                       {p.weight_delta > 0 ? '+' : ''}
                       {p.weight_delta.toFixed(1)}pp
                     </span>
@@ -119,13 +119,13 @@ export function TodaySummaries({
       {/* Theses */}
       <Doorway title="Theses" cta="Tracker" href="/portfolio?tab=theses" icon={Shield}>
         {theses.length === 0 ? (
-          <p className="text-sm text-text-muted">No active theses yet.</p>
+          <p className="text-sm text-ink-mute">No active theses yet.</p>
         ) : (
           <ul className="space-y-1.5">
             {theses.slice(0, 5).map((t, i) => (
               <li key={`${t.id}-${i}`} className="flex items-center gap-2 text-xs">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${statusDot(t.status ?? '')}`} />
-                <span className="truncate text-text-secondary">{t.name}</span>
+                <span className="truncate text-ink-soft">{t.name}</span>
               </li>
             ))}
           </ul>

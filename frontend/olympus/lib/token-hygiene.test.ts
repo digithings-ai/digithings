@@ -24,10 +24,20 @@ const PHASE_DEFERRED = [
   'PositionContributionChart.tsx',
 ];
 
-describe('F5 token hygiene', () => {
+describe('canon token hygiene (#1402)', () => {
   const files = walk(join(__dirname, '..', 'components'));
-  it('no text-fin-purple literal survives in components', () => {
-    const offenders = files.filter((f) => readFileSync(f, 'utf8').includes('text-fin-purple'));
+  it('no pre-canon vocabulary survives in components (text-text-*, bg-bg-*, fin-*)', () => {
+    // The digiweb canon bridge (@digithings/web web-theme.css) owns the utility
+    // vocabulary: text-ink/-soft/-mute, bg-bg/surface/term-bg, border-hair,
+    // text-up/down/warn/accent. The olympus-local @theme block that used to
+    // define these names is gone — any survivor would silently compile to
+    // nothing under Tailwind v4.
+    const legacy =
+      /text-text-|bg-bg-(?:primary|secondary|glass)|border-border-|fin-blue|fin-green|fin-red|fin-amber|fin-purple/;
+    const offenders = files
+      // *.test.* keep intentional negative guards like not.toContain('fin-purple')
+      .filter((f) => !/\.test\.tsx?$/.test(f))
+      .filter((f) => legacy.test(readFileSync(f, 'utf8')));
     expect(offenders).toEqual([]);
   });
   it('no #a78bfa or raw rgba(59,130,246) literal survives in components (Phase-0 scope)', () => {

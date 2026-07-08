@@ -18,11 +18,11 @@ function s(v: unknown): string {
 
 function stanceColor(stance: string): string {
   const l = stance.toLowerCase();
-  if (l.includes('bull')) return 'text-fin-green';
-  if (l.includes('bear')) return 'text-fin-red/90';
-  if (l.includes('buy') || l.includes('strong')) return 'text-fin-green';
-  if (l.includes('sell') || l.includes('avoid')) return 'text-fin-red';
-  return 'text-text-secondary';
+  if (l.includes('bull')) return 'text-up';
+  if (l.includes('bear')) return 'text-down/90';
+  if (l.includes('buy') || l.includes('strong')) return 'text-up';
+  if (l.includes('sell') || l.includes('avoid')) return 'text-down';
+  return 'text-ink-soft';
 }
 
 export default function AnalystDocumentView({
@@ -73,13 +73,13 @@ export default function AnalystDocumentView({
       {(ticker || stance) && (
         <div className="flex items-center gap-4 flex-wrap">
           {ticker && (
-            <span className="font-mono text-base text-fin-blue font-semibold">{ticker}</span>
+            <span className="font-mono text-base text-accent font-semibold">{ticker}</span>
           )}
           {stance && (
             <span className={`font-semibold capitalize ${stanceColor(stance)}`}>
               {stance}
               {convictionScore && (
-                <span className="ml-2 font-normal text-text-muted text-xs">
+                <span className="ml-2 font-normal text-ink-mute text-xs">
                   conviction: {convictionScore}
                 </span>
               )}
@@ -91,8 +91,8 @@ export default function AnalystDocumentView({
       {/* Body: thesis */}
       {thesis && (
         <div>
-          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Thesis</h3>
-          <div className="prose prose-invert max-w-none text-sm text-text-secondary">
+          <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Thesis</h3>
+          <div className="prose prose-invert max-w-none text-sm text-ink-soft">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(thesis)}</ReactMarkdown>
           </div>
         </div>
@@ -101,12 +101,12 @@ export default function AnalystDocumentView({
       {/* Footer: sources list */}
       {sources.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Sources</h3>
-          <ul className="list-disc pl-5 text-text-secondary space-y-1">
+          <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Sources</h3>
+          <ul className="list-disc pl-5 text-ink-soft space-y-1">
             {sources.map((src, i) =>
               src.url ? (
                 <li key={i}>
-                  <a href={src.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-text-primary">
+                  <a href={src.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">
                     {src.title}
                   </a>
                 </li>

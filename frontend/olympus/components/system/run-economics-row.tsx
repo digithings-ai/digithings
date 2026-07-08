@@ -43,7 +43,7 @@ export function RunEconomicsRow({ latest }: { latest: AtlasRunDiagnostics }) {
       <StatTile
         label="Grounding"
         value={grounding}
-        color={(latest.grounding_failed ?? 0) > 0 ? 'text-fin-amber' : undefined}
+        color={(latest.grounding_failed ?? 0) > 0 ? 'text-warn' : undefined}
       />
     </div>
   );

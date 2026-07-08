@@ -88,7 +88,7 @@ export default function AttributionTab({
       </div>
 
       {summary.unpriced > 0 ? (
-        <p className="text-xs text-fin-amber">
+        <p className="text-xs text-warn">
           {summary.unpriced} holding{summary.unpriced === 1 ? '' : 's'} lack a priced window, so the
           active-return total is partial and does not fully reconcile to portfolio − benchmark.
         </p>
@@ -124,7 +124,7 @@ export default function AttributionTab({
             </ResponsiveContainer>
           </div>
         ) : (
-          <p className="text-xs text-text-muted">No priced contributions to chart.</p>
+          <p className="text-xs text-ink-mute">No priced contributions to chart.</p>
         )}
       </SectionCard>
 
@@ -135,7 +135,7 @@ export default function AttributionTab({
         <div className="overflow-x-auto">
           <table className="w-full text-sm tabular-nums">
             <thead>
-              <tr className="text-left text-xs text-text-muted border-b border-border-subtle">
+              <tr className="text-left text-xs text-ink-mute border-b border-hair">
                 <th className="py-2 pr-4 font-medium">Ticker</th>
                 <th className="py-2 pr-4 font-medium">Sector</th>
                 <th className="py-2 pr-4 font-medium text-right">Weight</th>
@@ -147,10 +147,10 @@ export default function AttributionTab({
             </thead>
             <tbody>
               {attribution.map((r) => (
-                <tr key={r.id} className="border-b border-border-subtle/50">
-                  <td className="py-2 pr-4 text-text-primary">{r.ticker}</td>
-                  <td className="py-2 pr-4 text-text-muted truncate max-w-[160px]">{r.sector_bucket ?? '—'}</td>
-                  <td className="py-2 pr-4 text-right text-text-secondary">{fmtPct(r.weight_pct, 1)}</td>
+                <tr key={r.id} className="border-b border-hair/50">
+                  <td className="py-2 pr-4 text-ink">{r.ticker}</td>
+                  <td className="py-2 pr-4 text-ink-mute truncate max-w-[160px]">{r.sector_bucket ?? '—'}</td>
+                  <td className="py-2 pr-4 text-right text-ink-soft">{fmtPct(r.weight_pct, 1)}</td>
                   <td className={`py-2 pr-4 text-right ${signColorClass(r.position_return_pct)}`}>
                     {fmtPct(r.position_return_pct)}
                   </td>

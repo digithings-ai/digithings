@@ -9,10 +9,10 @@ import type { MatchedOpinions } from './EventsTab';
 /** Impact → trader-facing RISK level + .fin-* color. */
 function riskLevel(impact: string): { label: string; text: string; dot: string } {
   const i = (impact ?? '').trim().toLowerCase();
-  if (i === 'high') return { label: 'High risk', text: 'text-fin-red', dot: 'bg-fin-red' };
+  if (i === 'high') return { label: 'High risk', text: 'text-down', dot: 'bg-down' };
   if (i === 'medium' || i === 'med')
-    return { label: 'Medium risk', text: 'text-fin-amber', dot: 'bg-fin-amber' };
-  return { label: 'Low risk', text: 'text-text-muted', dot: 'bg-text-muted/60' };
+    return { label: 'Medium risk', text: 'text-warn', dot: 'bg-warn' };
+  return { label: 'Low risk', text: 'text-ink-mute', dot: 'bg-ink-mute/60' };
 }
 
 /** Format an ISO timestamptz to the viewer's locale time, or null when absent. */
@@ -83,19 +83,19 @@ export default function EventDetailPanel({
       />
 
       {/* Panel */}
-      <div className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-border-subtle bg-bg-secondary shadow-2xl">
+      <div className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-hair bg-term-bg shadow-2xl">
         {/* Grab bar — phone-only affordance hinting the sheet is dismissable. */}
         <div className="flex shrink-0 justify-center pt-2 sm:hidden" aria-hidden>
           <span className="h-1 w-9 rounded-full bg-white/20" />
         </div>
-        <div className="flex items-start gap-3 border-b border-border-subtle px-5 py-4">
-          <CalendarClock size={18} className="mt-0.5 shrink-0 text-fin-blue" aria-hidden />
+        <div className="flex items-start gap-3 border-b border-hair px-5 py-4">
+          <CalendarClock size={18} className="mt-0.5 shrink-0 text-accent" aria-hidden />
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold leading-snug text-text-primary">
+            <h2 className="text-base font-semibold leading-snug text-ink">
               {event.event_name}
             </h2>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-              <span className="flex items-center gap-1 font-mono uppercase text-text-muted">
+              <span className="flex items-center gap-1 font-mono uppercase text-ink-mute">
                 <Globe size={11} aria-hidden />
                 {event.country}
               </span>
@@ -104,7 +104,7 @@ export default function EventDetailPanel({
                 {risk.label}
               </span>
               {time ? (
-                <span className="font-mono tabular-nums text-text-secondary">{time}</span>
+                <span className="font-mono tabular-nums text-ink-soft">{time}</span>
               ) : null}
             </div>
           </div>
@@ -112,7 +112,7 @@ export default function EventDetailPanel({
             type="button"
             onClick={handleClose}
             aria-label="Close"
-            className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-white/[0.06] hover:text-text-primary sm:h-9 sm:w-9"
+            className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-mute transition-colors hover:bg-white/[0.06] hover:text-ink sm:h-9 sm:w-9"
           >
             <X size={18} aria-hidden />
           </button>
@@ -123,16 +123,16 @@ export default function EventDetailPanel({
           <div className="grid grid-cols-3 gap-2">
             {(
               [
-                ['Prior', event.prior, 'text-text-secondary'],
-                ['Forecast', event.forecast, 'text-text-secondary'],
-                ['Actual', event.actual, 'text-text-primary'],
+                ['Prior', event.prior, 'text-ink-soft'],
+                ['Forecast', event.forecast, 'text-ink-soft'],
+                ['Actual', event.actual, 'text-ink'],
               ] as const
             ).map(([label, value, valueClass]) => (
               <div
                 key={label}
-                className="rounded-lg border border-border-subtle bg-white/[0.02] px-3 py-2"
+                className="rounded-lg border border-hair bg-white/[0.02] px-3 py-2"
               >
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
                   {label}
                 </div>
                 <div className={`mt-0.5 font-mono text-sm tabular-nums ${valueClass}`}>
@@ -144,11 +144,11 @@ export default function EventDetailPanel({
 
           {/* What desks said */}
           <div>
-            <h3 className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+            <h3 className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
               <Users size={12} aria-hidden />
               What desks said
               {hasOpinions ? (
-                <span className="tabular-nums text-text-secondary">
+                <span className="tabular-nums text-ink-soft">
                   · {opinions!.mentions} mention{opinions!.mentions === 1 ? '' : 's'}
                 </span>
               ) : null}
@@ -157,9 +157,9 @@ export default function EventDetailPanel({
             {hasOpinions ? (
               <div className="space-y-2">
                 {opinions!.brokers.length > 0 ? (
-                  <p className="text-xs text-text-muted">
+                  <p className="text-xs text-ink-mute">
                     Cited by{' '}
-                    <span className="text-text-secondary">{opinions!.brokers.join(', ')}</span>.
+                    <span className="text-ink-soft">{opinions!.brokers.join(', ')}</span>.
                   </p>
                 ) : null}
                 {opinions!.citations.length > 0 ? (
@@ -168,29 +168,29 @@ export default function EventDetailPanel({
                       key={`${c.broker}-${c.source_file}-${i}`}
                       className="rounded-lg bg-white/[0.02] p-3"
                     >
-                      <div className="mb-1 font-mono text-xs font-semibold text-text-primary">
+                      <div className="mb-1 font-mono text-xs font-semibold text-ink">
                         {c.broker || 'Unknown desk'}
                       </div>
                       {c.expected_outcome ? (
-                        <p className="text-xs leading-snug text-text-secondary">
-                          <span className="text-text-muted">Expected: </span>
+                        <p className="text-xs leading-snug text-ink-soft">
+                          <span className="text-ink-mute">Expected: </span>
                           {c.expected_outcome}
                         </p>
                       ) : null}
                       {c.fx_impact ? (
-                        <p className="mt-1 text-xs leading-snug text-text-secondary">
-                          <span className="text-text-muted">FX impact: </span>
+                        <p className="mt-1 text-xs leading-snug text-ink-soft">
+                          <span className="text-ink-mute">FX impact: </span>
                           {c.fx_impact}
                         </p>
                       ) : null}
                     </div>
                   ))
                 ) : (
-                  <p className="text-xs text-text-muted">No broker detail available.</p>
+                  <p className="text-xs text-ink-mute">No broker detail available.</p>
                 )}
               </div>
             ) : (
-              <p className="text-xs text-text-muted">No desk commentary for this event yet.</p>
+              <p className="text-xs text-ink-mute">No desk commentary for this event yet.</p>
             )}
           </div>
         </div>

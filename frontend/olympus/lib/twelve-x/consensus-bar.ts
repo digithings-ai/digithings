@@ -36,9 +36,9 @@ export function currencyColor(ccy: string): string {
 
 /** score → `.fin-*` text color (strong/lean bands). */
 export function scoreColorClass(score: number): string {
-  if (score >= LEAN_BAND) return 'text-fin-green';
-  if (score <= -LEAN_BAND) return 'text-fin-red';
-  return 'text-text-secondary';
+  if (score >= LEAN_BAND) return 'text-up';
+  if (score <= -LEAN_BAND) return 'text-down';
+  return 'text-ink-soft';
 }
 
 /** score → human-readable conviction label. */

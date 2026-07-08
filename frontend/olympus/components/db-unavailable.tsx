@@ -15,16 +15,16 @@ export default function DbUnavailable() {
   return (
     <div className={`${SUBPAGE_MAX} py-12`}>
       <div className="glass-card mx-auto max-w-md px-6 py-8 text-center">
-        <h2 className="font-display text-2xl tracking-tight text-text-primary">
+        <h2 className="font-display text-2xl tracking-tight text-ink">
           Live data is temporarily unavailable
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-text-muted">
+        <p className="mt-2 text-sm leading-relaxed text-ink-mute">
           The dashboard can&rsquo;t reach its data right now. It&rsquo;ll reconnect automatically.
         </p>
         <button
           type="button"
           onClick={() => window.location.reload()}
-          className="mt-5 inline-flex items-center rounded-lg border border-border-subtle px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-white/[0.06]"
+          className="mt-5 inline-flex items-center rounded-lg border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-white/[0.06]"
         >
           Retry
         </button>

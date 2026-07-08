@@ -140,9 +140,9 @@ function sortEvents(
 function SortGlyph({ active, dir }: { active: boolean; dir: SortDir }) {
   if (!active) return <ArrowUpDown className="inline size-3.5 opacity-40" aria-hidden />;
   return dir === 'asc' ? (
-    <ArrowUp className="inline size-3.5 text-fin-blue" aria-hidden />
+    <ArrowUp className="inline size-3.5 text-accent" aria-hidden />
   ) : (
-    <ArrowDown className="inline size-3.5 text-fin-blue" aria-hidden />
+    <ArrowDown className="inline size-3.5 text-accent" aria-hidden />
   );
 }
 
@@ -300,12 +300,12 @@ export default function ActivityTab(props: {
         return (
           <td
             key={`${col}-${i}`}
-            className={`${cellWrapperClass(col)} px-3 py-3 font-mono text-xs text-text-secondary md:px-5`}
+            className={`${cellWrapperClass(col)} px-3 py-3 font-mono text-xs text-ink-soft md:px-5`}
           >
             <span className="inline-flex items-center gap-2">
               {ev.date}
               {isNewDay ? (
-                <span className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-fin-amber/20 text-fin-amber border border-fin-amber/30">
+                <span className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-warn/20 text-warn border border-warn/30">
                   New
                 </span>
               ) : null}
@@ -328,7 +328,7 @@ export default function ActivityTab(props: {
         return (
           <td
             key={`${col}-${i}`}
-            className={`${cellWrapperClass(col)} px-5 py-3 text-right font-mono tabular-nums text-xs text-text-secondary`}
+            className={`${cellWrapperClass(col)} px-5 py-3 text-right font-mono tabular-nums text-xs text-ink-soft`}
             title={ev.prev_weight_pct != null ? `Previous weight: ${ev.prev_weight_pct.toFixed(2)}%` : undefined}
           >
             {ev.prev_weight_pct != null ? `${ev.prev_weight_pct.toFixed(2)}%` : '—'}
@@ -348,7 +348,7 @@ export default function ActivityTab(props: {
         return (
           <td
             key={`${col}-${i}`}
-            className={`${cellWrapperClass(col)} px-5 py-3 text-right font-mono tabular-nums text-xs text-text-secondary`}
+            className={`${cellWrapperClass(col)} px-5 py-3 text-right font-mono tabular-nums text-xs text-ink-soft`}
           >
             {ev.weight_change_pct != null
               ? `${ev.weight_change_pct > 0 ? '+' : ''}${ev.weight_change_pct.toFixed(2)}pp`
@@ -359,7 +359,7 @@ export default function ActivityTab(props: {
         return (
           <td
             key={`${col}-${i}`}
-            className={`${cellWrapperClass(col)} max-w-[min(28rem,40vw)] px-3 py-3 align-top text-xs text-text-muted md:px-5 lg:max-w-md`}
+            className={`${cellWrapperClass(col)} max-w-[min(28rem,40vw)] px-3 py-3 align-top text-xs text-ink-mute md:px-5 lg:max-w-md`}
             title={ev.reason ?? undefined}
           >
             <span className="line-clamp-2 leading-snug">{ev.reason ?? '—'}</span>
@@ -369,7 +369,7 @@ export default function ActivityTab(props: {
         return (
           <td
             key={`${col}-${i}`}
-            className={`${cellWrapperClass(col)} px-5 py-3 text-right font-mono tabular-nums text-xs text-text-secondary`}
+            className={`${cellWrapperClass(col)} px-5 py-3 text-right font-mono tabular-nums text-xs text-ink-soft`}
           >
             {ev.price != null ? `$${Number(ev.price).toFixed(2)}` : '—'}
           </td>
@@ -383,15 +383,15 @@ export default function ActivityTab(props: {
 
   return (
     <div className="glass-card p-0 overflow-hidden">
-      <div className="border-b border-border-subtle bg-bg-secondary px-4 py-4 md:px-6 md:py-5">
+      <div className="border-b border-hair bg-term-bg px-4 py-4 md:px-6 md:py-5">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
           <h3 className="text-lg font-semibold">Activity</h3>
-          <p className="text-[11px] text-text-muted font-mono">{rangeSummary}</p>
+          <p className="text-[11px] text-ink-mute font-mono">{rangeSummary}</p>
         </div>
 
         <div className="mt-4 flex flex-col gap-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-            <span className="shrink-0 text-[10px] uppercase tracking-wider text-text-muted sm:w-24">
+            <span className="shrink-0 text-[10px] uppercase tracking-wider text-ink-mute sm:w-24">
               Time window
             </span>
             <div className="flex flex-wrap gap-2">
@@ -402,8 +402,8 @@ export default function ActivityTab(props: {
                   onClick={() => setPreset(k)}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium border transition-colors ${
                     preset === k
-                      ? 'border-fin-blue/40 bg-fin-blue/15 text-fin-blue'
-                      : 'border-border-subtle text-text-muted hover:text-text-primary hover:bg-white/[0.04]'
+                      ? 'border-accent/40 bg-accent/15 text-accent'
+                      : 'border-hair text-ink-mute hover:text-ink hover:bg-white/[0.04]'
                   }`}
                 >
                   {k === '7d' ? '7 days' : k === '30d' ? '30 days' : 'All'}
@@ -413,18 +413,18 @@ export default function ActivityTab(props: {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
-            <span className="shrink-0 pt-0.5 text-[10px] uppercase tracking-wider text-text-muted sm:w-24">
+            <span className="shrink-0 pt-0.5 text-[10px] uppercase tracking-wider text-ink-mute sm:w-24">
               Events
             </span>
             <div className="flex min-w-0 flex-1 flex-wrap gap-2">
               {EVENT_TYPES.map((t) => (
                 <label
                   key={t}
-                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-[11px] text-text-secondary hover:bg-white/[0.03]"
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-hair bg-bg px-2 py-1 text-[11px] text-ink-soft hover:bg-white/[0.03]"
                 >
                   <input
                     type="checkbox"
-                    className="accent-fin-blue"
+                    className="accent-accent"
                     checked={eventMask[t]}
                     onChange={() => toggleEventType(t)}
                   />
@@ -435,7 +435,7 @@ export default function ActivityTab(props: {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
-            <span className="shrink-0 text-[10px] uppercase tracking-wider text-text-muted sm:w-24">Symbols</span>
+            <span className="shrink-0 text-[10px] uppercase tracking-wider text-ink-mute sm:w-24">Symbols</span>
             <div className="min-w-0 flex-1">
               <ActivityTickerMultiSelect
                 universe={tickerUniverse}
@@ -446,20 +446,20 @@ export default function ActivityTab(props: {
             </div>
           </div>
 
-          <div className="flex flex-wrap justify-end gap-2 border-t border-border-subtle pt-3">
+          <div className="flex flex-wrap justify-end gap-2 border-t border-hair pt-3">
             <button
               type="button"
               onClick={resetFilters}
-              className="rounded-md border border-border-subtle px-2.5 py-1.5 text-xs text-text-muted hover:text-text-primary hover:bg-white/[0.04]"
+              className="rounded-md border border-hair px-2.5 py-1.5 text-xs text-ink-mute hover:text-ink hover:bg-white/[0.04]"
             >
               Reset filters
             </button>
             <details className="group relative">
-              <summary className="list-none cursor-pointer rounded-md border border-border-subtle px-2.5 py-1.5 text-xs text-text-muted hover:text-text-primary hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
+              <summary className="list-none cursor-pointer rounded-md border border-hair px-2.5 py-1.5 text-xs text-ink-mute hover:text-ink hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
                 Columns
               </summary>
-              <div className="absolute right-0 z-20 mt-1 min-w-[11rem] rounded-md border border-border-subtle bg-bg-secondary p-2 shadow-lg">
-                <p className="mb-2 text-[10px] uppercase tracking-wider text-text-muted">Visible fields</p>
+              <div className="absolute right-0 z-20 mt-1 min-w-[11rem] rounded-md border border-hair bg-term-bg p-2 shadow-lg">
+                <p className="mb-2 text-[10px] uppercase tracking-wider text-ink-mute">Visible fields</p>
                 <ul className="space-y-1.5">
                   {ALL_COLUMNS.map((c) => (
                     <li key={c}>
@@ -470,7 +470,7 @@ export default function ActivityTab(props: {
                       >
                         <input
                           type="checkbox"
-                          className="accent-fin-blue"
+                          className="accent-accent"
                           checked={visible[c]}
                           disabled={c === 'date'}
                           onChange={() => toggleColumn(c)}
@@ -480,7 +480,7 @@ export default function ActivityTab(props: {
                     </li>
                   ))}
                 </ul>
-                <p className="mt-2 border-t border-border-subtle pt-2 text-[10px] text-text-muted leading-snug">
+                <p className="mt-2 border-t border-hair pt-2 text-[10px] text-ink-mute leading-snug">
                   Drag <GripVertical className="inline size-3 align-text-bottom opacity-60" /> on a header to reorder columns.
                 </p>
               </div>
@@ -492,7 +492,7 @@ export default function ActivityTab(props: {
       <div className="overflow-x-auto">
         <table className="w-full min-w-0 text-sm md:min-w-[720px]">
           <thead>
-            <tr className="text-text-muted text-xs uppercase tracking-wider">
+            <tr className="text-ink-mute text-xs uppercase tracking-wider">
               {orderedVisibleColumns.map((col) => (
                 <th
                   key={col}
@@ -514,7 +514,7 @@ export default function ActivityTab(props: {
                     <span
                       draggable
                       onDragStart={(e) => onDragStart(e, col)}
-                      className="cursor-grab touch-none text-text-muted hover:text-text-secondary active:cursor-grabbing"
+                      className="cursor-grab touch-none text-ink-mute hover:text-ink-soft active:cursor-grabbing"
                       title="Drag to reorder column"
                       aria-hidden
                     >
@@ -523,7 +523,7 @@ export default function ActivityTab(props: {
                     <button
                       type="button"
                       onClick={() => toggleSort(col)}
-                      className={`inline-flex items-center gap-1 rounded px-0.5 py-0.5 text-left hover:text-text-primary ${
+                      className={`inline-flex items-center gap-1 rounded px-0.5 py-0.5 text-left hover:text-ink ${
                         col === 'prev_weight' || col === 'weight' || col === 'delta' || col === 'price'
                           ? 'ml-auto'
                           : ''
@@ -538,7 +538,7 @@ export default function ActivityTab(props: {
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border-subtle">
+          <tbody className="divide-y divide-hair">
             {sortedEvents.map((ev, i) => {
               const detailParts = [
                 ev.reason ? `Reason: ${ev.reason}` : null,
@@ -554,7 +554,7 @@ export default function ActivityTab(props: {
             })}
             {sortedEvents.length === 0 && (
               <tr>
-                <td colSpan={colSpan} className="text-center py-10 text-text-muted">
+                <td colSpan={colSpan} className="text-center py-10 text-ink-mute">
                   {activityEvents.length === 0
                     ? 'No trades or rebalances in view.'
                     : 'No rows match filters or this date window. Widen the range or adjust filters.'}

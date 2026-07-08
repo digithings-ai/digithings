@@ -29,7 +29,7 @@ export function SystemStatus({ diagnostics }: { diagnostics: AtlasRunDiagnostics
         return ok ? (
           <FreshnessBanner latest={ok} />
         ) : (
-          <div className="glass-card p-4 text-sm text-fin-amber">
+          <div className="glass-card p-4 text-sm text-warn">
             No successful run yet — the most recent attempts did not complete. See the timeline below.
           </div>
         );
@@ -59,13 +59,13 @@ export default function SystemPage() {
   return (
     <div className={`${SUBPAGE_MAX} space-y-8 py-4 md:py-6`}>
       <header className="space-y-2">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
           System
         </p>
-        <h1 className="font-display text-3xl tracking-tight text-text-primary sm:text-4xl">
+        <h1 className="font-display text-3xl tracking-tight text-ink sm:text-4xl">
           How Olympus works
         </h1>
-        <p className="max-w-3xl text-sm leading-relaxed text-text-secondary">
+        <p className="max-w-3xl text-sm leading-relaxed text-ink-soft">
           Is it running, is it healthy, what does it cost, and how does it work?
         </p>
       </header>

@@ -49,13 +49,13 @@ function SleeveTooltipBody({
   if (!entries.length) return null;
 
   return (
-    <div className="rounded-lg border border-border-subtle bg-[#141414] px-3 py-2 text-xs shadow-lg min-w-[160px]">
-      <p className="font-medium text-text-primary mb-1.5 font-mono">{date}</p>
+    <div className="rounded-lg border border-hair bg-[#141414] px-3 py-2 text-xs shadow-lg min-w-[160px]">
+      <p className="font-medium text-ink mb-1.5 font-mono">{date}</p>
       <ul className="space-y-0.5 max-h-48 overflow-y-auto">
         {entries.map(({ k, v }) => (
           <li key={k} className="flex justify-between gap-4 tabular-nums">
-            <span className="text-text-secondary truncate">{formatKey(k)}</span>
-            <span className="text-text-primary shrink-0">{v.toFixed(1)}%</span>
+            <span className="text-ink-soft truncate">{formatKey(k)}</span>
+            <span className="text-ink shrink-0">{v.toFixed(1)}%</span>
           </li>
         ))}
       </ul>
@@ -87,7 +87,7 @@ export function SleeveStackedChart({
 }: SleeveStackedChartProps) {
   if (!data.length || !keys.length) {
     return (
-      <div className="h-[320px] flex items-center justify-center text-text-muted text-sm">
+      <div className="h-[320px] flex items-center justify-center text-ink-mute text-sm">
         Not enough history to chart sleeves.
       </div>
     );
@@ -130,7 +130,7 @@ export function SleeveStackedChart({
             <SleeveTooltipBody {...props} seriesKeys={keys} formatKey={formatKey} />
           )}
         />
-        <Legend formatter={(value: string) => <span className="text-text-secondary text-xs">{value}</span>} />
+        <Legend formatter={(value: string) => <span className="text-ink-soft text-xs">{value}</span>} />
         {selectedDate && dateSet.has(selectedDate) ? (
           <ReferenceLine
             x={selectedDate}

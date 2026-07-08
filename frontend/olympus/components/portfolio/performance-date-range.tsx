@@ -18,7 +18,7 @@ export function PerformanceDateRange({
 }) {
   return (
     <div
-      className="flex flex-wrap rounded-lg border border-border-subtle overflow-hidden text-xs"
+      className="flex flex-wrap rounded-lg border border-hair overflow-hidden text-xs"
       role="tablist"
       aria-label="Performance date range"
     >
@@ -30,8 +30,8 @@ export function PerformanceDateRange({
           aria-selected={value === key}
           onClick={() => onChange(key)}
           className={`px-3 py-1.5 font-medium transition-colors ${
-            i > 0 ? 'border-l border-border-subtle' : ''
-          } ${value === key ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:bg-white/[0.04] hover:text-text-primary'}`}
+            i > 0 ? 'border-l border-hair' : ''
+          } ${value === key ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-white/[0.04] hover:text-ink'}`}
         >
           {label}
         </button>

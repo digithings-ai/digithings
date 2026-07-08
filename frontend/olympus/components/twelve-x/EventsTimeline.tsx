@@ -182,9 +182,9 @@ export function impactClass(impact: TimelineImpact): string {
 
 /** Tailwind classes for a card's accent (left border) + tint, by impact. */
 function impactStyle(impact: TimelineImpact): string {
-  if (impact === 'high') return 'border-l-fin-red bg-fin-red/[0.13]';
-  if (impact === 'medium') return 'border-l-fin-amber bg-fin-amber/[0.13]';
-  return 'border-l-text-muted bg-white/[0.045]';
+  if (impact === 'high') return 'border-l-down bg-down/[0.13]';
+  if (impact === 'medium') return 'border-l-warn bg-warn/[0.13]';
+  return 'border-l-ink-mute bg-white/[0.045]';
 }
 
 function shortDayLabel(date: string): string {
@@ -257,7 +257,7 @@ export default function EventsTimeline({ events, mode, day, onSelect }: EventsTi
     <div className="flex flex-col gap-3">
       {mode === 'multi' ? (
         <div className="flex flex-wrap items-center gap-2.5">
-          <span className="text-[11px] uppercase tracking-[0.08em] text-text-muted">Scale</span>
+          <span className="text-[11px] uppercase tracking-[0.08em] text-ink-mute">Scale</span>
           <div className="inline-flex overflow-hidden rounded-md border border-white/10 text-[11px]">
             {(['day', 'hour'] as const).map((s) => (
               <button
@@ -266,22 +266,22 @@ export default function EventsTimeline({ events, mode, day, onSelect }: EventsTi
                 onClick={() => setScale(s)}
                 aria-pressed={scale === s}
                 className={`px-2.5 py-1 capitalize transition-colors ${
-                  scale === s ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:text-text-secondary'
+                  scale === s ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:text-ink-soft'
                 }`}
               >
                 {s}
               </button>
             ))}
           </div>
-          <span className="ml-auto inline-flex flex-wrap gap-3 text-[11px] text-text-muted" aria-hidden>
+          <span className="ml-auto inline-flex flex-wrap gap-3 text-[11px] text-ink-mute" aria-hidden>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-fin-red" /> High
+              <span className="h-2 w-2 rounded-full bg-down" /> High
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-fin-amber" /> Medium
+              <span className="h-2 w-2 rounded-full bg-warn" /> Medium
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-text-muted" /> Low
+              <span className="h-2 w-2 rounded-full bg-ink-mute" /> Low
             </span>
           </span>
         </div>
@@ -289,20 +289,20 @@ export default function EventsTimeline({ events, mode, day, onSelect }: EventsTi
 
       <div
         ref={scrollRef}
-        className={`tl-scroll max-w-full overflow-y-hidden rounded-[10px] border border-white/10 bg-glass ${
+        className={`tl-scroll max-w-full overflow-y-hidden rounded-[10px] border border-white/10 bg-surface ${
           mode === 'single' ? 'overflow-x-hidden max-[760px]:overflow-x-auto' : 'overflow-x-auto'
         }`}
       >
         <div className="relative" style={{ width: totalW }}>
           {/* axis */}
           <div
-            className="sticky top-0 z-[3] flex h-[42px] border-b border-white/10 bg-glass"
+            className="sticky top-0 z-[3] flex h-[42px] border-b border-white/10 bg-surface"
             style={{ width: totalW }}
           >
             {days.map((d) => (
               <div key={d} className="relative flex-none border-r border-white/[0.06] last:border-r-0" style={{ width: dayWidth }}>
                 {showDayLabel ? (
-                  <span className="absolute left-0 top-[5px] whitespace-nowrap px-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-secondary">
+                  <span className="absolute left-0 top-[5px] whitespace-nowrap px-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-soft">
                     {shortDayLabel(d)}
                   </span>
                 ) : null}
@@ -313,7 +313,7 @@ export default function EventsTimeline({ events, mode, day, onSelect }: EventsTi
                       <span className="absolute bottom-0 top-[22px] w-0 border-l border-white/10" style={{ left: x }} />
                       {h < TL_WIN_END ? (
                         <span
-                          className="absolute bottom-[4px] -translate-x-1/2 whitespace-nowrap font-mono text-[9.5px] text-text-muted"
+                          className="absolute bottom-[4px] -translate-x-1/2 whitespace-nowrap font-mono text-[9.5px] text-ink-mute"
                           style={{ left: x }}
                         >
                           {String(h).padStart(2, '0')}:00
@@ -360,9 +360,9 @@ export default function EventsTimeline({ events, mode, day, onSelect }: EventsTi
                 const title = `${e.time} ${e.currency} — ${e.title} (${e.durationMin} min)`;
                 const inner = (
                   <>
-                    <span className="font-mono text-[10px] text-text-muted">{e.time}</span>
-                    <span className="ml-1.5 font-mono text-[11px] font-semibold text-text-secondary">{e.currency}</span>
-                    <span className="mt-px block overflow-hidden text-ellipsis whitespace-nowrap text-[11.5px] leading-[1.25] text-text-secondary">
+                    <span className="font-mono text-[10px] text-ink-mute">{e.time}</span>
+                    <span className="ml-1.5 font-mono text-[11px] font-semibold text-ink-soft">{e.currency}</span>
+                    <span className="mt-px block overflow-hidden text-ellipsis whitespace-nowrap text-[11.5px] leading-[1.25] text-ink-soft">
                       {e.title}
                     </span>
                   </>

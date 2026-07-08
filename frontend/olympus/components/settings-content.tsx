@@ -50,35 +50,35 @@ export function SettingsContent({
   return (
     <div className={variant === 'page' ? 'space-y-6' : 'space-y-5'}>
       <div>
-        <p className="text-[10px] font-medium text-text-muted mb-2">Status</p>
+        <p className="text-[10px] font-medium text-ink-mute mb-2">Status</p>
         {lastRunDate ? (
-          <div className="rounded-lg border border-border-subtle bg-bg-secondary/50 px-3 py-2.5 space-y-1.5">
+          <div className="rounded-lg border border-hair bg-term-bg/50 px-3 py-2.5 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-text-secondary">Last run</span>
+              <span className="text-xs font-medium text-ink-soft">Last run</span>
               <AsOfBadge date={lastRunDate} createdAt={lastRunAt} />
             </div>
-            <p className="font-mono text-[11px] text-text-muted">
+            <p className="font-mono text-[11px] text-ink-mute">
               {formatRunStamp(lastRunDate, lastRunAt)} UTC
-              {runType ? <span className="text-text-secondary"> · {runType}</span> : null}
+              {runType ? <span className="text-ink-soft"> · {runType}</span> : null}
             </p>
           </div>
         ) : (
-          <div className="rounded-lg border border-border-subtle bg-bg-secondary/50 px-3 py-2.5">
-            <p className="text-xs text-text-muted">No pipeline runs yet</p>
+          <div className="rounded-lg border border-hair bg-term-bg/50 px-3 py-2.5">
+            <p className="text-xs text-ink-mute">No pipeline runs yet</p>
           </div>
         )}
       </div>
 
       <div>
-        <p className="text-[10px] font-medium text-text-muted mb-2">Appearance</p>
+        <p className="text-[10px] font-medium text-ink-mute mb-2">Appearance</p>
         <div className="flex flex-col gap-1.5">
-          <div className="grid grid-cols-3 rounded-lg border border-border-subtle overflow-hidden text-xs">
+          <div className="grid grid-cols-3 rounded-lg border border-hair overflow-hidden text-xs">
             <button
               type="button"
               aria-pressed={theme === 'auto'}
               onClick={() => setTheme('auto')}
               className={`px-2 py-2 font-medium transition-colors ${
-                theme === 'auto' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-white/[0.04]'
+                theme === 'auto' ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-white/[0.04]'
               }`}
             >
               Auto
@@ -87,8 +87,8 @@ export function SettingsContent({
               type="button"
               aria-pressed={theme === 'dark'}
               onClick={() => setTheme('dark')}
-              className={`px-2 py-2 font-medium border-l border-border-subtle transition-colors ${
-                theme === 'dark' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-white/[0.04]'
+              className={`px-2 py-2 font-medium border-l border-hair transition-colors ${
+                theme === 'dark' ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-white/[0.04]'
               }`}
             >
               Dark
@@ -97,8 +97,8 @@ export function SettingsContent({
               type="button"
               aria-pressed={theme === 'light'}
               onClick={() => setTheme('light')}
-              className={`px-2 py-2 font-medium border-l border-border-subtle transition-colors ${
-                theme === 'light' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-white/[0.04]'
+              className={`px-2 py-2 font-medium border-l border-hair transition-colors ${
+                theme === 'light' ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-white/[0.04]'
               }`}
             >
               Light
@@ -108,16 +108,16 @@ export function SettingsContent({
       </div>
 
       <div>
-        <p className="text-[10px] font-medium text-text-muted mb-2">About</p>
-        <div className="rounded-lg border border-border-subtle bg-bg-secondary/50 divide-y divide-border-subtle">
+        <p className="text-[10px] font-medium text-ink-mute mb-2">About</p>
+        <div className="rounded-lg border border-hair bg-term-bg/50 divide-y divide-hair">
           <div className="flex items-center justify-between gap-2 px-3 py-2">
-            <span className="text-xs text-text-secondary">Build</span>
-            <span className="font-mono text-[11px] text-text-muted">{version}</span>
+            <span className="text-xs text-ink-soft">Build</span>
+            <span className="font-mono text-[11px] text-ink-mute">{version}</span>
           </div>
           <div className="flex items-center justify-between gap-2 px-3 py-2">
-            <span className="text-xs text-text-secondary">Data source</span>
+            <span className="text-xs text-ink-soft">Data source</span>
             <span
-              className="font-mono text-[11px] text-text-muted truncate max-w-[55%]"
+              className="font-mono text-[11px] text-ink-mute truncate max-w-[55%]"
               title={dataSourceHost ?? undefined}
             >
               {dataSourceHost ?? 'not configured'}
@@ -130,11 +130,11 @@ export function SettingsContent({
                 onOpenPalette();
                 onNavigate?.();
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-text-secondary hover:bg-white/[0.04] hover:text-text-primary transition-colors"
+              className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-ink-soft hover:bg-white/[0.04] hover:text-ink transition-colors"
             >
-              <Search size={14} className="shrink-0 text-text-muted" aria-hidden />
+              <Search size={14} className="shrink-0 text-ink-mute" aria-hidden />
               <span>Search</span>
-              <kbd className="ml-auto font-mono px-1.5 py-0.5 rounded border border-border-subtle bg-bg-primary text-text-primary">
+              <kbd className="ml-auto font-mono px-1.5 py-0.5 rounded border border-hair bg-bg text-ink">
                 ⌘K
               </kbd>
             </button>
@@ -143,7 +143,7 @@ export function SettingsContent({
             href="/system"
             onClick={onNavigate}
             className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors ${
-              sys ? 'text-accent' : 'text-text-secondary hover:bg-white/[0.04] hover:text-text-primary'
+              sys ? 'text-accent' : 'text-ink-soft hover:bg-white/[0.04] hover:text-ink'
             }`}
           >
             <Database size={14} className="shrink-0" aria-hidden />
@@ -154,7 +154,7 @@ export function SettingsContent({
           <Link
             href="/settings"
             onClick={onNavigate}
-            className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-text-secondary border border-border-subtle hover:bg-white/[0.04] hover:text-text-primary transition-colors"
+            className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-ink-soft border border-hair hover:bg-white/[0.04] hover:text-ink transition-colors"
           >
             All settings
           </Link>

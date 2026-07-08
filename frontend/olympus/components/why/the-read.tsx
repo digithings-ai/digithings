@@ -34,9 +34,9 @@ export function TheReadBody({ digest }: { digest: DigestPayload }) {
   return (
     <div className="space-y-6">
       <header className="space-y-3">
-        <h1 className="font-display text-3xl sm:text-4xl tracking-tight text-text-primary">The read</h1>
+        <h1 className="font-display text-3xl sm:text-4xl tracking-tight text-ink">The read</h1>
         {digest.headline ? (
-          <p className="text-sm sm:text-base leading-relaxed text-text-secondary max-w-3xl">
+          <p className="text-sm sm:text-base leading-relaxed text-ink-soft max-w-3xl">
             {digest.headline}
           </p>
         ) : null}
@@ -47,15 +47,15 @@ export function TheReadBody({ digest }: { digest: DigestPayload }) {
               return (
                 <span
                   key={seg}
-                  className="inline-flex items-center gap-1 rounded-md border border-border-subtle bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-text-muted"
+                  className="inline-flex items-center gap-1 rounded-md border border-hair bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-ink-mute"
                   title={isToday ? 'Refreshed in the latest run' : 'Carried from the last baseline'}
                 >
                   <span
-                    className={`h-1 w-1 rounded-full ${isToday ? 'bg-fin-green' : 'bg-text-muted/50'}`}
+                    className={`h-1 w-1 rounded-full ${isToday ? 'bg-up' : 'bg-ink-mute/50'}`}
                     aria-hidden
                   />
                   {seg}
-                  <span className="text-text-muted/70">
+                  <span className="text-ink-mute/70">
                     {isToday ? 'today' : `baseline${f.as_of ? ` ${f.as_of}` : ''}`}
                   </span>
                 </span>
@@ -73,14 +73,14 @@ export function TheReadBody({ digest }: { digest: DigestPayload }) {
           {digest.actionable_summary.length ? (
             <ActionableList items={digest.actionable_summary} />
           ) : (
-            <p className="text-sm text-text-muted">No actionable items for the latest run.</p>
+            <p className="text-sm text-ink-mute">No actionable items for the latest run.</p>
           )}
         </div>
         <div>
           {digest.risk_radar.length ? (
             <RiskList items={digest.risk_radar} />
           ) : (
-            <p className="text-sm text-text-muted">No risks flagged for the latest run.</p>
+            <p className="text-sm text-ink-mute">No risks flagged for the latest run.</p>
           )}
         </div>
       </section>
@@ -92,10 +92,10 @@ export function TheReadBody({ digest }: { digest: DigestPayload }) {
           if (!body) return null;
           return (
             <details key={String(key)} className="glass-card px-5 py-3.5">
-              <summary className="cursor-pointer text-sm font-semibold text-text-secondary hover:text-text-primary">
+              <summary className="cursor-pointer text-sm font-semibold text-ink-soft hover:text-ink">
                 {title}
               </summary>
-              <p className="mt-3 text-sm leading-relaxed text-text-secondary whitespace-pre-line">{body}</p>
+              <p className="mt-3 text-sm leading-relaxed text-ink-soft whitespace-pre-line">{body}</p>
             </details>
           );
         })}

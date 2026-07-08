@@ -48,11 +48,11 @@ function eventMarkerColor(ev: DashboardPositionEvent['event']): string {
 }
 
 function eventLabelClass(ev: DashboardPositionEvent['event']): string {
-  if (ev === 'OPEN') return 'text-fin-green';
-  if (ev === 'EXIT') return 'text-fin-red';
+  if (ev === 'OPEN') return 'text-up';
+  if (ev === 'EXIT') return 'text-down';
   if (ev === 'ADD') return 'text-[var(--accent)]';
-  if (ev === 'TRIM') return 'text-fin-amber';
-  return 'text-text-muted';
+  if (ev === 'TRIM') return 'text-warn';
+  return 'text-ink-mute';
 }
 
 function isoToday(): string {
@@ -193,7 +193,7 @@ export default function PositionDrilldown({
       className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
         windowPreset === k
           ? 'bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/40'
-          : 'border border-border-subtle text-text-muted hover:bg-white/[0.04]'
+          : 'border border-hair text-ink-mute hover:bg-white/[0.04]'
       }`}
     >
       {DRILLDOWN_WINDOW_LABELS[k]}
@@ -201,14 +201,14 @@ export default function PositionDrilldown({
   ));
 
   return (
-    <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-4 md:p-5 space-y-4">
+    <div className="rounded-lg border border-hair bg-term-bg/40 p-4 md:p-5 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-semibold truncate">
             {position.ticker}
-            {position.name ? <span className="text-text-muted font-normal"> — {position.name}</span> : null}
+            {position.name ? <span className="text-ink-mute font-normal"> — {position.name}</span> : null}
           </p>
-          <p className="text-xs text-text-muted">
+          <p className="text-xs text-ink-mute">
             As of {rangeEnd}
             {mode === 'performance' && performanceRange ? ` · Range ${performanceRange.start} → ${rangeEnd}` : null}
           </p>
@@ -217,32 +217,32 @@ export default function PositionDrilldown({
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
-        <div className="rounded-md border border-border-subtle bg-bg-primary/40 p-3">
-          <p className="text-[11px] font-semibold text-text-muted tracking-wide">Weight</p>
+        <div className="rounded-md border border-hair bg-bg/40 p-3">
+          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Weight</p>
           <p className="text-sm mt-1 font-mono tabular-nums">
             {position.weight_actual != null ? `${position.weight_actual.toFixed(1)}%` : '—'}
           </p>
         </div>
-        <div className="rounded-md border border-border-subtle bg-bg-primary/40 p-3">
-          <p className="text-[11px] font-semibold text-text-muted tracking-wide">Avg entry</p>
+        <div className="rounded-md border border-hair bg-bg/40 p-3">
+          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Avg entry</p>
           <p className="text-sm mt-1 font-mono tabular-nums">
             {avgEntry != null ? `$${avgEntry.toFixed(2)}` : '—'}
           </p>
         </div>
-        <div className="rounded-md border border-border-subtle bg-bg-primary/40 p-3">
-          <p className="text-[11px] font-semibold text-text-muted tracking-wide">Unrealized</p>
+        <div className="rounded-md border border-hair bg-bg/40 p-3">
+          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Unrealized</p>
           <p className={`text-sm mt-1 font-mono tabular-nums font-semibold ${pnlColor(pnlVsAvg)}`}>
             {pnlVsAvg != null ? `${pnlVsAvg >= 0 ? '+' : ''}${pnlVsAvg.toFixed(2)}%` : '—'}
           </p>
         </div>
-        <div className="rounded-md border border-border-subtle bg-bg-primary/40 p-3">
-          <p className="text-[11px] font-semibold text-text-muted tracking-wide">Δ weight (window)</p>
+        <div className="rounded-md border border-hair bg-bg/40 p-3">
+          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Δ weight (window)</p>
           <p className={`text-sm mt-1 font-mono tabular-nums ${pnlColor(netW)}`}>
             {netW != null ? `${netW >= 0 ? '+' : ''}${netW.toFixed(2)}pp` : '—'}
           </p>
         </div>
-        <div className="rounded-md border border-border-subtle bg-bg-primary/40 p-3 col-span-2 lg:col-span-2">
-          <p className="text-[11px] font-semibold text-text-muted tracking-wide">Category / thesis</p>
+        <div className="rounded-md border border-hair bg-bg/40 p-3 col-span-2 lg:col-span-2">
+          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Category / thesis</p>
           <p className="text-sm mt-1 truncate">
             {formatAllocationCategory(position.category)} · {thesisNames(position.thesis_ids, thesisById)}
           </p>
@@ -250,23 +250,23 @@ export default function PositionDrilldown({
       </div>
 
       {mode === 'performance' && periodContribPpt != null && !Number.isNaN(periodContribPpt) ? (
-        <div className="rounded-md border border-border-subtle bg-bg-primary/30 px-3 py-2 text-sm">
-          <span className="text-text-muted">Attributed contribution (window): </span>
+        <div className="rounded-md border border-hair bg-bg/30 px-3 py-2 text-sm">
+          <span className="text-ink-mute">Attributed contribution (window): </span>
           <span className={`font-mono tabular-nums font-semibold ${pnlColor(periodContribPpt)}`}>
             {periodContribPpt >= 0 ? '+' : ''}
             {periodContribPpt.toFixed(3)} ppt
           </span>
-          <span className="text-text-muted text-xs ml-2">(daily return × prior-day weight)</span>
+          <span className="text-ink-mute text-xs ml-2">(daily return × prior-day weight)</span>
         </div>
       ) : null}
 
       {loading ? (
-        <p className="text-sm text-text-muted py-6 text-center">Loading chart data…</p>
+        <p className="text-sm text-ink-mute py-6 text-center">Loading chart data…</p>
       ) : err ? (
-        <p className="text-sm text-fin-red py-4">{err}</p>
+        <p className="text-sm text-down py-4">{err}</p>
       ) : chartRows.length >= 2 ? (
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold text-text-muted tracking-wide">Weight &amp; price</p>
+          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Weight &amp; price</p>
           <div className="h-[280px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartRows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
@@ -300,10 +300,10 @@ export default function PositionDrilldown({
                     if (!active || !payload?.length) return null;
                     const row = payload[0].payload as DrilldownChartRow;
                     return (
-                      <div className="rounded-lg border border-border-subtle bg-bg-primary px-3 py-2 text-[0.82rem] shadow-lg max-w-sm">
-                        <p className="font-mono text-text-secondary text-xs">{row.date}</p>
-                        <p className="text-text-primary tabular-nums mt-1">Close ${row.close.toFixed(2)}</p>
-                        <p className="text-text-muted tabular-nums text-xs mt-0.5">Weight {row.weightPct.toFixed(2)}%</p>
+                      <div className="rounded-lg border border-hair bg-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-sm">
+                        <p className="font-mono text-ink-soft text-xs">{row.date}</p>
+                        <p className="text-ink tabular-nums mt-1">Close ${row.close.toFixed(2)}</p>
+                        <p className="text-ink-mute tabular-nums text-xs mt-0.5">Weight {row.weightPct.toFixed(2)}%</p>
                         {row.dayEvents.length > 0 ? (
                           <ul className="mt-2 space-y-1 text-xs">
                             {row.dayEvents.map((ev, i) => (
@@ -356,14 +356,14 @@ export default function PositionDrilldown({
           </div>
         </div>
       ) : (
-        <p className="text-sm text-text-muted py-2">
+        <p className="text-sm text-ink-mute py-2">
           Not enough price history in this window for the chart. See activity below.
         </p>
       )}
 
       {mode === 'performance' && contributionSeries.length >= 2 ? (
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold text-text-muted tracking-wide">Cumulative contribution (ppt)</p>
+          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Cumulative contribution (ppt)</p>
           <div className="h-[160px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={contributionSeries} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
@@ -382,13 +382,13 @@ export default function PositionDrilldown({
                     const cum = payload.find((p) => p.dataKey === 'cumPp')?.value;
                     const daily = payload.find((p) => p.dataKey === 'dailyPp')?.value;
                     return (
-                      <div className="rounded-lg border border-border-subtle bg-bg-primary px-3 py-2 text-[0.82rem] shadow-lg">
-                        <p className="font-mono text-text-secondary text-xs">{String(label)}</p>
-                        <p className="text-text-primary tabular-nums mt-1">
+                      <div className="rounded-lg border border-hair bg-bg px-3 py-2 text-[0.82rem] shadow-lg">
+                        <p className="font-mono text-ink-soft text-xs">{String(label)}</p>
+                        <p className="text-ink tabular-nums mt-1">
                           Cumulative:{' '}
                           {typeof cum === 'number' ? `${cum >= 0 ? '+' : ''}${cum.toFixed(4)} ppt` : '—'}
                         </p>
-                        <p className="text-text-muted tabular-nums text-xs mt-0.5">
+                        <p className="text-ink-mute tabular-nums text-xs mt-0.5">
                           Daily:{' '}
                           {typeof daily === 'number' ? `${daily >= 0 ? '+' : ''}${daily.toFixed(4)} ppt` : '—'}
                         </p>
@@ -421,11 +421,11 @@ export default function PositionDrilldown({
       ) : null}
 
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold text-text-muted tracking-wide">Activity</p>
-        <div className="overflow-x-auto rounded-md border border-border-subtle">
+        <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Activity</p>
+        <div className="overflow-x-auto rounded-md border border-hair">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
-              <tr className="text-left text-text-muted text-xs uppercase tracking-wider border-b border-border-subtle bg-bg-primary/30">
+              <tr className="text-left text-ink-mute text-xs uppercase tracking-wider border-b border-hair bg-bg/30">
                 <th className="px-3 py-2">Date</th>
                 <th className="px-3 py-2">Action</th>
                 <th className="px-3 py-2 text-right">Δ weight</th>
@@ -434,10 +434,10 @@ export default function PositionDrilldown({
                 <th className="px-3 py-2">Reason</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border-subtle">
+            <tbody className="divide-y divide-hair">
               {ledgerDesc.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-text-muted text-sm">
+                  <td colSpan={6} className="px-3 py-6 text-center text-ink-mute text-sm">
                     No OPEN / ADD / TRIM / EXIT events in this window.
                   </td>
                 </tr>
@@ -446,7 +446,7 @@ export default function PositionDrilldown({
                   const ledgerPx = onLedgerPrice(e);
                   return (
                   <tr key={`${e.date}-${e.event}-${i}`} className="hover:bg-white/[0.02]">
-                    <td className="px-3 py-2 font-mono text-xs text-text-secondary whitespace-nowrap">{e.date}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-ink-soft whitespace-nowrap">{e.date}</td>
                     <td className="px-3 py-2">
                       <span className={`font-semibold text-xs ${eventLabelClass(e.event)}`}>{e.event}</span>
                     </td>
@@ -455,7 +455,7 @@ export default function PositionDrilldown({
                         ? `${e.weight_change_pct >= 0 ? '+' : ''}${e.weight_change_pct.toFixed(2)}pp`
                         : '—'}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums text-xs text-text-secondary">
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-xs text-ink-soft">
                       {e.prev_weight_pct != null && e.weight_pct != null
                         ? `${e.prev_weight_pct.toFixed(2)} → ${e.weight_pct.toFixed(2)}%`
                         : '—'}
@@ -463,7 +463,7 @@ export default function PositionDrilldown({
                     <td className="px-3 py-2 text-right font-mono tabular-nums text-xs">
                       {ledgerPx != null ? `$${ledgerPx.toFixed(2)}` : '—'}
                     </td>
-                    <td className="px-3 py-2 text-xs text-text-muted max-w-[280px]">{e.reason ?? '—'}</td>
+                    <td className="px-3 py-2 text-xs text-ink-mute max-w-[280px]">{e.reason ?? '—'}</td>
                   </tr>
                   );
                 })

@@ -218,9 +218,9 @@ function fmtPct(v: number): string {
 
 /** vs-Avg flag → arrow glyph + directional color class. */
 function vsPresentation(flag: VsAvgFlag | null): { arrow: string; cls: string } {
-  if (flag === 'above') return { arrow: '▲', cls: 'text-fin-green' };
-  if (flag === 'below') return { arrow: '▼', cls: 'text-fin-red' };
-  return { arrow: '·', cls: 'text-text-muted' };
+  if (flag === 'above') return { arrow: '▲', cls: 'text-up' };
+  if (flag === 'below') return { arrow: '▼', cls: 'text-down' };
+  return { arrow: '·', cls: 'text-ink-mute' };
 }
 
 export interface ConsensusDataTableProps {
@@ -294,7 +294,7 @@ export function ConsensusDataTable({
 
   if (!hasData) {
     return (
-      <div className="glass-card p-8 text-center text-text-muted text-sm">
+      <div className="glass-card p-8 text-center text-ink-mute text-sm">
         No consensus snapshot available yet.
       </div>
     );
@@ -304,11 +304,11 @@ export function ConsensusDataTable({
     <div className="space-y-3.5">
       {/* Controls: averaging window */}
       <div className="flex items-center gap-2.5 flex-wrap">
-        <span className="text-[11px] uppercase tracking-wider text-text-muted">
+        <span className="text-[11px] uppercase tracking-wider text-ink-mute">
           Avg window
         </span>
         <div
-          className="inline-flex rounded-lg border border-border-subtle overflow-hidden"
+          className="inline-flex rounded-lg border border-hair overflow-hidden"
           role="group"
           aria-label="Averaging window"
         >
@@ -322,11 +322,11 @@ export function ConsensusDataTable({
                 aria-pressed={on}
                 onClick={() => setWindow(n)}
                 className={`px-3 py-1.5 text-[11.5px] font-medium tabular-nums transition-colors ${
-                  idx < AVG_WINDOWS.length - 1 ? 'border-r border-border-subtle' : ''
+                  idx < AVG_WINDOWS.length - 1 ? 'border-r border-hair' : ''
                 } ${
                   on
-                    ? 'bg-fin-blue/15 text-fin-blue'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.03]'
+                    ? 'bg-accent/15 text-accent'
+                    : 'text-ink-soft hover:text-ink hover:bg-white/[0.03]'
                 }`}
               >
                 {n}
@@ -334,7 +334,7 @@ export function ConsensusDataTable({
             );
           })}
         </div>
-        <span className="text-[11px] text-text-muted ml-1">
+        <span className="text-[11px] text-ink-mute ml-1">
           trailing-{window}-run consensus average
         </span>
       </div>
@@ -352,8 +352,8 @@ export function ConsensusDataTable({
               onClick={() => setFilter(f.key)}
               className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${
                 on
-                  ? 'border-fin-blue/40 bg-fin-blue/15 text-fin-blue'
-                  : 'border-border-subtle text-text-muted hover:text-text-primary'
+                  ? 'border-accent/40 bg-accent/15 text-accent'
+                  : 'border-hair text-ink-mute hover:text-ink'
               }`}
             >
               {f.label}
@@ -367,7 +367,7 @@ export function ConsensusDataTable({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] border-collapse">
             <thead>
-              <tr className="border-b border-border-subtle">
+              <tr className="border-b border-hair">
                 {COLUMNS.map((c) => {
                   const isSorted = c.sortable && c.key === sortKey;
                   const ind = isSorted ? (sortDir === 'desc' ? '▼' : '▲') : '';
@@ -376,7 +376,7 @@ export function ConsensusDataTable({
                     return (
                       <th
                         key={c.key}
-                        className={`px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted ${alignCls}`}
+                        className={`px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-mute ${alignCls}`}
                       >
                         {c.label}
                       </th>
@@ -388,30 +388,30 @@ export function ConsensusDataTable({
                       aria-sort={
                         isSorted ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
                       }
-                      className={`px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted ${alignCls}`}
+                      className={`px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-mute ${alignCls}`}
                     >
                       <button
                         type="button"
                         data-key={c.key}
                         onClick={() => onHeaderClick(c.key as SortKey)}
-                        className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-text-primary transition-colors ${
-                          isSorted ? 'text-text-primary' : ''
+                        className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-ink transition-colors ${
+                          isSorted ? 'text-ink' : ''
                         }`}
                       >
                         {c.label}
-                        {ind ? <span className="text-fin-blue text-[9px]">{ind}</span> : null}
+                        {ind ? <span className="text-accent text-[9px]">{ind}</span> : null}
                       </button>
                     </th>
                   );
                 })}
                 {onDrillToProvenance ? (
-                  <th className="px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted text-right">
+                  <th className="px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-mute text-right">
                     Trace
                   </th>
                 ) : null}
               </tr>
             </thead>
-            <tbody className="divide-y divide-border-subtle">
+            <tbody className="divide-y divide-hair">
               {rows.map((r) => {
                 const colorClass = scoreColorClass(r.score);
                 const cDelta = deltas.byCurrency[r.currency];
@@ -445,7 +445,7 @@ export function ConsensusDataTable({
                     <td className="px-3.5 py-2.5 text-right">
                       <DeltaChip delta={r.scoreDelta} isNew={isNew} />
                     </td>
-                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-text-secondary">
+                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-ink-soft">
                       {r.avg === null ? '—' : r.avg.toFixed(2)}
                     </td>
                     <td
@@ -454,10 +454,10 @@ export function ConsensusDataTable({
                     >
                       {r.vs === null ? '—' : `${vsP.arrow} ${fmtSigned(r.score - (r.avg as number))}`}
                     </td>
-                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-text-secondary">
+                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-ink-soft">
                       {fmtPct(r.confidence)}
                     </td>
-                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-text-secondary">
+                    <td className="px-3.5 py-2.5 text-right font-mono tabular-nums text-[13px] text-ink-soft">
                       {fmtPct(r.agreement)}
                     </td>
                     <td className={`px-3.5 py-2.5 text-[12px] font-medium ${colorClass}`}>
@@ -468,7 +468,7 @@ export function ConsensusDataTable({
                         <button
                           type="button"
                           onClick={() => onDrillToProvenance(r.currency)}
-                          className="text-[11px] font-medium text-fin-blue hover:underline"
+                          className="text-[11px] font-medium text-accent hover:underline"
                           title={`Why this weight? See desk provenance for ${r.currency} in Intelligence`}
                         >
                           Why?

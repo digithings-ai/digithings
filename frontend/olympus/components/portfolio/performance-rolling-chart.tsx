@@ -23,18 +23,18 @@ function PeriodRiskSummary({
   annVolPct: number;
 }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-lg border border-border-subtle bg-bg-secondary/50 p-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-lg border border-hair bg-term-bg/50 p-4">
       <div>
-        <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1">Sharpe (Rf = 0)</p>
-        <p className="text-lg font-semibold tabular-nums text-text-primary">{sharpe.toFixed(2)}</p>
+        <p className="text-[10px] text-ink-mute uppercase tracking-wider mb-1">Sharpe (Rf = 0)</p>
+        <p className="text-lg font-semibold tabular-nums text-ink">{sharpe.toFixed(2)}</p>
       </div>
       <div>
-        <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1">Sortino</p>
-        <p className="text-lg font-semibold tabular-nums text-text-primary">{sortino.toFixed(2)}</p>
+        <p className="text-[10px] text-ink-mute uppercase tracking-wider mb-1">Sortino</p>
+        <p className="text-lg font-semibold tabular-nums text-ink">{sortino.toFixed(2)}</p>
       </div>
       <div>
-        <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1">Ann. volatility</p>
-        <p className="text-lg font-semibold tabular-nums text-text-primary">{annVolPct.toFixed(1)}%</p>
+        <p className="text-[10px] text-ink-mute uppercase tracking-wider mb-1">Ann. volatility</p>
+        <p className="text-lg font-semibold tabular-nums text-ink">{annVolPct.toFixed(1)}%</p>
       </div>
     </div>
   );
@@ -58,17 +58,17 @@ export function PerformanceRollingChart({
       {period ? (
         <>
           <PeriodRiskSummary sharpe={period.sharpe} sortino={period.sortino} annVolPct={period.annVolPct} />
-          <p className="text-[11px] text-text-muted leading-snug">
+          <p className="text-[11px] text-ink-mute leading-snug">
             Full selected range — same methodology as Advanced statistics (daily returns, Rf = 0).
           </p>
         </>
       ) : (
-        <p className="text-sm text-text-muted">Need at least two NAV observations in this range.</p>
+        <p className="text-sm text-ink-mute">Need at least two NAV observations in this range.</p>
       )}
 
       {hasRollingSharpe && rollingPoints >= 2 ? (
         <div className="space-y-2">
-          <p className="text-[11px] text-text-muted">
+          <p className="text-[11px] text-ink-mute">
             Rolling series uses a {rollingWindow}-trading-day window (shortened automatically when history is
             limited).
           </p>
@@ -101,9 +101,9 @@ export function PerformanceRollingChart({
                 />
                 <Tooltip
                   contentStyle={{
-                    background: 'var(--color-bg-secondary)',
-                    border: '1px solid var(--color-border-subtle)',
-                    color: 'var(--color-text-primary)',
+                    background: 'var(--term-bg)',
+                    border: '1px solid var(--hair)',
+                    color: 'var(--ink)',
                     borderRadius: '8px',
                     fontSize: '0.85rem',
                   }}
@@ -141,7 +141,7 @@ export function PerformanceRollingChart({
           </div>
         </div>
       ) : period ? (
-        <p className="text-[12px] text-text-muted rounded-lg border border-dashed border-border-subtle px-4 py-3">
+        <p className="text-[12px] text-ink-mute rounded-lg border border-dashed border-hair px-4 py-3">
           Not enough overlapping days in this range for rolling metrics.
         </p>
       ) : null}

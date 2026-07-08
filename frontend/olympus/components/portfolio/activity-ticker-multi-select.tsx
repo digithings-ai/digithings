@@ -56,13 +56,13 @@ export function ActivityTickerMultiSelect({
       {selected.map((t) => (
         <span
           key={t}
-          className="inline-flex items-center gap-0.5 pl-2 pr-1 py-0.5 rounded-md text-[11px] font-mono font-medium border border-fin-blue/35 bg-fin-blue/10 text-fin-blue"
+          className="inline-flex items-center gap-0.5 pl-2 pr-1 py-0.5 rounded-md text-[11px] font-mono font-medium border border-accent/35 bg-accent/10 text-accent"
         >
           {t}
           <button
             type="button"
             onClick={() => onRemove(t)}
-            className="p-0.5 rounded hover:bg-white/10 text-text-secondary hover:text-text-primary leading-none"
+            className="p-0.5 rounded hover:bg-white/10 text-ink-soft hover:text-ink leading-none"
             aria-label={`Remove ${t}`}
           >
             ×
@@ -74,7 +74,7 @@ export function ActivityTickerMultiSelect({
         <button
           type="button"
           onClick={toggleOpen}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-border-subtle bg-bg-secondary text-text-secondary hover:border-fin-blue/40 hover:text-text-primary transition-colors"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-hair bg-term-bg text-ink-soft hover:border-accent/40 hover:text-ink transition-colors"
           aria-expanded={open ? 'true' : 'false'}
           aria-haspopup="listbox"
           aria-controls={listboxId}
@@ -85,7 +85,7 @@ export function ActivityTickerMultiSelect({
 
         {open && (
           <div
-            className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,18rem)] rounded-lg border border-border-subtle bg-bg-secondary shadow-xl overflow-hidden"
+            className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,18rem)] rounded-lg border border-hair bg-term-bg shadow-xl overflow-hidden"
           >
             <input
               type="search"
@@ -93,13 +93,13 @@ export function ActivityTickerMultiSelect({
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search tickers…"
               aria-label="Search tickers"
-              className="w-full px-2.5 py-2 text-sm bg-bg-primary border-b border-border-subtle text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-inset focus:ring-fin-blue/30"
+              className="w-full px-2.5 py-2 text-sm bg-bg border-b border-hair text-ink placeholder:text-ink-mute focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent/30"
               autoComplete="off"
               autoFocus
             />
             <div id={listboxId} className="max-h-52 overflow-y-auto py-1">
               {filtered.length === 0 ? (
-                <div role="status" className="text-xs text-text-muted px-3 py-4 text-center">
+                <div role="status" className="text-xs text-ink-mute px-3 py-4 text-center">
                   No matches
                 </div>
               ) : (
@@ -118,8 +118,8 @@ export function ActivityTickerMultiSelect({
                         }}
                         className={`w-full text-left px-3 py-1.5 text-xs font-mono transition-colors ${
                           on
-                            ? 'bg-fin-blue/15 text-fin-blue'
-                            : 'text-text-secondary hover:bg-white/[0.06] hover:text-text-primary'
+                            ? 'bg-accent/15 text-accent'
+                            : 'text-ink-soft hover:bg-white/[0.06] hover:text-ink'
                         }`}
                       >
                         {t}

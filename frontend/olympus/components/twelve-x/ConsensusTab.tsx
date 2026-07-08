@@ -184,14 +184,14 @@ export default function ConsensusTab({
 
   return (
     <div className="space-y-5">
-      <p className="text-xs text-text-muted max-w-2xl">
+      <p className="text-xs text-ink-mute max-w-2xl">
         Relevance-weighted G10 consensus over time. Score ranges {SCORE_MIN} (max bearish) to {SCORE_MAX}{' '}
         (max bullish); bands mark a directional lean (±{LEAN_BAND}) and strong conviction (±{STRONG_BAND}).
       </p>
 
       {/* Sub-nav: Table | Charts (Table default) */}
       <div
-        className="inline-flex rounded-lg border border-border-subtle overflow-hidden"
+        className="inline-flex rounded-lg border border-hair overflow-hidden"
         role="group"
         aria-label="Consensus view"
       >
@@ -205,11 +205,11 @@ export default function ConsensusTab({
               aria-pressed={on}
               onClick={() => setView(v)}
               className={`px-3.5 py-1.5 text-[11.5px] font-medium capitalize transition-colors ${
-                idx === 0 ? 'border-r border-border-subtle' : ''
+                idx === 0 ? 'border-r border-hair' : ''
               } ${
                 on
-                  ? 'bg-fin-blue/15 text-fin-blue'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.03]'
+                  ? 'bg-accent/15 text-accent'
+                  : 'text-ink-soft hover:text-ink hover:bg-white/[0.03]'
               }`}
             >
               {v === 'table' ? 'Table' : 'Charts'}
@@ -230,17 +230,17 @@ export default function ConsensusTab({
               : `Focus ${topMover.currency}`
           }
         >
-          <span className="text-[10px] font-medium uppercase tracking-wide text-text-muted shrink-0">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-ink-mute shrink-0">
             Biggest shift
           </span>
           <span className="font-mono font-semibold shrink-0" style={{ color: currencyColor(topMover.currency) }}>
             {topMover.currency}
           </span>
-          <span className="tabular-nums text-xs font-mono text-text-secondary shrink-0">
+          <span className="tabular-nums text-xs font-mono text-ink-soft shrink-0">
             {topMover.scoreNow.toFixed(2)}
           </span>
           <DeltaChip delta={topMover.scoreDelta} />
-          <span className="text-[11px] text-text-muted ml-auto shrink-0">
+          <span className="text-[11px] text-ink-mute ml-auto shrink-0">
             {topMover.direction === 'up' ? 'turned more bullish' : 'turned more bearish'} since last run
           </span>
         </button>
@@ -267,8 +267,8 @@ export default function ConsensusTab({
                 onClick={() => setSelectedCcy(null)}
                 className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${
                   selectedCcy == null
-                    ? 'border-fin-blue/40 bg-fin-blue/15 text-fin-blue'
-                    : 'border-border-subtle text-text-muted hover:text-text-primary'
+                    ? 'border-accent/40 bg-accent/15 text-accent'
+                    : 'border-hair text-ink-mute hover:text-ink'
                 }`}
               >
                 All
@@ -280,8 +280,8 @@ export default function ConsensusTab({
                   onClick={() => setSelectedCcy(c === selectedCcy ? null : c)}
                   className={`text-[11px] font-mono font-medium px-2.5 py-1 rounded-full border transition-colors ${
                     c === selectedCcy
-                      ? 'border-fin-blue/40 bg-fin-blue/15 text-fin-blue'
-                      : 'border-border-subtle text-text-muted hover:text-text-primary'
+                      ? 'border-accent/40 bg-accent/15 text-accent'
+                      : 'border-hair text-ink-mute hover:text-ink'
                   }`}
                   style={c === selectedCcy ? undefined : { color: currencyColor(c) }}
                 >
@@ -296,12 +296,12 @@ export default function ConsensusTab({
             {/* Score-over-time multi-line chart (Raw | Average) */}
             <div className="glass-card p-4 md:p-5 space-y-3" data-chart="line">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+                <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">
                   Consensus score over time
                 </h3>
                 {/* Raw | Average smoothing toggle */}
                 <div
-                  className="inline-flex rounded-lg border border-border-subtle overflow-hidden ml-auto"
+                  className="inline-flex rounded-lg border border-hair overflow-hidden ml-auto"
                   role="group"
                   aria-label="Smoothing"
                 >
@@ -315,11 +315,11 @@ export default function ConsensusTab({
                         aria-pressed={on}
                         onClick={() => setSmoothMode(m)}
                         className={`px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                          idx === 0 ? 'border-r border-border-subtle' : ''
+                          idx === 0 ? 'border-r border-hair' : ''
                         } ${
                           on
-                            ? 'bg-fin-blue/15 text-fin-blue'
-                            : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.03]'
+                            ? 'bg-accent/15 text-accent'
+                            : 'text-ink-soft hover:text-ink hover:bg-white/[0.03]'
                         }`}
                       >
                         {m === 'raw' ? 'Raw' : 'Average'}
@@ -328,13 +328,13 @@ export default function ConsensusTab({
                   })}
                 </div>
                 {/* Band legend: shaded = strong conviction (±1.25); dashed = directional lean (±0.35). */}
-                <span className="text-[10px] text-text-muted flex items-center gap-2 w-full">
+                <span className="text-[10px] text-ink-mute flex items-center gap-2 w-full">
                   <span className="flex items-center gap-1">
-                    <span className="inline-block h-2.5 w-3 rounded-sm bg-fin-green/15" />
+                    <span className="inline-block h-2.5 w-3 rounded-sm bg-up/15" />
                     Strong ±{STRONG_BAND}
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="inline-block w-3 border-t border-dashed border-fin-green/60" />
+                    <span className="inline-block w-3 border-t border-dashed border-up/60" />
                     Lean ±{LEAN_BAND}
                   </span>
                   <span className="ml-auto">
@@ -371,9 +371,9 @@ export default function ConsensusTab({
                       />
                       <Tooltip
                         contentStyle={{
-                          background: 'var(--color-bg-secondary)',
-                          border: '1px solid var(--color-border-subtle)',
-                          color: 'var(--color-text-primary)',
+                          background: 'var(--term-bg)',
+                          border: '1px solid var(--hair)',
+                          color: 'var(--ink)',
                           borderRadius: '8px',
                           fontSize: '0.8rem',
                         }}
@@ -384,7 +384,7 @@ export default function ConsensusTab({
                           return [Number.isNaN(n) ? '—' : n.toFixed(2), String(name)];
                         }}
                       />
-                      <Legend formatter={(value: string) => <span className="text-text-secondary text-xs">{value}</span>} />
+                      <Legend formatter={(value: string) => <span className="text-ink-soft text-xs">{value}</span>} />
                       {currencies.map((c) => {
                         const dim = selectedCcy != null && selectedCcy !== c;
                         return (
@@ -405,7 +405,7 @@ export default function ConsensusTab({
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="h-[300px] flex items-center justify-center text-text-muted text-sm">
+                <div className="h-[300px] flex items-center justify-center text-ink-mute text-sm">
                   Not enough consensus history to chart.
                 </div>
               )}
@@ -414,7 +414,7 @@ export default function ConsensusTab({
             {/* Position-split stacked area */}
             <div className="glass-card p-4 md:p-5 space-y-3" data-chart="split">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+                <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">
                   Position split over time
                 </h3>
                 {splitFocusCcy ? (
@@ -425,7 +425,7 @@ export default function ConsensusTab({
                     {splitFocusCcy}
                   </span>
                 ) : null}
-                <span className="text-[11px] text-text-muted ml-auto">
+                <span className="text-[11px] text-ink-mute ml-auto">
                   {selectedCcy ? 'Selected currency' : 'Strongest conviction (latest)'}
                 </span>
               </div>
@@ -447,9 +447,9 @@ export default function ConsensusTab({
                       />
                       <Tooltip
                         contentStyle={{
-                          background: 'var(--color-bg-secondary)',
-                          border: '1px solid var(--color-border-subtle)',
-                          color: 'var(--color-text-primary)',
+                          background: 'var(--term-bg)',
+                          border: '1px solid var(--hair)',
+                          color: 'var(--ink)',
                           borderRadius: '8px',
                           fontSize: '0.8rem',
                         }}
@@ -458,7 +458,7 @@ export default function ConsensusTab({
                           return [Number.isNaN(n) ? '—' : `${n.toFixed(1)}%`, String(name)];
                         }}
                       />
-                      <Legend formatter={(value: string) => <span className="text-text-secondary text-xs">{value}</span>} />
+                      <Legend formatter={(value: string) => <span className="text-ink-soft text-xs">{value}</span>} />
                       <Area type="monotone" dataKey="bullish" stackId="split" name="Bullish" stroke="#3fb984" fill="#3fb984" fillOpacity={0.6} />
                       <Area type="monotone" dataKey="neutral" stackId="split" name="Neutral" stroke="#94a3b8" fill="#94a3b8" fillOpacity={0.45} />
                       <Area type="monotone" dataKey="watch" stackId="split" name="Watch" stroke="#e0b341" fill="#e0b341" fillOpacity={0.5} />
@@ -467,7 +467,7 @@ export default function ConsensusTab({
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="h-[240px] flex items-center justify-center text-text-muted text-sm">
+                <div className="h-[240px] flex items-center justify-center text-ink-mute text-sm">
                   No position-split history for this currency.
                 </div>
               )}

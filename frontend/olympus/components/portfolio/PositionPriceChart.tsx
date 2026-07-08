@@ -75,31 +75,31 @@ function ChartTooltip({
         <p className="font-mono font-semibold" style={{ color: eventDotColor(p.event) }}>
           {p.event}
         </p>
-        <p className="text-text-secondary mt-1 font-mono">{p.date}</p>
-        <p className="text-text-secondary tabular-nums mt-0.5">
+        <p className="text-ink-soft mt-1 font-mono">{p.date}</p>
+        <p className="text-ink-soft tabular-nums mt-0.5">
           Price:{' '}
           {p.markPrice != null ? `$${p.markPrice.toFixed(2)}` : p.close != null ? `$${p.close.toFixed(2)}` : '—'}
         </p>
         {p.weight_pct != null ? (
-          <p className="text-text-muted mt-1 tabular-nums">Weight after: {p.weight_pct.toFixed(2)}%</p>
+          <p className="text-ink-mute mt-1 tabular-nums">Weight after: {p.weight_pct.toFixed(2)}%</p>
         ) : null}
         {p.weight_change_pct != null ? (
-          <p className="text-text-muted tabular-nums">
+          <p className="text-ink-mute tabular-nums">
             Δ weight: {p.weight_change_pct > 0 ? '+' : ''}
             {p.weight_change_pct.toFixed(2)}pp
           </p>
         ) : null}
-        {p.reason ? <p className="text-text-muted mt-1.5 text-[11px] leading-snug">{p.reason}</p> : null}
+        {p.reason ? <p className="text-ink-mute mt-1.5 text-[11px] leading-snug">{p.reason}</p> : null}
       </div>
     );
   }
   const w = weightByDate?.get(p.date);
   return (
     <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-[0.82rem] shadow-lg">
-      <p className="font-mono text-text-secondary">{p.date}</p>
-      <p className="text-text-primary tabular-nums mt-0.5">${Number(p.close).toFixed(2)}</p>
+      <p className="font-mono text-ink-soft">{p.date}</p>
+      <p className="text-ink tabular-nums mt-0.5">${Number(p.close).toFixed(2)}</p>
       {typeof w === 'number' ? (
-        <p className="text-text-muted tabular-nums mt-1 text-[11px]">Weight (portfolio): {w.toFixed(2)}%</p>
+        <p className="text-ink-mute tabular-nums mt-1 text-[11px]">Weight (portfolio): {w.toFixed(2)}%</p>
       ) : null}
     </div>
   );
@@ -242,16 +242,16 @@ function PriceChartBrushPanel({
   const chartEnd = chartRows[chartRows.length - 1].date;
 
   return (
-    <div ref={containerRef} className="rounded-xl border border-border-subtle bg-bg-secondary/20 overflow-hidden">
+    <div ref={containerRef} className="rounded-xl border border-hair bg-term-bg/20 overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-2 px-4 pt-3 pb-1">
         <div>
-          <p className="text-[11px] text-text-muted uppercase tracking-wider">Price</p>
-          <p className="text-sm font-medium text-text-primary mt-0.5">
-            <span className="font-mono text-fin-blue">{ticker}</span>
-            <span className="text-text-muted font-normal"> · </span>
-            <span className="text-text-secondary text-xs font-mono">{rangeLabel}</span>
+          <p className="text-[11px] text-ink-mute uppercase tracking-wider">Price</p>
+          <p className="text-sm font-medium text-ink mt-0.5">
+            <span className="font-mono text-accent">{ticker}</span>
+            <span className="text-ink-mute font-normal"> · </span>
+            <span className="text-ink-soft text-xs font-mono">{rangeLabel}</span>
           </p>
-          <p className="text-[10px] text-text-muted mt-1 font-mono">
+          <p className="text-[10px] text-ink-mute mt-1 font-mono">
             {chartRows[0].date} → {chartEnd}
           </p>
         </div>
@@ -259,7 +259,7 @@ function PriceChartBrushPanel({
           <button
             type="button"
             onClick={resetView}
-            className="text-[11px] px-2.5 py-1 rounded-lg border border-border-subtle text-text-secondary hover:bg-white/[0.04] hover:text-text-primary transition-colors"
+            className="text-[11px] px-2.5 py-1 rounded-lg border border-hair text-ink-soft hover:bg-white/[0.04] hover:text-ink transition-colors"
           >
             Fit all
           </button>
@@ -444,21 +444,21 @@ function ChartBody({
 
   if (loading) {
     return (
-      <div className="h-[240px] rounded-xl border border-border-subtle bg-bg-secondary/30 animate-pulse flex items-center justify-center text-xs text-text-muted">
+      <div className="h-[240px] rounded-xl border border-hair bg-term-bg/30 animate-pulse flex items-center justify-center text-xs text-ink-mute">
         Loading price history…
       </div>
     );
   }
   if (err) {
     return (
-      <div className="h-[200px] rounded-xl border border-border-subtle bg-bg-secondary/30 flex items-center justify-center text-xs text-fin-red px-4 text-center">
+      <div className="h-[200px] rounded-xl border border-hair bg-term-bg/30 flex items-center justify-center text-xs text-down px-4 text-center">
         {err}
       </div>
     );
   }
   if (!chartRows.length) {
     return (
-      <div className="h-[160px] rounded-xl border border-border-subtle bg-bg-secondary/30 flex items-center justify-center text-xs text-text-muted">
+      <div className="h-[160px] rounded-xl border border-hair bg-term-bg/30 flex items-center justify-center text-xs text-ink-mute">
         No price history for this range.
       </div>
     );

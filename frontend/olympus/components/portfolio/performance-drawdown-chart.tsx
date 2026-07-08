@@ -17,7 +17,7 @@ export function PerformanceDrawdownChart({
 }) {
   if (data.length < 2) {
     return (
-      <div className="h-[240px] flex items-center justify-center text-text-muted text-sm">
+      <div className="h-[240px] flex items-center justify-center text-ink-mute text-sm">
         Not enough NAV history for drawdown.
       </div>
     );
@@ -39,9 +39,9 @@ export function PerformanceDrawdownChart({
         />
         <Tooltip
           contentStyle={{
-            background: 'var(--color-bg-secondary)',
-            border: '1px solid var(--color-border-subtle)',
-            color: 'var(--color-text-primary)',
+            background: 'var(--term-bg)',
+            border: '1px solid var(--hair)',
+            color: 'var(--ink)',
             borderRadius: '8px',
             fontSize: '0.85rem',
           }}
