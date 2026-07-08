@@ -1,7 +1,7 @@
 import { Colophon, Footer, Reveal } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
-import { DqNav } from "@/components/landing/DqNav";
+import { SiteNav } from "@/components/landing/SiteNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
 import { OlympusScene } from "@/components/landing/OlympusScene";
@@ -13,7 +13,7 @@ import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
 export default function Home() {
   return (
     <>
-      <DqNav />
+      <SiteNav />
       <main>
         <HeroMesh>
           <h1 className="dqhero-h1">
