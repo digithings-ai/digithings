@@ -115,7 +115,7 @@ function ByokSettingsForm({
 
   return (
     <>
-      <div className="mb-5 rounded-lg border border-sky-950/40 bg-sky-950/15 px-3 py-2.5 text-[12px] text-sky-200/90 leading-relaxed">
+      <div className="mb-5 rounded-lg border border-hair bg-surface-2 px-3 py-2.5 text-[12px] text-ink-soft leading-relaxed">
         Your key is stored in your browser only and never saved to our servers.
         It is sent directly to the BFF on each request and not logged or persisted.
       </div>

@@ -49,6 +49,17 @@ here.
 - **Tokens, never literals.** Colours come from `@digithings/design/tokens.css`
   (`--ink`, `--surface`, `--bg`, `--hair`, `--accent`, `--up`/`--down`). Use
   token-backed Tailwind utilities or semantic classes — never ad-hoc hex/rgb.
+  CI enforces this (`scripts/check_frontend_canon.py`); sanctioned literal
+  homes and the `canon-allow` escape are documented in
+  `frontend/digiweb/MIGRATION.md`.
+- **One Tailwind bridge.** Apps never declare their own `@theme` block — they
+  import `@digithings/web/styles/web-theme.css` (`@theme inline`). Shared
+  sheets import with `layer(components)`; add an `@source` line for any
+  `@digithings/web` component the app renders. Wiring order + the three
+  load-bearing rules: `frontend/digiweb/MIGRATION.md`.
+- **Shared primitives first.** NavShell (site navs), DocsLayout/CodeTabs/
+  EndpointDoc (docs surfaces), Terminal, Emblem/StackRow, Footer/Colophon —
+  never re-implement these per app.
 - **Monochrome is the default livery;** colour is opt-in per product via a scope
   class (`accent-digiquant`, …). `atlas`/`hermes`/`kairos` are backend langgraph
   names, not coloured products.
