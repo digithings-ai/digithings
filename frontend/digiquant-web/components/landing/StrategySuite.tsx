@@ -23,6 +23,10 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+// Hooks only — the same import the shared scrolly primitive (@digithings/web
+// motion/scrolly.tsx) uses internally; hooks don't pull the full animation
+// runtime. Element creators must come from @digithings/web's `m` (the app is
+// wrapped in LazyMotion strict, which throws on a full `motion.*` component).
 import { useScroll, useMotionValueEvent } from "motion/react";
 import Link from "next/link";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
