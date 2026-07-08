@@ -45,7 +45,7 @@ export const metadata: Metadata = {
 // /docs (trailingSlash export → /docs/ also matches). Kept local rather than in
 // the shared @digithings/web themeInitScript because only this site has /docs.
 const docsIvoryInit =
-  "try{if(/^\\/docs(\\/|$)/.test(location.pathname)&&!localStorage.getItem('dt-theme')){document.documentElement.setAttribute('data-theme','light');var m=document.querySelector('meta[name=\"theme-color\"]');if(m)m.setAttribute('content','#FBFBF9')}}catch(e){}";
+  "try{if(/^\\/docs(\\/|$)/.test(location.pathname)&&!localStorage.getItem('dt-theme')){document.documentElement.setAttribute('data-theme','light');var m=document.querySelector('meta[name=\"theme-color\"]');if(m)m.setAttribute('content','#FBFBF9')}}catch(e){}"; // canon-allow: mirrors tokens.css light --bg (pre-paint script)
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   // suppressHydrationWarning: themeInitScript (and the /docs ivory default)
@@ -63,7 +63,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
         {/* Single fallback; themeInitScript sets it to the active theme pre-paint.
             Literal = tokens.css dark --bg (metas can't read CSS vars). */}
-        <meta name="theme-color" content="#0A0E0C" />
+        <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
       </head>
       <body>
         <div className="grain" aria-hidden="true" />

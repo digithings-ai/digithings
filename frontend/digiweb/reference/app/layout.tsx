@@ -88,7 +88,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script
           dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }}
         />
-        <meta name="theme-color" content="#0B0C0E" />
+        <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
       </head>
       <body>
         <MotionProvider>

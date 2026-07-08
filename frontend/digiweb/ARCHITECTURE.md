@@ -29,7 +29,15 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | Package | Directory | Provides |
 | ------- | --------- | -------- |
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/web` | `web/` | shared React layer (Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) |
+| `@digithings/web` | `web/` | shared React layer (NavShell, DocsLayout/CodeTabs/EndpointDoc, Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+
+Since the canon migration (#1399, 2026-07): apps declare **no local `@theme`
+block** — `web-theme.css` is the one bridge (its `inline` semantics keep scoped
+liveries live inside utilities); shared sheets import with `layer(components)`;
+package components rendered by an app need an `@source` line. The adoption
+playbook and the CI guard contract live in [MIGRATION.md](MIGRATION.md)
+(`scripts/check_frontend_canon.py`, enforced in the web/olympus/digichat CI
+jobs).
 
 ### The move touched deploy config
 
