@@ -8,11 +8,13 @@
 @import "@digithings/design/site/site.css" layer(components);
 @import "@digithings/web/styles/web-theme.css";
 @import "@digithings/web/styles/nav-shell.css";
+@import "@digithings/web/styles/pricing.css";
 @import "@digithings/design/tearsheet/styles.css";
 
 /* Shared components (@digithings/web) carry token-backed utilities, and
    Tailwind never scans package sources on its own — point it at them. */
 @source "../../digiweb/web/src/components/NavShell.tsx";
+@source "../../digiweb/web/src/components/pricing";
 
 :root[data-theme] {
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
@@ -58,15 +60,11 @@
    contact tiers, clone-repo actions, and pipeline card spans now carry token
    utilities in their TSX.) */
 
-/* Managed contact tier: accent-tinted card variant. Two-color gradient +
-   color-mix border stay CSS per the leave rule; the box itself is utilities
-   in app/contact/page.tsx. */
-@layer components {
-  .price-card-accent {
-    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-    background: linear-gradient(180deg, var(--accent-weak), var(--surface));
-  }
-}
+/* (Accent decision, #1417: the featured/managed tier now wears the shared
+   `.pricing-tier-accent` flat color-mix wash from @digithings/web pricing.css —
+   the app-local `.price-card-accent` vertical gradient is deleted, keeping one
+   accent grammar across every pricing surface. An app-local override could not
+   compose anyway: card utilities beat @layer components.) */
 /* Tearsheet grammar (.ts-*) lives in @digithings/design/tearsheet/styles.css
    (imported at the top of this file). App-local tearsheet bits below:
    the @media print grammar further down (library page rhythm moved to
