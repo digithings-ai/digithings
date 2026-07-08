@@ -35,7 +35,7 @@ the broader delegation framework.
 |---|---|---|---|
 | Python dependency CVEs | `scheduled-maintenance.yml` — `dependency-audit` job + `pip-audit.yml` | weekly + on PR | Runs `pip-audit`, files an `exec:claude` + `risk:high` issue per weekly batch of findings |
 | Secret leaks | `gitleaks.yml` | on push / PR | Scans for hard-coded secrets, fails CI if any found |
-| Protected-path edits | `scripts/claude-hooks/protected-path-guard.sh` | PreToolUse hook | Blocks `.github/workflows/`, `SECURITY.md`, `docs/scoring/`, `digikey/` edits outside task branches |
+| Protected-path edits | `scripts/claude-hooks/protected-path-guard.sh` | PreToolUse hook | Blocks `.github/workflows/`, `SECURITY.md`, `docs/scoring/`, `config/litellm.yaml`, `projects/` edits outside properly-named branches — in both the current checkout and the primary tree when the session is rooted in a linked worktree |
 | Live-trading path edits | `scripts/hooks/pre-push.sh` | pre-push | Requires `Human-Approved-By:` trailer on commits touching live-trading paths |
 
 ## Workflow health
