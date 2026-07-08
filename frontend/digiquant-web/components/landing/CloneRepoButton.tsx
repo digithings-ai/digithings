@@ -28,19 +28,19 @@ export function CloneRepoButton({ className = "btn btn-ghost" }: { className?: s
   }, []);
 
   return (
-    <div className="clone-repo-actions">
+    <div className="flex w-full justify-start gap-[0.5rem]">
       <button
         type="button"
-        className={`${className} btn-clone-cmd`.trim()}
+        className={`${className} min-w-[6.35rem] justify-center px-[0.85rem] font-mono text-[0.72rem] normal-case tracking-normal`.trim()}
         onClick={onCopy}
         aria-label={
           copied ? "Clone command copied to clipboard" : "Copy git clone command for digiquant"
         }
       >
-        <span className="btn-clone-cmd-text">{copied ? "Copied!" : "git clone"}</span>
+        <span className="whitespace-nowrap">{copied ? "Copied!" : "git clone"}</span>
       </button>
       <a
-        className="btn btn-ghost btn-icon"
+        className="btn btn-ghost btn-icon min-w-[3.125rem] flex-none px-[0.65rem]"
         href={DIGIQUANT_REPO_URL}
         target="_blank"
         rel="noopener noreferrer"

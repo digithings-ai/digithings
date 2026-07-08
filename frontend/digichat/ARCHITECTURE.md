@@ -85,6 +85,23 @@ DigiKey). Both return a short-lived JWT + optional `litellm_proxy_api_key`.
 connection pool. Six tables: `tenants`, `user_tenants`, `api_keys`, `conversations`,
 `conversation_messages`, `quant_runs`. Managed by three migration files in `drizzle/`.
 
+**Design-canon theming** (`src/app/globals.css`, `src/app/layout.tsx`,
+`src/components/providers.tsx` — #1403): the app runs on the shared DigiThings token
+canon. `@digithings/design/tokens.css` defines `[data-theme="dark"|"light"]` semantic
+tokens; `@digithings/web/styles/web-theme.css` is the single Tailwind `@theme inline`
+bridge for token-named utilities; digichat's `globals.css` derives the shadcn variable
+set from those tokens under `:root[data-theme]` scopes (`--background: var(--bg)`,
+`--border: var(--hair)`, `--destructive: var(--down)`, …; dark `--primary`/`--ring`
+wear `--accent-digichat` rose, light runs the deeper phosphor teal). `<html>` ships
+`data-theme="dark"` + `.dark` as SSR defaults; the shared `themeInitScript` re-points
+both pre-paint (`dt-theme` localStorage key, shared with the marketing sites) and a
+`MutationObserver` (`ThemeClassSync` in `providers.tsx`) mirrors every later
+`[data-theme]` flip onto the `.dark`/`.light` classes for the Tailwind `dark:`
+variant. The old `@digithings/digichat-ui` `tokens-shadcn-bridge.css` (shadcn vars →
+token names, the reverse direction) is no longer imported; `/embed` sets
+`[data-theme]` on the root from the tenant `theme` (its own iframe document) and
+per-tenant accent hexes still override at the wrapper.
+
 **Source file reference table**
 
 | File | Purpose |

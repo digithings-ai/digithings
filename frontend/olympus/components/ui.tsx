@@ -25,21 +25,21 @@ export function StatCard({
   label,
   value,
   icon: Icon,
-  iconColor = 'text-fin-blue',
+  iconColor = 'text-accent',
   subtitle,
   valueClass = '',
 }: StatCardProps) {
   return (
     <div className="glass-card p-6">
       <div className="flex justify-between items-start">
-        <span className="text-xs font-semibold uppercase tracking-widest text-text-muted">{label}</span>
+        <span className="text-xs font-semibold uppercase tracking-widest text-ink-mute">{label}</span>
         {Icon && <Icon size={16} className={iconColor} />}
       </div>
       <div className={`text-3xl font-bold tabular-nums mt-2 ${valueClass}`}>
         {value}
       </div>
       {subtitle && (
-        <p className="text-xs text-text-muted mt-2">{subtitle}</p>
+        <p className="text-xs text-ink-mute mt-2">{subtitle}</p>
       )}
     </div>
   );
@@ -48,11 +48,11 @@ export function StatCard({
 /** Badge variant */
 export function Badge({ children, variant = 'default', className = '' }: BadgeProps) {
   const variants: Record<NonNullable<BadgeProps['variant']>, string> = {
-    default: 'bg-white/10 text-text-secondary border-border-subtle',
-    blue: 'bg-fin-blue/15 text-fin-blue border-fin-blue/30',
-    green: 'bg-fin-green/15 text-fin-green border-fin-green/30',
-    red: 'bg-fin-red/15 text-fin-red border-fin-red/30',
-    amber: 'bg-fin-amber/15 text-fin-amber border-fin-amber/30',
+    default: 'bg-ink/10 text-ink-soft border-hair',
+    blue: 'bg-accent/15 text-accent border-accent/30',
+    green: 'bg-up/15 text-up border-up/30',
+    red: 'bg-down/15 text-down border-down/30',
+    amber: 'bg-warn/15 text-warn border-warn/30',
   };
   return (
     <span
@@ -79,5 +79,5 @@ export function formatPct(v: number | null | undefined): string {
 /** Return Tailwind color class for positive/negative */
 export function pnlColor(v: number | null | undefined): string {
   if (v == null) return '';
-  return v >= 0 ? 'text-fin-green' : 'text-fin-red';
+  return v >= 0 ? 'text-up' : 'text-down';
 }

@@ -1,5 +1,5 @@
 export function AtlasMark({ className }: { className?: string }) {
-  const merged = ['text-text-primary', className].filter(Boolean).join(' ');
+  const merged = ['text-ink', className].filter(Boolean).join(' ');
   return (
     <svg
       width="28"

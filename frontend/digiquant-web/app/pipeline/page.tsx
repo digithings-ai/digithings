@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { DqNav } from "@/components/landing/DqNav";
+import { SiteNav } from "@/components/landing/SiteNav";
 import { Footer } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 
@@ -14,7 +14,7 @@ export default function PipelineRedirect() {
 
   return (
     <>
-      <DqNav />
+      <SiteNav />
       <main className="section dq-subpage" style={{ minHeight: "50vh", display: "grid", placeItems: "center" }}>
         <p style={{ color: "var(--ink-soft)" }}>
           Redirecting… <Link href="/#pipeline">Continue to pipeline</Link>

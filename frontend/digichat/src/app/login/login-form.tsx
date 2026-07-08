@@ -31,7 +31,7 @@ export function LoginForm({
             Continue with SSO
           </Button>
         ) : (
-          <p className="text-sm text-amber-200/90">
+          <p className="text-sm text-warn">
             OIDC is not configured (set AUTH_OIDC_ISSUER, AUTH_OIDC_CLIENT_ID,
             AUTH_OIDC_CLIENT_SECRET).
           </p>

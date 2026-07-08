@@ -1,6 +1,6 @@
 ## Goal
 
-Wire **`PricingMatrix`** + **`FaqAccordion`** (E3) into digiquant.io `/#pricing` section with honest open-core tier copy ([COPY_GUIDE.md §10](../../../../frontend/design/COPY_GUIDE.md)).
+Wire **`PricingMatrix`** + **`FaqAccordion`** (E3) into digiquant.io `/#pricing` section with honest open-core tier copy ([COPY_GUIDE.md §10](../../../../frontend/digiweb/design/COPY_GUIDE.md)).
 
 ## Component
 
@@ -25,8 +25,8 @@ Manual: navigate to `/#pricing`; FAQ keyboard accessible.
 
 ## Documentation to Update
 
-- [ ] `frontend/design/demos/digiquant-landing/DESIGN_DECISIONS.md`
-- [ ] `frontend/design/COPY_GUIDE.md` if tier copy changes
+- [ ] `frontend/digiweb/design/demos/digiquant-landing/DESIGN_DECISIONS.md`
+- [ ] `frontend/digiweb/design/COPY_GUIDE.md` if tier copy changes
 
 ## Out of Scope
 

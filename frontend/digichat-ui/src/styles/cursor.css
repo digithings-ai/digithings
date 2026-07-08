@@ -39,7 +39,7 @@
 .dtc-error {
   margin: 0.3rem 0 0;
   font-size: 0.8rem;
-  color: color-mix(in srgb, #e5484d 80%, var(--ink));
+  color: color-mix(in srgb, var(--down) 80%, var(--ink));
 }
 @media (prefers-reduced-motion: reduce) {
   .dtc-chip {

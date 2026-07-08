@@ -17,13 +17,24 @@ if [ "${DIGI_ALLOW_PROTECTED:-0}" = "1" ]; then
 fi
 
 # Protected path patterns (glob-style, matched against absolute path).
-protected=(
-  "$PROJECT_ROOT/SECURITY.md"
-  "$PROJECT_ROOT/.github/workflows/"
-  "$PROJECT_ROOT/docs/scoring/"
-  "$PROJECT_ROOT/config/litellm.yaml"
-  "$PROJECT_ROOT/projects/"
-)
+# Cover both the current checkout and the main repo behind it: project-root-guard
+# treats linked worktrees and the primary tree as one project, so protection must
+# span both or a worktree-rooted session could edit the main tree's copies.
+MAIN_REPO_ROOT="$(main_repo_root)"
+protected_roots=("$PROJECT_ROOT")
+if [[ -n "$MAIN_REPO_ROOT" && "$MAIN_REPO_ROOT" != "$PROJECT_ROOT" ]]; then
+  protected_roots+=("$MAIN_REPO_ROOT")
+fi
+protected=()
+for root in "${protected_roots[@]}"; do
+  protected+=(
+    "$root/SECURITY.md"
+    "$root/.github/workflows/"
+    "$root/docs/scoring/"
+    "$root/config/litellm.yaml"
+    "$root/projects/"
+  )
+done
 
 # Live-trading path regex (matches root agents.yml human_gates). The directory
 # fragment is anchored to digiquant — a bare '/live[/.]' also matched design
@@ -34,10 +45,12 @@ live_trading_regex='(live_trading|execute_trade|place_order|(^|/)digiquant/(.*/)
 # except live-trading, which is never allowed without DIGI_ALLOW_PROTECTED=1.
 branch="$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
 
-case "$target" in
-  *$PROJECT_ROOT/projects/*)
-    deny "projects/ is confidential — never edit via agent." ;;
-esac
+for root in "${protected_roots[@]}"; do
+  case "$target" in
+    *"$root"/projects/*)
+      deny "projects/ is confidential — never edit via agent." ;;
+  esac
+done
 
 if [[ "$target" =~ $live_trading_regex ]]; then
   deny "edit to live-trading path '$target' is blocked. \

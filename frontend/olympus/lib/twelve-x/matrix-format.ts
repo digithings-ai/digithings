@@ -13,12 +13,12 @@ export function directionStyle(direction: string): {
 } {
   const d = direction.trim().toLowerCase();
   if (d === 'bullish' || d === 'long' || d === 'buy')
-    return { text: 'text-fin-green', bg: 'bg-fin-green/10', border: 'border-fin-green/30', glyph: '▲' };
+    return { text: 'text-up', bg: 'bg-up/10', border: 'border-up/30', glyph: '▲' };
   if (d === 'bearish' || d === 'short' || d === 'sell')
-    return { text: 'text-fin-red', bg: 'bg-fin-red/10', border: 'border-fin-red/30', glyph: '▼' };
+    return { text: 'text-down', bg: 'bg-down/10', border: 'border-down/30', glyph: '▼' };
   if (d === 'watch')
-    return { text: 'text-fin-amber', bg: 'bg-fin-amber/10', border: 'border-fin-amber/30', glyph: '◆' };
-  return { text: 'text-text-secondary', bg: 'bg-white/[0.03]', border: 'border-border-subtle', glyph: '•' };
+    return { text: 'text-warn', bg: 'bg-warn/10', border: 'border-warn/30', glyph: '◆' };
+  return { text: 'text-ink-soft', bg: 'bg-white/[0.03]', border: 'border-hair', glyph: '•' };
 }
 
 /** Coarse direction bucket for tallying a desk's net tilt. */

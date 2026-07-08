@@ -11,6 +11,16 @@
  * its results in a ref. The per-scroll path is Motion's `useScroll` progress →
  * pure math on the cached metrics → setState. Cards are memoized so scroll
  * frames re-render only the transform wrappers, never the charts.
+ *
+ * Shared-stepper evaluation (#1417): @digithings/web's useScrollyFeatures maps
+ * progress → one active index over EQUAL dwells and, under its stepper media
+ * query (≤860px or reduced motion), unpins to render every slide in flow. This
+ * deck is not behavior-identical to that: card offsets are continuous pixel
+ * tweens over unequal budgets (0.82/1.12 × --dqss-enter-scroll) plus an intro
+ * hold and a CTA budget, small viewports KEEP the pinned stack (fit-scaled, not
+ * unpinned), and reduced motion is handled inline (discrete offsets + CSS
+ * at-rest layout). Adopting the hook would rewrite these scrubbing internals —
+ * out of scope, left as-is.
  */
 import {
   memo,
@@ -23,6 +33,10 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+// Hooks only — the same import the shared scrolly primitive (@digithings/web
+// motion/scrolly.tsx) uses internally; hooks don't pull the full animation
+// runtime. Element creators must come from @digithings/web's `m` (the app is
+// wrapped in LazyMotion strict, which throws on a full `motion.*` component).
 import { useScroll, useMotionValueEvent } from "motion/react";
 import Link from "next/link";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";

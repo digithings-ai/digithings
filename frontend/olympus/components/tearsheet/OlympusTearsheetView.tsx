@@ -7,7 +7,7 @@
  * absorbed Attribution diagnostics. One serif H1, one primary KPI strip (NOT a
  * MetricCard wall), two labeled .ts-panel tracks. Pure-SVG charts (no recharts in
  * the tracks) so window.print() yields a crisp PDF; the Download PDF button is
- * enabled in ALL states. F5 token rule: signed financial values use fin-green/red
+ * enabled in ALL states. F5 token rule: signed financial values use up/red
  * (toneClass); cyan --accent is reserved for the equity line + header chrome.
  */
 import type React from 'react';

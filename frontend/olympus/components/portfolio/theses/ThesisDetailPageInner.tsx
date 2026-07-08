@@ -49,7 +49,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
   if (loading) return <AtlasLoader />;
   if (error || !data)
     return (
-      <div className="flex items-center justify-center min-h-[40vh] text-fin-red">
+      <div className="flex items-center justify-center min-h-[40vh] text-down">
         {error || 'Failed to load'}
       </div>
     );
@@ -65,7 +65,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
           >
             <ArrowLeft size={16} /> Back to Theses
           </Link>
-          <p className="text-text-muted">
+          <p className="text-ink-mute">
             We don&apos;t have a thesis on record for <span className="font-mono">{thesisId}</span>.
           </p>
         </div>
@@ -86,8 +86,8 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
             >
               <ArrowLeft size={16} /> Back to Theses
             </Link>
-            <h1 className="font-display text-2xl text-text-primary">Unlinked expressions</h1>
-            <p className="max-w-2xl text-sm leading-relaxed text-text-secondary">
+            <h1 className="font-display text-2xl text-ink">Unlinked expressions</h1>
+            <p className="max-w-2xl text-sm leading-relaxed text-ink-soft">
               These holdings aren&apos;t yet tied to a named thesis. They&apos;ll roll up under a
               market view once the link is recorded.
             </p>
@@ -117,32 +117,32 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
           </Link>
 
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <h1 className="font-display text-3xl leading-tight text-text-primary">{t.name}</h1>
+            <h1 className="font-display text-3xl leading-tight text-ink">{t.name}</h1>
             <AsOfBadge date={lastUpdated} />
           </div>
 
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <div className="flex items-center gap-2">
               <ConvictionMeter value={pips} max={CONFIDENCE_PIPS} srLabel={confidenceLabel} />
-              <span className="text-xs text-text-muted tabular-nums">{confidenceLabel}</span>
+              <span className="text-xs text-ink-mute tabular-nums">{confidenceLabel}</span>
             </div>
             {t.horizon ? (
-              <span className="rounded-md border border-border-subtle px-2 py-0.5 text-[11px] text-text-secondary">
+              <span className="rounded-md border border-hair px-2 py-0.5 text-[11px] text-ink-soft">
                 {t.horizon}
               </span>
             ) : null}
             {t.vehicle ? (
-              <span className="font-mono text-xs text-text-secondary">{t.vehicle}</span>
+              <span className="font-mono text-xs text-ink-soft">{t.vehicle}</span>
             ) : null}
             {isNonActive(t.status) ? (
-              <span className="rounded-full border border-fin-amber/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-fin-amber">
+              <span className="rounded-full border border-warn/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-warn">
                 {t.status}
               </span>
             ) : null}
           </div>
 
           {t.notes ? (
-            <p className="max-w-3xl text-sm leading-relaxed text-text-secondary">{t.notes}</p>
+            <p className="max-w-3xl text-sm leading-relaxed text-ink-soft">{t.notes}</p>
           ) : null}
         </div>
 

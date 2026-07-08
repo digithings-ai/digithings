@@ -21,7 +21,7 @@ export default function MoversStrip({
 
   return (
     <div className={className}>
-      <div className="text-[10px] font-medium uppercase tracking-wide text-text-muted mb-1.5">
+      <div className="text-[10px] font-medium uppercase tracking-wide text-ink-mute mb-1.5">
         {title}
       </div>
       <div className="flex gap-2 overflow-x-auto -mx-1 px-1 snap-x">
@@ -30,10 +30,10 @@ export default function MoversStrip({
             key={m.currency}
             type="button"
             onClick={() => onSelect?.(m.currency)}
-            className="snap-start shrink-0 glass-card px-2.5 py-1.5 flex items-center gap-1.5 hover:bg-white/[0.04] transition-colors"
+            className="snap-start shrink-0 glass-card px-2.5 py-1.5 flex items-center gap-1.5 hover:bg-ink/[0.04] transition-colors"
           >
-            <span className="font-mono font-semibold text-text-primary">{m.currency}</span>
-            <span className="tabular-nums text-[11px] font-mono text-text-secondary">
+            <span className="font-mono font-semibold text-ink">{m.currency}</span>
+            <span className="tabular-nums text-[11px] font-mono text-ink-soft">
               {m.scoreNow.toFixed(2)}
             </span>
             <DeltaChip delta={m.scoreDelta} />

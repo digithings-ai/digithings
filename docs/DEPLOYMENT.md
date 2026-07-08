@@ -116,7 +116,7 @@ One public domain is in use for DigiChat; see [docs/adr/0018-digichat-path-routi
 
 ### digithings.ai — static landing page
 
-- **Source:** `frontend/digithings-web/` (Next.js static export; and shared `frontend/design/`, `frontend/web/` assets).
+- **Source:** `frontend/digithings-web/` (Next.js static export; and shared `frontend/digiweb/design/`, `frontend/digiweb/web/` assets).
 - **Deployment:** **Cloudflare Pages** via `scripts/build-digithings.sh` (CI: Cloudflare Pages project `digithings-ai`).
 - **Legacy:** the `static.yml` GitHub Pages workflow and the pre-migration `frontend/digithings/` static HTML tree were both **removed** — the former in the 2026-06 workflow cleanup, the latter in #1240 once `frontend/digithings-web` (Next.js) fully replaced it as the build source; do not use GitHub Pages for this domain.
 - **Nav link:** the landing page links to `/chat` (path-routed to the DigiChat container per ADR-0018, not a subdomain).

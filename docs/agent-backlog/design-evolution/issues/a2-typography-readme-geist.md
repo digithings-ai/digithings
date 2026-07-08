@@ -1,6 +1,6 @@
 ## Goal
 
-Align `frontend/design/README.md` typography documentation with reality: **Geist Sans + Geist Mono** are the canonical fonts in Next.js apps; deprecate Inter/JetBrains Mono as documented defaults per [`EVOLUTION.md` §4](../../../../frontend/design/EVOLUTION.md).
+Align `frontend/digiweb/design/README.md` typography documentation with reality: **Geist Sans + Geist Mono** are the canonical fonts in Next.js apps; deprecate Inter/JetBrains Mono as documented defaults per [`EVOLUTION.md` §4](../../../../frontend/digiweb/design/EVOLUTION.md).
 
 ## Component
 
@@ -8,10 +8,10 @@ Align `frontend/design/README.md` typography documentation with reality: **Geist
 
 ## Acceptance Criteria
 
-- [ ] `frontend/design/README.md` typography table lists Geist Sans (body), Geist Mono (labels/code/data), Fraunces or Instrument Serif (marketing display only)
+- [ ] `frontend/digiweb/design/README.md` typography table lists Geist Sans (body), Geist Mono (labels/code/data), Fraunces or Instrument Serif (marketing display only)
 - [ ] Legacy Inter/JetBrains entries marked **deprecated** with migration note
 - [ ] Role table matches `EVOLUTION.md` §4 (display / body / label / data / code)
-- [ ] `frontend/design/EVOLUTION.md` Phase A typography checkbox marked done
+- [ ] `frontend/digiweb/design/EVOLUTION.md` Phase A typography checkbox marked done
 - [ ] No code changes to font loading in this task (docs-only)
 
 ## Test Requirements
@@ -20,8 +20,8 @@ Align `frontend/design/README.md` typography documentation with reality: **Geist
 
 ## Documentation to Update
 
-- [ ] `frontend/design/README.md`
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/README.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Scoring Targets
 

@@ -8,8 +8,8 @@ on:
   pull_request:
     paths:
       - "frontend/digithings-web/**"
-      - "frontend/web/**"
-      - "frontend/design/**"
+      - "frontend/digiweb/web/**"
+      - "frontend/digiweb/design/**"
       - "scripts/build-digithings.sh"
       - ".github/workflows/deploy-digithings-cloudflare.yml"
   workflow_dispatch:

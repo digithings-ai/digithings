@@ -50,7 +50,7 @@ function WordSwapBlock({ oldText, newText }: { oldText: string; newText: string 
   const mono = isTableLine(oldText) || isTableLine(newText);
   return (
     <div
-      className={`whitespace-pre-wrap px-3 py-1 border-l-2 border-amber-500/50 bg-bg-secondary/60 leading-relaxed text-text-secondary/95 ${
+      className={`whitespace-pre-wrap px-3 py-1 border-l-2 border-warn/50 bg-term-bg/60 leading-relaxed text-ink-soft/95 ${
         mono ? 'font-mono text-[12px]' : 'text-sm font-sans'
       }`}
     >
@@ -59,7 +59,7 @@ function WordSwapBlock({ oldText, newText }: { oldText: string; newText: string 
           return (
             <span
               key={j}
-              className="bg-emerald-950/55 text-emerald-100 rounded-sm px-0.5 border-b border-emerald-500/60"
+              className="bg-up/15 text-up rounded-sm px-0.5 border-b border-up/60"
             >
               {w.value}
             </span>
@@ -69,7 +69,7 @@ function WordSwapBlock({ oldText, newText }: { oldText: string; newText: string 
           return (
             <span
               key={j}
-              className="bg-red-950/50 text-red-100/95 line-through decoration-red-300/50 rounded-sm px-0.5"
+              className="bg-down/15 text-down line-through decoration-down/50 rounded-sm px-0.5"
             >
               {w.value}
             </span>
@@ -103,14 +103,14 @@ function compareModeFootnote(pair: DocumentDiffPair): string {
 }
 
 function segmentOuterClass() {
-  return 'inline-flex rounded-lg border border-border-subtle p-0.5 bg-bg-secondary/80 gap-0.5';
+  return 'inline-flex rounded-lg border border-hair p-0.5 bg-term-bg/80 gap-0.5';
 }
 
 function segmentBtnClass(active: boolean) {
   return `rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${
     active
-      ? 'border-fin-blue/40 bg-fin-blue/15 text-fin-blue'
-      : 'border-transparent text-text-muted hover:text-text-primary hover:bg-white/[0.06]'
+      ? 'border-accent/40 bg-accent/15 text-accent'
+      : 'border-transparent text-ink-mute hover:text-ink hover:bg-ink/[0.06]'
   }`;
 }
 
@@ -155,7 +155,7 @@ function DocumentArtifactCompareDropdown({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-border-subtle bg-bg-secondary text-text-secondary hover:border-fin-blue/40 hover:text-text-primary transition-colors"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-hair bg-term-bg text-ink-soft hover:border-accent/40 hover:text-ink transition-colors"
         aria-expanded={open ? 'true' : 'false'}
         aria-haspopup="listbox"
       >
@@ -163,7 +163,7 @@ function DocumentArtifactCompareDropdown({
         <ChevronDown size={14} className={`opacity-70 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,20rem)] rounded-lg border border-border-subtle bg-[#141414] shadow-xl overflow-hidden">
+        <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,20rem)] rounded-lg border border-hair bg-term-bg shadow-xl overflow-hidden">
           <div role="listbox" aria-label="Compare document to" className="py-1">
             <button
               type="button"
@@ -177,10 +177,10 @@ function DocumentArtifactCompareDropdown({
               }}
               className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
                 !canPrev
-                  ? 'text-text-muted opacity-40 cursor-not-allowed'
+                  ? 'text-ink-mute opacity-40 cursor-not-allowed'
                   : compareKind === 'previous_day'
-                    ? 'bg-fin-blue/15 text-fin-blue'
-                    : 'text-text-secondary hover:bg-white/[0.06] hover:text-text-primary'
+                    ? 'bg-accent/15 text-accent'
+                    : 'text-ink-soft hover:bg-ink/[0.06] hover:text-ink'
               }`}
             >
               {comparePresetLabel('previous_day', anchors)}
@@ -197,16 +197,16 @@ function DocumentArtifactCompareDropdown({
               }}
               className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
                 !canBase
-                  ? 'text-text-muted opacity-40 cursor-not-allowed'
+                  ? 'text-ink-mute opacity-40 cursor-not-allowed'
                   : compareKind === 'delta_baseline'
-                    ? 'bg-fin-blue/15 text-fin-blue'
-                    : 'text-text-secondary hover:bg-white/[0.06] hover:text-text-primary'
+                    ? 'bg-accent/15 text-accent'
+                    : 'text-ink-soft hover:bg-ink/[0.06] hover:text-ink'
               }`}
             >
               {comparePresetLabel('delta_baseline', anchors)}
             </button>
           </div>
-          <p className="text-[10px] text-text-muted px-2.5 py-1.5 border-t border-border-subtle bg-bg-secondary/80">
+          <p className="text-[10px] text-ink-mute px-2.5 py-1.5 border-t border-hair bg-term-bg/80">
             Previous or baseline — or use the date field for a custom run day.
           </p>
         </div>
@@ -255,7 +255,7 @@ export default function GenericDiffDocumentView({
   const customReady = compareKind !== 'custom_date' || /^\d{4}-\d{2}-\d{2}$/.test(customCompareDate.trim());
 
   if (anchorsLoading) {
-    return <p className="text-text-muted text-sm">Loading document…</p>;
+    return <p className="text-ink-mute text-sm">Loading document…</p>;
   }
 
   const toolbar = (
@@ -307,7 +307,7 @@ export default function GenericDiffDocumentView({
               }}
             />
             <label className="flex flex-col gap-0.5 min-w-[10.5rem]">
-              <span className="text-[10px] uppercase tracking-wider text-text-muted">Or compare to date</span>
+              <span className="text-[10px] uppercase tracking-wider text-ink-mute">Or compare to date</span>
               <input
                 type="date"
                 value={customCompareDate}
@@ -318,7 +318,7 @@ export default function GenericDiffDocumentView({
                   else if (canPrev) setCompareKind('previous_day');
                   else if (canBase) setCompareKind('delta_baseline');
                 }}
-                className="rounded-md border border-border-subtle bg-bg-secondary px-2 py-1.5 text-xs text-text-primary font-mono focus:outline-none focus:ring-1 focus:ring-inset focus:ring-fin-blue/30"
+                className="rounded-md border border-hair bg-term-bg px-2 py-1.5 text-xs text-ink font-mono focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent/30"
                 aria-label="Compare this document to a custom run date"
               />
             </label>
@@ -343,7 +343,7 @@ export default function GenericDiffDocumentView({
     return (
       <div className="space-y-4">
         {toolbar}
-        <p className="text-text-muted text-sm">Pick a compare date, or clear the custom date field to use a preset.</p>
+        <p className="text-ink-mute text-sm">Pick a compare date, or clear the custom date field to use a preset.</p>
       </div>
     );
   }
@@ -352,7 +352,7 @@ export default function GenericDiffDocumentView({
     return (
       <div className="space-y-4">
         {toolbar}
-        <p className="text-text-muted text-sm">Loading comparison…</p>
+        <p className="text-ink-mute text-sm">Loading comparison…</p>
       </div>
     );
   }
@@ -361,7 +361,7 @@ export default function GenericDiffDocumentView({
     return (
       <div className="space-y-3">
         {toolbar}
-        <p className="text-fin-red text-xs">{error}</p>
+        <p className="text-down text-xs">{error}</p>
         <div className="prose prose-invert max-w-none text-sm">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
         </div>
@@ -373,7 +373,7 @@ export default function GenericDiffDocumentView({
     return (
       <div className="space-y-4">
         {toolbar}
-        <p className="text-text-muted text-sm">
+        <p className="text-ink-mute text-sm">
           No comparison document for this choice — showing the current version below.
         </p>
         <div className="prose prose-invert max-w-none text-sm leading-relaxed">
@@ -386,21 +386,21 @@ export default function GenericDiffDocumentView({
   return (
     <div className="space-y-4">
       {toolbar}
-      <p className="text-text-muted text-[11px]" title={compareModeFootnote(pair)}>
-        Diff vs <span className="font-mono text-fin-blue">{pair.compareDate}</span>
-        <span className="text-text-muted"> · {compareModeFootnote(pair)}</span>
+      <p className="text-ink-mute text-[11px]" title={compareModeFootnote(pair)}>
+        Diff vs <span className="font-mono text-accent">{pair.compareDate}</span>
+        <span className="text-ink-mute"> · {compareModeFootnote(pair)}</span>
       </p>
 
       {diffLayout === 'inline' ? (
         <div>
           {!hasDiff ? (
-            <p className="text-text-muted text-sm mb-3">No text changes vs comparison version.</p>
+            <p className="text-ink-mute text-sm mb-3">No text changes vs comparison version.</p>
           ) : (
-            <p className="text-[10px] uppercase tracking-wider text-text-muted mb-2">
+            <p className="text-[10px] uppercase tracking-wider text-ink-mute mb-2">
               Line diff with word highlights where a line was replaced · removed (red) · added (green)
             </p>
           )}
-          <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 text-sm leading-relaxed max-h-[min(62vh,720px)] overflow-auto">
+          <div className="rounded-lg border border-hair bg-term-bg/40 text-sm leading-relaxed max-h-[min(62vh,720px)] overflow-auto">
             {lineItems.map((item, i) => {
               if (item.kind === 'wordSwap') {
                 return <WordSwapBlock key={i} oldText={item.oldText} newText={item.newText} />;
@@ -411,7 +411,7 @@ export default function GenericDiffDocumentView({
                 return (
                   <span
                     key={i}
-                    className={`block whitespace-pre-wrap px-3 py-0.5 bg-emerald-950/50 text-emerald-100 border-l-2 border-emerald-500/80 ${fontClass}`}
+                    className={`block whitespace-pre-wrap px-3 py-0.5 bg-up/10 text-up border-l-2 border-up/70 ${fontClass}`}
                   >
                     {item.text}
                   </span>
@@ -421,7 +421,7 @@ export default function GenericDiffDocumentView({
                 return (
                   <span
                     key={i}
-                    className={`block whitespace-pre-wrap px-3 py-0.5 bg-red-950/45 text-red-100/95 border-l-2 border-red-500/70 line-through decoration-red-300/50 ${fontClass}`}
+                    className={`block whitespace-pre-wrap px-3 py-0.5 bg-down/10 text-down border-l-2 border-down/60 line-through decoration-down/50 ${fontClass}`}
                   >
                     {item.text}
                   </span>
@@ -430,7 +430,7 @@ export default function GenericDiffDocumentView({
               return (
                 <span
                   key={i}
-                  className={`block whitespace-pre-wrap px-3 py-0.5 text-text-secondary/90 ${fontClass}`}
+                  className={`block whitespace-pre-wrap px-3 py-0.5 text-ink-soft/90 ${fontClass}`}
                 >
                   {item.text}
                 </span>
@@ -440,18 +440,18 @@ export default function GenericDiffDocumentView({
         </div>
       ) : (
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-text-muted mb-2">
+          <p className="text-[10px] uppercase tracking-wider text-ink-mute mb-2">
             Comparison (left) · current (right)
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[min(62vh,720px)] overflow-auto">
-            <div className="rounded-lg border border-border-subtle bg-bg-secondary/30 p-3 min-h-0 overflow-auto">
-              <p className="text-[10px] font-mono text-text-muted mb-2">Compare — {pair.compareDate}</p>
+            <div className="rounded-lg border border-hair bg-term-bg/30 p-3 min-h-0 overflow-auto">
+              <p className="text-[10px] font-mono text-ink-mute mb-2">Compare — {pair.compareDate}</p>
               <div className="prose prose-invert max-w-none text-sm leading-relaxed">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{pair.beforeMarkdown}</ReactMarkdown>
               </div>
             </div>
-            <div className="rounded-lg border border-border-subtle bg-bg-secondary/30 p-3 min-h-0 overflow-auto">
-              <p className="text-[10px] font-mono text-text-muted mb-2">Current — {pair.targetDate}</p>
+            <div className="rounded-lg border border-hair bg-term-bg/30 p-3 min-h-0 overflow-auto">
+              <p className="text-[10px] font-mono text-ink-mute mb-2">Current — {pair.targetDate}</p>
               <div className="prose prose-invert max-w-none text-sm leading-relaxed">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{pair.afterMarkdown}</ReactMarkdown>
               </div>
