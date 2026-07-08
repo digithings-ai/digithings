@@ -1,28 +1,23 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useBrushRange } from '@/lib/hooks/use-brush-range';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Area,
-  Bar,
-  BarChart,
-  Brush,
-  CartesianGrid,
-  Cell,
-  ComposedChart,
-  Line,
-  ReferenceLine,
-  ResponsiveContainer,
-  Scatter,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+  AreaSeries,
+  LineStyle,
+  createSeriesMarkers,
+  type IPriceLine,
+  type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarker,
+  type Time,
+} from 'lightweight-charts';
 import { fetchPositionPriceChart } from '@/lib/queries';
 import { buildEventContributionSteps } from '@/lib/position-contribution-event-steps';
 import { buildPositionContributionToNavSeries, type PositionContributionPoint } from '@/lib/position-contribution-series';
 import type { NavChartPoint, PositionHistoryRow, PositionPriceChartData, PositionPriceChartEvent } from '@/lib/types';
 import { EVENT_COLORS, useChartColors, withAlpha } from '@/lib/chart-colors';
+import { ChartTipShell, toLineData, useChartTip, useLightweightChart } from '@/lib/lw-chart';
+import { PositionContributionEventBars, type EventBarDatum } from './PositionContributionEventBars';
 
 function subtractIsoDays(iso: string, days: number): string {
   const parts = iso.split('-').map(Number);
@@ -59,7 +54,8 @@ function rowOnOrAfter(rows: PositionContributionPoint[], iso: string): PositionC
   return rows.find((r) => r.date >= iso) ?? null;
 }
 
-type ScatterRow = PositionContributionPoint & {
+/** An OPEN/EXIT/ADD/TRIM event snapped onto its (on-or-after) series day. */
+type EventMarkerRow = PositionContributionPoint & {
   event: PositionPriceChartEvent['event'];
   markPrice: number | null;
   weight_pct: number | null;
@@ -68,51 +64,7 @@ type ScatterRow = PositionContributionPoint & {
   reason: string | null;
 };
 
-function ContribTooltip({
-  active,
-  payload,
-  closeByDate,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload: PositionContributionPoint & Partial<ScatterRow> }>;
-  closeByDate?: Map<string, number>;
-}) {
-  if (!active || !payload?.length) return null;
-  const p = payload[0].payload;
-  const px = closeByDate?.get(p.date);
-  if ('event' in p && p.event) {
-    return (
-      <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-xs">
-        <p className={`font-mono font-semibold ${eventLabelClass(p.event)}`}>
-          {p.event}
-        </p>
-        <p className="text-ink-soft mt-1 font-mono">{p.date}</p>
-        <p className="text-ink tabular-nums mt-0.5">
-          Cumulative: {p.cumPp.toFixed(3)} ppt
-        </p>
-        {px != null ? (
-          <p className="text-ink-mute tabular-nums text-[11px] mt-1">Close (proxy day): ${px.toFixed(2)}</p>
-        ) : null}
-        {p.weight_pct != null ? (
-          <p className="text-ink-mute mt-1 tabular-nums">Weight after: {p.weight_pct.toFixed(2)}%</p>
-        ) : null}
-        {p.reason ? <p className="text-ink-mute mt-1.5 text-[11px] leading-snug">{p.reason}</p> : null}
-      </div>
-    );
-  }
-  return (
-    <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg">
-      <p className="font-mono text-ink-soft">{p.date}</p>
-      <p className="text-ink tabular-nums mt-0.5">Cumulative: {p.cumPp.toFixed(3)} ppt</p>
-      <p className="text-ink-mute tabular-nums text-[11px] mt-1">Step: {p.dailyPp.toFixed(4)} ppt</p>
-      {px != null ? (
-        <p className="text-ink-mute tabular-nums text-[11px] mt-1">Close: ${px.toFixed(2)}</p>
-      ) : null}
-    </div>
-  );
-}
-
-function ContribChartBrushPanel({
+function ContribChartPanel({
   ticker,
   rangeLabel,
   chartRows,
@@ -128,32 +80,28 @@ function ContribChartBrushPanel({
   closeByDate: Map<string, number>;
   events: PositionPriceChartEvent[];
   firstEntryDate: string | null;
-  eventBarData: Array<{ name: string; deltaPp: number; fill: string }>;
+  eventBarData: EventBarDatum[];
   contribTickDecimals: number;
 }) {
-  const chart = useChartColors();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const gradientId = useId().replace(/:/g, '');
-  const { brushStart, brushEnd, setBrushStart, setBrushEnd } = useBrushRange(chartRows.length);
+  const { containerRef, chart, colors, isAlive } = useLightweightChart();
+  const tip = useChartTip(chart, containerRef, isAlive);
+  const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
+  const zeroLineRef = useRef<IPriceLine | null>(null);
+  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
-  const visibleRows = useMemo(() => {
-    if (!chartRows.length) return [];
-    const end = Math.min(brushEnd, chartRows.length - 1);
-    const start = Math.max(0, Math.min(brushStart, end));
-    return chartRows.slice(start, end + 1);
-  }, [chartRows, brushStart, brushEnd]);
+  const byDate = useMemo(() => new Map(chartRows.map((r) => [r.date, r])), [chartRows]);
 
   const markers = useMemo(() => {
     const evs = events.filter((e) => e.event !== 'HOLD');
-    if (!chartRows.length) return [] as ScatterRow[];
+    if (!chartRows.length) return [] as EventMarkerRow[];
     const first = chartRows[0].date;
     const last = chartRows[chartRows.length - 1].date;
-    const inRange = evs.filter((e) => e.date >= first && e.date <= last);
-    return inRange
-      .map((ev) => {
+    return evs
+      .filter((e) => e.date >= first && e.date <= last)
+      .map((ev): EventMarkerRow | null => {
         const tr = rowOnOrAfter(chartRows, ev.date);
         if (!tr) return null;
-        const row: ScatterRow = {
+        return {
           ...tr,
           event: ev.event,
           markPrice: ev.price,
@@ -162,113 +110,103 @@ function ContribChartBrushPanel({
           weight_change_pct: ev.weight_change_pct,
           reason: ev.reason,
         };
-        return row;
       })
-      .filter((x): x is ScatterRow => x != null);
+      .filter((x): x is EventMarkerRow => x != null)
+      .sort((a, b) => a.date.localeCompare(b.date));
   }, [events, chartRows]);
 
-  const scatterInView = useMemo(() => {
-    if (!visibleRows.length || !markers.length) return [] as ScatterRow[];
-    const d0 = visibleRows[0].date;
-    const d1 = visibleRows[visibleRows.length - 1].date;
-    return markers.filter((m) => m.date >= d0 && m.date <= d1);
-  }, [visibleRows, markers]);
-
-  const onBrushChange = useCallback((e: { startIndex?: number; endIndex?: number }) => {
-    if (e.startIndex !== undefined) setBrushStart(e.startIndex);
-    if (e.endIndex !== undefined) setBrushEnd(e.endIndex);
-  }, [setBrushEnd, setBrushStart]);
-
-  const resetView = useCallback(() => {
-    if (!chartRows.length) return;
-    setBrushStart(0);
-    setBrushEnd(chartRows.length - 1);
-  }, [chartRows, setBrushEnd, setBrushStart]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || !chartRows.length) return;
-
-    const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) return;
-      const n = chartRows.length;
-      if (n < 2) return;
-      let start = Math.max(0, Math.min(brushStart, brushEnd));
-      let end = Math.max(start, Math.min(n - 1, Math.max(brushStart, brushEnd)));
-      const span = end - start + 1;
-      const mid = (start + end) / 2;
-
-      e.preventDefault();
-
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-        const step = Math.max(1, Math.floor(span * 0.12));
-        const dir = e.deltaX > 0 ? 1 : -1;
-        let ns = start + dir * step;
-        let ne = ns + span - 1;
-        if (ns < 0) {
-          ne -= ns;
-          ns = 0;
-        }
-        if (ne > n - 1) {
-          ns -= ne - (n - 1);
-          ne = n - 1;
-        }
-        if (ns < 0) ns = 0;
-        setBrushStart(ns);
-        setBrushEnd(ne);
-        return;
-      }
-
-      const zoomIn = e.deltaY < 0;
-      let newSpan = zoomIn ? Math.max(5, Math.floor(span * 0.88)) : Math.min(n, Math.ceil(span * 1.12));
-      newSpan = Math.max(3, Math.min(n, newSpan));
-      let newStart = Math.round(mid - newSpan / 2);
-      let newEnd = newStart + newSpan - 1;
-      if (newStart < 0) {
-        newEnd -= newStart;
-        newStart = 0;
-      }
-      if (newEnd > n - 1) {
-        newStart -= newEnd - (n - 1);
-        newEnd = n - 1;
-      }
-      if (newStart < 0) newStart = 0;
-      setBrushStart(newStart);
-      setBrushEnd(newEnd);
-    };
-
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [brushEnd, brushStart, chartRows, setBrushEnd, setBrushStart]);
-
   const entryLineDate = useMemo(() => {
-    if (!firstEntryDate || !visibleRows.length) return null;
-    const a = visibleRows[0].date;
-    const b = visibleRows[visibleRows.length - 1].date;
-    if (firstEntryDate < a || firstEntryDate > b) return null;
-    return rowOnOrAfter(visibleRows, firstEntryDate)?.date ?? null;
-  }, [firstEntryDate, visibleRows]);
+    if (!firstEntryDate || !chartRows.length) return null;
+    if (firstEntryDate < chartRows[0].date || firstEntryDate > chartRows[chartRows.length - 1].date) {
+      return null;
+    }
+    return rowOnOrAfter(chartRows, firstEntryDate)?.date ?? null;
+  }, [firstEntryDate, chartRows]);
+
+  // Cumulative-ppt series + data.
+  useEffect(() => {
+    if (!chart || !chartRows.length) return;
+    const series = chart.addSeries(AreaSeries, {
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceFormat: {
+        type: 'custom',
+        formatter: (v: number) => v.toFixed(contribTickDecimals),
+        minMove: 0.0001,
+      },
+    });
+    series.setData(toLineData(chartRows, (r) => r.date, (r) => r.cumPp));
+    seriesRef.current = series;
+    markersRef.current = createSeriesMarkers(series, []);
+    zeroLineRef.current = series.createPriceLine({
+      price: 0,
+      lineStyle: LineStyle.Dashed,
+      lineWidth: 1,
+      axisLabelVisible: false,
+      color: withAlpha(colors.ink, 0.12),
+    });
+    chart.timeScale().fitContent();
+    return () => {
+      seriesRef.current = null;
+      markersRef.current = null;
+      zeroLineRef.current = null;
+      if (isAlive()) chart.removeSeries(series);
+    };
+    // colors is applied by the effect below; recreate only on data changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chart, chartRows, contribTickDecimals, isAlive]);
+
+  // Token colors + event/entry markers (re-applied on theme flips).
+  useEffect(() => {
+    seriesRef.current?.applyOptions({
+      lineColor: colors.accent,
+      topColor: withAlpha(colors.accent, 0.35),
+      bottomColor: withAlpha(colors.accent, 0),
+    });
+    zeroLineRef.current?.applyOptions({ color: withAlpha(colors.ink, 0.12) });
+    const marks: SeriesMarker<Time>[] = [];
+    if (entryLineDate) {
+      marks.push({
+        time: entryLineDate as Time,
+        position: 'belowBar',
+        shape: 'arrowUp',
+        color: withAlpha(colors.up, 0.65),
+        text: 'Entry',
+        size: 1,
+      });
+    }
+    markers.forEach((m, i) => {
+      marks.push({
+        time: m.date as Time,
+        position: 'inBar',
+        shape: 'circle',
+        color: eventDotColor(m.event),
+        size: m.event === 'TRIM' || m.event === 'ADD' ? 1 : 2,
+        id: `evt:${i}`,
+      });
+    });
+    marks.sort((a, b) => String(a.time).localeCompare(String(b.time)));
+    markersRef.current?.setMarkers(marks);
+  }, [colors, chartRows, markers, entryLineDate]);
+
+  const fitAll = useCallback(() => {
+    chart?.timeScale().fitContent();
+  }, [chart]);
 
   const chartEnd = chartRows[chartRows.length - 1].date;
 
-  const contributionYDomain = useMemo((): [number, number] | ['auto', 'auto'] => {
-    const rows = visibleRows.length ? visibleRows : chartRows;
-    if (!rows.length) return ['auto', 'auto'];
-    let lo = Infinity;
-    let hi = -Infinity;
-    for (const r of rows) {
-      lo = Math.min(lo, r.cumPp);
-      hi = Math.max(hi, r.cumPp);
-    }
-    if (!Number.isFinite(lo)) return ['auto', 'auto'];
-    const span = Math.max(hi - lo, 0);
-    const pad =
-      span > 0 ? Math.max(span * 0.12, 0.002) : Math.max(Math.abs(hi), 0.01) * 0.15 + 0.005;
-    return [lo - pad, hi + pad];
-  }, [visibleRows, chartRows]);
+  const hoveredMarker = useMemo(() => {
+    const id = tip?.param.hoveredObjectId;
+    if (typeof id !== 'string' || !id.startsWith('evt:')) return null;
+    return markers[Number(id.slice(4))] ?? null;
+  }, [tip, markers]);
+
+  const tipRow = tip ? byDate.get(tip.iso) : undefined;
+  const tipClose = tip ? closeByDate.get(tip.iso) : undefined;
 
   return (
-    <div ref={containerRef} className="rounded-xl border border-hair bg-term-bg/20 overflow-hidden">
+    <div className="rounded-xl border border-hair bg-term-bg/20 overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-2 px-4 pt-3 pb-1">
         <div>
           <p className="text-[11px] text-ink-mute uppercase tracking-wider">Contribution to portfolio</p>
@@ -278,199 +216,60 @@ function ContribChartBrushPanel({
             <span className="text-ink-soft text-xs font-mono">{rangeLabel}</span>
           </p>
           <p className="text-[10px] text-ink-mute mt-1 font-mono">
-            {chartRows[0].date} → {chartEnd}
+            {chartRows[0].date} → {chartEnd} · ppt (portfolio)
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
           <button
             type="button"
-            onClick={resetView}
+            onClick={fitAll}
             className="text-[11px] px-2.5 py-1 rounded-lg border border-hair text-ink-soft hover:bg-ink/[0.04] hover:text-ink transition-colors"
           >
             Fit all
           </button>
+          <p className="text-[10px] text-ink-mute">Drag to pan · scroll to zoom</p>
         </div>
       </div>
 
-      <div className="h-[min(320px,42vh)] min-h-[220px] w-full px-2 pb-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={visibleRows} margin={{ top: 12, right: 14, left: 4, bottom: 4 }}>
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={chart.accent} stopOpacity={0.35} />
-                <stop offset="100%" stopColor={chart.accent} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke={chart.hair} vertical={false} />
-            <XAxis
-              dataKey="date"
-              tick={{ fill: chart.axis, fontSize: 11 }}
-              tickFormatter={(d: string) => (d?.length >= 10 ? d.slice(5) : d)}
-              minTickGap={32}
-            />
-            <YAxis
-              domain={contributionYDomain}
-              tick={{ fill: chart.axis, fontSize: 11 }}
-              width={58}
-              tickFormatter={(v) =>
-                typeof v === 'number' ? v.toFixed(contribTickDecimals) : String(v)
-              }
-              label={{
-                value: 'ppt (portfolio)',
-                angle: -90,
-                position: 'insideLeft',
-                fill: chart.axis,
-                fontSize: 10,
-              }}
-            />
-            <Tooltip
-              content={(tipProps) => (
-                <ContribTooltip
-                  active={tipProps.active}
-                  payload={
-                    tipProps.payload as Array<{ payload: PositionContributionPoint & Partial<ScatterRow> }> | undefined
-                  }
-                  closeByDate={closeByDate}
-                />
-              )}
-              cursor={{ stroke: withAlpha(chart.ink, 0.12) }}
-            />
-            <ReferenceLine y={0} stroke={withAlpha(chart.ink, 0.12)} strokeDasharray="3 3" />
-            {entryLineDate ? (
-              <ReferenceLine
-                x={entryLineDate}
-                stroke={withAlpha(chart.up, 0.45)}
-                strokeDasharray="4 4"
-                label={{ value: 'Entry', fill: chart.axis, fontSize: 10 }}
-              />
-            ) : null}
-            <Area
-              type="monotone"
-              dataKey="cumPp"
-              stroke="none"
-              fill={`url(#${gradientId})`}
-              isAnimationActive={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="cumPp"
-              stroke={chart.accent}
-              dot={false}
-              strokeWidth={2}
-              name="Cumulative pp"
-              isAnimationActive={false}
-            />
-            <Scatter
-              data={scatterInView}
-              dataKey="cumPp"
-              fill={chart.accent}
-              isAnimationActive={false}
-              shape={(raw: unknown) => {
-                const props = raw as { cx?: number; cy?: number; payload?: ScatterRow };
-                const { cx, cy, payload } = props;
-                if (cx == null || cy == null || !payload?.event) return <g />;
-                const r = payload.event === 'TRIM' || payload.event === 'ADD' ? 4 : 5;
-                return (
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={r}
-                    fill={eventDotColor(payload.event)}
-                    stroke={chart.bg}
-                    strokeWidth={1.5}
-                  />
-                );
-              }}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="h-16 px-2 pb-3">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartRows} margin={{ top: 2, right: 14, left: 4, bottom: 2 }}>
-            <XAxis dataKey="date" hide />
-            <YAxis hide domain={['auto', 'auto']} />
-            <Line
-              type="monotone"
-              dataKey="cumPp"
-              stroke={chart.accent}
-              strokeOpacity={0.4}
-              dot={false}
-              strokeWidth={1}
-              isAnimationActive={false}
-            />
-            <Brush
-              dataKey="date"
-              height={28}
-              stroke={chart.accent}
-              fill={withAlpha(chart.accent, 0.08)}
-              travellerWidth={10}
-              startIndex={brushStart}
-              endIndex={brushEnd}
-              onChange={onBrushChange}
-              tickFormatter={(d: string) => (typeof d === 'string' && d.length >= 7 ? d.slice(5) : '')}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-
-      {eventBarData.length > 0 ? (
-        <div className="border-t border-hair px-4 py-4">
-          <p className="text-[11px] text-ink-mute uppercase tracking-wider">Δ ppt between activity dates</p>
-          <p className="text-[11px] text-ink-mute mt-1 mb-3 leading-snug">
-            Each bar is the change in cumulative portfolio attribution (ppt) from the prior step to this activity
-            (NAV-aligned). Green / red = contribution added or lost in that leg.
-          </p>
-          <div
-            className="w-full"
-            style={{ height: Math.min(280, Math.max(120, eventBarData.length * 36)) }}
-          >
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                layout="vertical"
-                data={eventBarData}
-                margin={{ top: 4, right: 28, left: 4, bottom: 4 }}
-              >
-                <XAxis
-                  type="number"
-                  tick={{ fill: chart.axis, fontSize: 10 }}
-                  tickFormatter={(v) => (typeof v === 'number' ? v.toFixed(contribTickDecimals) : String(v))}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={200}
-                  tick={{ fill: chart.inkSoft, fontSize: 10 }}
-                  interval={0}
-                />
-                <Tooltip
-                  cursor={{ fill: withAlpha(chart.ink, 0.03) }}
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const row = payload[0].payload as { name: string; deltaPp: number };
-                    return (
-                      <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-sm">
-                        <p className="text-ink-soft text-[11px] leading-snug">{row.name}</p>
-                        <p className="text-ink tabular-nums mt-1 font-mono">
-                          Δ {row.deltaPp >= 0 ? '+' : ''}
-                          {row.deltaPp.toFixed(4)} ppt
-                        </p>
-                      </div>
-                    );
-                  }}
-                />
-                <ReferenceLine x={0} stroke={withAlpha(chart.ink, 0.12)} />
-                <Bar dataKey="deltaPp" radius={[0, 2, 2, 0]} isAnimationActive={false}>
-                  {eventBarData.map((entry, i) => (
-                    <Cell key={`cell-${i}`} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+      <div className="h-[min(360px,46vh)] min-h-[240px] w-full px-2 pb-3">
+        <div ref={containerRef} className="relative h-full w-full">
+          {tip && hoveredMarker ? (
+            <ChartTipShell tip={tip}>
+              <p className={`font-mono font-semibold ${eventLabelClass(hoveredMarker.event)}`}>
+                {hoveredMarker.event}
+              </p>
+              <p className="text-ink-soft mt-1 font-mono">{hoveredMarker.date}</p>
+              <p className="text-ink tabular-nums mt-0.5">
+                Cumulative: {hoveredMarker.cumPp.toFixed(3)} ppt
+              </p>
+              {closeByDate.get(hoveredMarker.date) != null ? (
+                <p className="text-ink-mute tabular-nums text-[11px] mt-1">
+                  Close (proxy day): ${closeByDate.get(hoveredMarker.date)?.toFixed(2)}
+                </p>
+              ) : null}
+              {hoveredMarker.weight_pct != null ? (
+                <p className="text-ink-mute mt-1 tabular-nums">
+                  Weight after: {hoveredMarker.weight_pct.toFixed(2)}%
+                </p>
+              ) : null}
+              {hoveredMarker.reason ? (
+                <p className="text-ink-mute mt-1.5 text-[11px] leading-snug">{hoveredMarker.reason}</p>
+              ) : null}
+            </ChartTipShell>
+          ) : tip && tipRow ? (
+            <ChartTipShell tip={tip}>
+              <p className="font-mono text-ink-soft">{tipRow.date}</p>
+              <p className="text-ink tabular-nums mt-0.5">Cumulative: {tipRow.cumPp.toFixed(3)} ppt</p>
+              <p className="text-ink-mute tabular-nums text-[11px] mt-1">Step: {tipRow.dailyPp.toFixed(4)} ppt</p>
+              {tipClose != null ? (
+                <p className="text-ink-mute tabular-nums text-[11px] mt-1">Close: ${tipClose.toFixed(2)}</p>
+              ) : null}
+            </ChartTipShell>
+          ) : null}
         </div>
-      ) : null}
+      </div>
+
+      <PositionContributionEventBars data={eventBarData} tickDecimals={contribTickDecimals} />
     </div>
   );
 }
@@ -566,7 +365,7 @@ function ChartBody({
     return buildEventContributionSteps(chartRows, data?.events ?? []);
   }, [chartRows, data?.events]);
 
-  const eventBarData = useMemo(() => {
+  const eventBarData = useMemo<EventBarDatum[]>(() => {
     return eventStepRows.map((s) => ({
       name:
         s.kind === 'tail' && s.label.length > 42 ? `${s.label.slice(0, 40)}…` : s.label,
@@ -598,7 +397,7 @@ function ChartBody({
   }
 
   return (
-    <ContribChartBrushPanel
+    <ContribChartPanel
       key={chartRows.length}
       ticker={ticker}
       rangeLabel={rangeLabel}

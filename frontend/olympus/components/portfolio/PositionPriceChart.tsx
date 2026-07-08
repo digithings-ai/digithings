@@ -1,23 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useBrushRange } from '@/lib/hooks/use-brush-range';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Area,
-  Brush,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ReferenceLine,
-  ResponsiveContainer,
-  Scatter,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+  AreaSeries,
+  createSeriesMarkers,
+  type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarker,
+  type Time,
+} from 'lightweight-charts';
 import { fetchPositionPriceChart } from '@/lib/queries';
 import type { PositionHistoryRow, PositionPriceChartData, PositionPriceChartEvent } from '@/lib/types';
-import { EVENT_COLORS, useChartColors, withAlpha } from '@/lib/chart-colors';
+import { EVENT_COLORS, withAlpha } from '@/lib/chart-colors';
+import { ChartTipShell, toLineData, useChartTip, useLightweightChart } from '@/lib/lw-chart';
 
 function eventDotColor(ev: PositionPriceChartEvent['event']): string {
   // Fixed marker hues from the sanctioned allowlist (lib/chart-colors.ts).
@@ -50,7 +45,10 @@ const ENTRY_PADDING_DAYS = 45;
 /** When we cannot infer an entry, load ~2y of history. */
 const FALLBACK_LOOKBACK_DAYS = 730;
 
-type ScatterRow = Row & {
+/** An OPEN/EXIT/ADD/TRIM event snapped onto its (on-or-after) trading day. */
+type EventMarkerRow = {
+  date: string;
+  close: number;
   event: PositionPriceChartEvent['event'];
   markPrice: number | null;
   weight_pct: number | null;
@@ -59,55 +57,7 @@ type ScatterRow = Row & {
   reason: string | null;
 };
 
-function ChartTooltip({
-  active,
-  payload,
-  weightByDate,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload: Row & Partial<ScatterRow> }>;
-  /** Last known portfolio weight % for each trading day (forward-filled from position_history). */
-  weightByDate?: Map<string, number>;
-}) {
-  if (!active || !payload?.length) return null;
-  const p = payload[0].payload as ScatterRow;
-  if ('event' in p && p.event) {
-    return (
-      <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-xs">
-        <p className="font-mono font-semibold" style={{ color: eventDotColor(p.event) }}>
-          {p.event}
-        </p>
-        <p className="text-ink-soft mt-1 font-mono">{p.date}</p>
-        <p className="text-ink-soft tabular-nums mt-0.5">
-          Price:{' '}
-          {p.markPrice != null ? `$${p.markPrice.toFixed(2)}` : p.close != null ? `$${p.close.toFixed(2)}` : '—'}
-        </p>
-        {p.weight_pct != null ? (
-          <p className="text-ink-mute mt-1 tabular-nums">Weight after: {p.weight_pct.toFixed(2)}%</p>
-        ) : null}
-        {p.weight_change_pct != null ? (
-          <p className="text-ink-mute tabular-nums">
-            Δ weight: {p.weight_change_pct > 0 ? '+' : ''}
-            {p.weight_change_pct.toFixed(2)}pp
-          </p>
-        ) : null}
-        {p.reason ? <p className="text-ink-mute mt-1.5 text-[11px] leading-snug">{p.reason}</p> : null}
-      </div>
-    );
-  }
-  const w = weightByDate?.get(p.date);
-  return (
-    <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg">
-      <p className="font-mono text-ink-soft">{p.date}</p>
-      <p className="text-ink tabular-nums mt-0.5">${Number(p.close).toFixed(2)}</p>
-      {typeof w === 'number' ? (
-        <p className="text-ink-mute tabular-nums mt-1 text-[11px]">Weight (portfolio): {w.toFixed(2)}%</p>
-      ) : null}
-    </div>
-  );
-}
-
-function PriceChartBrushPanel({
+function PriceChartPanel({
   ticker,
   rangeLabel,
   chartRows,
@@ -122,32 +72,26 @@ function PriceChartBrushPanel({
   events: PositionPriceChartEvent[];
   firstEntryDate: string | null;
 }) {
-  const chart = useChartColors();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const gradientId = useId().replace(/:/g, '');
-  const { brushStart, brushEnd, setBrushStart, setBrushEnd } = useBrushRange(chartRows.length);
+  const { containerRef, chart, colors, isAlive } = useLightweightChart();
+  const tip = useChartTip(chart, containerRef, isAlive);
+  const priceRef = useRef<ISeriesApi<'Area'> | null>(null);
+  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
-  const visibleRows = useMemo(() => {
-    if (!chartRows.length) return [];
-    const end = Math.min(brushEnd, chartRows.length - 1);
-    const start = Math.max(0, Math.min(brushStart, end));
-    return chartRows.slice(start, end + 1);
-  }, [chartRows, brushStart, brushEnd]);
+  const byDate = useMemo(() => new Map(chartRows.map((r) => [r.date, r])), [chartRows]);
 
   const markers = useMemo(() => {
     const evs = events.filter((e) => e.event !== 'HOLD');
-    if (!chartRows.length) return [] as ScatterRow[];
+    if (!chartRows.length) return [] as EventMarkerRow[];
     const first = chartRows[0].date;
     const last = chartRows[chartRows.length - 1].date;
-    const inRange = evs.filter((e) => e.date >= first && e.date <= last);
-    return inRange
-      .map((ev) => {
+    return evs
+      .filter((e) => e.date >= first && e.date <= last)
+      .map((ev): EventMarkerRow | null => {
         const tr = rowOnOrAfter(chartRows, ev.date);
         if (!tr) return null;
-        const row: ScatterRow = {
+        return {
           date: tr.date,
           close: tr.close,
-          is_trading_day: tr.is_trading_day,
           event: ev.event,
           markPrice: ev.price,
           weight_pct: ev.weight_pct,
@@ -155,97 +99,89 @@ function PriceChartBrushPanel({
           weight_change_pct: ev.weight_change_pct,
           reason: ev.reason,
         };
-        return row;
       })
-      .filter((x): x is ScatterRow => x != null);
+      .filter((x): x is EventMarkerRow => x != null)
+      .sort((a, b) => a.date.localeCompare(b.date));
   }, [events, chartRows]);
 
-  const scatterInView = useMemo(() => {
-    if (!visibleRows.length || !markers.length) return [] as ScatterRow[];
-    const d0 = visibleRows[0].date;
-    const d1 = visibleRows[visibleRows.length - 1].date;
-    return markers.filter((m) => m.date >= d0 && m.date <= d1);
-  }, [visibleRows, markers]);
-
-  const onBrushChange = useCallback((e: { startIndex?: number; endIndex?: number }) => {
-    if (e.startIndex !== undefined) setBrushStart(e.startIndex);
-    if (e.endIndex !== undefined) setBrushEnd(e.endIndex);
-  }, [setBrushEnd, setBrushStart]);
-
-  const resetView = useCallback(() => {
-    if (!chartRows.length) return;
-    setBrushStart(0);
-    setBrushEnd(chartRows.length - 1);
-  }, [chartRows, setBrushEnd, setBrushStart]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || !chartRows.length) return;
-
-    const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) return;
-      const n = chartRows.length;
-      if (n < 2) return;
-      let start = Math.max(0, Math.min(brushStart, brushEnd));
-      let end = Math.max(start, Math.min(n - 1, Math.max(brushStart, brushEnd)));
-      const span = end - start + 1;
-      const mid = (start + end) / 2;
-
-      e.preventDefault();
-
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-        const step = Math.max(1, Math.floor(span * 0.12));
-        const dir = e.deltaX > 0 ? 1 : -1;
-        let ns = start + dir * step;
-        let ne = ns + span - 1;
-        if (ns < 0) {
-          ne -= ns;
-          ns = 0;
-        }
-        if (ne > n - 1) {
-          ns -= ne - (n - 1);
-          ne = n - 1;
-        }
-        if (ns < 0) ns = 0;
-        setBrushStart(ns);
-        setBrushEnd(ne);
-        return;
-      }
-
-      const zoomIn = e.deltaY < 0;
-      let newSpan = zoomIn ? Math.max(5, Math.floor(span * 0.88)) : Math.min(n, Math.ceil(span * 1.12));
-      newSpan = Math.max(3, Math.min(n, newSpan));
-      let newStart = Math.round(mid - newSpan / 2);
-      let newEnd = newStart + newSpan - 1;
-      if (newStart < 0) {
-        newEnd -= newStart;
-        newStart = 0;
-      }
-      if (newEnd > n - 1) {
-        newStart -= newEnd - (n - 1);
-        newEnd = n - 1;
-      }
-      if (newStart < 0) newStart = 0;
-      setBrushStart(newStart);
-      setBrushEnd(newEnd);
-    };
-
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [brushEnd, brushStart, chartRows, setBrushEnd, setBrushStart]);
-
   const entryLineDate = useMemo(() => {
-    if (!firstEntryDate || !visibleRows.length) return null;
-    const a = visibleRows[0].date;
-    const b = visibleRows[visibleRows.length - 1].date;
-    if (firstEntryDate < a || firstEntryDate > b) return null;
-    return rowOnOrAfter(visibleRows, firstEntryDate)?.date ?? null;
-  }, [firstEntryDate, visibleRows]);
+    if (!firstEntryDate || !chartRows.length) return null;
+    if (firstEntryDate < chartRows[0].date || firstEntryDate > chartRows[chartRows.length - 1].date) {
+      return null;
+    }
+    return rowOnOrAfter(chartRows, firstEntryDate)?.date ?? null;
+  }, [firstEntryDate, chartRows]);
+
+  // Price series + data.
+  useEffect(() => {
+    if (!chart || !chartRows.length) return;
+    const price = chart.addSeries(AreaSeries, {
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceFormat: { type: 'custom', formatter: (v: number) => v.toFixed(0), minMove: 0.01 },
+    });
+    price.setData(toLineData(chartRows, (r) => r.date, (r) => r.close));
+    priceRef.current = price;
+    markersRef.current = createSeriesMarkers(price, []);
+    chart.timeScale().fitContent();
+    return () => {
+      priceRef.current = null;
+      markersRef.current = null;
+      if (isAlive()) chart.removeSeries(price);
+    };
+  }, [chart, chartRows, isAlive]);
+
+  // Token colors + event/entry markers (re-applied on theme flips).
+  useEffect(() => {
+    priceRef.current?.applyOptions({
+      lineColor: colors.accent,
+      topColor: withAlpha(colors.accent, 0.35),
+      bottomColor: withAlpha(colors.accent, 0),
+    });
+    const marks: SeriesMarker<Time>[] = [];
+    if (entryLineDate) {
+      marks.push({
+        time: entryLineDate as Time,
+        position: 'belowBar',
+        shape: 'arrowUp',
+        color: withAlpha(colors.up, 0.65),
+        text: 'Entry',
+        size: 1,
+      });
+    }
+    markers.forEach((m, i) => {
+      marks.push({
+        time: m.date as Time,
+        position: 'inBar',
+        shape: 'circle',
+        color: eventDotColor(m.event),
+        size: m.event === 'TRIM' || m.event === 'ADD' ? 1 : 2,
+        id: `evt:${i}`,
+      });
+    });
+    marks.sort((a, b) => String(a.time).localeCompare(String(b.time)));
+    markersRef.current?.setMarkers(marks);
+  }, [colors, chartRows, markers, entryLineDate]);
+
+  const fitAll = useCallback(() => {
+    chart?.timeScale().fitContent();
+  }, [chart]);
 
   const chartEnd = chartRows[chartRows.length - 1].date;
 
+  /** Marker under the pointer, if any (hoveredObjectId carries our `evt:<i>` id). */
+  const hoveredMarker = useMemo(() => {
+    const id = tip?.param.hoveredObjectId;
+    if (typeof id !== 'string' || !id.startsWith('evt:')) return null;
+    return markers[Number(id.slice(4))] ?? null;
+  }, [tip, markers]);
+
+  const tipRow = tip ? byDate.get(tip.iso) : undefined;
+  const tipWeight = tip ? weightByDate.get(tip.iso) : undefined;
+
   return (
-    <div ref={containerRef} className="rounded-xl border border-hair bg-term-bg/20 overflow-hidden">
+    <div className="rounded-xl border border-hair bg-term-bg/20 overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-2 px-4 pt-3 pb-1">
         <div>
           <p className="text-[11px] text-ink-mute uppercase tracking-wider">Price</p>
@@ -261,116 +197,74 @@ function PriceChartBrushPanel({
         <div className="flex flex-col items-end gap-1">
           <button
             type="button"
-            onClick={resetView}
+            onClick={fitAll}
             className="text-[11px] px-2.5 py-1 rounded-lg border border-hair text-ink-soft hover:bg-ink/[0.04] hover:text-ink transition-colors"
           >
             Fit all
           </button>
+          <p className="text-[10px] text-ink-mute">Drag to pan · scroll to zoom</p>
         </div>
       </div>
 
-      <div className="h-[min(320px,42vh)] min-h-[220px] w-full px-2 pb-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={visibleRows} margin={{ top: 12, right: 14, left: 4, bottom: 4 }}>
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={chart.accent} stopOpacity={0.35} />
-                <stop offset="100%" stopColor={chart.accent} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke={chart.hair} vertical={false} />
-            <XAxis
-              dataKey="date"
-              tick={{ fill: chart.axis, fontSize: 11 }}
-              tickFormatter={(d: string) => (d?.length >= 10 ? d.slice(5) : d)}
-              minTickGap={32}
-            />
-            <YAxis
-              domain={['auto', 'auto']}
-              tick={{ fill: chart.axis, fontSize: 11 }}
-              width={52}
-              tickFormatter={(v) => (typeof v === 'number' ? v.toFixed(0) : String(v))}
-            />
-            <Tooltip
-              content={(tipProps) => (
-                <ChartTooltip
-                  active={tipProps.active}
-                  payload={tipProps.payload as Array<{ payload: Row & Partial<ScatterRow> }> | undefined}
-                  weightByDate={weightByDate}
-                />
-              )}
-              cursor={{ stroke: withAlpha(chart.ink, 0.12) }}
-            />
-            {entryLineDate ? (
-              <ReferenceLine
-                x={entryLineDate}
-                stroke={withAlpha(chart.up, 0.45)}
-                strokeDasharray="4 4"
-                label={{ value: 'Entry', fill: chart.axis, fontSize: 10 }}
-              />
-            ) : null}
-            <Area
-              type="monotone"
-              dataKey="close"
-              stroke="none"
-              fill={`url(#${gradientId})`}
-              isAnimationActive={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="close"
-              stroke={chart.accent}
-              dot={false}
-              strokeWidth={2}
-              name="Close"
-              isAnimationActive={false}
-            />
-            <Scatter
-              data={scatterInView}
-              dataKey="close"
-              fill={chart.accent}
-              isAnimationActive={false}
-              shape={(raw: unknown) => {
-                const props = raw as { cx?: number; cy?: number; payload?: ScatterRow };
-                const { cx, cy, payload } = props;
-                if (cx == null || cy == null || !payload?.event) return <g />;
-                const r = payload.event === 'TRIM' || payload.event === 'ADD' ? 4 : 5;
-                return (
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={r}
-                    fill={eventDotColor(payload.event)}
-                    stroke={chart.bg}
-                    strokeWidth={1.5}
-                  />
-                );
-              }}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
+      <div className="h-[min(360px,46vh)] min-h-[240px] w-full px-2 pb-3">
+        <div ref={containerRef} className="relative h-full w-full">
+          {tip && hoveredMarker ? (
+            <ChartTipShell tip={tip}>
+              <p className="font-mono font-semibold" style={{ color: eventDotColor(hoveredMarker.event) }}>
+                {hoveredMarker.event}
+              </p>
+              <p className="text-ink-soft mt-1 font-mono">{hoveredMarker.date}</p>
+              <p className="text-ink-soft tabular-nums mt-0.5">
+                Price:{' '}
+                {hoveredMarker.markPrice != null
+                  ? `$${hoveredMarker.markPrice.toFixed(2)}`
+                  : `$${hoveredMarker.close.toFixed(2)}`}
+              </p>
+              {hoveredMarker.weight_pct != null ? (
+                <p className="text-ink-mute mt-1 tabular-nums">
+                  Weight after: {hoveredMarker.weight_pct.toFixed(2)}%
+                </p>
+              ) : null}
+              {hoveredMarker.weight_change_pct != null ? (
+                <p className="text-ink-mute tabular-nums">
+                  Δ weight: {hoveredMarker.weight_change_pct > 0 ? '+' : ''}
+                  {hoveredMarker.weight_change_pct.toFixed(2)}pp
+                </p>
+              ) : null}
+              {hoveredMarker.reason ? (
+                <p className="text-ink-mute mt-1.5 text-[11px] leading-snug">{hoveredMarker.reason}</p>
+              ) : null}
+            </ChartTipShell>
+          ) : tip && tipRow ? (
+            <ChartTipShell tip={tip}>
+              <p className="font-mono text-ink-soft">{tipRow.date}</p>
+              <p className="text-ink tabular-nums mt-0.5">${tipRow.close.toFixed(2)}</p>
+              {typeof tipWeight === 'number' ? (
+                <p className="text-ink-mute tabular-nums mt-1 text-[11px]">
+                  Weight (portfolio): {tipWeight.toFixed(2)}%
+                </p>
+              ) : null}
+            </ChartTipShell>
+          ) : null}
+        </div>
       </div>
 
-      <div className="h-16 px-2 pb-3">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartRows} margin={{ top: 2, right: 14, left: 4, bottom: 2 }}>
-            <XAxis dataKey="date" hide />
-            <YAxis hide domain={['auto', 'auto']} />
-            <Line type="monotone" dataKey="close" stroke={chart.accent} strokeOpacity={0.4} dot={false} strokeWidth={1} isAnimationActive={false} />
-            <Brush
-              dataKey="date"
-              height={28}
-              stroke={chart.accent}
-              fill={withAlpha(chart.accent, 0.08)}
-              travellerWidth={10}
-              startIndex={brushStart}
-              endIndex={brushEnd}
-              onChange={onBrushChange}
-              tickFormatter={(d: string) => (typeof d === 'string' && d.length >= 7 ? d.slice(5) : '')}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
+      {markers.length > 0 ? (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 px-4 pb-3 text-[10px] text-ink-mute">
+          {(['OPEN', 'ADD', 'TRIM', 'EXIT'] as const)
+            .filter((ev) => markers.some((m) => m.event === ev))
+            .map((ev) => (
+              <span key={ev} className="inline-flex items-center gap-1">
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ background: eventDotColor(ev), boxShadow: `0 0 0 1.5px ${colors.bg}` }}
+                  aria-hidden
+                />
+                {ev}
+              </span>
+            ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -468,7 +362,7 @@ function ChartBody({
   }
 
   return (
-    <PriceChartBrushPanel
+    <PriceChartPanel
       key={chartRows.length}
       ticker={ticker}
       rangeLabel={rangeLabel}

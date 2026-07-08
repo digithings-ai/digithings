@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Footer, Reveal } from "@digithings/web";
+import { Footer, PricingTierCard, Reveal } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 import {
   CONTACT_MANAGED_FEATURES,
@@ -38,36 +38,42 @@ export default function ContactPage() {
               </div>
             </Reveal>
 
-            {/* Two-tier cards: token utilities on the boxes; the feature lists
-                reuse the shared .pricing__features family (✓ rows) so contact
-                and the homepage pricing section speak one grammar. */}
+            {/* Two-tier cards: the shared PricingTierCard (hero voice, #1417) —
+                ✓ feature grammar and the featured tier's flat accent wash come
+                from @digithings/web pricing.css, so contact and the homepage
+                pricing section speak one grammar. The app owns the grid. */}
             <div className="mx-auto mt-[2.4rem] grid max-w-[880px] grid-cols-2 gap-[1.25rem] max-[640px]:grid-cols-1">
-              <Reveal className="relative rounded-[var(--r-md)] border border-hair bg-surface px-[1.8rem] py-[2rem]">
-                <h3 className="text-[1.4rem] font-semibold tracking-[-0.02em]">Self hosted</h3>
-                <p className="mb-[1.3rem] mt-[0.4rem] font-mono text-[0.95rem] text-ink-soft">
-                  open core · <span className="text-up">free</span>
-                </p>
-                <ul className="pricing__features mb-[1.6rem]">
-                  {CONTACT_SELF_FEATURES.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
-                <CloneRepoButton />
+              <Reveal>
+                <PricingTierCard
+                  variant="hero"
+                  nameAs="h3"
+                  className="h-full"
+                  name="Self hosted"
+                  priceLine={
+                    <>
+                      open core · <span className="text-up">free</span>
+                    </>
+                  }
+                  features={[...CONTACT_SELF_FEATURES]}
+                  cta={<CloneRepoButton />}
+                />
               </Reveal>
 
-              <Reveal className="price-card-accent relative rounded-[var(--r-md)] border px-[1.8rem] py-[2rem]">
-                <h3 className="text-[1.4rem] font-semibold tracking-[-0.02em]">Managed</h3>
-                <p className="mb-[1.3rem] mt-[0.4rem] font-mono text-[0.95rem] text-ink-soft">
-                  contact us
-                </p>
-                <ul className="pricing__features mb-[1.6rem]">
-                  {CONTACT_MANAGED_FEATURES.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
-                <a className="btn btn-primary" href={MANAGED_CONTACT_MAILTO}>
-                  Email us <span aria-hidden="true">→</span>
-                </a>
+              <Reveal>
+                <PricingTierCard
+                  variant="hero"
+                  nameAs="h3"
+                  className="h-full"
+                  accent
+                  name="Managed"
+                  priceLine="contact us"
+                  features={[...CONTACT_MANAGED_FEATURES]}
+                  cta={
+                    <a className="btn btn-primary" href={MANAGED_CONTACT_MAILTO}>
+                      Email us <span aria-hidden="true">→</span>
+                    </a>
+                  }
+                />
               </Reveal>
             </div>
 

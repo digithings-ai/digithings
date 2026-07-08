@@ -230,7 +230,13 @@ export function OlympusScene() {
               nodes lit in --accent as `gp` advances (see applyState). Reduced-motion-safe
               (discrete state is scroll-driven, not rAF-gated) and mobile-simplified at the
               820px breakpoint — #1215 is satisfied here, not via a separate ScrollyFeatures
-              refactor of this hand-tuned scene. */}
+              refactor of this hand-tuned scene.
+              (Shared-rail evaluation, #1417: @digithings/web's ScrollyRail renders
+              discrete ticks with one `.on` index; this rail is a continuous width
+              fill plus numbered, labelled nodes lit cumulatively over UNEQUAL dwell
+              windows (0.42/0.38/0.20) that also drive the pan math — not
+              behavior-identical, and adopting useScrollyFeatures would rewrite the
+              scene's scrubbing internals, which are out of scope. Left as-is.) */}
           <div className="dqp-rail">
             <div className="dqp-fill" ref={railFillRef} />
             {NODES.map(([num, label], i) => (

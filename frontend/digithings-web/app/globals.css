@@ -7,6 +7,7 @@
 @import "@digithings/web/styles/web-theme.css";
 @import "@digithings/web/styles/nav-shell.css";
 @import "@digithings/web/styles/docs.css";
+@import "@digithings/web/styles/terminal-manifest.css";
 /* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
    the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
    caret's animation shorthand when an element carries both .chat-cursor
@@ -19,6 +20,7 @@
 /* Tailwind must scan the shared components that carry token utilities —
    paths relative to this file (frontend/digiweb/web). */
 @source "../../digiweb/web/src/components/NavShell.tsx";
+@source "../../digiweb/web/src/components/TerminalManifest.tsx";
 @source "../../digiweb/web/src/components/docs";
 @source "../../digiweb/web/src/components/chat";
 
@@ -75,10 +77,11 @@
    (itself from frontend/digiweb/design/demos/digiquant-landing/07-scroll-driven.html),
    since slimmed by the canon migration (#1400): the scroll-aware nav lives in
    @digithings/web's NavShell (nav-shell.css), the /docs shell in the shared
-   docs family (docs.css), and the clean layout/type rules moved into their
-   TSX as token utilities. What remains below is what must stay CSS — the
-   mesh-hero entrance art + keyframes and the terminal module manifest.
-   Namespaced `dq*`/`dt-*` so nothing collides with shared site.css. Consumes
+   docs family (docs.css), the clean layout/type rules moved into their
+   TSX as token utilities, and the terminal module manifest rides the shared
+   <TerminalManifest> primitive (terminal-manifest.css, #1416). What remains
+   below is what must stay CSS — the mesh-hero entrance art + keyframes.
+   Namespaced `dq*` so nothing collides with shared site.css. Consumes
    [data-theme] tokens only → light/dark safe.
    ========================================================================== */
 :root {
@@ -105,7 +108,6 @@ html {
 #architecture .section-head {
   margin-bottom: clamp(1.25rem, 2.5vw, 1.75rem);
 }
-#architecture .dt-manifest { margin-top: 0; }
 #contact { scroll-margin-top: calc(var(--dq-nav-h) + 1.5rem); }
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
@@ -148,72 +150,6 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   .dqhero-h1 .ln > span, .dqhero-lede, .dqhero-cta { opacity: 1 !important; transform: none !important; transition: none !important; }
   .dqhero-scroll::after { animation: none; opacity: 0.6; transform: none; }
 }
-
-/* ---- module manifest: a `digithings ps` terminal-style process list ---------
-   (ModuleManifest.tsx). Theme-aware via tokens; lowercase two-tone names
-   (digi = --ink, suffix = --accent). Row stagger + cursor blink are CSS-only. */
-/* Self-contained, fixed-height card: the box always sits at its maximum height
-   (sized to fit all ten module rows), so selecting a module streams its summary
-   into already-reserved space — the box never grows and never scrolls. */
-.dt-manifest { font-family: var(--font-mono); background: color-mix(in srgb, var(--surface) 70%, transparent); border: 1px solid var(--hair); border-radius: 16px; padding: clamp(1rem, 2.4vw, 1.5rem) clamp(1rem, 2.4vw, 1.6rem); max-width: 760px; margin: clamp(2rem, 4vw, 3rem) auto 0; display: flex; flex-direction: column; }
-/* Single-column (stacked) below 860px: rows take their natural height, the
-   output panel fills the remaining space. */
-.dt-manifest-body { display: grid; grid-template-columns: 1fr; }
-.dt-manifest-head { color: var(--ink-mute); font-size: 0.8rem; letter-spacing: 0.02em; margin-bottom: 0.7rem; flex: none; }
-.dt-mh-prompt { color: var(--accent); }
-.dt-manifest-rows { list-style: none; margin: 0; padding: 0; min-height: 0; }
-.dt-mrow { animation: dt-mrow-in 0.5s var(--ease) both; }
-@keyframes dt-mrow-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-.dt-mrow-link { width: 100%; text-align: left; background: transparent; border: 0; cursor: pointer; font: inherit; display: grid; grid-template-columns: 12px minmax(108px, 132px) 1fr; align-items: center; gap: 0.55rem 0.85rem; padding: 0.4rem 0.55rem; border-radius: 8px; color: var(--ink-soft); transition: background 0.18s var(--ease); }
-.dt-mrow-link:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); }
-.dt-mrow.is-sel .dt-mrow-link { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.dt-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 65%, transparent); }
-.dt-dot.off { background: transparent; border: 1px solid var(--hair-2); box-shadow: none; }
-.dt-mname { font-weight: 500; font-size: 0.92rem; }
-.dt-mname .dt-d { color: var(--ink); }
-.dt-mname .dt-s { color: var(--accent); }
-.dt-mrole { color: var(--ink-soft); font-size: 0.84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dt-mrow.is-road .dt-mname, .dt-mrow.is-road .dt-mrole { opacity: 0.55; }
-/* live `digithings show <module>` output that types out at the cursor */
-.dt-out { margin-top: 0.6rem; padding: 0.75rem 0.55rem 0.3rem; border-top: 1px dashed var(--hair); display: flex; flex-direction: column; }
-.dt-out-hint { margin: 0; color: var(--ink-mute); font-size: 0.84rem; }
-.dt-out-body { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 0.84rem; line-height: 1.6; color: var(--ink-soft); }
-.dt-out-body .dt-d { color: var(--ink); }
-.dt-cur { display: inline-block; width: 7px; height: 14px; background: var(--accent); vertical-align: -2px; animation: dt-bl 1.1s steps(1) infinite; }
-@keyframes dt-bl { 50% { opacity: 0; } }
-@media (max-width: 560px) {
-  .dt-mrow-link { grid-template-columns: 12px 1fr; }
-  .dt-mrole { display: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dt-mrow { animation: none; }
-  .dt-cur { animation: none; }
-}
-/* two-column on wide screens: module list left, live output right — keeps the
-   streamed text in view (no scroll) and saves vertical space; stacks below 860px */
-@media (min-width: 860px) {
-  .dt-manifest { max-width: 980px; }
-  /* Two-column: list left, output right, both stretched to the card's full
-     height so the output panel is always at maximum size. */
-  /* Two columns, both stretched to the SAME height. The output column's
-     scrollable body collapses its min-content to 0, so the ten-row list always
-     drives the row height — the card spans exactly to the bottom of the list and
-     never grows when a (longer) description is selected; the body scrolls
-     internally instead. */
-  .dt-manifest-body { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); grid-template-rows: minmax(0, 1fr); gap: 1.6rem; align-items: stretch; }
-  .dt-manifest-rows { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
-  .dt-out { margin-top: 0; border-top: 0; border-left: 1px dashed var(--hair); padding: 0.1rem 0 0.4rem 1.6rem; min-height: 0; }
-  .dt-out-show { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-  .dt-out-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
-}
-
-.dt-out-show { padding-bottom: 0.2rem; }
-
-/* ---- Per-module "ask digichat" shortcut (ModuleManifest.tsx) — hands the
-   selected module off to the full /chat page via chatHandoff. ---- */
-.dt-ask { margin-top: auto; align-self: flex-end; font: inherit; font-size: 0.78rem; color: var(--ink-soft); background: transparent; border: 1px solid var(--hair); border-radius: 7px; cursor: pointer; padding: 0.3rem 0.6rem; transition: background 0.18s var(--ease), color 0.18s var(--ease); }
-.dt-ask:hover { background: var(--accent-weak); color: var(--ink); }
-.dt-ask .dt-s { color: var(--accent); }
 
 /* Mermaid diagrams (MermaidBlock.tsx) — client-rendered SVG for pipeline/architecture
    visualizations. Centered, contained; a view-source toggle reveals the raw code. */
