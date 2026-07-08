@@ -128,23 +128,11 @@ To update the landing page: edit `frontend/digithings-web/`, run the build scrip
 > **Status:** not deployed yet. `frontend/digichat` has no live production deployment today; this section documents the target architecture (ADR-0018) for when it ships. Tracked in epic [#1248](https://github.com/digithings-ai/digithings/issues/1248).
 
 - **Source:** `frontend/digichat/` — tracked in this monorepo, not a separate deployment repo.
-- **Deployment:** a Cloudflare Route forwards `digithings.ai/chat/*` to the DigiChat container origin (a stateful Next.js standalone server — `frontend/digichat/Dockerfile`). No separate subdomain or DNS entry.
-- **Proxy implementation template:** `ops/cloudflare/digichat-chat-route-proxy/` contains a production-ready Worker (`worker.js`) + `wrangler.toml` for this route.
+- **Deployment:** Cloudflare Pages Function `frontend/digithings-web/functions/chat/[[path]].ts` forwards `digithings.ai/chat/*` to the DigiChat container origin (a stateful Next.js standalone server — `frontend/digichat/Dockerfile`). No separate subdomain or DNS entry.
 - **Path config:** `DIGICHAT_BASE_PATH=/chat`, `NEXT_PUBLIC_DIGICHAT_BASE_PATH=/chat`, `AUTH_URL=https://digithings.ai/chat` in the deployment environment.
 - **Auth:** also requires `AUTH_SECRET` and `DIGIKEY_BFF_TOKEN` in the deployment environment.
 
-To deploy DigiChat:
-
-1. Build/push the container from `frontend/digichat/Dockerfile` and run DB migrations.
-2. Deploy the Worker template:
-   ```bash
-   cd ops/cloudflare/digichat-chat-route-proxy
-   npx wrangler secret put DIGICHAT_ORIGIN
-   npx wrangler deploy --env prod
-   ```
-3. Keep the Cloudflare route at `digithings.ai/chat*` on the same apex zone.
-
-No changes are needed in this repo's DNS (same domain, no new record).
+To deploy DigiChat: build/push the container from `frontend/digichat/Dockerfile`, run DB migrations, and set `DIGICHAT_ORIGIN` in the `digithings-ai` Cloudflare Pages project (falls back to the current Azure Container App URL if unset). No changes needed in this repo's DNS (same domain, no new record).
 
 ### Verifying the routing
 
