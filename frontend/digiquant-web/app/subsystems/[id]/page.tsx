@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Footer, Emblem, StackRow, subsystems, subsystemById } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "../../_nav";
-import { DqNav } from "@/components/landing/DqNav";
+import { SiteNav } from "@/components/landing/SiteNav";
 
 // Poster grammar (canon §12): epithet ≤ 6 words, honest to function; fine
 // print is a real repo path or a real function plus the livery token. The
@@ -43,7 +43,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
 
   return (
     <>
-      <DqNav />
+      <SiteNav />
       <main className="section dq-subpage">
         <div className="wrap" style={{ maxWidth: 820 }}>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem", color: "var(--ink-mute)", marginBottom: "1.4rem" }}>

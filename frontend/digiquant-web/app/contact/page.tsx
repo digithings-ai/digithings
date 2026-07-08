@@ -6,7 +6,7 @@ import {
   CONTACT_SELF_FEATURES,
   MANAGED_CONTACT_MAILTO,
 } from "../_contact";
-import { DqNav } from "@/components/landing/DqNav";
+import { SiteNav } from "@/components/landing/SiteNav";
 import { AmbientMesh } from "@/components/landing/AmbientMesh";
 import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
 
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 export default function ContactPage() {
   return (
     <>
-      <DqNav />
+      <SiteNav />
       <main className="dq-subpage">
         <AmbientMesh />
         <section className="section">

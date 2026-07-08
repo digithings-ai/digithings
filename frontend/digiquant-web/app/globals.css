@@ -2,7 +2,12 @@
 @import "@digithings/design/tokens.css";
 @import "@digithings/design/site/site.css";
 @import "@digithings/web/styles/web-theme.css";
+@import "@digithings/web/styles/nav-shell.css";
 @import "@digithings/design/tearsheet/styles.css";
+
+/* Shared components (@digithings/web) carry token-backed utilities, and
+   Tailwind never scans package sources on its own — point it at them. */
+@source "../../digiweb/web/src/components/NavShell.tsx";
 
 :root[data-theme] {
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
@@ -184,7 +189,7 @@
   .grain,
   .glow,
   .site-nav,
-  .dqnav,
+  .nav-shell,
   .footer,
   .ts-header-actions,
   .ts-back,
@@ -358,11 +363,13 @@
 /* ==========================================================================
    v7 LANDING — ported from
    frontend/digiweb/design/demos/digiquant-landing/07-scroll-driven.html
-   Namespaced (dqnav / dqhero / dqp / dqss) so nothing collides with shared
+   Namespaced (dqhero / dqp / dqss) so nothing collides with shared
    site.css (.hero, .nav, .node, .stage, .brand, .section) or the .ts-* tearsheet
    classes above. Consumes [data-theme] tokens only → light/dark safe.
    ========================================================================== */
-:root { --dq-nav-h: 62px; }
+/* One height knob: NavShell (@digithings/web) reads --nav-shell-h; the local
+   anchor offsets and StrategySuite's scroll math still read --dq-nav-h. */
+:root { --nav-shell-h: 62px; --dq-nav-h: var(--nav-shell-h); }
 
 /* Page chrome sits above the fixed grain/glow layers (site.css z-index: 0). */
 main,
@@ -392,151 +399,18 @@ html {
 .dq-title { font-family: var(--serif); font-weight: 400; font-size: clamp(1.6rem, 3vw, 2.4rem); letter-spacing: -0.01em; line-height: 1.12; color: var(--ink); margin-top: 0.6rem; }
 .dq-sub { color: var(--ink-soft); margin-top: 0.8rem; max-width: 60ch; line-height: 1.6; }
 
-/* ---- scroll-aware nav ---- */
-.dqnav { position: fixed; top: 0; left: 0; right: 0; height: var(--dq-nav-h); z-index: 210; display: flex; align-items: center; border-bottom: 1px solid transparent; transition: transform 0.4s var(--ease), background 0.3s var(--ease), border-color 0.3s var(--ease); }
-.dqnav.scrolled { background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(14px); border-bottom-color: var(--hair); }
-.dqnav.hidden { transform: translateY(calc(-1 * var(--dq-nav-h) - 1px)); }
-.dqnav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; position: relative; z-index: 56; }
-.dqnav .brand { text-transform: lowercase; color: var(--ink); }
-/* brand QR: transparent marks (no opaque tile, no glow). Show the variant that
+/* ---- nav dress (the bar itself is the shared NavShell — see SiteNav.tsx) ----
+   brand QR: transparent marks (no opaque tile, no glow). Show the variant that
    matches the active theme — dark modules on light, light modules on dark. */
 .brand-mark { display: inline-block; width: 24px; height: 24px; }
 [data-theme="light"] .brand-mark-dark { display: none; }
 [data-theme="dark"] .brand-mark-light { display: none; }
-.dqnav-links { display: flex; gap: 1.8rem; font-size: 0.9rem; color: var(--ink-soft); }
-.dqnav-links a { transition: color 0.2s var(--ease); }
-.dqnav-links a:hover { color: var(--ink); }
-.dqnav-cta { display: flex; align-items: center; gap: 0.9rem; }
 /* icon-only buttons (nav GitHub, tearsheet download): square, glyph centred */
 .btn-icon { padding-inline: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
 .btn-icon svg { display: block; }
-/* theme-toggle + GitHub + hamburger: borderless, no fill — glyph/lines only */
-.dqnav-cta .theme-toggle,
-.dqnav-cta .btn-icon,
-.dqnav-cta .dqnav-toggle {
-  background: transparent;
-  border: none;
-  border-color: transparent;
-  box-shadow: none;
-  color: var(--ink-mute);
-}
-.dqnav-cta .theme-toggle:hover,
-.dqnav-cta .btn-icon:hover,
-.dqnav-cta .dqnav-toggle:hover { color: var(--ink); background: transparent; }
-.dqnav-lead { display: flex; align-items: center; min-width: 0; }
-.dqnav-toggle {
-  display: none;
-  flex-shrink: 0;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 5px;
-  padding: 0.5rem;
-  margin: 0;
-  cursor: pointer;
-}
-.dqnav-toggle span {
-  display: block;
-  width: 18px;
-  height: 1.5px;
-  background: currentColor;
-  border-radius: 1px;
-  transition: transform 0.25s var(--ease), opacity 0.2s var(--ease);
-}
-.dqnav.menu-open .dqnav-toggle span:first-child { transform: translateY(3.25px) rotate(45deg); }
-.dqnav.menu-open .dqnav-toggle span:last-child { transform: translateY(-3.25px) rotate(-45deg); }
-/* Full-viewport scrim — portaled to body; dims + aggressively blurs page behind menu */
-.dqnav-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  cursor: pointer;
-  background: color-mix(in srgb, var(--bg) 90%, transparent);
-  backdrop-filter: blur(40px) saturate(1.3);
-  -webkit-backdrop-filter: blur(40px) saturate(1.3);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 0.28s var(--ease), visibility 0.28s;
-}
-.dqnav-backdrop.is-open {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-.dqnav-sheet {
-  position: fixed;
-  inset: 0;
-  z-index: 201;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  text-align: right;
-  padding: calc(var(--dq-nav-h) + 1.5rem) clamp(1.25rem, 5vw, 2rem) max(1.25rem, env(safe-area-inset-bottom));
-  background: transparent;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(-6px);
-  transition: visibility 0.28s, transform 0.28s var(--ease);
-}
-.dqnav-sheet.is-open {
-  visibility: visible;
-  transform: none;
-}
-.dqnav-sheet-links {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.35rem;
-  flex: 1;
-  width: min(100%, 20rem);
-  margin-left: auto;
-  font-size: 1.35rem;
-  font-family: var(--font-serif, Georgia, serif);
-  color: var(--ink);
-  pointer-events: auto;
-}
-.dqnav-sheet-links a {
-  display: block;
-  width: 100%;
-  padding: 0.85rem 0;
-  border-bottom: 1px solid var(--hair);
-  color: var(--ink-soft);
-  text-align: right;
-  text-shadow: 0 1px 12px color-mix(in srgb, var(--bg) 70%, transparent);
-  transition: color 0.2s var(--ease);
-}
-.dqnav-sheet-links a:hover { color: var(--ink); }
-.dqnav-sheet-cta {
-  display: flex;
-  justify-content: flex-end;
-  width: min(100%, 20rem);
-  margin-left: auto;
-  padding-top: 1.5rem;
-  padding-bottom: max(1rem, env(safe-area-inset-bottom));
-  pointer-events: auto;
-}
-.dqnav-sheet-cta .btn { width: auto; justify-content: center; }
-.dqnav.menu-open {
-  border-bottom-color: var(--hair);
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(14px);
-}
-.dqnav.menu-open.hidden { transform: none; }
-@media (min-width: 881px) { .dqnav-backdrop, .dqnav-sheet { display: none; } }
-@media (max-width: 880px) {
-  .dqnav-toggle { display: inline-flex; margin-left: 0.5rem; }
-  .dqnav-links { display: none; }
-  .dqnav .wrap { gap: 1rem; }
-}
-@media (max-width: 560px) { .dqnav-cta { gap: 0.5rem; flex-shrink: 0; } .dqnav-cta .dqnav-toggle { margin-left: 0.65rem; } }
-@media (max-width: 768px) { .dqnav.hidden { transform: none; } }
 
-/* Olympus CTA: real Olympus mark + label */
-.dqnav-olympus { display: inline-flex; align-items: center; gap: 0.45rem; }
+/* Olympus CTA (NavShell sheet slot): real Olympus mark + label */
+.olympus-cta { display: inline-flex; align-items: center; gap: 0.45rem; }
 .olympus-mark { transform-origin: 50% 50%; }
 /* mark strokes are fully drawn at rest; the Open-Olympus button replays the
    dashboard's loader (stroke-draw + scale pulse) on hover. */
@@ -545,14 +419,14 @@ html {
 .olympus-stroke-2 { --ol-len: 190; }
 .olympus-stroke-3 { --ol-len: 45; }
 .olympus-stroke-4 { --ol-len: 165; }
-.dqnav-olympus:hover .olympus-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
-.dqnav-olympus:hover .olympus-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
-.dqnav-olympus:hover .olympus-stroke-2 { animation-delay: 0.03s; }
-.dqnav-olympus:hover .olympus-stroke-3 { animation-delay: 0.06s; }
-.dqnav-olympus:hover .olympus-stroke-4 { animation-delay: 0.09s; }
+.olympus-cta:hover .olympus-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.olympus-cta:hover .olympus-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
+.olympus-cta:hover .olympus-stroke-2 { animation-delay: 0.03s; }
+.olympus-cta:hover .olympus-stroke-3 { animation-delay: 0.06s; }
+.olympus-cta:hover .olympus-stroke-4 { animation-delay: 0.09s; }
 @keyframes ol-pulse { 0% { transform: scale(0.82); } 35% { transform: scale(1); } 55% { transform: scale(0.72); } 72% { transform: scale(1.03); } 100% { transform: scale(1); } }
 @keyframes ol-draw { 0% { stroke-dashoffset: var(--ol-len); opacity: 0.4; } 10% { opacity: 1; } 40%, 55% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .dqnav-olympus:hover .olympus-mark, .dqnav-olympus:hover .olympus-stroke { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .olympus-cta:hover .olympus-mark, .olympus-cta:hover .olympus-stroke { animation: none; } }
 
 /* push subpage content (no full-bleed hero) clear of the fixed nav; relative so
    the ambient mesh can anchor to the top band without covering the footer */
