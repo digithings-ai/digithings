@@ -86,7 +86,7 @@ function EChartsRenderer({
   return (
     <Card
       className={cn(
-        "overflow-hidden border-border/40 bg-black/20 p-2",
+        "overflow-hidden border-border/40 bg-term-bg p-2",
         className,
       )}
     >
@@ -118,7 +118,7 @@ function ChartFailedCard({
           View raw JSON
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <pre className="mt-2 max-h-64 overflow-auto rounded-md border border-border/40 bg-black/30 p-2 font-mono text-[11px]">
+          <pre className="mt-2 max-h-64 overflow-auto rounded-md border border-border/40 bg-term-bg p-2 font-mono text-[11px]">
             {JSON.stringify(spec, null, 2)}
           </pre>
         </CollapsibleContent>
