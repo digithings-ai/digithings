@@ -14,16 +14,6 @@ if [ "${DIGI_FORCE_GUARD_TEST:-0}" != "1" ] && [ "${DIGI_ALLOW_PROTECTED:-0}" = 
   exit 0
 fi
 
-# Protected path patterns — keep in sync with protected-path-guard.sh.
-# No trailing slash: normpath strips it, so comparisons use "$p"|"$p/"* below.
-protected=(
-  "$PROJECT_ROOT/SECURITY.md"
-  "$PROJECT_ROOT/.github/workflows"
-  "$PROJECT_ROOT/docs/scoring"
-  "$PROJECT_ROOT/config/litellm.yaml"
-  "$PROJECT_ROOT/projects"
-)
-
 # Live-trading path regex (always block, even on task/* branches).
 live_trading_regex='(live_trading|execute_trade|place_order|/live[/.])'
 
@@ -144,6 +134,29 @@ for t in targets:
 # If no write targets detected, nothing to guard.
 [ -z "$write_targets" ] && exit 0
 
+# Roots to guard — the current checkout plus the main repo behind it. The
+# Write/Edit guard treats linked worktrees and the primary tree as one project,
+# so Bash writes must honor the protected paths in both trees. Computed here
+# (not at the top) to keep the no-write fast path free of the git spawn.
+MAIN_REPO_ROOT="$(main_repo_root)"
+protected_roots=("$PROJECT_ROOT")
+if [[ -n "$MAIN_REPO_ROOT" && "$MAIN_REPO_ROOT" != "$PROJECT_ROOT" ]]; then
+  protected_roots+=("$MAIN_REPO_ROOT")
+fi
+
+# Protected path patterns — keep in sync with protected-path-guard.sh.
+# No trailing slash: normpath strips it, so comparisons use "$p"|"$p/"* below.
+protected=()
+for root in "${protected_roots[@]}"; do
+  protected+=(
+    "$root/SECURITY.md"
+    "$root/.github/workflows"
+    "$root/docs/scoring"
+    "$root/config/litellm.yaml"
+    "$root/projects"
+  )
+done
+
 # Branch check deferred until here — only needed when write targets exist.
 branch="$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
 
@@ -156,17 +169,22 @@ while IFS= read -r target; do
     /tmp/*) continue ;;
   esac
 
-  # Always allow writes outside PROJECT_ROOT.
-  case "$target" in
-    "$PROJECT_ROOT"*) ;;
-    *) continue ;;
-  esac
+  # Always allow writes outside the guarded roots.
+  inside_root=0
+  for root in "${protected_roots[@]}"; do
+    case "$target" in
+      "$root"*) inside_root=1 ;;
+    esac
+  done
+  [ "$inside_root" -eq 0 ] && continue
 
   # confidential projects/ dir — always block (exact dir or any file inside).
-  case "$target" in
-    "$PROJECT_ROOT/projects"|"$PROJECT_ROOT/projects/"*)
-      deny "projects/ is confidential — Bash writes to '$target' are blocked." ;;
-  esac
+  for root in "${protected_roots[@]}"; do
+    case "$target" in
+      "$root/projects"|"$root/projects/"*)
+        deny "projects/ is confidential — Bash writes to '$target' are blocked." ;;
+    esac
+  done
 
   # Live-trading paths — always block (even on task/* branches).
   if [[ "$target" =~ $live_trading_regex ]]; then
