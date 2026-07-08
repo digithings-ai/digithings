@@ -18,7 +18,7 @@ export default function DocsPage() {
   return (
     <>
       <DtNav />
-      <main className="dq-subpage pb-[clamp(2rem,5vw,4rem)]">
+      <main className="pt-[var(--dq-nav-h)] pb-[clamp(2rem,5vw,4rem)]">
         <DocsLayout />
       </main>
       <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
