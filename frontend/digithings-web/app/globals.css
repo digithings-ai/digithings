@@ -61,16 +61,15 @@
 [data-theme="dark"] .brand-mark-light { display: none; }
 
 /* ==========================================================================
-   v7 LANDING CHROME — ported from digiquant-web/app/globals.css (itself from
-   frontend/digiweb/design/demos/digiquant-landing/07-scroll-driven.html). Namespaced
-   `dq*` so nothing collides with shared site.css (.hero, .nav, .node, .stage,
-   .brand, .section). Consumes [data-theme] tokens only → light/dark safe.
-
-   EXCLUDED on purpose (digiquant-only): the `.ts-*` tearsheet set, the `.dqp-*`
-   pipeline + `.dqss-*` strategy-suite scrolly classes, the Olympus mark CSS
-   (`.dqnav-olympus`, `.olympus-*`, `@keyframes ol-*`), and the digiquant
-   section/pricing helpers (`.dq-pricing/.price-card/.dq-metrics/.dq-stages/
-   .ladder/.dq-flow/.dq-built/.dqcta`).
+   v7 LANDING CHROME — originally ported from digiquant-web/app/globals.css
+   (itself from frontend/digiweb/design/demos/digiquant-landing/07-scroll-driven.html),
+   since slimmed by the canon migration (#1400): the scroll-aware nav lives in
+   @digithings/web's NavShell (nav-shell.css), the /docs shell in the shared
+   docs family (docs.css), and the clean layout/type rules moved into their
+   TSX as token utilities. What remains below is what must stay CSS — the
+   mesh-hero entrance art + keyframes and the terminal module manifest.
+   Namespaced `dq*`/`dt-*` so nothing collides with shared site.css. Consumes
+   [data-theme] tokens only → light/dark safe.
    ========================================================================== */
 :root {
   --dq-nav-h: 62px;
