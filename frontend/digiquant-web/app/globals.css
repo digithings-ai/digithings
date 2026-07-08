@@ -58,7 +58,11 @@
    (Dissolved in the canon migration (#1401): dead `.dq-glyph`, `.dq-stages`,
    `.dq-metrics`, `.ladder`/`.rung`, `.dqcta`, and the `.dq-flow` grid; the
    contact tiers, clone-repo actions, and pipeline card spans now carry token
-   utilities in their TSX.) */
+   utilities in their TSX.)
+   (#1417: of the promoted @digithings/web primitives only the pricing family
+   has an adoption target here — the old metrics/stages/flow sections died
+   with the v7 landing (their CSS was already dead at #1401), and no count-up
+   stats exist, so PerfMetrics / NumberedStages / StatCounter are not wired.) */
 
 /* (Accent decision, #1417: the featured/managed tier now wears the shared
    `.pricing-tier-accent` flat color-mix wash from @digithings/web pricing.css —
@@ -377,8 +381,8 @@ html {
 /* subpage section header — the main page's serif eyebrow/title/sub pattern,
    without .section-head's `h2` rule (which forces 600-weight sans over .dq-title) */
 .dq-sechead { max-width: 56ch; margin-bottom: clamp(2.5rem, 5vw, 4rem); }
-.dq-sechead.center { margin-inline: auto; text-align: center; }
-.dq-sechead.center .dq-title, .dq-sechead.center .dq-sub { margin-inline: auto; }
+/* (dead `.dq-sechead.center` variants removed in the #1417 census — centered
+   section heads carry their alignment inline in TSX) */
 
 /* ---- HERO: animated mesh-gradient, scroll-reactive ---- */
 .dqhero { position: relative; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; }
