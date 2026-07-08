@@ -7,6 +7,12 @@
 @import "@digithings/web/styles/web-theme.css";
 @import "@digithings/web/styles/nav-shell.css";
 @import "@digithings/web/styles/docs.css";
+/* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
+   the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
+   caret's animation shorthand when an element carries both .chat-cursor
+   and .dt-cur). */
+@import "@digithings/web/styles/chat-core.css";
+@import "@digithings/web/styles/chat-widgets.css";
 @import "@digithings/digichat-ui/styles/cursor.css";
 @import "@digithings/digichat-ui/styles/session.css";
 
@@ -14,6 +20,7 @@
    paths relative to this file (frontend/digiweb/web). */
 @source "../../digiweb/web/src/components/NavShell.tsx";
 @source "../../digiweb/web/src/components/docs";
+@source "../../digiweb/web/src/components/chat";
 
 /* Point the token font families at the self-hosted next/font variables. */
 :root[data-theme] {

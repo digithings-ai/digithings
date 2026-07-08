@@ -33,8 +33,18 @@
 @import "@digithings/design/tokens.css";
 @import "@digithings/web/styles/web-theme.css";
 @import "@digithings/design/app-shell-terminal/styles.css";
+/* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
+   the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
+   caret's animation shorthand when an element carries both .chat-cursor
+   and .dt-cur). */
+@import "@digithings/web/styles/chat-core.css";
+@import "@digithings/web/styles/chat-widgets.css";
 @import "@digithings/digichat-ui/styles/cursor.css";
 @import "@digithings/digichat-ui/styles/session.css";
+
+/* Tailwind never scans package sources — generate the token utilities the
+   shared chat components carry (MIGRATION.md rule 3). */
+@source "../../../digiweb/web/src/components/chat";
 
 @custom-variant dark (&:is(.dark *));
 
