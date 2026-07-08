@@ -3,30 +3,44 @@
 @import "shadcn/tailwind.css";
 
 /* ---------------------------------------------------------------------------
- * DigiThings design primitives (#273 supersedes #260).
+ * DigiThings design canon (#1403; supersedes the #273/#260 shadcn palette).
+ *
+ * Token flow is now one-directional, canon-first:
+ *   @digithings/design/tokens.css   — [data-theme] semantic tokens
+ *                                     (--bg / --surface / --ink / --hair / …)
+ *   @digithings/web web-theme.css   — THE Tailwind bridge for token-named
+ *                                     utilities (text-ink, bg-surface, …)
+ *   :root[data-theme] blocks below  — shadcn vars DERIVE from the tokens
+ *                                     (--background: var(--bg); …)
+ *   local @theme inline             — maps shadcn-named utilities onto the
+ *                                     shadcn vars (which chain to tokens).
+ *
+ * The old @digithings/digichat-ui tokens-shadcn-bridge.css (which mapped
+ * shadcn vars INTO token names — backwards from canon) is retired here: with
+ * [data-theme] on <html> (layout.tsx), session.css / cursor.css read the canon
+ * tokens directly, exactly like digithings-web /chat does.
  *
  * Collision resolution (--accent):
- *   - shadcn/ui consumes `--accent` at `:root` / `.dark` as its neutral
- *     hover/selection gray — that stays authoritative site-wide.
- *   - The design primitives want `--accent` to mean the *brand* hue
- *     (rose for DigiChat). We therefore scope the brand `--accent` into
- *     the `.app-shell` subtree only (see bottom of file). App-shell CSS
- *     resolves to `--accent-digichat`; shadcn utilities elsewhere stay on
- *     shadcn's gray.
- *
- * Imports placed first so our `:root` and `.dark` blocks below win the
- * cascade for shadcn's `--accent` override.
+ *   - tokens.css sets --accent per theme (phosphor cyan dark / deep teal
+ *     light) at :root[data-theme].
+ *   - <body> carries `.accent-digichat` (tokens.css livery class), so the
+ *     whole app resolves --accent to the digichat rose (--accent-digichat,
+ *     ruled 2026-07-06). `.app-shell` re-scopes the same rose for the chrome.
+ *   - shadcn's `--accent` therefore also resolves rose under <body> — this
+ *     matches digichat 0.2.0's rendered state (the body livery class already
+ *     outranked the old neutral-gray :root definition via inheritance).
  * ------------------------------------------------------------------------- */
 @import "@digithings/design/tokens.css";
+@import "@digithings/web/styles/web-theme.css";
 @import "@digithings/design/app-shell-terminal/styles.css";
+@import "@digithings/digichat-ui/styles/cursor.css";
+@import "@digithings/digichat-ui/styles/session.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -44,6 +58,7 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -66,95 +81,89 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root, .light {
-  --background: #fbfbf9;
-  --foreground: #14181b;
-  --card: #ffffff;
-  --card-foreground: #14181b;
-  --popover: #ffffff;
-  --popover-foreground: #14181b;
-  --primary: #0e8c7f;
-  --primary-foreground: #ffffff;
-  --secondary: #f4f4f1;
-  --secondary-foreground: #14181b;
-  --muted: #f4f4f1;
-  --muted-foreground: #5c636a;
-  --accent: #efeee9;
-  --accent-foreground: #14181b;
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: #e4e0d8;
-  --input: #e4e0d8;
-  --ring: #0e8c7f;
-  --chart-1: #0e8c7f;
-  --chart-2: #3dd6c4;
-  --chart-3: #8a9097;
-  --chart-4: #2f9e70;
-  --chart-5: #c9533b;
+:root {
   --radius: 0.625rem;
-  --sidebar: #f4f4f1;
-  --sidebar-foreground: #14181b;
-  --sidebar-primary: #0e8c7f;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #efeee9;
-  --sidebar-accent-foreground: #14181b;
-  --sidebar-border: #e4e0d8;
-  --sidebar-ring: #0e8c7f;
 }
 
 /*
- * Dark theme — unified DigiThings design language on a neutral near-black,
- * matching digithings.ai / digiquant.io / Olympus. shadcn `--primary`/`--ring`
- * carry DigiChat's own rose accent (split off digiquant's shared cyan,
- * ruled 2026-07-06); `--accent` stays a neutral hover gray. Brand rose for
- * the DigiChat chrome is scoped in `.app-shell`.
+ * shadcn vars derive from the canon tokens (full mapping table in #1403).
+ * Scoped to :root[data-theme] — the attribute is SSR'd ("dark", layout.tsx)
+ * and re-pointed pre-paint by the shared themeInitScript. The `.dark`/`.light`
+ * classes are kept in lockstep on <html> (layout.tsx inline snippet +
+ * ThemeClassSync in providers.tsx) because the `dark:` variant above and the
+ * embed wrapper still key off classes.
  */
-.dark {
-  --background: #0b0c0e;
-  --foreground: #eceef0;
-  --card: #121417;
-  --card-foreground: #eceef0;
-  --popover: #121417;
-  --popover-foreground: #eceef0;
-  --primary: #e2708a;
-  --primary-foreground: #04201c;
-  --secondary: #171a1e;
-  --secondary-foreground: #eceef0;
-  --muted: #171a1e;
-  --muted-foreground: #9aa0a6;
-  --accent: #1f2226;
-  --accent-foreground: #eceef0;
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: #23262b;
-  --input: #23262b;
-  --ring: #e2708a;
-  --chart-1: #e2708a;
-  --chart-2: #6fe3d4;
-  --chart-3: #9aa0a6;
-  --chart-4: #3fb984;
-  --chart-5: #e0654b;
-  --sidebar: #0e0e10;
-  --sidebar-foreground: #eceef0;
-  --sidebar-primary: #e2708a;
-  --sidebar-primary-foreground: #04201c;
-  --sidebar-accent: #171a1e;
-  --sidebar-accent-foreground: #eceef0;
-  --sidebar-border: #23262b;
-  --sidebar-ring: #e2708a;
+:root[data-theme] {
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary-foreground: var(--on-accent);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-2);
+  /* --ink-soft, not --ink-mute: the pre-canon values (#9aa0a6 dark /
+     #5c636a light) are exactly --ink-soft in both themes; --ink-mute would
+     drop contrast on ~50 text-muted-foreground call sites. */
+  --muted-foreground: var(--ink-soft);
+  /* shadcn --accent intentionally NOT defined here — the canon token flows
+     through (body livery resolves it to the digichat rose; see header). */
+  --accent-foreground: var(--ink);
+  --destructive: var(--down);
+  /* Error copy sits on --destructive/10 tints, never on solid red, and
+     rendered inherited ink pre-canon (the var was undefined) — keep ink. */
+  --destructive-foreground: var(--ink);
+  --border: var(--hair);
+  --input: var(--hair);
+  --chart-2: var(--up);
+  --chart-3: var(--ink-soft);
+  --chart-4: var(--warn);
+  --chart-5: var(--down);
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary-foreground: var(--on-accent);
+  --sidebar-accent: var(--surface-2);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--hair);
 
-  /* Align the legacy @digithings/design tokens (consumed by the imported
-     app-shell primitive and the .dc-term-* chrome) to the new palette. */
-  --bg-primary: #0b0c0e;
-  --bg-secondary: #08090b;
-  --text-primary: #eceef0;
-  --text-secondary: #9aa0a6;
-  --border-color: #23262b;
-  --fg: #eceef0;
-  --accent-digichat: #e2708a;
+  /* digichat self-hosts Geist via next/font (CSP-safe); re-point the canon
+     font tokens at the loaded families (digiquant-web pattern — tokens.css
+     ships literal family names that only the geist package registers). */
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Legacy @digithings/design primitives (consumed by the imported app-shell
+     chrome and the .dc-* classes below) — now theme-aware via canon tokens. */
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--term-bg);
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-soft);
+  --border-color: var(--hair);
+  --fg: var(--ink);
 }
 
-@import "@digithings/digichat-ui/styles/tokens-shadcn-bridge.css";
-@import "@digithings/digichat-ui/styles/cursor.css";
-@import "@digithings/digichat-ui/styles/session.css";
+/*
+ * Brand-accented shadcn slots differ per theme, mirroring tokens.css's own
+ * --up convention: dark wears the rose livery (--accent-digichat, ruled
+ * 2026-07-06); light runs the deeper phosphor teal for contrast on paper
+ * (rose is 2.4:1 on the light canvas — fails AA).
+ */
+:root[data-theme="dark"] {
+  --primary: var(--accent-digichat);
+  --ring: var(--accent-digichat);
+  --chart-1: var(--accent-digichat);
+  --sidebar-primary: var(--accent-digichat);
+  --sidebar-ring: var(--accent-digichat);
+}
+:root[data-theme="light"] {
+  --primary: var(--accent);
+  --ring: var(--accent);
+  --chart-1: var(--accent);
+  --sidebar-primary: var(--accent);
+  --sidebar-ring: var(--accent);
+}
 
 @layer base {
   * {
@@ -172,7 +181,7 @@
  * #273 — DigiChat modern-terminal chrome.
  *
  * `.app-shell` scopes the brand `--accent` so the design primitives
- * pick up DigiChat violet without disturbing shadcn's neutral `--accent` at
+ * pick up the DigiChat rose without disturbing shadcn's neutral `--accent` at
  * `:root`. `.dc-term-*` classes layer chat-specific affordances (message
  * rows, tool chips, sources accordion, streaming caret) on top of the
  * primitive palette.
