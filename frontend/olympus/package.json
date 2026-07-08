@@ -14,6 +14,7 @@
     "@digithings/web": "*",
     "@supabase/supabase-js": "^2.101.1",
     "diff": "^8.0.4",
+    "lightweight-charts": "^5.2.0",
     "lucide-react": "^1.7.0",
     "next": "16.2.4",
     "react": "^19.2.4",
