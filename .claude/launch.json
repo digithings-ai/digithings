@@ -86,12 +86,10 @@
         "--workspace",
         "design-reference",
         "run",
-        "dev",
-        "--",
-        "--port",
-        "4013"
+        "dev"
       ],
-      "port": 4013
+      "port": 4013,
+      "autoPort": true
     },
     {
       "name": "demos",
