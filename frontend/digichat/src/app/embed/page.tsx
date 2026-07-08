@@ -83,6 +83,20 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
     emit("embed_loaded", { accent });
   }, [accent]);
 
+  // Tenant theme drives the canon [data-theme] on <html> — the semantic
+  // tokens are scoped :root[data-theme="…"] (tokens.css), so a subtree class
+  // alone no longer flips the palette. Default stays dark like the pre-canon
+  // embed (this page is its own iframe document, so the root flip is scoped
+  // to the embed). The .dark/.light classes follow via ThemeClassSync
+  // (providers.tsx); the wrapper div below keeps its class for the Tailwind
+  // `dark:` variant inside the subtree.
+  useEffect(() => {
+    document.documentElement.setAttribute(
+      "data-theme",
+      tenantCfg.theme === "light" ? "light" : "dark",
+    );
+  }, [tenantCfg.theme]);
+
   const accentStyle = tenantCfg.accent
     ? ({
         "--accent": tenantCfg.accent.color,
