@@ -1,10 +1,10 @@
 ## Goal
 
-Build shared **`HorizontalScrollBand`** primitive — Cursor-style horizontal snap scroll for changelog cards, testimonial rows, and mobile overflow bands ([`EVOLUTION.md` §6](../../../../frontend/design/EVOLUTION.md), [design spec §Layer C](../../../superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md)).
+Build shared **`HorizontalScrollBand`** primitive — Cursor-style horizontal snap scroll for changelog cards, testimonial rows, and mobile overflow bands ([`EVOLUTION.md` §6](../../../../frontend/digiweb/design/EVOLUTION.md), [design spec §Layer C](../../../superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md)).
 
 ## Component
 
-- [x] cross-cutting (`frontend/design/`)
+- [x] cross-cutting (`frontend/digiweb/design/`)
 
 ## Acceptance Criteria
 
@@ -13,7 +13,7 @@ Build shared **`HorizontalScrollBand`** primitive — Cursor-style horizontal sn
 - [ ] `prefers-reduced-motion: reduce` → stack cards vertically (no horizontal scroll)
 - [ ] Optional `horizontal-scroll.js` for keyboard nav / focus management (document if skipped)
 - [ ] Demo in smoke page with 3+ cards
-- [ ] Document in `frontend/design/site/README.md`
+- [ ] Document in `frontend/digiweb/design/site/README.md`
 
 ## Test Requirements
 
@@ -26,8 +26,8 @@ Manual: mobile viewport — cards snap; reduced motion — vertical stack.
 
 ## Documentation to Update
 
-- [ ] `frontend/design/site/README.md`
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/site/README.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

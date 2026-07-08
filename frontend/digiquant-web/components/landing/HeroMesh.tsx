@@ -1,7 +1,7 @@
 "use client";
 /**
  * Full-bleed animated mesh-gradient hero (Stripe-style), ported from the locked
- * v7 prototype (frontend/design/demos/digiquant-landing/07-scroll-driven.html).
+ * v7 prototype (frontend/digiweb/design/demos/digiquant-landing/07-scroll-driven.html).
  *
  * The mesh blobs ease toward the cursor and parallax/fade as the hero scrolls
  * away. Theme-safe: the base fill is read from the live `--bg` token (re-read on

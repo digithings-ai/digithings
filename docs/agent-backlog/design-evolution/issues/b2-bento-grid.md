@@ -1,20 +1,20 @@
 ## Goal
 
-Build a shared **`BentoGrid`** layout primitive — Cursor-style 2×2 (and responsive 1-col) linked feature cells for marketing sections ([`EVOLUTION.md` §6](../../../../frontend/design/EVOLUTION.md)).
+Build a shared **`BentoGrid`** layout primitive — Cursor-style 2×2 (and responsive 1-col) linked feature cells for marketing sections ([`EVOLUTION.md` §6](../../../../frontend/digiweb/design/EVOLUTION.md)).
 
 ## Component
 
-- [x] cross-cutting (`frontend/design/`)
+- [x] cross-cutting (`frontend/digiweb/design/`)
 
 ## Acceptance Criteria
 
-- [ ] CSS classes in `frontend/design/site/site.css`:
+- [ ] CSS classes in `frontend/digiweb/design/site/site.css`:
   - `.bento` — CSS grid, gap from spacing tokens, `--wrap-wide` max-width
   - `.bento__cell` — linked card surface (`<a>` or `.bento__cell--static`), hairline border, hover lift using `--duration-hover` + `--ease-glide`
   - Responsive: 2×2 at `min-width: 768px`, single column below
   - Optional `.bento__cell--span-2` for wide cell
 - [ ] Cell anatomy documented: kicker (mono), title, body, optional thumbnail slot, arrow suffix CTA (`Learn more →`)
-- [ ] Demo in `frontend/design/smoke/index.html` with 4 placeholder cells
+- [ ] Demo in `frontend/digiweb/design/smoke/index.html` with 4 placeholder cells
 - [ ] Light + dark theme tested
 - [ ] No glass morphism on cells (flat `--surface` steps)
 
@@ -27,8 +27,8 @@ cd frontend/digithings-web && npm run build
 
 ## Documentation to Update
 
-- [ ] `frontend/design/site/README.md` — BentoGrid section
-- [ ] `frontend/design/EVOLUTION.md` — Phase B checkbox
+- [ ] `frontend/digiweb/design/site/README.md` — BentoGrid section
+- [ ] `frontend/digiweb/design/EVOLUTION.md` — Phase B checkbox
 
 ## Scoring Targets
 

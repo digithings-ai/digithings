@@ -1,14 +1,14 @@
 ## Goal
 
-Build **`StatCounter`** — scroll-triggered animated metrics (x.ai API scale + Cursor enterprise %) for hero and feature bands ([`xai-full.md`](../../../../frontend/design/references/scans/xai-full.md)).
+Build **`StatCounter`** — scroll-triggered animated metrics (x.ai API scale + Cursor enterprise %) for hero and feature bands ([`xai-full.md`](../../../../frontend/digiweb/design/references/scans/xai-full.md)).
 
 ## Component
 
-- [x] cross-cutting (`frontend/design/`)
+- [x] cross-cutting (`frontend/digiweb/design/`)
 
 ## Acceptance Criteria
 
-- [ ] JS module `frontend/design/stat-counter.js` (or extend scroll-trigger):
+- [ ] JS module `frontend/digiweb/design/stat-counter.js` (or extend scroll-trigger):
   - Observes `.stat-counter` elements; animates from 0 → `data-target` on enter viewport
   - Supports `data-prefix`, `data-suffix`, `data-decimals`
   - Uses `tabular-nums` + Geist Mono styling via `.stat-counter__value`
@@ -24,8 +24,8 @@ Build **`StatCounter`** — scroll-triggered animated metrics (x.ai API scale + 
 
 ## Documentation to Update
 
-- [ ] `frontend/design/site/README.md`
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/site/README.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 - [ ] Note in `EVOLUTION.md` §10 anti-patterns: fake tickers rejected
 
 ## Out of Scope

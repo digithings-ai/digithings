@@ -95,7 +95,7 @@
 
 | Package | Type | Deploy / use | Keep? |
 |---------|------|--------------|-------|
-| `frontend/design/` | npm workspace `@digithings/design` | Imported by digichat, olympus, static sites | **Keep** |
+| `frontend/digiweb/design/` | npm workspace `@digithings/design` | Imported by digichat, olympus, static sites | **Keep** |
 | `frontend/digithings/` | Static HTML | Cloudflare / `build-digithings.sh` | **Keep** |
 | `frontend/digiquant/` | Static HTML + `atlas.html` | `build-digiquant.sh`; ADR-0012 publish repo | **Keep** |
 | `frontend/digichat/` | Next.js 16 BFF + chat | Compose profile `digichat` | **Keep** |
@@ -182,7 +182,7 @@ Planning docs (provider review, FX automation). Some June 2026 files were untrac
 | **JAN-028** | Unify | `scripts/build-digiquant.sh` vs missing GHA workflow | M | Low |
 | **JAN-029** | Keep | `projects/sitaas`, `projects/twelve_x` — confidential, gitignored | — | — |
 | **JAN-030** | Keep | All six Python service trees | — | — |
-| **JAN-031** | Keep | `frontend/design` + static landings | — | — |
+| **JAN-031** | Keep | `frontend/digiweb/design` + static landings | — | — |
 | **JAN-032** | Done | This file (`docs/reviews/2026-06-repository-janitor-audit.md`) | S | None |
 
 ---
