@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "@digithings/design/tokens.css";
-@import "@digithings/design/site/site.css";
+/* site.css loads into the `components` cascade layer: it still beats
+   Tailwind's preflight (base), but token utilities in TSX can locally
+   override it. Unlayered, its `* { margin: 0 }` reset would silently kill
+   every margin utility in the app — utilities live in @layer utilities,
+   and unlayered author CSS outranks all layers. */
+@import "@digithings/design/site/site.css" layer(components);
 @import "@digithings/web/styles/web-theme.css";
 @import "@digithings/web/styles/nav-shell.css";
 @import "@digithings/design/tearsheet/styles.css";
@@ -18,12 +23,9 @@
   --font-display: var(--serif);
 }
 
-/* Shared tokens ship a separate --up green; digiquant.io maps positive P&L to
-   the brand teal. Must match :root[data-theme="dark|light"] specificity. */
-:root[data-theme="dark"],
-:root[data-theme="light"] {
-  --up: var(--accent);
-}
+/* (The former local `--up: var(--accent)` mapping is gone (#1401): tokens.css
+   now rules --up = the digiquant phosphor per theme — same colors, but pinned
+   to the token so P&L can never follow a livery scope.) */
 
 /* Marketing/editorial headings (.hero-title on pipeline + subsystems) render in
    the v7 serif via --font-display at weight 400 — the serif voice is never
@@ -33,16 +35,10 @@
 .hero-title { font-weight: 400 !important; letter-spacing: -0.025em; }
 .hero-title em { font-style: italic; color: var(--accent); -webkit-text-fill-color: initial; }
 
-/* brand glyph */
-.dq-glyph { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 70%, #fff), var(--accent)); position: relative; box-shadow: 0 0 16px var(--accent-weak); }
-.dq-glyph::after { content: ""; position: absolute; inset: 5px; border-left: 2px solid var(--bg); border-bottom: 2px solid var(--bg); }
-
-.dq-up { color: var(--up); } .dq-down { color: var(--down); }
-
 /* Light mode: the mesh uses source-over (not additive), so bump the shared teal
    wash + accent-weak token so the cursor bloom and .glow read on --bg. */
 :root[data-theme="light"] {
-  --accent-weak: rgba(14, 140, 127, 0.22);
+  --accent-weak: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 :root[data-theme="light"] .dqhero-canvas { filter: blur(48px) saturate(1.38); }
 :root[data-theme="light"] .dq-ambient { filter: blur(54px) saturate(1.38); }
@@ -56,91 +52,25 @@
 
 /* (Removed in the v7 port: old left-headline hero `.panel`/`.dq-curve`, the
    simulated `.dq-tickerbar` marquee, and the `.dq-mini-flow` teaser. The home is
-   now HeroMesh + PipelineScene + StrategySuite — see the "v7 landing" block below.) */
+   now HeroMesh + PipelineScene + StrategySuite — see the "v7 landing" block below.)
+   (Dissolved in the canon migration (#1401): dead `.dq-glyph`, `.dq-stages`,
+   `.dq-metrics`, `.ladder`/`.rung`, `.dqcta`, and the `.dq-flow` grid; the
+   contact tiers, clone-repo actions, and pipeline card spans now carry token
+   utilities in their TSX.) */
 
-/* pipeline stage cards */
-.dq-stages { grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
-.dq-stages .mod-card .role { min-height: 2.6em; }
-
-/* metric cards */
-.dq-metrics { grid-template-columns: repeat(4, 1fr); gap: 1rem; }
-.dq-metric { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.4rem 1.3rem; }
-.dq-metric .ml { display: block; font-size: 0.76rem; color: var(--ink-mute); margin-bottom: 0.5rem; }
-.dq-metric .mv { font-family: var(--font-mono); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.dq-metric .mu { font-size: 0.82rem; color: var(--ink-mute); margin-left: 0.2rem; }
-
-/* contact tiers */
-.dq-contact { grid-template-columns: repeat(2, 1fr); gap: 1.25rem; max-width: 880px; }
-.price-card { position: relative; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 2rem 1.8rem; }
-.price-card.accent { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
-
-.price-card h3 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.02em; }
-.price-card .price { font-family: var(--font-mono); font-size: 0.95rem; color: var(--ink-soft); margin: 0.4rem 0 1.3rem; }
-.price-card ul { list-style: none; display: flex; flex-direction: column; gap: 0.65rem; margin-bottom: 1.6rem; }
-.price-card li { font-size: 0.92rem; color: var(--ink-soft); padding-left: 1.4rem; position: relative; }
-.price-card li::before { content: ""; position: absolute; left: 2px; top: 0.4em; width: 8px; height: 8px; border-bottom: 1.5px solid var(--accent); border-right: 1.5px solid var(--accent); transform: rotate(45deg); }
-.price-card .btn { width: 100%; justify-content: center; }
-.price-card .btn-primary {
-  width: auto;
-  justify-content: center;
+/* Managed contact tier: accent-tinted card variant. Two-color gradient +
+   color-mix border stay CSS per the leave rule; the box itself is utilities
+   in app/contact/page.tsx. */
+@layer components {
+  .price-card-accent {
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    background: linear-gradient(180deg, var(--accent-weak), var(--surface));
+  }
 }
-.clone-repo-actions {
-  display: flex;
-  gap: 0.5rem;
-  width: 100%;
-  justify-content: flex-start;
-}
-.clone-repo-actions .btn { width: auto; }
-.clone-repo-actions .btn-clone-cmd {
-  flex: 0 1 auto;
-  min-width: 6.35rem;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0;
-  text-transform: none;
-  padding-inline: 0.85rem;
-}
-.clone-repo-actions .btn-clone-cmd-text {
-  white-space: nowrap;
-}
-.clone-repo-actions .btn-icon {
-  flex: 0 0 auto;
-  min-width: 3.125rem;
-  padding-inline: 0.65rem;
-}
-
-/* execution ladder */
-.ladder { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.6rem 1.6rem 1.2rem; max-width: 760px; margin: 0 auto; }
-.ladder svg { width: 100%; height: auto; }
-.rung { stroke: var(--accent); opacity: .4; fill: var(--accent-weak); }
-.rung.active { opacity: .95; stroke-width: 2; fill: color-mix(in srgb, var(--accent) 16%, transparent); }
-.rung.future { opacity: .3; }
-.ladder-cap { font-family: var(--font-mono); font-size: .74rem; color: var(--ink-mute); margin-top: .8rem; text-align: center; }
-
-@media (max-width: 940px) { .dq-stages { grid-template-columns: 1fr; } .dq-metrics { grid-template-columns: repeat(2,1fr); } }
-@media (max-width: 640px) { .dq-metrics, .dq-contact { grid-template-columns: 1fr; } }
-
-/* linear research → execution flow (the reinvented /pipeline) */
-.dq-flow { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(216px, 1fr)); gap: 1.1rem; margin-top: 2rem; }
-.dq-flow-step { position: relative; background: var(--surface); border: 1px solid var(--hair); border-left: 2px solid var(--accent); border-radius: var(--r-md); padding: 1.3rem 1.3rem 1.2rem; display: flex; flex-direction: column; gap: 0.5rem; transition: transform 0.25s var(--ease), border-color 0.25s var(--ease); }
-.dq-flow-step:hover { transform: translateY(-3px); border-color: var(--hair-2); border-left-color: var(--accent); }
-.dq-flow-n { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); letter-spacing: 0.1em; }
-.dq-flow-step h3 { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.02em; }
-.dq-flow-step p { font-size: 0.9rem; color: var(--ink-soft); line-height: 1.55; flex: 1; }
-.dq-flow-tool { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); border: 1px solid var(--hair); border-radius: 999px; padding: 0.2rem 0.6rem; align-self: flex-start; }
-.dq-flow-step.is-exec { border-left-color: var(--accent); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
-.dq-flow-step.is-exec .dq-flow-n { color: var(--accent); }
-.dq-flow-arrow { position: absolute; right: -0.92rem; top: 50%; transform: translateY(-50%); color: var(--hair-2); font-size: 1.05rem; z-index: 2; pointer-events: none; }
-@media (max-width: 760px) { .dq-flow-arrow { display: none; } }
-
-.dq-built { color: var(--ink-mute); font-size: 0.9rem; max-width: 52ch; margin-inline: auto; }
-.dq-built a { color: var(--accent); }
 /* Tearsheet grammar (.ts-*) lives in @digithings/design/tearsheet/styles.css
    (imported at the top of this file). App-local tearsheet bits below:
-   the library page rhythm here, and the @media print grammar further down. */
-.dq-subpage-library { padding-bottom: clamp(4.5rem, 10vw, 7rem); }
-.dq-subpage-library .wrap { padding-bottom: 1.5rem; }
+   the @media print grammar further down (library page rhythm moved to
+   utilities on app/strategies/page.tsx). */
 
 /* Screen: print chrome hidden until export. */
 .ts-print-brand,
@@ -394,20 +324,26 @@ html {
   background: var(--bg);
 }
 
-/* editorial heading set (serif), shared by the suite intro + closing section */
-.dq-eyebrow { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+/* editorial heading set (serif), shared across every section head. Stays CSS
+   (intentional skip, #1401): one definition feeds six surfaces including the
+   scroll scenes' descendant rules (.dqss-intro .dq-sub, .dq-sechead.center
+   combinators) — duplicating the strings as utilities would fork the voice.
+   The strategies-page eyebrow was folded into the shared .kicker instead. */
 .dq-title { font-family: var(--serif); font-weight: 400; font-size: clamp(1.6rem, 3vw, 2.4rem); letter-spacing: -0.01em; line-height: 1.12; color: var(--ink); margin-top: 0.6rem; }
 .dq-sub { color: var(--ink-soft); margin-top: 0.8rem; max-width: 60ch; line-height: 1.6; }
 
 /* ---- nav dress (the bar itself is the shared NavShell — see SiteNav.tsx) ----
    brand QR: transparent marks (no opaque tile, no glow). Show the variant that
-   matches the active theme — dark modules on light, light modules on dark. */
-.brand-mark { display: inline-block; width: 24px; height: 24px; }
-[data-theme="light"] .brand-mark-dark { display: none; }
-[data-theme="dark"] .brand-mark-light { display: none; }
-/* icon-only buttons (nav GitHub, tearsheet download): square, glyph centred */
-.btn-icon { padding-inline: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
-.btn-icon svg { display: block; }
+   matches the active theme — dark modules on light, light modules on dark.
+   @layer components so token utilities in TSX can locally re-dress them. */
+@layer components {
+  .brand-mark { display: inline-block; width: 24px; height: 24px; }
+  [data-theme="light"] .brand-mark-dark { display: none; }
+  [data-theme="dark"] .brand-mark-light { display: none; }
+  /* icon-only buttons (nav GitHub, tearsheet download): square, glyph centred */
+  .btn-icon { padding-inline: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
+  .btn-icon svg { display: block; }
+}
 
 /* Olympus CTA (NavShell sheet slot): real Olympus mark + label */
 .olympus-cta { display: inline-flex; align-items: center; gap: 0.45rem; }
@@ -456,7 +392,9 @@ html {
 .dqhero-h1 .ln > span { display: block; transform: translateY(calc(108% + 0.24em)); transition: transform 1s var(--ease); }
 .dqhero-h1 .ln:nth-child(2) > span { transition-delay: 0.09s; }
 .dqhero.loaded .dqhero-h1 .ln > span { transform: none; }
-.dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px rgba(0, 0, 0, 0.45); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
+/* lede legibility halo over the mesh derives from --bg (the nav-shell sheet
+   recipe), so light mode gets a light halo instead of a black smudge. */
+.dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px color-mix(in srgb, var(--bg) 45%, transparent); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
 .dqhero-lede b { color: var(--ink); font-weight: 500; }
 .dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
 .dqhero-cta { display: flex; gap: 0.8rem; margin-top: 2.4rem; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
@@ -508,7 +446,6 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqpipe-step.is-right .dqpipe-card { border-left: 1px solid var(--hair); border-right: 2px solid var(--accent); }
 .dqpipe-step.is-exec .dqpipe-card { border-left-color: var(--up); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
 .dqpipe-step.is-exec.is-right .dqpipe-card { border-right-color: var(--up); }
-.dqpipe-step.is-exec .dq-flow-n { color: var(--up); }
 .dqpipe-rail {
   position: absolute; top: 1.6rem; width: 12px; height: 12px; border-radius: 50%;
   border: 2px solid var(--hair-2); background: var(--bg);
@@ -561,6 +498,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqp-ehead h3 { font-family: var(--serif); font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 400; letter-spacing: -0.015em; margin-bottom: 0.55rem; line-height: 1.1; color: var(--ink); }
 /* left-align the body to match the left-aligned tag + heading (was centered) */
 .dqp-ehead p { color: var(--ink-soft); font-size: 1rem; line-height: 1.6; max-width: 52ch; margin-inline: 0; }
+/* #000 here is a mask alpha ramp (fully-opaque stop), not a color — leave rule */
 .dqp-track { margin-top: 1.2rem; overflow: hidden; padding: 0.4rem 2px; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); }
 .dqp-steps { display: inline-flex; gap: 0.7rem; will-change: transform; }
 .dqp-step { flex: none; width: 166px; border: 1px solid var(--hair); border-radius: 11px; background: var(--surface); padding: 0.85rem 0.9rem; opacity: 0.34; transition: opacity 0.45s var(--ease), border-color 0.45s var(--ease), transform 0.45s var(--ease), box-shadow 0.45s var(--ease); }
@@ -692,6 +630,8 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  /* rgba(0,0,0,…) box-shadows here and on the deck cards below are shadow
+     ink, not brand color — sanctioned literals (site.css .term precedent) */
   box-shadow: 0 16px 40px -28px rgba(0, 0, 0, 0.55);
   transition: background 0.2s var(--ease), border-color 0.2s var(--ease), color 0.2s var(--ease);
 }
@@ -918,11 +858,6 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
     --dqss-peek: 3.25rem;
   }
 }
-
-/* ---- closing CTA ---- */
-.dqcta { text-align: center; }
-.dqcta .dq-sub { margin-inline: auto; }
-.dqcta-actions { display: flex; gap: 0.8rem; flex-wrap: wrap; justify-content: center; margin-top: 2rem; }
 
 @media (prefers-reduced-motion: reduce) {
   .dqhero-h1 .ln > span, .dqhero-lede, .dqhero-cta { opacity: 1 !important; transform: none !important; transition: none !important; }

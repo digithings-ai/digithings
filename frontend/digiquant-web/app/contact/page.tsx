@@ -38,13 +38,16 @@ export default function ContactPage() {
               </div>
             </Reveal>
 
-            <div className="grid dq-contact" style={{ marginInline: "auto", marginTop: "2.4rem" }}>
-              <Reveal className="price-card">
-                <h3>Self hosted</h3>
-                <p className="price">
-                  open core · <span className="dq-up">free</span>
+            {/* Two-tier cards: token utilities on the boxes; the feature lists
+                reuse the shared .pricing__features family (✓ rows) so contact
+                and the homepage pricing section speak one grammar. */}
+            <div className="mx-auto mt-[2.4rem] grid max-w-[880px] grid-cols-2 gap-[1.25rem] max-[640px]:grid-cols-1">
+              <Reveal className="relative rounded-[var(--r-md)] border border-hair bg-surface px-[1.8rem] py-[2rem]">
+                <h3 className="text-[1.4rem] font-semibold tracking-[-0.02em]">Self hosted</h3>
+                <p className="mb-[1.3rem] mt-[0.4rem] font-mono text-[0.95rem] text-ink-soft">
+                  open core · <span className="text-up">free</span>
                 </p>
-                <ul>
+                <ul className="pricing__features mb-[1.6rem]">
                   {CONTACT_SELF_FEATURES.map((feature) => (
                     <li key={feature}>{feature}</li>
                   ))}
@@ -52,10 +55,12 @@ export default function ContactPage() {
                 <CloneRepoButton />
               </Reveal>
 
-              <Reveal className="price-card accent">
-                <h3>Managed</h3>
-                <p className="price">contact us</p>
-                <ul>
+              <Reveal className="price-card-accent relative rounded-[var(--r-md)] border px-[1.8rem] py-[2rem]">
+                <h3 className="text-[1.4rem] font-semibold tracking-[-0.02em]">Managed</h3>
+                <p className="mb-[1.3rem] mt-[0.4rem] font-mono text-[0.95rem] text-ink-soft">
+                  contact us
+                </p>
+                <ul className="pricing__features mb-[1.6rem]">
                   {CONTACT_MANAGED_FEATURES.map((feature) => (
                     <li key={feature}>{feature}</li>
                   ))}
@@ -67,9 +72,12 @@ export default function ContactPage() {
             </div>
 
             <Reveal>
-              <p className="dq-built" style={{ textAlign: "center", marginTop: "2.4rem" }}>
+              <p className="mx-auto mt-[2.4rem] max-w-[52ch] text-center text-[0.9rem] text-ink-mute">
                 Not sure which fits? Start self-managed — it&rsquo;s the full product — and{" "}
-                <a href={MANAGED_CONTACT_MAILTO}>get in touch</a> if you later want it managed.
+                <a className="text-accent" href={MANAGED_CONTACT_MAILTO}>
+                  get in touch
+                </a>{" "}
+                if you later want it managed.
               </p>
             </Reveal>
           </div>

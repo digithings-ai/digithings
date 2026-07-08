@@ -18,11 +18,11 @@ export default function StrategiesPage() {
   return (
     <>
       <SiteNav />
-      <main className="dq-subpage dq-subpage-library">
+      <main className="dq-subpage pb-[clamp(4.5rem,10vw,7rem)]">
         <AmbientMesh />
-        <div className="wrap">
+        <div className="wrap pb-[1.5rem]">
           <header className="dq-sechead">
-            <div className="dq-eyebrow">{"// strategies"}</div>
+            <div className="kicker">{"// strategies"}</div>
             <h1 className="dq-title">Strategy library</h1>
             <p className="dq-sub">
               Full tearsheets — equity, drawdown, trade log, and risk metrics. Each run is a
