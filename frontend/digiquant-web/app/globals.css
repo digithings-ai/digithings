@@ -83,29 +83,36 @@
     margin: 12mm 14mm;
   }
 
+  /* Print pins the LIGHT theme as literals: print cannot rely on data-theme
+     (a dark-mode visitor must still get paper-white output), so each value
+     below mirrors its :root[data-theme="light"] token from tokens.css —
+     named per line. Paper deviations are deliberate: pure #ffffff instead of
+     the off-white canvas, and opaque hairlines instead of alpha ones (alpha
+     borders dither on some print engines). Everything else in this @media
+     block consumes these pinned custom properties, never raw literals. */
   :root[data-theme],
   :root[data-theme="dark"],
   :root[data-theme="light"],
   html.ts-printing {
     color-scheme: light;
-    --bg: #ffffff;
-    --surface: #ffffff;
-    --surface-2: #ffffff;
-    --hair: #dddddd;
-    --hair-2: #cccccc;
-    --ink: #14181b;
-    --ink-soft: #5c636a;
-    --ink-mute: #8a9097;
-    --accent: #0e8c7f;
-    --accent-weak: rgba(14, 140, 127, 0.1);
-    --on-accent: #ffffff;
-    --up: #0e8c7f;
-    --down: #c9533b;
-    --warn: #b5832a;
+    --bg: #ffffff;                          /* --bg light = #FBFBF9; paper stays pure white */
+    --surface: #ffffff;                     /* --surface light = #FFFFFF */
+    --surface-2: #ffffff;                   /* --surface-2 light = #F4F4F1; flattened to paper */
+    --hair: #dddddd;                        /* --hair light = rgba(10,15,20,.10), opaque for print */
+    --hair-2: #cccccc;                      /* --hair-2 light = rgba(10,15,20,.18), opaque for print */
+    --ink: #14181b;                         /* --ink light */
+    --ink-soft: #5c636a;                    /* --ink-soft light */
+    --ink-mute: #8a9097;                    /* --ink-mute light */
+    --accent: #0e8c7f;                      /* --accent light */
+    --accent-weak: rgba(14, 140, 127, 0.1); /* --accent-weak light (.12 → .1 on paper) */
+    --on-accent: #ffffff;                   /* --on-accent light */
+    --up: #0e8c7f;                          /* --up light (paper phosphor) */
+    --down: #c9533b;                        /* --down light */
+    --warn: #b5832a;                        /* --warn light */
   }
 
   html, body {
-    background: #ffffff !important;
+    background: var(--bg) !important;
     color: var(--ink) !important;
   }
   body {
@@ -254,15 +261,15 @@
     break-inside: avoid;
     page-break-inside: avoid;
     box-shadow: none !important;
-    background: #ffffff !important;
+    background: var(--surface) !important;
     border: 1px solid var(--hair) !important;
   }
   .ts-position-live { border-color: var(--hair) !important; }
   .ts-chip {
-    background: #ffffff !important;
+    background: var(--surface) !important;
     border-color: var(--hair) !important;
   }
-  .ts-trade-open { background: #ffffff !important; }
+  .ts-trade-open { background: var(--surface) !important; }
 
   .ts-grid-2 { grid-template-columns: 1fr 1fr; }
   .ts-table-scroll,
@@ -273,7 +280,7 @@
   }
   .ts-table thead th {
     position: static;
-    background: #ffffff !important;
+    background: var(--surface) !important;
   }
   .ts-table th,
   .ts-table td {
@@ -283,7 +290,7 @@
 
   .ts-matrix-cell {
     border-color: var(--hair) !important;
-    background: #ffffff !important;
+    background: var(--surface) !important;
   }
 
   .ts-svg.is-interactive { pointer-events: none; }
