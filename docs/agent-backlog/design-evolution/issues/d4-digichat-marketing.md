@@ -1,6 +1,6 @@
 ## Goal
 
-Align **DigiChat** marketing/public route with Cursor "product is the hero" model — full chat chrome as pitch + `CodeSampleBand` for BYOK/API ([`EVOLUTION.md` §3 DigiChat](../../../../frontend/design/EVOLUTION.md)).
+Align **DigiChat** marketing/public route with Cursor "product is the hero" model — full chat chrome as pitch + `CodeSampleBand` for BYOK/API ([`EVOLUTION.md` §3 DigiChat](../../../../frontend/digiweb/design/EVOLUTION.md)).
 
 ## Component
 
@@ -26,7 +26,7 @@ Manual: `/login`, main chat route, marketing route
 ## Documentation to Update
 
 - [ ] `frontend/digichat/README.md`
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

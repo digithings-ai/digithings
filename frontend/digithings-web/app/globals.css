@@ -55,7 +55,7 @@
 
 /* ==========================================================================
    v7 LANDING CHROME — ported from digiquant-web/app/globals.css (itself from
-   frontend/design/demos/digiquant-landing/07-scroll-driven.html). Namespaced
+   frontend/digiweb/design/demos/digiquant-landing/07-scroll-driven.html). Namespaced
    `dq*` so nothing collides with shared site.css (.hero, .nav, .node, .stage,
    .brand, .section). Consumes [data-theme] tokens only → light/dark safe.
 

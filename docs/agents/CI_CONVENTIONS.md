@@ -35,7 +35,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `copilot-pr-lifecycle.lock.yml` | Copilot: PR lifecycle | schedule (10 min), dispatch | End-to-end `copilot/*` loop: issue link, mark-ready, CI, review, fix rounds, automerge | Working | none |
 | `copilot-pr-mark-ready.yml` | Copilot: PR mark ready | workflow_dispatch (dispatched by lifecycle) | Marks a draft `copilot/*` PR ready for review | Working | none |
 | `test-digibase.yml` | Test: digibase | workflow_call, push (main/develop), PR | digibase unit tests | Working | `digibase/**`, `tests/db/**` |
-| `test-digichat.yml` | Test: digichat | workflow_call, push (main/develop), PR | digichat (Next.js) lint + tests | Working | `frontend/digichat/**`, `frontend/design/**`, `package.json` |
+| `test-digichat.yml` | Test: digichat | workflow_call, push (main/develop), PR | digichat (Next.js) lint + tests | Working | `frontend/digichat/**`, `frontend/digiweb/design/**`, `package.json` |
 | `test-digiclaw.yml` | Test: digiclaw | workflow_call, push (main/develop), PR | digiclaw unit tests | Working | `digiclaw/**`, `tests/dc/**` |
 | `test-digigraph.yml` | Test: digigraph | workflow_call, push (main/develop), PR | digigraph unit tests | Working | `digigraph/**`, `tests/dg/**` |
 | `test-digikey.yml` | Test: digikey | workflow_call, push (main/develop), PR | digikey unit tests | Working | `digikey/**`, `tests/dk/**` |

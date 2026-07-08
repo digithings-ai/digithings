@@ -1,17 +1,17 @@
 ## Goal
 
-Add shared **`TrustStrip`** (logo/proof row) and **`reveal-up`** enter-animation utilities — Cursor hero trust line + Graphite friction reducers + Graphite glide reveals ([`copy-patterns.md`](../../../../frontend/design/references/scans/copy-patterns.md)).
+Add shared **`TrustStrip`** (logo/proof row) and **`reveal-up`** enter-animation utilities — Cursor hero trust line + Graphite friction reducers + Graphite glide reveals ([`copy-patterns.md`](../../../../frontend/digiweb/design/references/scans/copy-patterns.md)).
 
 ## Component
 
-- [x] cross-cutting (`frontend/design/`)
+- [x] cross-cutting (`frontend/digiweb/design/`)
 
 ## Acceptance Criteria
 
 - [ ] `.trust-strip` — horizontal flex/grid of proof items (text or logo slots), muted `--text-secondary`, works centered below hero CTAs
 - [ ] `.trust-strip__item` — supports text (`open core · self-hosted`) or `<img>` logo with consistent height (~24–32px)
 - [ ] `.reveal-up` utility — initial `opacity: 0; translateY(1rem)`; `.reveal-up.is-visible` (or `[data-revealed]`) animates with `--ease-glide` + `--duration-reveal`
-- [ ] Integrate with existing `frontend/design/scroll-trigger.js` or `site/reveal.js` — document trigger contract
+- [ ] Integrate with existing `frontend/digiweb/design/scroll-trigger.js` or `site/reveal.js` — document trigger contract
 - [ ] Respect `prefers-reduced-motion: reduce` (instant visible state)
 - [ ] Demo in smoke page
 - [ ] Document in `site/README.md`
@@ -23,8 +23,8 @@ Add shared **`TrustStrip`** (logo/proof row) and **`reveal-up`** enter-animation
 
 ## Documentation to Update
 
-- [ ] `frontend/design/site/README.md`
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/site/README.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

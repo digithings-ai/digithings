@@ -45,14 +45,14 @@ digigraph:
 
 digichat:
   - frontend/digichat/**
-  - frontend/design/**
+  - frontend/digiweb/design/**
   - package.json
   - package-lock.json
   - .github/workflows/test-digichat.yml
 
 olympus:
   - frontend/olympus/**
-  - frontend/design/**
+  - frontend/digiweb/design/**
   - package.json
   - package-lock.json
   - .github/workflows/test-olympus.yml
@@ -60,8 +60,8 @@ olympus:
 web:
   - frontend/digithings-web/**
   - frontend/digiquant-web/**
-  - frontend/web/**
-  - frontend/design/**
+  - frontend/digiweb/web/**
+  - frontend/digiweb/design/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
