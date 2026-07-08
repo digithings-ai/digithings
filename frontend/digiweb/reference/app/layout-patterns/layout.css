@@ -213,49 +213,10 @@
   }
 }
 
-/* Numbered stages — a sequential-step spine, one livery per stage */
-
-/* ns-spine + ns-stage base layout migrated to utilities in
-   numbered-stages-reference.tsx; the ::before spine art and :last-child
-   overrides stay in CSS. */
-
-.ns-stage:last-child {
-  padding-bottom: 0;
-}
-
-/* the spine line runs through the node column, behind the badges */
-.ns-stage::before {
-  content: "";
-  position: absolute;
-  left: calc(1.7rem - 0.5px);
-  top: 1.9rem;
-  bottom: -0.1rem;
-  width: 1px;
-  background: var(--hair);
-}
-
-.ns-stage:last-child::before {
-  display: none;
-}
-
-.ns-node {
-  position: relative;
-  z-index: 1;
-  width: 3.4rem;
-  height: 2rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--hair));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: var(--accent);
-}
-
-/* ns-body / tag / title / mech migrated to utilities in
-   numbered-stages-reference.tsx. */
+/* Numbered stages — promoted to @digithings/web (#1415): the <NumberedStages/>
+   primitive (components/stages/NumberedStages.tsx) carries the utilities; the
+   ns-* structural CSS (::before spine, :last-child stops, color-mix node) lives
+   in @digithings/web/styles/stages.css, imported from globals.css. */
 
 /* Social-proof / testimonial wall — fully migrated to token utilities in
    testimonial-wall-reference.tsx; no CSS rules remain. */

@@ -3,6 +3,7 @@ import { CodeReviewReference } from "@/components/code-review-reference";
 import { CodeSampleReference } from "@/components/code-sample-reference";
 import { StreamTranscriptReference } from "@/components/stream-transcript-reference";
 import { TerminalBudgetReference } from "@/components/terminal-budget-reference";
+import { TerminalManifestReference } from "@/components/terminal-manifest-reference";
 
 export default function TerminalPage() {
   return (
@@ -19,6 +20,7 @@ export default function TerminalPage() {
       </header>
 
       <TerminalBudgetReference />
+      <TerminalManifestReference />
       <StreamTranscriptReference />
       <CodeReviewReference />
       <CodeSampleReference />

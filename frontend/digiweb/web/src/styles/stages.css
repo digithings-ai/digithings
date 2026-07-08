@@ -1,0 +1,53 @@
+/* ==========================================================================
+   @digithings/web — numbered-stages structural CSS (components/stages/*).
+   Import AFTER the token bridge, in the app's globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/stages.css";
+     @source "<path-to>/digiweb/web/src/components/stages";
+   The @source line is load-bearing (path relative to the app's globals.css):
+   the component carries token-backed utilities, and Tailwind does not scan
+   package sources on its own.
+
+   Utilities in <NumberedStages/> carry the layout/spacing/color/type. This
+   file holds only what must stay CSS: the ::before spine art running through
+   the badge column, the :last-child stop rules, and the badge's two-color
+   color-mix border/fill (re-tinted per stage by an `accent-<module>` livery
+   scope from @digithings/design/tokens.css).
+   ========================================================================== */
+
+.ns-stage:last-child {
+  padding-bottom: 0;
+}
+
+/* the spine line runs through the node column, behind the badges */
+.ns-stage::before {
+  content: "";
+  position: absolute;
+  left: calc(1.7rem - 0.5px);
+  top: 1.9rem;
+  bottom: -0.1rem;
+  width: 1px;
+  background: var(--hair);
+}
+
+.ns-stage:last-child::before {
+  display: none;
+}
+
+.ns-node {
+  position: relative;
+  z-index: 1;
+  width: 3.4rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--hair));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+}
