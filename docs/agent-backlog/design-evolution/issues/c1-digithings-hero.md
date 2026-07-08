@@ -1,6 +1,6 @@
 ## Goal
 
-Realign **digithings.ai** hero to Cursor pattern: literal primary CTA, trust strip, and `ProductFrame` product visual — per [`EVOLUTION.md` §3 digithings](../../../../frontend/design/EVOLUTION.md).
+Realign **digithings.ai** hero to Cursor pattern: literal primary CTA, trust strip, and `ProductFrame` product visual — per [`EVOLUTION.md` §3 digithings](../../../../frontend/digiweb/design/EVOLUTION.md).
 
 ## Component
 
@@ -29,7 +29,7 @@ Realign **digithings.ai** hero to Cursor pattern: literal primary CTA, trust str
 ## Documentation to Update
 
 - [ ] `frontend/digithings-web/README.md` or landing component doc if exists
-- [ ] `frontend/design/EVOLUTION.md` Phase C digithings hero item
+- [ ] `frontend/digiweb/design/EVOLUTION.md` Phase C digithings hero item
 
 ## Out of Scope
 

@@ -1,14 +1,14 @@
 ## Goal
 
-Extract a reusable **`ScrollyFeatures`** primitive from digiquant's `PipelineScene` / strategy scroll patterns — Graphite-style pinned section + progress rail + N slides ([`graphite-full.md`](../../../../frontend/design/references/scans/graphite-full.md)).
+Extract a reusable **`ScrollyFeatures`** primitive from digiquant's `PipelineScene` / strategy scroll patterns — Graphite-style pinned section + progress rail + N slides ([`graphite-full.md`](../../../../frontend/digiweb/design/references/scans/graphite-full.md)).
 
 ## Component
 
-- [x] cross-cutting (`frontend/design/`)
+- [x] cross-cutting (`frontend/digiweb/design/`)
 
 ## Acceptance Criteria
 
-- [ ] Shared module (JS + CSS) under `frontend/design/`:
+- [ ] Shared module (JS + CSS) under `frontend/digiweb/design/`:
   - Sticky pin container with configurable slide count
   - **Progress rail** — vertical or horizontal indicator showing active slide index (Graphite pattern)
   - Scroll-driven slide transitions using existing scroll-trigger patterns
@@ -25,9 +25,9 @@ Extract a reusable **`ScrollyFeatures`** primitive from digiquant's `PipelineSce
 
 ## Documentation to Update
 
-- [ ] `frontend/design/site/README.md` — ScrollyFeatures API
+- [ ] `frontend/digiweb/design/site/README.md` — ScrollyFeatures API
 - [ ] `frontend/digiquant-web/ARCHITECTURE.md` if landing structure changes
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

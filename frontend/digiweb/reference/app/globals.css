@@ -1,0 +1,484 @@
+@import "tailwindcss";
+@import "@digithings/design/tokens.css";
+@import "@digithings/web/styles/web-theme.css";
+@import "@digithings/web/styles/docs.css";
+@import "@digithings/web/styles/nav-shell.css";
+
+/* Shared components (@digithings/web) carry token-backed utilities, and
+   Tailwind never scans package sources on its own — point it at them
+   explicitly. */
+@source "../../web/src/components/docs";
+@source "../../web/src/components/NavShell.tsx";
+
+/* Shared base for every design-reference page. Family-specific styles live
+   next to their page (app/<family>/<family>.css) — keep this file small. */
+
+:root[data-theme] {
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-fraunces), "Fraunces", Georgia, serif;
+  --peek: 3.2rem;
+  --nav-h: 3.4rem;
+}
+
+/* Token → Tailwind bridge: supplied by @digithings/web/styles/web-theme.css
+   (the single `@theme inline` canon — see its header). The former local bridge
+   and the reference-only color rulings (--up/--down phosphor money colors,
+   atlas/hermes/kairos → ink) were promoted into the shared files 2026-07-08. */
+
+/* Anchor jumps clear the sticky nav instead of tucking the target title
+   underneath it. Every id-anchored section inherits the same offset. */
+html {
+  scroll-padding-top: calc(var(--nav-h) + 1rem);
+}
+
+/* Skip link — visually hidden until keyboard focus */
+
+.skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 30;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--surface-inverse, #06110f);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/* Site nav — the one piece of chrome shared across pages */
+
+.site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 1.6rem;
+  padding: 0.75rem clamp(1rem, 3vw, 1.8rem);
+  border-bottom: 1px solid var(--hair);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(10px);
+  /* stay a single row — JS collapses to the hamburger the moment the inline
+     links would overflow (see SiteNav). overflow:clip contains any transient
+     pre-hydration overflow so the bar never grows to a second line. */
+  flex-wrap: nowrap;
+  overflow: clip;
+}
+
+.site-nav-mark {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.82rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.site-nav-mark em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.site-nav-links {
+  list-style: none;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+}
+
+.site-nav-links a {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+  text-decoration: none;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid transparent;
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.site-nav-links a:hover {
+  color: var(--ink);
+}
+
+.site-nav-links a[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Reusable keycap — command palette, search hint, footer hints */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--hair);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  line-height: 1;
+  color: var(--ink-soft);
+  vertical-align: middle;
+}
+
+/* Livery (color) + type (font) selectors — persistent, app-wide choosers in
+   the bar. The livery starts the right-aligned control group. */
+
+.site-nav-livery {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+.site-nav-suite {
+  display: inline-flex;
+  align-items: center;
+}
+
+.site-nav-livery select,
+.site-nav-suite select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0.32rem 1.4rem 0.32rem 0.6rem;
+  cursor: pointer;
+  /* mono chevron, tinted with the live accent */
+  background-image: linear-gradient(45deg, transparent 50%, var(--accent) 50%),
+    linear-gradient(135deg, var(--accent) 50%, transparent 50%);
+  background-position: right 0.62rem center, right 0.42rem center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.site-nav-livery select:hover,
+.site-nav-suite select:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.site-nav-livery select option,
+.site-nav-suite select option {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* Theme toggle + hamburger — the production dqnav grammar: borderless,
+   no fill, glyph/lines only; ink-mute resting, ink on hover. */
+
+.site-nav-theme {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: color 0.2s var(--ease);
+}
+
+.site-nav-theme:hover {
+  color: var(--ink);
+}
+
+.site-nav-burger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 0.5rem;
+  margin: 0 0 0 0.4rem;
+  border: none;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: color 0.2s var(--ease);
+}
+
+.site-nav-burger:hover {
+  color: var(--ink);
+}
+
+.site-nav-burger span {
+  display: block;
+  width: 18px;
+  height: 1.5px;
+  background: currentColor;
+  border-radius: 1px;
+  transition: transform 0.25s var(--ease);
+}
+
+.site-nav-burger.is-open span:first-child {
+  transform: translateY(3.25px) rotate(45deg);
+}
+
+.site-nav-burger.is-open span:last-child {
+  transform: translateY(-3.25px) rotate(-45deg);
+}
+
+/* Full-viewport scrim: dims + aggressively blurs the page behind the menu */
+
+.site-nav-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 18;
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  backdrop-filter: blur(40px) saturate(1.3);
+  -webkit-backdrop-filter: blur(40px) saturate(1.3);
+}
+
+/* Sheet: transparent over the blurred page, right-aligned serif links */
+
+.site-nav-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 4.6rem clamp(1.25rem, 5vw, 2rem) 1.25rem;
+  pointer-events: none;
+}
+
+.site-nav-sheet ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: min(100%, 20rem);
+  pointer-events: auto;
+}
+
+.site-nav-sheet a {
+  display: block;
+  width: 100%;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  color: var(--ink-soft);
+  text-align: right;
+  text-decoration: none;
+  transition: color 0.2s var(--ease);
+}
+
+.site-nav-sheet a:hover,
+.site-nav-sheet a[aria-current="page"] {
+  color: var(--ink);
+}
+
+.site-nav-sheet a[aria-current="page"] {
+  border-bottom-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+}
+
+/* Collapsed state — driven by JS fit-detection (SiteNav), not a fixed
+   breakpoint: the inline links give way to the hamburger the instant they
+   would no longer fit on one row, whatever the viewport width. */
+.site-nav.is-collapsed .site-nav-links {
+  display: none;
+}
+
+.site-nav.is-collapsed .site-nav-burger {
+  display: inline-flex;
+}
+
+/* Page scaffold */
+
+.reference-page {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: clamp(2.4rem, 5vw, 4rem) clamp(1rem, 3vw, 1.8rem) 5rem;
+}
+
+.hero {
+  border-bottom: 1px solid var(--hair);
+  padding-bottom: 2rem;
+}
+
+.hero h1 {
+  margin-top: 0.6rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  letter-spacing: -0.02em;
+  line-height: 1.04;
+}
+
+.hero h1 em {
+  color: var(--accent);
+  font-style: italic;
+}
+
+.hero p {
+  color: var(--ink-soft);
+  max-width: 62ch;
+  margin-top: 0.9rem;
+}
+
+/* the hero eyebrow is accent like every other kicker — outrank `.hero p` */
+.hero .kicker {
+  color: var(--accent);
+  margin-top: 0;
+}
+
+.section-block {
+  margin-top: clamp(3rem, 7vw, 5rem);
+}
+
+.section-head .kicker,
+.kicker {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.section-head .title,
+.title {
+  margin-top: 0.55rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.4rem, 3.2vw, 2rem);
+  letter-spacing: -0.013em;
+  line-height: 1.1;
+}
+
+.section-copy {
+  margin-top: 0.7rem;
+  color: var(--ink-soft);
+  max-width: 68ch;
+}
+
+/* Buttons — consumed by several pages (foundations, data, account) */
+
+.btn-row {
+  margin-top: 1.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.btn-row-states {
+  margin-top: 0.8rem;
+}
+
+.btn-primary,
+.btn-ghost,
+.btn-quiet,
+.btn-danger {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  padding: 0.62rem 1.3rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--surface-inverse, #06110f);
+  border-color: var(--accent);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-magnetic {
+  will-change: transform;
+}
+
+.btn-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--surface-inverse, #06110f) 30%, transparent);
+  border-top-color: var(--surface-inverse, #06110f);
+  animation: btn-spin 0.7s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--hair);
+}
+
+.btn-ghost:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.btn-quiet {
+  background: transparent;
+  color: var(--ink-mute);
+  border-color: transparent;
+  padding-left: 0.2rem;
+  padding-right: 0.2rem;
+}
+
+.btn-quiet:hover {
+  color: var(--ink);
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
+}
+
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--down) 10%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-spinner {
+    animation: none !important;
+  }
+}

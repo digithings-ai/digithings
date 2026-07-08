@@ -1,0 +1,94 @@
+"use client";
+
+/**
+ * Chat markdown — an assistant turn rendering full markdown (headings, emphasis,
+ * lists, block quotes, fenced code with a copy affordance, tables) on the token
+ * palette. Static display template.
+ */
+export function ChatMarkdownReference() {
+  return (
+    <section className="section-block">
+      <p className="kicker">{"// markdown"}</p>
+      <h2 className="title">Rich text, rendered in place.</h2>
+      <p className="section-copy">
+        Assistant turns render full markdown — headings, emphasis, ordered and unordered lists,
+        block quotes, fenced code with a copy affordance, and tables — all on the token palette so
+        it reads as one surface. This shows the rendered result, not the raw source.
+      </p>
+
+      <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-[12px] border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
+        <div className="flex gap-[0.55rem] items-baseline chat-turn--assistant">
+          <span className="shrink-0 font-mono text-[0.86rem] leading-[1.5] text-accent" aria-hidden="true">
+            ▸
+          </span>
+          <div className="md-body min-w-0 border-0 rounded-none bg-transparent p-0 text-[0.88rem] leading-[1.6]">
+            <h3>Backtest summary</h3>
+            <p>
+              <code>trend_xsec</code> on <strong>ETH-USD</strong> over eight years returns a{" "}
+              <strong>profit factor of 2.31</strong> — <em>respectable, but fee-sensitive</em>. Two
+              things worth calling out before you size it up:
+            </p>
+            <ul>
+              <li>Turnover is high — half the edge is eaten below 4bps of slippage.</li>
+              <li>The 2022 drawdown ran 11 weeks; size for the duration, not just the depth.</li>
+            </ul>
+            <p>Suggested next steps:</p>
+            <ol>
+              <li>Re-run with the venue&apos;s live maker/taker schedule.</li>
+              <li>Add a volatility target so exposure scales down in chop.</li>
+              <li>Paper-trade for two weeks before any live capital.</li>
+            </ol>
+            <blockquote>
+              Never route to a broker without human approval — live paths are gated for a reason.
+            </blockquote>
+            <figure className="md-code">
+              <figcaption>
+                <span>python</span>
+                <button type="button" className="md-copy">
+                  copy
+                </button>
+              </figcaption>
+              <pre>
+                <code>
+                  {`bt = Backtest("trend_xsec", symbol="ETH-USD")
+bt.fees = venue.schedule("binance")
+bt.sizing = Kelly(cap=0.5)
+report = bt.run(years=8)`}
+                </code>
+              </pre>
+            </figure>
+            <table className="md-table">
+              <thead>
+                <tr>
+                  <th>metric</th>
+                  <th>value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>profit factor</td>
+                  <td>2.31</td>
+                </tr>
+                <tr>
+                  <td>max drawdown</td>
+                  <td>−18.4%</td>
+                </tr>
+                <tr>
+                  <td>sharpe</td>
+                  <td>1.87</td>
+                </tr>
+              </tbody>
+            </table>
+            <p>
+              Full methodology in the{" "}
+              <a href="#" className="md-link">
+                vault tearsheet
+              </a>
+              .
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}

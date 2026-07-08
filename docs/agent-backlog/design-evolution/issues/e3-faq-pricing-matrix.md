@@ -4,7 +4,7 @@ Build shared **`FaqAccordion`** and **`PricingMatrix`** primitives — Graphite/
 
 ## Component
 
-- [x] cross-cutting (`frontend/design/`)
+- [x] cross-cutting (`frontend/digiweb/design/`)
 
 ## Acceptance Criteria
 
@@ -15,7 +15,7 @@ Build shared **`FaqAccordion`** and **`PricingMatrix`** primitives — Graphite/
 - [ ] JSON content shape documented for FAQ + tiers per site
 - [ ] `prefers-reduced-motion` respected on expand/collapse
 - [ ] Demo in smoke page
-- [ ] Document in `frontend/design/site/README.md`
+- [ ] Document in `frontend/digiweb/design/site/README.md`
 
 ## Test Requirements
 
@@ -27,8 +27,8 @@ Manual: keyboard expand FAQ; tier cards responsive at mobile.
 
 ## Documentation to Update
 
-- [ ] `frontend/design/site/README.md`
-- [ ] `frontend/design/COPY_GUIDE.md` §8 pricing voice
+- [ ] `frontend/digiweb/design/site/README.md`
+- [ ] `frontend/digiweb/design/COPY_GUIDE.md` §8 pricing voice
 
 ## Out of Scope
 
