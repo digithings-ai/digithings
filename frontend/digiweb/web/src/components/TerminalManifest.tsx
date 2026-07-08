@@ -181,7 +181,10 @@ export function TerminalManifest({
                 </p>
               )}
             </div>
-            {footer}
+            {/* Fragment keeps the slot element out of this children array: an
+                element prop arriving across an RSC boundary trips React 19's
+                missing-key check when reconciled as a direct array member. */}
+            <>{footer}</>
           </div>
         </div>
       </div>
