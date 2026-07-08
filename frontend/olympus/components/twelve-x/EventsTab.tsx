@@ -149,7 +149,7 @@ function EventRow({
         // Every row opens the event-detail slide-over so the list and the timeline
         // behave identically — one click, same popup, opinions or not.
         onClick={() => onSelect(event)}
-        className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.02]"
+        className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-ink/[0.02]"
       >
         {/* Time column */}
         <div className="w-14 shrink-0 text-right">
@@ -355,7 +355,7 @@ export default function EventsTab({
         <h2 className="text-base font-semibold text-ink md:text-lg">Upcoming catalysts</h2>
         {/* List | Timeline segmented control (demo's #evtSubnav). */}
         <div
-          className="ml-auto inline-flex overflow-hidden rounded-md border border-white/10 text-[11px]"
+          className="ml-auto inline-flex overflow-hidden rounded-md border border-hair text-[11px]"
           role="group"
           aria-label="Events view"
         >

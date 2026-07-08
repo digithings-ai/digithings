@@ -21,7 +21,7 @@ export default function MobileAppBar() {
         <button
           type="button"
           onClick={toggleMobileNav}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hair text-ink hover:bg-white/[0.06]"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hair text-ink hover:bg-ink/[0.06]"
           aria-expanded={mobileNavOpen}
           aria-controls="app-sidebar-nav"
           aria-label={mobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
@@ -34,7 +34,7 @@ export default function MobileAppBar() {
         <button
           type="button"
           onClick={openCommandPalette}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hair text-ink hover:bg-white/[0.06]"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hair text-ink hover:bg-ink/[0.06]"
           aria-label="Search"
         >
           <Search size={20} strokeWidth={2} />

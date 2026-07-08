@@ -86,7 +86,7 @@ export default function EventDetailPanel({
       <div className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-hair bg-term-bg shadow-2xl">
         {/* Grab bar — phone-only affordance hinting the sheet is dismissable. */}
         <div className="flex shrink-0 justify-center pt-2 sm:hidden" aria-hidden>
-          <span className="h-1 w-9 rounded-full bg-white/20" />
+          <span className="h-1 w-9 rounded-full bg-ink/20" />
         </div>
         <div className="flex items-start gap-3 border-b border-hair px-5 py-4">
           <CalendarClock size={18} className="mt-0.5 shrink-0 text-accent" aria-hidden />
@@ -112,7 +112,7 @@ export default function EventDetailPanel({
             type="button"
             onClick={handleClose}
             aria-label="Close"
-            className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-mute transition-colors hover:bg-white/[0.06] hover:text-ink sm:h-9 sm:w-9"
+            className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
           >
             <X size={18} aria-hidden />
           </button>
@@ -130,7 +130,7 @@ export default function EventDetailPanel({
             ).map(([label, value, valueClass]) => (
               <div
                 key={label}
-                className="rounded-lg border border-hair bg-white/[0.02] px-3 py-2"
+                className="rounded-lg border border-hair bg-ink/[0.02] px-3 py-2"
               >
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
                   {label}
@@ -166,7 +166,7 @@ export default function EventDetailPanel({
                   opinions!.citations.map((c, i) => (
                     <div
                       key={`${c.broker}-${c.source_file}-${i}`}
-                      className="rounded-lg bg-white/[0.02] p-3"
+                      className="rounded-lg bg-ink/[0.02] p-3"
                     >
                       <div className="mb-1 font-mono text-xs font-semibold text-ink">
                         {c.broker || 'Unknown desk'}

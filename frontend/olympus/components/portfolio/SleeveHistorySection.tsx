@@ -40,21 +40,21 @@ export default function SleeveHistorySection(props: {
             <button
               type="button"
               onClick={() => setHistoryMode('ticker')}
-              className={`px-3 py-1.5 font-medium ${historyMode === 'ticker' ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-ink-mute hover:bg-white/[0.04]'}`}
+              className={`px-3 py-1.5 font-medium ${historyMode === 'ticker' ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-ink-mute hover:bg-ink/[0.04]'}`}
             >
               Ticker
             </button>
             <button
               type="button"
               onClick={() => setHistoryMode('category')}
-              className={`px-3 py-1.5 font-medium border-l border-hair ${historyMode === 'category' ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-ink-mute hover:bg-white/[0.04]'}`}
+              className={`px-3 py-1.5 font-medium border-l border-hair ${historyMode === 'category' ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-ink-mute hover:bg-ink/[0.04]'}`}
             >
               Category
             </button>
             <button
               type="button"
               onClick={() => setHistoryMode('thesis')}
-              className={`px-3 py-1.5 font-medium border-l border-hair ${historyMode === 'thesis' ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-ink-mute hover:bg-white/[0.04]'}`}
+              className={`px-3 py-1.5 font-medium border-l border-hair ${historyMode === 'thesis' ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'text-ink-mute hover:bg-ink/[0.04]'}`}
             >
               Thesis
             </button>
@@ -69,7 +69,7 @@ export default function SleeveHistorySection(props: {
             <button
               type="button"
               onClick={onClearHistoryDate}
-              className="shrink-0 px-2 py-1 rounded border border-hair hover:bg-white/[0.06] text-ink"
+              className="shrink-0 px-2 py-1 rounded border border-hair hover:bg-ink/[0.06] text-ink"
             >
               Clear
             </button>

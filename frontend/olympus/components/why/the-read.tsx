@@ -47,7 +47,7 @@ export function TheReadBody({ digest }: { digest: DigestPayload }) {
               return (
                 <span
                   key={seg}
-                  className="inline-flex items-center gap-1 rounded-md border border-hair bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-ink-mute"
+                  className="inline-flex items-center gap-1 rounded-md border border-hair bg-ink/[0.04] px-1.5 py-0.5 text-[10px] text-ink-mute"
                   title={isToday ? 'Refreshed in the latest run' : 'Carried from the last baseline'}
                 >
                   <span

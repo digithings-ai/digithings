@@ -131,7 +131,7 @@ function segmentBtnClass(active: boolean) {
   return `rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${
     active
       ? 'border-accent/40 bg-accent/15 text-accent'
-      : 'border-transparent text-ink-mute hover:text-ink hover:bg-white/[0.06]'
+      : 'border-transparent text-ink-mute hover:text-ink hover:bg-ink/[0.06]'
   }`;
 }
 
@@ -201,7 +201,7 @@ function DigestCompareDropdown({
                   ? 'text-ink-mute opacity-40 cursor-not-allowed'
                   : compareKind === 'previous_digest'
                     ? 'bg-accent/15 text-accent'
-                    : 'text-ink-soft hover:bg-white/[0.06] hover:text-ink'
+                    : 'text-ink-soft hover:bg-ink/[0.06] hover:text-ink'
               }`}
             >
               {comparePresetLabel('previous_digest', context)}
@@ -221,7 +221,7 @@ function DigestCompareDropdown({
                   ? 'text-ink-mute opacity-40 cursor-not-allowed'
                   : compareKind === 'delta_baseline'
                     ? 'bg-accent/15 text-accent'
-                    : 'text-ink-soft hover:bg-white/[0.06] hover:text-ink'
+                    : 'text-ink-soft hover:bg-ink/[0.06] hover:text-ink'
               }`}
             >
               {comparePresetLabel('delta_baseline', context)}

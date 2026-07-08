@@ -197,7 +197,7 @@ export default function PositionDrilldown({
       className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
         windowPreset === k
           ? 'bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/40'
-          : 'border border-hair text-ink-mute hover:bg-white/[0.04]'
+          : 'border border-hair text-ink-mute hover:bg-ink/[0.04]'
       }`}
     >
       {DRILLDOWN_WINDOW_LABELS[k]}
@@ -449,7 +449,7 @@ export default function PositionDrilldown({
                 ledgerDesc.map((e, i) => {
                   const ledgerPx = onLedgerPrice(e);
                   return (
-                  <tr key={`${e.date}-${e.event}-${i}`} className="hover:bg-white/[0.02]">
+                  <tr key={`${e.date}-${e.event}-${i}`} className="hover:bg-ink/[0.02]">
                     <td className="px-3 py-2 font-mono text-xs text-ink-soft whitespace-nowrap">{e.date}</td>
                     <td className="px-3 py-2">
                       <span className={`font-semibold text-xs ${eventLabelClass(e.event)}`}>{e.event}</span>

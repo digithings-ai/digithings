@@ -285,7 +285,7 @@ function ContribChartBrushPanel({
           <button
             type="button"
             onClick={resetView}
-            className="text-[11px] px-2.5 py-1 rounded-lg border border-hair text-ink-soft hover:bg-white/[0.04] hover:text-ink transition-colors"
+            className="text-[11px] px-2.5 py-1 rounded-lg border border-hair text-ink-soft hover:bg-ink/[0.04] hover:text-ink transition-colors"
           >
             Fit all
           </button>

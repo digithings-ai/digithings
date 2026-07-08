@@ -179,6 +179,20 @@ export const CURRENCY_COLORS: Record<string, string> = {
 export const CURRENCY_FALLBACK = '#94a3b8';
 
 /**
+ * Comparable-overlay stroke: the fixed benchmark hue when known, otherwise a
+ * stable hash-derived hsl so ad-hoc tickers keep a consistent identity.
+ */
+export function comparableLineColor(t: string): string {
+  if (BENCHMARK_COLORS[t]) return BENCHMARK_COLORS[t];
+  let h = 0;
+  for (let i = 0; i < t.length; i++) {
+    h = t.charCodeAt(i) + ((h << 5) - h);
+  }
+  const hue = Math.abs(h) % 360;
+  return `hsl(${hue} 62% 58%)`;
+}
+
+/**
  * Position-event markers (price/contribution charts). Deliberately FIXED,
  * not token-driven: in the dark theme --up === --accent (both the digiquant
  * phosphor), which would make OPEN and ADD markers indistinguishable. The

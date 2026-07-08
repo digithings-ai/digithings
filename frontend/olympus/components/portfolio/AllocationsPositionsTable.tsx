@@ -171,8 +171,8 @@ export default function AllocationsPositionsTable(props: {
                     <Fragment key={p.ticker}>
                       <tr
                         onClick={() => setExpandedTicker(isExpanded ? null : p.ticker)}
-                        className={`cursor-pointer transition-colors hover:bg-white/[0.03] ${
-                          isExpanded ? 'bg-white/[0.02]' : ''
+                        className={`cursor-pointer transition-colors hover:bg-ink/[0.03] ${
+                          isExpanded ? 'bg-ink/[0.02]' : ''
                         }`}
                       >
                         <td className="pl-2 pr-2 py-3 md:pl-4">
@@ -279,7 +279,7 @@ export default function AllocationsPositionsTable(props: {
                         </td>
                       </tr>
                       {isExpanded && (
-                        <tr className="bg-white/[0.02]">
+                        <tr className="bg-ink/[0.02]">
                           <td colSpan={colCount} className="px-4 py-5 md:px-6 md:py-6">
                             <PositionDrilldown
                               key={p.ticker}

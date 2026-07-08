@@ -298,7 +298,7 @@ export function DeliberationsTab() {
                       type="button"
                       onClick={() => setActiveId(active ? null : d.id)}
                       aria-expanded={active}
-                      className={`w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-white/[0.03] transition-colors ${
+                      className={`w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-ink/[0.03] transition-colors ${
                         active ? 'bg-warn/[0.06]' : ''
                       }`}
                     >

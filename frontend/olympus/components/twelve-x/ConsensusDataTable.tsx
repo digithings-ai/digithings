@@ -326,7 +326,7 @@ export function ConsensusDataTable({
                 } ${
                   on
                     ? 'bg-accent/15 text-accent'
-                    : 'text-ink-soft hover:text-ink hover:bg-white/[0.03]'
+                    : 'text-ink-soft hover:text-ink hover:bg-ink/[0.03]'
                 }`}
               >
                 {n}
@@ -422,7 +422,7 @@ export function ConsensusDataTable({
                   <tr
                     key={r.currency}
                     data-ccy={r.currency}
-                    className="text-sm hover:bg-white/[0.02] transition-colors"
+                    className="text-sm hover:bg-ink/[0.02] transition-colors"
                   >
                     <td className="px-3.5 py-2.5">
                       <span

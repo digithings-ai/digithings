@@ -65,7 +65,7 @@ export default function BriefsSlideshow({
             key={`${bb.source_file}-${bb.run_date}-${n}`}
             type="button"
             aria-label={`Go to brief ${n + 1}`}
-            className={`h-1.5 w-1.5 rounded-full ${n === idx ? 'bg-accent' : 'bg-white/20'}`}
+            className={`h-1.5 w-1.5 rounded-full ${n === idx ? 'bg-accent' : 'bg-ink/20'}`}
             onClick={() => setI(n)}
           />
         ))}

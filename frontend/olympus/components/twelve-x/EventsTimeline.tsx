@@ -184,7 +184,7 @@ export function impactClass(impact: TimelineImpact): string {
 function impactStyle(impact: TimelineImpact): string {
   if (impact === 'high') return 'border-l-down bg-down/[0.13]';
   if (impact === 'medium') return 'border-l-warn bg-warn/[0.13]';
-  return 'border-l-ink-mute bg-white/[0.045]';
+  return 'border-l-ink-mute bg-ink/[0.045]';
 }
 
 function shortDayLabel(date: string): string {
@@ -258,7 +258,7 @@ export default function EventsTimeline({ events, mode, day, onSelect }: EventsTi
       {mode === 'multi' ? (
         <div className="flex flex-wrap items-center gap-2.5">
           <span className="text-[11px] uppercase tracking-[0.08em] text-ink-mute">Scale</span>
-          <div className="inline-flex overflow-hidden rounded-md border border-white/10 text-[11px]">
+          <div className="inline-flex overflow-hidden rounded-md border border-hair text-[11px]">
             {(['day', 'hour'] as const).map((s) => (
               <button
                 key={s}
@@ -289,18 +289,18 @@ export default function EventsTimeline({ events, mode, day, onSelect }: EventsTi
 
       <div
         ref={scrollRef}
-        className={`tl-scroll max-w-full overflow-y-hidden rounded-[10px] border border-white/10 bg-surface ${
+        className={`tl-scroll max-w-full overflow-y-hidden rounded-[10px] border border-hair bg-surface ${
           mode === 'single' ? 'overflow-x-hidden max-[760px]:overflow-x-auto' : 'overflow-x-auto'
         }`}
       >
         <div className="relative" style={{ width: totalW }}>
           {/* axis */}
           <div
-            className="sticky top-0 z-[3] flex h-[42px] border-b border-white/10 bg-surface"
+            className="sticky top-0 z-[3] flex h-[42px] border-b border-hair bg-surface"
             style={{ width: totalW }}
           >
             {days.map((d) => (
-              <div key={d} className="relative flex-none border-r border-white/[0.06] last:border-r-0" style={{ width: dayWidth }}>
+              <div key={d} className="relative flex-none border-r border-ink/[0.06] last:border-r-0" style={{ width: dayWidth }}>
                 {showDayLabel ? (
                   <span className="absolute left-0 top-[5px] whitespace-nowrap px-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-soft">
                     {shortDayLabel(d)}
@@ -310,7 +310,7 @@ export default function EventsTimeline({ events, mode, day, onSelect }: EventsTi
                   const x = (h - TL_WIN_START) * pxPerHour;
                   return (
                     <span key={`t-${h}`}>
-                      <span className="absolute bottom-0 top-[22px] w-0 border-l border-white/10" style={{ left: x }} />
+                      <span className="absolute bottom-0 top-[22px] w-0 border-l border-hair" style={{ left: x }} />
                       {h < TL_WIN_END ? (
                         <span
                           className="absolute bottom-[4px] -translate-x-1/2 whitespace-nowrap font-mono text-[9.5px] text-ink-mute"
@@ -333,13 +333,13 @@ export default function EventsTimeline({ events, mode, day, onSelect }: EventsTi
               return (
                 <span key={`col-${d}`}>
                   <div
-                    className="absolute bottom-0 top-0 border-r border-white/[0.06]"
+                    className="absolute bottom-0 top-0 border-r border-ink/[0.06]"
                     style={{ left: dayLeft, width: dayWidth }}
                   />
                   {ticks.map((h) => (
                     <span
                       key={`g-${d}-${h}`}
-                      className="tl-grid absolute bottom-0 top-0 w-0 border-l border-white/10"
+                      className="tl-grid absolute bottom-0 top-0 w-0 border-l border-hair"
                       style={{ left: dayLeft + (h - TL_WIN_START) * pxPerHour }}
                     />
                   ))}
@@ -354,7 +354,7 @@ export default function EventsTimeline({ events, mode, day, onSelect }: EventsTi
                 const e = c.event;
                 const clickable = Boolean(onSelect && e.id != null);
                 const className = `tl-card absolute box-border overflow-hidden rounded-md border-l-[3px] px-[7px] py-[5px] text-left ${
-                  clickable ? 'cursor-pointer transition-shadow hover:ring-1 hover:ring-inset hover:ring-white/20' : ''
+                  clickable ? 'cursor-pointer transition-shadow hover:ring-1 hover:ring-inset hover:ring-ink/20' : ''
                 } ${impactClass(e.impact)} ${impactStyle(e.impact)}`;
                 const style = { left: dayLeft + c.x, top, width: c.width, height: TL_LANE_H };
                 const title = `${e.time} ${e.currency} — ${e.title} (${e.durationMin} min)`;

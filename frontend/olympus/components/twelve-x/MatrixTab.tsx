@@ -136,7 +136,7 @@ export default function MatrixTab({
                           <button
                             type="button"
                             onClick={() => onOpenBrief(cell.source_file, cell.run_date)}
-                            className={`flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-md border ${s.bg} ${s.border} px-1 py-1.5 text-center transition-colors hover:border-accent/50 hover:bg-white/[0.05]`}
+                            className={`flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-md border ${s.bg} ${s.border} px-1 py-1.5 text-center transition-colors hover:border-accent/50 hover:bg-ink/[0.05]`}
                             style={{ opacity: convictionOpacity(cell.conviction) }}
                             title={title}
                           >

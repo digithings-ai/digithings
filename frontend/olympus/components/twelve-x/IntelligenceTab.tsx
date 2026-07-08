@@ -82,7 +82,7 @@ function ComponentBar({ components }: { components: Record<string, number> }) {
         {segments.map((s) => (
           <div
             key={s.key}
-            className="relative h-full flex-1 overflow-hidden rounded-full bg-white/[0.06]"
+            className="relative h-full flex-1 overflow-hidden rounded-full bg-ink/[0.06]"
             title={`${s.label}: ${s.value.toFixed(2)}`}
           >
             <div
@@ -141,7 +141,7 @@ function IntelligenceCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 rounded border border-hair bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-ink-mute">
+          <span className="shrink-0 rounded border border-hair bg-ink/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-ink-mute">
             #{idea.rank}
           </span>
           <button

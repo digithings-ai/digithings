@@ -78,7 +78,7 @@ export function SettingsContent({
               aria-pressed={theme === 'auto'}
               onClick={() => setTheme('auto')}
               className={`px-2 py-2 font-medium transition-colors ${
-                theme === 'auto' ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-white/[0.04]'
+                theme === 'auto' ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-ink/[0.04]'
               }`}
             >
               Auto
@@ -88,7 +88,7 @@ export function SettingsContent({
               aria-pressed={theme === 'dark'}
               onClick={() => setTheme('dark')}
               className={`px-2 py-2 font-medium border-l border-hair transition-colors ${
-                theme === 'dark' ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-white/[0.04]'
+                theme === 'dark' ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-ink/[0.04]'
               }`}
             >
               Dark
@@ -98,7 +98,7 @@ export function SettingsContent({
               aria-pressed={theme === 'light'}
               onClick={() => setTheme('light')}
               className={`px-2 py-2 font-medium border-l border-hair transition-colors ${
-                theme === 'light' ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-white/[0.04]'
+                theme === 'light' ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-ink/[0.04]'
               }`}
             >
               Light
@@ -130,7 +130,7 @@ export function SettingsContent({
                 onOpenPalette();
                 onNavigate?.();
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-ink-soft hover:bg-white/[0.04] hover:text-ink transition-colors"
+              className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-ink-soft hover:bg-ink/[0.04] hover:text-ink transition-colors"
             >
               <Search size={14} className="shrink-0 text-ink-mute" aria-hidden />
               <span>Search</span>
@@ -143,7 +143,7 @@ export function SettingsContent({
             href="/system"
             onClick={onNavigate}
             className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors ${
-              sys ? 'text-accent' : 'text-ink-soft hover:bg-white/[0.04] hover:text-ink'
+              sys ? 'text-accent' : 'text-ink-soft hover:bg-ink/[0.04] hover:text-ink'
             }`}
           >
             <Database size={14} className="shrink-0" aria-hidden />
@@ -154,7 +154,7 @@ export function SettingsContent({
           <Link
             href="/settings"
             onClick={onNavigate}
-            className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-ink-soft border border-hair hover:bg-white/[0.04] hover:text-ink transition-colors"
+            className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-ink-soft border border-hair hover:bg-ink/[0.04] hover:text-ink transition-colors"
           >
             All settings
           </Link>

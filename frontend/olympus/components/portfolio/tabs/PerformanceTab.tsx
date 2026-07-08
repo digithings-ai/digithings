@@ -377,7 +377,7 @@ export default function PerformanceTab() {
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="w-full flex items-center justify-between px-6 py-4 hover:bg-white/[0.02] transition-colors"
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-ink/[0.02] transition-colors"
           >
             <h3 className="text-lg font-semibold">Advanced statistics</h3>
             {showAdvanced ? (

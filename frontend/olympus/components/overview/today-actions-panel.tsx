@@ -28,7 +28,7 @@ const STYLE: Record<ActionKind, { badge: string; icon: typeof ArrowRight }> = {
   OPEN: { badge: 'bg-up/15 text-up border-up/30', icon: PlusCircle },
   TRIM: { badge: 'bg-warn/15 text-warn border-warn/30', icon: ArrowDownRight },
   ADD: { badge: 'bg-accent/15 text-accent border-accent/30', icon: ArrowUpRight },
-  HOLD: { badge: 'bg-white/[0.06] text-ink-mute border-hair', icon: ArrowRight },
+  HOLD: { badge: 'bg-ink/[0.06] text-ink-mute border-hair', icon: ArrowRight },
 };
 
 /**
@@ -60,7 +60,7 @@ function ActionRow({ a, rationale }: { a: RebalanceAction; rationale?: string })
   const { badge, icon: Icon } = STYLE[kind];
   const delta = (a.recommended_pct ?? 0) - (a.current_pct ?? 0);
   return (
-    <div className="px-5 py-2.5 hover:bg-white/[0.025] transition-colors">
+    <div className="px-5 py-2.5 hover:bg-ink/[0.025] transition-colors">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <span

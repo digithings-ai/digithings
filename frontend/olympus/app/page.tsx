@@ -70,7 +70,7 @@ export default function OverviewPage() {
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-5 inline-flex items-center rounded-lg border border-hair px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-white/[0.06]"
+            className="mt-5 inline-flex items-center rounded-lg border border-hair px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-ink/[0.06]"
           >
             Try again
           </button>

@@ -27,7 +27,7 @@ export function VehicleThesisRow({
   return (
     <Link
       href={href}
-      className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+      className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
     >
       {thesis.vehicle ? (
         <span className="w-16 shrink-0 font-mono text-sm font-semibold text-ink">

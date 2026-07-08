@@ -214,12 +214,12 @@ export default function RebalanceDocumentView({
         <div className="rounded-lg border border-hair bg-term-bg/50 p-4 space-y-1 text-ink-soft">
           <p className="text-xs font-semibold text-ink-mute uppercase tracking-wider">Delta summary</p>
           <p>
-            Changes triggered: <span className="text-white">{String(ds.changes_triggered ?? '—')}</span> · Held:{' '}
-            <span className="text-white">{String(ds.held_count ?? '—')}</span>
+            Changes triggered: <span className="text-ink">{String(ds.changes_triggered ?? '—')}</span> · Held:{' '}
+            <span className="text-ink">{String(ds.held_count ?? '—')}</span>
           </p>
           {ds.largest_move != null && String(ds.largest_move).trim() ? (
             <p>
-              Largest move: <span className="text-white">{String(ds.largest_move)}</span>
+              Largest move: <span className="text-ink">{String(ds.largest_move)}</span>
             </p>
           ) : null}
           {Array.isArray(ds.new_entries) && ds.new_entries.length > 0 ? (

@@ -211,7 +211,7 @@ export default function ConsensusTab({
               } ${
                 on
                   ? 'bg-accent/15 text-accent'
-                  : 'text-ink-soft hover:text-ink hover:bg-white/[0.03]'
+                  : 'text-ink-soft hover:text-ink hover:bg-ink/[0.03]'
               }`}
             >
               {v === 'table' ? 'Table' : 'Charts'}
@@ -225,7 +225,7 @@ export default function ConsensusTab({
         <button
           type="button"
           onClick={() => (onDrillToProvenance ? onDrillToProvenance(topMover.currency) : setSelectedCcy(topMover.currency))}
-          className="w-full glass-card px-4 py-2.5 flex items-center gap-2 text-left hover:bg-white/[0.03] transition-colors"
+          className="w-full glass-card px-4 py-2.5 flex items-center gap-2 text-left hover:bg-ink/[0.03] transition-colors"
           title={
             onDrillToProvenance
               ? `Why this weight? See desk provenance for ${topMover.currency} in Intelligence`
@@ -321,7 +321,7 @@ export default function ConsensusTab({
                         } ${
                           on
                             ? 'bg-accent/15 text-accent'
-                            : 'text-ink-soft hover:text-ink hover:bg-white/[0.03]'
+                            : 'text-ink-soft hover:text-ink hover:bg-ink/[0.03]'
                         }`}
                       >
                         {m === 'raw' ? 'Raw' : 'Average'}

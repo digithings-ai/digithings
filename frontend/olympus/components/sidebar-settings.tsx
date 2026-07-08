@@ -160,9 +160,9 @@ export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed
         aria-haspopup="dialog"
         className={`
           flex items-center gap-3 w-full rounded-lg py-3 text-sm font-medium transition-colors
-          text-ink-soft hover:text-ink hover:bg-white/[0.03]
+          text-ink-soft hover:text-ink hover:bg-ink/[0.03]
           ${sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-3'}
-          ${open ? 'bg-white/[0.06] text-ink' : ''}
+          ${open ? 'bg-ink/[0.06] text-ink' : ''}
         `}
       >
         <Settings size={20} className="shrink-0" />

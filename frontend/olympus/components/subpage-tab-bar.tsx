@@ -12,7 +12,7 @@ export function subpageTabButtonClass(active: boolean): string {
   return `flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
     active
       ? 'bg-accent/15 text-accent border-accent/40'
-      : 'text-ink-soft border-transparent hover:bg-white/[0.04] hover:text-ink'
+      : 'text-ink-soft border-transparent hover:bg-ink/[0.04] hover:text-ink'
   }`;
 }
 
@@ -80,7 +80,7 @@ export function SubpageStickyTabBar({
           ref={triggerRef}
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="relative z-30 flex items-center gap-2 rounded-lg border border-hair px-3 py-1.5 text-sm font-medium text-ink hover:bg-white/[0.06] md:hidden"
+          className="relative z-30 flex items-center gap-2 rounded-lg border border-hair px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/[0.06] md:hidden"
           aria-expanded={open}
           aria-controls="subpage-tabs"
           aria-label={`${open ? 'Close' : 'Open'} ${menuLabel} menu`}

@@ -79,8 +79,8 @@ export function PositionPnlTable({
                     }}
                     className={
                       showCharts && !skipChart
-                        ? `cursor-pointer transition-colors hover:bg-white/[0.02] ${isOpen ? 'bg-white/[0.02]' : ''}`
-                        : 'hover:bg-white/[0.02] transition-colors'
+                        ? `cursor-pointer transition-colors hover:bg-ink/[0.02] ${isOpen ? 'bg-ink/[0.02]' : ''}`
+                        : 'hover:bg-ink/[0.02] transition-colors'
                     }
                   >
                     <td className="px-4 py-3 font-semibold md:px-6">{p.ticker}</td>
@@ -110,7 +110,7 @@ export function PositionPnlTable({
                     ) : null}
                   </tr>
                   {isOpen && priceChartAnchorDate && !skipChart ? (
-                    <tr className="bg-white/[0.02]">
+                    <tr className="bg-ink/[0.02]">
                       <td colSpan={7} className="border-t border-hair px-4 py-5 md:px-6">
                         <PositionDrilldown
                           key={`${p.ticker}-${priceChartAnchorDate}`}

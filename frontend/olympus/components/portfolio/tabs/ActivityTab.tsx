@@ -403,7 +403,7 @@ export default function ActivityTab(props: {
                   className={`rounded-md px-2.5 py-1 text-xs font-medium border transition-colors ${
                     preset === k
                       ? 'border-accent/40 bg-accent/15 text-accent'
-                      : 'border-hair text-ink-mute hover:text-ink hover:bg-white/[0.04]'
+                      : 'border-hair text-ink-mute hover:text-ink hover:bg-ink/[0.04]'
                   }`}
                 >
                   {k === '7d' ? '7 days' : k === '30d' ? '30 days' : 'All'}
@@ -420,7 +420,7 @@ export default function ActivityTab(props: {
               {EVENT_TYPES.map((t) => (
                 <label
                   key={t}
-                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-hair bg-bg px-2 py-1 text-[11px] text-ink-soft hover:bg-white/[0.03]"
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-hair bg-bg px-2 py-1 text-[11px] text-ink-soft hover:bg-ink/[0.03]"
                 >
                   <input
                     type="checkbox"
@@ -450,12 +450,12 @@ export default function ActivityTab(props: {
             <button
               type="button"
               onClick={resetFilters}
-              className="rounded-md border border-hair px-2.5 py-1.5 text-xs text-ink-mute hover:text-ink hover:bg-white/[0.04]"
+              className="rounded-md border border-hair px-2.5 py-1.5 text-xs text-ink-mute hover:text-ink hover:bg-ink/[0.04]"
             >
               Reset filters
             </button>
             <details className="group relative">
-              <summary className="list-none cursor-pointer rounded-md border border-hair px-2.5 py-1.5 text-xs text-ink-mute hover:text-ink hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
+              <summary className="list-none cursor-pointer rounded-md border border-hair px-2.5 py-1.5 text-xs text-ink-mute hover:text-ink hover:bg-ink/[0.04] [&::-webkit-details-marker]:hidden">
                 Columns
               </summary>
               <div className="absolute right-0 z-20 mt-1 min-w-[11rem] rounded-md border border-hair bg-term-bg p-2 shadow-lg">
@@ -547,7 +547,7 @@ export default function ActivityTab(props: {
               ].filter(Boolean);
               const rowTitle = detailParts.length ? detailParts.join('\n') : undefined;
               return (
-                <tr key={`${ev.date}-${ev.ticker}-${i}`} className="hover:bg-white/[0.02]" title={rowTitle}>
+                <tr key={`${ev.date}-${ev.ticker}-${i}`} className="hover:bg-ink/[0.02]" title={rowTitle}>
                   {orderedVisibleColumns.map((col) => renderCell(col, ev, i))}
                 </tr>
               );

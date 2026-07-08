@@ -95,7 +95,7 @@ export default function OpportunityScreenerDocumentView({
               </thead>
               <tbody className="divide-y divide-hair">
                 {rows.map((row, i) => (
-                  <tr key={i} className="hover:bg-white/[0.02]">
+                  <tr key={i} className="hover:bg-ink/[0.02]">
                     {columns.map((c) => {
                       const v = row[c];
                       const isNum =

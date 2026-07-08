@@ -30,7 +30,7 @@ export default function DeltaRequestDocumentView({ payload }: { payload: Record<
       <div className="rounded-lg border border-hair bg-term-bg/50 p-4 space-y-1">
         <p>
           <span className="text-ink-mute">Target date:</span>{' '}
-          <span className="font-mono text-white">{date || '—'}</span>
+          <span className="font-mono text-ink">{date || '—'}</span>
         </p>
         <p>
           <span className="text-ink-mute">Baseline:</span>{' '}

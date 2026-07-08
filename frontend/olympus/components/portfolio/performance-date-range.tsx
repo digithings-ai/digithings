@@ -31,7 +31,7 @@ export function PerformanceDateRange({
           onClick={() => onChange(key)}
           className={`px-3 py-1.5 font-medium transition-colors ${
             i > 0 ? 'border-l border-hair' : ''
-          } ${value === key ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-white/[0.04] hover:text-ink'}`}
+          } ${value === key ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-ink/[0.04] hover:text-ink'}`}
         >
           {label}
         </button>

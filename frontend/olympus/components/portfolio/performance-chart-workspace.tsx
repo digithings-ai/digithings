@@ -21,18 +21,12 @@ import { PerformanceDrawdownChart } from '@/components/portfolio/performance-dra
 import { PerformanceRollingChart } from '@/components/portfolio/performance-rolling-chart';
 import type { PerformanceChartView } from '@/lib/performance-series';
 import { buildDailyReturnsWithNavIndex } from '@/lib/performance-series';
-import { BENCHMARK_COLORS, EVENT_COLORS, useChartColors, withAlpha } from '@/lib/chart-colors';
-
-// Benchmark hues live in the sanctioned fixed allowlist (lib/chart-colors.ts).
-function lineColorForTicker(t: string): string {
-  if (BENCHMARK_COLORS[t]) return BENCHMARK_COLORS[t];
-  let h = 0;
-  for (let i = 0; i < t.length; i++) {
-    h = t.charCodeAt(i) + ((h << 5) - h);
-  }
-  const hue = Math.abs(h) % 360;
-  return `hsl(${hue} 62% 58%)`;
-}
+import {
+  EVENT_COLORS,
+  comparableLineColor as lineColorForTicker,
+  useChartColors,
+  withAlpha,
+} from '@/lib/chart-colors';
 
 const VIEW_OPTIONS: { id: PerformanceChartView; label: string; hint: string }[] = [
   { id: 'nav', label: 'NAV vs comparables', hint: 'Indexed series; legend removes an overlay' },
@@ -303,7 +297,7 @@ function ComparableDropdown({
           <button
             type="button"
             onClick={() => onRemove(t)}
-            className="p-0.5 rounded hover:bg-white/10 text-ink-soft hover:text-ink leading-none"
+            className="p-0.5 rounded hover:bg-ink/10 text-ink-soft hover:text-ink leading-none"
             aria-label={`Remove ${t}`}
           >
             ×
@@ -374,7 +368,7 @@ function ComparableDropdown({
                           ? 'bg-accent/15 text-accent'
                           : disabled
                             ? 'text-ink-mute opacity-40 cursor-not-allowed'
-                            : 'text-ink-soft hover:bg-white/[0.06] hover:text-ink'
+                            : 'text-ink-soft hover:bg-ink/[0.06] hover:text-ink'
                       }`}
                     >
                       {t}
@@ -520,7 +514,7 @@ export function PerformanceChartWorkspace({
                 className={`text-left px-3 py-2 rounded-lg text-xs font-medium border transition-colors max-w-[200px] ${
                   view === opt.id
                     ? 'border-accent bg-accent/15 text-accent'
-                    : 'border-hair text-ink-soft hover:bg-white/[0.04] hover:text-ink'
+                    : 'border-hair text-ink-soft hover:bg-ink/[0.04] hover:text-ink'
                 }`}
               >
                 <span className="block">{opt.label}</span>

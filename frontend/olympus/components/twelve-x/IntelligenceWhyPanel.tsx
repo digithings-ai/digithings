@@ -99,7 +99,7 @@ function classificationClass(cls: string): string {
     case 'superseded':
       return 'text-warn border-warn/50 bg-warn/10';
     default:
-      return 'text-ink-mute border-hair bg-white/[0.04]';
+      return 'text-ink-mute border-hair bg-ink/[0.04]';
   }
 }
 
@@ -136,7 +136,7 @@ function TierOne({ components }: { components: IntelligenceWhyComponents }) {
                 {leg.weight.toFixed(2)} × {leg.input.toFixed(2)}
               </span>
             </span>
-            <span className="relative h-3 min-w-[80px] flex-1 overflow-hidden rounded-sm bg-white/[0.05]">
+            <span className="relative h-3 min-w-[80px] flex-1 overflow-hidden rounded-sm bg-ink/[0.05]">
               <span
                 className="absolute inset-y-0 left-0 rounded-sm"
                 style={{

@@ -62,7 +62,7 @@ export function ActivityTickerMultiSelect({
           <button
             type="button"
             onClick={() => onRemove(t)}
-            className="p-0.5 rounded hover:bg-white/10 text-ink-soft hover:text-ink leading-none"
+            className="p-0.5 rounded hover:bg-ink/10 text-ink-soft hover:text-ink leading-none"
             aria-label={`Remove ${t}`}
           >
             ×
@@ -119,7 +119,7 @@ export function ActivityTickerMultiSelect({
                         className={`w-full text-left px-3 py-1.5 text-xs font-mono transition-colors ${
                           on
                             ? 'bg-accent/15 text-accent'
-                            : 'text-ink-soft hover:bg-white/[0.06] hover:text-ink'
+                            : 'text-ink-soft hover:bg-ink/[0.06] hover:text-ink'
                         }`}
                       >
                         {t}

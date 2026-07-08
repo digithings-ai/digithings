@@ -41,7 +41,7 @@ export default function EvolutionSourcesDocumentView({
   return (
     <div className="space-y-6 text-sm">
       <div>
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
+        <h2 className="text-lg font-semibold text-ink">{title}</h2>
         {date ? <p className="text-xs text-ink-mute font-mono mt-1">{date}</p> : null}
       </div>
       {notes ? (

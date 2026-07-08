@@ -83,7 +83,7 @@ export default function MiniCalendar({ dates, runKindByDate, selected, onSelect 
             } else if (kind === 'delta') {
               dayBtn.push('text-accent hover:bg-accent/20');
             } else {
-              dayBtn.push('text-ink-soft border border-hair/80 hover:bg-white/[0.06]');
+              dayBtn.push('text-ink-soft border border-hair/80 hover:bg-ink/[0.06]');
             }
           }
 

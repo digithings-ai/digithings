@@ -58,7 +58,7 @@ function Doorway({
   return (
     <Link
       href={href}
-      className="glass-card block p-4 transition-colors hover:border-white/[0.12]"
+      className="glass-card block p-4 transition-colors hover:border-hair-2"
     >
       <div className="mb-2.5 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">

@@ -48,7 +48,7 @@ export function StatCard({
 /** Badge variant */
 export function Badge({ children, variant = 'default', className = '' }: BadgeProps) {
   const variants: Record<NonNullable<BadgeProps['variant']>, string> = {
-    default: 'bg-white/10 text-ink-soft border-hair',
+    default: 'bg-ink/10 text-ink-soft border-hair',
     blue: 'bg-accent/15 text-accent border-accent/30',
     green: 'bg-up/15 text-up border-up/30',
     red: 'bg-down/15 text-down border-down/30',
