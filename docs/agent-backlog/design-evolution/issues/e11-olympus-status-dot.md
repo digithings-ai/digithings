@@ -24,7 +24,7 @@ Add optional **Olympus footer status dot** wired to DigiSmith `GET /v1/status` â
 ## Documentation to Update
 
 - [ ] `frontend/olympus/ARCHITECTURE.md`
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

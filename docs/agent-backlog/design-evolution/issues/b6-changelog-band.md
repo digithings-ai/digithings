@@ -1,16 +1,16 @@
 ## Goal
 
-Build **`ChangelogBand`** — Cursor-style dated release rows for marketing landings ([`cursor-full.md`](../../../../frontend/design/references/scans/cursor-full.md)).
+Build **`ChangelogBand`** — Cursor-style dated release rows for marketing landings ([`cursor-full.md`](../../../../frontend/digiweb/design/references/scans/cursor-full.md)).
 
 ## Component
 
-- [x] cross-cutting (`frontend/design/`)
+- [x] cross-cutting (`frontend/digiweb/design/`)
 
 ## Acceptance Criteria
 
 - [ ] CSS `.changelog-band` — section with mono date column + title + optional tag (`release`, `fix`)
 - [ ] Data shape documented (JSON or TS type): `{ date, version?, title, href, tag? }[]`
-- [ ] Static example JSON in `frontend/design/` or consumed from `CHANGELOG.md` excerpt (document source of truth)
+- [ ] Static example JSON in `frontend/digiweb/design/` or consumed from `CHANGELOG.md` excerpt (document source of truth)
 - [ ] "View all releases →" footer link pattern
 - [ ] Responsive: stacked on mobile, row layout on desktop
 - [ ] Demo with 3–5 entries in smoke page
@@ -23,8 +23,8 @@ cd frontend/digithings-web && npm run build
 
 ## Documentation to Update
 
-- [ ] `frontend/design/site/README.md`
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/site/README.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

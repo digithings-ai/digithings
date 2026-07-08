@@ -19,7 +19,7 @@ ADR-0002 committed to two live domains â€” `digithings.ai` and `digiquant.io` â€
 
 ## Decision
 
-`digiquant.io` is served from a dedicated publish repo, `digithings-ai/digiquant.io`, whose GitHub Pages config serves its `main` branch root. A sync workflow in this monorepo (`.github/workflows/deploy-digiquant.yml`) builds `dist/` from `frontend/digiquant/` + `frontend/design/` on every push to `develop`/`main` touching those paths, and force-pushes the result to the publish repo using a fine-grained PAT (`DIGIQUANT_IO_DEPLOY_TOKEN`, scoped to the publish repo, contents: read/write).
+`digiquant.io` is served from a dedicated publish repo, `digithings-ai/digiquant.io`, whose GitHub Pages config serves its `main` branch root. A sync workflow in this monorepo (`.github/workflows/deploy-digiquant.yml`) builds `dist/` from `frontend/digiquant/` + `frontend/digiweb/design/` on every push to `develop`/`main` touching those paths, and force-pushes the result to the publish repo using a fine-grained PAT (`DIGIQUANT_IO_DEPLOY_TOKEN`, scoped to the publish repo, contents: read/write).
 
 **The publish repo is deploy-only.** No human commits there; its history is a byproduct of deploys. The monorepo remains the sole source of truth.
 

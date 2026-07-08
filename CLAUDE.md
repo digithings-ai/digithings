@@ -36,10 +36,10 @@ Run `make score` on staged changes before every PR. All dimensions must pass.
 
 Rubrics live in `docs/scoring/` (10 criteria each).
 
-**Exception — presentation-only frontend** (`frontend/design/**`, `**.css`, static
+**Exception — presentation-only frontend** (`frontend/digiweb/design/**`, `**.css`, static
 marketing pages): `make score` does **not** apply — its rubrics are Python-oriented
 and misfire on CSS/JS. `frontend/**` is excluded from the `score` CI filter and
-`frontend/design/` is in `score.py`'s skip list. Iterate design on **one branch off
+`frontend/digiweb/design/` is in `score.py`'s skip list. Iterate design on **one branch off
 `develop`** with a live preview (`.claude/launch.json` dev servers) and open a
 single PR when the look is approved. Gates that still apply: gitleaks (secrets),
 app builds, the digithings deploy build-check. (See #1310.)
