@@ -13,6 +13,10 @@ export { Emblem, emblems } from "./components/emblems";
 export { StackLogo, StackRow } from "./components/StackLogo";
 export { ScrollyGraph, GraphSVG } from "./components/graph";
 export { Nav, Footer, Colophon, ModuleCard, type NavLink } from "./components/chrome";
+export { NavShell, type NavShellProps } from "./components/NavShell";
+export { DocsLayout, type DocsNavGroup, type DocsNavItem, type DocsHero } from "./components/docs/DocsLayout";
+export { CodeTabs, DocsCodeBlock, type CodeSample } from "./components/docs/CodeTabs";
+export { EndpointDoc, MethodBadge, type DocsEndpoint, type DocsField, type DocsMethod } from "./components/docs/Endpoint";
 export { HashScrollManager } from "./navigation/HashScrollManager";
 export {
   hashIdFromHref,

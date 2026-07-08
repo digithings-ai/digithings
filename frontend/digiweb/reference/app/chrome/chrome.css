@@ -26,6 +26,50 @@
   backdrop-filter: blur(10px);
 }
 
+/* Nav shell — the production <NavShell/> primitive (@digithings/web) framed as
+   a static specimen. The component's own dress lives in the package's
+   nav-shell.css; these rules only contain and pin it: fixed → absolute inside
+   the frame, page-scroll state classes neutralized, and one dress forced per
+   frame so the specimen is deterministic no matter where the page sits.
+   isolation: isolate keeps the bar's production z-index inside the frame's
+   stacking context (it must never paint over the reference site-nav). */
+
+.nsr-frame {
+  position: relative;
+  isolation: isolate;
+  height: 10.5rem;
+  margin-top: 0;
+  overflow: clip;
+  border-radius: 12px;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+}
+
+.nsr-frame .nav-shell {
+  position: absolute; /* contained by the frame, not the viewport */
+}
+
+/* the page's own scroll drives the specimen's listener; ignore its verdicts */
+.nsr-frame .nav-shell.is-hidden {
+  transform: none;
+}
+
+.nsr-frame--rest .nav-shell,
+.nsr-frame--rest .nav-shell.is-scrolled {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom-color: transparent;
+}
+
+/* same declarations as .nav-shell.is-scrolled — pinned on */
+.nsr-frame--settled .nav-shell {
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom-color: var(--hair);
+}
+
 /* Announcement bar — .annc-bar / .annc-close / .annc-restore migrated to
    utilities in announcement-bar-reference.tsx. The link keeps its class: the
    parent-hover-descendant rule (.annc-link:hover b) has no single-element

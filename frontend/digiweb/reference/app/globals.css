@@ -1,6 +1,14 @@
 @import "tailwindcss";
 @import "@digithings/design/tokens.css";
 @import "@digithings/web/styles/web-theme.css";
+@import "@digithings/web/styles/docs.css";
+@import "@digithings/web/styles/nav-shell.css";
+
+/* Shared components (@digithings/web) carry token-backed utilities, and
+   Tailwind never scans package sources on its own — point it at them
+   explicitly. */
+@source "../../web/src/components/docs";
+@source "../../web/src/components/NavShell.tsx";
 
 /* Shared base for every design-reference page. Family-specific styles live
    next to their page (app/<family>/<family>.css) — keep this file small. */
