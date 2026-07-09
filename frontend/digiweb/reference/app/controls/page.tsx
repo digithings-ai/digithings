@@ -1,5 +1,6 @@
 import "./controls.css";
 import { AccordionReference } from "@/components/controls/accordion-reference";
+import { ControlsLayerReference } from "@/components/controls/controls-layer-reference";
 import { DropdownReference } from "@/components/controls/dropdown-reference";
 import { EmptyStatesReference } from "@/components/controls/empty-states-reference";
 import { FormFieldsReference } from "@/components/controls/form-fields-reference";
@@ -25,6 +26,7 @@ export default function ControlsPage() {
         </p>
       </header>
 
+      <ControlsLayerReference />
       <DropdownReference />
       <SearchBarReference />
       <NavButtonsReference />

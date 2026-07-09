@@ -11,10 +11,19 @@ const FIRST_PARTY_FRAME_ANCESTORS = [
   "https://digiquant.io",
 ] as const;
 
+/**
+ * Dev tooling (Next.js HMR / React Refresh) evaluates code via eval() and
+ * needs 'unsafe-eval' in script-src. Added ONLY outside production so the
+ * shipped CSP stays byte-identical; mirrors the localhost dev-guard on
+ * embedFrameAncestors below. Evaluated at import — next dev loads this config
+ * with NODE_ENV=development, next build with NODE_ENV=production. (#1434)
+ */
+const SCRIPT_SRC_DEV_EVAL = process.env.NODE_ENV !== "production" ? " 'unsafe-eval'" : "";
+
 /** Baseline CSP for the authenticated app (frame-ancestors deny). */
 export const DIGICHAT_APP_CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${SCRIPT_SRC_DEV_EVAL}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",

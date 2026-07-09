@@ -56,8 +56,11 @@ jobs:
           }
           # digithings.ai — Next.js static export (frontend/digithings-web).
           probe "https://digithings.ai/" "text/html"
-          # Prerendered module route — build-asserted in build-digithings.sh.
-          probe "https://digithings.ai/modules/digigraph/" "text/html"
+          # A second prerendered route. /modules/* was removed in the design
+          # epic (#1414) — module detail pages folded into the home-page terminal
+          # manifest (build-digithings.sh now asserts that manifest instead) — so
+          # probe /docs/, still a prerendered static-export route.
+          probe "https://digithings.ai/docs/" "text/html"
           # Stable non-HTML asset (public/design/assets/og.png) — the canary for
           # the SPA-fallback MIME-masking regression #671 was written to catch.
           probe "https://digithings.ai/design/assets/og.png" "image/png"

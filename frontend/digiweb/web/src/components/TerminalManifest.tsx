@@ -151,7 +151,14 @@ export function TerminalManifest({
                   <button
                     type="button"
                     className="tm-row-link"
-                    aria-expanded={isSel}
+                    // Toggle buttons feeding one shared output pane: clicking a
+                    // row selects it (re-clicking deselects), so aria-pressed —
+                    // the selected state — is the accurate model. (aria-selected
+                    // is invalid on role=button; a listbox would need arrow-key
+                    // nav these rows don't implement.) The output pane always
+                    // renders (hint vs detail — content swaps, nothing
+                    // collapses), so this is selection, not disclosure. (#1434)
+                    aria-pressed={isSel}
                     onClick={() => select(r.id)}
                   >
                     <span className={`tm-dot${off ? " off" : ""}`} aria-hidden="true" />
