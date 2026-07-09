@@ -25,3 +25,4 @@ export {
   type TabStripProps,
   type TabItem,
 } from "./TabStrip";
+export { ToastStack, type ToastStackProps, type ToastItem, type ToastTone } from "./ToastStack";
