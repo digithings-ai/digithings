@@ -30,9 +30,12 @@ def digivault_path_scopes(method: str, path: str) -> list[str] | None:
     # Discovery is a read; the hub fetches the tool manifest before invoking.
     if path == "/v1/orchestrator_tools":
         return [SCOPE_READ]
-    # Invocation and all mutating note routes require write — invoke can create.
+    # Invocation is gated at read here — most orchestrator tools are reads
+    # (search, backlinks, lint). The one mutating tool (create_note) enforces
+    # SCOPE_WRITE itself in the handler, keyed on the requested tool name, so a
+    # read-only caller can't reach it via this shared endpoint.
     if path == "/v1/orchestrator_invoke":
-        return [SCOPE_WRITE]
+        return [SCOPE_READ]
     if method in ("POST", "PUT", "PATCH", "DELETE"):
         return [SCOPE_WRITE]
     return [SCOPE_READ]
