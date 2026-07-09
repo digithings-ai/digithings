@@ -416,6 +416,23 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqhero-scroll::after { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 28px; border-radius: 999px; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 35%, transparent)); box-shadow: 0 0 14px var(--accent); animation: dq-scrollcue 1.9s var(--ease) infinite; }
 @keyframes dq-scrollcue { 0% { transform: translateY(-28px); opacity: 0; } 25% { opacity: 1; } 90% { opacity: 0; } 100% { transform: translateY(88px); opacity: 0; } }
 
+/* Short-viewport nav clearance (#1434): the hero centres its content in
+   100svh, but the NavShell is position:fixed (--dq-nav-h). On short viewports
+   (mobile landscape, split-screen — ~414px tall) a centred, taller-than-
+   viewport headline rides up UNDER the fixed nav. Below this height threshold,
+   top-align the hero and pad past the nav so content always clears it; the
+   section still grows (min-height) so nothing is clipped. Desktop keeps its
+   centred composition — the query never fires above 640px tall. The abspos
+   canvas/veil/graph (inset:0) fill the padding box, so only .dqhero-inner
+   shifts down; the mesh art still covers the full hero. Mirrors digithings-web. */
+@media (max-height: 640px) {
+  .dqhero {
+    align-items: flex-start;
+    padding-top: calc(var(--dq-nav-h) + 1.25rem);
+    padding-bottom: 2rem;
+  }
+}
+
 /* ---- PIPELINE: linear research → execution (homepage #pipeline) ---- */
 .dqpipe { border-top: 1px solid var(--hair); }
 .dqpipe-steps-wrap { position: relative; max-width: 820px; margin: 0 auto; }
