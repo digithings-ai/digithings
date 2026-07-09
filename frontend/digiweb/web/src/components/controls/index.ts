@@ -2,8 +2,7 @@
  * Controls family barrel (#1419) — behavioral controls wrapping
  * @base-ui/react, skinned to reproduce digichat's src/components/ui/*
  * rendered look by default (skin="reference" opts into the reference
- * controls-family grammar). Not yet wired into src/index.ts or the package
- * exports map — the epic's wiring step re-exports from here.
+ * controls-family grammar). Re-exported from the package barrel (src/index.ts).
  */
 export {
   DropdownMenu,

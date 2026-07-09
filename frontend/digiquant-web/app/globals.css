@@ -327,11 +327,6 @@ html {
 #pricing {
   scroll-margin-top: var(--dq-nav-h);
 }
-#contact {
-  position: relative;
-  z-index: 3;
-  background: var(--bg);
-}
 
 /* editorial heading set (serif), shared across every section head. Stays CSS
    (intentional skip, #1401): one definition feeds six surfaces including the

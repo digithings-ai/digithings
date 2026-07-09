@@ -63,7 +63,7 @@ function ModulePanel({ m }: { m: ModuleNode }) {
       <div className="dg-panel-head">
         <Emblem id={m.emblem} size={40} />
         <div>
-          <span className={`dg-tier t-${m.tier}`}>{m.tier === "roadmap" ? "roadmap" : m.tier}</span>
+          <span className={`dg-tier t-${m.tier}`}>{m.tier}</span>
           <h3>{m.name}</h3>
         </div>
       </div>
