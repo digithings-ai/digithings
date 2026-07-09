@@ -14,3 +14,4 @@ export {
   type PipelineStatus,
   type PipelineSummaryItem,
 } from "./Pipeline";
+export { RotatingPrompts, type RotatingPromptsProps } from "./RotatingPrompts";

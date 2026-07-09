@@ -295,3 +295,29 @@
     border-left: none;
   }
 }
+
+/* ── RotatingPrompts — blinking caret ─────────────────────────────────────
+   The component carries the prompt shell as token utilities. Only the caret
+   stays CSS — it owns an @keyframes animation (migrate-vs-leave). */
+
+@layer components {
+  .prompt-caret {
+    width: 7px;
+    height: 15px;
+    background: var(--accent);
+    align-self: center;
+    animation: prompt-blink 1.1s steps(1) infinite;
+  }
+}
+
+@keyframes prompt-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prompt-caret {
+    animation: none;
+  }
+}
