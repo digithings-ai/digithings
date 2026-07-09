@@ -1,9 +1,13 @@
+"use client";
+
 /**
  * Sortable data table — a strategy leaderboard you can reorder by any column.
  * Click a header to sort (toggles asc/desc), the active column shows a caret and
  * carries aria-sort; numeric columns sort numerically, text lexically. Returns
  * wear the up colour, drawdown the down colour; everything else stays ink.
  * Consumes the shared <SortableTable/> primitive from @digithings/web.
+ * Client component — the column `format`/`rowKey` functions can't cross the
+ * RSC serialization boundary, so the specimen owns the client edge.
  */
 import { SortableTable, type SortableColumn } from "@digithings/web";
 

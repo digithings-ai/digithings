@@ -4,10 +4,14 @@
  * above the single-strategy tearsheet metrics: this is the whole book. P&L
  * reads wear the money colors; ratios stay ink; the allocation bars take the
  * accent (teal on the digiquant-scoped Finance page). Consumes the shared
- * <PerformanceDashboard/> primitive from @digithings/web. Static display
- * template.
+ * <PerformanceDashboard/> primitive from @digithings/web and demonstrates its
+ * composite `children` slot: the page passes the finance-charts
+ * <EquityCurve/> in (the dashboard never imports charts itself), wrapped in a
+ * definite-height pane for the chart host's autoSize to fill.
  */
 import {
+  EQUITY_CURVE_DEMO,
+  EquityCurve,
   PerformanceDashboard,
   type DashboardAllocation,
   type DashboardHeadline,
@@ -51,7 +55,12 @@ export function PerformanceDashboardReference() {
         ratios={RATIOS}
         allocations={ALLOC}
         className="mt-[1.2rem]"
-      />
+      >
+        {/* composite slot — chart passed in by the page, definite height */}
+        <div className="h-[240px] p-[0.6rem]">
+          <EquityCurve data={EQUITY_CURVE_DEMO} label="Book equity curve — demo series" />
+        </div>
+      </PerformanceDashboard>
     </section>
   );
 }
