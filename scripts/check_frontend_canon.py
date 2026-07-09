@@ -13,6 +13,10 @@ Checks (git-tracked files under frontend/ only):
   3. Hex / rgb() color literals in .tsx/.ts component code. CSS files are NOT
      scanned for literals: the migrate-vs-leave rule sanctions art, masks and
      print pins there, each carrying a token-naming comment.
+  4. Family census (#1421): a NEW app-local component-class family (vs the
+     committed ``frontend_class_families.json`` baseline) means UI was built
+     app-locally instead of promoted through the reference — pages assemble
+     from shared primitives.
 
 Escapes:
   * a line containing ``canon-allow`` (with a reason!) is skipped;
@@ -25,6 +29,7 @@ Usage: check_frontend_canon.py [--warn]   (--warn reports but exits 0)
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -106,6 +111,42 @@ def literal_scan_text(line: str) -> str:
     return TRAILING_COMMENT.sub("", BLOCK_COMMENT.sub("", line))
 
 
+FAMILY_BASELINE = REPO / "scripts" / "frontend_class_families.json"
+# Apps under the family-census ratchet (#1421). digiweb (reference + shared
+# packages) is exempt — it is WHERE new families are supposed to be born.
+CENSUS_APPS = ("digithings-web", "digiquant-web", "olympus", "digichat", "digichat-ui")
+CLASS_DEF = re.compile(r"^\.([a-z][a-z0-9]+)(?:-|\s|:|\.|,|\{)", re.M)
+
+
+def family_census_findings(files: list[str]) -> list[tuple[str, int, str, str]]:
+    """Ratchet v2 (#1421): pages assemble from shared primitives — an app
+    growing a NEW component-class family means someone built UI app-locally
+    instead of promoting it through the reference (MIGRATION.md playbook)."""
+    baseline = json.loads(FAMILY_BASELINE.read_text())
+    findings: list[tuple[str, int, str, str]] = []
+    for app in CENSUS_APPS:
+        allowed = set(baseline.get(app, []))
+        for rel in files:
+            if not rel.startswith(f"frontend/{app}/") or not rel.endswith(".css"):
+                continue
+            text = (REPO / rel).read_text(encoding="utf-8")
+            for m in CLASS_DEF.finditer(text):
+                fam = m.group(1)
+                if fam not in allowed:
+                    lineno = text.count("\n", 0, m.start()) + 1
+                    findings.append(
+                        (
+                            rel,
+                            lineno,
+                            "new-component-family",
+                            f".{fam}-* is not in {app}'s baseline — promote via the "
+                            f"reference (MIGRATION.md) or extend {FAMILY_BASELINE.name}",
+                        )
+                    )
+                    allowed.add(fam)  # one finding per new family per app
+    return findings
+
+
 def tracked_frontend_files() -> list[str]:
     out = subprocess.run(
         ["git", "ls-files", "frontend"],
@@ -119,9 +160,10 @@ def tracked_frontend_files() -> list[str]:
 
 def main() -> int:
     warn_only = "--warn" in sys.argv[1:]
-    findings: list[tuple[str, int, str, str]] = []
+    tracked = tracked_frontend_files()
+    findings: list[tuple[str, int, str, str]] = list(family_census_findings(tracked))
 
-    for rel in tracked_frontend_files():
+    for rel in tracked:
         ext = Path(rel).suffix
         if ext not in VOCAB_EXTS or TEST_FILE.search(rel):
             continue

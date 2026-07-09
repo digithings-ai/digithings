@@ -29,7 +29,7 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | Package | Directory | Provides |
 | ------- | --------- | -------- |
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/web` | `web/` | shared React layer (NavShell, DocsLayout/CodeTabs/EndpointDoc, Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+| `@digithings/web` | `web/` | shared React layer (NavShell, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, the chat family, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
 
 Since the canon migration (#1399, 2026-07): apps declare **no local `@theme`
 block** — `web-theme.css` is the one bridge (its `inline` semantics keep scoped

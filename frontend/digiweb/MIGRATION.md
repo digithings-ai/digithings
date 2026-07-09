@@ -70,13 +70,51 @@ review.
 
 ## Shared primitives first
 
-Before writing new UI, check `frontend/digiweb/MANIFEST.json` (84 components,
+Before writing new UI, check `frontend/digiweb/MANIFEST.json` (85 components,
 13 families) and `@digithings/web` exports: NavShell, Footer/Colophon,
-DocsLayout/CodeTabs/EndpointDoc, Terminal, Emblem/StackRow, ModuleCard,
-Reveal/Stagger/HeroEntrance, useScrollyFeatures/ScrollyRail. Motion always
-via `m` under `MotionProvider` (LazyMotion `domAnimation` `strict` — a raw
-`motion.*` element creator throws). The reference app (port 4013) is the
-live catalog; `/digiweb` is the agent entry point.
+DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages,
+PerfMetrics/StatCounter, TerminalManifest, the chat family (ChatTranscript/
+ChatMessage/ChatMarkdown/ChatToolCall/…), the controls layer (Button/Badge/
+Card/Input/Label/Avatar/DropdownMenu/Sheet/Tooltip/Collapsible on the `dress`
+axis), Terminal, Emblem/StackRow, ModuleCard, Reveal/Stagger/HeroEntrance,
+useScrollyFeatures/ScrollyRail. Motion always via `m` under `MotionProvider`
+(LazyMotion `domAnimation` `strict` — a raw `motion.*` element creator throws).
+The reference app (port 4013) is the live catalog; `/digiweb` is the agent
+entry point.
+
+## Promotion playbook (v2 — the #1414 epic shape)
+
+New UI is born in the reference, promoted, then adopted — never built app-locally
+(the guard's **family census** enforces this: a new app-local class family vs
+`scripts/frontend_class_families.json` fails CI).
+
+1. **Promote**: reference specimen → importable, props-driven primitive in
+   `@digithings/web`; the specimen becomes a thin consumer. Shape props against
+   the real adoption targets (read the app code first).
+2. **Wire**: exports in `web/src/index.ts`, a `package.json` exports entry per
+   new css file, `@import` + `@source` lines in consumers, MANIFEST regen.
+3. **Adopt**: apps swap markup onto the primitive. **API compatibility beats
+   aesthetic purity** — where the reference dress and an app's shipped dress
+   differ, give the primitive a variant/`dress` axis that reproduces the app's
+   look EXACTLY (see the controls layer's `dress="reference"|"chat"`), and
+   record the reference-vs-app delta for a product ruling. Where a primitive
+   can't express the app's behavior, do NOT force it — keep the local code and
+   write the gap into a ledger (`digichat-ui/ARCHITECTURE.md`,
+   `digichat/CONTROLS.md` are the precedents).
+
+### The cascade-layering contract (bitten twice — read this)
+
+Unlayered author CSS beats every `@layer`, including `utilities`. Therefore:
+
+- **Package control/dress CSS**: single-class defaults (`.ctl-btn-chat { … }`)
+  go in `@layer components` so call-site utilities (`p-8`, `text-[9px]`) can
+  override them. State/structural rules (`:hover`, `[aria-*]`, `[data-size]`,
+  descendant sizing, per-side geometry) stay **unlayered on purpose** — they
+  must beat utilities, exactly like the shadcn variants they replace. Probe the
+  compiled output when in doubt; specificity intuition lies here.
+- **App imports of shared sheets** carrying resets or generic element rules:
+  always `layer(components)` (`site.css` shipped `* { margin: 0 }` unlayered
+  and silently killed every margin utility — twice).
 
 ## Debugging checklist (QA'ing an app against the canon)
 
