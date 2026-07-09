@@ -15,3 +15,8 @@ export {
   type DashboardAllocation,
   type PerformanceDashboardProps,
 } from "./PerformanceDashboard";
+export {
+  SyncedTearsheet,
+  type TearsheetPoint,
+  type SyncedTearsheetProps,
+} from "./SyncedTearsheet";
