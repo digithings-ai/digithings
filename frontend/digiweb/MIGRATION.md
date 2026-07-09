@@ -28,10 +28,17 @@ Three rules that are load-bearing, learned the hard way:
    `data-theme` flips re-resolve inside every utility. A plain `@theme`
    freezes the var at `:root` — the scoped-livery bug that shipped to both
    marketing sites before #1399.
-2. **Never import a shared sheet unlayered.** Unlayered author CSS outranks
-   ALL `@layer`s: site.css's `* { margin: 0 }` reset silently killed every
-   margin utility (including NavShell's `mx-auto` centering) until imported
-   as `layer(components)`.
+2. **Never import a shared sheet unlayered** — *unless the sheet manages its
+   own layering*. Unlayered author CSS outranks ALL `@layer`s: site.css's
+   `* { margin: 0 }` reset silently killed every margin utility (including
+   NavShell's `mx-auto` centering) until imported as `layer(components)`.
+   The exception: sheets whose headers say to import them **plainly** because
+   they split rules deliberately between `@layer components` (defaults that
+   call-site utilities must override) and unlayered (state/structural rules
+   that must keep outranking plain utilities) — `chat-core.css`,
+   `chat-widgets.css`, `controls-core.css`, `controls-overlay.css` (#1418,
+   #1419). Wrapping those in `layer(…)` demotes their state rules and breaks
+   digichat's rendered-look parity.
 3. **`@source` any package component you render.** Without it the shared
    component's utilities are never generated — the failure is silent (its
    own CSS file masks most of it).
