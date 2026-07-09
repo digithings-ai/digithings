@@ -357,3 +357,43 @@
     pointer-events: none;
   }
 }
+
+/* ── AnnouncementBar — whole-bar link chrome ──────────────────────────────
+   The frame is a components-layer default (production overrides the demo
+   radius/border with call-site utilities); the link keeps its class for the
+   parent-hover-descendant CTA rule, which has no single-element utility. */
+
+@layer components {
+  .annc-bar {
+    display: flex;
+    min-height: 48px;
+    align-items: center;
+    border: 1px solid var(--hair);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+
+  .annc-link {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem 0.6rem;
+    padding: 0.55rem 1rem;
+    font-size: 0.8rem;
+    color: var(--ink);
+    text-decoration: none;
+  }
+}
+
+/* state / structural — unlayered on purpose (cascade contract) */
+
+.annc-link:hover b {
+  text-decoration: underline;
+}
+
+.annc-link b {
+  font-weight: 400;
+  color: var(--accent);
+}

@@ -70,32 +70,10 @@
   border-bottom-color: var(--hair);
 }
 
-/* Announcement bar — .annc-bar / .annc-close / .annc-restore migrated to
-   utilities in announcement-bar-reference.tsx. The link keeps its class: the
-   parent-hover-descendant rule (.annc-link:hover b) has no single-element
-   utility. */
-
-.annc-link {
-  flex: 1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.3rem 0.6rem;
-  padding: 0.55rem 1rem;
-  font-size: 0.8rem;
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.annc-link:hover b {
-  text-decoration: underline;
-}
-
-.annc-link b {
-  font-weight: 400;
-  color: var(--accent);
-}
+/* Announcement bar — promoted to @digithings/web (#1450): the
+   <AnnouncementBar/> primitive (components/effects-chrome/AnnouncementBar.tsx)
+   carries the bar; .annc-bar/.annc-link live in
+   @digithings/web/styles/effects-chrome.css, imported from globals.css. */
 
 /* Footer — .ref-footer wrapper, column grid, titles, link lists, and the
    utility row (status/copyright) migrated to utilities in footer-reference.tsx.

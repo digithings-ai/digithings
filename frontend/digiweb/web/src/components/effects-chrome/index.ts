@@ -16,3 +16,4 @@ export {
 } from "./Pipeline";
 export { RotatingPrompts, type RotatingPromptsProps } from "./RotatingPrompts";
 export { StackingPanels, type StackingPanelsProps, type StackingPanel } from "./StackingPanels";
+export { AnnouncementBar, type AnnouncementBarProps } from "./AnnouncementBar";
