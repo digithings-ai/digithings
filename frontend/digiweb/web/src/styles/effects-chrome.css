@@ -397,3 +397,98 @@
   font-weight: 400;
   color: var(--accent);
 }
+
+/* ── TabStrip — sliding active indicator, two dresses ─────────────────────
+   Base strip/button/ink defaults are components-layer; the variant
+   combinators, aria/hover/focus states, and the ink (whose transform +
+   width are written from a ref and animated by this transition) stay
+   unlayered — they must keep beating call-site utilities. */
+
+@layer components {
+  .tab-strip {
+    position: relative;
+    display: inline-flex;
+    gap: 0.2rem;
+  }
+
+  .tab-btn {
+    position: relative;
+    z-index: 1;
+    border: none;
+    background: transparent;
+    color: var(--ink-mute);
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: color 0.2s var(--ease);
+  }
+
+  .tab-ink {
+    position: absolute;
+    transition:
+      transform 0.28s var(--ease),
+      width 0.28s var(--ease);
+    pointer-events: none;
+  }
+}
+
+/* state / structural — unlayered on purpose (cascade contract) */
+
+.tab-strip.underline {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.tab-strip.pill {
+  padding: 0.25rem;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 90%, var(--bg));
+}
+
+.tab-strip.underline .tab-btn {
+  padding: 0.55rem 0.7rem 0.7rem;
+}
+
+.tab-strip.pill .tab-btn {
+  padding: 0.4rem 0.95rem;
+}
+
+.tab-btn:hover {
+  color: var(--ink-soft);
+}
+
+.tab-btn[aria-selected="true"] {
+  color: var(--ink);
+}
+
+.tab-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.tab-ink.underline {
+  left: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+}
+
+.tab-ink.pill {
+  z-index: 0;
+  top: 0.25rem;
+  bottom: 0.25rem;
+  left: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-ink {
+    transition: none;
+  }
+}
