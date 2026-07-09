@@ -13,14 +13,17 @@
 
    Layering is deliberate and load-bearing:
    - `@layer components` blocks hold every DEFAULT that a digichat call site
-     overrides via className (widths, fonts, colors, shadows). digichat's old
-     ui/* wrappers relied on tailwind-merge to resolve base-vs-call-site
+     overrides via className (pane width, fonts, colors, shadows). digichat's
+     old ui/* wrappers relied on tailwind-merge to resolve base-vs-call-site
      utility conflicts; @digithings/web has no tailwind-merge, so the base
      dress sits in the `components` layer where the app's `utilities` layer
      deterministically wins.
-   - Unlayered rules hold pure state machinery that nothing overrides: the
-     popup enter/exit keyframes, sheet slide transforms, the backdrop blur,
-     and the reduced-motion kill-switches (which must beat utilities).
+   - Unlayered rules hold everything that must keep BEATING plain call-site
+     utilities: state machinery (popup enter/exit keyframes, sheet slide
+     transforms, backdrop blur, reduced-motion kill-switches) AND the sheet
+     per-side geometry, whose old data-[side=…]: variants compiled to
+     (0,2,0) selectors that out-ranked call-site w-full/max-w-* utilities
+     (see the note at the geometry block).
 
    Compat target (binding, E3 lesson): the DEFAULT skin reproduces digichat's
    current rendered look exactly, translated to canon tokens per digichat's
@@ -201,46 +204,52 @@
 
 /* ── sheet (side panel) ──────────────────────────────────────────────── */
 
-@layer components {
-  /* per-side geometry — widths/max-widths sit here so call-site utilities
-     (w-full, max-w-md, sm:max-w-lg) keep winning as they did via cn() */
-  .ctl-sheet[data-side="right"] {
-    inset-block: 0;
-    right: 0;
-    height: 100%;
-    width: 75%;
-    border-left: 1px solid var(--hair);
-  }
+/* per-side geometry — UNLAYERED on purpose. digichat's old dress carried
+   these as data-[side=…]: variants, which compile to class+attribute
+   selectors at (0,2,0) specificity — so plain call-site utilities (w-full,
+   max-w-md, sm:max-w-lg on both digichat SheetContent call sites) always
+   LOST to them (verified against the Tailwind v4.2.2 compiled output;
+   tailwind-merge kept the differently-modified base classes). Keeping the
+   geometry unlayered reproduces that exact cascade: the sheets stay 75%
+   wide, capped at 24rem from the sm breakpoint. */
+.ctl-sheet[data-side="right"] {
+  inset-block: 0;
+  right: 0;
+  height: 100%;
+  width: 75%;
+  border-left: 1px solid var(--hair);
+}
 
+.ctl-sheet[data-side="left"] {
+  inset-block: 0;
+  left: 0;
+  height: 100%;
+  width: 75%;
+  border-right: 1px solid var(--hair);
+}
+
+.ctl-sheet[data-side="top"] {
+  inset-inline: 0;
+  top: 0;
+  height: auto;
+  border-bottom: 1px solid var(--hair);
+}
+
+.ctl-sheet[data-side="bottom"] {
+  inset-inline: 0;
+  bottom: 0;
+  height: auto;
+  border-top: 1px solid var(--hair);
+}
+
+@media (min-width: 40rem) {
+  .ctl-sheet[data-side="right"],
   .ctl-sheet[data-side="left"] {
-    inset-block: 0;
-    left: 0;
-    height: 100%;
-    width: 75%;
-    border-right: 1px solid var(--hair);
+    max-width: 24rem;
   }
+}
 
-  .ctl-sheet[data-side="top"] {
-    inset-inline: 0;
-    top: 0;
-    height: auto;
-    border-bottom: 1px solid var(--hair);
-  }
-
-  .ctl-sheet[data-side="bottom"] {
-    inset-inline: 0;
-    bottom: 0;
-    height: auto;
-    border-top: 1px solid var(--hair);
-  }
-
-  @media (min-width: 40rem) {
-    .ctl-sheet[data-side="right"],
-    .ctl-sheet[data-side="left"] {
-      max-width: 24rem;
-    }
-  }
-
+@layer components {
   /* close button — digichat's Button variant=ghost size=icon-sm dress */
   .ctl-sheet-close {
     border-radius: min(var(--radius-md, 0.5rem), 12px);
