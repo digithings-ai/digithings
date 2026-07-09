@@ -14,8 +14,10 @@ if [ "${DIGI_FORCE_GUARD_TEST:-0}" != "1" ] && [ "${DIGI_ALLOW_PROTECTED:-0}" = 
   exit 0
 fi
 
-# Live-trading path regex (always block, even on task/* branches).
-live_trading_regex='(live_trading|execute_trade|place_order|/live[/.])'
+# Live-trading path regex (always block, even on task/* branches). The
+# directory fragment is anchored to digiquant — a bare '/live[/.]' also matched
+# design screenshots under frontend/**/references/**/live/ (false positives).
+live_trading_regex='(live_trading|execute_trade|place_order|(^|/)digiquant/(.*/)?live[/.])'
 
 # Fast pre-check: skip the Python parse for commands with no write-implying tokens.
 # This avoids spawning python3 on every git/pytest/ruff invocation.

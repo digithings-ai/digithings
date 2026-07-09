@@ -67,9 +67,11 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
   [ -z "$base" ] && continue
 
-  # Scan changed paths for live-trading touch.
+  # Scan changed paths for live-trading touch. The directory fragment is
+  # anchored to digiquant — a bare '/live/' also matched design-reference
+  # screenshots under frontend/**/references/**/live/ (false positives).
   changed="$(git diff --name-only "$base" "$local_sha" 2>/dev/null || true)"
-  if echo "$changed" | grep -Eq '(live_trading|execute_trade|place_order|/live/)'; then
+  if echo "$changed" | grep -Eq '(live_trading|execute_trade|place_order|(^|/)digiquant/(.*/)?live/)'; then
     # Require a human co-sign trailer in at least one commit in the range.
     if ! git log --format=%B "$base..$local_sha" | grep -Eiq '^(Human-Approved-By|Co-Authored-By:[[:space:]]+[^C])'; then
       echo "pre-push: live-trading paths changed but no Human-Approved-By trailer found in commits." >&2
