@@ -1,6 +1,6 @@
 # ADR-0012 — digiquant.io served from a separate publish repo
 
-> **Historical note (2026-06):** Production deploy also uses **Cloudflare Pages** (`scripts/build-digiquant.sh`, `.github/workflows/deploy-digiquant-cloudflare.yml`). The split-repo `deploy-digiquant.yml` sync path below may still apply for `digithings-ai/digiquant.io`.
+> **Historical note (2026-06):** Production deploy also uses **Cloudflare Pages** (`scripts/build-digiquant.sh`, `.github/workflows/deploy-digiquant-cloudflare.yml`). The split-repo `deploy-digiquant.yml` sync path below may still apply for `digithings-ai/digiquant.io`. **Two identifiers named in the Decision section below have since been renamed** (kept as-written to preserve the ADR record): the sync workflow `.github/workflows/deploy-digiquant.yml` → `.github/workflows/deploy-digiquant-cloudflare.yml`, and the content path `frontend/digiquant/` → `frontend/digiquant-web/`.
 
 **Status:** Accepted (2026-04-23)
 **Amends:** [ADR-0002](0002-domain-unification.md) (two-domain plan) and [ADR-0009](0009-frontend-umbrella.md) (frontend umbrella).
