@@ -30,6 +30,7 @@ TOOL_VAULT_SEARCH_TAG = "digivault_search_tag"
 TOOL_VAULT_BACKLINKS = "digivault_backlinks"
 TOOL_VAULT_LINT = "digivault_lint"
 TOOL_VAULT_CREATE_NOTE = "digivault_create_note"
+TOOL_VAULT_SEARCH_NOTES = "digivault_search_notes"
 
 ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
     {
@@ -37,8 +38,11 @@ ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_VAULT_BACKLINKS,
         TOOL_VAULT_LINT,
         TOOL_VAULT_CREATE_NOTE,
+        TOOL_VAULT_SEARCH_NOTES,
     }
 )
+
+DEFAULT_SEARCH_NOTES_LIMIT = 7
 
 
 def _fn(name: str, description: str, params: FunctionParametersSchema) -> OpenAIToolDict:
@@ -85,6 +89,29 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
                     "body": {"type": "string"},
                 },
                 "required": ["name"],
+            },
+        ),
+        _fn(
+            TOOL_VAULT_SEARCH_NOTES,
+            "Full-text search over the DigiThings architecture vault (all module docs — "
+            "digigraph, digiquant, digisearch, digichat, digikey, digismith, digivault, "
+            "digiclaw, digibase, and roadmap modules). Ranked by relevance across title, "
+            "body, and tags. Use for any question about the digithings stack: modules, "
+            "ports, APIs, architecture, build/run. Requires the vault's Supabase-backed "
+            "store to be configured (CORE_SUPABASE_URL / CORE_SUPABASE_ANON_KEY).",
+            {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Natural-language search query.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": f"Max hits to return (default {DEFAULT_SEARCH_NOTES_LIMIT}).",
+                    },
+                },
+                "required": ["query"],
             },
         ),
     ]

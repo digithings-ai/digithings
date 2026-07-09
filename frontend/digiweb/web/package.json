@@ -1,0 +1,42 @@
+{
+  "name": "@digithings/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared React + Framer Motion component layer for the DigiThings marketing sites. Consumes @digithings/design tokens.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles/web-theme.css": "./src/styles/web-theme.css",
+    "./styles/docs.css": "./src/styles/docs.css",
+    "./styles/nav-shell.css": "./src/styles/nav-shell.css",
+    "./styles/pricing.css": "./src/styles/pricing.css",
+    "./styles/stages.css": "./src/styles/stages.css",
+    "./styles/metrics.css": "./src/styles/metrics.css",
+    "./styles/terminal-manifest.css": "./src/styles/terminal-manifest.css",
+    "./styles/chat-core.css": "./src/styles/chat-core.css",
+    "./styles/chat-widgets.css": "./src/styles/chat-widgets.css",
+    "./styles/controls-core.css": "./src/styles/controls-core.css",
+    "./styles/controls-overlay.css": "./src/styles/controls-overlay.css",
+    "./data/modules": "./src/data/modules.ts",
+    "./data/subsystems": "./src/data/subsystems.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.3.0",
+    "@digithings/design": "*",
+    "motion": "^12.23.12",
+    "simple-icons": "^15.18.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0"
+  }
+}

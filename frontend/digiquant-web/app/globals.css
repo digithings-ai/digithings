@@ -1,8 +1,20 @@
 @import "tailwindcss";
 @import "@digithings/design/tokens.css";
-@import "@digithings/design/site/site.css";
+/* site.css loads into the `components` cascade layer: it still beats
+   Tailwind's preflight (base), but token utilities in TSX can locally
+   override it. Unlayered, its `* { margin: 0 }` reset would silently kill
+   every margin utility in the app — utilities live in @layer utilities,
+   and unlayered author CSS outranks all layers. */
+@import "@digithings/design/site/site.css" layer(components);
 @import "@digithings/web/styles/web-theme.css";
+@import "@digithings/web/styles/nav-shell.css";
+@import "@digithings/web/styles/pricing.css";
 @import "@digithings/design/tearsheet/styles.css";
+
+/* Shared components (@digithings/web) carry token-backed utilities, and
+   Tailwind never scans package sources on its own — point it at them. */
+@source "../../digiweb/web/src/components/NavShell.tsx";
+@source "../../digiweb/web/src/components/pricing";
 
 :root[data-theme] {
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
@@ -13,12 +25,9 @@
   --font-display: var(--serif);
 }
 
-/* Shared tokens ship a separate --up green; digiquant.io maps positive P&L to
-   the brand teal. Must match :root[data-theme="dark|light"] specificity. */
-:root[data-theme="dark"],
-:root[data-theme="light"] {
-  --up: var(--accent);
-}
+/* (The former local `--up: var(--accent)` mapping is gone (#1401): tokens.css
+   now rules --up = the digiquant phosphor per theme — same colors, but pinned
+   to the token so P&L can never follow a livery scope.) */
 
 /* Marketing/editorial headings (.hero-title on pipeline + subsystems) render in
    the v7 serif via --font-display at weight 400 — the serif voice is never
@@ -28,16 +37,10 @@
 .hero-title { font-weight: 400 !important; letter-spacing: -0.025em; }
 .hero-title em { font-style: italic; color: var(--accent); -webkit-text-fill-color: initial; }
 
-/* brand glyph */
-.dq-glyph { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 70%, #fff), var(--accent)); position: relative; box-shadow: 0 0 16px var(--accent-weak); }
-.dq-glyph::after { content: ""; position: absolute; inset: 5px; border-left: 2px solid var(--bg); border-bottom: 2px solid var(--bg); }
-
-.dq-up { color: var(--up); } .dq-down { color: var(--down); }
-
 /* Light mode: the mesh uses source-over (not additive), so bump the shared teal
    wash + accent-weak token so the cursor bloom and .glow read on --bg. */
 :root[data-theme="light"] {
-  --accent-weak: rgba(14, 140, 127, 0.22);
+  --accent-weak: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 :root[data-theme="light"] .dqhero-canvas { filter: blur(48px) saturate(1.38); }
 :root[data-theme="light"] .dq-ambient { filter: blur(54px) saturate(1.38); }
@@ -51,91 +54,25 @@
 
 /* (Removed in the v7 port: old left-headline hero `.panel`/`.dq-curve`, the
    simulated `.dq-tickerbar` marquee, and the `.dq-mini-flow` teaser. The home is
-   now HeroMesh + PipelineScene + StrategySuite — see the "v7 landing" block below.) */
+   now HeroMesh + PipelineScene + StrategySuite — see the "v7 landing" block below.)
+   (Dissolved in the canon migration (#1401): dead `.dq-glyph`, `.dq-stages`,
+   `.dq-metrics`, `.ladder`/`.rung`, `.dqcta`, and the `.dq-flow` grid; the
+   contact tiers, clone-repo actions, and pipeline card spans now carry token
+   utilities in their TSX.)
+   (#1417: of the promoted @digithings/web primitives only the pricing family
+   has an adoption target here — the old metrics/stages/flow sections died
+   with the v7 landing (their CSS was already dead at #1401), and no count-up
+   stats exist, so PerfMetrics / NumberedStages / StatCounter are not wired.) */
 
-/* pipeline stage cards */
-.dq-stages { grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
-.dq-stages .mod-card .role { min-height: 2.6em; }
-
-/* metric cards */
-.dq-metrics { grid-template-columns: repeat(4, 1fr); gap: 1rem; }
-.dq-metric { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.4rem 1.3rem; }
-.dq-metric .ml { display: block; font-size: 0.76rem; color: var(--ink-mute); margin-bottom: 0.5rem; }
-.dq-metric .mv { font-family: var(--font-mono); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.dq-metric .mu { font-size: 0.82rem; color: var(--ink-mute); margin-left: 0.2rem; }
-
-/* contact tiers */
-.dq-contact { grid-template-columns: repeat(2, 1fr); gap: 1.25rem; max-width: 880px; }
-.price-card { position: relative; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 2rem 1.8rem; }
-.price-card.accent { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
-
-.price-card h3 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.02em; }
-.price-card .price { font-family: var(--font-mono); font-size: 0.95rem; color: var(--ink-soft); margin: 0.4rem 0 1.3rem; }
-.price-card ul { list-style: none; display: flex; flex-direction: column; gap: 0.65rem; margin-bottom: 1.6rem; }
-.price-card li { font-size: 0.92rem; color: var(--ink-soft); padding-left: 1.4rem; position: relative; }
-.price-card li::before { content: ""; position: absolute; left: 2px; top: 0.4em; width: 8px; height: 8px; border-bottom: 1.5px solid var(--accent); border-right: 1.5px solid var(--accent); transform: rotate(45deg); }
-.price-card .btn { width: 100%; justify-content: center; }
-.price-card .btn-primary {
-  width: auto;
-  justify-content: center;
-}
-.clone-repo-actions {
-  display: flex;
-  gap: 0.5rem;
-  width: 100%;
-  justify-content: flex-start;
-}
-.clone-repo-actions .btn { width: auto; }
-.clone-repo-actions .btn-clone-cmd {
-  flex: 0 1 auto;
-  min-width: 6.35rem;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0;
-  text-transform: none;
-  padding-inline: 0.85rem;
-}
-.clone-repo-actions .btn-clone-cmd-text {
-  white-space: nowrap;
-}
-.clone-repo-actions .btn-icon {
-  flex: 0 0 auto;
-  min-width: 3.125rem;
-  padding-inline: 0.65rem;
-}
-
-/* execution ladder */
-.ladder { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.6rem 1.6rem 1.2rem; max-width: 760px; margin: 0 auto; }
-.ladder svg { width: 100%; height: auto; }
-.rung { stroke: var(--accent); opacity: .4; fill: var(--accent-weak); }
-.rung.active { opacity: .95; stroke-width: 2; fill: color-mix(in srgb, var(--accent) 16%, transparent); }
-.rung.future { opacity: .3; }
-.ladder-cap { font-family: var(--font-mono); font-size: .74rem; color: var(--ink-mute); margin-top: .8rem; text-align: center; }
-
-@media (max-width: 940px) { .dq-stages { grid-template-columns: 1fr; } .dq-metrics { grid-template-columns: repeat(2,1fr); } }
-@media (max-width: 640px) { .dq-metrics, .dq-contact { grid-template-columns: 1fr; } }
-
-/* linear research → execution flow (the reinvented /pipeline) */
-.dq-flow { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(216px, 1fr)); gap: 1.1rem; margin-top: 2rem; }
-.dq-flow-step { position: relative; background: var(--surface); border: 1px solid var(--hair); border-left: 2px solid var(--accent); border-radius: var(--r-md); padding: 1.3rem 1.3rem 1.2rem; display: flex; flex-direction: column; gap: 0.5rem; transition: transform 0.25s var(--ease), border-color 0.25s var(--ease); }
-.dq-flow-step:hover { transform: translateY(-3px); border-color: var(--hair-2); border-left-color: var(--accent); }
-.dq-flow-n { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); letter-spacing: 0.1em; }
-.dq-flow-step h3 { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.02em; }
-.dq-flow-step p { font-size: 0.9rem; color: var(--ink-soft); line-height: 1.55; flex: 1; }
-.dq-flow-tool { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); border: 1px solid var(--hair); border-radius: 999px; padding: 0.2rem 0.6rem; align-self: flex-start; }
-.dq-flow-step.is-exec { border-left-color: var(--accent); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
-.dq-flow-step.is-exec .dq-flow-n { color: var(--accent); }
-.dq-flow-arrow { position: absolute; right: -0.92rem; top: 50%; transform: translateY(-50%); color: var(--hair-2); font-size: 1.05rem; z-index: 2; pointer-events: none; }
-@media (max-width: 760px) { .dq-flow-arrow { display: none; } }
-
-.dq-built { color: var(--ink-mute); font-size: 0.9rem; max-width: 52ch; margin-inline: auto; }
-.dq-built a { color: var(--accent); }
+/* (Accent decision, #1417: the featured/managed tier now wears the shared
+   `.pricing-tier-accent` flat color-mix wash from @digithings/web pricing.css —
+   the app-local `.price-card-accent` vertical gradient is deleted, keeping one
+   accent grammar across every pricing surface. An app-local override could not
+   compose anyway: card utilities beat @layer components.) */
 /* Tearsheet grammar (.ts-*) lives in @digithings/design/tearsheet/styles.css
    (imported at the top of this file). App-local tearsheet bits below:
-   the library page rhythm here, and the @media print grammar further down. */
-.dq-subpage-library { padding-bottom: clamp(4.5rem, 10vw, 7rem); }
-.dq-subpage-library .wrap { padding-bottom: 1.5rem; }
+   the @media print grammar further down (library page rhythm moved to
+   utilities on app/strategies/page.tsx). */
 
 /* Screen: print chrome hidden until export. */
 .ts-print-brand,
@@ -148,29 +85,36 @@
     margin: 12mm 14mm;
   }
 
+  /* Print pins the LIGHT theme as literals: print cannot rely on data-theme
+     (a dark-mode visitor must still get paper-white output), so each value
+     below mirrors its :root[data-theme="light"] token from tokens.css —
+     named per line. Paper deviations are deliberate: pure #ffffff instead of
+     the off-white canvas, and opaque hairlines instead of alpha ones (alpha
+     borders dither on some print engines). Everything else in this @media
+     block consumes these pinned custom properties, never raw literals. */
   :root[data-theme],
   :root[data-theme="dark"],
   :root[data-theme="light"],
   html.ts-printing {
     color-scheme: light;
-    --bg: #ffffff;
-    --surface: #ffffff;
-    --surface-2: #ffffff;
-    --hair: #dddddd;
-    --hair-2: #cccccc;
-    --ink: #14181b;
-    --ink-soft: #5c636a;
-    --ink-mute: #8a9097;
-    --accent: #0e8c7f;
-    --accent-weak: rgba(14, 140, 127, 0.1);
-    --on-accent: #ffffff;
-    --up: #0e8c7f;
-    --down: #c9533b;
-    --warn: #b5832a;
+    --bg: #ffffff;                          /* --bg light = #FBFBF9; paper stays pure white */
+    --surface: #ffffff;                     /* --surface light = #FFFFFF */
+    --surface-2: #ffffff;                   /* --surface-2 light = #F4F4F1; flattened to paper */
+    --hair: #dddddd;                        /* --hair light = rgba(10,15,20,.10), opaque for print */
+    --hair-2: #cccccc;                      /* --hair-2 light = rgba(10,15,20,.18), opaque for print */
+    --ink: #14181b;                         /* --ink light */
+    --ink-soft: #5c636a;                    /* --ink-soft light */
+    --ink-mute: #8a9097;                    /* --ink-mute light */
+    --accent: #0e8c7f;                      /* --accent light */
+    --accent-weak: rgba(14, 140, 127, 0.1); /* --accent-weak light (.12 → .1 on paper) */
+    --on-accent: #ffffff;                   /* --on-accent light */
+    --up: #0e8c7f;                          /* --up light (paper phosphor) */
+    --down: #c9533b;                        /* --down light */
+    --warn: #b5832a;                        /* --warn light */
   }
 
   html, body {
-    background: #ffffff !important;
+    background: var(--bg) !important;
     color: var(--ink) !important;
   }
   body {
@@ -184,7 +128,7 @@
   .grain,
   .glow,
   .site-nav,
-  .dqnav,
+  .nav-shell,
   .footer,
   .ts-header-actions,
   .ts-back,
@@ -319,15 +263,15 @@
     break-inside: avoid;
     page-break-inside: avoid;
     box-shadow: none !important;
-    background: #ffffff !important;
+    background: var(--surface) !important;
     border: 1px solid var(--hair) !important;
   }
   .ts-position-live { border-color: var(--hair) !important; }
   .ts-chip {
-    background: #ffffff !important;
+    background: var(--surface) !important;
     border-color: var(--hair) !important;
   }
-  .ts-trade-open { background: #ffffff !important; }
+  .ts-trade-open { background: var(--surface) !important; }
 
   .ts-grid-2 { grid-template-columns: 1fr 1fr; }
   .ts-table-scroll,
@@ -338,7 +282,7 @@
   }
   .ts-table thead th {
     position: static;
-    background: #ffffff !important;
+    background: var(--surface) !important;
   }
   .ts-table th,
   .ts-table td {
@@ -348,7 +292,7 @@
 
   .ts-matrix-cell {
     border-color: var(--hair) !important;
-    background: #ffffff !important;
+    background: var(--surface) !important;
   }
 
   .ts-svg.is-interactive { pointer-events: none; }
@@ -357,12 +301,14 @@
 
 /* ==========================================================================
    v7 LANDING — ported from
-   frontend/design/demos/digiquant-landing/07-scroll-driven.html
-   Namespaced (dqnav / dqhero / dqp / dqss) so nothing collides with shared
+   frontend/digiweb/design/demos/digiquant-landing/07-scroll-driven.html
+   Namespaced (dqhero / dqp / dqss) so nothing collides with shared
    site.css (.hero, .nav, .node, .stage, .brand, .section) or the .ts-* tearsheet
    classes above. Consumes [data-theme] tokens only → light/dark safe.
    ========================================================================== */
-:root { --dq-nav-h: 62px; }
+/* One height knob: NavShell (@digithings/web) reads --nav-shell-h; the local
+   anchor offsets and StrategySuite's scroll math still read --dq-nav-h. */
+:root { --nav-shell-h: 62px; --dq-nav-h: var(--nav-shell-h); }
 
 /* Page chrome sits above the fixed grain/glow layers (site.css z-index: 0). */
 main,
@@ -381,162 +327,30 @@ html {
 #pricing {
   scroll-margin-top: var(--dq-nav-h);
 }
-#contact {
-  position: relative;
-  z-index: 3;
-  background: var(--bg);
-}
 
-/* editorial heading set (serif), shared by the suite intro + closing section */
-.dq-eyebrow { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+/* editorial heading set (serif), shared across every section head. Stays CSS
+   (intentional skip, #1401): one definition feeds six surfaces including the
+   scroll scenes' descendant rules (.dqss-intro .dq-sub, .dq-sechead.center
+   combinators) — duplicating the strings as utilities would fork the voice.
+   The strategies-page eyebrow was folded into the shared .kicker instead. */
 .dq-title { font-family: var(--serif); font-weight: 400; font-size: clamp(1.6rem, 3vw, 2.4rem); letter-spacing: -0.01em; line-height: 1.12; color: var(--ink); margin-top: 0.6rem; }
 .dq-sub { color: var(--ink-soft); margin-top: 0.8rem; max-width: 60ch; line-height: 1.6; }
 
-/* ---- scroll-aware nav ---- */
-.dqnav { position: fixed; top: 0; left: 0; right: 0; height: var(--dq-nav-h); z-index: 210; display: flex; align-items: center; border-bottom: 1px solid transparent; transition: transform 0.4s var(--ease), background 0.3s var(--ease), border-color 0.3s var(--ease); }
-.dqnav.scrolled { background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(14px); border-bottom-color: var(--hair); }
-.dqnav.hidden { transform: translateY(calc(-1 * var(--dq-nav-h) - 1px)); }
-.dqnav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; position: relative; z-index: 56; }
-.dqnav .brand { text-transform: lowercase; color: var(--ink); }
-/* brand QR: transparent marks (no opaque tile, no glow). Show the variant that
-   matches the active theme — dark modules on light, light modules on dark. */
-.brand-mark { display: inline-block; width: 24px; height: 24px; }
-[data-theme="light"] .brand-mark-dark { display: none; }
-[data-theme="dark"] .brand-mark-light { display: none; }
-.dqnav-links { display: flex; gap: 1.8rem; font-size: 0.9rem; color: var(--ink-soft); }
-.dqnav-links a { transition: color 0.2s var(--ease); }
-.dqnav-links a:hover { color: var(--ink); }
-.dqnav-cta { display: flex; align-items: center; gap: 0.9rem; }
-/* icon-only buttons (nav GitHub, tearsheet download): square, glyph centred */
-.btn-icon { padding-inline: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
-.btn-icon svg { display: block; }
-/* theme-toggle + GitHub + hamburger: borderless, no fill — glyph/lines only */
-.dqnav-cta .theme-toggle,
-.dqnav-cta .btn-icon,
-.dqnav-cta .dqnav-toggle {
-  background: transparent;
-  border: none;
-  border-color: transparent;
-  box-shadow: none;
-  color: var(--ink-mute);
+/* ---- nav dress (the bar itself is the shared NavShell — see SiteNav.tsx) ----
+   brand QR: transparent marks (no opaque tile, no glow). Show the variant that
+   matches the active theme — dark modules on light, light modules on dark.
+   @layer components so token utilities in TSX can locally re-dress them. */
+@layer components {
+  .brand-mark { display: inline-block; width: 24px; height: 24px; }
+  [data-theme="light"] .brand-mark-dark { display: none; }
+  [data-theme="dark"] .brand-mark-light { display: none; }
+  /* icon-only buttons (nav GitHub, tearsheet download): square, glyph centred */
+  .btn-icon { padding-inline: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
+  .btn-icon svg { display: block; }
 }
-.dqnav-cta .theme-toggle:hover,
-.dqnav-cta .btn-icon:hover,
-.dqnav-cta .dqnav-toggle:hover { color: var(--ink); background: transparent; }
-.dqnav-lead { display: flex; align-items: center; min-width: 0; }
-.dqnav-toggle {
-  display: none;
-  flex-shrink: 0;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 5px;
-  padding: 0.5rem;
-  margin: 0;
-  cursor: pointer;
-}
-.dqnav-toggle span {
-  display: block;
-  width: 18px;
-  height: 1.5px;
-  background: currentColor;
-  border-radius: 1px;
-  transition: transform 0.25s var(--ease), opacity 0.2s var(--ease);
-}
-.dqnav.menu-open .dqnav-toggle span:first-child { transform: translateY(3.25px) rotate(45deg); }
-.dqnav.menu-open .dqnav-toggle span:last-child { transform: translateY(-3.25px) rotate(-45deg); }
-/* Full-viewport scrim — portaled to body; dims + aggressively blurs page behind menu */
-.dqnav-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  cursor: pointer;
-  background: color-mix(in srgb, var(--bg) 90%, transparent);
-  backdrop-filter: blur(40px) saturate(1.3);
-  -webkit-backdrop-filter: blur(40px) saturate(1.3);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 0.28s var(--ease), visibility 0.28s;
-}
-.dqnav-backdrop.is-open {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-.dqnav-sheet {
-  position: fixed;
-  inset: 0;
-  z-index: 201;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  text-align: right;
-  padding: calc(var(--dq-nav-h) + 1.5rem) clamp(1.25rem, 5vw, 2rem) max(1.25rem, env(safe-area-inset-bottom));
-  background: transparent;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(-6px);
-  transition: visibility 0.28s, transform 0.28s var(--ease);
-}
-.dqnav-sheet.is-open {
-  visibility: visible;
-  transform: none;
-}
-.dqnav-sheet-links {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.35rem;
-  flex: 1;
-  width: min(100%, 20rem);
-  margin-left: auto;
-  font-size: 1.35rem;
-  font-family: var(--font-serif, Georgia, serif);
-  color: var(--ink);
-  pointer-events: auto;
-}
-.dqnav-sheet-links a {
-  display: block;
-  width: 100%;
-  padding: 0.85rem 0;
-  border-bottom: 1px solid var(--hair);
-  color: var(--ink-soft);
-  text-align: right;
-  text-shadow: 0 1px 12px color-mix(in srgb, var(--bg) 70%, transparent);
-  transition: color 0.2s var(--ease);
-}
-.dqnav-sheet-links a:hover { color: var(--ink); }
-.dqnav-sheet-cta {
-  display: flex;
-  justify-content: flex-end;
-  width: min(100%, 20rem);
-  margin-left: auto;
-  padding-top: 1.5rem;
-  padding-bottom: max(1rem, env(safe-area-inset-bottom));
-  pointer-events: auto;
-}
-.dqnav-sheet-cta .btn { width: auto; justify-content: center; }
-.dqnav.menu-open {
-  border-bottom-color: var(--hair);
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(14px);
-}
-.dqnav.menu-open.hidden { transform: none; }
-@media (min-width: 881px) { .dqnav-backdrop, .dqnav-sheet { display: none; } }
-@media (max-width: 880px) {
-  .dqnav-toggle { display: inline-flex; margin-left: 0.5rem; }
-  .dqnav-links { display: none; }
-  .dqnav .wrap { gap: 1rem; }
-}
-@media (max-width: 560px) { .dqnav-cta { gap: 0.5rem; flex-shrink: 0; } .dqnav-cta .dqnav-toggle { margin-left: 0.65rem; } }
-@media (max-width: 768px) { .dqnav.hidden { transform: none; } }
 
-/* Olympus CTA: real Olympus mark + label */
-.dqnav-olympus { display: inline-flex; align-items: center; gap: 0.45rem; }
+/* Olympus CTA (NavShell sheet slot): real Olympus mark + label */
+.olympus-cta { display: inline-flex; align-items: center; gap: 0.45rem; }
 .olympus-mark { transform-origin: 50% 50%; }
 /* mark strokes are fully drawn at rest; the Open-Olympus button replays the
    dashboard's loader (stroke-draw + scale pulse) on hover. */
@@ -545,14 +359,14 @@ html {
 .olympus-stroke-2 { --ol-len: 190; }
 .olympus-stroke-3 { --ol-len: 45; }
 .olympus-stroke-4 { --ol-len: 165; }
-.dqnav-olympus:hover .olympus-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
-.dqnav-olympus:hover .olympus-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
-.dqnav-olympus:hover .olympus-stroke-2 { animation-delay: 0.03s; }
-.dqnav-olympus:hover .olympus-stroke-3 { animation-delay: 0.06s; }
-.dqnav-olympus:hover .olympus-stroke-4 { animation-delay: 0.09s; }
+.olympus-cta:hover .olympus-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.olympus-cta:hover .olympus-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
+.olympus-cta:hover .olympus-stroke-2 { animation-delay: 0.03s; }
+.olympus-cta:hover .olympus-stroke-3 { animation-delay: 0.06s; }
+.olympus-cta:hover .olympus-stroke-4 { animation-delay: 0.09s; }
 @keyframes ol-pulse { 0% { transform: scale(0.82); } 35% { transform: scale(1); } 55% { transform: scale(0.72); } 72% { transform: scale(1.03); } 100% { transform: scale(1); } }
 @keyframes ol-draw { 0% { stroke-dashoffset: var(--ol-len); opacity: 0.4; } 10% { opacity: 1; } 40%, 55% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .dqnav-olympus:hover .olympus-mark, .dqnav-olympus:hover .olympus-stroke { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .olympus-cta:hover .olympus-mark, .olympus-cta:hover .olympus-stroke { animation: none; } }
 
 /* push subpage content (no full-bleed hero) clear of the fixed nav; relative so
    the ambient mesh can anchor to the top band without covering the footer */
@@ -562,8 +376,8 @@ html {
 /* subpage section header — the main page's serif eyebrow/title/sub pattern,
    without .section-head's `h2` rule (which forces 600-weight sans over .dq-title) */
 .dq-sechead { max-width: 56ch; margin-bottom: clamp(2.5rem, 5vw, 4rem); }
-.dq-sechead.center { margin-inline: auto; text-align: center; }
-.dq-sechead.center .dq-title, .dq-sechead.center .dq-sub { margin-inline: auto; }
+/* (dead `.dq-sechead.center` variants removed in the #1417 census — centered
+   section heads carry their alignment inline in TSX) */
 
 /* ---- HERO: animated mesh-gradient, scroll-reactive ---- */
 .dqhero { position: relative; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; }
@@ -582,7 +396,9 @@ html {
 .dqhero-h1 .ln > span { display: block; transform: translateY(calc(108% + 0.24em)); transition: transform 1s var(--ease); }
 .dqhero-h1 .ln:nth-child(2) > span { transition-delay: 0.09s; }
 .dqhero.loaded .dqhero-h1 .ln > span { transform: none; }
-.dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px rgba(0, 0, 0, 0.45); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
+/* lede legibility halo over the mesh derives from --bg (the nav-shell sheet
+   recipe), so light mode gets a light halo instead of a black smudge. */
+.dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px color-mix(in srgb, var(--bg) 45%, transparent); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
 .dqhero-lede b { color: var(--ink); font-weight: 500; }
 .dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
 .dqhero-cta { display: flex; gap: 0.8rem; margin-top: 2.4rem; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
@@ -634,7 +450,6 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqpipe-step.is-right .dqpipe-card { border-left: 1px solid var(--hair); border-right: 2px solid var(--accent); }
 .dqpipe-step.is-exec .dqpipe-card { border-left-color: var(--up); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
 .dqpipe-step.is-exec.is-right .dqpipe-card { border-right-color: var(--up); }
-.dqpipe-step.is-exec .dq-flow-n { color: var(--up); }
 .dqpipe-rail {
   position: absolute; top: 1.6rem; width: 12px; height: 12px; border-radius: 50%;
   border: 2px solid var(--hair-2); background: var(--bg);
@@ -687,6 +502,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqp-ehead h3 { font-family: var(--serif); font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 400; letter-spacing: -0.015em; margin-bottom: 0.55rem; line-height: 1.1; color: var(--ink); }
 /* left-align the body to match the left-aligned tag + heading (was centered) */
 .dqp-ehead p { color: var(--ink-soft); font-size: 1rem; line-height: 1.6; max-width: 52ch; margin-inline: 0; }
+/* #000 here is a mask alpha ramp (fully-opaque stop), not a color — leave rule */
 .dqp-track { margin-top: 1.2rem; overflow: hidden; padding: 0.4rem 2px; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); }
 .dqp-steps { display: inline-flex; gap: 0.7rem; will-change: transform; }
 .dqp-step { flex: none; width: 166px; border: 1px solid var(--hair); border-radius: 11px; background: var(--surface); padding: 0.85rem 0.9rem; opacity: 0.34; transition: opacity 0.45s var(--ease), border-color 0.45s var(--ease), transform 0.45s var(--ease), box-shadow 0.45s var(--ease); }
@@ -818,6 +634,8 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  /* rgba(0,0,0,…) box-shadows here and on the deck cards below are shadow
+     ink, not brand color — sanctioned literals (site.css .term precedent) */
   box-shadow: 0 16px 40px -28px rgba(0, 0, 0, 0.55);
   transition: background 0.2s var(--ease), border-color 0.2s var(--ease), color 0.2s var(--ease);
 }
@@ -1045,11 +863,6 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   }
 }
 
-/* ---- closing CTA ---- */
-.dqcta { text-align: center; }
-.dqcta .dq-sub { margin-inline: auto; }
-.dqcta-actions { display: flex; gap: 0.8rem; flex-wrap: wrap; justify-content: center; margin-top: 2rem; }
-
 @media (prefers-reduced-motion: reduce) {
   .dqhero-h1 .ln > span, .dqhero-lede, .dqhero-cta { opacity: 1 !important; transform: none !important; transition: none !important; }
   .dqhero-scroll::after { animation: none; opacity: 0.85; transform: translateY(30px); }
@@ -1078,12 +891,17 @@ html.no-js .dqss-library-cta { transform: none !important; visibility: visible; 
 
 /* ---- subsystem poster (canon §12) ----
    One poster per sub-graph hero: giant lowercase serif italic name, the
-   subsystem's OWN livery blooming from below (the sanctioned luminous
-   moment), an honest epithet, and fine print that is a real path or a
-   real function. Surface fallback first: without color-mix() the bloom
-   drops and the poster stays a plain hairline panel. */
-.sub-poster { position: relative; border: 1px solid var(--hair); border-radius: 12px; overflow: hidden; padding: 4.5rem 1.6rem 1.4rem; margin-bottom: 2rem; background: var(--surface); background: radial-gradient(130% 95% at 50% 115%, color-mix(in srgb, var(--sub-acc) 15%, transparent), transparent 62%), var(--surface); }
+   subsystem's livery blooming from below, an honest epithet, and fine print
+   that is a real path or a real function. The poster wears the standard
+   accent-<module> scope (tokens.css), and consumes var(--accent) only —
+   atlas · hermes · kairos are backend langgraphs whose accents resolve to
+   ink under [data-theme] (ruling 2026-07-08), so these posters bloom as a
+   deliberate ink tint rising into the hairline panel; the digiquant phosphor
+   stays reserved for the terminal moments below (cmdline, init codeblock).
+   Surface fallback first: without color-mix() the bloom drops and the
+   poster stays a plain hairline panel. */
+.sub-poster { position: relative; border: 1px solid var(--hair); border-radius: 12px; overflow: hidden; padding: 4.5rem 1.6rem 1.4rem; margin-bottom: 2rem; background: var(--surface); background: radial-gradient(130% 95% at 50% 115%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 62%), var(--surface); }
 .sub-poster .sub-regmark { position: absolute; top: 0.7rem; left: 0.8rem; font-family: var(--font-mono); font-weight: 300; color: var(--ink-mute); font-size: 0.8rem; user-select: none; }
 .sub-poster-name { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(3rem, 8vw, 5rem); line-height: 0.95; letter-spacing: -0.02em; color: var(--ink); text-transform: lowercase; margin: 0; }
-.sub-poster-epithet { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.14em; color: var(--sub-acc); color: color-mix(in srgb, var(--sub-acc) 75%, var(--ink)); margin-top: 0.8rem; }
+.sub-poster-epithet { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.14em; color: var(--accent); color: color-mix(in srgb, var(--accent) 75%, var(--ink)); margin-top: 0.8rem; }
 .sub-poster-fine { font-family: var(--font-mono); font-size: 0.6rem; color: var(--ink-mute); margin-top: 0.45rem; line-height: 1.8; }

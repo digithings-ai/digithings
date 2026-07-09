@@ -85,6 +85,42 @@ DigiKey). Both return a short-lived JWT + optional `litellm_proxy_api_key`.
 connection pool. Six tables: `tenants`, `user_tenants`, `api_keys`, `conversations`,
 `conversation_messages`, `quant_runs`. Managed by three migration files in `drizzle/`.
 
+**Design-canon theming** (`src/app/globals.css`, `src/app/layout.tsx`,
+`src/components/providers.tsx` — #1403): the app runs on the shared DigiThings token
+canon. `@digithings/design/tokens.css` defines `[data-theme="dark"|"light"]` semantic
+tokens; `@digithings/web/styles/web-theme.css` is the single Tailwind `@theme inline`
+bridge for token-named utilities; digichat's `globals.css` derives the shadcn variable
+set from those tokens under `:root[data-theme]` scopes (`--background: var(--bg)`,
+`--border: var(--hair)`, `--destructive: var(--down)`, …; dark `--primary`/`--ring`
+wear `--accent-digichat` rose, light runs the deeper phosphor teal). `<html>` ships
+`data-theme="dark"` + `.dark` as SSR defaults; the shared `themeInitScript` re-points
+both pre-paint (`dt-theme` localStorage key, shared with the marketing sites) and a
+`MutationObserver` (`ThemeClassSync` in `providers.tsx`) mirrors every later
+`[data-theme]` flip onto the `.dark`/`.light` classes for the Tailwind `dark:`
+variant. The old `@digithings/digichat-ui` `tokens-shadcn-bridge.css` (shadcn vars →
+token names, the reverse direction) is no longer imported; `/embed` sets
+`[data-theme]` on the root from the tenant `theme` (its own iframe document) and
+per-tenant accent hexes still override at the wrapper. Because the shared
+`ThemeProvider` (in `providers.tsx`, which wraps `/embed` too via the root layout)
+keeps a `prefers-color-scheme` listener that rewrites `[data-theme]` to the OS scheme
+whenever there is no `dt-theme` key — always true for an anonymous embed visitor —
+`/embed` re-asserts the tenant theme with a `MutationObserver` on `html[data-theme]`
+(guarded write, so the observer never loops), so a mid-session OS light↔dark flip
+can't silently override a tenant's forced theme (#1434).
+
+**Shared controls layer** (`src/components/ui/*` — #1419): ten of the fifteen
+shadcn-derived wrappers are now thin re-exports of the `@digithings/web`
+controls family (`button`, `badge`, `card`, `input`, `label` pin
+`dress="chat"`; `avatar`, `collapsible`, `dropdown-menu`, `sheet`, `tooltip`
+re-export bare — the shared default skin is digichat's dress). Import sites
+are unchanged (`@/components/ui/<x>`). `globals.css` imports
+`@digithings/web/styles/controls-core.css` + `controls-overlay.css` before
+the digichat-ui sheets and `@source`s the shared controls directory
+(load-bearing — the behavioral controls carry token-backed utilities).
+`scroll-area`, `separator`, `sidebar`, `skeleton`, `textarea` stay local (no
+shared counterpart yet). Full swap/kept ledger, cascade contract, and
+browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
+
 **Source file reference table**
 
 | File | Purpose |
@@ -393,7 +429,11 @@ the relay's SSE contract (`conversation`, `text-delta`, `trace`, `done`,
 `error`) into AI SDK UI message stream parts. Conversation state lives on
 the relay's side (e.g. Azure Foundry conversations); the client echoes the
 relay's conversation id via `X-External-Conversation` (sessionStorage,
-`digichat_embed_conversation:<host>`). Both rate limiters (per-IP embed +
+`digichat_embed_conversation:<host>`). The Foundry relay streams incremental
+deltas then re-sends the COMPLETE text as one terminal frame; `external-relay-stream.ts`
+suppresses that duplicate by *holding* a delta equal to the accumulated text and only
+dropping it when the next frame is `done` (a later `text-delta` flushes it) — so a
+legitimately doubled chunk mid-stream is no longer lost (#1434). Both rate limiters (per-IP embed +
 shared BFF bucket, now keyed by the tenant's real slug) run before the
 backend branch. Relay URLs come from config, never the request, so there
 is no open-proxy/SSRF surface. First consumer: DataTapStream (datatap-web)

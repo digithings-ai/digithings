@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Footer } from "@digithings/web";
 import { DQ_FOOTER } from "../../_nav";
-import { DqNav } from "@/components/landing/DqNav";
+import { SiteNav } from "@/components/landing/SiteNav";
 import { TearsheetView } from "@/components/tearsheet/tearsheet-view";
 import { strategyDisplayName } from "@/components/tearsheet/strategy-names";
 import { type StrategyIndexEntry } from "@/components/tearsheet/types";
@@ -29,7 +29,7 @@ export default async function TearsheetPage({ params }: { params: Promise<{ id: 
 
   return (
     <>
-      <DqNav />
+      <SiteNav />
       <main className="ts-page dq-subpage">
         <div className="wrap">
           <TearsheetView key={id} slug={id} />

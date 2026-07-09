@@ -71,7 +71,7 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
 ### Positive
 
 - **Token sync is free.** A single source of truth at
-  `frontend/design/tokens.css` is consumed by every surface via
+  `frontend/digiweb/design/tokens.css` is consumed by every surface via
   workspace resolution. No HTTPS drift checks, no `npm publish` loop.
 - **Atomic cross-surface changes.** A design edit + its consumers
   update in one PR with one review. Previously this would have required
@@ -81,7 +81,7 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
   pre-push hook, and the PR automation are all single-repo tools. The
   umbrella doesn't require new machinery.
 - **CI alignment.** `digichat-test.yml` finally activates, gated on
-  `frontend/digichat/**` + `frontend/design/**`.
+  `frontend/digichat/**` + `frontend/digiweb/design/**`.
 - **History preserved.** All moves used `git mv` where possible; only
   the digichat import is from a fresh working tree (its prior 3-commit
   local history is acceptable loss).
@@ -136,7 +136,7 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
 - npm (not pnpm) — matches the pre-existing `digichat/package-lock.json`.
 - Static sites reference the design via `../design/…`
   relative paths. Published via a `dist/` assembly step in `static.yml`
-  that copies both `frontend/digithings/` and `frontend/design/`
+  that copies both `frontend/digithings/` and `frontend/digiweb/design/`
   into the Pages artifact.
 - `frontend/digichat/package.json` declares `@digithings/design`
   as a workspace dependency, but `globals.css` does not yet `@import` it

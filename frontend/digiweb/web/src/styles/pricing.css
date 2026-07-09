@@ -1,0 +1,60 @@
+/* ==========================================================================
+   pricing.css — CSS leave-rules for the pricing family
+   (components/pricing/Pricing.tsx + components/pricing/PricingMatrix.tsx).
+   Import once in an app's globals.css, after web-theme.css:
+     @import "@digithings/web/styles/pricing.css";
+
+   Static structure is token-backed Tailwind utilities in the components.
+   Only what utilities can't express lives here: the accent tier's two-color
+   color-mix wash, the ✓ check-marker ::before on feature rows, and the
+   billing toggle (ancestor `.on` state pairing + two-color mix + knob
+   translate).
+   ========================================================================== */
+
+/* ── accent (featured) tier card: two-color mixes on border + wash ──────── */
+.pricing-tier-accent {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+/* ── ✓ check-marker grammar on feature rows (li.pricing-feature) ────────── */
+.pricing-feature::before {
+  content: "✓";
+  flex: 0 0 auto;
+  color: var(--up);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* ── billing toggle: .pm-toggle.on drives the knob (state + translate) ──── */
+.pm-toggle {
+  width: 38px;
+  height: 21px;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.pm-toggle .pm-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--ink-mute);
+  transition: transform 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+
+.pm-toggle.on {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  background: var(--accent-weak);
+}
+
+.pm-toggle.on .pm-knob {
+  transform: translateX(17px);
+  background: var(--accent);
+}

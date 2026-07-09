@@ -314,6 +314,12 @@ class DigiProjectConfig:
             "digiquant_url", os.environ.get("DIGIQUANT_URL", "http://digiquant:8001")
         )
 
+    def get_digivault_url(self) -> str:
+        """DigiVault service URL."""
+        return self.services.get(
+            "digivault_url", os.environ.get("DIGIVAULT_URL", "http://digivault:8004")
+        )
+
     def get_research_system_prompt(self) -> str | None:
         """Custom system prompt for research node. When set, LLM responds in natural language (no JSON)."""
         return self.agents.get("research_system_prompt")

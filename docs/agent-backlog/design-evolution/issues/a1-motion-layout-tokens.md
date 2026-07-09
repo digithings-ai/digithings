@@ -1,10 +1,10 @@
 ## Goal
 
-Add Graphite-inspired motion and layout tokens to `frontend/design/tokens.css` so all surfaces share section rhythm, product-frame sizing, and glide easing — per [`EVOLUTION.md` §5](../../../../frontend/design/EVOLUTION.md).
+Add Graphite-inspired motion and layout tokens to `frontend/digiweb/design/tokens.css` so all surfaces share section rhythm, product-frame sizing, and glide easing — per [`EVOLUTION.md` §5](../../../../frontend/digiweb/design/EVOLUTION.md).
 
 ## Component
 
-- [x] cross-cutting (`frontend/design/`)
+- [x] cross-cutting (`frontend/digiweb/design/`)
 
 ## Acceptance Criteria
 
@@ -17,8 +17,8 @@ Add Graphite-inspired motion and layout tokens to `frontend/design/tokens.css` s
   - `--duration-reveal: 0.6s`
   - `--duration-hover: 0.18s`
 - [ ] Existing `--transition-speed` / `--transition-ease` unchanged (no breaking consumers)
-- [ ] `frontend/design/README.md` documents new tokens in Motion + Spacing sections
-- [ ] `frontend/design/EVOLUTION.md` Phase A checkbox for tokens marked done
+- [ ] `frontend/digiweb/design/README.md` documents new tokens in Motion + Spacing sections
+- [ ] `frontend/digiweb/design/EVOLUTION.md` Phase A checkbox for tokens marked done
 - [ ] `npm run build` (or workspace equivalent) passes for `digithings-web` and `digiquant-web`
 
 ## Test Requirements
@@ -34,8 +34,8 @@ cd frontend/digiquant-web && npm run build
 
 ## Documentation to Update
 
-- [ ] `frontend/design/README.md` — Motion & layout token tables
-- [ ] `frontend/design/EVOLUTION.md` — Phase A checkbox
+- [ ] `frontend/digiweb/design/README.md` — Motion & layout token tables
+- [ ] `frontend/digiweb/design/EVOLUTION.md` — Phase A checkbox
 
 ## Scoring Targets
 

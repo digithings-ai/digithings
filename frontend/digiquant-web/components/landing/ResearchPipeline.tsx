@@ -124,23 +124,33 @@ export function ResearchPipeline() {
             aria-label="digiquant research-to-execution pipeline"
             ref={stepsRef}
           >
-            {FLOW.map((s, i) => (
-            <li
-              key={s.n}
-              className={`dqpipe-step${i === FLOW.length - 1 ? " is-exec" : ""}${i % 2 === 1 ? " is-right" : ""}`}
-              ref={(el) => {
-                stepRefs.current[i] = el;
-              }}
-            >
-              <span className="dqpipe-rail" aria-hidden="true" />
-              <div className="dqpipe-card">
-                <span className="dq-flow-n">{s.n}</span>
-                <h3>{s.title}</h3>
-                <p>{s.body}</p>
-                <span className="dq-flow-tool">{s.tool}</span>
-              </div>
-            </li>
-            ))}
+            {FLOW.map((s, i) => {
+              const isExec = i === FLOW.length - 1;
+              return (
+                <li
+                  key={s.n}
+                  className={`dqpipe-step${isExec ? " is-exec" : ""}${i % 2 === 1 ? " is-right" : ""}`}
+                  ref={(el) => {
+                    stepRefs.current[i] = el;
+                  }}
+                >
+                  <span className="dqpipe-rail" aria-hidden="true" />
+                  <div className="dqpipe-card">
+                    {/* execution step numbers wear the money-up phosphor */}
+                    <span
+                      className={`font-mono text-[0.8rem] tracking-[0.1em] ${isExec ? "text-up" : "text-accent"}`}
+                    >
+                      {s.n}
+                    </span>
+                    <h3>{s.title}</h3>
+                    <p>{s.body}</p>
+                    <span className="self-start rounded-full border border-hair px-[0.6rem] py-[0.2rem] font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute">
+                      {s.tool}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
           </ol>
         </div>
       </div>

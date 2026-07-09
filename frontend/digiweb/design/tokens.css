@@ -1,0 +1,228 @@
+/* ==========================================================================
+   DigiThings Design System — Tokens
+   --------------------------------------------------------------------------
+   Single source of truth for colors, type, spacing, radii, timing.
+   Component CSS (components.css) must reference tokens only — no raw hex.
+   Base palette mirrors digichat/src/app/globals.css (dark mode).
+
+   Per-module accents are declared as --accent-<module>. A section, card,
+   or other scope sets `--accent: var(--accent-digigraph);` and component
+   rules consume `var(--accent)`.
+   ========================================================================== */
+
+:root {
+  /* --- Base palette (dark) --------------------------------------------- */
+  --bg-primary: #121212;
+  --bg-secondary: #0a0a0a;
+  --text-primary: #e6e6e6;
+  --text-secondary: #a3a3a3;
+  --border-color: #2a2a2a;
+  --fg: #ffffff;
+
+  /* Legacy alias kept so pre-existing rules (e.g. h2/h3 color) continue
+     to resolve. New components should prefer --fg or --accent. */
+  --accent-color: var(--fg);
+
+  /* --- Per-module accent palette --------------------------------------- */
+  --accent-digigraph:  #e5b765;
+  --accent-digiquant:  #3dd6c4; /* ruled 2026-07-03: the terminal phosphor is digiquant's identity
+                                   (matches the dark-theme --accent below; the light theme runs its
+                                   deeper #0E8C7F for contrast on paper). emerald #4fa37a returns to
+                                   the unassigned pool. */
+  --accent-atlas:      #6fbf94;
+  --accent-hermes:     #4a8f7b;
+  --accent-kairos:     #2f7a65;
+  --accent-digisearch: #5aa3c4;
+  --accent-digichat:   #e2708a; /* ruled 2026-07-06: digichat splits off digiquant's shared cyan —
+                                   now a standalone consumer chat surface, it earns its own voice.
+                                   Rose, 6.4:1 on the dark canvas (AA+), distinct from digikey's
+                                   terracotta #d97a5a and every other hue in the livery table. */
+  --accent-digikey:    #d97a5a;
+  --accent-digismith:  #6fa3a3;
+  --accent-digiclaw:   #b87840;
+  --accent-digibase:   #9ea0a5;
+  --accent-digistore:  #7b7fc7;
+  --accent-digilink:   #4fa39b;
+  --accent-digivault:  #9d8fc9; /* ruled 2026-07-04: the lavender returns from the unassigned pool —
+                                   the Obsidian-kinship hue for the Obsidian-style vault. 6.67:1 on
+                                   the dark canvas (AA+); distinct from digistore's deeper #7b7fc7. */
+
+  /* Scoped accent override pattern: sections/cards set --accent locally,
+     defaults to the neutral foreground if unscoped. */
+  --accent: var(--fg);
+
+  /* --- Typography ------------------------------------------------------- */
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'Fira Code', 'Space Mono', monospace;
+
+  --font-size-h1: clamp(3rem, 6vw, 4.5rem);
+  --font-size-h2: 2.5rem;
+  --font-size-h3: 1.5rem;
+  --font-size-section-title: 3.5rem;
+  --font-size-body: 1.25rem;
+  --font-size-small: 0.95rem;
+  --font-size-xs: 0.85rem;
+
+  /* --- Spacing scale --------------------------------------------------- */
+  --spacing-base: 1.5rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 1rem;
+  --space-4: 1.5rem;
+  --space-5: 2rem;
+  --space-6: 3rem;
+  --space-7: 4rem;
+  --space-8: 6rem;
+  --space-9: 8rem;
+
+  /* --- Radius ---------------------------------------------------------- */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* --- Motion ---------------------------------------------------------- */
+  --transition-speed: 0.8s;
+  --transition-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Convenience scoping classes so markup can opt into a module's accent
+   without writing inline styles. Any component inside will resolve
+   var(--accent) to the module color. */
+.accent-digigraph  { --accent: var(--accent-digigraph); }
+.accent-digiquant  { --accent: var(--accent-digiquant); }
+.accent-atlas      { --accent: var(--accent-atlas); }
+.accent-hermes     { --accent: var(--accent-hermes); }
+.accent-kairos     { --accent: var(--accent-kairos); }
+.accent-digisearch { --accent: var(--accent-digisearch); }
+.accent-digichat   { --accent: var(--accent-digichat); }
+.accent-digikey    { --accent: var(--accent-digikey); }
+.accent-digismith  { --accent: var(--accent-digismith); }
+.accent-digiclaw   { --accent: var(--accent-digiclaw); }
+.accent-digibase   { --accent: var(--accent-digibase); }
+.accent-digistore  { --accent: var(--accent-digistore); }
+.accent-digilink   { --accent: var(--accent-digilink); }
+.accent-digivault  { --accent: var(--accent-digivault); }
+
+/* ==========================================================================
+   Redesign theme layer (v2) — semantic, light + dark, terminal-phosphor cyan
+   --------------------------------------------------------------------------
+   Scoped ONLY under [data-theme] so the legacy :root palette above (still
+   consumed by chat.html, atlas.html, and Olympus until migrated) is left
+   untouched. Redesigned pages set data-theme via a pre-paint snippet, so they
+   resolve these. Accent is a single cyan; --up/--down are P&L semantics only.
+   ========================================================================== */
+:root[data-theme="dark"] {
+  /* Tell the UA its native surfaces (overscroll/rubber-band canvas, scrollbars,
+     the strip behind the mobile address bar) are dark — otherwise they paint
+     light by default, leaving a mismatched edge above the page on mobile. */
+  color-scheme: dark;
+  --bg:        #0A0E0C; /* warm canvas, ruled 2026-07-02 (was #0B0C0E) */
+  --surface:   #121417;
+  --surface-2: #171A1E;
+  --hair:      rgba(255, 255, 255, 0.09);
+  --hair-2:    rgba(255, 255, 255, 0.15);
+
+  --ink:       #ECEEF0;
+  --ink-soft:  #9AA0A6;
+  --ink-mute:  #6B7177;
+
+  --accent:      #3DD6C4;
+  --accent-weak: rgba(61, 214, 196, 0.14);
+  --on-accent:   #04201C;
+
+  /* ruled 2026-07-08 (promoted from design-reference): money-up wears the
+     digiquant phosphor — fixed to the *token*, never the live --accent, so
+     P&L colors cannot follow a livery scope. Down is its paired red. */
+  --up:   var(--accent-digiquant);
+  --down: #E5533E;
+  --warn: #E0B341;
+
+  --term-bg:   #08090B;
+  --term-ink:  #E7EAEC;
+  --term-mute: #7E858B;
+  --term-hair: rgba(255, 255, 255, 0.09);
+  --term-fill: rgba(255, 255, 255, 0.05);
+
+  --grain-opacity: 0.03;
+  --grain-blend: screen;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg:        #FBFBF9;
+  --surface:   #FFFFFF;
+  --surface-2: #F4F4F1;
+  --hair:      rgba(10, 15, 20, 0.10);
+  --hair-2:    rgba(10, 15, 20, 0.18);
+
+  --ink:       #14181B;
+  --ink-soft:  #5C636A;
+  --ink-mute:  #8A9097;
+
+  --accent:      #0E8C7F;
+  --accent-weak: rgba(14, 140, 127, 0.12);
+  --on-accent:   #FFFFFF;
+
+  /* ruled 2026-07-08: light runs the deeper phosphor #0E8C7F for contrast on
+     paper (same convention as --accent, line ~28) — a literal, not
+     var(--accent), so P&L stays livery-proof. Down keeps the deeper paper red. */
+  --up:   #0E8C7F;
+  --down: #C9533B;
+  --warn: #B5832A;
+
+  /* Terminal converts with the theme: light panel, dark ink. */
+  --term-bg:   #F1F0EB;
+  --term-ink:  #1A1E22;
+  --term-mute: #6B7177;
+  --term-hair: rgba(10, 15, 20, 0.12);
+  --term-fill: rgba(10, 15, 20, 0.05);
+
+  --grain-opacity: 0.045;
+  --grain-blend: multiply;
+}
+
+/* Shared (theme-independent) tokens for the redesign. */
+:root[data-theme] {
+  /* ruled 2026-07-08 (promoted from design-reference): atlas · hermes · kairos
+     name backend langgraphs, not colored products — on redesigned surfaces
+     their accents collapse to ink so any scope, livery, or stale persisted
+     selection resolves monochrome. Scoped to [data-theme] so legacy pages
+     (no data-theme attr) keep the :root greens until they migrate. */
+  --accent-atlas: var(--ink);
+  --accent-hermes: var(--ink);
+  --accent-kairos: var(--ink);
+
+  --font-sans: "Geist", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "Instrument Serif", Georgia, serif;
+
+  --wrap: 1180px;
+  --wrap-wide: 1280px;
+  --product-frame-w: 800px;
+  --gutter: clamp(1.25rem, 4vw, 3.25rem);
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Graphite-inspired section rhythm + reveal motion (EVOLUTION.md §5). */
+  --section-y: clamp(4rem, 8vw, 7rem);
+  --section-y-tight: clamp(2.5rem, 5vw, 4rem);
+  --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-reveal: 0.6s;
+  --duration-hover: 0.18s;
+}
+
+/* High-fidelity twin of the house curve (canon §09): a spring-shaped
+   linear() with the same fast-attack/soft-settle character as the
+   cubic-bezier above. Adopted behind @supports — browsers without
+   linear() keep the bezier; motion character is identical in kind,
+   richer in settle. */
+@supports (transition-timing-function: linear(0, 1)) {
+  :root[data-theme] {
+    --ease: linear(0, 0.012 0.9%, 0.05 2%, 0.411 9.2%, 0.517 11.8%, 0.611 14.6%, 0.694 17.7%, 0.765 21.1%, 0.824 24.8%, 0.872 28.9%, 0.91 33.4%, 0.939 38.4%, 0.977 50.9%, 0.994 68.4%, 1);
+    --ease-glide: var(--ease);
+  }
+}

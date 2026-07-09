@@ -8,6 +8,7 @@ import type {
   IntelligenceWhyItem,
 } from '@/lib/twelve-x/types';
 import { scoreColorClass, scoreLabel } from '@/lib/twelve-x/consensus-bar';
+import { LEG_COLORS } from '@/lib/chart-colors';
 import { ConsensusScoreBar } from './ConsensusScoreBars';
 
 /* ------------------------------------------------------------------ *
@@ -74,30 +75,31 @@ function recencyLabel(days: number | null): string {
   return days === 1 ? '1 day' : `${days} days`;
 }
 
-/** The 0.50/0.30/0.20 leg-bar colors (consensus / event / breadth). */
-const LEG_COLOR = ['#3B82F6', '#6db6ff', '#8B5CF6'] as const;
+/** The 0.50/0.30/0.20 leg-bar colors (consensus / event / breadth) —
+ * fixed hues from the sanctioned allowlist (lib/chart-colors.ts). */
+const LEG_COLOR = LEG_COLORS;
 
 /** Tier-2 split-bar segments, in the spec's order (Bull / Neutral / Watch / Bear). */
 const SPLIT_SEGMENTS = [
-  { key: 'bullish_pct', label: 'Bull', color: 'rgba(63,185,132,0.75)' },
-  { key: 'neutral_pct', label: 'Neutral', color: 'rgba(148,163,184,0.6)' },
-  { key: 'watch_pct', label: 'Watch', color: 'rgba(224,179,65,0.7)' },
-  { key: 'bearish_pct', label: 'Bear', color: 'rgba(224,101,75,0.75)' },
+  { key: 'bullish_pct', label: 'Bull', color: 'color-mix(in srgb, var(--up) 75%, transparent)' },
+  { key: 'neutral_pct', label: 'Neutral', color: 'color-mix(in srgb, var(--ink-mute) 60%, transparent)' },
+  { key: 'watch_pct', label: 'Watch', color: 'color-mix(in srgb, var(--warn) 70%, transparent)' },
+  { key: 'bearish_pct', label: 'Bear', color: 'color-mix(in srgb, var(--down) 75%, transparent)' },
 ] as const;
 
 /** classification → badge color classes (active/confirmed/invalidated/superseded). */
 function classificationClass(cls: string): string {
   switch (cls.trim().toLowerCase()) {
     case 'active':
-      return 'text-fin-blue border-fin-blue/50 bg-fin-blue/10';
+      return 'text-accent border-accent/50 bg-accent/10';
     case 'confirmed':
-      return 'text-fin-green border-fin-green/50 bg-fin-green/10';
+      return 'text-up border-up/50 bg-up/10';
     case 'invalidated':
-      return 'text-fin-red border-fin-red/50 bg-fin-red/10';
+      return 'text-down border-down/50 bg-down/10';
     case 'superseded':
-      return 'text-fin-amber border-fin-amber/50 bg-fin-amber/10';
+      return 'text-warn border-warn/50 bg-warn/10';
     default:
-      return 'text-text-muted border-border-subtle bg-white/[0.04]';
+      return 'text-ink-mute border-hair bg-ink/[0.04]';
   }
 }
 
@@ -122,19 +124,19 @@ function TierOne({ components }: { components: IntelligenceWhyComponents }) {
   const legMax = [0.5, 0.3, 0.2];
   return (
     <div className="mt-4">
-      <h4 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+      <h4 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-ink-mute">
         Tier 1 — how it scored
       </h4>
       <div className="space-y-1.5">
         {wf.legs.map((leg, i) => (
           <div key={leg.label} className="flex items-center gap-2.5">
-            <span className="w-44 shrink-0 text-[11.5px] text-text-secondary">
+            <span className="w-44 shrink-0 text-[11.5px] text-ink-soft">
               {leg.label}{' '}
-              <span className="font-mono tabular-nums text-text-muted">
+              <span className="font-mono tabular-nums text-ink-mute">
                 {leg.weight.toFixed(2)} × {leg.input.toFixed(2)}
               </span>
             </span>
-            <span className="relative h-3 min-w-[80px] flex-1 overflow-hidden rounded-sm bg-white/[0.05]">
+            <span className="relative h-3 min-w-[80px] flex-1 overflow-hidden rounded-sm bg-ink/[0.05]">
               <span
                 className="absolute inset-y-0 left-0 rounded-sm"
                 style={{
@@ -143,17 +145,17 @@ function TierOne({ components }: { components: IntelligenceWhyComponents }) {
                 }}
               />
             </span>
-            <span className="w-14 text-right font-mono text-xs tabular-nums text-text-secondary">
+            <span className="w-14 text-right font-mono text-xs tabular-nums text-ink-soft">
               {leg.contribution.toFixed(3)}
             </span>
           </div>
         ))}
-        <div className="mt-2 flex items-center gap-2.5 border-t border-border-subtle pt-2">
-          <span className="w-44 shrink-0 text-[11.5px] font-semibold text-text-primary">
+        <div className="mt-2 flex items-center gap-2.5 border-t border-hair pt-2">
+          <span className="w-44 shrink-0 text-[11.5px] font-semibold text-ink">
             Confluence
           </span>
           <span className="flex-1" />
-          <span className="w-14 text-right font-mono text-sm font-semibold tabular-nums text-fin-blue">
+          <span className="w-14 text-right font-mono text-sm font-semibold tabular-nums text-accent">
             = {wf.total.toFixed(3)}
           </span>
         </div>
@@ -169,7 +171,7 @@ function TierOne({ components }: { components: IntelligenceWhyComponents }) {
           .map((chip) => (
             <span
               key={chip}
-              className="rounded-full border border-border-subtle px-2 py-0.5 font-mono text-[10.5px] text-text-secondary"
+              className="rounded-full border border-hair px-2 py-0.5 font-mono text-[10.5px] text-ink-soft"
             >
               {chip}
             </span>
@@ -183,10 +185,10 @@ function TierTwo({ consensus }: { consensus: IntelligenceWhyItem['consensus'] })
   if (!consensus) {
     return (
       <div className="mt-4">
-        <h4 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+        <h4 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-ink-mute">
           Tier 2 — the consensus behind it
         </h4>
-        <p className="text-xs text-text-muted">No matching consensus row for this currency.</p>
+        <p className="text-xs text-ink-mute">No matching consensus row for this currency.</p>
       </div>
     );
   }
@@ -201,14 +203,14 @@ function TierTwo({ consensus }: { consensus: IntelligenceWhyItem['consensus'] })
 
   return (
     <div className="mt-4">
-      <h4 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+      <h4 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-ink-mute">
         Tier 2 — the consensus behind it
       </h4>
       <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2">
         {figs.map((f) => (
           <div key={f.label}>
-            <div className="text-[9.5px] uppercase tracking-wider text-text-muted">{f.label}</div>
-            <div className={`font-mono text-base font-semibold tabular-nums ${f.cls ?? 'text-text-primary'}`}>
+            <div className="text-[9.5px] uppercase tracking-wider text-ink-mute">{f.label}</div>
+            <div className={`font-mono text-base font-semibold tabular-nums ${f.cls ?? 'text-ink'}`}>
               {f.value}
             </div>
           </div>
@@ -237,7 +239,7 @@ function TierTwo({ consensus }: { consensus: IntelligenceWhyItem['consensus'] })
           );
         })}
       </div>
-      <div className="mt-1.5 flex flex-wrap gap-3 text-[10.5px] text-text-muted">
+      <div className="mt-1.5 flex flex-wrap gap-3 text-[10.5px] text-ink-mute">
         {SPLIT_SEGMENTS.map((s) => (
           <span key={s.key} className="flex items-center gap-1.5">
             <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: s.color }} />
@@ -251,21 +253,21 @@ function TierTwo({ consensus }: { consensus: IntelligenceWhyItem['consensus'] })
 
 function DeskRow({ desk }: { desk: IntelligenceWhyDesk }) {
   return (
-    <div className="mb-2 rounded-md border border-border-subtle bg-bg-secondary p-2.5">
+    <div className="mb-2 rounded-md border border-hair bg-term-bg p-2.5">
       <div className="mb-1.5 flex flex-wrap items-center gap-2.5">
-        <span className="text-[12.5px] font-semibold text-text-primary">{desk.broker}</span>
+        <span className="text-[12.5px] font-semibold text-ink">{desk.broker}</span>
         <span
           className={`rounded border px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide ${classificationClass(desk.classification)}`}
         >
           {desk.classification}
         </span>
-        <span className="font-mono text-[11px] text-text-muted">
+        <span className="font-mono text-[11px] text-ink-mute">
           relevance {desk.relevance.toFixed(2)}
           {desk.conviction ? ` · ${desk.conviction} conviction` : ''}
           {desk.direction ? ` · ${desk.direction}` : ''}
         </span>
       </div>
-      {desk.reason ? <p className="text-xs leading-snug text-text-secondary">{desk.reason}</p> : null}
+      {desk.reason ? <p className="text-xs leading-snug text-ink-soft">{desk.reason}</p> : null}
     </div>
   );
 }
@@ -273,13 +275,13 @@ function DeskRow({ desk }: { desk: IntelligenceWhyDesk }) {
 function TierThree({ desks }: { desks: IntelligenceWhyDesk[] }) {
   return (
     <div className="mt-4">
-      <h4 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+      <h4 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-ink-mute">
         Tier 3 — supporting desks
       </h4>
       {desks.length > 0 ? (
         desks.map((d, i) => <DeskRow key={`${d.broker}-${i}`} desk={d} />)
       ) : (
-        <p className="text-xs text-text-muted">No supporting desks recorded for this currency.</p>
+        <p className="text-xs text-ink-mute">No supporting desks recorded for this currency.</p>
       )}
     </div>
   );
@@ -310,13 +312,13 @@ export default function IntelligenceWhyPanel({ item, initialExpanded }: Intellig
   const bodyId = useId();
 
   return (
-    <div className="mt-2 border-t border-border-subtle/60 pt-2">
+    <div className="mt-2 border-t border-hair/60 pt-2">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-controls={bodyId}
-        className="flex w-full items-center gap-2 text-left text-[11px] font-medium uppercase tracking-wider text-text-muted transition-colors hover:text-text-secondary"
+        className="flex w-full items-center gap-2 text-left text-[11px] font-medium uppercase tracking-wider text-ink-mute transition-colors hover:text-ink-soft"
       >
         <ChevronDown
           size={14}
@@ -328,11 +330,11 @@ export default function IntelligenceWhyPanel({ item, initialExpanded }: Intellig
 
       {open ? (
         <div id={bodyId} className="mt-2">
-          <div className="rounded-md border border-dashed border-border-subtle bg-bg-secondary px-3 py-2.5">
-            <span className="mb-1 block text-[9.5px] font-medium uppercase tracking-wider text-fin-amber">
+          <div className="rounded-md border border-dashed border-hair bg-term-bg px-3 py-2.5">
+            <span className="mb-1 block text-[9.5px] font-medium uppercase tracking-wider text-warn">
               synthesized — would require generation
             </span>
-            <p className="text-[12.5px] italic text-text-secondary">
+            <p className="text-[12.5px] italic text-ink-soft">
               {item.currency} screens{' '}
               {item.direction ? item.direction.toLowerCase() : 'neutral'} at confluence{' '}
               {Number.isFinite(item.score) ? item.score.toFixed(2) : '—'}, driven mainly by{' '}

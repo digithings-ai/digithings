@@ -97,6 +97,73 @@ describe("createExternalRelayStreamResponse", () => {
     expect(res.headers.get("X-Request-Id")).toBe("rid-1");
   });
 
+  it("drops the relay's terminal full-text re-emit so the answer is not duplicated", async () => {
+    // The Foundry relay streams incremental deltas, then re-sends the COMPLETE
+    // text as one terminal delta (verified against the live relay). That last
+    // frame must be dropped, not forwarded.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          sseBody([
+            'event: text-delta\ndata: {"type":"text-delta","delta":"Hi "}\n\n',
+            'event: text-delta\ndata: {"type":"text-delta","delta":"there"}\n\n',
+            'event: text-delta\ndata: {"type":"text-delta","delta":"Hi there"}\n\n',
+            'event: done\ndata: {"type":"done"}\n\n',
+          ]),
+          { status: 200 }
+        )
+      )
+    );
+    const out = await drain(
+      await createExternalRelayStreamResponse({
+        relayUrl: "https://relay.example.com/api/digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+      })
+    );
+    expect(out).toContain('"delta":"Hi "');
+    expect(out).toContain('"delta":"there"');
+    // the terminal snapshot equal to the whole answer so far is dropped
+    expect(out).not.toContain('"delta":"Hi there"');
+  });
+
+  it("keeps a delta that equals the accumulated text when it is NOT the terminal frame", async () => {
+    // Regression (#1434): the old guard dropped any delta equal to the text so
+    // far, even mid-stream — so a legitimately doubled chunk ("xyz" then "xyz"
+    // for "xyzxyz") lost content. The suppression must fire only on the actual
+    // terminal re-emit (the delta immediately before `done`), not on any
+    // equality with accumulated text.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          sseBody([
+            'event: text-delta\ndata: {"type":"text-delta","delta":"xyz"}\n\n',
+            'event: text-delta\ndata: {"type":"text-delta","delta":"xyz"}\n\n',
+            'event: text-delta\ndata: {"type":"text-delta","delta":"!"}\n\n',
+            'event: done\ndata: {"type":"done"}\n\n',
+          ]),
+          { status: 200 }
+        )
+      )
+    );
+    const out = await drain(
+      await createExternalRelayStreamResponse({
+        relayUrl: "https://relay.example.com/api/digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+      })
+    );
+    // Both "xyz" deltas must be forwarded — count, since .toContain can't tell
+    // one occurrence from two. The old code emitted it only once.
+    const xyzCount = out.split('"delta":"xyz"').length - 1;
+    expect(xyzCount).toBe(2);
+    expect(out).toContain('"delta":"!"');
+  });
+
   it("forwards the stored conversationId on subsequent turns", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(sseBody(['event: done\ndata: {"type":"done"}\n\n']), { status: 200 })

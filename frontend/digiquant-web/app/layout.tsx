@@ -51,7 +51,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             the strategy deck); removed pre-paint when scripts run. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
         {/* Single fallback; themeInitScript sets it to the active theme pre-paint. */}
-        <meta name="theme-color" content="#0B0C0E" />
+        <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
       </head>
       <body>
         <div className="grain" aria-hidden="true" />

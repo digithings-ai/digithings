@@ -56,7 +56,7 @@ SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
     ("digiquant/scripts/atlas/preload-history.py", "pd."),
     ("digiquant/scripts/atlas/update_tearsheet.py", "pandas"),
     # RegExp.exec in terminal highlighter — not Python exec() (DESLOP-027)
-    ("frontend/design/terminal/highlight-dom.js", "bare exec()"),
+    ("frontend/digiweb/design/terminal/highlight-dom.js", "bare exec()"),
     # projects/ are confidential standalone research scripts, not services
     ("projects/", "blocking sleep"),
     ("projects/", "requests import"),
@@ -76,7 +76,7 @@ SCORE_SKIP_PATH_FRAGMENTS: tuple[str, ...] = (
     # heuristics are Python-oriented and misfire on CSS/JS (eval/exec/TODO scans
     # hit all files). This is the source-of-truth design dir we iterate heavily;
     # secrets are still covered by gitleaks. See #1310.
-    "frontend/design/",
+    "frontend/digiweb/design/",
 )
 
 # ── Anti-pattern definitions ──────────────────────────────────────────────────

@@ -89,6 +89,7 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 
 - `triage` — see `.claude/skills/triage/SKILL.md`
 - `ci-triage` — see `.claude/skills/ci-triage/SKILL.md`
+- `digiweb` — see `.claude/skills/digiweb/SKILL.md`
 
 **Slash commands** (Claude Code) / prompted workflows (other tools):
 

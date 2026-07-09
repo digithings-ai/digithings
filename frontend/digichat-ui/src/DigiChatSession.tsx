@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ChatStreamCursor } from "@digithings/web";
 import { ChatActivities } from "./components/ChatActivities";
 import { CopyButton } from "./components/CopyButton";
 import { DigiChatWordmark } from "./components/DigiChatMark";
@@ -153,7 +154,9 @@ export function DigiChatSession({
             </span>
             <div className="dc-body dc-intro-body">
               {intro}
-              {!introDone && <span className="dt-cur" />}
+              {/* Shared caret primitive (#1418); keeps .dt-cur so consumer CSS
+                  and the cursor.css contract stay authoritative on ties. */}
+              {!introDone && <ChatStreamCursor className="dt-cur" />}
               {introDone && showByok && !providerIsSet ? (
                 <p className="dc-intro-byok">
                   {" "}
@@ -195,7 +198,7 @@ export function DigiChatSession({
                   <>
                     {m.activities?.length ? <ChatActivities activities={m.activities} /> : null}
                     {renderAssistant(m.content, streaming)}
-                    {streaming && <span className="dt-cur" />}
+                    {streaming && <ChatStreamCursor className="dt-cur" />}
                     {streaming && !m.content && !m.activities?.length ? (
                       <span className="dc-out-dim">connecting…</span>
                     ) : null}
@@ -204,7 +207,9 @@ export function DigiChatSession({
                   m.content
                 )}
               </div>
-              {m.role === "assistant" && !streaming && m.content ? (
+              {/* No copy button on embed: the clipboard API is unavailable in a
+                  cross-origin iframe, so the button silently no-ops. */}
+              {layout !== "embed" && m.role === "assistant" && !streaming && m.content ? (
                 <CopyButton text={m.content} className="dc-msg-copy" ariaLabel="Copy answer" />
               ) : null}
             </div>

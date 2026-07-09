@@ -18,6 +18,7 @@
     "react-dom": "^19.2.4"
   },
   "dependencies": {
+    "@digithings/web": "*",
     "mermaid": "^11.16.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1"

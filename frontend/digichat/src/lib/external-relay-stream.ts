@@ -72,6 +72,15 @@ export async function createExternalRelayStreamResponse(opts: {
     execute: async ({ writer }) => {
       const textId = "assistant-main";
       let textOpen = false;
+      // Accumulates streamed answer text so we can drop the relay's terminal
+      // full-text re-emit (see the text-delta branch below).
+      let accumulatedText = "";
+      // A delta equal to the whole answer so far is only *probably* the relay's
+      // terminal re-emit — a legitimate answer can also double a chunk
+      // mid-stream (e.g. "ab" then "ab" for "abab"). Hold such a delta instead
+      // of dropping it outright; the `done` branch confirms it was terminal and
+      // drops it, while any later frame proves it was real and flushes it.
+      let pendingSnapshot: string | null = null;
       const openText = () => {
         if (!textOpen) {
           writer.write({ type: "text-start", id: textId });
@@ -116,8 +125,27 @@ export async function createExternalRelayStreamResponse(opts: {
               data: { conversationId: data.conversationId },
             });
           } else if (event === "text-delta" && typeof data.delta === "string") {
+            // A new delta arrived after a held snapshot — it wasn't terminal, so
+            // the snapshot was real content: flush it before handling this frame.
+            if (pendingSnapshot !== null) {
+              openText();
+              writer.write({ type: "text-delta", id: textId, delta: pendingSnapshot });
+              accumulatedText += pendingSnapshot;
+              pendingSnapshot = null;
+            }
+            // The relay (Foundry Responses API) streams the answer as incremental
+            // deltas, then re-sends the COMPLETE text as one terminal delta — which
+            // duplicated every answer in the client. A delta equal to the full text
+            // so far is likely that re-emit, but only if `done` follows: hold it and
+            // let the done/finally branches decide. (Root cause is relay-side; this
+            // is the container-side guard while that Function is unmaintained.)
+            if (accumulatedText.length > 0 && data.delta === accumulatedText) {
+              pendingSnapshot = data.delta;
+              continue;
+            }
             openText();
             writer.write({ type: "text-delta", id: textId, delta: data.delta });
+            accumulatedText += data.delta;
           } else if (event === "trace") {
             writer.write({
               type: "data-digigraphTrace",
@@ -130,14 +158,29 @@ export async function createExternalRelayStreamResponse(opts: {
               },
             });
           } else if (event === "error") {
+            // Drop any held snapshot so finally doesn't emit a duplicate ahead
+            // of the error banner.
+            pendingSnapshot = null;
             throw new Error(
               typeof data.message === "string" ? data.message : "external relay error"
             );
           } else if (event === "done") {
+            // Reached the terminal frame: a held snapshot IS the relay's
+            // full-text re-emit, so drop it by clearing without flushing.
+            pendingSnapshot = null;
             break;
           }
         }
       } finally {
+        // Stream ended without a `done` frame while still holding a snapshot:
+        // it can't be confirmed as the terminal re-emit, so emit it rather than
+        // lose content (the relay contract always sends `done`, so this only
+        // covers an abnormal early close).
+        if (pendingSnapshot !== null) {
+          openText();
+          writer.write({ type: "text-delta", id: textId, delta: pendingSnapshot });
+          accumulatedText += pendingSnapshot;
+        }
         closeText();
       }
     },

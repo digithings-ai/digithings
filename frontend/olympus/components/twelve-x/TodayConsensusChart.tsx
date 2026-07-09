@@ -46,18 +46,18 @@ function fmtSigned(v: number | null): string {
 
 /** Score → directional text-color class, neutral (`null`) → muted. */
 function valueColor(v: number | null): string {
-  if (v === null || !Number.isFinite(v)) return 'text-text-muted';
+  if (v === null || !Number.isFinite(v)) return 'text-ink-mute';
   return scoreColorClass(v);
 }
 
 /** Momentum → arrow glyph + color class (▲ up / ▼ down / · flat). */
 function momentumPresentation(m: number | null): { arrow: string; cls: string } {
   if (m === null || !Number.isFinite(m) || m === 0) {
-    return { arrow: '·', cls: 'text-text-secondary' };
+    return { arrow: '·', cls: 'text-ink-soft' };
   }
   return m > 0
-    ? { arrow: '▲', cls: 'text-fin-green' }
-    : { arrow: '▼', cls: 'text-fin-red' };
+    ? { arrow: '▲', cls: 'text-up' }
+    : { arrow: '▼', cls: 'text-down' };
 }
 
 export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
@@ -88,16 +88,16 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
   return (
     <section className="glass-card p-4 flex flex-col flex-1">
       <div className="mb-3.5">
-        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-text-secondary">
+        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-soft">
           Consensus average
         </h2>
-        <p className="mt-1 text-[11px] text-text-muted">
+        <p className="mt-1 text-[11px] text-ink-mute">
           Trailing 5-run average — raw latest scores are on the Consensus tab.
         </p>
       </div>
 
       {!hasData ? (
-        <p className="text-xs text-text-muted py-6 text-center">
+        <p className="text-xs text-ink-mute py-6 text-center">
           No consensus history yet — bars appear once a run is recorded.
         </p>
       ) : (
@@ -129,7 +129,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
                     )}`}
                   >
                     {fmtSigned(r.avgNow)}
-                    <span className="ml-1 text-[9.5px] font-normal text-text-muted">avg</span>
+                    <span className="ml-1 text-[9.5px] font-normal text-ink-mute">avg</span>
                   </span>
                   <span
                     className={`font-mono tabular-nums text-right text-[11.5px] w-[52px] ${mom.cls}`}
@@ -142,37 +142,37 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
             })}
           </div>
 
-          <div className="tc-legend flex items-center flex-wrap gap-3.5 mt-3.5 pt-3 border-t border-border-subtle text-[10.5px] text-text-muted">
+          <div className="tc-legend flex items-center flex-wrap gap-3.5 mt-3.5 pt-3 border-t border-hair text-[10.5px] text-ink-mute">
             <span className="flex items-center gap-1.5">
               <span
-                className="inline-block w-4 h-2 rounded-sm bg-fin-green"
+                className="inline-block w-4 h-2 rounded-sm bg-up"
                 aria-hidden="true"
               />
               Consensus average (bar · green bull / red bear, from zero center)
             </span>
             <span className="flex items-center gap-1.5">
               <span
-                className="inline-block w-0.5 h-3 rounded-sm bg-text-primary"
+                className="inline-block w-0.5 h-3 rounded-sm bg-ink"
                 aria-hidden="true"
               />
               Today&apos;s actual
             </span>
             <span className="flex items-center gap-1.5">
               <span
-                className="inline-block w-0.5 h-3 rounded-sm bg-fin-blue"
+                className="inline-block w-0.5 h-3 rounded-sm bg-accent"
                 aria-hidden="true"
               />
               Yesterday&apos;s avg
             </span>
             <span className="flex items-center gap-1.5">
               <span
-                className="inline-block w-0.5 h-3 rounded-sm bg-text-muted"
+                className="inline-block w-0.5 h-3 rounded-sm bg-ink-mute"
                 aria-hidden="true"
               />
               5 days ago avg
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="text-fin-green">▲</span>/<span className="text-fin-red">▼</span> =
+              <span className="text-up">▲</span>/<span className="text-down">▼</span> =
               actual vs average (rate of change)
             </span>
           </div>

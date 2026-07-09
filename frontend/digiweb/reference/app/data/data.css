@@ -1,0 +1,709 @@
+/* Data page — dot-matrix stat, card deck, pricing precision table. */
+
+/* .dot-matrix-card wrapper (mt / grid-cols-[180px_1fr] / gap / border / radius /
+   bg / padding + max-[900px]:grid-cols-1) → utilities in dot-matrix-stat.tsx.
+   The .dot-matrix-grid + .dot cluster below is the LED-matrix mechanic — CSS. */
+
+.dot-matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink-mute) 20%, transparent);
+}
+
+.dot.on {
+  background: var(--accent);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 44%, transparent);
+}
+
+/* .dot-matrix-copy .label / .value / .note → utilities in dot-matrix-stat.tsx */
+
+/* Card deck — sticky stacking (the cavemen.dev pattern). Cards sit in
+   normal flow; on wide screens each pins at a cascaded top offset and the
+   next card slides up over it. Narrow screens drop sticky entirely and the
+   cards simply appear in sequence. */
+
+/* .deck wrapper (mt / grid-cols-[minmax(0,1fr)_220px] / gap / items-start +
+   max-[900px]:grid-cols-1) → utilities in card-deck.tsx. Everything below —
+   .deck-slots / .deck-card / .deck-rail and the deck-content variants — stays
+   CSS: sticky + --stack-index mechanics and cross-file descendant / positional
+   selectors (.deck-card p, .deck-rail li.on .dot, .deck-card-head h3) that would
+   lose their ancestor hook or shift specificity if flattened. */
+
+/* Cards are DIRECT children of one shared container: a sticky element can
+   never leave its containing block, so per-card wrappers would drag each
+   card away as its own wrapper scrolls past. Sharing the container keeps
+   every card pinned until the whole deck ends; the gap is the scroll
+   runway between pins. */
+.deck-slots {
+  display: grid;
+  gap: 55svh;
+  /* tail runway: enough scroll after the last card enters for it to ride up
+     to its pinned offset, so the completed stack is the section's final state */
+  padding-bottom: 65svh;
+}
+
+.deck-card {
+  position: sticky;
+  /* site nav (~3.3rem) + breathing room + 2.4rem cascade per card so every
+     pinned card keeps a visible top edge under the one covering it */
+  top: calc(5rem + 2.4rem * var(--stack-index, 0));
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 1rem;
+  will-change: transform;
+}
+
+.deck-rail-pin {
+  position: sticky;
+  top: 38vh;
+}
+
+.deck-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.8rem;
+}
+
+.deck-card-head h3 {
+  font-size: 1.2rem;
+}
+
+.deck-card-head span {
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+}
+
+.deck-card p {
+  margin-top: 0.35rem;
+  color: var(--ink-soft);
+}
+
+.deck-card dl {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.deck-card dt {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  letter-spacing: 0.08em;
+}
+
+.deck-card dd {
+  margin-top: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+}
+
+.deck-card dd.up {
+  color: var(--up);
+}
+
+.deck-card dd.down {
+  color: var(--down);
+}
+
+.deck-rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 1px solid var(--hair);
+  padding-left: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.deck-rail li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.deck-rail .dot {
+  width: 7px;
+  height: 7px;
+}
+
+.deck-rail li.on {
+  color: var(--ink);
+}
+
+.deck-rail li.on .dot {
+  background: var(--accent);
+}
+
+/* Deck card variants (content-only; the deck stays agnostic) */
+
+.deck-changelog-version {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+}
+
+.deck-changelog ul {
+  margin-top: 1rem;
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.deck-changelog li {
+  position: relative;
+  padding-left: 1.1rem;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.deck-changelog li::before {
+  content: "+";
+  position: absolute;
+  left: 0;
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+}
+
+.deck-quote {
+  margin: 0;
+  padding: 0.4rem 0.2rem;
+}
+
+.deck-quote blockquote {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-style: italic;
+  font-size: clamp(1.25rem, 2.6vw, 1.6rem);
+  letter-spacing: -0.013em;
+  line-height: 1.3;
+}
+
+.deck-quote figcaption {
+  margin-top: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.deck-alert-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+.deck-alert-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--ink-mute);
+}
+
+.deck-alert-status.down .deck-alert-dot {
+  background: var(--down);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--down) 44%, transparent);
+}
+
+.deck-alert-status.up .deck-alert-dot {
+  background: var(--up);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--up) 44%, transparent);
+}
+
+.deck-alert-time {
+  margin-left: auto;
+  color: var(--ink-mute);
+}
+
+.deck-alert h3 {
+  margin-top: 0.8rem;
+  font-size: 1.2rem;
+}
+
+/* Pricing + comparison matrix — promoted to @digithings/web (#1415).
+   Structure/behavior live in web/src/components/pricing/Pricing.tsx and
+   PricingMatrix.tsx (token-backed utilities); the CSS leave-rules (accent
+   tier wash, ✓ feature markers, billing-toggle state machinery) live in
+   @digithings/web/styles/pricing.css, imported via globals.css. */
+
+@media (max-width: 900px) {
+  /* .dot-matrix-card + .deck responsive collapse → max-[900px]:grid-cols-1
+     utilities in dot-matrix-stat.tsx / card-deck.tsx. (The former
+     .pricing-paths override here was a no-op — 2 cols at every width — and is
+     now covered by the base grid-cols-2 utility.) */
+
+  /* Narrow: no stacking — the cards simply appear in sequence. The JS side
+     gates its scale/brightness transforms off below 901px too. */
+  .deck-slots {
+    gap: 0.9rem;
+    padding-bottom: 0;
+  }
+
+  .deck-card {
+    position: relative;
+    top: 0;
+  }
+
+  .deck-rail-pin {
+    display: none;
+  }
+}
+
+/* Changelog rail — horizontal scroll strip with drag, snap, and edge fades */
+
+/* .cr-head + .cr-nav wrappers → utilities in changelog-rail-reference.tsx */
+
+.cr-arrow {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.cr-arrow:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+/* Edge fades: the rail reads as a strip that continues past both sides */
+.cr-mask {
+  margin-top: 1.2rem;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 2.2rem,
+    #000 calc(100% - 2.2rem),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 2.2rem,
+    #000 calc(100% - 2.2rem),
+    transparent 100%
+  );
+}
+
+.cr-track {
+  display: flex;
+  gap: 0.9rem;
+  overflow-x: auto;
+  padding: 0.2rem 2.2rem;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.cr-track::-webkit-scrollbar {
+  display: none;
+}
+
+.cr-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.cr-card {
+  scroll-snap-align: start;
+  flex: 0 0 16.5rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 1.1rem;
+  user-select: none;
+}
+
+/* .cr-card-head + .cr-version → utilities in changelog-rail-reference.tsx.
+   .cr-tag stays CSS: it pairs with .cr-tag-feature / -breaking (specificity tie
+   + two-color mix borders). */
+
+.cr-tag {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  color: var(--ink-mute);
+}
+
+.cr-tag-feature {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 40%, var(--hair));
+}
+
+.cr-tag-breaking {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
+}
+
+/* .cr-date + .cr-title → utilities in changelog-rail-reference.tsx */
+
+.cr-card ul {
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.cr-card li {
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.cr-card li::before {
+  content: "+";
+  position: absolute;
+  left: 0;
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+}
+
+/* Stat counter — promoted to @digithings/web (#1415): the <StatCounter/>
+   primitive (components/metrics/StatCounter.tsx) carries the utilities; the
+   .sc-stat nth-child border grid lives in @digithings/web/styles/metrics.css,
+   imported from globals.css. */
+
+/* Roadmap Gantt — initiative bars across a month axis */
+
+/* .rg-scroll wrapper (mt / overflow-x-auto) → utilities in
+   roadmap-gantt-reference.tsx. The .rg grid below stays CSS: it reads / sets
+   --rg-label-w / --rg-cols / --rg-now, uses calc + two-color mixes + ::before. */
+
+.rg {
+  --rg-label-w: 11rem;
+  min-width: 620px;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 0.9rem 1rem 1rem;
+  font-family: var(--font-mono);
+}
+
+/* header: label spacer + one cell per month */
+.rg-head {
+  display: grid;
+  grid-template-columns: var(--rg-label-w) repeat(var(--rg-cols), 1fr);
+  border-bottom: 1px solid var(--hair);
+  padding-bottom: 0.5rem;
+}
+
+.rg-month {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+  text-align: center;
+}
+
+.rg-body {
+  position: relative;
+  padding-top: 0.7rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.rg-row {
+  display: grid;
+  grid-template-columns: var(--rg-label-w) repeat(var(--rg-cols), 1fr);
+  align-items: center;
+}
+
+.rg-label {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  padding-right: 0.6rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rg-bar {
+  height: 1.5rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--hair));
+  display: flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  overflow: hidden;
+}
+
+.rg-bar-span {
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--accent) 75%, var(--ink));
+  white-space: nowrap;
+}
+
+/* "now" marker: label width + fractional offset across the timeline area */
+.rg-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--rg-label-w) + (var(--rg-now) / var(--rg-cols)) * (100% - var(--rg-label-w)));
+  width: 1px;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+.rg-now::before {
+  content: "now";
+  position: absolute;
+  top: -0.1rem;
+  left: 0.2rem;
+  font-size: 0.52rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+/* ── marquee ticker (infinite "built on" strip) ─────────────────────────── */
+
+/* .mq wrapper (mt / flex-col / gap) → utilities in marquee-ticker-reference.tsx */
+
+.mq-row {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+}
+
+.mq-track {
+  display: inline-flex;
+  width: max-content;
+  gap: 2.2rem;
+  will-change: transform;
+}
+
+.mq-track--a {
+  animation: mq-left 34s linear infinite;
+}
+
+.mq-track--b {
+  animation: mq-right 34s linear infinite;
+}
+
+.mq-row:hover .mq-track {
+  animation-play-state: paused;
+}
+
+/* .mq-item + .mq-dot → utilities in marquee-ticker-reference.tsx */
+
+@keyframes mq-left {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes mq-right {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mq-track--a,
+  .mq-track--b {
+    animation: none;
+  }
+}
+
+/* ── odometer (mechanical digit-roll counter) ───────────────────────────── */
+
+/* .odo-grid wrapper (mt / grid-cols-4 / border / radius / bg / overflow +
+   max-[720px]:grid-cols-2) → utilities in odometer-reference.tsx. The .odo-cell
+   nth-child border grid and the .odo reel mechanic below stay CSS. */
+
+.odo-cell {
+  padding: 1.3rem;
+  border-left: 1px solid var(--hair);
+  border-top: 1px solid var(--hair);
+}
+
+.odo-cell:nth-child(-n + 4) {
+  border-top: none;
+}
+
+.odo-cell:nth-child(4n + 1) {
+  border-left: none;
+}
+
+.odo {
+  display: inline-flex;
+  align-items: flex-end;
+  font-family: var(--font-mono);
+  font-size: 1.7rem;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.odo-reel {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+}
+
+.odo-strip {
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.odo-digit {
+  height: 1em;
+  line-height: 1em;
+  text-align: center;
+}
+
+.odo-sep {
+  display: inline-block;
+}
+
+/* .odo-label → utilities in odometer-reference.tsx */
+
+@media (prefers-reduced-motion: reduce) {
+  .odo-strip {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .odo-cell:nth-child(-n + 4) {
+    border-top: 1px solid var(--hair);
+  }
+
+  .odo-cell:nth-child(-n + 2) {
+    border-top: none;
+  }
+
+  .odo-cell:nth-child(4n + 1) {
+    border-left: 1px solid var(--hair);
+  }
+
+  .odo-cell:nth-child(2n + 1) {
+    border-left: none;
+  }
+}
+
+/* ── sortable data table (strategy leaderboard) ─────────────────────────── */
+
+/* .srt-scroll wrapper (mt / overflow-x-auto / border / radius / bg) → utilities
+   in sortable-table-reference.tsx. The .srt-table cluster below stays CSS:
+   ancestor of thead th / td, .srt-r .srt-head, :hover / .is-active, td.up/.down. */
+
+.srt-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+}
+
+.srt-l {
+  text-align: left;
+}
+.srt-r {
+  text-align: right;
+}
+
+.srt-table thead th {
+  padding: 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.srt-head {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.7rem 1rem;
+  border: none;
+  background: transparent;
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: color 0.15s var(--ease);
+}
+
+.srt-r .srt-head {
+  justify-content: flex-end;
+}
+
+.srt-head:hover {
+  color: var(--ink-soft);
+}
+
+.srt-head.is-active {
+  color: var(--ink);
+}
+
+.srt-caret {
+  font-size: 0.6rem;
+  opacity: 0.55;
+}
+
+.srt-head.is-active .srt-caret {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.srt-table td {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--hair) 55%, transparent);
+  color: var(--ink-soft);
+}
+
+.srt-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.srt-sym {
+  color: var(--ink);
+}
+
+.srt-table td.up {
+  color: var(--up);
+}
+.srt-table td.down {
+  color: var(--down);
+}

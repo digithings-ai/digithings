@@ -28,6 +28,12 @@ jobs:
       - name: Install (root workspaces)
         run: npm ci --no-audit --no-fund
 
+      # Canon ratchet (#1404): frontends stay on token-backed utilities —
+      # no raw palette classes, legacy vocabulary, or color literals outside
+      # the sanctioned allowlist. Playbook: frontend/digiweb/MIGRATION.md
+      - name: Frontend canon guard
+        run: python3 scripts/check_frontend_canon.py
+
       - name: Lint digithings-web
         run: npm run lint --workspace digithings-web
 

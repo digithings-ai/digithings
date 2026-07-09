@@ -33,6 +33,20 @@ export const metadata: Metadata = {
   },
 };
 
+// /docs defaults to the ivory reading mode (canon §14: long-form surfaces go
+// light) unless the visitor has chosen a theme (dt-theme). This used to live as
+// an inline <script> in the /docs *segment* layout, but a script rendered by a
+// route segment is re-created (not hydrated) on every client-side navigation
+// into /docs — which makes React 19 warn ("Encountered a script tag while
+// rendering React component…") and, because client-created scripts never
+// execute, the ivory default only ever applied on a hard load anyway. Running
+// it here in the always-hydrated pre-paint <head> keeps the hard-load ivory
+// default (no flash) and removes the warning; the pathname guard scopes it to
+// /docs (trailingSlash export → /docs/ also matches). Kept local rather than in
+// the shared @digithings/web themeInitScript because only this site has /docs.
+const docsIvoryInit =
+  "try{if(/^\\/docs(\\/|$)/.test(location.pathname)&&!localStorage.getItem('dt-theme')){document.documentElement.setAttribute('data-theme','light');var m=document.querySelector('meta[name=\"theme-color\"]');if(m)m.setAttribute('content','#FBFBF9')}}catch(e){}"; // canon-allow: mirrors tokens.css light --bg (pre-paint script)
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   // suppressHydrationWarning: themeInitScript (and the /docs ivory default)
   // legitimately flip data-theme + meta pre-hydration; scoped to this
@@ -41,12 +55,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable} ${fraunces.variable} no-js`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* /docs → ivory default (pre-paint), scoped by pathname; see docsIvoryInit above. */}
+        <script dangerouslySetInnerHTML={{ __html: docsIvoryInit }} />
         {/* Law 06 (content-first): SSR ships html.no-js so stylesheet rules can
             neutralize JS-gated hiding (hero entrance, [data-motion] reveals);
             removed pre-paint when scripts run. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
-        {/* Single fallback; themeInitScript sets it to the active theme pre-paint. */}
-        <meta name="theme-color" content="#0B0C0E" />
+        {/* Single fallback; themeInitScript sets it to the active theme pre-paint.
+            Literal = tokens.css dark --bg (metas can't read CSS vars). */}
+        <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
       </head>
       <body>
         <div className="grain" aria-hidden="true" />

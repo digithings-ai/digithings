@@ -31,7 +31,7 @@ type TracePartData = {
   payload?: { label?: unknown; status?: unknown };
 };
 
-function uiMessageToDigiChat(message: UIMessage): DigiChatMessage {
+export function uiMessageToDigiChat(message: UIMessage): DigiChatMessage {
   const text = message.parts
     .filter((part): part is { type: "text"; text: string } => part.type === "text")
     .map((part) => part.text)
@@ -42,10 +42,23 @@ function uiMessageToDigiChat(message: UIMessage): DigiChatMessage {
       part.type === "data-digigraphTrace",
   );
 
-  const activities: DigiChatActivity[] = traces.map((t) => ({
+  // Collapse trace steps by label: the external relay can emit the same step
+  // more than once (e.g. repeated "in_progress" frames), and each trace part
+  // carries a unique id so nothing reconciles upstream. Keyed by resolved
+  // label, first-seen order preserved; `done` is true if any frame completed.
+  const byLabel = new Map<string, { label: string; done: boolean }>();
+  for (const t of traces) {
+    const label = String(t.data?.payload?.label ?? t.data?.type ?? "activity");
+    const done = t.data?.payload?.status === "completed";
+    const seen = byLabel.get(label);
+    if (seen) seen.done = seen.done || done;
+    else byLabel.set(label, { label, done });
+  }
+
+  const activities: DigiChatActivity[] = Array.from(byLabel.values(), (t) => ({
     kind: "trace" as const,
-    label: String(t.data?.payload?.label ?? t.data?.type ?? "activity"),
-    done: t.data?.payload?.status === "completed",
+    label: t.label,
+    done: t.done,
   }));
 
   return {

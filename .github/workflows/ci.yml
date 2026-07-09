@@ -77,21 +77,21 @@ jobs:
               - '.github/workflows/test-digigraph.yml'
             digichat:
               - 'frontend/digichat/**'
-              - 'frontend/design/**'
+              - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-digichat.yml'
             olympus:
               - 'frontend/olympus/**'
-              - 'frontend/design/**'
+              - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-olympus.yml'
             web:
               - 'frontend/digithings-web/**'
               - 'frontend/digiquant-web/**'
-              - 'frontend/web/**'
-              - 'frontend/design/**'
+              - 'frontend/digiweb/web/**'
+              - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
@@ -154,6 +154,26 @@ jobs:
               - 'pip-audit-ignore.txt'
               - '.github/workflows/security-pip-audit.yml'
             # CI_PATH_FILTERS_END
+
+  # ── Frontend canon guard (#1404, #1434) — UNCONDITIONAL ─────────────────────
+  # No `needs`/`if` gate on purpose: check_frontend_canon.py does
+  # `git ls-files frontend` and scans ALL frontend files regardless of the
+  # diff, so path-gating it (as the per-app test jobs still do) let a PR
+  # touching only frontend/digichat-ui/** or frontend/digiweb/reference/**
+  # skip the guard entirely — even though digichat-ui is a census app.
+  # Stdlib-only; no npm/pip install needed.
+  frontend-canon:
+    name: Frontend canon guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Frontend canon guard
+        run: python3 scripts/check_frontend_canon.py
 
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
