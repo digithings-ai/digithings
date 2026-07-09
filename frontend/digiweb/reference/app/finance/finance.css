@@ -152,23 +152,8 @@
 }
 
 /* ── performance dashboard ──────────────────────────────────────────────── */
-/* Shell, header, ratio/alloc typography, and layout migrated to token-backed
-   utilities in performance-dashboard-reference.tsx. Only the .pdash-ratio
-   border-left grid stays here — its :first-child / :nth-child(4) overrides are
-   sibling-index selectors Tailwind can't express. */
-
-.pdash-ratio {
-  border-left: 1px solid var(--hair);
-}
-
-.pdash-ratio:first-child {
-  border-left: none;
-}
-
-@media (max-width: 720px) {
-  /* .pdash-ratios collapses to 3-up via max-[720px]:grid-cols-3; the 4th ratio
-     then starts a new row, so drop its border-left. */
-  .pdash-ratio:nth-child(4) {
-    border-left: none;
-  }
-}
+/* Promoted to @digithings/web (#1450): the <PerformanceDashboard/> primitive
+   (components/finance-composites/PerformanceDashboard.tsx) carries the
+   utilities; the pdash-* sibling-index hairlines (headline cells + ratio
+   strip, keyed off data-cols) live in
+   @digithings/web/styles/finance-composites.css, imported from globals.css. */

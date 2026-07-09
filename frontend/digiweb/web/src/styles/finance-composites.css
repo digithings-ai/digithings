@@ -149,3 +149,56 @@
 .srt-table td.down {
   color: var(--down);
 }
+
+/* ── PerformanceDashboard: hairline grammar (pdash-*) ────────────────────── */
+/* Sibling-index hairlines Tailwind can't express — all structural, all
+   unlayered on purpose. Utilities in the component carry everything else. */
+
+/* headline cells: left hairlines between cells; stacked with top hairlines
+   when the row collapses to one column ≤ 720px */
+.pdash-head {
+  border-left: 1px solid var(--hair);
+}
+
+.pdash-head:first-child {
+  border-left: none;
+}
+
+@media (max-width: 720px) {
+  .pdash-head {
+    border-left: none;
+    border-top: 1px solid var(--hair);
+  }
+
+  .pdash-head:first-child {
+    border-top: none;
+  }
+}
+
+/* ratio strip: left hairlines between cells, re-derived per row keyed off
+   the strip's data-cols (n-up desktop, 3-up ≤ 720px) */
+.pdash-ratio {
+  border-left: 1px solid var(--hair);
+}
+
+.pdash-ratios[data-cols="6"] .pdash-ratio:nth-child(6n + 1),
+.pdash-ratios[data-cols="5"] .pdash-ratio:nth-child(5n + 1),
+.pdash-ratios[data-cols="4"] .pdash-ratio:nth-child(4n + 1),
+.pdash-ratios[data-cols="3"] .pdash-ratio:nth-child(3n + 1) {
+  border-left: none;
+}
+
+@media (max-width: 720px) {
+  /* the strip is 3-up whatever data-cols says (max-[720px]:grid-cols-3) —
+     re-derive. Selectors keep the [data-cols] attr so they tie the desktop
+     rules on specificity and win by order. */
+  .pdash-ratios[data-cols="6"] .pdash-ratio:nth-child(6n + 1),
+  .pdash-ratios[data-cols="5"] .pdash-ratio:nth-child(5n + 1),
+  .pdash-ratios[data-cols="4"] .pdash-ratio:nth-child(4n + 1) {
+    border-left: 1px solid var(--hair);
+  }
+
+  .pdash-ratios[data-cols] .pdash-ratio:nth-child(3n + 1) {
+    border-left: none;
+  }
+}
