@@ -200,7 +200,9 @@ export default function Home() {
         </section>
       </main>
 
-      <Colophon name="digi" suffix="things" />
+      {/* sweep: the flagship page opts into the reference footer's glow
+          sweep — every other consumer keeps the outline-only default. */}
+      <Colophon name="digi" suffix="things" sweep />
       <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
     </>
   );
