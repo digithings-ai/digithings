@@ -1,0 +1,60 @@
+/* ==========================================================================
+   @digithings/web — finance-composites family structural CSS
+   (components/finance-composites/*: <StockTicker/>, <OrderBook/>,
+   <SortableTable/>, <PerformanceDashboard/>, <SyncedTearsheet/>).
+   Import PLAINLY (no layer(…) wrapper) AFTER the token bridge, in the app's
+   globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/finance-composites.css";
+     @source "<path-to>/digiweb/web/src/components/finance-composites";
+   The @source line is load-bearing (path relative to the app's globals.css):
+   the components carry token-backed utilities, and Tailwind does not scan
+   package sources on its own.
+
+   Layering (the cascade contract, MIGRATION.md): single-class defaults live
+   in @layer components so call-site utilities can override them; state and
+   structural rules (:hover, .is-active, descendant sizing, sibling-index
+   hairlines, keyframes, media blocks) stay UNLAYERED on purpose — they must
+   keep outranking plain utilities. Do not wrap this import in layer(…).
+   OrderBook is pure token utilities and needs nothing here; SyncedTearsheet
+   paints on canvas from tokens read at runtime.
+   ========================================================================== */
+
+/* ── StockTicker: seamless scrolling tape (tk-*) ─────────────────────────── */
+
+@layer components {
+  .tk {
+    overflow: hidden;
+    border-block: 1px solid var(--hair);
+    /* mask alpha, not a palette color — #000 is "fully opaque" in mask space
+       (migrate-vs-leave sanctions masks staying concrete). */
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+  }
+
+  .tk-track {
+    display: inline-flex;
+    width: max-content;
+    animation: tk-scroll 42s linear infinite;
+    will-change: transform;
+  }
+}
+
+/* state/motion rules — unlayered on purpose */
+.tk:hover .tk-track {
+  animation-play-state: paused;
+}
+
+@keyframes tk-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tk-track {
+    animation: none;
+  }
+}

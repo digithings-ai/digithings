@@ -123,41 +123,12 @@
   color: var(--down);
 }
 
-/* ── stock ticker tape (seamless scrolling market strip) ────────────────── */
-
-.tk {
-  margin-top: 1.2rem;
-  overflow: hidden;
-  border-block: 1px solid var(--hair);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
-}
-
-.tk-track {
-  display: inline-flex;
-  width: max-content;
-  animation: tk-scroll 42s linear infinite;
-  will-change: transform;
-}
-
-.tk:hover .tk-track {
-  animation-play-state: paused;
-}
-
-/* .tk-item / .tk-sym / .tk-px / .tk-chg (+ up/down money colors) migrated to
-   token-backed utilities in stock-ticker-reference.tsx. */
-
-@keyframes tk-scroll {
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tk-track {
-    animation: none;
-  }
-}
+/* ── stock ticker tape ──────────────────────────────────────────────────── */
+/* Promoted to @digithings/web (#1450): the <StockTicker/> primitive
+   (components/finance-composites/StockTicker.tsx) carries the utilities; the
+   .tk mask/keyframe mechanics live in
+   @digithings/web/styles/finance-composites.css, imported from globals.css.
+   (The promoted .tk drops the old margin-top — the consumer adds mt.) */
 
 /* ── portfolio positions blotter ────────────────────────────────────────── */
 /* Blotter shell, table, cells, and P&L colors migrated to token-backed
