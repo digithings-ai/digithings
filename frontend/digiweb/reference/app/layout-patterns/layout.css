@@ -11,45 +11,11 @@
   text-decoration: underline;
 }
 
-/* Product frame — fixed artboard scaled to its container (container query) */
-
-.pf-viewport {
-  position: relative;
-  container-type: inline-size;
-  border: 1px solid var(--hair);
-  border-radius: 10px;
-  background: var(--bg);
-  overflow: hidden;
-  /* the artboard is 800 wide; height tracks it via the same scale factor */
-  aspect-ratio: 800 / 300;
-}
-
-.pf-artboard {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 800px;
-  height: 300px;
-  transform-origin: top left;
-  /* scale factor is measured and written by ProductFrame (ResizeObserver);
-     origin top-left so the scaled artboard pins to the frame corner */
-}
-
-.pf-tag {
-  position: absolute;
-  right: 0.6rem;
-  top: 0.6rem;
-  z-index: 2;
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.06em;
-  color: var(--ink);
-  background: color-mix(in srgb, var(--bg) 78%, transparent);
-  backdrop-filter: blur(6px);
-  border: 1px solid var(--hair);
-  border-radius: 5px;
-  padding: 0.15rem 0.45rem;
-}
+/* Product frame — promoted to @digithings/web (#1450): the <ProductFrame/>
+   primitive (components/data-layout/ProductFrame.tsx) owns the scale
+   mechanic; the pf-viewport/artboard/tag CSS lives in
+   @digithings/web/styles/data-layout.css, imported from globals.css. The
+   .pf-solo wrapper and .pf-mock-* demo tearsheet below stay with the page. */
 
 .pf-solo {
   margin-top: 1.2rem;

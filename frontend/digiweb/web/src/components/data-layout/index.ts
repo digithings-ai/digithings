@@ -3,3 +3,4 @@
 export { Odometer, OdometerStrip, type OdometerStat } from "./Odometer";
 export { DotMatrixStat, type DotMatrixStatProps } from "./DotMatrixStat";
 export { BentoGrid, BentoCell, type BentoSpan } from "./BentoGrid";
+export { ProductFrame, type ProductFrameProps } from "./ProductFrame";

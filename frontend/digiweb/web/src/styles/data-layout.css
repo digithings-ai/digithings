@@ -195,3 +195,49 @@
     transform: none;
   }
 }
+
+/* ── ProductFrame: fixed artboard scaled to its container ────────────────── */
+
+/* .pf-viewport / .pf-artboard are the geometry the ResizeObserver contract
+   depends on — unlayered on purpose. The component writes the real
+   aspect-ratio and artboard width/height inline (defaults below match the
+   800×300 reference artboard). */
+.pf-viewport {
+  position: relative;
+  container-type: inline-size;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--bg);
+  overflow: hidden;
+  /* the artboard is 800 wide; height tracks it via the same scale factor */
+  aspect-ratio: 800 / 300;
+}
+
+.pf-artboard {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 800px;
+  height: 300px;
+  transform-origin: top left;
+  /* scale factor is measured and written by ProductFrame (ResizeObserver);
+     origin top-left so the scaled artboard pins to the frame corner */
+}
+
+@layer components {
+  .pf-tag {
+    position: absolute;
+    right: 0.6rem;
+    top: 0.6rem;
+    z-index: 2;
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--hair);
+    border-radius: 5px;
+    padding: 0.15rem 0.45rem;
+  }
+}
