@@ -1,0 +1,297 @@
+/* ==========================================================================
+   @digithings/web — effects/chrome family structural CSS
+   (components/effects-chrome/*: <Pipeline/>, <RotatingPrompts/>,
+   <StackingPanels/>, <AnnouncementBar/>, <TabStrip/>, <ToastStack/>).
+
+   Import AFTER the token bridge, in the app's globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/effects-chrome.css";
+     @source "<path-to>/digiweb/web/src/components/effects-chrome";
+   The @source line is load-bearing (path relative to the app's globals.css):
+   the components carry token-backed utilities, and Tailwind does not scan
+   package sources on its own. Import this sheet PLAINLY (no layer(...)) —
+   it manages its own layering:
+
+   - single-class DEFAULT rules sit in `@layer components`, where the app's
+     `utilities` layer wins — call-site utilities (rounded-none, p-0 …) can
+     retune a default;
+   - STATE / STRUCTURAL rules (pseudo-classes, [aria-*], variant combinators,
+     descendant selectors, @keyframes hooks, media queries) stay UNLAYERED on
+     purpose so they keep beating plain call-site utilities — the cascade
+     contract from MIGRATION.md. Wrapping this import in layer(…) demotes the
+     state rules and breaks the rendered look.
+
+   Consumer-supplied custom props (fallbacks baked in):
+     --nav-h   sticky-pin offset for <StackingPanels/> (falls back to 3.4rem)
+   ========================================================================== */
+
+/* ── Pipeline — workflow viz (ported from the olympus dashboard) ──────────
+   The components carry the outer boxes (summary strip, flow row, columns) as
+   token utilities; the classes stay on the elements for the combinator /
+   modifier rules here: node states, the running pulse, the detail grids. */
+
+@layer components {
+  .pl-sum-k {
+    font-family: var(--font-mono);
+    font-size: 0.54rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-mute);
+  }
+
+  .pl-sum-v {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pl-col-tag {
+    position: absolute;
+    top: 0.4rem;
+    left: 0.7rem;
+    font-family: var(--font-mono);
+    font-size: 0.52rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-mute);
+  }
+
+  .pl-node {
+    width: 9.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--hair);
+    border-radius: 8px;
+    background: var(--surface);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.18s var(--ease), transform 0.15s var(--ease);
+  }
+
+  .pl-node-head {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .pl-pip {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--ink-soft);
+    flex-shrink: 0;
+  }
+
+  .pl-node-label {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--ink);
+  }
+
+  .pl-node-diag {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--ink-mute);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pl-conn {
+    flex-shrink: 0;
+    padding: 0 0.4rem;
+    color: color-mix(in srgb, var(--ink-mute) 80%, transparent);
+    display: inline-flex;
+  }
+
+  .pl-detail {
+    margin-top: 1rem;
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .pl-detail-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.85rem 1.1rem;
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .pl-detail-name {
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    color: var(--ink);
+  }
+
+  .pl-detail-model {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--ink-mute);
+    border: 1px solid var(--hair);
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+  }
+
+  .pl-detail-status {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-mute);
+  }
+
+  .pl-io {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    margin: 0;
+    background: var(--hair);
+  }
+
+  .pl-diag-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--hair);
+  }
+
+  .pl-diag-k {
+    font-family: var(--font-mono);
+    font-size: 0.52rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-mute);
+  }
+
+  .pl-diag-v {
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* state / structural — unlayered on purpose (cascade contract) */
+
+.pl-summary > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pl-running {
+  color: var(--accent);
+}
+
+.pl-col--par {
+  position: relative;
+  padding: 1.3rem 0.7rem 0.7rem;
+  border: 1px dashed color-mix(in srgb, var(--ink) 26%, var(--hair));
+  border-radius: 10px;
+}
+
+.pl-node:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--ink) 30%, var(--hair));
+}
+
+.pl-node.is-sel {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.pl-node--queued {
+  opacity: 0.55;
+}
+
+.pl-node--running .pl-pip,
+.pl-pip--running {
+  background: var(--accent);
+  animation: pl-pulse 1.6s var(--ease) infinite;
+}
+
+.pl-node--queued .pl-pip,
+.pl-pip--queued {
+  background: transparent;
+  border: 1px solid var(--ink-mute);
+}
+
+.pl-pip--done {
+  background: var(--ink-soft);
+}
+
+@keyframes pl-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.pl-detail-status--running {
+  color: var(--accent);
+}
+
+.pl-io > div {
+  background: var(--surface);
+  padding: 0.85rem 1.1rem;
+}
+
+.pl-io dt {
+  font-family: var(--font-mono);
+  font-size: 0.54rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+  margin-bottom: 0.3rem;
+}
+
+.pl-io dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.pl-diag-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.8rem 1.1rem;
+  border-left: 1px solid var(--hair);
+}
+
+.pl-diag-grid > div:first-child {
+  border-left: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pl-node--running .pl-pip,
+  .pl-pip--running {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .pl-io {
+    grid-template-columns: 1fr;
+  }
+  .pl-diag-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .pl-diag-grid > div:nth-child(3) {
+    border-left: none;
+  }
+}
