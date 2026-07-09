@@ -6,3 +6,4 @@
  * Re-exported from the package barrel (src/index.ts) by the F1 wire-up.
  */
 export { StockTicker, type TickerItem, type StockTickerProps } from "./StockTicker";
+export { OrderBook, type OrderBookLevel, type OrderBookProps } from "./OrderBook";
