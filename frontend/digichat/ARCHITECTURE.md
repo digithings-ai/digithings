@@ -100,7 +100,13 @@ both pre-paint (`dt-theme` localStorage key, shared with the marketing sites) an
 variant. The old `@digithings/digichat-ui` `tokens-shadcn-bridge.css` (shadcn vars →
 token names, the reverse direction) is no longer imported; `/embed` sets
 `[data-theme]` on the root from the tenant `theme` (its own iframe document) and
-per-tenant accent hexes still override at the wrapper.
+per-tenant accent hexes still override at the wrapper. Because the shared
+`ThemeProvider` (in `providers.tsx`, which wraps `/embed` too via the root layout)
+keeps a `prefers-color-scheme` listener that rewrites `[data-theme]` to the OS scheme
+whenever there is no `dt-theme` key — always true for an anonymous embed visitor —
+`/embed` re-asserts the tenant theme with a `MutationObserver` on `html[data-theme]`
+(guarded write, so the observer never loops), so a mid-session OS light↔dark flip
+can't silently override a tenant's forced theme (#1434).
 
 **Shared controls layer** (`src/components/ui/*` — #1419): ten of the fifteen
 shadcn-derived wrappers are now thin re-exports of the `@digithings/web`
@@ -423,7 +429,11 @@ the relay's SSE contract (`conversation`, `text-delta`, `trace`, `done`,
 `error`) into AI SDK UI message stream parts. Conversation state lives on
 the relay's side (e.g. Azure Foundry conversations); the client echoes the
 relay's conversation id via `X-External-Conversation` (sessionStorage,
-`digichat_embed_conversation:<host>`). Both rate limiters (per-IP embed +
+`digichat_embed_conversation:<host>`). The Foundry relay streams incremental
+deltas then re-sends the COMPLETE text as one terminal frame; `external-relay-stream.ts`
+suppresses that duplicate by *holding* a delta equal to the accumulated text and only
+dropping it when the next frame is `done` (a later `text-delta` flushes it) — so a
+legitimately doubled chunk mid-stream is no longer lost (#1434). Both rate limiters (per-IP embed +
 shared BFF bucket, now keyed by the tenant's real slug) run before the
 backend branch. Relay URLs come from config, never the request, so there
 is no open-proxy/SSRF surface. First consumer: DataTapStream (datatap-web)

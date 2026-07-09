@@ -9,6 +9,7 @@ COPY package.json package-lock.json ./
 COPY frontend/digichat/package.json frontend/digichat/
 COPY frontend/digichat-ui/package.json frontend/digichat-ui/
 COPY frontend/digiweb/design/package.json frontend/digiweb/design/
+COPY frontend/digiweb/web/package.json frontend/digiweb/web/
 COPY frontend/olympus/package.json frontend/olympus/
 RUN npm ci --workspace frontend/digichat --include-workspace-root
 
@@ -27,6 +28,7 @@ ARG DIGICHAT_EMBED_HOSTS=""
 ENV DIGICHAT_EMBED_HOSTS=$DIGICHAT_EMBED_HOSTS
 COPY --from=deps /app ./
 COPY frontend/digiweb/design ./frontend/digiweb/design
+COPY frontend/digiweb/web ./frontend/digiweb/web
 COPY frontend/digichat-ui ./frontend/digichat-ui
 COPY frontend/digichat ./frontend/digichat
 # package-lock.json is macOS-generated; Linux optional natives are not locked
