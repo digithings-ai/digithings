@@ -1,15 +1,9 @@
 /* Layout page — feature cell grammar + product frame technique. */
 
-/* Feature cells — base layout/type migrated to token utilities in
-   feature-cell-reference.tsx; only the combinator + :hover rules remain. */
-
-.fc-cell:nth-child(even) .fc-copy {
-  order: 2;
-}
-
-.fc-link:hover {
-  text-decoration: underline;
-}
+/* Feature cells — promoted to @digithings/web (#1450): the <FeatureCell/>
+   primitive (components/data-layout/FeatureCell.tsx) carries the utilities;
+   the fc-* combinator + :hover rules live in
+   @digithings/web/styles/data-layout.css, imported from globals.css. */
 
 /* Product frame — promoted to @digithings/web (#1450): the <ProductFrame/>
    primitive (components/data-layout/ProductFrame.tsx) owns the scale
@@ -86,12 +80,6 @@
 
 .pf-mock-stats dd.down {
   color: var(--down);
-}
-
-@media (max-width: 760px) {
-  .fc-cell:nth-child(even) .fc-copy {
-    order: 0;
-  }
 }
 
 /* Bento grid — promoted to @digithings/web (#1450): the <BentoGrid/> +

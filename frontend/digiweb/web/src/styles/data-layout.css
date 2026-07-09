@@ -241,3 +241,22 @@
     padding: 0.15rem 0.45rem;
   }
 }
+
+/* ── FeatureCell: combinator + state rules only ──────────────────────────── */
+
+/* even-numbered sibling cells swap copy/visual columns — unlayered */
+.fc-cell:nth-child(even) .fc-copy {
+  order: 2;
+}
+
+.fc-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 760px) {
+  /* single column ≤ 760px (the cell's max-[760px]:grid-cols-1 utility) —
+     copy back on top for even cells too */
+  .fc-cell:nth-child(even) .fc-copy {
+    order: 0;
+  }
+}
