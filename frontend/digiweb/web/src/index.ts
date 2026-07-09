@@ -33,6 +33,9 @@ export { PricingMatrix, type PricingMatrixProps, type PricingMatrixTier, type Pr
 export { NumberedStages, type NumberedStage } from "./components/stages/NumberedStages";
 export { PerfMetrics, type PerfMetric } from "./components/metrics/PerfMetrics";
 export { StatCounter, type CounterStat } from "./components/metrics/StatCounter";
+// promoted primitives (#1450)
+export { WordReveal, type WordRevealProps } from "./components/typography/WordReveal";
+export { Marquee, type MarqueeProps } from "./components/marquee/Marquee";
 export {
   TerminalManifest,
   type TerminalManifestRow,

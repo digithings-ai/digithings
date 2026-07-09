@@ -6,6 +6,8 @@
 @import "@digithings/web/styles/pricing.css";
 @import "@digithings/web/styles/stages.css";
 @import "@digithings/web/styles/metrics.css";
+@import "@digithings/web/styles/word-reveal.css";
+@import "@digithings/web/styles/marquee.css";
 @import "@digithings/web/styles/terminal-manifest.css";
 @import "@digithings/web/styles/chat-core.css";
 @import "@digithings/web/styles/chat-widgets.css";
@@ -20,6 +22,8 @@
 @source "../../web/src/components/pricing";
 @source "../../web/src/components/stages";
 @source "../../web/src/components/metrics";
+@source "../../web/src/components/typography";
+@source "../../web/src/components/marquee";
 @source "../../web/src/components/TerminalManifest.tsx";
 @source "../../web/src/components/chat";
 @source "../../web/src/components/controls";

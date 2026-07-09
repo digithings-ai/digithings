@@ -1,11 +1,15 @@
 /**
  * Infinite marquee ticker — the scrolling "built on" strip common to the
  * reference sites, in our terminal register: two mono rows drifting in
- * opposite directions, edge-fade masks, seamless loop (content duplicated,
- * track translated exactly -50%), and pause-on-hover. Pure CSS, so a plain
- * server component. Third-party tool names keep their proper casing (the
- * naming rule reserves capitals for them); reduced motion stops the drift.
+ * opposite directions, edge-fade masks, seamless loop and pause-on-hover.
+ * Consumes the shared <Marquee/> primitive from @digithings/web (promoted
+ * #1450); this specimen is a thin wrapper — two Marquees, opposite directions —
+ * that keeps the catalog rendering it. Third-party tool names keep their proper
+ * casing (the naming rule reserves capitals for them); reduced motion stops the
+ * drift.
  */
+import { Marquee } from "@digithings/web";
+
 const ROW_A = [
   "Polars",
   "NautilusTrader",
@@ -26,25 +30,6 @@ const ROW_B = [
   "Cloudflare",
 ];
 
-function Track({ items, dir }: { items: string[]; dir: "a" | "b" }) {
-  return (
-    <div className="mq-row">
-      <div className={`mq-track mq-track--${dir}`}>
-        {[...items, ...items].map((t, i) => (
-          <span
-            className="inline-flex items-center gap-[0.7rem] font-mono text-[0.82rem] whitespace-nowrap text-ink-soft"
-            key={`${t}-${i}`}
-            aria-hidden={i >= items.length || undefined}
-          >
-            <span className="h-1 w-1 rounded-full bg-accent" aria-hidden="true" />
-            {t}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function MarqueeTickerReference() {
   return (
     <section className="section-block">
@@ -57,8 +42,8 @@ export function MarqueeTickerReference() {
       </p>
 
       <div className="mt-[1.4rem] flex flex-col gap-[0.85rem]">
-        <Track items={ROW_A} dir="a" />
-        <Track items={ROW_B} dir="b" />
+        <Marquee items={ROW_A} direction="left" aria-label="Built on — data and quant tools" />
+        <Marquee items={ROW_B} direction="right" aria-label="Built on — web and infra tools" />
       </div>
     </section>
   );
