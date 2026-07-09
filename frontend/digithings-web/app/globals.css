@@ -151,6 +151,23 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   .dqhero-scroll::after { animation: none; opacity: 0.6; transform: none; }
 }
 
+/* Short-viewport nav clearance (#1434): the hero centres its content in
+   100svh, but the NavShell is position:fixed (--dq-nav-h). On short viewports
+   (mobile landscape, split-screen — ~414px tall) a centred, taller-than-
+   viewport headline rides up UNDER the fixed nav. Below this height threshold,
+   top-align the hero and pad past the nav so content always clears it; the
+   section still grows (min-height) so nothing is clipped. Desktop keeps its
+   centred composition — the query never fires above 640px tall. The abspos
+   canvas/veil/graph (inset:0) fill the padding box, so only .dqhero-inner
+   shifts down; the mesh art still covers the full hero. */
+@media (max-height: 640px) {
+  .dqhero {
+    align-items: flex-start;
+    padding-top: calc(var(--dq-nav-h) + 1.25rem);
+    padding-bottom: 2rem;
+  }
+}
+
 /* Mermaid diagrams (MermaidBlock.tsx) — client-rendered SVG for pipeline/architecture
    visualizations. Centered, contained; a view-source toggle reveals the raw code. */
 .dc-mermaid { margin: 0.7rem 0; }
