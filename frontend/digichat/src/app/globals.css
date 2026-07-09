@@ -39,12 +39,24 @@
    and .dt-cur). */
 @import "@digithings/web/styles/chat-core.css";
 @import "@digithings/web/styles/chat-widgets.css";
+/* Controls layer (#1419) — dress for the shared controls that
+   src/components/ui/* now re-export (Button/Badge/Card/Input/Label/Avatar
+   in controls-core, DropdownMenu/Sheet/Tooltip in controls-overlay).
+   Imported plainly — the sheets manage their own @layer components /
+   unlayered split so call-site utility overrides keep the exact cascade
+   the old tailwind-merge wrappers produced. Like chat-core, they sit
+   before the digichat-ui sheets. */
+@import "@digithings/web/styles/controls-core.css";
+@import "@digithings/web/styles/controls-overlay.css";
 @import "@digithings/digichat-ui/styles/cursor.css";
 @import "@digithings/digichat-ui/styles/session.css";
 
 /* Tailwind never scans package sources — generate the token utilities the
    shared chat components carry (MIGRATION.md rule 3). */
 @source "../../../digiweb/web/src/components/chat";
+/* … and the utilities the shared behavioral controls carry (#1419) — the
+   @source is load-bearing for controls-overlay's components. */
+@source "../../../digiweb/web/src/components/controls";
 
 @custom-variant dark (&:is(.dark *));
 

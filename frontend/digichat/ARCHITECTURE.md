@@ -102,6 +102,19 @@ token names, the reverse direction) is no longer imported; `/embed` sets
 `[data-theme]` on the root from the tenant `theme` (its own iframe document) and
 per-tenant accent hexes still override at the wrapper.
 
+**Shared controls layer** (`src/components/ui/*` — #1419): ten of the fifteen
+shadcn-derived wrappers are now thin re-exports of the `@digithings/web`
+controls family (`button`, `badge`, `card`, `input`, `label` pin
+`dress="chat"`; `avatar`, `collapsible`, `dropdown-menu`, `sheet`, `tooltip`
+re-export bare — the shared default skin is digichat's dress). Import sites
+are unchanged (`@/components/ui/<x>`). `globals.css` imports
+`@digithings/web/styles/controls-core.css` + `controls-overlay.css` before
+the digichat-ui sheets and `@source`s the shared controls directory
+(load-bearing — the behavioral controls carry token-backed utilities).
+`scroll-area`, `separator`, `sidebar`, `skeleton`, `textarea` stay local (no
+shared counterpart yet). Full swap/kept ledger, cascade contract, and
+browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
+
 **Source file reference table**
 
 | File | Purpose |
