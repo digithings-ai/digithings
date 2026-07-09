@@ -15,6 +15,8 @@
     "./styles/terminal-manifest.css": "./src/styles/terminal-manifest.css",
     "./styles/chat-core.css": "./src/styles/chat-core.css",
     "./styles/chat-widgets.css": "./src/styles/chat-widgets.css",
+    "./styles/controls-core.css": "./src/styles/controls-core.css",
+    "./styles/controls-overlay.css": "./src/styles/controls-overlay.css",
     "./data/modules": "./src/data/modules.ts",
     "./data/subsystems": "./src/data/subsystems.ts"
   },
@@ -26,6 +28,7 @@
     "react-dom": "^19.2.4"
   },
   "dependencies": {
+    "@base-ui/react": "^1.3.0",
     "@digithings/design": "*",
     "motion": "^12.23.12",
     "simple-icons": "^15.18.0"

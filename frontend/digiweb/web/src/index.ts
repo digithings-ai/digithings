@@ -55,5 +55,52 @@ export {
   type ChatWidgetButtonTone,
 } from "./components/chat/ChatWidgetFrame";
 
+// controls layer (#1419)
+export { Button, type ButtonProps, type ButtonDress, type ButtonReferenceVariant, type ButtonChatVariant, type ButtonChatSize } from "./components/controls/Button";
+export { Badge, type BadgeProps, type BadgeDress, type BadgeReferenceVariant, type BadgeChatVariant } from "./components/controls/Badge";
+export { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent, CardFooter, type CardProps, type CardDress, type CardSize } from "./components/controls/Card";
+export { Input, type InputProps, type InputDress } from "./components/controls/Input";
+export { Label, type LabelProps, type LabelDress } from "./components/controls/Label";
+export { Avatar, AvatarImage, AvatarFallback, AvatarBadge, AvatarGroup, AvatarGroupCount, type AvatarProps, type AvatarImageProps, type AvatarFallbackProps, type AvatarSize } from "./components/controls/Avatar";
+export {
+  DropdownMenu,
+  DropdownMenuPortal,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  Sheet,
+  SheetTrigger,
+  SheetClose,
+  SheetPortal,
+  SheetOverlay,
+  SheetContent,
+  SheetHeader,
+  SheetFooter,
+  SheetTitle,
+  SheetDescription,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+  type ControlSkin,
+  type DropdownMenuContentProps,
+  type DropdownMenuItemProps,
+  type SheetContentProps,
+  type TooltipContentProps,
+} from "./components/controls";
+
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
 export { subsystems, subsystemById, type Subsystem } from "./data/subsystems";

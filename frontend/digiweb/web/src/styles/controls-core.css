@@ -1,0 +1,1037 @@
+/* ==========================================================================
+   @digithings/web — shared controls layer CSS (components/controls/*, #1419).
+   The static control atoms: Button, Badge, Card, Input, Label, Avatar.
+
+   Every control carries TWO dresses (per the E3 ruling — API compatibility
+   beats aesthetic purity, digichat's rendered look must be reproducible
+   exactly):
+
+   - the REFERENCE dress (`*-ref` classes, the default): the design-reference
+     controls grammar, value-for-value copies of the specimen CSS —
+     .btn-primary / .btn-ghost / .btn-quiet / .btn-danger / .btn-icon
+     (reference/app/globals.css + styles/nav-shell.css), .ff-input
+     (reference/app/controls/controls.css), and the .dg-tier pill
+     (styles/web-theme.css). Mono type, pill radii, hairline borders,
+     srgb color-mix — kept verbatim so a specimen swap is pixel-faithful.
+
+   - the CHAT dress (`*-chat` classes): digichat's current shadcn-derived
+     control dress translated utility-for-utility from
+     digichat/src/components/ui/{button,badge,card,input,label,avatar}.tsx.
+     digichat's shadcn vars all resolve to canon tokens (#1403 reverse
+     bridge), so each rule reads `var(--shadcn-slot, var(--canon-token))`:
+     exact inside digichat (where the slot vars exist), canonical fallback
+     everywhere else. Opacity washes use `color-mix(in oklab, …)` — the
+     exact color space Tailwind v4 emits for `/NN` modifiers — so the
+     rendered pixels match digichat's current build. Dark rules key off
+     [data-theme="dark"], which digichat keeps in lockstep with its legacy
+     `.dark` class.
+
+   Wiring — import AFTER the token bridge in the app's globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/controls-core.css";
+   The controls components carry NO Tailwind utilities (all dress lives
+   here, keyed off data-slot / data-size / aria state), so no @source line
+   is needed for this family.
+   ========================================================================== */
+
+/* ── Button — reference dress (reference/app/globals.css .btn-*) ────────── */
+
+.ctl-btn-ref {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  padding: 0.62rem 1.3rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.ctl-btn-ref--primary {
+  background: var(--accent);
+  color: var(--surface-inverse, #06110f);
+  border-color: var(--accent);
+}
+
+.ctl-btn-ref--primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ctl-btn-ref--ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--hair);
+}
+
+.ctl-btn-ref--ghost:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.ctl-btn-ref--quiet {
+  background: transparent;
+  color: var(--ink-mute);
+  border-color: transparent;
+  padding-left: 0.2rem;
+  padding-right: 0.2rem;
+}
+
+.ctl-btn-ref--quiet:hover {
+  color: var(--ink);
+}
+
+.ctl-btn-ref--danger {
+  background: transparent;
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
+}
+
+.ctl-btn-ref--danger:hover {
+  background: color-mix(in srgb, var(--down) 10%, transparent);
+}
+
+/* the borderless glyph button — the nav-shell tail-cluster grammar
+   (styles/nav-shell.css .btn-icon): no fill, no border, ink-mute → ink */
+.ctl-btn-ref--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--ink-mute);
+  transition: color 0.2s var(--ease);
+}
+
+.ctl-btn-ref--icon:hover {
+  color: var(--ink);
+  background: transparent;
+}
+
+.ctl-btn-ref--icon svg {
+  display: block;
+}
+
+/* loading state — .btn-loading / .btn-spinner grammar */
+.ctl-btn-ref--loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ctl-btn-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--surface-inverse, #06110f) 30%, transparent);
+  border-top-color: var(--surface-inverse, #06110f);
+  animation: ctl-btn-spin 0.7s linear infinite;
+}
+
+@keyframes ctl-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Button — chat dress (digichat ui/button.tsx, utility-for-utility) ──── */
+
+.ctl-btn-chat {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg, 0.625rem);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  font-size: 0.875rem;
+  line-height: calc(1.25 / 0.875);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  user-select: none;
+}
+
+.ctl-btn-chat:focus-visible {
+  outline: none;
+  border-color: var(--ring, var(--accent));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring, var(--accent)) 50%, transparent);
+}
+
+.ctl-btn-chat:active {
+  transform: translateY(1px);
+}
+
+.ctl-btn-chat:disabled {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.ctl-btn-chat[aria-invalid="true"] {
+  border-color: var(--destructive, var(--down));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-btn-chat[aria-invalid="true"] {
+  border-color: color-mix(in oklab, var(--destructive, var(--down)) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+}
+
+.ctl-btn-chat svg {
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.ctl-btn-chat svg:not([class*="size-"]) {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* variants — hovers sit under (hover: hover), exactly as Tailwind v4 emits
+   digichat's hover: utilities */
+.ctl-btn-chat--default {
+  background: var(--primary, var(--accent));
+  color: var(--primary-foreground, var(--on-accent));
+}
+
+.ctl-btn-chat--outline {
+  border-color: var(--border, var(--hair));
+  background: var(--background, var(--bg));
+}
+
+.ctl-btn-chat--outline[aria-expanded="true"] {
+  background: var(--muted, var(--surface-2));
+  color: var(--foreground, var(--ink));
+}
+
+[data-theme="dark"] .ctl-btn-chat--outline {
+  border-color: var(--input, var(--hair));
+  background: color-mix(in oklab, var(--input, var(--hair)) 30%, transparent);
+}
+
+.ctl-btn-chat--secondary {
+  background: var(--secondary, var(--surface-2));
+  color: var(--secondary-foreground, var(--ink));
+}
+
+.ctl-btn-chat--secondary[aria-expanded="true"] {
+  background: var(--secondary, var(--surface-2));
+  color: var(--secondary-foreground, var(--ink));
+}
+
+.ctl-btn-chat--ghost[aria-expanded="true"] {
+  background: var(--muted, var(--surface-2));
+  color: var(--foreground, var(--ink));
+}
+
+.ctl-btn-chat--destructive {
+  background: color-mix(in oklab, var(--destructive, var(--down)) 10%, transparent);
+  color: var(--destructive, var(--down));
+}
+
+.ctl-btn-chat--destructive:focus-visible {
+  border-color: color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-btn-chat--destructive {
+  background: color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-btn-chat--destructive:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+}
+
+.ctl-btn-chat--link {
+  color: var(--primary, var(--accent));
+  text-underline-offset: 4px;
+}
+
+@media (hover: hover) {
+  a.ctl-btn-chat--default:hover {
+    background: color-mix(in oklab, var(--primary, var(--accent)) 80%, transparent);
+  }
+
+  .ctl-btn-chat--outline:hover {
+    background: var(--muted, var(--surface-2));
+    color: var(--foreground, var(--ink));
+  }
+
+  [data-theme="dark"] .ctl-btn-chat--outline:hover {
+    background: color-mix(in oklab, var(--input, var(--hair)) 50%, transparent);
+  }
+
+  .ctl-btn-chat--secondary:hover {
+    background: color-mix(in oklab, var(--secondary, var(--surface-2)) 80%, transparent);
+  }
+
+  .ctl-btn-chat--ghost:hover {
+    background: var(--muted, var(--surface-2));
+    color: var(--foreground, var(--ink));
+  }
+
+  [data-theme="dark"] .ctl-btn-chat--ghost:hover {
+    background: color-mix(in oklab, var(--muted, var(--surface-2)) 50%, transparent);
+  }
+
+  .ctl-btn-chat--destructive:hover {
+    background: color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+  }
+
+  [data-theme="dark"] .ctl-btn-chat--destructive:hover {
+    background: color-mix(in oklab, var(--destructive, var(--down)) 30%, transparent);
+  }
+
+  .ctl-btn-chat--link:hover {
+    text-decoration-line: underline;
+  }
+}
+
+/* sizes */
+.ctl-btn-chat--size-default {
+  height: 2rem;
+  gap: 0.375rem;
+  padding-inline: 0.625rem;
+}
+
+.ctl-btn-chat--size-default:has([data-icon="inline-end"]) {
+  padding-right: 0.5rem;
+}
+
+.ctl-btn-chat--size-default:has([data-icon="inline-start"]) {
+  padding-left: 0.5rem;
+}
+
+.ctl-btn-chat--size-xs {
+  height: 1.5rem;
+  gap: 0.25rem;
+  border-radius: min(var(--radius-md, 0.5rem), 10px);
+  padding-inline: 0.5rem;
+  font-size: 0.75rem;
+  line-height: calc(1 / 0.75);
+}
+
+.ctl-btn-chat--size-xs:has([data-icon="inline-end"]) {
+  padding-right: 0.375rem;
+}
+
+.ctl-btn-chat--size-xs:has([data-icon="inline-start"]) {
+  padding-left: 0.375rem;
+}
+
+.ctl-btn-chat--size-xs svg:not([class*="size-"]) {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.ctl-btn-chat--size-sm {
+  height: 1.75rem;
+  gap: 0.25rem;
+  border-radius: min(var(--radius-md, 0.5rem), 12px);
+  padding-inline: 0.625rem;
+  font-size: 0.8rem;
+}
+
+.ctl-btn-chat--size-sm:has([data-icon="inline-end"]) {
+  padding-right: 0.375rem;
+}
+
+.ctl-btn-chat--size-sm:has([data-icon="inline-start"]) {
+  padding-left: 0.375rem;
+}
+
+.ctl-btn-chat--size-sm svg:not([class*="size-"]) {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.ctl-btn-chat--size-lg {
+  height: 2.25rem;
+  gap: 0.375rem;
+  padding-inline: 0.625rem;
+}
+
+.ctl-btn-chat--size-lg:has([data-icon="inline-end"]) {
+  padding-right: 0.75rem;
+}
+
+.ctl-btn-chat--size-lg:has([data-icon="inline-start"]) {
+  padding-left: 0.75rem;
+}
+
+.ctl-btn-chat--size-icon {
+  width: 2rem;
+  height: 2rem;
+}
+
+.ctl-btn-chat--size-icon-xs {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: min(var(--radius-md, 0.5rem), 10px);
+}
+
+.ctl-btn-chat--size-icon-xs svg:not([class*="size-"]) {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.ctl-btn-chat--size-icon-sm {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: min(var(--radius-md, 0.5rem), 12px);
+}
+
+.ctl-btn-chat--size-icon-lg {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+/* inside a button group the compact radii return to the group's lg radius */
+[data-slot="button-group"] .ctl-btn-chat--size-xs,
+[data-slot="button-group"] .ctl-btn-chat--size-sm,
+[data-slot="button-group"] .ctl-btn-chat--size-icon-xs,
+[data-slot="button-group"] .ctl-btn-chat--size-icon-sm {
+  border-radius: var(--radius-lg, 0.625rem);
+}
+
+/* ── Badge — reference dress (web-theme.css .dg-tier pill grammar) ──────── */
+
+.ctl-badge-ref {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  padding: 0.16rem 0.5rem;
+}
+
+.ctl-badge-ref--accent {
+  color: var(--accent);
+  border-color: var(--accent-weak);
+}
+
+.ctl-badge-ref--warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+}
+
+.ctl-badge-ref--up {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 40%, transparent);
+}
+
+.ctl-badge-ref--down {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, transparent);
+}
+
+/* ── Badge — chat dress (digichat ui/badge.tsx) ─────────────────────────── */
+
+.ctl-badge-chat {
+  display: inline-flex;
+  height: 1.25rem;
+  width: fit-content;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  overflow: hidden;
+  border-radius: var(--radius-4xl, 1.625rem);
+  border: 1px solid transparent;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: calc(1 / 0.75);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ctl-badge-chat:focus-visible {
+  border-color: var(--ring, var(--accent));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring, var(--accent)) 50%, transparent);
+}
+
+.ctl-badge-chat:has([data-icon="inline-end"]) {
+  padding-right: 0.375rem;
+}
+
+.ctl-badge-chat:has([data-icon="inline-start"]) {
+  padding-left: 0.375rem;
+}
+
+.ctl-badge-chat[aria-invalid="true"] {
+  border-color: var(--destructive, var(--down));
+}
+
+.ctl-badge-chat[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-badge-chat[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+}
+
+.ctl-badge-chat > svg {
+  pointer-events: none;
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+}
+
+.ctl-badge-chat--default {
+  background: var(--primary, var(--accent));
+  color: var(--primary-foreground, var(--on-accent));
+}
+
+.ctl-badge-chat--secondary {
+  background: var(--secondary, var(--surface-2));
+  color: var(--secondary-foreground, var(--ink));
+}
+
+.ctl-badge-chat--destructive {
+  background: color-mix(in oklab, var(--destructive, var(--down)) 10%, transparent);
+  color: var(--destructive, var(--down));
+}
+
+.ctl-badge-chat--destructive:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-badge-chat--destructive {
+  background: color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-badge-chat--destructive:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+}
+
+.ctl-badge-chat--outline {
+  border-color: var(--border, var(--hair));
+  color: var(--foreground, var(--ink));
+}
+
+.ctl-badge-chat--link {
+  color: var(--primary, var(--accent));
+  text-underline-offset: 4px;
+}
+
+@media (hover: hover) {
+  a.ctl-badge-chat--default:hover {
+    background: color-mix(in oklab, var(--primary, var(--accent)) 80%, transparent);
+  }
+
+  a.ctl-badge-chat--secondary:hover {
+    background: color-mix(in oklab, var(--secondary, var(--surface-2)) 80%, transparent);
+  }
+
+  a.ctl-badge-chat--destructive:hover {
+    background: color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+  }
+
+  a.ctl-badge-chat--outline:hover {
+    background: var(--muted, var(--surface-2));
+    color: var(--muted-foreground, var(--ink-soft));
+  }
+
+  .ctl-badge-chat--ghost:hover {
+    background: var(--muted, var(--surface-2));
+    color: var(--muted-foreground, var(--ink-soft));
+  }
+
+  [data-theme="dark"] .ctl-badge-chat--ghost:hover {
+    background: color-mix(in oklab, var(--muted, var(--surface-2)) 50%, transparent);
+  }
+
+  .ctl-badge-chat--link:hover {
+    text-decoration-line: underline;
+  }
+}
+
+/* ── Card — reference dress (the hairline frame grammar: 12px radius,
+      surface fill, hairline head/foot rows — ChatWidgetFrame paddings) ──── */
+
+.ctl-card-ref {
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.ctl-card-ref .ctl-card-header {
+  display: grid;
+  grid-auto-rows: min-content;
+  align-items: start;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.ctl-card-ref .ctl-card-header:has([data-slot="card-action"]) {
+  grid-template-columns: 1fr auto;
+}
+
+.ctl-card-ref .ctl-card-header:has([data-slot="card-description"]) {
+  grid-template-rows: auto auto;
+}
+
+.ctl-card-ref .ctl-card-title {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.ctl-card-ref .ctl-card-description {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.ctl-card-ref .ctl-card-content {
+  padding: 1rem;
+}
+
+.ctl-card-ref .ctl-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem 1rem;
+  border-top: 1px solid var(--hair);
+}
+
+/* ── Card — chat dress (digichat ui/card.tsx) ───────────────────────────── */
+
+.ctl-card-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow: hidden;
+  border-radius: var(--radius-xl, 0.875rem);
+  background: var(--card, var(--surface));
+  padding-block: 1rem;
+  font-size: 0.875rem;
+  line-height: calc(1.25 / 0.875);
+  color: var(--card-foreground, var(--ink));
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground, var(--ink)) 10%, transparent);
+}
+
+.ctl-card-chat:has([data-slot="card-footer"]) {
+  padding-bottom: 0;
+}
+
+.ctl-card-chat:has(> img:first-child) {
+  padding-top: 0;
+}
+
+.ctl-card-chat[data-size="sm"] {
+  gap: 0.75rem;
+  padding-block: 0.75rem;
+}
+
+.ctl-card-chat[data-size="sm"]:has([data-slot="card-footer"]) {
+  padding-bottom: 0;
+}
+
+.ctl-card-chat > img:first-child {
+  border-top-left-radius: var(--radius-xl, 0.875rem);
+  border-top-right-radius: var(--radius-xl, 0.875rem);
+}
+
+.ctl-card-chat > img:last-child {
+  border-bottom-left-radius: var(--radius-xl, 0.875rem);
+  border-bottom-right-radius: var(--radius-xl, 0.875rem);
+}
+
+.ctl-card-chat .ctl-card-header {
+  container: card-header / inline-size;
+  display: grid;
+  grid-auto-rows: min-content;
+  align-items: start;
+  gap: 0.25rem;
+  border-top-left-radius: var(--radius-xl, 0.875rem);
+  border-top-right-radius: var(--radius-xl, 0.875rem);
+  padding-inline: 1rem;
+}
+
+.ctl-card-chat .ctl-card-header:has([data-slot="card-action"]) {
+  grid-template-columns: 1fr auto;
+}
+
+.ctl-card-chat .ctl-card-header:has([data-slot="card-description"]) {
+  grid-template-rows: auto auto;
+}
+
+/* digichat's `[.border-b]:pb-4` — a header the consumer marked .border-b */
+.ctl-card-chat .ctl-card-header.border-b {
+  padding-bottom: 1rem;
+}
+
+.ctl-card-chat[data-size="sm"] .ctl-card-header {
+  padding-inline: 0.75rem;
+}
+
+.ctl-card-chat[data-size="sm"] .ctl-card-header.border-b {
+  padding-bottom: 0.75rem;
+}
+
+.ctl-card-chat .ctl-card-title {
+  font-family: var(--font-heading, var(--font-sans));
+  font-size: 1rem;
+  line-height: 1.375;
+  font-weight: 500;
+}
+
+.ctl-card-chat[data-size="sm"] .ctl-card-title {
+  font-size: 0.875rem;
+}
+
+.ctl-card-chat .ctl-card-description {
+  font-size: 0.875rem;
+  line-height: calc(1.25 / 0.875);
+  color: var(--muted-foreground, var(--ink-soft));
+}
+
+.ctl-card-chat .ctl-card-content {
+  padding-inline: 1rem;
+}
+
+.ctl-card-chat[data-size="sm"] .ctl-card-content {
+  padding-inline: 0.75rem;
+}
+
+.ctl-card-chat .ctl-card-footer {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--border, var(--hair));
+  background: color-mix(in oklab, var(--muted, var(--surface-2)) 50%, transparent);
+  padding: 1rem;
+  border-bottom-left-radius: var(--radius-xl, 0.875rem);
+  border-bottom-right-radius: var(--radius-xl, 0.875rem);
+}
+
+.ctl-card-chat[data-size="sm"] .ctl-card-footer {
+  padding: 0.75rem;
+}
+
+/* the action slot places itself the same way under both dresses */
+.ctl-card-action {
+  grid-column-start: 2;
+  grid-row: 1 / span 2;
+  align-self: start;
+  justify-self: end;
+}
+
+/* ── Input — reference dress (controls.css .ff-input, error/disabled keyed
+      off the input's own aria-invalid / :disabled instead of the specimen's
+      .ff-field wrapper hooks) ──────────────────────────────────────────── */
+
+.ctl-input-ref {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  outline: none;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.ctl-input-ref::placeholder {
+  color: var(--ink-mute);
+}
+
+.ctl-input-ref:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.ctl-input-ref[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--down) 60%, var(--hair));
+}
+
+.ctl-input-ref[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--down) 22%, transparent);
+}
+
+.ctl-input-ref:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Input — chat dress (digichat ui/input.tsx) ─────────────────────────── */
+
+.ctl-input-chat {
+  height: 2rem;
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--radius-lg, 0.625rem);
+  border: 1px solid var(--input, var(--hair));
+  background: transparent;
+  padding: 0.25rem 0.625rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  outline: none;
+  transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    text-decoration-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    fill 150ms cubic-bezier(0.4, 0, 0.2, 1), stroke 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (min-width: 48rem) {
+  .ctl-input-chat {
+    font-size: 0.875rem;
+    line-height: calc(1.25 / 0.875);
+  }
+}
+
+.ctl-input-chat::file-selector-button {
+  display: inline-flex;
+  height: 1.5rem;
+  border: 0;
+  background: transparent;
+  font-size: 0.875rem;
+  line-height: calc(1.25 / 0.875);
+  font-weight: 500;
+  color: var(--foreground, var(--ink));
+}
+
+.ctl-input-chat::placeholder {
+  color: var(--muted-foreground, var(--ink-soft));
+}
+
+.ctl-input-chat:focus-visible {
+  outline: none;
+  border-color: var(--ring, var(--accent));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring, var(--accent)) 50%, transparent);
+}
+
+.ctl-input-chat:disabled {
+  pointer-events: none;
+  cursor: not-allowed;
+  background: color-mix(in oklab, var(--input, var(--hair)) 50%, transparent);
+  opacity: 0.5;
+}
+
+.ctl-input-chat[aria-invalid="true"] {
+  border-color: var(--destructive, var(--down));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-input-chat {
+  background: color-mix(in oklab, var(--input, var(--hair)) 30%, transparent);
+}
+
+[data-theme="dark"] .ctl-input-chat:disabled {
+  background: color-mix(in oklab, var(--input, var(--hair)) 80%, transparent);
+}
+
+[data-theme="dark"] .ctl-input-chat[aria-invalid="true"] {
+  border-color: color-mix(in oklab, var(--destructive, var(--down)) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+}
+
+/* ── Label — reference dress (the form-fields mono micro-caps grammar) ──── */
+
+.ctl-label-ref {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+/* ── Label — chat dress (digichat ui/label.tsx) ─────────────────────────── */
+
+.ctl-label-chat {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1;
+  font-weight: 500;
+  user-select: none;
+}
+
+.group[data-disabled="true"] .ctl-label-chat {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.peer:disabled ~ .ctl-label-chat {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ── Avatar — chat dress only (digichat ui/avatar.tsx; the reference family
+      has no avatar specimen — reference dress deferred to a product ruling) */
+
+.ctl-avatar {
+  position: relative;
+  display: flex;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  user-select: none;
+}
+
+.ctl-avatar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1px solid var(--border, var(--hair));
+  mix-blend-mode: darken;
+}
+
+[data-theme="dark"] .ctl-avatar::after {
+  mix-blend-mode: lighten;
+}
+
+.ctl-avatar[data-size="lg"] {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.ctl-avatar[data-size="sm"] {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.ctl-avatar-image {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  object-fit: cover;
+}
+
+.ctl-avatar-fallback {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--muted, var(--surface-2));
+  font-size: 0.875rem;
+  line-height: calc(1.25 / 0.875);
+  color: var(--muted-foreground, var(--ink-soft));
+}
+
+.ctl-avatar[data-size="sm"] .ctl-avatar-fallback {
+  font-size: 0.75rem;
+  line-height: calc(1 / 0.75);
+}
+
+.ctl-avatar-badge {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--primary, var(--accent));
+  color: var(--primary-foreground, var(--on-accent));
+  background-blend-mode: color;
+  box-shadow: 0 0 0 2px var(--background, var(--bg));
+  user-select: none;
+}
+
+.ctl-avatar[data-size="sm"] .ctl-avatar-badge {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+.ctl-avatar[data-size="sm"] .ctl-avatar-badge > svg {
+  display: none;
+}
+
+.ctl-avatar[data-size="default"] .ctl-avatar-badge {
+  width: 0.625rem;
+  height: 0.625rem;
+}
+
+.ctl-avatar[data-size="default"] .ctl-avatar-badge > svg {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+.ctl-avatar[data-size="lg"] .ctl-avatar-badge {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.ctl-avatar[data-size="lg"] .ctl-avatar-badge > svg {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+.ctl-avatar-group {
+  display: flex;
+}
+
+.ctl-avatar-group > :not(:last-child) {
+  margin-inline-end: -0.5rem;
+}
+
+.ctl-avatar-group > [data-slot="avatar"] {
+  box-shadow: 0 0 0 2px var(--background, var(--bg));
+}
+
+.ctl-avatar-group-count {
+  position: relative;
+  display: flex;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--muted, var(--surface-2));
+  font-size: 0.875rem;
+  line-height: calc(1.25 / 0.875);
+  color: var(--muted-foreground, var(--ink-soft));
+  box-shadow: 0 0 0 2px var(--background, var(--bg));
+}
+
+.ctl-avatar-group:has([data-size="lg"]) .ctl-avatar-group-count {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.ctl-avatar-group:has([data-size="sm"]) .ctl-avatar-group-count {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.ctl-avatar-group-count > svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.ctl-avatar-group:has([data-size="lg"]) .ctl-avatar-group-count > svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.ctl-avatar-group:has([data-size="sm"]) .ctl-avatar-group-count > svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/* ── reduced motion ─────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .ctl-btn-spinner {
+    animation: none !important;
+  }
+}
