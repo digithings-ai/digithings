@@ -85,3 +85,26 @@
     border-left: none;
   }
 }
+
+/* ── DotMatrixStat: LED field ────────────────────────────────────────────── */
+
+@layer components {
+  /* grid-template-columns is written inline by the component (cols prop) */
+  .dms-grid {
+    display: grid;
+    gap: 6px;
+  }
+
+  .dms-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ink-mute) 20%, transparent);
+  }
+}
+
+/* lit state — unlayered on purpose (must outrank call-site utilities) */
+.dms-dot.on {
+  background: var(--accent);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 44%, transparent);
+}

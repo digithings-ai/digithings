@@ -1,14 +1,10 @@
 /* Data page — dot-matrix stat, card deck, pricing precision table. */
 
-/* .dot-matrix-card wrapper (mt / grid-cols-[180px_1fr] / gap / border / radius /
-   bg / padding + max-[900px]:grid-cols-1) → utilities in dot-matrix-stat.tsx.
-   The .dot-matrix-grid + .dot cluster below is the LED-matrix mechanic — CSS. */
-
-.dot-matrix-grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 6px;
-}
+/* Dot-matrix stat — promoted to @digithings/web (#1450): <DotMatrixStat/>
+   (components/data-layout/DotMatrixStat.tsx) carries the utilities; the
+   dms-* LED cluster lives in @digithings/web/styles/data-layout.css,
+   imported from globals.css. The generic .dot/.dot.on pair below STAYS —
+   the card-deck rail (.deck-rail .dot / li.on .dot) still composes it. */
 
 .dot {
   width: 8px;
