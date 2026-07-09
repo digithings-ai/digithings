@@ -1,0 +1,87 @@
+/* ==========================================================================
+   @digithings/web — data-layout family CSS (components/data-layout/*:
+   <Odometer/> + <OdometerStrip/>, <DotMatrixStat/>, <BentoGrid/> +
+   <BentoCell/>, <ProductFrame/>, <FeatureCell/>; <TestimonialWall/> is
+   utilities-only and needs no rules here).
+
+   Import PLAINLY (no layer(…) wrapper) AFTER the token bridge — this sheet
+   manages its own layering per the cascade contract (MIGRATION.md):
+   single-class dress defaults sit in @layer components so call-site
+   utilities can override them; state/structural rules — nth-child hairline
+   grids, ::before art, :hover, descendant overrides, media collapses, and
+   the ProductFrame geometry its ResizeObserver contract depends on — stay
+   unlayered ON PURPOSE so they keep outranking plain utilities.
+
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/data-layout.css";
+     @source "<path-to>/digiweb/web/src/components/data-layout";
+
+   The @source line is load-bearing (path relative to the app's globals.css):
+   the components carry token-backed utilities, and Tailwind does not scan
+   package sources on its own.
+   ========================================================================== */
+
+/* ── Odometer: reel mechanic + strip hairline grid ───────────────────────── */
+
+@layer components {
+  /* the reel column; Odometer suspends/releases this transition imperatively
+     (transition-property + transform inline) when the figure enters view */
+  .odo-strip {
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odo-strip {
+    transition: none;
+  }
+}
+
+/* hairline cell grid, keyed off the strip container's data-cols: first row
+   no top border, first column no left border (Tailwind can't express
+   nth-child) — same grammar as metrics.css's .perf-metric grid */
+.odo-cell {
+  border-left: 1px solid var(--hair);
+  border-top: 1px solid var(--hair);
+}
+
+.odo-grid[data-cols="4"] .odo-cell:nth-child(-n + 4),
+.odo-grid[data-cols="3"] .odo-cell:nth-child(-n + 3),
+.odo-grid[data-cols="2"] .odo-cell:nth-child(-n + 2) {
+  border-top: none;
+}
+
+.odo-grid[data-cols="4"] .odo-cell:nth-child(4n + 1),
+.odo-grid[data-cols="3"] .odo-cell:nth-child(3n + 1),
+.odo-grid[data-cols="2"] .odo-cell:nth-child(2n + 1) {
+  border-left: none;
+}
+
+/* ≤ 720px the strip is two-up whatever data-cols says (matching the
+   component's max-[720px]:grid-cols-2 utility) — re-derive the hairlines.
+   Selectors keep the [data-cols] attr so they tie the desktop rules on
+   specificity and win by order. */
+@media (max-width: 720px) {
+  .odo-grid[data-cols="4"] .odo-cell:nth-child(-n + 4),
+  .odo-grid[data-cols="3"] .odo-cell:nth-child(-n + 3) {
+    border-top: 1px solid var(--hair);
+  }
+
+  .odo-grid[data-cols] .odo-cell:nth-child(-n + 2) {
+    border-top: none;
+  }
+
+  .odo-grid[data-cols="4"] .odo-cell:nth-child(4n + 1),
+  .odo-grid[data-cols="3"] .odo-cell:nth-child(3n + 1) {
+    border-left: 1px solid var(--hair);
+  }
+
+  .odo-grid[data-cols] .odo-cell:nth-child(2n + 1) {
+    border-left: none;
+  }
+}

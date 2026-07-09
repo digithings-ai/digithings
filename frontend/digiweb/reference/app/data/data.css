@@ -542,84 +542,12 @@
   }
 }
 
-/* ── odometer (mechanical digit-roll counter) ───────────────────────────── */
+/* ── odometer — promoted to @digithings/web (#1450) ─────────────────────── */
 
-/* .odo-grid wrapper (mt / grid-cols-4 / border / radius / bg / overflow +
-   max-[720px]:grid-cols-2) → utilities in odometer-reference.tsx. The .odo-cell
-   nth-child border grid and the .odo reel mechanic below stay CSS. */
-
-.odo-cell {
-  padding: 1.3rem;
-  border-left: 1px solid var(--hair);
-  border-top: 1px solid var(--hair);
-}
-
-.odo-cell:nth-child(-n + 4) {
-  border-top: none;
-}
-
-.odo-cell:nth-child(4n + 1) {
-  border-left: none;
-}
-
-.odo {
-  display: inline-flex;
-  align-items: flex-end;
-  font-family: var(--font-mono);
-  font-size: 1.7rem;
-  line-height: 1;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.odo-reel {
-  display: inline-block;
-  height: 1em;
-  overflow: hidden;
-}
-
-.odo-strip {
-  display: flex;
-  flex-direction: column;
-  transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform;
-}
-
-.odo-digit {
-  height: 1em;
-  line-height: 1em;
-  text-align: center;
-}
-
-.odo-sep {
-  display: inline-block;
-}
-
-/* .odo-label → utilities in odometer-reference.tsx */
-
-@media (prefers-reduced-motion: reduce) {
-  .odo-strip {
-    transition: none;
-  }
-}
-
-@media (max-width: 720px) {
-  .odo-cell:nth-child(-n + 4) {
-    border-top: 1px solid var(--hair);
-  }
-
-  .odo-cell:nth-child(-n + 2) {
-    border-top: none;
-  }
-
-  .odo-cell:nth-child(4n + 1) {
-    border-left: 1px solid var(--hair);
-  }
-
-  .odo-cell:nth-child(2n + 1) {
-    border-left: none;
-  }
-}
+/* The <Odometer/> + <OdometerStrip/> primitives
+   (components/data-layout/Odometer.tsx) carry the utilities; the .odo-strip
+   reel mechanic and the .odo-cell data-cols hairline grid live in
+   @digithings/web/styles/data-layout.css, imported from globals.css. */
 
 /* ── sortable data table (strategy leaderboard) ─────────────────────────── */
 
