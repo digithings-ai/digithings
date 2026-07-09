@@ -108,3 +108,90 @@
   background: var(--accent);
   box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 44%, transparent);
 }
+
+/* ── BentoGrid / BentoCell: asymmetric module bento ──────────────────────── */
+
+@layer components {
+  .bento-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-auto-rows: 8.5rem;
+    gap: 0.9rem;
+  }
+
+  /* position/overflow anchor the ::before hairline; background sits here so
+     the unlayered .bento-hero color-mix tint always wins */
+  .bento-cell {
+    position: relative;
+    background: var(--surface);
+    overflow: hidden;
+    transition: border-color 0.25s var(--ease), transform 0.25s var(--ease);
+  }
+}
+
+/* everything below is state/structural — unlayered on purpose */
+
+/* accent hairline that fills on hover — the mod-card grammar */
+.bento-cell::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s var(--ease);
+}
+
+.bento-cell:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
+
+.bento-cell:hover::before {
+  transform: scaleX(1);
+}
+
+.bento-hero {
+  grid-column: span 2;
+  grid-row: span 2;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.bento-wide {
+  grid-column: span 2;
+}
+
+.bento-tall {
+  grid-row: span 2;
+}
+
+/* hero cells set their name in larger type — consumers put `bento-name` on
+   the cell's heading to opt in */
+.bento-hero .bento-name {
+  font-size: 1.3rem;
+}
+
+@media (max-width: 760px) {
+  .bento-grid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+  }
+
+  .bento-hero,
+  .bento-wide,
+  .bento-tall {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bento-cell {
+    transition: border-color 0.25s var(--ease);
+  }
+
+  .bento-cell:hover {
+    transform: none;
+  }
+}

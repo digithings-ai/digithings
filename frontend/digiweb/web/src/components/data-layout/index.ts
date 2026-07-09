@@ -2,3 +2,4 @@
 // wire stage. One css sheet for the family: styles/data-layout.css.
 export { Odometer, OdometerStrip, type OdometerStat } from "./Odometer";
 export { DotMatrixStat, type DotMatrixStatProps } from "./DotMatrixStat";
+export { BentoGrid, BentoCell, type BentoSpan } from "./BentoGrid";
