@@ -7,3 +7,4 @@
  */
 export { StockTicker, type TickerItem, type StockTickerProps } from "./StockTicker";
 export { OrderBook, type OrderBookLevel, type OrderBookProps } from "./OrderBook";
+export { SortableTable, type SortableColumn, type SortableTableProps } from "./SortableTable";

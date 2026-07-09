@@ -58,3 +58,94 @@
     animation: none;
   }
 }
+
+/* ── SortableTable: leaderboard grammar (srt-*) ──────────────────────────── */
+
+@layer components {
+  .srt-table {
+    width: 100%;
+    min-width: 560px;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.82rem;
+  }
+
+  .srt-l {
+    text-align: left;
+  }
+  .srt-r {
+    text-align: right;
+  }
+
+  .srt-head {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.7rem 1rem;
+    border: none;
+    background: transparent;
+    color: var(--ink-mute);
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: color 0.15s var(--ease);
+  }
+
+  .srt-caret {
+    font-size: 0.6rem;
+    opacity: 0.55;
+  }
+}
+
+/* descendant/state rules — unlayered on purpose (they must beat utilities,
+   exactly like the reference-app originals) */
+.srt-table thead th {
+  padding: 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.srt-r .srt-head {
+  justify-content: flex-end;
+}
+
+.srt-head:hover {
+  color: var(--ink-soft);
+}
+
+.srt-head.is-active {
+  color: var(--ink);
+}
+
+.srt-head.is-active .srt-caret {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.srt-table td {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--hair) 55%, transparent);
+  color: var(--ink-soft);
+}
+
+.srt-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* identifier-column emphasis. Written as td.srt-sym so it actually outranks
+   the `.srt-table td` read above — the reference's bare `.srt-sym` lost that
+   specificity fight (0,1,0 vs 0,1,1) and was silently dead. */
+.srt-table td.srt-sym {
+  color: var(--ink);
+}
+
+/* money colors, column-scoped — P&L semantics only, never a livery */
+.srt-table td.up {
+  color: var(--up);
+}
+.srt-table td.down {
+  color: var(--down);
+}
