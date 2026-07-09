@@ -60,15 +60,21 @@ TEST_FILE = re.compile(r"(\.test\.|\.spec\.|/__tests__/|/test/)")
 # 1. Raw palette utilities: any variant prefix chain, any Tailwind color
 #    family with a numeric shade. Token-backed utilities never match (no
 #    numeric shade suffix on ink/surface/hair/accent/up/down/warn/term-*).
+#    An optional side/offset segment may sit between the base prefix and the
+#    family — directional borders (``border-t-red-500``), ring offsets
+#    (``ring-offset-slate-900``), divide axes (``divide-x-blue-600``). The
+#    trailing numeric shade is what makes a match, so token utilities (no
+#    shade) still never match regardless of the segment.
 PALETTE_FAMILIES = (
     "zinc|slate|gray|neutral|stone|red|orange|amber|yellow|lime|green|emerald"
     "|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose"
 )
+SIDE_OFFSET = "t|b|l|r|x|y|s|e|offset"
 RAW_UTILITY = re.compile(
     rf"[\"'`\s:\]](?:[a-z-]+:)*"
     rf"(?:text|bg|border|divide|ring|outline|fill|stroke|from|via|to"
     rf"|placeholder|decoration|accent|caret|shadow)"
-    rf"-(?:{PALETTE_FAMILIES})-\d{{2,3}}(?:/\d{{1,3}})?\b"
+    rf"-(?:(?:{SIDE_OFFSET})-)?(?:{PALETTE_FAMILIES})-\d{{2,3}}(?:/\d{{1,3}})?\b"
 )
 
 # 2. Pre-canon vocabulary (olympus pre-#1402 bridge + fin-* semantics).
