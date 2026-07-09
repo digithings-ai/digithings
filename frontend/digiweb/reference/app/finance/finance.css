@@ -67,61 +67,11 @@
 /* Order book migrated to token-backed utilities in orderbook-reference.tsx
    (border-hair, bg-surface, text-up/down for the price side + depth tints). */
 
-/* Monthly returns heatmap */
-/* Only the scroll wrapper migrated (→ `mt-[1.2rem] overflow-x-auto`). The
-   heatmap table stays in CSS: its td tint interacts with per-cell inline styles,
-   and the YTD money colors rely on descendant specificity to beat the base td. */
-
-.mr-table {
-  width: 100%;
-  min-width: 640px;
-  border-collapse: separate;
-  border-spacing: 3px;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 0.68rem;
-}
-
-.mr-table thead th {
-  padding: 0.3rem 0;
-  font-weight: 400;
-  font-size: 0.56rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-mute);
-}
-
-.mr-table tbody th {
-  padding-right: 0.6rem;
-  text-align: right;
-  font-weight: 400;
-  color: var(--ink-soft);
-}
-
-.mr-table td {
-  text-align: center;
-  padding: 0.4rem 0.2rem;
-  border-radius: 4px;
-  color: var(--ink-mute);
-  background: color-mix(in srgb, var(--ink-mute) 8%, transparent);
-}
-
-.mr-ytd-head {
-  color: var(--ink) !important;
-}
-
-.mr-table td.mr-ytd {
-  background: transparent;
-  font-size: 0.72rem;
-}
-
-.mr-table td.mr-ytd.up {
-  color: var(--up);
-}
-
-.mr-table td.mr-ytd.down {
-  color: var(--down);
-}
+/* Monthly returns heatmap — promoted to @digithings/web (#1450): the
+   <MonthlyReturns/> primitive (components/finance-charts/MonthlyReturns.tsx)
+   carries the scroll wrapper + per-cell color-mix tints; the .mr-table
+   descendant grammar lives in @digithings/web/styles/finance-charts.css,
+   imported from globals.css. */
 
 /* ── stock ticker tape (seamless scrolling market strip) ────────────────── */
 
