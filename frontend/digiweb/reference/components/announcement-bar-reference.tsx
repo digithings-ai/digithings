@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { AnnouncementBar } from "@digithings/web";
 
 /** Graphite's announcement bar: 48px above the nav, the ENTIRE bar is the
@@ -31,7 +31,7 @@ export function AnnouncementBarReference() {
           href="#announcement-bar"
           cta="Read the changelog →"
           onDismiss={() => setDismissed(true)}
-          onLinkClick={(e) => e.preventDefault()}
+          onLinkClick={(e: MouseEvent<HTMLAnchorElement>) => e.preventDefault()}
           className="mt-[1.2rem]"
         >
           digiquant v2.4 ships kelly-capped position sizing.
