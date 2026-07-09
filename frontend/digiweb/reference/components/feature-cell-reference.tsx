@@ -1,8 +1,10 @@
 /**
  * Feature cell — a feature block pairing an eyebrow / outcome / mechanism copy
- * column with a scaled product frame. Static layout template.
+ * column with a scaled product frame. Consumes the shared <FeatureCell/> +
+ * <ProductFrame/> primitives from @digithings/web. Static layout template.
  */
-import { MockTearsheet, ProductFrame } from "@/components/product-frame-reference";
+import { FeatureCell, ProductFrame } from "@digithings/web";
+import { MockTearsheet } from "@/components/product-frame-reference";
 
 type Cell = {
   eyebrow: string;
@@ -43,30 +45,20 @@ export function FeatureCellReference() {
         cropped in a frame with a mono overlay tag. Copy leads; the screenshot proves it.
       </p>
 
-      {/* Token-backed Tailwind utilities via the @theme bridge; off-scale rem and
-          the clamp() outcome size stay as arbitrary utilities. fc-cell keeps its
-          class for the :nth-child(even) .fc-copy order swap; fc-link keeps its
-          class for the :hover underline. */}
       <div className="mt-[1.2rem] grid gap-[1.2rem]">
         {CELLS.map((cell) => (
-          <article
+          <FeatureCell
             key={cell.tag}
-            className={`fc-cell grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-center gap-[1.6rem] rounded-[12px] border border-hair bg-surface p-[1.6rem] max-[760px]:grid-cols-1 accent-${cell.accent}`}
+            eyebrow={cell.eyebrow}
+            outcome={cell.outcome}
+            mechanism={cell.mechanism}
+            href="#feature-cell"
+            livery={cell.accent}
           >
-            <div className="fc-copy">
-              <p className="font-mono text-[0.62rem] uppercase tracking-[0.12em] text-accent">{cell.eyebrow}</p>
-              <h3 className="mt-[0.5rem] font-display font-normal text-[clamp(1.3rem,2.6vw,1.7rem)] tracking-[-0.013em] leading-[1.12] text-ink">
-                {cell.outcome}
-              </h3>
-              <p className="mt-[0.6rem] max-w-[42ch] text-[0.92rem] text-ink-soft">{cell.mechanism}</p>
-              <a className="fc-link mt-[0.9rem] inline-block font-mono text-[0.72rem] text-accent no-underline" href="#feature-cell">
-                Learn more <span aria-hidden="true">→</span>
-              </a>
-            </div>
             <ProductFrame tag={cell.tag}>
               <MockTearsheet />
             </ProductFrame>
-          </article>
+          </FeatureCell>
         ))}
       </div>
     </section>

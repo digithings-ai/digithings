@@ -1,14 +1,10 @@
 /* Data page — dot-matrix stat, card deck, pricing precision table. */
 
-/* .dot-matrix-card wrapper (mt / grid-cols-[180px_1fr] / gap / border / radius /
-   bg / padding + max-[900px]:grid-cols-1) → utilities in dot-matrix-stat.tsx.
-   The .dot-matrix-grid + .dot cluster below is the LED-matrix mechanic — CSS. */
-
-.dot-matrix-grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 6px;
-}
+/* Dot-matrix stat — promoted to @digithings/web (#1450): <DotMatrixStat/>
+   (components/data-layout/DotMatrixStat.tsx) carries the utilities; the
+   dms-* LED cluster lives in @digithings/web/styles/data-layout.css,
+   imported from globals.css. The generic .dot/.dot.on pair below STAYS —
+   the card-deck rail (.deck-rail .dot / li.on .dot) still composes it. */
 
 .dot {
   width: 8px;
@@ -542,168 +538,15 @@
   }
 }
 
-/* ── odometer (mechanical digit-roll counter) ───────────────────────────── */
+/* ── odometer — promoted to @digithings/web (#1450) ─────────────────────── */
 
-/* .odo-grid wrapper (mt / grid-cols-4 / border / radius / bg / overflow +
-   max-[720px]:grid-cols-2) → utilities in odometer-reference.tsx. The .odo-cell
-   nth-child border grid and the .odo reel mechanic below stay CSS. */
+/* The <Odometer/> + <OdometerStrip/> primitives
+   (components/data-layout/Odometer.tsx) carry the utilities; the .odo-strip
+   reel mechanic and the .odo-cell data-cols hairline grid live in
+   @digithings/web/styles/data-layout.css, imported from globals.css. */
 
-.odo-cell {
-  padding: 1.3rem;
-  border-left: 1px solid var(--hair);
-  border-top: 1px solid var(--hair);
-}
-
-.odo-cell:nth-child(-n + 4) {
-  border-top: none;
-}
-
-.odo-cell:nth-child(4n + 1) {
-  border-left: none;
-}
-
-.odo {
-  display: inline-flex;
-  align-items: flex-end;
-  font-family: var(--font-mono);
-  font-size: 1.7rem;
-  line-height: 1;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.odo-reel {
-  display: inline-block;
-  height: 1em;
-  overflow: hidden;
-}
-
-.odo-strip {
-  display: flex;
-  flex-direction: column;
-  transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform;
-}
-
-.odo-digit {
-  height: 1em;
-  line-height: 1em;
-  text-align: center;
-}
-
-.odo-sep {
-  display: inline-block;
-}
-
-/* .odo-label → utilities in odometer-reference.tsx */
-
-@media (prefers-reduced-motion: reduce) {
-  .odo-strip {
-    transition: none;
-  }
-}
-
-@media (max-width: 720px) {
-  .odo-cell:nth-child(-n + 4) {
-    border-top: 1px solid var(--hair);
-  }
-
-  .odo-cell:nth-child(-n + 2) {
-    border-top: none;
-  }
-
-  .odo-cell:nth-child(4n + 1) {
-    border-left: 1px solid var(--hair);
-  }
-
-  .odo-cell:nth-child(2n + 1) {
-    border-left: none;
-  }
-}
-
-/* ── sortable data table (strategy leaderboard) ─────────────────────────── */
-
-/* .srt-scroll wrapper (mt / overflow-x-auto / border / radius / bg) → utilities
-   in sortable-table-reference.tsx. The .srt-table cluster below stays CSS:
-   ancestor of thead th / td, .srt-r .srt-head, :hover / .is-active, td.up/.down. */
-
-.srt-table {
-  width: 100%;
-  min-width: 560px;
-  border-collapse: collapse;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 0.82rem;
-}
-
-.srt-l {
-  text-align: left;
-}
-.srt-r {
-  text-align: right;
-}
-
-.srt-table thead th {
-  padding: 0;
-  border-bottom: 1px solid var(--hair);
-}
-
-.srt-head {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.7rem 1rem;
-  border: none;
-  background: transparent;
-  color: var(--ink-mute);
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  cursor: pointer;
-  transition: color 0.15s var(--ease);
-}
-
-.srt-r .srt-head {
-  justify-content: flex-end;
-}
-
-.srt-head:hover {
-  color: var(--ink-soft);
-}
-
-.srt-head.is-active {
-  color: var(--ink);
-}
-
-.srt-caret {
-  font-size: 0.6rem;
-  opacity: 0.55;
-}
-
-.srt-head.is-active .srt-caret {
-  opacity: 1;
-  color: var(--accent);
-}
-
-.srt-table td {
-  padding: 0.6rem 1rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--hair) 55%, transparent);
-  color: var(--ink-soft);
-}
-
-.srt-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.srt-sym {
-  color: var(--ink);
-}
-
-.srt-table td.up {
-  color: var(--up);
-}
-.srt-table td.down {
-  color: var(--down);
-}
+/* ── sortable data table ─────────────────────────────────────────────────────────── */
+/* Promoted to @digithings/web (#1450): the <SortableTable/> primitive
+   (components/finance-composites/SortableTable.tsx) carries the utilities;
+   the .srt-* grammar (header states, hairline rows, td money colors) lives in
+   @digithings/web/styles/finance-composites.css, imported from globals.css. */

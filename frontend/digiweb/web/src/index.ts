@@ -103,5 +103,98 @@ export {
   type TooltipContentProps,
 } from "./components/controls";
 
+// finance-charts family (#1450)
+export {
+  PriceChart,
+  EquityCurve,
+  DrawdownPlot,
+  MonthlyReturns,
+  useFinanceChart,
+  readFinancePalette,
+  financeChartOptions,
+  tokenAlpha,
+  toChartTime,
+  PRICE_CHART_DEMO,
+  EQUITY_CURVE_DEMO,
+  DRAWDOWN_DEMO,
+  MONTHLY_RETURNS_DEMO,
+  type PriceChartProps,
+  type EquityCurveProps,
+  type DrawdownPlotProps,
+  type MonthlyReturnsProps,
+  type MonthlyReturnRow,
+  type FinanceChartPalette,
+  type FinanceSeriesPoint,
+  type OhlcPoint,
+  type CrosshairLabelToken,
+} from "./components/finance-charts";
+
+// finance-composites family (#1450)
+export {
+  StockTicker,
+  OrderBook,
+  SortableTable,
+  PerformanceDashboard,
+  SyncedTearsheet,
+  type TickerItem,
+  type StockTickerProps,
+  type OrderBookLevel,
+  type OrderBookProps,
+  type SortableColumn,
+  type SortableTableProps,
+  type DashboardHeadline,
+  type DashboardRatio,
+  type DashboardAllocation,
+  type PerformanceDashboardProps,
+  type TearsheetPoint,
+  type SyncedTearsheetProps,
+} from "./components/finance-composites";
+
+// data-layout family (#1450)
+export {
+  Odometer,
+  OdometerStrip,
+  DotMatrixStat,
+  BentoGrid,
+  BentoCell,
+  ProductFrame,
+  FeatureCell,
+  TestimonialWall,
+  type OdometerStat,
+  type DotMatrixStatProps,
+  type BentoSpan,
+  type ProductFrameProps,
+  type FeatureCellProps,
+  type TestimonialQuote,
+  type TestimonialWallProps,
+} from "./components/data-layout";
+
+// effects-chrome family (#1450)
+export {
+  Pipeline,
+  RotatingPrompts,
+  StackingPanels,
+  AnnouncementBar,
+  TabStrip,
+  tabBaseId,
+  tabId,
+  tabPanelId,
+  ToastStack,
+  type PipelineProps,
+  type PipelineColumn,
+  type PipelineNode,
+  type PipelineStatus,
+  type PipelineSummaryItem,
+  type RotatingPromptsProps,
+  type StackingPanelsProps,
+  type StackingPanel,
+  type AnnouncementBarProps,
+  type TabStripProps,
+  type TabItem,
+  type ToastStackProps,
+  type ToastItem,
+  type ToastTone,
+} from "./components/effects-chrome";
+
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
 export { subsystems, subsystemById, type Subsystem } from "./data/subsystems";

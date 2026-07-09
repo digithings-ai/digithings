@@ -17,6 +17,10 @@
     "./styles/chat-widgets.css": "./src/styles/chat-widgets.css",
     "./styles/controls-core.css": "./src/styles/controls-core.css",
     "./styles/controls-overlay.css": "./src/styles/controls-overlay.css",
+    "./styles/finance-charts.css": "./src/styles/finance-charts.css",
+    "./styles/finance-composites.css": "./src/styles/finance-composites.css",
+    "./styles/data-layout.css": "./src/styles/data-layout.css",
+    "./styles/effects-chrome.css": "./src/styles/effects-chrome.css",
     "./data/modules": "./src/data/modules.ts",
     "./data/subsystems": "./src/data/subsystems.ts"
   },
@@ -30,6 +34,7 @@
   "dependencies": {
     "@base-ui/react": "^1.3.0",
     "@digithings/design": "*",
+    "lightweight-charts": "^5.2.0",
     "motion": "^12.23.12",
     "simple-icons": "^15.18.0"
   },

@@ -184,24 +184,11 @@ html.no-js .dqpipe-track-fill { height: 100%; }
   }
 }
 
-/* ── rotating prompts ───────────────────────────────────────────────── */
-/* .prompt-shell / .prompt-mark / .prompt-text migrated to token-backed
-   Tailwind utilities on rotating-prompts.tsx. The blinking caret stays here —
-   it owns an @keyframes animation. */
-
-.prompt-caret {
-  width: 7px;
-  height: 15px;
-  background: var(--accent);
-  align-self: center;
-  animation: prompt-blink 1.1s steps(1) infinite;
-}
-
-@keyframes prompt-blink {
-  50% {
-    opacity: 0;
-  }
-}
+/* ── rotating prompts — promoted to @digithings/web (#1450) ──────────────
+   The <RotatingPrompts/> primitive (components/effects-chrome/
+   RotatingPrompts.tsx) carries the prompt shell as utilities; the blinking
+   .prompt-caret @keyframes lives in @digithings/web/styles/effects-chrome.css,
+   imported from globals.css. */
 
 /* ── clip-path section reveal ───────────────────────────────────────── */
 /* .clip-band's static box + its label/copy/code type migrated to token-backed
@@ -231,12 +218,6 @@ html.no-js .dqpipe-track-fill { height: 100%; }
   to {
     clip-path: inset(0 0 0 0);
     transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .prompt-caret {
-    animation: none;
   }
 }
 
@@ -377,37 +358,11 @@ html.no-js .dqpipe-track-fill { height: 100%; }
   }
 }
 
-/* ── stacking panels section transition (mined from revolut.com) ────────── */
-/* .stk-wrap / .stk-inner / .stk-n / .stk-title / .stk-body migrated to
-   token-backed Tailwind utilities on stacking-panels.tsx. .stk-panel (sticky
-   pin, layered shadow, transform-origin) and .stk-dim (JS-driven overlay)
-   stay here as mechanics. */
-
-.stk-panel {
-  position: sticky;
-  top: calc(var(--nav-h) + 1.2rem);
-  min-height: 52vh;
-  display: flex;
-  align-items: center;
-  padding: clamp(1.6rem, 5vw, 3.2rem);
-  border: 1px solid var(--hair);
-  border-radius: 18px;
-  background: var(--surface);
-  box-shadow: 0 -22px 46px -26px rgba(0, 0, 0, 0.6);
-  transform-origin: center top;
-  will-change: transform;
-  overflow: hidden;
-}
-
-/* darkening overlay as a panel is covered — JS drives opacity */
-.stk-dim {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  background: var(--bg);
-  opacity: 0;
-  pointer-events: none;
-}
+/* ── stacking panels — promoted to @digithings/web (#1450) ────────────────
+   The <StackingPanels/> primitive (components/effects-chrome/
+   StackingPanels.tsx) carries content utilities + the scroll handler; the
+   .stk-panel / .stk-dim pinned mechanics live in
+   @digithings/web/styles/effects-chrome.css, imported from globals.css. */
 
 /* ── cross-fade + parallax section transition (mined from revolut.com) ──── */
 /* .cf-wrap margin + the .cf-kicker/.cf-title/.cf-body type migrated to
@@ -516,268 +471,8 @@ html.no-js .dqpipe-track-fill { height: 100%; }
   }
 }
 
-/* ── pipeline workflow viz (ported from the olympus dashboard) ──────────── */
-
-/* .pl-summary / .pl-flow / .pl-colwrap / .pl-col outer-box props migrated to
-   token-backed Tailwind utilities on pipeline-reference.tsx; their classes stay
-   on the elements for the combinator/modifier rules below. */
-.pl-summary > span {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.pl-sum-k {
-  font-family: var(--font-mono);
-  font-size: 0.54rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-mute);
-}
-
-.pl-sum-v {
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.pl-running {
-  color: var(--accent);
-}
-
-.pl-col--par {
-  position: relative;
-  padding: 1.3rem 0.7rem 0.7rem;
-  border: 1px dashed color-mix(in srgb, var(--ink) 26%, var(--hair));
-  border-radius: 10px;
-}
-
-.pl-col-tag {
-  position: absolute;
-  top: 0.4rem;
-  left: 0.7rem;
-  font-family: var(--font-mono);
-  font-size: 0.52rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-mute);
-}
-
-.pl-node {
-  width: 9.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.6rem 0.7rem;
-  border: 1px solid var(--hair);
-  border-radius: 8px;
-  background: var(--surface);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.18s var(--ease), transform 0.15s var(--ease);
-}
-
-.pl-node:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--ink) 30%, var(--hair));
-}
-
-.pl-node.is-sel {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
-}
-
-.pl-node--queued {
-  opacity: 0.55;
-}
-
-.pl-node-head {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.pl-pip {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--ink-soft);
-  flex-shrink: 0;
-}
-
-.pl-node--running .pl-pip,
-.pl-pip--running {
-  background: var(--accent);
-  animation: pl-pulse 1.6s var(--ease) infinite;
-}
-
-.pl-node--queued .pl-pip,
-.pl-pip--queued {
-  background: transparent;
-  border: 1px solid var(--ink-mute);
-}
-
-.pl-pip--done {
-  background: var(--ink-soft);
-}
-
-@keyframes pl-pulse {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
-  }
-  70% {
-    box-shadow: 0 0 0 5px transparent;
-  }
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
-}
-
-.pl-node-label {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: var(--ink);
-}
-
-.pl-node-diag {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  color: var(--ink-mute);
-  font-variant-numeric: tabular-nums;
-}
-
-.pl-conn {
-  flex-shrink: 0;
-  padding: 0 0.4rem;
-  color: color-mix(in srgb, var(--ink-mute) 80%, transparent);
-  display: inline-flex;
-}
-
-/* selected-node detail */
-.pl-detail {
-  margin-top: 1rem;
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  background: var(--surface);
-  overflow: hidden;
-}
-
-.pl-detail-head {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.85rem 1.1rem;
-  border-bottom: 1px solid var(--hair);
-}
-
-.pl-detail-name {
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  color: var(--ink);
-}
-
-.pl-detail-model {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  color: var(--ink-mute);
-  border: 1px solid var(--hair);
-  border-radius: 999px;
-  padding: 0.1rem 0.5rem;
-}
-
-.pl-detail-status {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-mute);
-}
-
-.pl-detail-status--running {
-  color: var(--accent);
-}
-
-.pl-io {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1px;
-  margin: 0;
-  background: var(--hair);
-}
-
-.pl-io > div {
-  background: var(--surface);
-  padding: 0.85rem 1.1rem;
-}
-
-.pl-io dt {
-  font-family: var(--font-mono);
-  font-size: 0.54rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-mute);
-  margin-bottom: 0.3rem;
-}
-
-.pl-io dd {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: var(--ink-soft);
-}
-
-.pl-diag-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  border-top: 1px solid var(--hair);
-}
-
-.pl-diag-grid > div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.8rem 1.1rem;
-  border-left: 1px solid var(--hair);
-}
-
-.pl-diag-grid > div:first-child {
-  border-left: none;
-}
-
-.pl-diag-k {
-  font-family: var(--font-mono);
-  font-size: 0.52rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-mute);
-}
-
-.pl-diag-v {
-  font-family: var(--font-mono);
-  font-size: 0.86rem;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pl-node--running .pl-pip,
-  .pl-pip--running {
-    animation: none;
-  }
-}
-
-@media (max-width: 640px) {
-  .pl-io {
-    grid-template-columns: 1fr;
-  }
-  .pl-diag-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .pl-diag-grid > div:nth-child(3) {
-    border-left: none;
-  }
-}
+/* ── pipeline workflow viz — promoted to @digithings/web (#1450) ──────────
+   The <Pipeline/> primitive (components/effects-chrome/Pipeline.tsx) carries
+   the outer-box utilities; the pl-* structural CSS (node states, running
+   pulse, detail grids) lives in @digithings/web/styles/effects-chrome.css,
+   imported from globals.css. */
