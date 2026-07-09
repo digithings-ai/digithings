@@ -150,7 +150,10 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="section" id="claim" aria-label="Own the whole stack">
+        {/* No .section padding here: the WordReveal track is its own breathing
+            room (the line rides in, pins at mid-viewport for a beat, and the
+            page flows on) — section padding on top of it read as a dead gap. */}
+        <section id="claim" aria-label="Own the whole stack">
           <div className="wrap">
             <WordReveal
               id="claim-reveal"

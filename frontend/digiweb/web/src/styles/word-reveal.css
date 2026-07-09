@@ -22,13 +22,16 @@
    ========================================================================== */
 
 /* ── pinned track ──────────────────────────────────────────────────────────
-   .wr-track is taller than the viewport and .wr-sticky pins the line while
-   scroll progress drives the reveal; words finish by 70% of track progress and
-   hold fully visible for the remaining 30% before the line unpins — the text
-   can never leave the viewport half-revealed. */
+   .wr-track is taller than the viewport and .wr-sticky pins the line at
+   mid-viewport. The reveal itself rides the line's ENTRY (scroll offset
+   ["start end","start start"] in WordReveal.tsx): words fill as the line
+   rises and finish by the time the pin engages, so the pinned remainder
+   (height − 100vh) is only a short hold before the page flows on — the text
+   can never leave the viewport half-revealed. Keep the track short: the tail
+   after the pin is dead scroll. */
 .wr-track {
   position: relative;
-  height: 240vh;
+  height: 150vh;
 }
 
 .wr-sticky {
@@ -55,7 +58,7 @@
 .word-line {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(1.7rem, 5vw, 3rem);
+  font-size: clamp(1.55rem, 4.2vw, 2.6rem);
   letter-spacing: -0.02em;
   line-height: 1.15;
   max-width: 24ch;

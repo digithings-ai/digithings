@@ -7,14 +7,15 @@ import { useRef } from "react";
 /**
  * WordReveal — the full-drama pinned-blur reveal promoted from the design
  * reference (typography/word-reveal). Reserved for the one hero claim per page:
- * the line pins to the viewport while scroll drives each word in from blur; the
- * reveal completes at 70% of the pinned track and the finished line holds for
- * the remaining 30% so it can never scroll away half-read. Under
+ * words fill from blur as the line rides up the viewport — the reveal starts
+ * as soon as the line enters and completes by the time it reaches
+ * mid-viewport, where a short sticky hold gives the finished claim one beat
+ * before the page flows on. It can never scroll away half-read. Under
  * `prefers-reduced-motion` — or with no JS at all (`html.no-js`) — the final
  * text renders statically, fully legible, with no empty scroll gap.
  *
  * The pinned-track / display-line / `.word` mechanics live in
- * styles/word-reveal.css (kept CSS per the migrate-vs-leave rule: the 240vh
+ * styles/word-reveal.css (kept CSS per the migrate-vs-leave rule: the 150vh
  * track, the sticky pin, and the reduced-motion + no-JS fallbacks). This
  * component carries the scroll→opacity/blur mapping and the token-backed
  * kicker/title utilities.
@@ -26,15 +27,22 @@ import { useRef } from "react";
  */
 
 /**
- * Timing over the pinned track: every word reaches full visibility by
- * REVEAL_END (70% of track progress); the remaining 30% holds the finished
- * line on screen while it is still pinned.
+ * Timing against ["start end", "start start"] scroll progress (0 = the track's
+ * top enters the viewport bottom, 1 = it reaches the viewport top, which is
+ * the instant the sticky pin engages with the line at mid-viewport):
+ * the line's own top clears the viewport bottom around ~0.4, so words start
+ * filling the moment the line is visible (REVEAL_START) and every word is
+ * fully legible by REVEAL_END ≈ the mid-viewport pin. The pinned remainder of
+ * the track (track height − 100vh) is a short hold, not reveal time.
  */
-const REVEAL_END = 0.7;
+const REVEAL_START = 0.4;
+const REVEAL_END = 0.98;
 const WORD_SPAN = 0.18;
 
 function wordWindow(index: number, total: number): [number, number] {
-  const start = (index / Math.max(1, total - 1)) * (REVEAL_END - WORD_SPAN);
+  const start =
+    REVEAL_START +
+    (index / Math.max(1, total - 1)) * (REVEAL_END - WORD_SPAN - REVEAL_START);
   return [start, start + WORD_SPAN];
 }
 
@@ -82,9 +90,12 @@ export type WordRevealProps = {
 export function WordReveal({ text, kicker, title, id, className }: WordRevealProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const reduced = useReducedMotion();
+  // 0 = track top enters the viewport bottom; 1 = track top reaches the
+  // viewport top (the sticky pin engages, line at mid-viewport). The reveal
+  // maps onto the line's entry ride — see the timing note above.
   const { scrollYProgress } = useScroll({
     target: trackRef,
-    offset: ["start start", "end end"],
+    offset: ["start end", "start start"],
   });
   const words = text.split(" ");
 
