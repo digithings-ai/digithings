@@ -7,6 +7,7 @@ import {
   StatCounter,
   WordReveal,
   type CounterStat,
+  type MarqueeItem,
   type NumberedStage,
 } from "@digithings/web";
 import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "./_nav";
@@ -24,17 +25,18 @@ import { ModuleManifest } from "@/components/landing/ModuleManifest";
 // component and exports statically. Every motion moment honors
 // prefers-reduced-motion and reads with no JS (html.no-js fallbacks).
 
-// The stack we build on — drifts in the marquee right below the hero.
-const STACK = [
-  "LangGraph",
-  "NautilusTrader",
-  "Polars",
-  "Pydantic v2",
-  "LiteLLM",
-  "Drizzle",
-  "MCP",
-  "FastAPI",
-  "Docker",
+// The stack we build on — the core seven, drifting in the marquee right below
+// the hero. Each carries its Simple Icons glyph where one exists
+// (@digithings/web logos registry); NautilusTrader and LiteLLM have no mark
+// and read text-only.
+const STACK: MarqueeItem[] = [
+  { name: "LangGraph", icon: "langgraph" },
+  { name: "NautilusTrader" },
+  { name: "Polars", icon: "polars" },
+  { name: "Pydantic", icon: "pydantic" },
+  { name: "LiteLLM" },
+  { name: "MCP", icon: "modelcontextprotocol" },
+  { name: "Docker", icon: "docker" },
 ];
 
 // Real, honest facts — each count-up figure is a property of the stack, not a
@@ -103,7 +105,7 @@ export default function Home() {
             items={STACK}
             tone="mute"
             speed={42}
-            aria-label="Built on LangGraph, NautilusTrader, Polars, Pydantic v2, LiteLLM, Drizzle, MCP, FastAPI, and Docker"
+            aria-label="Built on LangGraph, NautilusTrader, Polars, Pydantic, LiteLLM, MCP, and Docker"
             className="py-[0.95rem]"
           />
         </section>
