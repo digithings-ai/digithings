@@ -2,6 +2,7 @@ import "./chrome.css";
 import { AnnouncementBarReference } from "@/components/announcement-bar-reference";
 import { CommandPaletteReference } from "@/components/command-palette-reference";
 import { FooterReference } from "@/components/footer-reference";
+import { ModuleCardReference } from "@/components/chrome/module-card-reference";
 import { NavShellReference } from "@/components/chrome/nav-shell-reference";
 import { ScrollNavReference } from "@/components/scroll-nav-reference";
 import { TabsReference } from "@/components/tabs-reference";
@@ -27,6 +28,7 @@ export default function ChromePage() {
       <ToastStackReference />
       <ScrollNavReference />
       <NavShellReference />
+      <ModuleCardReference />
       <FooterReference />
     </main>
   );
