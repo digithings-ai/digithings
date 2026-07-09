@@ -2,8 +2,11 @@
 
 Every frontend surface consumes the design system the same way. This is the
 playbook that migrated all five apps (#1399, 2026-07) and the contract the
-**frontend canon guard** (`scripts/check_frontend_canon.py`, wired into the
-web/olympus/digichat CI jobs) enforces going forward.
+**frontend canon guard** (`scripts/check_frontend_canon.py`) enforces going
+forward. The guard runs as a dedicated **unconditional** `frontend-canon` job
+in `ci.yml` on every PR/push (#1434) — it scans the whole `frontend/` tree via
+`git ls-files`, not just the diff, so it must not be path-gated — and also runs
+(redundantly) inside the web/olympus/digichat test jobs.
 
 ## The wiring (every app, in this order)
 

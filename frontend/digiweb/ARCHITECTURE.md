@@ -36,8 +36,9 @@ block** — `web-theme.css` is the one bridge (its `inline` semantics keep scope
 liveries live inside utilities); shared sheets import with `layer(components)`;
 package components rendered by an app need an `@source` line. The adoption
 playbook and the CI guard contract live in [MIGRATION.md](MIGRATION.md)
-(`scripts/check_frontend_canon.py`, enforced in the web/olympus/digichat CI
-jobs).
+(`scripts/check_frontend_canon.py`, enforced by the unconditional
+`frontend-canon` job in `ci.yml` — plus redundantly in the web/olympus/digichat
+test jobs).
 
 ### The move touched deploy config
 
