@@ -358,37 +358,11 @@ html.no-js .dqpipe-track-fill { height: 100%; }
   }
 }
 
-/* ── stacking panels section transition (mined from revolut.com) ────────── */
-/* .stk-wrap / .stk-inner / .stk-n / .stk-title / .stk-body migrated to
-   token-backed Tailwind utilities on stacking-panels.tsx. .stk-panel (sticky
-   pin, layered shadow, transform-origin) and .stk-dim (JS-driven overlay)
-   stay here as mechanics. */
-
-.stk-panel {
-  position: sticky;
-  top: calc(var(--nav-h) + 1.2rem);
-  min-height: 52vh;
-  display: flex;
-  align-items: center;
-  padding: clamp(1.6rem, 5vw, 3.2rem);
-  border: 1px solid var(--hair);
-  border-radius: 18px;
-  background: var(--surface);
-  box-shadow: 0 -22px 46px -26px rgba(0, 0, 0, 0.6);
-  transform-origin: center top;
-  will-change: transform;
-  overflow: hidden;
-}
-
-/* darkening overlay as a panel is covered — JS drives opacity */
-.stk-dim {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  background: var(--bg);
-  opacity: 0;
-  pointer-events: none;
-}
+/* ── stacking panels — promoted to @digithings/web (#1450) ────────────────
+   The <StackingPanels/> primitive (components/effects-chrome/
+   StackingPanels.tsx) carries content utilities + the scroll handler; the
+   .stk-panel / .stk-dim pinned mechanics live in
+   @digithings/web/styles/effects-chrome.css, imported from globals.css. */
 
 /* ── cross-fade + parallax section transition (mined from revolut.com) ──── */
 /* .cf-wrap margin + the .cf-kicker/.cf-title/.cf-body type migrated to

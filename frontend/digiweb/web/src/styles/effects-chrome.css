@@ -321,3 +321,39 @@
     animation: none;
   }
 }
+
+/* ── StackingPanels — pinned layered panels ───────────────────────────────
+   Content type is token utilities in the component. The panel mechanics stay
+   CSS: sticky pin off the consumer's --nav-h, the layered seam shadow, and
+   transform-origin for the JS-driven scale-back. .stk-dim stays a class —
+   the scroll handler grabs it via querySelector and writes its opacity. */
+
+@layer components {
+  .stk-panel {
+    position: sticky;
+    top: calc(var(--nav-h, 3.4rem) + 1.2rem);
+    min-height: 52vh;
+    display: flex;
+    align-items: center;
+    padding: clamp(1.6rem, 5vw, 3.2rem);
+    border: 1px solid var(--hair);
+    border-radius: 18px;
+    background: var(--surface);
+    /* concrete black: cast-shadow ink, deliberately theme-invariant (no
+       shadow token) — same read as the reference specimen */
+    box-shadow: 0 -22px 46px -26px rgba(0, 0, 0, 0.6);
+    transform-origin: center top;
+    will-change: transform;
+    overflow: hidden;
+  }
+
+  /* darkening overlay as a panel is covered — JS drives opacity */
+  .stk-dim {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    background: var(--bg);
+    opacity: 0;
+    pointer-events: none;
+  }
+}
