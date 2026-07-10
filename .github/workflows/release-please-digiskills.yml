@@ -1,0 +1,34 @@
+# Tracks digiskills' version and changelog from Conventional Commits on
+# module/digiskills (not main: develop -> main promotions can land as a single
+# squashed "chore: promote develop to main (...)" commit that a Conventional
+# Commits parser reads as a no-op, swallowing the real feat/fix signal the
+# module branch still carries — same rationale as release-please-digichat.yml,
+# see #1343).
+name: "Release please: digiskills"
+
+on:
+  push:
+    branches:
+      - module/digiskills
+    paths:
+      - "digiskills/**"
+      - "release-please-config.json"
+      - ".release-please-manifest.json"
+
+concurrency:
+  group: release-please-digiskills
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          target-branch: module/digiskills
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

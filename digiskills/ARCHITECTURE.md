@@ -48,7 +48,7 @@ phases, not this module's job today.
 | `digiskills/synthesize.py` | `Synthesizer` protocol; `TemplateSynthesizer` (default, deterministic, no LLM) and `DigiLLMSynthesizer` (real prose via `digillm.completion`, lazily imported, requires `[llm]`). |
 | `digiskills/compiler.py` | `compile_skill(source, ...)` — orchestrates a `CorpusBuilder` + `Synthesizer` into a `CompileResult`. Picks sane defaults from `source.kind` when not given explicitly. |
 | `digiskills/package.py` | `write_skill_package` / `write_skill_zip` — writes a `SkillPackage` to disk as an installable directory or zip archive. |
-| `digiskills/cli.py` | `digiskills compile <path> --name ... [--llm] [--zip]` — Typer CLI, requires the `[cli]` extra. |
+| `digiskills/cli.py` | `digiskills compile <path> --name ... [--llm] [--zip] [--max-files N] [--max-file-chars N] [--max-total-chars N]` — Typer CLI, requires the `[cli]` extra. The `--max-*` flags override `LocalPathCorpusBuilder`'s caps (needed for large OpenAPI specs — a 484KB `public.json` exceeds the 200k-char per-file default and would ship truncated). |
 
 ## Public API (core)
 
@@ -206,6 +206,30 @@ trust-flagging pass.
 
 No other configuration — the core library and `LocalPathCorpusBuilder` need
 no environment variables at all.
+
+## Versioning & consumption
+
+`digiskills` is versioned by release-please on the `module/digiskills` branch
+(`release-please-digiskills.yml`, mirroring digichat's setup — see #1343 for why
+module-branch rather than `main`). Releases tag `digiskills-vX.Y.Z`; the Python
+release-type bumps `pyproject.toml`, and an `extra-files` generic updater bumps
+`__version__` in `src/digiskills/__init__.py` (annotated
+`# x-release-please-version`) so the two never drift.
+
+Because the digithings repo is public, an external consumer installs a pinned
+version straight from a tag — no PyPI publish, no registry:
+
+```bash
+pip install "digiskills[cli] @ git+https://github.com/digithings-ai/digithings.git@digiskills-v0.2.0#subdirectory=digiskills"
+```
+
+**Dependency-confusion caveat:** the `[ingest]` extra declares `digifetch>=0.1.0`,
+a monorepo sibling that is **not** published to PyPI. A plain
+`pip install "digiskills[ingest] @ git+..."` would try to resolve `digifetch`
+from PyPI and either fail or (worse) pull an unrelated package of that name.
+Only the `[cli]` install above (core + typer, both on PyPI) is safe to consume
+from a git tag. If remote-URL ingestion is ever needed off-repo, install
+`digifetch` from its own git subdirectory first.
 
 ## Testing
 
