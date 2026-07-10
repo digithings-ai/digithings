@@ -13,6 +13,12 @@ import { SignedConvictionBadge } from '@/components/shared/signed-conviction-bad
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { normalizeThesisId } from '@/lib/thesis-id';
 
+/*
+ * Ruling (#1450 F4 batch D): stays a local table. Sector group rows, the
+ * click-to-expand PositionDrilldown, ReactNode cells (conviction meter, risk
+ * envelope, signed decision badge) and responsive column hiding are outside
+ * the promoted <SortableTable/> leaderboard grammar — see lib/TABLES.md.
+ */
 function thesisNames(ids: string[], thesisById: Map<string, Thesis>): string {
   if (!ids.length) return '—';
   return ids.map((id) => thesisById.get(normalizeThesisId(id))?.name ?? id).join(', ');
