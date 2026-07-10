@@ -68,11 +68,10 @@
    (components/finance-composites/OrderBook.tsx) carries the token-backed
    utilities (border-hair, bg-surface, text-up/down + depth tints); no CSS. */
 
-/* Monthly returns heatmap — promoted to @digithings/web (#1450): the
-   <MonthlyReturns/> primitive (components/finance-charts/MonthlyReturns.tsx)
-   carries the scroll wrapper + per-cell color-mix tints; the .mr-table
-   descendant grammar lives in @digithings/web/styles/finance-charts.css,
-   imported from globals.css. */
+/* Returns matrix — the former <MonthlyReturns/> heatmap was deprecated into
+   the finance-tearsheet family's <ReturnsMatrix/> (#1463): one matrix
+   grammar. The .ts-matrix CSS-grid grammar lives in
+   @digithings/web/styles/finance-tearsheet.css, imported from globals.css. */
 
 /* ── stock ticker tape ──────────────────────────────────────────────────── */
 /* Promoted to @digithings/web (#1450): the <StockTicker/> primitive
