@@ -550,19 +550,20 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
    cards mid-content. In the deck pattern nothing is clipped — the next
    opaque card's coverage IS the seam (hairline border, no drop shadow). */
 .dqss { position: relative; z-index: 1; border-top: 1px solid var(--hair); }
+/* Section head carries the library CTA as a right-aligned action ("see
+   all →" grammar): a footer pill after the deck sat stranded in the slots'
+   tail runway — the blank scroll room the last card needs to ride its pin. */
 .dqss-intro {
-  max-width: 52ch;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
   margin-bottom: clamp(1.2rem, 2.5vw, 1.8rem);
 }
+.dqss-intro-copy { max-width: 52ch; }
 .dqss-intro .dq-sub { margin-bottom: 0; }
-
-/* Library CTA — plain in-flow footer after the deck (the slots' tail runway
-   means it arrives once the stack has fully assembled). */
-.dqss-library-cta {
-  display: flex;
-  justify-content: center;
-  margin-top: clamp(1.5rem, 3vw, 2.2rem);
-}
+.dqss-intro .dqss-library-pill { flex-shrink: 0; margin-bottom: 0.3rem; }
 .dqss-library-pill {
   display: inline-flex;
   align-items: center;
