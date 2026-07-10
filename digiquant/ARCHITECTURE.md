@@ -217,7 +217,11 @@ Structural settings (symbol, capital, sizing, 2018 trade window, precision) live
 - `ohlc_bars: list[OHLCBar]` (`{t,o,h,l,c}`) — full-history candlesticks for the price chart. Note this spans the **entire** price series, while `equity_curve`/`trades` are scoped to the `trade_start` window — the renderer must not assume a shared x-axis. Defaults to `[]`; absent on 1.0 fixtures and on adapter paths with no bars.
 - Per-trade signal type carried in `TradeRecord.entry_label` on the Nautilus path. `SlapperStrategy` records each entry's signal family in a metadata-only side-channel (`_signal_log`, keyed by `(entry_date, direction)`) — pure metadata, never fed back into a trade decision. `generate_tearsheets._entry_label` joins it onto round-trip trades and maps to the Pine display taxonomy (`MR Long`/`Trend Long`/`MR&T Long`/`Reversal Long` + Short variants), matching `scripts/validation/pine_backtest.py`. A join miss falls back to `""`.
 
-Existing published fixtures stay at schema `1.0` (no `ohlc_bars`, blank `entry_label`) until regenerated, so consumers must tolerate both versions.
+**Tearsheet schema 1.2** adds `signal_delay_days: int` (default `0`, back-compatible) — see the public signal delay below.
+
+Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank `entry_label`, no `signal_delay_days`) until regenerated, so consumers must tolerate all versions.
+
+**Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
 
 **digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read the committed JSON under `frontend/digiquant-web/public/strategies/` (`index.json` manifest + per-strategy `*.json`). These are **static artifacts**, not live Supabase/API queries. Cloudflare Pages rebuilds when `main` changes.
 
@@ -232,11 +236,11 @@ Without real calibrations, `SlapperStrategy` falls back to `calibrations.example
 
 ```bash
 python digiquant/scripts/fetch_coinbase.py
-python digiquant/scripts/generate_tearsheets.py --from-supabase --push-supabase
+python digiquant/scripts/generate_tearsheets.py --from-supabase --push-supabase --signal-delay-days 3
 git add frontend/digiquant-web/public/strategies/ && git commit  # static site rebuild
 ```
 
-`--from-supabase` loads fitted params from `strategy_calibrations`. `--push-supabase` writes headline metrics + equity curve to `strategy_tearsheets` (anon-readable for a future live UI). The digiquant.io site still serves the committed JSON under `public/strategies/` until the frontend fetches Supabase at runtime.
+`--from-supabase` loads fitted params from `strategy_calibrations`. `--push-supabase` writes headline metrics + equity curve to `strategy_tearsheets` (anon-readable for a future live UI) — with the delay active, both the static JSON and this upsert carry the same delayed view. The digiquant.io site still serves the committed JSON under `public/strategies/` until the frontend fetches Supabase at runtime.
 
 **One-time upload** (after optimizing in TradingView):
 

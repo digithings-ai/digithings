@@ -2,6 +2,8 @@
 
 import { FileText } from 'lucide-react';
 
+import { SafeMarkdown } from '@/components/SafeMarkdown';
+
 export default function DigestBrief({
   digest,
 }: {
@@ -24,7 +26,13 @@ export default function DigestBrief({
           {digest.doc_count} docs · {digest.broker_count} brokers
         </span>
       </header>
-      <p className="whitespace-pre-line text-sm leading-relaxed text-ink">{digest.summary}</p>
+      {/* The pipeline-written summary renders through SafeMarkdown (sanitizer
+          stays — REM-076) inside the canonical .chat-md typography scope.
+          `whitespace-pre-line` is kept ON PURPOSE: react-markdown emits soft
+          breaks as literal "\n" text nodes, so plain-text summaries keep their
+          exact pre-markdown line layout while real markdown (emphasis, lists,
+          tables) now picks up the shared grammar. */}
+      <SafeMarkdown className="whitespace-pre-line">{digest.summary}</SafeMarkdown>
       {digest.key_themes.length > 0 ? (
         <div className="mt-1 flex flex-wrap gap-1.5">
           {digest.key_themes.map((t) => (
