@@ -12,6 +12,8 @@
     "./styles/pricing.css": "./src/styles/pricing.css",
     "./styles/stages.css": "./src/styles/stages.css",
     "./styles/metrics.css": "./src/styles/metrics.css",
+    "./styles/word-reveal.css": "./src/styles/word-reveal.css",
+    "./styles/marquee.css": "./src/styles/marquee.css",
     "./styles/terminal-manifest.css": "./src/styles/terminal-manifest.css",
     "./styles/chat-core.css": "./src/styles/chat-core.css",
     "./styles/chat-widgets.css": "./src/styles/chat-widgets.css",

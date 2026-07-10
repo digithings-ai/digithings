@@ -485,58 +485,12 @@
   color: var(--ink-mute);
 }
 
-/* ── marquee ticker (infinite "built on" strip) ─────────────────────────── */
-
-/* .mq wrapper (mt / flex-col / gap) → utilities in marquee-ticker-reference.tsx */
-
-.mq-row {
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
-}
-
-.mq-track {
-  display: inline-flex;
-  width: max-content;
-  gap: 2.2rem;
-  will-change: transform;
-}
-
-.mq-track--a {
-  animation: mq-left 34s linear infinite;
-}
-
-.mq-track--b {
-  animation: mq-right 34s linear infinite;
-}
-
-.mq-row:hover .mq-track {
-  animation-play-state: paused;
-}
-
-/* .mq-item + .mq-dot → utilities in marquee-ticker-reference.tsx */
-
-@keyframes mq-left {
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-@keyframes mq-right {
-  from {
-    transform: translateX(-50%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mq-track--a,
-  .mq-track--b {
-    animation: none;
-  }
-}
+/* ── marquee ticker (infinite "built on" strip) ─────────────────────────────
+   Promoted to @digithings/web (#1450): the <Marquee/> primitive
+   (components/marquee/Marquee.tsx) carries the item chip utilities + accent dot;
+   the overflow + edge-fade mask, the seamless-loop keyframes (mq-left/mq-right),
+   pause-on-hover and the reduced-motion stop live in
+   @digithings/web/styles/marquee.css, imported from reference/app/globals.css. */
 
 /* ── odometer — promoted to @digithings/web (#1450) ─────────────────────── */
 

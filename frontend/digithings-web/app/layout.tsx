@@ -23,7 +23,15 @@ export const metadata: Metadata = {
   title: "digithings — an open-core agentic stack",
   description:
     "An open-core agentic stack — research, retrieval, and chat behind one supervisor. Self-hosted, BYOK, audit-on by default. No vendor lock-in.",
-  icons: { icon: "/favicon-qr.svg" },
+  // Scheme-aware favicon tiles, mirroring digiquant-web: the light tile on a
+  // dark browser chrome and vice versa, so the mark never reads as a flat box.
+  icons: {
+    icon: [
+      { url: "/favicon-qr-light.svg", media: "(prefers-color-scheme: dark)" },
+      { url: "/favicon-qr.svg", media: "(prefers-color-scheme: light)" },
+      { url: "/favicon-qr.svg" },
+    ],
+  },
   openGraph: {
     title: "digithings — an open-core agentic stack",
     description: "Open-core agentic stack — research, retrieval, chat behind one supervisor. Self-hosted, BYOK, audit-on by default.",
