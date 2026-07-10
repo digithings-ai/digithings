@@ -10,8 +10,15 @@
    grammars this dashboard reuses. */
 @import "@digithings/design/tokens.css";
 @import "@digithings/web/styles/web-theme.css";
+/* effects-chrome (TabStrip — subpage tab bar) manages its own layering:
+   import PLAINLY, never layer(…) — see the sheet header / MIGRATION.md. */
+@import "@digithings/web/styles/effects-chrome.css";
 @import "@digithings/design/quant-native/styles.css";
 @import "@digithings/design/tearsheet/styles.css";
+
+/* Tailwind never scans package sources — point it at the shared components
+   this app renders (load-bearing; see MIGRATION.md rule 3). */
+@source "../../digiweb/web/src/components/effects-chrome";
 
 /* ── Fonts (next/font routing) ───────────────────────────────────────────
    tokens.css names the families literally ("Geist", "Geist Mono",
