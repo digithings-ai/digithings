@@ -42,6 +42,7 @@ export {
   type TerminalManifestStatus,
   type TerminalManifestProps,
 } from "./components/TerminalManifest";
+export { DeckStack, DeckCard, type DeckStackProps, type DeckCardProps } from "./components/deck/DeckStack";
 // chat family (#1418)
 export { ChatTranscript, type ChatTranscriptProps } from "./components/chat/ChatTranscript";
 export { ChatMessage, type ChatMessageProps, type ChatRole, type ChatTone } from "./components/chat/ChatMessage";

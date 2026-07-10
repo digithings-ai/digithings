@@ -41,6 +41,7 @@
 | `digibase` | — | Shared Python library — error envelopes, HTTP helpers, OTel | [digibase/AGENTS.md](digibase/AGENTS.md) |
 | `digikey` | 8005 | JWT + scoped API key auth plane — RS256, JWKS, token exchange | [digikey/AGENTS.md](digikey/AGENTS.md) |
 | `digichat` | 3005 | Next.js BFF + React chat UI — Auth.js, Drizzle, AI SDK streaming | [digichat/AGENTS.md](digichat/AGENTS.md) |
+| `digiskills` | — | Compiles a codebase/docs source into an installable Agent Skill package | [digiskills/AGENTS.md](digiskills/AGENTS.md) |
 
 ---
 

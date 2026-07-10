@@ -53,11 +53,22 @@ export function NumberedStages({
   const fill = animated && safe;
 
   return (
-    <ol className={`grid list-none gap-0 p-0${className ? ` ${className}` : ""}`}>
+    <ol className={["grid list-none gap-0 p-0", className].filter(Boolean).join(" ")}>
       {stages.map((s, i) => {
-        const liClass = `ns-stage relative grid grid-cols-[3.4rem_1fr] gap-[1.1rem] pb-[1.8rem]${
-          s.livery ? ` accent-${s.livery}` : ""
-        }`;
+        // Utilities live in clean string literals on purpose: a template hole
+        // butted against a candidate (`pb-[…]${`) hides it from Tailwind's
+        // scanner, so the utility is silently never generated — the original
+        // pb-[1.8rem] shipped un-compiled and the stages rendered with no
+        // inter-stage padding at all (#1450 round 3). 2.8rem is the ruled
+        // breathing room between a stage's blurb and the next stage's title;
+        // the spine ::before spans the padded box (styles/stages.css), so the
+        // connector stays continuous, and :last-child zeroes the trailing pad.
+        const liClass = [
+          "ns-stage relative grid grid-cols-[3.4rem_1fr] gap-[1.1rem] pb-[2.8rem]",
+          s.livery ? `accent-${s.livery}` : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
         const content = (
           <>
             <span className="ns-node" aria-hidden="true">
