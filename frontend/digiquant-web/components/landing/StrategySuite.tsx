@@ -323,13 +323,21 @@ export function StrategySuite() {
     <section className="section dqss" id="strategies">
       <div className="wrap">
         <div className="dqss-intro">
-          <span className="kicker">{"// pre-built strategy library"}</span>
-          <h2 className="dq-title">Research-grade systems, ready to explore.</h2>
-          <p className="dq-sub">
-            Browse calibrated backtests from the DigiQuant library — equity, drawdown, trade
-            logs, and full tearsheets for every release. More assets join the catalog as they
-            clear the pipeline.
-          </p>
+          <div className="dqss-intro-copy">
+            <span className="kicker">{"// pre-built strategy library"}</span>
+            <h2 className="dq-title">Research-grade systems, ready to explore.</h2>
+            <p className="dq-sub">
+              Browse calibrated backtests from the DigiQuant library — equity, drawdown, trade
+              logs, and full tearsheets for every release. More assets join the catalog as they
+              clear the pipeline.
+            </p>
+          </div>
+          <Link href="/strategies" className="dqss-library-pill">
+            Full strategy library
+            <span className="dqss-library-arrow" aria-hidden="true">
+              →
+            </span>
+          </Link>
         </div>
 
         <DeckStack
@@ -342,15 +350,6 @@ export function StrategySuite() {
             </DeckCard>
           ))}
         </DeckStack>
-
-        <div className="dqss-library-cta">
-          <Link href="/strategies" className="dqss-library-pill">
-            Full strategy library
-            <span className="dqss-library-arrow" aria-hidden="true">
-              →
-            </span>
-          </Link>
-        </div>
       </div>
     </section>
   );
