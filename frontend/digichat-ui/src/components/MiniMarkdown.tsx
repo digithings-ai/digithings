@@ -6,6 +6,12 @@ import remarkGfm from "remark-gfm";
 import { CopyButton } from "./CopyButton";
 import { MermaidBlock } from "./MermaidBlock";
 
+/**
+ * GFM markdown renderer for streamed model output. Uses react-markdown + remark-gfm
+ * (tables, lists, strikethrough, task lists) without raw HTML — React escapes text
+ * nodes. Links render only for http(s) hrefs; fenced ```mermaid blocks render as
+ * diagrams via MermaidBlock.
+ */
 const components: Components = {
   p: ({ children }) => <p className="dc-md-p">{children}</p>,
   a: ({ href, children }) => {
