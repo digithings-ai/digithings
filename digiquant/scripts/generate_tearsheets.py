@@ -22,10 +22,19 @@ logging can only initialize once per process, so a second in-process
 crashing strategy cannot take down the rest — failures are collected and the
 script exits non-zero if any strategy failed.
 
+``--signal-delay-days N`` (#1462) lags the public view of every strategy by N
+calendar days: the OHLCV frame is truncated so the run ends N days before the
+freshest cached bar, and the whole tearsheet is generated from that shorter
+series. End-date shift — not redaction — so the equity curve, drawdown, trade
+log, open-position state, and headline metrics are self-consistent by
+construction and none of them can leak the live position. Payloads declare the
+lag via ``signal_delay_days``.
+
 Usage:
     python scripts/generate_tearsheets.py
     python scripts/generate_tearsheets.py --strategy eth_slapper
     python scripts/generate_tearsheets.py --cache-dir digiquant/data/price-history
+    python scripts/generate_tearsheets.py --signal-delay-days 3
 """
 
 from __future__ import annotations
@@ -36,9 +45,14 @@ import logging
 import multiprocessing
 import signal
 import sys
+from datetime import timedelta
 from decimal import Decimal
 from multiprocessing.connection import Connection
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import polars as pl
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -65,6 +79,30 @@ _PUBLISHED_BASELINE: dict[str, dict[str, float | int]] = {
 
 def load_settings() -> dict:
     return json.loads(SETTINGS_PATH.read_text())
+
+
+def apply_signal_delay(ohlcv: pl.DataFrame, signal_delay_days: int) -> pl.DataFrame:
+    """Truncate OHLCV so the run's end date lags the cached end by N calendar days.
+
+    End-date shift (#1462): the public tearsheets are generated as if the run
+    happened ``signal_delay_days`` days ago. Every derived artifact (equity
+    curve, drawdown, trade log, open-position state, headline metrics) is then
+    self-consistent by construction — there is no per-field redaction to get
+    wrong. The cutoff is calendar days from the newest bar's timestamp, not a
+    bar count, so gaps in the series still yield a true N-day lag.
+
+    ``0`` is an exact no-op (the frame is returned unchanged); negative values
+    would peek into the future and raise ``ValueError``.
+    """
+    import polars as pl
+
+    if signal_delay_days < 0:
+        raise ValueError(f"signal_delay_days must be >= 0, got {signal_delay_days}")
+    if signal_delay_days == 0 or ohlcv.is_empty():
+        return ohlcv
+    ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
+    cutoff = ohlcv[ts_col].max() - timedelta(days=signal_delay_days)
+    return ohlcv.filter(pl.col(ts_col) <= cutoff)
 
 
 def _mult(direction: str, entry_price: float, price: float) -> float:
@@ -407,6 +445,7 @@ def run_and_write(
     *,
     cal_source: str,
     push_supabase: bool = False,
+    signal_delay_days: int = 0,
 ) -> dict | None:
     from digiquant.data.prices.history_cache import load_cached
     from digiquant.strategies.calibrations_loader import resolve_calibrations
@@ -415,6 +454,14 @@ def run_and_write(
     ohlcv = load_cached(symbol, cache_dir)
     if ohlcv is None or ohlcv.is_empty():
         logger.error("No data for %s in %s", symbol, cache_dir)
+        return None
+    # Public signal delay (#1462): shift the whole run's end date back, so all
+    # published artifacts describe the same (lagged) point in time.
+    ohlcv = apply_signal_delay(ohlcv, signal_delay_days)
+    if ohlcv.is_empty():
+        logger.error(
+            "No data left for %s after applying %d-day signal delay", symbol, signal_delay_days
+        )
         return None
 
     d = settings["defaults"]
@@ -427,11 +474,12 @@ def run_and_write(
         trade_start=trade_start or None,
     )
     logger.info(
-        "Running Nautilus backtest: %s (%s, %d bars, cal=%s)",
+        "Running Nautilus backtest: %s (%s, %d bars, cal=%s, signal_delay=%dd)",
         strategy,
         symbol,
         len(ohlcv),
         cal_source,
+        signal_delay_days,
     )
     positions, bars_list, ohlc_bars, signal_log = run_nautilus(
         strategy, symbol, ohlcv, settings, calibration=calibration
@@ -480,16 +528,23 @@ def run_and_write(
         for t in closed
     ]
 
+    notes = [
+        f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
+        f"100% equity compounding, trade window from {trade_start}."
+    ]
+    if signal_delay_days:
+        notes.append(
+            f"Public signal delay: end date shifted back {signal_delay_days} days; "
+            f"all figures are as of {window[-1][0] if window else ''}."
+        )
     td = from_nautilus_run(
         summary,
         trade_dicts,
         equity_curve,
         data_source=d.get("data_source", "Coinbase daily OHLCV (CCXT)"),
         ohlc_bars=[b for b in ohlc_bars if not trade_start or b[0] >= trade_start],
-        notes=[
-            f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
-            f"100% equity compounding, trade window from {trade_start}."
-        ],
+        notes=notes,
+        signal_delay_days=signal_delay_days,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -531,6 +586,7 @@ def run_and_write(
         "kind": settings["strategies"][strategy].get("kind", "long_short"),
         "period_start": td.period_start,
         "period_end": td.period_end,
+        "signal_delay_days": td.signal_delay_days,
         "net_profit_pct": td.net_profit_pct,
         "max_drawdown_pct": td.max_drawdown_pct,
         "profit_factor": td.profit_factor,
@@ -559,6 +615,7 @@ def _push_tearsheet_to_supabase(strategy: str, td, equity_curve: list[tuple[str,
         "total_trades": td.total_trades,
         "period_start": td.period_start,
         "period_end": td.period_end,
+        "signal_delay_days": td.signal_delay_days,
         "final_equity": td.final_equity,
         "generated_at": td.generated_at,
     }
@@ -582,6 +639,7 @@ def _strategy_worker(
     output_dir: Path,
     cal_source: str,
     push_supabase: bool,
+    signal_delay_days: int,
 ) -> None:
     """Child-process entry point: run one strategy end-to-end, report via ``conn``."""
     status: tuple[str, dict | str | None]
@@ -594,6 +652,7 @@ def _strategy_worker(
             output_dir,
             cal_source=cal_source,
             push_supabase=push_supabase,
+            signal_delay_days=signal_delay_days,
         )
         if entry is not None:
             status = ("ok", entry)
@@ -645,6 +704,7 @@ def run_strategy_isolated(
     *,
     cal_source: str,
     push_supabase: bool = False,
+    signal_delay_days: int = 0,
 ) -> tuple[dict | None, str | None]:
     """Run one strategy's backtest in its own spawned process; return (entry, error).
 
@@ -668,6 +728,7 @@ def run_strategy_isolated(
             output_dir,
             cal_source,
             push_supabase,
+            signal_delay_days,
         ),
         name=f"tearsheet-{strategy}",
     )
@@ -713,7 +774,16 @@ def main() -> None:
         action="store_true",
         help="Upsert headline metrics to strategy_tearsheets after each run",
     )
+    parser.add_argument(
+        "--signal-delay-days",
+        type=int,
+        default=0,
+        help="Lag the public tearsheets by N calendar days: truncate OHLCV so the run "
+        "ends N days before the freshest cached bar (end-date shift, #1462). Default 0.",
+    )
     args = parser.parse_args()
+    if args.signal_delay_days < 0:
+        parser.error("--signal-delay-days must be >= 0")
 
     from digiquant.strategies.calibrations_loader import pick_calibration_source
 
@@ -742,6 +812,7 @@ def main() -> None:
             args.output_dir,
             cal_source=cal_source,
             push_supabase=args.push_supabase,
+            signal_delay_days=args.signal_delay_days,
         )
         if entry is not None:
             entries.append(entry)
