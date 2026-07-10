@@ -3,7 +3,16 @@
 import type { Mover } from '@/lib/twelve-x/types';
 import DeltaChip from './DeltaChip';
 
-/** A horizontally-scrollable strip of the biggest consensus shifts since the last run. */
+/**
+ * A horizontally-scrollable strip of the biggest consensus shifts since the last run.
+ *
+ * F5 ruling (#1450): the mover chips stay LOCAL glass-card `<button>`s — the
+ * promoted controls Card is a non-interactive `<div>` in a different dress
+ * (ctl-card-ref: 12px radius, no shadow/hover), and `.glass-card` is
+ * load-bearing for MotionLayer's scroll-reveal system (globals.css
+ * `html.motion-on .glass-card`). Same ruling as F4's StatCard; it covers the
+ * glass-card panel cards across the twelve-x tabs for the same two reasons.
+ */
 export interface MoversStripProps {
   movers: Mover[];
   onSelect?: (currency: string) => void;
