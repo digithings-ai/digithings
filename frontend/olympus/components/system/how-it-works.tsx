@@ -2,9 +2,36 @@
 
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
+import { NumberedStages, type NumberedStage } from '@digithings/web';
 import { SectionCard } from '@/components/observability/shared';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { OperatorControls } from './operator-controls';
+
+/** The run, one move at a time — same copy as the old prose paragraph,
+ * recast on the shared numbered-stage spine (F4 #1450). `animated={false}`:
+ * olympus has no MotionProvider (MotionLayer is deliberately CSS-only), so
+ * the spine renders static — content reads with no JS and under reduced
+ * motion by construction. */
+const STAGES: NumberedStage[] = [
+  {
+    num: '01',
+    tag: 'Atlas',
+    title: 'Research the market',
+    mech: 'Each run fans out across parallel phases — alternative data, institutional flows, macro, asset classes, and sectors — and synthesizes a daily read.',
+  },
+  {
+    num: '02',
+    tag: 'Hermes',
+    title: 'Deliberate the book',
+    mech: 'Hermes frames theses, screens candidates, runs per-ticker analysts and PM⇄analyst debates, and sizes risk.',
+  },
+  {
+    num: '03',
+    tag: 'Portfolio',
+    title: 'Book the decisions',
+    mech: 'The result is a booked portfolio with a signed decision behind every position.',
+  },
+];
 
 const PERSISTS: { what: string; where: string; note: string }[] = [
   { what: 'Research segments', where: 'documents', note: 'One row per segment (alt-data, macro, sectors, asset classes)' },
@@ -18,14 +45,7 @@ export function HowItWorks() {
   return (
     <div className="space-y-6">
       <SectionCard title="How it works">
-        <p className="max-w-3xl text-sm leading-relaxed text-ink-soft">
-          Each run, <span className="text-ink">Atlas</span> researches the market across
-          parallel phases — alternative data, institutional flows, macro, asset classes, and sectors —
-          and synthesizes a daily read. <span className="text-ink">Hermes</span> then
-          deliberates: it frames theses, screens candidates, runs per-ticker analysts and PM⇄analyst
-          debates, and sizes risk. The result is a booked portfolio with a signed decision behind every
-          position.
-        </p>
+        <NumberedStages stages={STAGES} animated={false} className="max-w-3xl pt-1" />
         <Link
           href={buildPipelineHref({})}
           className="inline-flex items-center gap-1.5 text-sm text-[var(--accent)] hover:underline"

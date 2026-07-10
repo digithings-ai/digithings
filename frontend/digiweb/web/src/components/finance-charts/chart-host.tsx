@@ -3,12 +3,13 @@
 /**
  * Finance-charts host scaffold (#1450) — the family's shared TradingView
  * Lightweight Charts lifecycle, promoted from the design reference
- * (finance/price-chart · equity-curve · drawdown). Mirrors the olympus
- * `lib/lw-chart.tsx` grammar without importing from olympus (this package
- * has no app dependencies): token-themed via CSS-variable reads with SSR
- * fallbacks, `autoSize: true`, transparent canvas, attribution logo off,
- * a MutationObserver on `data-theme` re-applies the palette live, and
- * kinetic-scroll inertia is disabled under prefers-reduced-motion.
+ * (finance/price-chart · equity-curve · drawdown). Since batch E this IS the
+ * chart-scaffold canon: olympus's `lib/lw-chart.tsx` is a thin adapter over
+ * this family (see lw-chart.tsx here for the persistent-chart lifecycle).
+ * Token-themed via CSS-variable reads with SSR fallbacks, `autoSize: true`,
+ * transparent canvas, attribution logo off, a MutationObserver on
+ * `data-theme` re-applies the palette live, and kinetic-scroll inertia is
+ * disabled under prefers-reduced-motion.
  *
  * Charts draw on canvas, so there is no CSS file for them — the host div
  * carries `h-full w-full` utilities and fills whatever definite-height pane
@@ -16,16 +17,15 @@
  * consuming app (it is a peer of this family).
  */
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, useSyncExternalStore, type RefObject } from "react";
 import {
-  ColorType,
   createChart,
-  CrosshairMode,
   type ChartOptions,
   type DeepPartial,
   type IChartApi,
   type Time,
 } from "lightweight-charts";
+import { chartChromeOptions } from "./lw-chart";
 
 /** ISO-dated series point — the wire shape every finance chart accepts. */
 export type FinanceSeriesPoint = {
@@ -65,10 +65,12 @@ export function toChartTime(iso: string): Time {
 
 /** Token reads off the host element, with SSR-safe fallbacks mirroring the
  *  dark theme in @digithings/design/tokens.css (the sanctioned cssVar
- *  fallback pattern — see scripts/check_frontend_canon.py). */
-export function readFinancePalette(host: HTMLElement): FinanceChartPalette {
+ *  fallback pattern — see scripts/check_frontend_canon.py). Pass `null`
+ *  (or call on the server) to get the fallback palette verbatim. */
+export function readFinancePalette(host: HTMLElement | null): FinanceChartPalette {
+  const cs = host && typeof window !== "undefined" ? getComputedStyle(host) : null;
   const cssVar = (name: string, fallback: string) =>
-    getComputedStyle(host).getPropertyValue(name).trim() || fallback;
+    cs?.getPropertyValue(name).trim() || fallback;
   return {
     ink: cssVar("--ink", "#ECEEF0"),
     inkMute: cssVar("--ink-mute", "#8A9097"),
@@ -106,29 +108,61 @@ export function tokenAlpha(color: string, alpha: number): string {
 
 /** Chart-wide options derived from the tokens: transparent canvas, hair
  *  grid + scale borders, ink-mute mono text and crosshair lines, token-backed
- *  crosshair labels. Re-applied wholesale on theme flips. */
+ *  crosshair labels. Re-applied wholesale on theme flips. Thin binding of the
+ *  palette onto the family's unified chrome builder (lw-chart.tsx). */
 export function financeChartOptions(
   p: FinanceChartPalette,
   crosshairLabel: CrosshairLabelToken
 ): DeepPartial<ChartOptions> {
-  const label = p[crosshairLabel];
-  return {
-    layout: {
-      background: { type: ColorType.Solid, color: "transparent" },
-      textColor: p.inkMute,
-      fontFamily: p.mono,
-      fontSize: 11,
-      attributionLogo: false,
-    },
-    grid: { vertLines: { color: p.hair }, horzLines: { color: p.hair } },
-    rightPriceScale: { borderColor: p.hair },
-    timeScale: { borderColor: p.hair, timeVisible: false },
-    crosshair: {
-      mode: CrosshairMode.Normal,
-      vertLine: { color: p.inkMute, labelBackgroundColor: label },
-      horzLine: { color: p.inkMute, labelBackgroundColor: label },
-    },
-  };
+  return chartChromeOptions({
+    text: p.inkMute,
+    hair: p.hair,
+    label: p[crosshairLabel],
+    fontFamily: p.mono,
+  });
+}
+
+/* ── Theme-reactive document-level palette ─────────────────────────────── */
+
+/** SSR / pre-mount snapshot — the fallback palette, referentially stable. */
+const SSR_PALETTE = readFinancePalette(null);
+
+let paletteCache: { theme: string | null; palette: FinanceChartPalette } | null = null;
+
+/**
+ * Resolved document-level palette, re-read once per `data-theme` flip and
+ * referentially stable between flips (safe as an effect dependency). This is
+ * the live-read companion to `useFinanceChartPalette` — pass it as
+ * `readColors` when composing with `useLightweightChart`.
+ */
+export function getFinancePalette(): FinanceChartPalette {
+  if (typeof window === "undefined") return SSR_PALETTE;
+  const theme = document.documentElement.getAttribute("data-theme");
+  if (!paletteCache || paletteCache.theme !== theme) {
+    paletteCache = { theme, palette: readFinancePalette(document.documentElement) };
+  }
+  return paletteCache.palette;
+}
+
+function subscribeToThemeFlips(onStoreChange: () => void): () => void {
+  const observer = new MutationObserver(onStoreChange);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
+  return () => observer.disconnect();
+}
+
+/**
+ * Theme-reactive palette hook: serves the fallback palette on the server
+ * (hydration-safe), the live document-level token values on the client, and
+ * re-reads when `data-theme` flips on `<html>`. Pairs with the persistent
+ * `useLightweightChart` scaffold (lw-chart.tsx) for dashboard surfaces.
+ * Note: document-level reads — scoped liveries (`.accent-digiquant { … }`)
+ * resolve per-host only through `useFinanceChart`'s host reads.
+ */
+export function useFinanceChartPalette(): FinanceChartPalette {
+  return useSyncExternalStore(subscribeToThemeFlips, getFinancePalette, () => SSR_PALETTE);
 }
 
 /**
@@ -140,8 +174,8 @@ export function financeChartOptions(
  * `setup` is an effect dependency — memoize it with `useCallback` keyed on
  * the data props. A data change tears the chart down and rebuilds it, which
  * matches the reference specimens' lifecycle (these are display surfaces;
- * dashboards with live-updating series should keep their own scaffold, e.g.
- * olympus `lib/lw-chart.tsx`).
+ * dashboards with live-updating series should use the persistent
+ * `useLightweightChart` scaffold from lw-chart.tsx instead).
  */
 export function useFinanceChart(
   setup: (
