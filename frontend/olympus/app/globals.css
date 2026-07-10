@@ -40,6 +40,10 @@
 @source "../../digiweb/web/src/components/stages";
 @source "../../digiweb/web/src/components/effects-chrome";
 
+/* Tailwind never scans package sources (MIGRATION.md rule 3) — the shared
+   finance-charts scaffold's ChartTipShell renders here via lib/lw-chart. */
+@source "../../digiweb/web/src/components/finance-charts";
+
 /* ── Fonts (next/font routing) ───────────────────────────────────────────
    tokens.css names the families literally ("Geist", "Geist Mono",
    "Instrument Serif") — but olympus self-hosts Geist Sans + Geist Mono +

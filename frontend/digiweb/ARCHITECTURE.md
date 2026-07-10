@@ -37,7 +37,7 @@ barrel, re-exported from `src/index.ts`:
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
-| `finance-charts` | PriceChart, EquityCurve, DrawdownPlot, MonthlyReturns + the chart-host scaffold (`useFinanceChart`, `readFinancePalette`, `financeChartOptions`, `tokenAlpha`, `toChartTime`) and `*_DEMO` datasets | `./styles/finance-charts.css` (MonthlyReturns only — the charts are canvas, zero CSS) |
+| `finance-charts` | PriceChart, EquityCurve, DrawdownPlot, MonthlyReturns + two chart scaffolds: rebuild-on-data `useFinanceChart` (with `readFinancePalette`, `financeChartOptions`, `tokenAlpha`, `toChartTime`) and the persistent dashboard lifecycle `useLightweightChart` (`chartChromeOptions`, `hostMonoFont`, `toLineData`/`timeToISO`, `useChartTip`/`ChartTipShell`, `useFinanceChartPalette`/`getFinancePalette` — converged from olympus `lib/lw-chart.tsx`, #1450 batch E) and `*_DEMO` datasets | `./styles/finance-charts.css` (MonthlyReturns only — the charts are canvas, zero CSS; `ChartTipShell` is utility-classed, covered by the family `@source` line) |
 | `finance-composites` | StockTicker, OrderBook, SortableTable, PerformanceDashboard, SyncedTearsheet | `./styles/finance-composites.css` |
 | `data-layout` | Odometer/OdometerStrip, DotMatrixStat, BentoGrid/BentoCell, ProductFrame, FeatureCell, TestimonialWall | `./styles/data-layout.css` |
 | `effects-chrome` | Pipeline, RotatingPrompts, StackingPanels, AnnouncementBar, TabStrip (+ `tabId`/`tabPanelId` helpers), ToastStack | `./styles/effects-chrome.css` |
