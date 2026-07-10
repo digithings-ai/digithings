@@ -1003,6 +1003,19 @@ has no anon policy — anon reads return an empty set (not a permission error) w
 role keeps full access (mirrors the `atlas_run_diagnostics` idiom, migration 033). Run
 `get_advisors(type="security")` after applying; expect zero `rls_disabled_in_public` findings.
 
+**Live price fan-out + public portfolio surface (#1461/#1462).** The top-level
+[`supabase/`](../supabase/README.md) directory (distinct from this component's
+`digiquant/supabase/` Atlas migration chain, same `core` project) holds digiquant.io's
+cross-cutting public read surface: three curated anon-readable views —
+`public_portfolio_positions`, `public_nav_history`, `public_price_latest` — exposing
+performance metrics only (never `rationale`/`pm_notes`/risk parameters; user ruling
+2026-07-10, #1462), plus the `prices-live` Deno edge function that polls Finnhub
+server-side (key held as a Supabase secret, dormant until `FINNHUB_API_KEY` is set) and
+fans quotes out to browsers on the Realtime broadcast channel `prices:live`. Crypto
+quotes take the other lane — streamed client-side from Coinbase's public WebSocket. See
+[`supabase/README.md`](../supabase/README.md) for the two-lane design, pg_cron + pg_net
+scheduling, and the one-time setup steps.
+
 ## DigiSearch Integration (#199)
 
 Finalized Atlas research documents in Supabase `documents` are indexed
