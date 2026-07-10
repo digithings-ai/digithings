@@ -50,9 +50,19 @@ const MODE_NOTE = [
   "Routes to the broker. Gated behind human approval.",
 ];
 
+const SECTIONS: TabItem[] = [
+  { id: "signals", label: "Signals" },
+  { id: "consensus", label: "Consensus" },
+  { id: "ideas", label: "Trade ideas" },
+  { id: "matrix", label: "Matrix" },
+  { id: "digest", label: "Digest" },
+  { id: "briefs", label: "Briefs" },
+];
+
 export function TabsReference() {
   const [view, setView] = useState(0);
   const [mode, setMode] = useState(1);
+  const [section, setSection] = useState(0);
   const reduced = useReducedMotion();
 
   const panelMotion = reduced
@@ -68,8 +78,9 @@ export function TabsReference() {
       <p className="section-copy">
         A tab strip whose active indicator slides between labels — measured from the live tab
         geometry and animated with a CSS transition, so it survives a resize and honours
-        reduced-motion. Arrow keys move between tabs; the panel below crossfades in. Two dresses:
-        an underline for content regions, a pill for a compact mode switch.
+        reduced-motion. Arrow keys move between tabs; the panel below crossfades in. Three
+        dresses: an underline for content regions, a pill for a compact mode switch, and a chip
+        row for dashboard sub-navs — it may wrap, and the slider follows across rows.
       </p>
 
       <div className="mt-[1.4rem]">
@@ -172,6 +183,24 @@ export function TabsReference() {
           label="Execution mode"
         />
         <p className="mt-[0.9rem] font-mono text-[0.74rem] text-ink-mute">{MODE_NOTE[mode]}</p>
+      </div>
+
+      {/* chip — the dashboard sub-nav dress (olympus subpage tab bars). The note
+          below is not a tabpanel, so linkPanels={false} keeps aria-controls off
+          the tabs rather than emitting dangling references. */}
+      <div className="mt-8 max-w-[26rem]">
+        <TabStrip
+          tabs={SECTIONS}
+          active={section}
+          onChange={setSection}
+          variant="chip"
+          label="Workspace sections"
+          linkPanels={false}
+        />
+        <p className="mt-[0.9rem] font-mono text-[0.74rem] text-ink-mute">
+          {SECTIONS[section].label} — constrained width on purpose: the chip row wraps and the
+          slider follows.
+        </p>
       </div>
     </section>
   );

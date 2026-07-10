@@ -52,7 +52,11 @@ token-backed utilities, so consuming apps need an `@source` line per family
 directory. `PerformanceDashboard` exposes a `children` slot for finance-charts
 content passed in by the page (it never imports charts itself); `ToastStack` is
 imperative-free (`toasts` + `onDismiss` props — app-level toast state stays
-app-owned).
+app-owned). `TabStrip` wears three dresses (`underline`, `pill`, and `chip` —
+the dashboard sub-nav chip row, which may flex-wrap; the ink follows across
+rows), takes `ReactNode` labels, and accepts `linkPanels={false}` to omit
+`aria-controls` when the consumer owns no panel ids (wrapper-adaption cases
+like olympus's subpage tab bar).
 
 Since the canon migration (#1399, 2026-07): apps declare **no local `@theme`
 block** — `web-theme.css` is the one bridge (its `inline` semantics keep scoped

@@ -17,13 +17,16 @@
 @import "@digithings/web/styles/controls-core.css";
 /* NumberedStages spine/node art (system → How it works, F4 #1450). */
 @import "@digithings/web/styles/stages.css";
+/* effects-chrome (TabStrip — subpage tab bar) manages its own layering:
+   import PLAINLY, never layer(…) — see the sheet header / MIGRATION.md. */
+@import "@digithings/web/styles/effects-chrome.css";
 @import "@digithings/design/quant-native/styles.css";
 @import "@digithings/design/tearsheet/styles.css";
 
-/* Tailwind never scans package sources — the stages component carries
-   token-backed utilities, so point Tailwind at it (path relative to this
-   file). */
+/* Tailwind never scans package sources — point it at the shared components
+   this app renders (load-bearing; see MIGRATION.md rule 3). */
 @source "../../digiweb/web/src/components/stages";
+@source "../../digiweb/web/src/components/effects-chrome";
 
 /* ── Fonts (next/font routing) ───────────────────────────────────────────
    tokens.css names the families literally ("Geist", "Geist Mono",
