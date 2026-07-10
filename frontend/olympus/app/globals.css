@@ -29,6 +29,11 @@
    that <ChatMarkdown> (via SafeMarkdown) scopes around rendered documents
    and memo notes. */
 @import "@digithings/web/styles/chat-core.css";
+/* Controls layer (#1419/#1450) — dress + state machinery for the shared
+   behavioral controls (twelve-x's BriefPanel rides the Sheet). Imported
+   PLAINLY on purpose: the sheet manages its own @layer components /
+   unlayered split (MIGRATION.md rule 2 exception). */
+@import "@digithings/web/styles/controls-overlay.css";
 
 /* Tailwind never scans package sources (MIGRATION.md rule 3) — generate the
    utilities the shared ChatMarkdown shell carries (min-w-0, text-[0.88rem],
@@ -39,6 +44,10 @@
    this app renders (load-bearing; see MIGRATION.md rule 3). */
 @source "../../digiweb/web/src/components/stages";
 @source "../../digiweb/web/src/components/effects-chrome";
+
+/* Tailwind never scans package sources — generate the token utilities the
+   shared controls carry (MIGRATION.md rule 3). */
+@source "../../digiweb/web/src/components/controls";
 
 /* Tailwind never scans package sources (MIGRATION.md rule 3) — the shared
    finance-charts scaffold's ChartTipShell renders here via lib/lw-chart. */
@@ -371,6 +380,25 @@ html.light .qn-blueprint-bg {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+/* ── Shared-Sheet scrim (olympus overlay convention) ─────────────────────
+   The @digithings/web Sheet ships digichat's compat scrim (bg-bg/10 + 4px
+   blur — a kept delta, see controls-overlay.css header). Olympus overlay
+   chrome dims with black-based scrims (command palette black/75, sidebar
+   drawer black/60, twelve-x slide-overs black/50) — re-dress the sheet
+   overlay to match, keyed off the control's data-slot hook (an attribute
+   selector, so no new app-local class family). Unlayered + later in source
+   than the package import, so it outranks both the utility background and
+   the package's unlayered @supports blur. Black-based dim layer, not a
+   themed color (same ruling as --shadow-glass above). */
+[data-slot="sheet-overlay"] {
+  background: rgb(0 0 0 / 0.5);
+}
+@supports (backdrop-filter: blur(2px)) {
+  [data-slot="sheet-overlay"] {
+    backdrop-filter: blur(2px);
+  }
 }
 
 /* ── twelve-x: divergent consensus score bar (frozen visual-spec recipe) ──

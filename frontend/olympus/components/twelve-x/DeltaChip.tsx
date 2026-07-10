@@ -1,6 +1,14 @@
 'use client';
 
-/** A compact run-over-run delta glyph (or a "NEW" badge when there's no prior). */
+/**
+ * A compact run-over-run delta glyph (or a "NEW" badge when there's no prior).
+ *
+ * F5 ruling (#1450): stays LOCAL — no @digithings/web Badge variant renders
+ * this dress. The NEW chip is a filled accent chip (bg-accent/15, 4px radius,
+ * 10px type); the shared reference dress is the bordered .dg-tier mono
+ * micro-caps pill (no fill) and the chat dress has no accent-fill variant.
+ * The delta glyph is bare money-tone typography, not a pill at all.
+ */
 export interface DeltaChipProps {
   delta: number | null;
   decimals?: number;
