@@ -10,6 +10,11 @@
    grammars this dashboard reuses. */
 @import "@digithings/design/tokens.css";
 @import "@digithings/web/styles/web-theme.css";
+/* Shared controls dress (Badge — F4 #1450). Imported PLAINLY on purpose:
+   controls-core.css manages its own layering (defaults in @layer components,
+   state/structural rules unlayered — see its header). No @source needed:
+   the controls carry no Tailwind utilities. */
+@import "@digithings/web/styles/controls-core.css";
 @import "@digithings/design/quant-native/styles.css";
 @import "@digithings/design/tearsheet/styles.css";
 
