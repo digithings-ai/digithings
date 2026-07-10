@@ -12,8 +12,8 @@ on:
       - module/digiskills
     paths:
       - "digiskills/**"
-      - "release-please-config.json"
-      - ".release-please-manifest.json"
+      - "release-please-config-digiskills.json"
+      - ".release-please-manifest-digiskills.json"
 
 concurrency:
   group: release-please-digiskills
@@ -30,5 +30,8 @@ jobs:
       - uses: googleapis/release-please-action@v4
         with:
           target-branch: module/digiskills
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+          # Dedicated config/manifest so this workflow releases ONLY digiskills.
+          # A shared config would co-release digichat from module/digiskills,
+          # racing release-please-digichat.yml (see #1485).
+          config-file: release-please-config-digiskills.json
+          manifest-file: .release-please-manifest-digiskills.json
