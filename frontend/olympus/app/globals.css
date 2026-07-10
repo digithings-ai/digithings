@@ -160,7 +160,12 @@ html.light .qn-blueprint-bg {
   border-left: 2px solid var(--accent, var(--accent-digiquant));
 }
 
-/* ── Markdown prose overrides ──────────────────────────────────────────── */
+/* ── Markdown prose overrides (typography plugin) ────────────────────────
+   NOT dead after the #1450 .chat-md adoption — two surfaces still render
+   `.prose`: DigestDocumentView (kept local on purpose; its jump-to-section
+   TOC drives custom h2/h3 components whose utilities would lose to the
+   unlayered .chat-md heading rules) and twelve-x BriefPanel (F5 scope).
+   Remove this block + the @plugin line only when both are off `.prose`. */
 .prose {
   --tw-prose-body: var(--ink-soft);
   --tw-prose-headings: var(--ink);
