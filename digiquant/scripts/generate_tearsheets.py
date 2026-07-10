@@ -16,6 +16,12 @@ gitignored ``calibrations.json``. The trade window (``trade_start``) is enforced
 inside the strategy, so warmup uses earlier bars while reported trades match the
 TradingView Strategy Tester window.
 
+Each strategy's backtest runs in its own spawned process: NautilusTrader's Rust
+logging can only initialize once per process, so a second in-process
+``BacktestEngine`` aborts the interpreter (#1389). Isolation also means one
+crashing strategy cannot take down the rest — failures are collected and the
+script exits non-zero if any strategy failed.
+
 Usage:
     python scripts/generate_tearsheets.py
     python scripts/generate_tearsheets.py --strategy eth_slapper
@@ -27,8 +33,11 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import multiprocessing
+import signal
 import sys
 from decimal import Decimal
+from multiprocessing.connection import Connection
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -139,7 +148,9 @@ def _avg_trade_pct(trades: list[dict]) -> float:
     return sum(t["pnl_pct"] for t in trades) / len(trades)
 
 
-def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict, calibration: dict | None = None):
+def run_nautilus(
+    strategy: str, symbol: str, ohlcv, settings: dict, calibration: dict | None = None
+):
     """Run the Nautilus backtest; return (positions_report_df, bars_list, ohlc_bars, signal_log).
 
     ``bars_list`` is [(date_str, close_float), ...] for the mark-to-market curve.
@@ -299,9 +310,9 @@ def carry_open_at_period_end(
 ) -> list[dict]:
     """Always-in-market: a close on the final bar is live MTM, not a flat book.
 
-    Nautilus may record ``ts_closed`` on the last daily bar when the backtest ends
-  while still positioned. For tearsheet / digiquant.io we keep that leg open so
-    the current-position banner matches TradingView's open trade at series end.
+      Nautilus may record ``ts_closed`` on the last daily bar when the backtest ends
+    while still positioned. For tearsheet / digiquant.io we keep that leg open so
+      the current-position banner matches TradingView's open trade at series end.
     """
     if not trades or not bars_list:
         return trades
@@ -415,7 +426,13 @@ def run_and_write(
         source=cal_source,  # type: ignore[arg-type]
         trade_start=trade_start or None,
     )
-    logger.info("Running Nautilus backtest: %s (%s, %d bars, cal=%s)", strategy, symbol, len(ohlcv), cal_source)
+    logger.info(
+        "Running Nautilus backtest: %s (%s, %d bars, cal=%s)",
+        strategy,
+        symbol,
+        len(ohlcv),
+        cal_source,
+    )
     positions, bars_list, ohlc_bars, signal_log = run_nautilus(
         strategy, symbol, ohlcv, settings, calibration=calibration
     )
@@ -556,6 +573,117 @@ def _push_tearsheet_to_supabase(strategy: str, td, equity_curve: list[tuple[str,
     logger.info("  Pushed tearsheet summary → strategy_tearsheets (%s)", strategy)
 
 
+def _strategy_worker(
+    conn: Connection,
+    strategy: str,
+    symbol: str,
+    settings: dict,
+    cache_dir: Path,
+    output_dir: Path,
+    cal_source: str,
+    push_supabase: bool,
+) -> None:
+    """Child-process entry point: run one strategy end-to-end, report via ``conn``."""
+    status: tuple[str, dict | str | None]
+    try:
+        entry = run_and_write(
+            strategy,
+            symbol,
+            settings,
+            cache_dir,
+            output_dir,
+            cal_source=cal_source,
+            push_supabase=push_supabase,
+        )
+        if entry is not None:
+            status = ("ok", entry)
+        else:
+            status = ("error", "no tearsheet produced (see logs above)")
+    except Exception as exc:
+        logger.exception("Tearsheet run failed for %s", strategy)
+        status = ("error", f"{type(exc).__name__}: {exc}")
+    try:
+        conn.send(status)
+    finally:
+        conn.close()
+    if status[0] != "ok":
+        raise SystemExit(1)
+
+
+def _describe_exitcode(exitcode: int | None) -> str:
+    """Human-readable process exit description (signal-aware)."""
+    if exitcode is None:
+        return "unknown exit"
+    if exitcode < 0:
+        try:
+            name = signal.Signals(-exitcode).name
+        except ValueError:
+            name = f"signal {-exitcode}"
+        return f"killed by {name}"
+    return f"exit code {exitcode}"
+
+
+def _interpret_worker_result(
+    result: tuple[str, dict | str | None] | None,
+    exitcode: int | None,
+) -> tuple[dict | None, str | None]:
+    """Map a worker's pipe message + exit code to ``(index_entry, error)``."""
+    if result is None:
+        return None, f"backtest process died before reporting ({_describe_exitcode(exitcode)})"
+    kind, payload = result
+    if kind == "ok" and isinstance(payload, dict):
+        return payload, None
+    return None, str(payload)
+
+
+def run_strategy_isolated(
+    strategy: str,
+    symbol: str,
+    settings: dict,
+    cache_dir: Path,
+    output_dir: Path,
+    *,
+    cal_source: str,
+    push_supabase: bool = False,
+) -> tuple[dict | None, str | None]:
+    """Run one strategy's backtest in its own spawned process; return (entry, error).
+
+    NautilusTrader's Rust logging can only initialize once per process
+    (``log::set_boxed_logger``); a fresh in-process ``BacktestEngine`` per strategy
+    panics on the second engine — "Failed to initialize logging: attempted to set a
+    logger after the logging system was already initialized" — and SIGABRTs the
+    whole run (#1389). A spawned process per strategy gives each engine a clean
+    slate and contains any engine crash to that one strategy.
+    """
+    ctx = multiprocessing.get_context("spawn")
+    parent_conn, child_conn = ctx.Pipe(duplex=False)
+    proc = ctx.Process(
+        target=_strategy_worker,
+        args=(
+            child_conn,
+            strategy,
+            symbol,
+            settings,
+            cache_dir,
+            output_dir,
+            cal_source,
+            push_supabase,
+        ),
+        name=f"tearsheet-{strategy}",
+    )
+    proc.start()
+    child_conn.close()
+    result: tuple[str, dict | str | None] | None = None
+    try:
+        result = parent_conn.recv()
+    except EOFError:
+        result = None
+    finally:
+        parent_conn.close()
+    proc.join()
+    return _interpret_worker_result(result, proc.exitcode)
+
+
 def main() -> None:
     load_repo_env()
     settings = load_settings()
@@ -603,9 +731,10 @@ def main() -> None:
 
     targets = {args.strategy: strategies[args.strategy]} if args.strategy else strategies
 
-    entries = []
+    entries: list[dict] = []
+    failures: list[tuple[str, str]] = []
     for strat, cfg in targets.items():
-        entry = run_and_write(
+        entry, error = run_strategy_isolated(
             strat,
             cfg["symbol"],
             settings,
@@ -614,21 +743,34 @@ def main() -> None:
             cal_source=cal_source,
             push_supabase=args.push_supabase,
         )
-        if entry:
+        if entry is not None:
             entries.append(entry)
         else:
-            logger.error("FAILED: %s", strat)
+            failures.append((strat, error or "unknown error"))
+            logger.error("FAILED: %s — %s", strat, error)
 
     if entries:
         idx_path = args.output_dir / "index.json"
-        if args.strategy and idx_path.exists():
-            existing = [
-                e for e in json.loads(idx_path.read_text()) if e["strategy"] != args.strategy
-            ]
-            entries = existing + entries
-        idx_path.write_text(json.dumps(entries, indent=2))
-        logger.info("Updated index.json (%d strategies)", len(entries))
-    logger.info("Done.")
+        merged = list(entries)
+        if idx_path.exists() and (args.strategy or failures):
+            # Partial run (single strategy, or some strategies failed): keep prior
+            # index entries for strategies not refreshed here, so one failure does
+            # not drop a live strategy card from digiquant.io.
+            refreshed = {e["strategy"] for e in entries}
+            prior = [e for e in json.loads(idx_path.read_text()) if e["strategy"] not in refreshed]
+            merged = prior + entries
+        idx_path.write_text(json.dumps(merged, indent=2))
+        logger.info("Updated index.json (%d strategies)", len(merged))
+
+    succeeded = {e["strategy"] for e in entries}
+    logger.info("Done: %d/%d strategies succeeded.", len(succeeded), len(targets))
+    for strat in targets:
+        if strat in succeeded:
+            logger.info("  OK      %s", strat)
+        else:
+            logger.error("  FAILED  %s: %s", strat, dict(failures).get(strat, "unknown error"))
+    if failures:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

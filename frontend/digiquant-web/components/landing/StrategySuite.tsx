@@ -1,26 +1,19 @@
 "use client";
 /**
- * Homepage strategy spotlight — scroll-pinned peek stack (BTC / ETH / SOL).
+ * Homepage strategy spotlight — the BTC / ETH / SOL tearsheet previews on the
+ * canonical <DeckStack/> sticky cascade (@digithings/web, promoted from the
+ * design reference's card deck, #1450).
  *
- * Cards slide in from below as you scroll; the full stack + library CTA scale to
- * fit the viewport when zoom or content height would otherwise clip.
- *
- * Scroll handling (#1322): measurement (layout reads + height/scale writes) runs
- * only when something can actually change size — mount, resize, visualViewport,
- * ResizeObserver on the pin column/stack, tearsheet data landing — and caches
- * its results in a ref. The per-scroll path is Motion's `useScroll` progress →
- * pure math on the cached metrics → setState. Cards are memoized so scroll
- * frames re-render only the transform wrappers, never the charts.
- *
- * Shared-stepper evaluation (#1417): @digithings/web's useScrollyFeatures maps
- * progress → one active index over EQUAL dwells and, under its stepper media
- * query (≤860px or reduced motion), unpins to render every slide in flow. This
- * deck is not behavior-identical to that: card offsets are continuous pixel
- * tweens over unequal budgets (0.82/1.12 × --dqss-enter-scroll) plus an intro
- * hold and a CTA budget, small viewports KEEP the pinned stack (fit-scaled, not
- * unpinned), and reduced motion is handled inline (discrete offsets + CSS
- * at-rest layout). Adopting the hook would rewrite these scrubbing internals —
- * out of scope, left as-is.
+ * The previous bespoke scroll carousel (a .dqss-stack clip box + JS-measured
+ * per-card offsets and a buried/top/hidden state machine) hard-clipped buried
+ * cards mid-content at its overflow:hidden boundary. The deck pattern has no
+ * clip box, no fixed card height and no shadow: every card is fully rendered
+ * in normal document flow, pins under the nav at a cascaded top offset
+ * (--stack-index), and the next opaque card covering it IS the seam — nothing
+ * is ever cut off, and the content reads top-to-bottom with no JS. The deck
+ * mechanics live in @digithings/web/styles/deck.css (imported from
+ * globals.css, with the components/deck @source line); this file only owns
+ * the tearsheet-preview card content and its data loading.
  */
 import {
   memo,
@@ -28,17 +21,11 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
-  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from "react";
-// Hooks only — the same import the shared scrolly primitive (@digithings/web
-// motion/scrolly.tsx) uses internally; hooks don't pull the full animation
-// runtime. Element creators must come from @digithings/web's `m` (the app is
-// wrapped in LazyMotion strict, which throws on a full `motion.*` component).
-import { useScroll, useMotionValueEvent } from "motion/react";
 import Link from "next/link";
+import { DeckCard, DeckStack } from "@digithings/web";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
 import { CurrentPosition } from "@/components/tearsheet/current-position";
 import { LiveMetricsBadge } from "@/components/tearsheet/live-metrics";
@@ -59,108 +46,10 @@ const STRATEGIES = SLAPPER_ORDER.map(
 
 const PREVIEW_PANE_H = 220;
 const PREVIEW_LOOKBACK = "6m" as const;
-const MIN_FIT_SCALE = 0.68;
 
 type PreviewMode = "charts" | "tables";
 
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-
-const emptySubscribe = () => () => {};
-
-// Cached once — the per-scroll path must not re-query media state (#1322).
-let reducedMq: MediaQueryList | null = null;
-function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined") return false;
-  reducedMq ??= window.matchMedia("(prefers-reduced-motion: reduce)");
-  return reducedMq.matches;
-}
-
-function easeInOutCubic(t: number): number {
-  const x = clamp(t, 0, 1);
-  return x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
-}
-
-function parseCssLengthPx(raw: string, viewportH: number): number {
-  const trimmed = raw.trim();
-  if (!trimmed) return 0;
-  const n = Number.parseFloat(trimmed);
-  if (!Number.isFinite(n)) return 0;
-  if (trimmed.endsWith("svh") || trimmed.endsWith("vh")) return (n / 100) * viewportH;
-  if (trimmed.endsWith("rem")) return n * 16;
-  return n;
-}
-
-function introHoldPx(scrolly: HTMLElement): number {
-  const raw = getComputedStyle(scrolly).getPropertyValue("--dqss-intro-hold").trim();
-  return parseCssLengthPx(raw, window.innerHeight);
-}
-
-function cardEnterBudgetsPx(scrolly: HTMLElement, count: number): number[] {
-  const base = parseCssLengthPx(
-    getComputedStyle(scrolly).getPropertyValue("--dqss-enter-scroll").trim() || "80svh",
-    window.innerHeight,
-  );
-  if (count <= 0) return [];
-  if (count === 1) return [base];
-  return Array.from({ length: count }, (_, i) => (i === 0 ? base * 0.82 : base * 1.12));
-}
-
-function stackCardOffsetY(
-  cardIndex: number,
-  scrolledPastHold: number,
-  budgets: number[],
-  hideOffset: number,
-): number {
-  let cursor = 0;
-  for (let i = 0; i < budgets.length; i++) {
-    const budget = budgets[i]!;
-    const start = cursor;
-    cursor += budget;
-    if (i !== cardIndex) continue;
-    if (scrolledPastHold <= start) return hideOffset;
-    if (scrolledPastHold >= cursor) return 0;
-    const t = (scrolledPastHold - start) / budget;
-    return hideOffset * (1 - easeInOutCubic(t));
-  }
-  return hideOffset;
-}
-
-function stackActiveIndex(scrolledPastHold: number, budgets: number[]): number {
-  let cursor = 0;
-  let idx = 0;
-  for (let i = 0; i < budgets.length; i++) {
-    if (scrolledPastHold >= cursor) idx = i;
-    cursor += budgets[i]!;
-  }
-  return idx;
-}
-
-function totalCardBudgetPx(budgets: number[]): number {
-  return budgets.reduce((sum, b) => sum + b, 0);
-}
-
-function libraryCtaBudgetPx(scrolly: HTMLElement): number {
-  return parseCssLengthPx(
-    getComputedStyle(scrolly).getPropertyValue("--dqss-cta-scroll").trim() || "40svh",
-    window.innerHeight,
-  );
-}
-
-function libraryCtaOffsetY(
-  scrolledPastHold: number,
-  cardBudgets: number[],
-  ctaBudget: number,
-  hideOffset: number,
-): number {
-  const cardsEnd = totalCardBudgetPx(cardBudgets);
-  if (scrolledPastHold <= cardsEnd) return hideOffset;
-  const ctaEnd = cardsEnd + ctaBudget;
-  if (scrolledPastHold >= ctaEnd) return 0;
-  const t = (scrolledPastHold - cardsEnd) / ctaBudget;
-  return hideOffset * (1 - easeInOutCubic(t));
-}
-
-function useElementWidth(ref: RefObject<HTMLDivElement | null>): number {
+function useElementWidth(ref: RefObject<HTMLElement | null>): number {
   const [width, setWidth] = useState(640);
 
   useEffect(() => {
@@ -259,13 +148,19 @@ function Kpi({ label, value, className }: { label: string; value: ReactNode; cla
   );
 }
 
+/**
+ * One tearsheet preview card body — header, current position, KPIs,
+ * chart/table toggle. Rendered inside a <DeckCard className="dqss-card">
+ * (the deck card element carries the .dqss-card dress + container queries);
+ * the width probe rides the header, which spans the card's content box.
+ */
 const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
   entry,
 }: {
   entry: StrategyIndexEntry;
 }) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const cardWidth = useElementWidth(cardRef);
+  const headerRef = useRef<HTMLElement>(null);
+  const cardWidth = useElementWidth(headerRef);
   const [mode, setMode] = useState<PreviewMode>("charts");
   const { data, status } = useTearsheetData(entry.strategy);
 
@@ -308,8 +203,8 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
   const bars = data?.bars;
 
   return (
-    <div ref={cardRef} className="dqss-card">
-      <header className="ts-header dqss-card-header">
+    <>
+      <header ref={headerRef} className="ts-header">
         <div className="ts-header-main">
           <h1 className="ts-h1 ts-h1-with-logo">
             <AssetLogoFor
@@ -415,340 +310,46 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
           View full tearsheet ↗
         </Link>
       </p>
-    </div>
+    </>
   );
 });
 
-function navHeightPx(): number {
-  const raw = getComputedStyle(document.documentElement).getPropertyValue("--dq-nav-h").trim();
-  const parsed = Number.parseFloat(raw);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function peekHeightPx(stack: HTMLElement | null): number {
-  const raw = getComputedStyle(stack ?? document.documentElement)
-    .getPropertyValue("--dqss-peek")
-    .trim();
-  const parsed = Number.parseFloat(raw);
-  if (!Number.isFinite(parsed)) return 60;
-  return raw.endsWith("rem") ? parsed * 16 : parsed;
-}
-
-function tallestCardHeightPx(scrolly: HTMLElement): number {
-  let tallest = 0;
-  scrolly.querySelectorAll<HTMLElement>(".dqss-card").forEach((card) => {
-    tallest = Math.max(tallest, card.offsetHeight);
-  });
-  return tallest > 0 ? tallest : 620;
-}
-
-function libraryCtaHideOffsetPx(scrolly: HTMLElement): number {
-  const cta = scrolly.querySelector<HTMLElement>(".dqss-library-cta");
-  return (cta?.offsetHeight ?? 52) + 40;
-}
-
-function syncStackHeight(scrolly: HTMLElement, count: number): number {
-  const stack = scrolly.querySelector<HTMLElement>(".dqss-stack");
-  if (!stack) return 620;
-  const cardH = tallestCardHeightPx(scrolly);
-  const peek = peekHeightPx(stack);
-  const stackH = cardH + peek * Math.max(0, count - 1) + 16;
-  stack.style.setProperty("--dqss-card-h", `${cardH}px`);
-  stack.style.height = `${stackH}px`;
-  const clip = scrolly.querySelector<HTMLElement>(".dqss-stack-clip");
-  if (clip) clip.style.height = `${stackH}px`;
-  return stackH;
-}
-
-function applyViewportFit(scrolly: HTMLElement, count: number): void {
-  const col = scrolly.querySelector<HTMLElement>(".dqss-pin-col");
-  const stack = scrolly.querySelector<HTMLElement>(".dqss-stack");
-  if (!col) return;
-
-  col.style.setProperty("--dqss-fit-scale", "1");
-  if (stack) stack.style.removeProperty("--dqss-peek");
-
-  syncStackHeight(scrolly, count);
-
-  const available = window.innerHeight - navHeightPx() - 24;
-  let contentH = col.scrollHeight;
-  if (contentH <= available) return;
-
-  let scale = clamp(available / contentH, MIN_FIT_SCALE, 1);
-  if (stack && scale < 0.92) {
-    stack.style.setProperty("--dqss-peek", scale < 0.8 ? "2.35rem" : "2.75rem");
-    syncStackHeight(scrolly, count);
-    contentH = col.scrollHeight;
-    scale = clamp(available / contentH, MIN_FIT_SCALE, 1);
-  }
-  col.style.setProperty("--dqss-fit-scale", scale.toFixed(4));
-}
-
-function totalScrollyHeightPx(scrolly: HTMLElement, pinH: number, count: number): number {
-  const viewportMin = Math.max(320, window.innerHeight - navHeightPx());
-  const pinRunway = Math.max(pinH, viewportMin);
-  const style = getComputedStyle(scrolly);
-  const introHold = parseCssLengthPx(style.getPropertyValue("--dqss-intro-hold").trim(), window.innerHeight);
-  const ctaScroll = parseCssLengthPx(style.getPropertyValue("--dqss-cta-scroll").trim(), window.innerHeight);
-  const budgetSum = totalCardBudgetPx(cardEnterBudgetsPx(scrolly, count));
-  const tail = 0.32 * window.innerHeight;
-  return Math.ceil(introHold + budgetSum + ctaScroll + pinRunway + tail);
-}
-
-function syncScrollyHeight(scrolly: HTMLElement, pinH: number, count: number): void {
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduced) {
-    scrolly.style.height = "";
-    return;
-  }
-  const heightPx = totalScrollyHeightPx(scrolly, pinH, count);
-  scrolly.style.height = `${heightPx}px`;
-}
-
-function measureStackMetrics(scrolly: HTMLElement, count: number) {
-  const pin = scrolly.querySelector<HTMLElement>(".dqss-stack-pin");
-  const stackH = syncStackHeight(scrolly, count);
-  applyViewportFit(scrolly, count);
-  const pinH = pin?.getBoundingClientRect().height ?? Math.max(320, window.innerHeight - navHeightPx());
-  syncScrollyHeight(scrolly, pinH, count);
-  const pinHAfter = pin?.getBoundingClientRect().height ?? pinH;
-  const scrollable = Math.max(1, scrolly.offsetHeight - pinHAfter);
-  const hideOffset = stackH + 24;
-  const ctaHideOffset = libraryCtaHideOffsetPx(scrolly);
-  return { pinH: pinHAfter, scrollable, hideOffset, ctaHideOffset, stackH };
-}
-
-/** Everything the per-scroll math needs, produced by the measure pass only. */
-type StackMetrics = {
-  scrollable: number;
-  hideOffset: number;
-  ctaHideOffset: number;
-  budgets: number[];
-  ctaBudget: number;
-  holdPx: number;
-  /** Window-scroll distance the scrolly spans (height − viewport) — maps
-   *  Motion's 0..1 progress back to scrolled pixels. */
-  runway: number;
-};
-
 export function StrategySuite() {
-  const scrollyRef = useRef<HTMLDivElement>(null);
-  const metricsRef = useRef<StackMetrics | null>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [cardOffsets, setCardOffsets] = useState<number[]>(() => STRATEGIES.map(() => 9999));
-  const [introPhase, setIntroPhase] = useState(true);
-  const [libraryCtaOffset, setLibraryCtaOffset] = useState(9999);
-  // aria-hidden is a JS-driven visual-sync concern: SSR must not ship it, or
-  // no-JS screen-reader users lose the deck entirely (law 06). Applied only
-  // after hydration (the DqNav mount-gate idiom); the wrappers suppress the
-  // attribute-level mismatch.
-  const hydrated = useSyncExternalStore(
-    emptySubscribe,
-    () => true,
-    () => false,
-  );
-  const count = STRATEGIES.length;
-
-  const { scrollYProgress } = useScroll({
-    target: scrollyRef,
-    offset: ["start start", "end end"],
-  });
-
   useEffect(() => {
     prefetchAllTearsheets(STRATEGIES.map((s) => s.strategy));
   }, []);
 
-  // Per-scroll path: pure math on cached metrics — zero layout reads or writes.
-  const applyScroll = () => {
-    const m = metricsRef.current;
-    if (!m) return;
-    const scrolled = clamp(scrollYProgress.get() * m.runway, 0, m.scrollable);
-
-    if (scrolled < m.holdPx) {
-      setIntroPhase(true);
-      setActiveIndex(0);
-      setCardOffsets(STRATEGIES.map(() => m.hideOffset));
-      setLibraryCtaOffset(m.ctaHideOffset);
-      return;
-    }
-
-    setIntroPhase(false);
-    const scrolledPastHold = scrolled - m.holdPx;
-
-    if (prefersReducedMotion()) {
-      const idx = stackActiveIndex(scrolledPastHold, m.budgets);
-      setActiveIndex(idx);
-      setCardOffsets(STRATEGIES.map((_, i) => (i <= idx ? 0 : m.hideOffset)));
-      setLibraryCtaOffset(
-        scrolledPastHold >= totalCardBudgetPx(m.budgets) ? 0 : m.ctaHideOffset,
-      );
-      return;
-    }
-
-    setActiveIndex(stackActiveIndex(scrolledPastHold, m.budgets));
-    setCardOffsets(
-      STRATEGIES.map((_, i) => stackCardOffsetY(i, scrolledPastHold, m.budgets, m.hideOffset)),
-    );
-    setLibraryCtaOffset(
-      libraryCtaOffsetY(scrolledPastHold, m.budgets, m.ctaBudget, m.ctaHideOffset),
-    );
-  };
-  const applyScrollRef = useRef(applyScroll);
-  useEffect(() => {
-    applyScrollRef.current = applyScroll;
-  });
-
-  useMotionValueEvent(scrollYProgress, "change", () => applyScrollRef.current());
-
-  useEffect(() => {
-    const scrolly = scrollyRef.current;
-    if (!scrolly) return;
-
-    // Measure pass: all layout reads + height/scale writes live here. Runs on
-    // mount, viewport changes, pin column / stack resizes, and tearsheet data
-    // landing — never on scroll (#1322).
-    const remeasure = () => {
-      const { scrollable, hideOffset, ctaHideOffset } = measureStackMetrics(scrolly, count);
-      metricsRef.current = {
-        scrollable,
-        hideOffset,
-        ctaHideOffset,
-        budgets: cardEnterBudgetsPx(scrolly, count),
-        ctaBudget: libraryCtaBudgetPx(scrolly),
-        holdPx: introHoldPx(scrolly),
-        runway: Math.max(1, scrolly.offsetHeight - window.innerHeight),
-      };
-      applyScrollRef.current();
-    };
-
-    const nudgeStrategiesHash = () => {
-      if (window.location.hash !== "#strategies") return;
-      const m = metricsRef.current;
-      if (!m) return;
-      const scrolled = clamp(-scrolly.getBoundingClientRect().top, 0, m.scrollable);
-      if (scrolled >= m.holdPx) return;
-      window.scrollTo({
-        top: window.scrollY + (m.holdPx - scrolled) + 1,
-        behavior: "instant",
-      });
-    };
-
-    const onHashChange = () => {
-      requestAnimationFrame(() => {
-        remeasure();
-        nudgeStrategiesHash();
-      });
-    };
-
-    const onViewportChange = () => {
-      remeasure();
-    };
-
-    window.addEventListener("resize", onViewportChange, { passive: true });
-    window.addEventListener("hashchange", onHashChange);
-    window.visualViewport?.addEventListener("resize", onViewportChange);
-    window.visualViewport?.addEventListener("scroll", onViewportChange);
-
-    const col = scrolly.querySelector<HTMLElement>(".dqss-pin-col");
-    const stack = scrolly.querySelector<HTMLElement>(".dqss-stack");
-    const ro = new ResizeObserver(() => {
-      requestAnimationFrame(remeasure);
-    });
-    if (col) ro.observe(col);
-    if (stack) ro.observe(stack);
-
-    remeasure();
-    requestAnimationFrame(() => {
-      remeasure();
-      nudgeStrategiesHash();
-    });
-
-    const unsubCache = subscribeTearsheetCache(() => {
-      requestAnimationFrame(remeasure);
-    });
-
-    return () => {
-      unsubCache();
-      window.removeEventListener("resize", onViewportChange);
-      window.removeEventListener("hashchange", onHashChange);
-      window.visualViewport?.removeEventListener("resize", onViewportChange);
-      window.visualViewport?.removeEventListener("scroll", onViewportChange);
-      ro.disconnect();
-    };
-    // applyScrollRef is stable; remeasure closes over the current count.
-  }, [count]);
-
   return (
-    <section className="dqss" id="strategies">
-      <div
-        className="dqss-scrolly"
-        ref={scrollyRef}
-        style={{ "--stack-count": count } as CSSProperties}
-      >
-        <div className="dqss-stack-pin">
-          <div className="wrap dqss-pin-col">
-            <div className="dqss-intro" data-phase={introPhase ? "hold" : "stack"}>
-              <span className="kicker">{"// pre-built strategy library"}</span>
-              <h2 className="dq-title">Research-grade systems, ready to explore.</h2>
-              <p className="dq-sub">
-                Browse calibrated backtests from the DigiQuant library — equity, drawdown, trade
-                logs, and full tearsheets for every release. More assets join the catalog as they
-                clear the pipeline.
-              </p>
-            </div>
-
-            <div className="dqss-stack-clip" aria-hidden={hydrated ? introPhase : undefined}>
-              <div
-                className="dqss-stack"
-                role="group"
-                aria-roledescription="carousel"
-                aria-label={`Strategy tearsheets — ${symbolBase(STRATEGIES[activeIndex]?.symbol ?? "BTC")} on top`}
-              >
-                {STRATEGIES.map((entry, i) => {
-                  const offset = cardOffsets[i] ?? 0;
-                  const notYetShown = introPhase || (offset > 8 && i !== activeIndex);
-                  return (
-                    <div
-                      key={entry.strategy}
-                      className="dqss-stack-card"
-                      data-stack-index={i}
-                      data-state={
-                        notYetShown
-                          ? "hidden"
-                          : i < activeIndex
-                            ? "buried"
-                            : i === activeIndex
-                              ? "top"
-                              : "below"
-                      }
-                      style={
-                        {
-                          "--stack-index": i,
-                          transform: `translate3d(0, ${offset}px, 0)`,
-                        } as CSSProperties
-                      }
-                      aria-hidden={hydrated ? introPhase || i > activeIndex : undefined}
-                    >
-                      <StrategyTearsheetCard entry={entry} />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <div
-              className="dqss-library-cta"
-              data-state={introPhase || libraryCtaOffset > 8 ? "hidden" : "visible"}
-              style={{ transform: `translate3d(0, ${libraryCtaOffset}px, 0)` }}
-            >
-              <Link href="/strategies" className="dqss-library-pill">
-                Full strategy library
-                <span className="dqss-library-arrow" aria-hidden="true">
-                  →
-                </span>
-              </Link>
-            </div>
+    <section className="section dqss" id="strategies">
+      <div className="wrap">
+        <div className="dqss-intro">
+          <div className="dqss-intro-copy">
+            <span className="kicker">{"// pre-built strategy library"}</span>
+            <h2 className="dq-title">Research-grade systems, ready to explore.</h2>
+            <p className="dq-sub">
+              Browse calibrated backtests from the DigiQuant library — equity, drawdown, trade
+              logs, and full tearsheets for every release. More assets join the catalog as they
+              clear the pipeline.
+            </p>
           </div>
+          <Link href="/strategies" className="dqss-library-pill">
+            Full strategy library
+            <span className="dqss-library-arrow" aria-hidden="true">
+              →
+            </span>
+          </Link>
         </div>
+
+        <DeckStack
+          ariaLabel="Strategy tearsheets"
+          rail={STRATEGIES.map((s) => symbolBase(s.symbol))}
+        >
+          {STRATEGIES.map((entry) => (
+            <DeckCard key={entry.strategy} className="dqss-card">
+              <StrategyTearsheetCard entry={entry} />
+            </DeckCard>
+          ))}
+        </DeckStack>
       </div>
     </section>
   );

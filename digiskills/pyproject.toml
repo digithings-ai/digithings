@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "digiskills"
+version = "0.1.0"
+description = "DigiSkills – compiles a codebase/docs source into an installable Agent Skill package (SKILL.md + references) for DigiThings"
+readme = "ARCHITECTURE.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "pydantic>=2",
+    # YAML frontmatter rendering for SKILL.md. Already a repo-wide dependency
+    # (digivault, digisearch); kept as a direct, flat dep so the core library
+    # installs without monorepo-sibling ordering.
+    "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+# Typer CLI (`digiskills compile ...`). The core library (models, ingest,
+# synthesize, compiler, package) imports none of this.
+cli = ["typer>=0.12"]
+# Remote-source corpus builder (ingest_url.py) — fetches docs/OpenAPI URLs via
+# digifetch.HttpFetcher. Lazily imported; `import digiskills` never imports it.
+ingest = ["digifetch>=0.1.0"]
+# Real LLM-backed synthesis (DigiLLMSynthesizer) via digillm.completion.
+# Lazily imported; the default TemplateSynthesizer needs no LLM/API key.
+llm = ["digillm>=0.1.0"]
+dev = ["digiskills[cli,ingest,llm]", "pytest>=8", "ruff>=0.8"]
+
+[project.scripts]
+digiskills = "digiskills.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__ re-exports public symbols; ruff flags them as unused.
+# Matches the repo-root ruff.toml, digibase, digisearch, digifetch, digivault.
+"**/__init__.py" = ["F401"]

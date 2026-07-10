@@ -10,6 +10,11 @@ import {
   computeEffectivePortfolioRiskMetrics,
 } from '@/lib/portfolio-risk-metrics';
 
+/*
+ * Ruling (#1450 F4 batch D): not a table — a MetricCard KPI grid over locally
+ * computed stats. There is no column/sort grammar for the promoted
+ * <SortableTable/> to re-back — see lib/TABLES.md.
+ */
 interface MetricProps {
   label: string;
   value: number | string | null | undefined;

@@ -16,6 +16,8 @@ export {
 } from "./MonthlyReturns";
 export {
   useFinanceChart,
+  useFinanceChartPalette,
+  getFinancePalette,
   readFinancePalette,
   financeChartOptions,
   tokenAlpha,
@@ -25,6 +27,19 @@ export {
   type OhlcPoint,
   type CrosshairLabelToken,
 } from "./chart-host";
+export {
+  useLightweightChart,
+  chartChromeOptions,
+  hostMonoFont,
+  toLineData,
+  timeToISO,
+  useChartTip,
+  ChartTipShell,
+  type ChartChrome,
+  type ChartTip,
+  type UseLightweightChartConfig,
+  type UseLightweightChartResult,
+} from "./lw-chart";
 export {
   PRICE_CHART_DEMO,
   EQUITY_CURVE_DEMO,

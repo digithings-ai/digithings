@@ -63,6 +63,15 @@ Global `.recharts-*` overrides in `globals.css` now reference the canon tokens
 follow the shared palette. Every chart color — both engines — comes from
 `lib/chart-colors.ts` (the single sanctioned color source, #1402).
 
+### Table grammar
+
+The portfolio tables stay app-local: the promoted `<SortableTable/>`
+leaderboard (`@digithings/web` finance-composites) cannot host their row
+drilldown, sector grouping, per-cell money tones, or responsive column
+hiding (#1450 F4 batch D). The per-file ruling — and what adoption would
+take — lives in [`lib/TABLES.md`](lib/TABLES.md). New *flat* leaderboards
+should adopt the primitive instead of hand-rolling sort state.
+
 ## Supabase / RLS
 
 Olympus reads portfolio and research data from the shared Atlas Supabase project

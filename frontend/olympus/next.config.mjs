@@ -4,8 +4,8 @@ const nextConfig = {
   basePath: '/olympus',
   images: { unoptimized: true },
   trailingSlash: true,
-  // @digithings/web ships raw TS sources (exports "." → src/index.ts) —
-  // Next must transpile it (same wiring as digithings-web).
+  // @digithings/web ships TypeScript sources (exports "." → src/index.ts) —
+  // Next must compile them (same wiring as digithings-web / digiquant-web).
   transpilePackages: ['@digithings/web'],
 };
 

@@ -37,7 +37,7 @@ barrel, re-exported from `src/index.ts`:
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
-| `finance-charts` | PriceChart, EquityCurve, DrawdownPlot, MonthlyReturns + the chart-host scaffold (`useFinanceChart`, `readFinancePalette`, `financeChartOptions`, `tokenAlpha`, `toChartTime`) and `*_DEMO` datasets | `./styles/finance-charts.css` (MonthlyReturns only — the charts are canvas, zero CSS) |
+| `finance-charts` | PriceChart, EquityCurve, DrawdownPlot, MonthlyReturns + two chart scaffolds: rebuild-on-data `useFinanceChart` (with `readFinancePalette`, `financeChartOptions`, `tokenAlpha`, `toChartTime`) and the persistent dashboard lifecycle `useLightweightChart` (`chartChromeOptions`, `hostMonoFont`, `toLineData`/`timeToISO`, `useChartTip`/`ChartTipShell`, `useFinanceChartPalette`/`getFinancePalette` — converged from olympus `lib/lw-chart.tsx`, #1450 batch E) and `*_DEMO` datasets | `./styles/finance-charts.css` (MonthlyReturns only — the charts are canvas, zero CSS; `ChartTipShell` is utility-classed, covered by the family `@source` line) |
 | `finance-composites` | StockTicker, OrderBook, SortableTable, PerformanceDashboard, SyncedTearsheet | `./styles/finance-composites.css` |
 | `data-layout` | Odometer/OdometerStrip, DotMatrixStat, BentoGrid/BentoCell, ProductFrame, FeatureCell, TestimonialWall | `./styles/data-layout.css` |
 | `effects-chrome` | Pipeline, RotatingPrompts, StackingPanels, AnnouncementBar, TabStrip (+ `tabId`/`tabPanelId` helpers), ToastStack | `./styles/effects-chrome.css` |
@@ -52,7 +52,11 @@ token-backed utilities, so consuming apps need an `@source` line per family
 directory. `PerformanceDashboard` exposes a `children` slot for finance-charts
 content passed in by the page (it never imports charts itself); `ToastStack` is
 imperative-free (`toasts` + `onDismiss` props — app-level toast state stays
-app-owned).
+app-owned). `TabStrip` wears three dresses (`underline`, `pill`, and `chip` —
+the dashboard sub-nav chip row, which may flex-wrap; the ink follows across
+rows), takes `ReactNode` labels, and accepts `linkPanels={false}` to omit
+`aria-controls` when the consumer owns no panel ids (wrapper-adaption cases
+like olympus's subpage tab bar).
 
 Since the canon migration (#1399, 2026-07): apps declare **no local `@theme`
 block** — `web-theme.css` is the one bridge (its `inline` semantics keep scoped
