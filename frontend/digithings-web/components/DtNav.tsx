@@ -10,7 +10,7 @@
 import Link from "next/link";
 import { NavShell, GitHubGlyph } from "@digithings/web";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
-import { DigiChatMark } from "@/components/DigiChatMark";
+import { DigiChatMark } from "@digithings/digichat-ui";
 
 export function DtNav() {
   return (

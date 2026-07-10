@@ -7,7 +7,6 @@ import {
 } from "@digithings/digichat-ui";
 import { useStackChat } from "@/lib/useStackChat";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
-import { MiniMarkdown } from "@/lib/miniMarkdown";
 import { ProviderSettings } from "@/components/ProviderSettings";
 import { providerSummary, useProviderSettings } from "@/lib/providerSettings";
 
@@ -74,7 +73,6 @@ export function DigiChatSession() {
       layout="page"
       chat={chat}
       showIntro={showIntro}
-      renderAssistantContent={(content) => (content ? <MiniMarkdown text={content} /> : null)}
       settingsPanel={
         <ProviderSettings
           open={settingsOpen}
