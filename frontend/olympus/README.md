@@ -63,6 +63,35 @@ Global `.recharts-*` overrides in `globals.css` now reference the canon tokens
 follow the shared palette. Every chart color — both engines — comes from
 `lib/chart-colors.ts` (the single sanctioned color source, #1402).
 
+### Shared-component adoption gaps (ledger)
+
+Rulings where a promoted `@digithings/web` primitive cannot back an olympus
+surface (the honest-gap protocol in
+[`frontend/digiweb/MIGRATION.md`](../digiweb/MIGRATION.md) — keep the local
+code, record why):
+
+- **`SortableTable` ↛ `components/twelve-x/ConsensusDataTable.tsx`** (#1450,
+  F5 tables). The Consensus — G10 table is a frozen visual spec whose grammar
+  exceeds the primitive's string-cell API on six axes: ReactNode cells (the
+  divergent `ConsensusScoreBar`, `DeltaChip` with new-currency state);
+  per-cell conditional color (`currencyColor` inline style, `scoreColorClass`,
+  vs-Avg arrow classes); a non-sortable presentational column (the score bar);
+  derived sort values with null-last ordering in *both* directions (pinned by
+  `ConsensusDataTable.test.tsx` — `SortableTable` compares `row[key]` directly
+  and has no null semantics); the optional per-row "Why?" provenance
+  cross-link column; and the `srt-*` dress itself, whose deliberately
+  unlayered `.srt-table td` rules would override the frozen spec's per-column
+  typography from underneath call-site utilities. The local table already
+  carries the primitive's accessibility grammar — real `<button>` headers
+  (keyboard sort) and `aria-sort` on `<th>`. Re-evaluate only if
+  `SortableTable` grows per-column render/sort-accessor/cell-class options
+  plus a dress axis.
+- **`SortableTable` ↛ `components/twelve-x/MatrixTab.tsx`** (#1450, F5
+  tables). No sortable tabular surface exists in the file: its only
+  table-like structure is the broker-by-currency ARIA grid (CSS grid with
+  sticky rowheaders and conviction-shaded cell buttons), which stays a custom
+  render by design.
+
 ## Supabase / RLS
 
 Olympus reads portfolio and research data from the shared Atlas Supabase project
