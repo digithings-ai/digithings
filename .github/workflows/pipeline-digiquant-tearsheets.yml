@@ -61,10 +61,13 @@ jobs:
         run: python digiquant/scripts/fetch_coinbase.py --through-yesterday
 
       - name: Generate tearsheets (from Supabase calibrations)
+        # --signal-delay-days 3 (#1462): public tearsheets lag reality by 3 days
+        # (end-date shift) so the live position can't be read off the curve.
         run: |
           python digiquant/scripts/generate_tearsheets.py \
             --from-supabase \
-            --push-supabase
+            --push-supabase \
+            --signal-delay-days 3
 
       - name: Commit refreshed static JSON (if changed)
         env:
