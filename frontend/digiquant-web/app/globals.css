@@ -9,12 +9,14 @@
 @import "@digithings/web/styles/web-theme.css";
 @import "@digithings/web/styles/nav-shell.css";
 @import "@digithings/web/styles/pricing.css";
+@import "@digithings/web/styles/deck.css";
 @import "@digithings/design/tearsheet/styles.css";
 
 /* Shared components (@digithings/web) carry token-backed utilities, and
    Tailwind never scans package sources on its own — point it at them. */
 @source "../../digiweb/web/src/components/NavShell.tsx";
 @source "../../digiweb/web/src/components/pricing";
+@source "../../digiweb/web/src/components/deck";
 
 :root[data-theme] {
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
@@ -536,107 +538,30 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqp-spacer { border: none; background: transparent; opacity: 0; padding: 0; pointer-events: none; }
 @media (max-width: 820px) { .dqp-step { width: 150px; } .dqp-heads { min-height: 180px; } .dqp-scrolly { height: 360vh; } .dqp-node { width: 90px; } }
 
-/* ---- STRATEGY SUITE: scroll-pinned fitted peek stack ---- */
+/* ---- STRATEGY SUITE: tearsheet previews on the canonical deck stack ----
+   Stack mechanics (sticky cascade, slots runway, side rail, narrow-viewport
+   collapse) are the promoted @digithings/web DeckStack — styles/deck.css,
+   imported above (#1450). The rules below dress the CARD CONTENTS only:
+   .dqss-card rides the deck card element itself as its app dress (unlayered
+   app CSS outranks deck.css's @layer components surface defaults). The
+   former bespoke clip carousel (.dqss-scrolly / .dqss-stack-pin /
+   .dqss-stack-clip / .dqss-stack state machine, fixed --dqss-card-h, JS
+   offset scrubbing) is deleted: its overflow:hidden clip box hard-cut buried
+   cards mid-content. In the deck pattern nothing is clipped — the next
+   opaque card's coverage IS the seam (hairline border, no drop shadow). */
 .dqss { position: relative; z-index: 1; border-top: 1px solid var(--hair); }
 .dqss-intro {
-  flex: 0 0 auto;
   max-width: 52ch;
-  width: 100%;
-  margin-bottom: clamp(0.75rem, 1.5vw, 1.1rem);
-  padding-top: clamp(1.25rem, 3vw, 2rem);
-  transition: opacity 0.35s ease, transform 0.35s ease;
-}
-.dqss-intro[data-phase="stack"] {
-  opacity: 0.92;
-  transform: translateY(-0.15rem);
+  margin-bottom: clamp(1.2rem, 2.5vw, 1.8rem);
 }
 .dqss-intro .dq-sub { margin-bottom: 0; }
 
-.dqss-scrolly {
-  --dqss-stack-count: 3;
-  --dqss-intro-hold: 4svh;
-  --dqss-enter-scroll: 88svh;
-  --dqss-cta-scroll: 40svh;
-  --dqss-card-h: 32rem;
-  --dqss-fit-scale: 1;
-  --dqss-budget-sum: calc(0.82 + 1.12 * (var(--stack-count, var(--dqss-stack-count)) - 1));
-  --dqss-pin-h: calc(100svh - var(--dq-nav-h));
-  min-height: calc(
-    var(--dqss-intro-hold) +
-    var(--dqss-budget-sum) * var(--dqss-enter-scroll) +
-    var(--dqss-cta-scroll) +
-    var(--dqss-pin-h) +
-    32svh
-  );
-  position: relative;
-}
-.dqss-stack-pin {
-  position: sticky;
-  top: var(--dq-nav-h);
-  min-height: calc(100svh - var(--dq-nav-h));
-  height: auto;
-  width: 100%;
-  overflow: visible;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: clamp(0.5rem, 1.5vw, 1rem) clamp(0.75rem, 2.5vw, 1.25rem);
-}
-.dqss-pin-col {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  width: min(100%, 52rem);
-  min-height: 0;
-  height: auto;
-  transform: scale(var(--dqss-fit-scale, 1));
-  transform-origin: top center;
-}
-.dqss-stack-clip {
-  flex: 0 0 auto;
-  position: relative;
-  width: 100%;
-  overflow: hidden;
-}
-.dqss-stack {
-  --dqss-peek: 3.75rem;
-  position: relative;
-  width: min(100%, 52rem);
-  min-height: calc(
-    var(--dqss-card-h, 32rem) + var(--dqss-peek) * (var(--stack-count, var(--dqss-stack-count)) - 1)
-  );
-  overflow: visible;
-}
-.dqss-stack-card {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(var(--dqss-peek) * var(--stack-index, 0));
-  z-index: calc(10 + var(--stack-index, 0));
-  will-change: transform;
-}
-.dqss-stack-card[data-state="hidden"] {
-  visibility: hidden;
-  pointer-events: none;
-}
+/* Library CTA — plain in-flow footer after the deck (the slots' tail runway
+   means it arrives once the stack has fully assembled). */
 .dqss-library-cta {
-  position: relative;
-  flex: 0 0 auto;
-  width: 100%;
-  z-index: 1;
   display: flex;
   justify-content: center;
-  margin-top: clamp(1rem, 2.2vw, 1.35rem);
-  padding-bottom: clamp(0.35rem, 1.5vw, 0.65rem);
-  will-change: transform;
-  pointer-events: none;
-}
-.dqss-library-cta[data-state="visible"] {
-  pointer-events: auto;
-}
-.dqss-library-cta[data-state="hidden"] {
-  visibility: hidden;
-  pointer-events: none;
+  margin-top: clamp(1.5rem, 3vw, 2.2rem);
 }
 .dqss-library-pill {
   display: inline-flex;
@@ -669,20 +594,10 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqss-library-pill:hover .dqss-library-arrow {
   transform: translateX(3px);
 }
-.dqss-stack-card .dqss-card {
-  background: var(--surface);
-  /* Seam shadow per the reference StackingPanels canon (effects-chrome.css
-     .stk-panel): tight upward cast onto the buried card, tucked inside the corner radius (blur < |spread|
-     laterally, so no shadow peeks past the rounded corners). The previous
-     0 50px 100px downward blur overflowed .dqss-stack-clip's overflow:hidden
-     and rendered as a hard boxed edge below each card. Concrete black:
-     cast-shadow ink, deliberately theme-invariant — same ruling as .stk-panel. */
-  box-shadow: 0 -14px 28px -30px rgba(0, 0, 0, 0.65);
-}
-.dqss-stack-card .dqss-card-header {
-  background: var(--surface);
-}
-
+/* The card dress, worn by the DeckCard element itself. Opaque surface + 1px
+   hairline + radius and deliberately NO box-shadow — the deck canon's seam is
+   the next opaque card covering this one (deck.css). overflow:hidden only
+   clips this card's own rounded corners; there is no stack clip box. */
 .dqss-card {
   container-type: inline-size;
   container-name: dqss-card;
@@ -694,8 +609,6 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   border-radius: 16px;
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
   overflow: hidden;
-  /* Reference StackingPanels seam-shadow canon (see .dqss-stack-card note). */
-  box-shadow: 0 -14px 28px -30px rgba(0, 0, 0, 0.65);
   padding: clamp(0.85rem, 2cqi, 1.15rem) clamp(0.9rem, 2.2cqi, 1.25rem) clamp(0.95rem, 2cqi, 1.2rem);
 }
 .dqss-card .ts-header { margin-bottom: clamp(0.75rem, 2cqi, 1rem); padding-bottom: clamp(0.65rem, 1.5cqi, 0.85rem); align-items: flex-start; border-bottom: 1px solid var(--hair); }
@@ -881,37 +794,16 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   .dqss-card .ts-meta-text { display: none; }
 }
 
-@media (max-width: 860px) {
-  .dqss-stack {
-    --dqss-peek: 3.25rem;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .dqhero-h1 .ln > span, .dqhero-lede, .dqhero-cta { opacity: 1 !important; transform: none !important; transition: none !important; }
   .dqhero-scroll::after { animation: none; opacity: 0.85; transform: translateY(30px); }
   .dqpipe-step { opacity: 1; transform: none; transition: none; }
-  .dqss-scrolly { height: auto !important; }
-  .dqss-stack-pin { position: relative; top: auto; min-height: 0; }
-  /* The scrub never runs here, so render the deck at rest: all cards visible,
-     stacked with the base peek offsets so each underlying card keeps its title
-     strip showing, front card fully readable, library CTA in flow below.
-     Grid same-cell stacking replaces the JS-measured absolute layout — the
-     row sizes itself to the cards, and the padding absorbs the peek offsets. */
-  .dqss-stack { height: auto !important; display: grid; padding-bottom: calc(var(--dqss-peek) * 2); }
-  .dqss-stack-card { position: relative !important; grid-area: 1 / 1; top: calc(var(--dqss-peek) * var(--stack-index, 0)); transform: none !important; }
-  .dqss-stack-card[data-state="hidden"] { visibility: visible; pointer-events: auto; }
-  .dqss-library-cta { transform: none !important; visibility: visible; pointer-events: auto; }
+  /* Strategy deck: nothing to neutralize — the sticky cascade is plain CSS
+     (deck.css) and DeckStack gates its recede transform off under reduced
+     motion; every card is always fully rendered in flow (no-JS included,
+     law 06). */
   .dqss-chart-skeleton { animation: none; }
 }
-
-/* no-JS (law 06): without scripts the deck renders at rest — the same layout
-   as the reduced-motion block above (keep the two in sync). */
-html.no-js .dqss-scrolly { height: auto !important; }
-html.no-js .dqss-stack { height: auto !important; display: grid; padding-bottom: calc(var(--dqss-peek) * 2); }
-html.no-js .dqss-stack-card { position: relative !important; grid-area: 1 / 1; top: calc(var(--dqss-peek) * var(--stack-index, 0)); transform: none !important; }
-html.no-js .dqss-stack-card[data-state="hidden"] { visibility: visible; pointer-events: auto; }
-html.no-js .dqss-library-cta { transform: none !important; visibility: visible; pointer-events: auto; }
 
 /* ---- subsystem poster (canon §12) ----
    One poster per sub-graph hero: giant lowercase serif italic name, the
