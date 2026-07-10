@@ -21,7 +21,8 @@ from digiskills.synthesize import Synthesizer, TemplateSynthesizer
 class CorpusBuilder(Protocol):
     """Turns a :class:`SkillSource` into a :class:`Corpus`."""
 
-    def build(self, source: SkillSource) -> Corpus: ...
+    def build(self, source: SkillSource) -> Corpus:
+        pass
 
 
 def _default_corpus_builder(source: SkillSource) -> CorpusBuilder:

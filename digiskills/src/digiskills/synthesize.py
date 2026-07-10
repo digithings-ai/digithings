@@ -45,7 +45,8 @@ _LANGUAGE_BY_CONTENT_TYPE: dict[str, str] = {
 class Synthesizer(Protocol):
     """Turns a corpus into a :class:`SkillPackage` for the given source."""
 
-    def synthesize(self, corpus: Corpus, source: SkillSource) -> SkillPackage: ...
+    def synthesize(self, corpus: Corpus, source: SkillSource) -> SkillPackage:
+        pass
 
 
 def _safe_reference_filename(origin: str, used: set[str]) -> str:
