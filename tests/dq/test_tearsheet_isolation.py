@@ -103,6 +103,7 @@ def _fake_runner(fail: set[str]):
         *,
         cal_source: str,
         push_supabase: bool = False,
+        signal_delay_days: int = 0,
     ) -> tuple[dict | None, str | None]:
         calls.append(strategy)
         if strategy in fail:
