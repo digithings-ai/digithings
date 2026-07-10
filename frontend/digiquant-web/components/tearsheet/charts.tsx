@@ -5,6 +5,10 @@
  * container width. Colours come from CSS custom properties on the chart classes
  * (theme-aware via [data-theme]). Supports linear / log / symlog y scales —
  * symlog handles series that cross zero (cumulative P&L).
+ *
+ * Engine ruling (#1450 F2): these surfaces stay SVG — the PDF export re-renders
+ * the same components, so the promoted lightweight-charts finance family
+ * (canvas) is not adopted here. See ./CHARTS.md before swapping engines.
  */
 import { type ReactNode, type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fmtCompact, fmtMoney, fmtNum, fmtPct, toneClass } from "./format";
