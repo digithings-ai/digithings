@@ -10,6 +10,7 @@ import {
   EndpointDoc,
   type DocsEndpoint,
   DocsCodeBlock,
+  Reveal,
 } from "@digithings/web";
 import { apiDocs, type ModuleApiDoc, type Endpoint } from "@/lib/apiDocs";
 import { guides, type Block } from "@/lib/sharedDocs";
@@ -21,8 +22,10 @@ import { guideToMarkdown, moduleToMarkdown } from "@/lib/docsSerializers";
  * DocsCodeBlock own the endpoint and code-block chrome. This file keeps only
  * what is digithings content: the tier-grouped nav model, the shared guides
  * (Getting started / Authentication / Conventions), the per-module reference
- * merged from apiDocs, and "copy as Markdown" for AI agents. All static, so
- * the site exports cleanly.
+ * merged from apiDocs, and "copy as Markdown" for AI agents. Section heads
+ * (guide titles, module headers) enter on the shared <Reveal/> — heads only,
+ * bodies stay static, and reduced-motion/no-JS render everything standing
+ * (#1450 polish). All static content, so the site exports cleanly.
  */
 const ordered = [...modules].sort((a, b) => a.graphOrder - b.graphOrder);
 const TIERS: { key: ModuleNode["tier"]; label: string }[] = [
@@ -159,7 +162,9 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
   const isRoad = m.tier === "roadmap";
   return (
     <article className="doc-mod" id={m.id}>
-      <header className="doc-mod-head">
+      {/* Entrance on the section head only — the body stays static so the
+          reference never gates content on scroll (#1450 polish). */}
+      <Reveal as="header" className="doc-mod-head">
         <Emblem id={m.emblem} size={32} />
         <div className="doc-mod-title">
           <h2>
@@ -170,7 +175,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
         </div>
         <span className={`doc-badge${isRoad ? " is-road" : ""}`}>{m.tier}</span>
         <CopyMd text={moduleToMarkdown(m)} label="Markdown" />
-      </header>
+      </Reveal>
 
       <p className="doc-tagline">{m.tagline}</p>
 
@@ -347,7 +352,9 @@ export function DocsLayout() {
     >
       {guides.map((g) => (
         <section className="doc-guide" id={g.id} key={g.id}>
-          <h2 className="doc-guide-title">{g.title}</h2>
+          <Reveal as="h2" className="doc-guide-title">
+            {g.title}
+          </Reveal>
           <Blocks blocks={g.blocks} />
         </section>
       ))}
