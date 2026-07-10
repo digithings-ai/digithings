@@ -113,10 +113,23 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
     return () => observer.disconnect();
   }, [tenantCfg.theme]);
 
-  const accentStyle = tenantCfg.accent
+  // The embedding site can theme the widget to its own brand by passing
+  // `?accent=#rrggbb` (+ optional `?accentForeground=`), the same override
+  // channel it already uses for welcome/placeholder. A validated URL color
+  // wins over the tenant-registry accent; both are inline `--accent` so they
+  // override the preset `.accent-*` class either way.
+  const urlColors = useMemo(() => {
+    if (typeof window === "undefined") return {} as { accent?: string; accentForeground?: string };
+    const { accent: c, accentForeground: fg } = readEmbedUiParams(window.location.search);
+    return { accent: c, accentForeground: fg };
+  }, []);
+
+  const accentColor = urlColors.accent ?? tenantCfg.accent?.color;
+  const accentForeground = urlColors.accentForeground ?? tenantCfg.accent?.foreground;
+  const accentStyle = accentColor
     ? ({
-        "--accent": tenantCfg.accent.color,
-        "--accent-foreground": tenantCfg.accent.foreground,
+        "--accent": accentColor,
+        ...(accentForeground ? { "--accent-foreground": accentForeground } : {}),
       } as React.CSSProperties)
     : undefined;
 
@@ -244,14 +257,18 @@ function EmbedChat({
       chat={{ ...chat, send: wrappedSend }}
       headerSlot={headerSlot}
       footerSlot={footerSlot}
-      formReplacement={gate.locked && !ungated ? <PaywallCard /> : undefined}
+      formReplacement={
+        gate.locked && !ungated ? (
+          <PaywallCard lockedContact={tenantCfg.lockedContact} />
+        ) : undefined
+      }
       showIntro={!gate.locked}
       ariaLabel={headerTitle ?? "digichat embed"}
     />
   );
 }
 
-function PaywallCard() {
+function PaywallCard({ lockedContact }: { lockedContact?: string }) {
   const { setKey } = useBYOKKey();
   const [showBYOK, setShowBYOK] = useState(false);
   const [inputKey, setInputKey] = useState("");
@@ -276,6 +293,30 @@ function PaywallCard() {
     setInputModel("");
     setShowBYOK(false);
   }, [inputKey, inputModel, provider, setKey]);
+
+  // Contact-us variant: tenants that would rather route capped visitors to
+  // sales than offer BYOK set `lockedContact` (see embed-tenants.ts). Placed
+  // after all hooks so hook order stays stable (rules-of-hooks).
+  if (lockedContact) {
+    return (
+      <div className="border-t border-border bg-muted/40 p-4">
+        <p className="mb-2 text-sm font-medium">
+          You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          For more, get in touch at{" "}
+          <a
+            href={`mailto:${lockedContact}`}
+            className="font-medium underline"
+            style={{ color: "var(--accent)" }}
+          >
+            {lockedContact}
+          </a>
+          .
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="border-t border-border bg-muted/40 p-4">
