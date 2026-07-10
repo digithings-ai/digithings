@@ -1,10 +1,10 @@
-# Olympus portfolio-table inventory & SortableTable ruling (#1450 F4 batch D, epic #1414)
+# Olympus table inventory & SortableTable ruling (#1450 F4 batch D + F5 tables, epic #1414)
 
 > **Ruling: the promoted `<SortableTable/>` leaderboard (`@digithings/web`
-> finance-composites) is NOT adopted for the olympus portfolio tables.** Every
-> batch-D target either has no tabular render or is built around interactions
-> the primitive's grammar cannot host. Local code stays, per the
-> migrate-vs-leave / honest-engineering contract
+> finance-composites) is NOT adopted for the olympus portfolio tables or the
+> twelve-x tables.** Every batch-D and F5-tables target either has no tabular
+> render or is built around interactions the primitive's grammar cannot host.
+> Local code stays, per the migrate-vs-leave / honest-engineering contract
 > (`frontend/digiweb/MIGRATION.md`, promotion playbook step 3 — the
 > `lib/CHARTS.md` engine ruling is the in-app precedent).
 
@@ -27,6 +27,13 @@ mount by the first column (or `defaultSort`) unconditionally.
 | `components/portfolio/position-pnl-table.tsx` | Performance tab P&L table | Same row **drilldown** — and it is always live: the only call site (`PerformanceTab`) always derives `priceChartAnchorDate` (last snap date, else `meta.last_updated`). P&L % wears **per-cell sign-dependent** `text-up`/`text-down` (the primitive's `tone` is column-scoped); 3 columns hide responsively; and the primitive's unconditional initial sort would reorder rows away from today's API order (including the CASH row's position). |
 | `components/portfolio/advanced-stats-panel.tsx` | Performance tab advanced statistics | **Not a table at all** — a `MetricCard` KPI grid (`grid grid-cols-2 md:grid-cols-4`) over locally computed stats. There is no column/sort grammar to re-back. |
 
+## Per-file inventory (F5 twelve-x targets, #1450 F5 tables)
+
+| File | Surface | Why it keeps local code |
+|---|---|---|
+| `components/twelve-x/ConsensusDataTable.tsx` | Consensus — G10 table | A **frozen visual spec** whose grammar exceeds the primitive's string-cell API on six axes: **ReactNode cells** in 4 of 9 columns (the divergent `ConsensusScoreBar`, `DeltaChip` with new-currency state, `currencyColor`-styled ticker, optional per-row "Why?" provenance cross-link) where `format` returns strings; **per-cell conditional color** (`scoreColorClass` / vs-Avg arrow classes vary per row — the primitive's `tone` is column-scoped); a **non-sortable presentational column** (the score bar — every `SortableTable` header is a sort button); **derived sort values** (vs-Avg sorts by the score−avg gap, not the cell field) with **null-last ordering in both directions**, pinned by `ConsensusDataTable.test.tsx` (the primitive `String(null)`-compares); the optional **Trace column** keyed off `onDrillToProvenance`; and the deliberately unlayered `.srt-table td` dress (`finance-composites.css`), which would override the frozen spec's per-column typography from underneath call-site utilities. The local table already carries the primitive's accessibility grammar — real `<button>` headers (keyboard sort) and `aria-sort` on `<th>`. Partial adoption is structurally impossible: `SortableTable` is a whole-table component, not a headless sort hook. |
+| `components/twelve-x/MatrixTab.tsx` | Broker-by-currency matrix | **No sortable tabular surface exists in the file** (no sort state anywhere) — its only table-like structure is the broker-by-currency ARIA grid (CSS grid with sticky rowheaders and conviction-shaded cell buttons), which stays a custom render by design. |
+
 ## What adoption would take (if a product ruling ever wants these sortable)
 
 Recorded so a future promotion pass can size the gap instead of re-auditing:
@@ -40,6 +47,12 @@ Recorded so a future promotion pass can size the gap instead of re-auditing:
   hosts sign-dependent money colors.
 - An unsorted "natural order" state (or controlled sort) — required to keep
   today's initial row order.
+- Sort-value accessors (sort by a derived value, not the cell field) with
+  null-last semantics in both directions — hosts ConsensusDataTable's vs-Avg
+  gap sort.
+- Per-column `sortable: false` — hosts presentational columns (score bar).
+- A dress axis (opt out of / re-skin the unlayered `.srt-table td`
+  typography) — required wherever a frozen visual spec sets per-column type.
 - Row expansion (`renderDetail` + row click) — the drilldown named in the
   batch brief as the canonical cannot-host example; a deliberate non-goal for
   a leaderboard primitive.
