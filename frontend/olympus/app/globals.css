@@ -12,6 +12,18 @@
 @import "@digithings/web/styles/web-theme.css";
 @import "@digithings/design/quant-native/styles.css";
 @import "@digithings/design/tearsheet/styles.css";
+/* chat-core (#1418, adopted by olympus in #1450) — imported PLAINLY on
+   purpose (MIGRATION.md rule 2 exception): its element combinators are
+   deliberately unlayered so they keep beating plain utilities. Olympus uses
+   only the .chat-md markdown grammar — the canonical markdown typography
+   that <ChatMarkdown> (via SafeMarkdown) scopes around rendered documents
+   and memo notes. */
+@import "@digithings/web/styles/chat-core.css";
+
+/* Tailwind never scans package sources (MIGRATION.md rule 3) — generate the
+   utilities the shared ChatMarkdown shell carries (min-w-0, text-[0.88rem],
+   leading-[1.6]). */
+@source "../../digiweb/web/src/components/chat/ChatMarkdown.tsx";
 
 /* ── Fonts (next/font routing) ───────────────────────────────────────────
    tokens.css names the families literally ("Geist", "Geist Mono",
