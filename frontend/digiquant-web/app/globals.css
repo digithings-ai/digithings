@@ -9,6 +9,14 @@
 @import "@digithings/web/styles/web-theme.css";
 @import "@digithings/web/styles/nav-shell.css";
 @import "@digithings/web/styles/pricing.css";
+/* Homepage expressive grammar (#1450 F2 adoption) — imported PLAINLY (no
+   layer(…) wrapper): each sheet manages its own layering per the cascade
+   contract (MIGRATION.md). data-layout.css carries the digit-roll
+   OdometerStrip metrics band, word-reveal.css the pinned-blur claim,
+   marquee.css the seamless stack strip, deck.css the sticky tearsheet stack. */
+@import "@digithings/web/styles/data-layout.css";
+@import "@digithings/web/styles/word-reveal.css";
+@import "@digithings/web/styles/marquee.css";
 @import "@digithings/web/styles/deck.css";
 @import "@digithings/design/tearsheet/styles.css";
 
@@ -16,6 +24,9 @@
    Tailwind never scans package sources on its own — point it at them. */
 @source "../../digiweb/web/src/components/NavShell.tsx";
 @source "../../digiweb/web/src/components/pricing";
+@source "../../digiweb/web/src/components/marquee";
+@source "../../digiweb/web/src/components/data-layout";
+@source "../../digiweb/web/src/components/typography";
 @source "../../digiweb/web/src/components/deck";
 
 :root[data-theme] {
@@ -64,7 +75,11 @@
    (#1417: of the promoted @digithings/web primitives only the pricing family
    has an adoption target here — the old metrics/stages/flow sections died
    with the v7 landing (their CSS was already dead at #1401), and no count-up
-   stats exist, so PerfMetrics / NumberedStages / StatCounter are not wired.) */
+   stats exist, so PerfMetrics / NumberedStages / StatCounter are not wired.)
+   (#1450 F2: the flagship expressive grammar lands — the stack Marquee, the
+   OdometerStrip metrics band (real figures mined from the strategies index +
+   shared subsystems data), and the one WordReveal claim. All shared-sheet
+   primitives — no new app-local CSS below.) */
 
 /* (Accent decision, #1417: the featured/managed tier now wears the shared
    `.pricing-tier-accent` flat color-mix wash from @digithings/web pricing.css —
