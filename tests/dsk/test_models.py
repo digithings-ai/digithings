@@ -102,6 +102,18 @@ def test_corpus_default_empty() -> None:
     assert corpus.documents == []
     assert corpus.truncated is False
     assert corpus.total_chars == 0
+    assert corpus.redacted_count == 0
+    assert corpus.injection_flags == []
+
+
+def test_source_document_trusted_defaults_true() -> None:
+    doc = SourceDocument(origin="a.md", title="a", content="x")
+    assert doc.trusted is True
+
+
+def test_source_document_trusted_can_be_set_false() -> None:
+    doc = SourceDocument(origin="https://example.com", title="t", content="x", trusted=False)
+    assert doc.trusted is False
 
 
 def test_compile_result_document_count_must_be_non_negative() -> None:

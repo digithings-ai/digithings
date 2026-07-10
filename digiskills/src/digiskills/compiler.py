@@ -60,6 +60,21 @@ def compile_skill(
         warnings.append("no documents were ingested — the compiled skill has no references")
     if corpus.truncated:
         warnings.append("corpus was truncated by a size/count cap; some source content was dropped")
+    if any(not doc.trusted for doc in corpus.documents):
+        warnings.append(
+            "corpus includes untrusted third-party content (e.g. scraped URLs) — "
+            "the compiled SKILL.md/references are flagged accordingly; review before "
+            "an agent installs and acts on them"
+        )
+    if corpus.redacted_count:
+        warnings.append(
+            f"{corpus.redacted_count} likely secret(s) were redacted from ingested content"
+        )
+    if corpus.injection_flags:
+        warnings.append(
+            f"{len(corpus.injection_flags)} document(s) contain text resembling a "
+            "prompt-injection attempt — flagged as data, not blocked; review before shipping"
+        )
 
     return CompileResult(
         package=package,
