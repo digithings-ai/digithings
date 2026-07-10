@@ -68,9 +68,12 @@ follow the shared palette. Every chart color — both engines — comes from
 The portfolio tables stay app-local: the promoted `<SortableTable/>`
 leaderboard (`@digithings/web` finance-composites) cannot host their row
 drilldown, sector grouping, per-cell money tones, or responsive column
-hiding (#1450 F4 batch D). The per-file ruling — and what adoption would
-take — lives in [`lib/TABLES.md`](lib/TABLES.md). New *flat* leaderboards
-should adopt the primitive instead of hand-rolling sort state.
+hiding (#1450 F4 batch D). The twelve-x tables stay local too: the frozen
+Consensus — G10 spec exceeds the primitive's string-cell API, and MatrixTab
+has no sortable tabular surface at all (#1450 F5 tables). The per-file
+rulings — and what adoption would take — live in
+[`lib/TABLES.md`](lib/TABLES.md). New *flat* leaderboards should adopt the
+primitive instead of hand-rolling sort state.
 
 ## Supabase / RLS
 
