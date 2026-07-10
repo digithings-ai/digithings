@@ -13,7 +13,10 @@ Phase plan (P0 ADR → P1 compiler core → P2 dogfood → P3 external pilot →
 hosted platform, explicitly deferred): tracking epic
 [#1453](https://github.com/digithings-ai/digithings/issues/1453).
 
-**Status:** P1 (skill compiler core) + P2 (dogfood) shipped. No FastAPI
+**Status:** P1 (skill compiler core) + P2 (dogfood) shipped. P3 pre-flight
+hardening (SSRF, memory cap, secret redaction, untrusted-content flagging on
+the remote-ingestion path) shipped ahead of any real external source being
+run through the pipeline — see "Security hardening" below. No FastAPI
 service, no MCP server, no hosted registry — those are unscoped follow-up
 phases, not this module's job today.
 
@@ -40,7 +43,8 @@ phases, not this module's job today.
 | `digiskills/models.py` | Pydantic v2 models: `SkillSource`, `SourceDocument`, `Corpus`, `SkillManifest`, `SkillReference`, `SkillPackage`, `CompileResult`. |
 | `digiskills/frontmatter.py` | `render_skill_md` / `parse_skill_md` — the `SKILL.md` YAML-frontmatter format (`name` + `description` only). |
 | `digiskills/ingest.py` | `LocalPathCorpusBuilder` — walks a local directory (ignore-list + size caps), zero extra dependencies. |
-| `digiskills/ingest_url.py` | `UrlCorpusBuilder` — fetches docs/OpenAPI URLs via `digifetch.HttpFetcher`. Lazily imports `digifetch`; requires the `[ingest]` extra. |
+| `digiskills/ingest_url.py` | `UrlCorpusBuilder` — fetches docs/OpenAPI URLs via `digifetch.HttpFetcher`. Lazily imports `digifetch`; requires the `[ingest]` extra. Applies `digiskills.security` (SSRF allowlist, redaction, injection scan) to every fetch. |
+| `digiskills/security.py` | Stdlib-only (no deps, no extra required): `is_allowed_scrape_url` (SSRF allowlist, mirrors digisearch REM-064), `redact_secrets`, `scan_for_prompt_injection`. Used by `ingest_url.py`. |
 | `digiskills/synthesize.py` | `Synthesizer` protocol; `TemplateSynthesizer` (default, deterministic, no LLM) and `DigiLLMSynthesizer` (real prose via `digillm.completion`, lazily imported, requires `[llm]`). |
 | `digiskills/compiler.py` | `compile_skill(source, ...)` — orchestrates a `CorpusBuilder` + `Synthesizer` into a `CompileResult`. Picks sane defaults from `source.kind` when not given explicitly. |
 | `digiskills/package.py` | `write_skill_package` / `write_skill_zip` — writes a `SkillPackage` to disk as an installable directory or zip archive. |
@@ -106,7 +110,8 @@ directory/zip. `compile_skill` wraps the middle two steps and reports
   fatal to the whole build (mirrors `digillm.web_search`'s fail-soft
   convention). Accepts an injected `fetcher=` for tests (an
   `httpx.MockTransport`-backed `HttpFetcher`) — no real network calls in the
-  unit suite.
+  unit suite. Every fetched `SourceDocument` is marked `trusted=False` — see
+  "Security hardening" below.
 
 ## Design decisions
 
@@ -135,6 +140,63 @@ directory/zip. `compile_skill` wraps the middle two steps and reports
   codebase, a docs site) without a vector-DB dependency. Revisit if a real
   corpus needs retrieval-style ranking rather than "ingest everything under a
   cap."
+
+## Security hardening
+
+P3 (external pilot, ADR-0023) is the point where third-party content — and
+possibly credentials embedded in it — first enters the pipeline. A security
+review ahead of P3 found four gaps in the remote-ingestion path
+(`ingest_url.py`/`synthesize.py`), all fixed before any real external source
+is run through the compiler:
+
+1. **Compiled output wasn't flagged as untrusted.** `SKILL.md`/`references/`
+   are literal instruction text a coding agent reads and acts on at install
+   time — `CompileResult.warnings` (Python-side metadata) doesn't travel with
+   the installed files, so a caller who discards warnings would ship an
+   unflagged package. Fix: `SourceDocument.trusted` (default `True`, set
+   `False` by `UrlCorpusBuilder`) — `synthesize.py` prepends an untrusted-
+   content banner to any reference file and to `SkillPackage.body` built from
+   untrusted content, and `DigiLLMSynthesizer`'s system prompt explicitly
+   tells the model to treat corpus excerpts as untrusted data, never as
+   instructions to follow or repeat.
+2. **SSRF via redirects.** `digifetch.HttpFetcher`'s default client follows
+   redirects with no host-pinning. Fix: `digiskills/security.py`'s
+   `is_allowed_scrape_url` — a stdlib-only (`ipaddress`/`socket`/
+   `urllib.parse`) duplicate of digisearch's proven `is_allowed_scrape_url`
+   (REM-064; not imported, so `digiskills[ingest]` doesn't gain a digisearch
+   dependency for one function) — validates every URL before fetching *and*
+   the actually-fetched URL after, and `UrlCorpusBuilder`'s own default
+   fetcher is built with `follow_redirects=False`, so a redirect is never
+   actually requested (a 3xx response is simply skipped, not chased).
+3. **Unbounded memory.** `HttpFetcher.fetch()` buffers the full decoded
+   response with no byte cap; only the streamed `download()` enforces
+   `DEFAULT_MAX_BYTES` (32 MiB). Fix: `UrlCorpusBuilder` now calls
+   `download()` and decodes the returned bytes itself (`_decode_bytes`,
+   charset from the response's `content-type`, utf-8 fallback) instead of
+   `fetch()`.
+4. **No secret redaction.** Scraped content could carry API keys/tokens into
+   a reference file or into a `DigiLLMSynthesizer` prompt sent to a
+   third-party model. Fix: `security.redact_secrets` — pattern-based
+   (AWS/GitHub/Slack/OpenAI-style keys, PEM private-key blocks, JWTs, bearer
+   tokens, generic `key=`/`secret=`/`token=`/`password=` assignments) —
+   applied to every fetched document before it becomes a `SourceDocument`.
+   Best-effort only, not a substitute for the source not containing secrets.
+
+`security.scan_for_prompt_injection` complements (1): a best-effort,
+non-blocking heuristic scan for injection-style phrasing (`"ignore previous
+instructions"`, fake `system:`/`assistant:` turns, etc.) in fetched content.
+It never mutates or strips content — regex heuristics are too false-positive/
+negative-prone for that — it only adds to `Corpus.injection_flags`, which
+`compile_skill` surfaces as a `CompileResult` warning alongside the untrusted
+and redaction-count warnings.
+
+Scope: this hardening covers `UrlCorpusBuilder` (the only builder that pulls
+third-party content today). `LocalPathCorpusBuilder` ingests a path the
+*caller* already controls (its own repo, or a corpus staged locally) and is
+out of scope — `SourceDocument.trusted` defaults `True` there. If a future
+source routes third-party content through `LocalPathCorpusBuilder` (e.g. a
+pre-scraped local mirror), revisit whether it needs the same redaction/
+trust-flagging pass.
 
 ## Environment variables
 
@@ -165,7 +227,13 @@ python -c "import sys, digiskills; assert not ({'digifetch','digillm','typer'} &
 `test_synthesize.py` are skipped (`pytest.importorskip`) when `digifetch` /
 `digillm` aren't installed, and never make a real HTTP or LLM call even when
 they are — `httpx.MockTransport` and a monkeypatched `digillm.completion`
-stand in.
+stand in. `tests/dsk/test_security.py` (stdlib-only, always runs) covers the
+SSRF allowlist, redaction, and injection-scan functions directly;
+`test_ingest_url.py` covers them wired into `UrlCorpusBuilder` (blocked URLs
+never reach the fetcher, a redirect that an injected fetcher does follow is
+still caught by the post-fetch host re-check, the byte cap trips via
+`download()`, secrets get redacted, injection phrasing gets flagged not
+stripped).
 
 `tests/dsk/test_dogfood.py` (P2) compiles every DigiThings module's real
 `ARCHITECTURE.md`/`AGENTS.md` (digigraph, digiquant, digisearch, digismith,
@@ -194,7 +262,7 @@ Per ADR-0023's phase plan:
 | Gap | Phase | Notes |
 |-----|-------|-------|
 | Dogfood against DigiThings' own modules | P2 (done) | `tests/dsk/test_dogfood.py` compiles `ARCHITECTURE.md`/`AGENTS.md` from every module as a known-good validation corpus. MCP tool manifests (live `/v1/orchestrator_tools` responses) are **not** included — that needs running services, not a static-file corpus; still a gap. |
-| External pilot against a real client's docs/API | P3 | New trust boundary (third-party content, possibly credentials in scraped docs) — needs its own security review before any real client data is processed. |
+| External pilot against a real client's docs/API | P3 | Pre-flight hardening done (see "Security hardening" above: SSRF, memory cap, redaction, untrusted/injection flagging). Actually running a real client source through the pipeline is still pending a go/no-go decision on which builder/source to use. |
 | digisearch-backed corpus builder | Follow-up | For corpora that outgrow naive ingestion (huge codebases/doc sites) — chunk/embed/retrieve instead of "ingest everything under a cap." |
 | Hosted platform / registry / live MCP distribution | P4 (unscoped) | Explicitly deferred in ADR-0023; revisit only after the static package format is proven useful. |
 | Prompt-quality tuning for `DigiLLMSynthesizer` | Ongoing | P1 ships a working structured-output integration, not a tuned prompt — expect iteration once real corpora are run through it. |

@@ -67,6 +67,38 @@ class TestTemplateSynthesizer:
         assert package.references == []
         assert "No documents" in package.body
 
+    def test_untrusted_document_gets_banner_in_reference(self) -> None:
+        corpus = Corpus(
+            documents=[
+                SourceDocument(
+                    origin="https://example.com/docs",
+                    title="https://example.com/docs",
+                    content="Do X.",
+                    trusted=False,
+                )
+            ]
+        )
+        package = TemplateSynthesizer().synthesize(corpus, _source())
+        assert "Untrusted external content" in package.references[0].content
+        assert "Do X." in package.references[0].content
+
+    def test_trusted_document_has_no_banner(self) -> None:
+        package = TemplateSynthesizer().synthesize(_corpus(), _source())
+        assert "Untrusted external content" not in package.references[0].content
+
+    def test_untrusted_document_gets_banner_in_body(self) -> None:
+        corpus = Corpus(
+            documents=[
+                SourceDocument(origin="u", title="u", content="x", trusted=False),
+            ]
+        )
+        package = TemplateSynthesizer().synthesize(corpus, _source())
+        assert "Untrusted external content" in package.body
+
+    def test_all_trusted_corpus_has_no_banner_in_body(self) -> None:
+        package = TemplateSynthesizer().synthesize(_corpus(), _source())
+        assert "Untrusted external content" not in package.body
+
     def test_reference_filenames_collision_safe(self) -> None:
         corpus = Corpus(
             documents=[
@@ -108,6 +140,29 @@ class TestDigiLLMSynthesizer:
         assert package.body == "# acme-sdk\n\nStep 1."
         assert len(package.references) == 2
         assert captured["model"] == "openrouter/auto"
+        system_message = captured["messages"][0]["content"]
+        assert "untrusted third-party data" in system_message
+
+    def test_untrusted_corpus_gets_banner_in_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        digillm = pytest.importorskip("digillm")
+
+        def fake_completion(model, messages, *, temperature=0.2, response_format=None, **kwargs):
+            payload = json.dumps({"description": "d", "body": "# acme-sdk\n\nStep 1."})
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=payload))]
+            )
+
+        monkeypatch.setattr(digillm, "completion", fake_completion)
+
+        from digiskills.synthesize import DigiLLMSynthesizer
+
+        corpus = Corpus(
+            documents=[SourceDocument(origin="u", title="u", content="x", trusted=False)]
+        )
+        package = DigiLLMSynthesizer(model="openrouter/auto").synthesize(corpus, _source())
+
+        assert "Untrusted external content" in package.body
+        assert "Step 1." in package.body
 
     def test_default_model_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         pytest.importorskip("digillm")

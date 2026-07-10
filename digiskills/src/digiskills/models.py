@@ -58,12 +58,20 @@ class SkillSource(BaseModel):
 
 
 class SourceDocument(BaseModel):
-    """A single ingested unit of content — one file or one fetched URL."""
+    """A single ingested unit of content — one file or one fetched URL.
+
+    ``trusted`` is True for content the caller controls directly (local
+    files) and False for content pulled from a third party at ingestion
+    time (e.g. :class:`~digiskills.ingest_url.UrlCorpusBuilder` fetches) —
+    surfaced to the compiled package as an untrusted-content banner and to
+    the caller as a :class:`CompileResult` warning.
+    """
 
     origin: str = Field(min_length=1)
     title: str = Field(min_length=1)
     content: str
     content_type: str = "text/plain"
+    trusted: bool = True
 
 
 class Corpus(BaseModel):
@@ -72,6 +80,12 @@ class Corpus(BaseModel):
     documents: list[SourceDocument] = Field(default_factory=list)
     # True when a size/count cap cut the corpus short — surfaced as a compile warning.
     truncated: bool = False
+    # Count of likely-secret substrings redacted from ingested content (see
+    # digiskills.security.redact_secrets) — surfaced as a compile warning.
+    redacted_count: int = 0
+    # Heuristic prompt-injection flags from ingested content (see
+    # digiskills.security.scan_for_prompt_injection) — surfaced as a compile warning.
+    injection_flags: list[str] = Field(default_factory=list)
 
     @property
     def total_chars(self) -> int:
