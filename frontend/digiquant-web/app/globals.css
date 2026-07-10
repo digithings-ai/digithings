@@ -671,7 +671,12 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 }
 .dqss-stack-card .dqss-card {
   background: var(--surface);
-  box-shadow: 0 50px 100px -55px rgba(0, 0, 0, 0.8);
+  /* Seam shadow per the reference StackingPanels canon (effects-chrome.css
+     .stk-panel): tight upward cast onto the buried card. The previous
+     0 50px 100px downward blur overflowed .dqss-stack-clip's overflow:hidden
+     and rendered as a hard boxed edge below each card. Concrete black:
+     cast-shadow ink, deliberately theme-invariant — same ruling as .stk-panel. */
+  box-shadow: 0 -22px 46px -26px rgba(0, 0, 0, 0.6);
 }
 .dqss-stack-card .dqss-card-header {
   background: var(--surface);
@@ -688,7 +693,8 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   border-radius: 16px;
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
   overflow: hidden;
-  box-shadow: 0 50px 100px -55px rgba(0, 0, 0, 0.8);
+  /* Reference StackingPanels seam-shadow canon (see .dqss-stack-card note). */
+  box-shadow: 0 -22px 46px -26px rgba(0, 0, 0, 0.6);
   padding: clamp(0.85rem, 2cqi, 1.15rem) clamp(0.9rem, 2.2cqi, 1.25rem) clamp(0.95rem, 2cqi, 1.2rem);
 }
 .dqss-card .ts-header { margin-bottom: clamp(0.75rem, 2cqi, 1rem); padding-bottom: clamp(0.65rem, 1.5cqi, 0.85rem); align-items: flex-start; border-bottom: 1px solid var(--hair); }
