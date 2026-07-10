@@ -16,6 +16,7 @@
 @import "@digithings/web/styles/finance-charts.css";
 @import "@digithings/web/styles/finance-composites.css";
 @import "@digithings/web/styles/data-layout.css";
+@import "@digithings/web/styles/deck.css";
 @import "@digithings/web/styles/effects-chrome.css";
 
 /* Shared components (@digithings/web) carry token-backed utilities, and
@@ -34,6 +35,7 @@
 @source "../../web/src/components/finance-charts";
 @source "../../web/src/components/finance-composites";
 @source "../../web/src/components/data-layout";
+@source "../../web/src/components/deck";
 @source "../../web/src/components/effects-chrome";
 
 /* Shared base for every design-reference page. Family-specific styles live
