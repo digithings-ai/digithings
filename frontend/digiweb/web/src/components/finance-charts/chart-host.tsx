@@ -174,8 +174,8 @@ export function useFinanceChartPalette(): FinanceChartPalette {
  * `setup` is an effect dependency — memoize it with `useCallback` keyed on
  * the data props. A data change tears the chart down and rebuilds it, which
  * matches the reference specimens' lifecycle (these are display surfaces;
- * dashboards with live-updating series should keep their own scaffold, e.g.
- * olympus `lib/lw-chart.tsx`).
+ * dashboards with live-updating series should use the persistent
+ * `useLightweightChart` scaffold from lw-chart.tsx instead).
  */
 export function useFinanceChart(
   setup: (

@@ -7,9 +7,16 @@
 The reference grammar for lightweight-charts lives in the digiweb design
 reference (`frontend/digiweb/reference/components/equity-curve-reference.tsx`,
 `drawdown-plot-reference.tsx`): token-themed via CSS-variable reads with SSR
-fallbacks, `autoSize: true`, no custom candle renderers. The olympus-local
-scaffold is `lib/lw-chart.tsx`; every color continues to come from
-`lib/chart-colors.ts` (the single sanctioned color source, #1402).
+fallbacks, `autoSize: true`, no custom candle renderers. Since #1450 batch E
+the scaffold itself lives in `@digithings/web` (the finance-charts family's
+`lw-chart.tsx`: persistent `useLightweightChart` lifecycle with `isAlive()`
+disposal guard, `toLineData`/`timeToISO` adapters, `useChartTip`/
+`ChartTipShell` tooltip plumbing, `chartChromeOptions` token chrome shared
+with `useFinanceChart`); `lib/lw-chart.tsx` here is a thin adapter binding
+that scaffold to olympus's ChartColors — every color continues to come from
+`lib/chart-colors.ts` (the single sanctioned color source, #1402), which
+stays olympus-local (fixed categorical/benchmark hues are app vocabulary,
+not package surface).
 
 ## Classification
 
@@ -47,7 +54,8 @@ scope for both engines.
 
 - New **time-series** chart → `useLightweightChart` from `lib/lw-chart.tsx`
   (token theming, autoSize, theme-reactive re-skin, reduced-motion handling
-  come for free). Colors only from `lib/chart-colors.ts`.
+  come for free — the lifecycle itself is the shared `@digithings/web`
+  finance-charts scaffold). Colors only from `lib/chart-colors.ts`.
 - New **categorical/composition** chart → recharts, colors only from
   `lib/chart-colors.ts` (`useChartColors()` for semantic hues, the fixed
   allowlist for series identity).
