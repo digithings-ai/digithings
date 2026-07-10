@@ -1,7 +1,6 @@
 'use client';
 
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { isEvolutionSourcesEmpty } from '@/lib/library-doc-tier';
 
 type Rating = { name?: string; reliability?: string; notes?: string };
@@ -21,9 +20,7 @@ export default function EvolutionSourcesDocumentView({
           This outline was published without scores. Open the Evolution tab when the scorecard is filled in, or view raw
           markdown below.
         </p>
-        <div className="mt-4 prose prose-invert max-w-none text-left text-sm opacity-80">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
-        </div>
+        <SafeMarkdown className="mt-4 text-left opacity-80">{fallbackMarkdown}</SafeMarkdown>
       </div>
     );
   }
@@ -47,9 +44,7 @@ export default function EvolutionSourcesDocumentView({
       {notes ? (
         <div>
           <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Notes</h3>
-          <div className="prose prose-invert max-w-none text-sm">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{notes}</ReactMarkdown>
-          </div>
+          <SafeMarkdown>{notes}</SafeMarkdown>
         </div>
       ) : null}
       <div>

@@ -1,7 +1,6 @@
 'use client';
 
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { cleanMemoProse } from '@/lib/render-pipeline-payloads';
 
 /**
@@ -34,9 +33,7 @@ export default function AnalystDocumentView({
 }) {
   if (!payload) {
     return (
-      <div className="prose prose-invert max-w-none text-sm">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
-      </div>
+      <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
     );
   }
 
@@ -61,9 +58,7 @@ export default function AnalystDocumentView({
   // If the payload has no recognizable fields, fall back to markdown render.
   if (!thesis && !stance) {
     return (
-      <div className="prose prose-invert max-w-none text-sm">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
-      </div>
+      <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
     );
   }
 
@@ -92,9 +87,7 @@ export default function AnalystDocumentView({
       {thesis && (
         <div>
           <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Thesis</h3>
-          <div className="prose prose-invert max-w-none text-sm text-ink-soft">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(thesis)}</ReactMarkdown>
-          </div>
+          <SafeMarkdown>{cleanMemoProse(thesis)}</SafeMarkdown>
         </div>
       )}
 
