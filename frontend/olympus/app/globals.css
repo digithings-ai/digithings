@@ -22,6 +22,18 @@
 @import "@digithings/web/styles/effects-chrome.css";
 @import "@digithings/design/quant-native/styles.css";
 @import "@digithings/design/tearsheet/styles.css";
+/* chat-core (#1418, adopted by olympus in #1450) — imported PLAINLY on
+   purpose (MIGRATION.md rule 2 exception): its element combinators are
+   deliberately unlayered so they keep beating plain utilities. Olympus uses
+   only the .chat-md markdown grammar — the canonical markdown typography
+   that <ChatMarkdown> (via SafeMarkdown) scopes around rendered documents
+   and memo notes. */
+@import "@digithings/web/styles/chat-core.css";
+
+/* Tailwind never scans package sources (MIGRATION.md rule 3) — generate the
+   utilities the shared ChatMarkdown shell carries (min-w-0, text-[0.88rem],
+   leading-[1.6]). */
+@source "../../digiweb/web/src/components/chat/ChatMarkdown.tsx";
 
 /* Tailwind never scans package sources — point it at the shared components
    this app renders (load-bearing; see MIGRATION.md rule 3). */
@@ -163,7 +175,12 @@ html.light .qn-blueprint-bg {
   border-left: 2px solid var(--accent, var(--accent-digiquant));
 }
 
-/* ── Markdown prose overrides ──────────────────────────────────────────── */
+/* ── Markdown prose overrides (typography plugin) ────────────────────────
+   NOT dead after the #1450 .chat-md adoption — two surfaces still render
+   `.prose`: DigestDocumentView (kept local on purpose; its jump-to-section
+   TOC drives custom h2/h3 components whose utilities would lose to the
+   unlayered .chat-md heading rules) and twelve-x BriefPanel (F5 scope).
+   Remove this block + the @plugin line only when both are off `.prose`. */
 .prose {
   --tw-prose-body: var(--ink-soft);
   --tw-prose-headings: var(--ink);
