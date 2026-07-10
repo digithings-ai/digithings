@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef, type ReactNode } from "react";
 import { useReducedMotion } from "motion/react";
 
 /**
@@ -8,24 +8,34 @@ import { useReducedMotion } from "motion/react";
  * reference (chrome/tabs). A proper tablist: role="tablist"/"tab",
  * aria-selected, roving tabindex, ArrowLeft/Right + Home/End keyboard nav.
  * The active indicator is a single absolutely-positioned element whose
- * transform/width are measured from the active tab and written straight to a
- * ref, so the slide is a CSS transition — no `layoutId` (the apps' LazyMotion
- * runs `domAnimation`, which omits layout animations) and no per-frame React
- * state. Survives resize; honours reduced motion (indicator jumps, no slide).
+ * transform/width (and, for the box dresses, height) are measured from the
+ * active tab and written straight to a ref, so the slide is a CSS transition
+ * — no `layoutId` (the apps' LazyMotion runs `domAnimation`, which omits
+ * layout animations) and no per-frame React state. Survives resize; honours
+ * reduced motion (indicator jumps, no slide).
  *
- * Two dresses: `underline` for content regions, `pill` for a compact mode
- * switch. The strip is controlled (`active` + `onChange`); panels are
- * consumer-owned — wire them with the exported `tabId`/`tabPanelId` helpers:
+ * Three dresses: `underline` for content regions, `pill` for a compact mode
+ * switch, `chip` for a wrapping row of bordered chip tabs (the olympus
+ * dashboard sub-nav dress — sans face, accent-tinted active chip). `pill`
+ * and `chip` position the ink with translate(x, y) + measured height, so
+ * `chip` rows may flex-wrap. The strip is controlled (`active` + `onChange`);
+ * panels are consumer-owned — wire them with the exported `tabId`/
+ * `tabPanelId` helpers:
  *
  *   <TabStrip tabs={TABS} active={i} onChange={setI} label="Account view" />
  *   <div role="tabpanel" id={tabPanelId("Account view", tab.id)}
  *        aria-labelledby={tabId("Account view", tab.id)}>…</div>
  *
+ * When the consumer's panels carry no DOM ids (e.g. a wrapper adapting
+ * legacy children), pass `linkPanels={false}` to omit `aria-controls` —
+ * the attribute is optional in the APG tabs pattern, and a dangling
+ * reference is worse than none.
+ *
  * Wiring (in the consuming app):
  *   globals.css   @import "@digithings/web/styles/effects-chrome.css";
  *                 @source "<path-to>/digiweb/web/src/components/effects-chrome";
  */
-export type TabItem = { id: string; label: string };
+export type TabItem = { id: string; label: ReactNode };
 
 export type TabStripProps = {
   tabs: TabItem[];
@@ -34,7 +44,9 @@ export type TabStripProps = {
   onChange: (index: number) => void;
   /** Accessible tablist name; also seeds the tab/panel id pairing. */
   label: string;
-  variant?: "underline" | "pill";
+  variant?: "underline" | "pill" | "chip";
+  /** Emit aria-controls → tabPanelId(label, id) (default). False = omit. */
+  linkPanels?: boolean;
   className?: string;
 };
 
@@ -59,6 +71,7 @@ export function TabStrip({
   onChange,
   label,
   variant = "underline",
+  linkPanels = true,
   className,
 }: TabStripProps) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -74,15 +87,21 @@ export function TabStrip({
       const el = list.querySelectorAll<HTMLButtonElement>('[role="tab"]')[active];
       if (!el) return;
       ink.style.transition = animate ? "" : "none";
-      ink.style.transform = `translateX(${el.offsetLeft}px)`;
+      // translate(x, y): offsetTop/offsetLeft are measured against the strip's
+      // padding box — the same origin as the ink's absolute top:0/left:0 — so
+      // the box dresses (pill/chip) track the tab even across wrapped rows.
+      ink.style.transform = `translate(${el.offsetLeft}px, ${el.offsetTop}px)`;
       ink.style.width = `${el.offsetWidth}px`;
+      // The underline ink keeps its CSS height (2px, strip-bottom anchored);
+      // the box dresses take the tab's own height.
+      if (variant !== "underline") ink.style.height = `${el.offsetHeight}px`;
       if (!animate) {
         // flush the jump before restoring the transition so it never animates
         void ink.offsetWidth;
         ink.style.transition = "";
       }
     },
-    [active],
+    [active, variant],
   );
 
   useLayoutEffect(() => {
@@ -124,7 +143,7 @@ export function TabStrip({
           role="tab"
           id={tabId(label, t.id)}
           aria-selected={i === active}
-          aria-controls={tabPanelId(label, t.id)}
+          aria-controls={linkPanels ? tabPanelId(label, t.id) : undefined}
           tabIndex={i === active ? 0 : -1}
           className="tab-btn"
           onClick={() => onChange(i)}

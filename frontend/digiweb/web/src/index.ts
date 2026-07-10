@@ -42,6 +42,7 @@ export {
   type TerminalManifestStatus,
   type TerminalManifestProps,
 } from "./components/TerminalManifest";
+export { DeckStack, DeckCard, type DeckStackProps, type DeckCardProps } from "./components/deck/DeckStack";
 // chat family (#1418)
 export { ChatTranscript, type ChatTranscriptProps } from "./components/chat/ChatTranscript";
 export { ChatMessage, type ChatMessageProps, type ChatRole, type ChatTone } from "./components/chat/ChatMessage";
@@ -113,10 +114,19 @@ export {
   DrawdownPlot,
   MonthlyReturns,
   useFinanceChart,
+  useFinanceChartPalette,
+  getFinancePalette,
   readFinancePalette,
   financeChartOptions,
   tokenAlpha,
   toChartTime,
+  useLightweightChart,
+  chartChromeOptions,
+  hostMonoFont,
+  toLineData,
+  timeToISO,
+  useChartTip,
+  ChartTipShell,
   PRICE_CHART_DEMO,
   EQUITY_CURVE_DEMO,
   DRAWDOWN_DEMO,
@@ -130,6 +140,10 @@ export {
   type FinanceSeriesPoint,
   type OhlcPoint,
   type CrosshairLabelToken,
+  type ChartChrome,
+  type ChartTip,
+  type UseLightweightChartConfig,
+  type UseLightweightChartResult,
 } from "./components/finance-charts";
 
 // finance-composites family (#1450)

@@ -22,6 +22,7 @@
     "./styles/finance-charts.css": "./src/styles/finance-charts.css",
     "./styles/finance-composites.css": "./src/styles/finance-composites.css",
     "./styles/data-layout.css": "./src/styles/data-layout.css",
+    "./styles/deck.css": "./src/styles/deck.css",
     "./styles/effects-chrome.css": "./src/styles/effects-chrome.css",
     "./data/modules": "./src/data/modules.ts",
     "./data/subsystems": "./src/data/subsystems.ts"
