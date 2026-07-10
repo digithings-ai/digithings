@@ -39,7 +39,7 @@ from digiskills.models import (
 from digiskills.package import write_skill_package
 from digiskills.synthesize import DigiLLMSynthesizer, Synthesizer, TemplateSynthesizer
 
-__version__ = "0.1.0"  # x-release-please-version
+__version__ = "0.2.0"  # x-release-please-version
 
 __all__ = [
     "CompileResult",
