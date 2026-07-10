@@ -13,6 +13,10 @@
 @import "@digithings/design/quant-native/styles.css";
 @import "@digithings/design/tearsheet/styles.css";
 
+/* Tailwind never scans package sources (MIGRATION.md rule 3) — the shared
+   finance-charts scaffold's ChartTipShell renders here via lib/lw-chart. */
+@source "../../digiweb/web/src/components/finance-charts";
+
 /* ── Fonts (next/font routing) ───────────────────────────────────────────
    tokens.css names the families literally ("Geist", "Geist Mono",
    "Instrument Serif") — but olympus self-hosts Geist Sans + Geist Mono +
