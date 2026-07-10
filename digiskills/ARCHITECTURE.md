@@ -13,9 +13,9 @@ Phase plan (P0 ADR → P1 compiler core → P2 dogfood → P3 external pilot →
 hosted platform, explicitly deferred): tracking epic
 [#1453](https://github.com/digithings-ai/digithings/issues/1453).
 
-**Status:** P1 (skill compiler core). No FastAPI service, no MCP server, no
-hosted registry — those are unscoped follow-up phases, not this module's job
-today.
+**Status:** P1 (skill compiler core) + P2 (dogfood) shipped. No FastAPI
+service, no MCP server, no hosted registry — those are unscoped follow-up
+phases, not this module's job today.
 
 ---
 
@@ -167,6 +167,16 @@ python -c "import sys, digiskills; assert not ({'digifetch','digillm','typer'} &
 they are — `httpx.MockTransport` and a monkeypatched `digillm.completion`
 stand in.
 
+`tests/dsk/test_dogfood.py` (P2) compiles every DigiThings module's real
+`ARCHITECTURE.md`/`AGENTS.md` (digigraph, digiquant, digisearch, digismith,
+digiclaw, digibase, digikey, digivault, digifetch, digillm, digiskills,
+digichat) through the full pipeline with `TemplateSynthesizer`, asserting a
+clean compile (no truncation warnings — real module docs stay well under the
+size caps) and a well-formed, round-trippable `SKILL.md`. This validates
+ingestion/packaging against real content on every CI run; it does not
+validate `DigiLLMSynthesizer` prose quality, which needs a live model and is
+a manual check.
+
 ## Monorepo integration
 
 - Registered in `agents.yml` under `components:` (`agents_doc`, `arch_doc`,
@@ -183,7 +193,7 @@ Per ADR-0023's phase plan:
 
 | Gap | Phase | Notes |
 |-----|-------|-------|
-| Dogfood against DigiThings' own modules | P2 | Compile skills from each module's `ARCHITECTURE.md`/`AGENTS.md`/MCP manifests as a known-good validation corpus. |
+| Dogfood against DigiThings' own modules | P2 (done) | `tests/dsk/test_dogfood.py` compiles `ARCHITECTURE.md`/`AGENTS.md` from every module as a known-good validation corpus. MCP tool manifests (live `/v1/orchestrator_tools` responses) are **not** included — that needs running services, not a static-file corpus; still a gap. |
 | External pilot against a real client's docs/API | P3 | New trust boundary (third-party content, possibly credentials in scraped docs) — needs its own security review before any real client data is processed. |
 | digisearch-backed corpus builder | Follow-up | For corpora that outgrow naive ingestion (huge codebases/doc sites) — chunk/embed/retrieve instead of "ingest everything under a cap." |
 | Hosted platform / registry / live MCP distribution | P4 (unscoped) | Explicitly deferred in ADR-0023; revisit only after the static package format is proven useful. |
