@@ -5,6 +5,14 @@ Shared DigiChat terminal-session UI. Two consumers render it today:
 **digithings-web** (`components/DigiChatSession.tsx` → `/chat`). Both also
 `@import` this package's stylesheets from their `globals.css`.
 
+Since #1450 (F3) the surfaces hold **zero forked copies** of this package's
+components: digithings-web deleted its local `miniMarkdown` / `MermaidBlock` /
+`CopyButton` / `DigiChatMark` and renders assistant content through this
+package's default `MiniMarkdown` (no `renderAssistantContent` override).
+Everything app-specific arrives through the session's parametrization
+(below); the apps keep only their transport (`DigiChatController` wiring),
+BYOK settings UI, and handoff/seed logic.
+
 ## Module map
 
 | File | What it is |
@@ -33,6 +41,27 @@ Shared DigiChat terminal-session UI. Two consumers render it today:
   byte-identical across changes here.
 - Styles read canon tokens (`--ink`, `--accent`, `--hair`, …) under the
   consumer's `[data-theme]`; this package defines no tokens of its own.
+
+## Session parametrization (how the two surfaces share one component)
+
+`DigiChatSessionProps` (`src/types.ts`) is the whole divergence budget between
+`/chat` and `/embed` — anything not expressible here belongs in the consumer,
+not in a fork:
+
+| Prop | digithings-web `/chat` | digichat `/embed` |
+|---|---|---|
+| `chat: DigiChatController` | `useStackChat` + BYOK headers | `useEmbedDigiChat` + gate-wrapped `send` |
+| `layout` | `"page"` (full viewport under nav) | `"embed"` (flex child, no copy buttons — cross-origin clipboard) |
+| `showStatusBar` / `showByok` | status bar + BYOK affordances | no bar; BYOK only when gated |
+| `settingsPanel` + `chat.openSettings` | `ProviderSettings` panel | — (BYOK lives in the paywall card) |
+| `headerSlot` / `footerSlot` | — | tenant title, turn meter, attribution |
+| `formReplacement` | — | paywall card when the free-turn gate locks |
+| `showIntro` | `false` after a handoff seed resumes a transcript | `false` when the gate is locked |
+| `renderAssistantContent` | — (package `MiniMarkdown` default) | — (package `MiniMarkdown` default) |
+
+The `/chat` handoff seed (homepage quick-ask → `lib/chatHandoff.ts`) stays
+app-owned: the wrapper seeds the controller's messages and flips `showIntro`;
+the session itself has no storage or routing knowledge.
 
 ## Chat-family convergence (#1418)
 
