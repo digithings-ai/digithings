@@ -398,11 +398,14 @@
   color: var(--accent);
 }
 
-/* ── TabStrip — sliding active indicator, two dresses ─────────────────────
+/* ── TabStrip — sliding active indicator, three dresses ───────────────────
    Base strip/button/ink defaults are components-layer; the variant
    combinators, aria/hover/focus states, and the ink (whose transform +
-   width are written from a ref and animated by this transition) stay
-   unlayered — they must keep beating call-site utilities. */
+   width — and height for the box dresses — are written from a ref and
+   animated by this transition) stay unlayered — they must keep beating
+   call-site utilities. Box-dress inks (pill/chip) anchor top:0/left:0 and
+   take translate(x, y) + measured height from the component, so a `chip`
+   strip may flex-wrap and the ink still lands on the active row. */
 
 @layer components {
   .tab-strip {
@@ -477,14 +480,58 @@
   background: var(--accent);
 }
 
+/* pill/chip inks: top/left origin — transform + height come from the ref */
 .tab-ink.pill {
   z-index: 0;
-  top: 0.25rem;
-  bottom: 0.25rem;
+  top: 0;
   left: 0;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+/* chip — the olympus dashboard sub-nav dress: wrapping row of bordered
+   chips, sans face, accent-tinted active chip (parity with the app's
+   `subpageTabButtonClass` active/inactive reads). */
+.tab-strip.chip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tab-strip.chip .tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink-soft);
+  transition:
+    color 0.2s var(--ease),
+    background-color 0.2s var(--ease);
+}
+
+.tab-strip.chip .tab-btn:hover:not([aria-selected="true"]) {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  color: var(--ink);
+}
+
+.tab-strip.chip .tab-btn[aria-selected="true"] {
+  color: var(--accent);
+}
+
+.tab-ink.chip {
+  z-index: 0;
+  top: 0;
+  left: 0;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
