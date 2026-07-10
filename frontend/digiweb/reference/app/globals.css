@@ -13,6 +13,10 @@
 @import "@digithings/web/styles/chat-widgets.css";
 @import "@digithings/web/styles/controls-core.css";
 @import "@digithings/web/styles/controls-overlay.css";
+@import "@digithings/web/styles/finance-charts.css";
+@import "@digithings/web/styles/finance-composites.css";
+@import "@digithings/web/styles/data-layout.css";
+@import "@digithings/web/styles/effects-chrome.css";
 
 /* Shared components (@digithings/web) carry token-backed utilities, and
    Tailwind never scans package sources on its own — point it at them
@@ -27,6 +31,10 @@
 @source "../../web/src/components/TerminalManifest.tsx";
 @source "../../web/src/components/chat";
 @source "../../web/src/components/controls";
+@source "../../web/src/components/finance-charts";
+@source "../../web/src/components/finance-composites";
+@source "../../web/src/components/data-layout";
+@source "../../web/src/components/effects-chrome";
 
 /* Shared base for every design-reference page. Family-specific styles live
    next to their page (app/<family>/<family>.css) — keep this file small. */

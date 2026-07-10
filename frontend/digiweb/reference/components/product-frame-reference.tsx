@@ -1,9 +1,3 @@
-"use client";
-
-import { useEffect, useRef, type ReactNode } from "react";
-
-const ARTBOARD_W = 800;
-
 /**
  * ProductFrame — the "real surface, cropped" technique mined from graphite:
  * a product screenshot is authored once on a FIXED 800px artboard, then scaled
@@ -11,34 +5,11 @@ const ARTBOARD_W = 800;
  * pixel-faithful at any width. CSS calc() can't derive a unitless scale from
  * lengths, so a ResizeObserver measures the container and writes the factor
  * straight to the node (no per-frame React state). An optional overlay tag
- * labels the crop.
+ * labels the crop. Consumes (re-exports) the shared <ProductFrame/> primitive
+ * from @digithings/web; the mock tearsheet below is demo content that stays
+ * with the reference. Interactive layout template.
  */
-export function ProductFrame({ tag, children }: { tag?: string; children: ReactNode }) {
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const artboardRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const vp = viewportRef.current;
-    const art = artboardRef.current;
-    if (!vp || !art) return;
-    const apply = (w: number) => {
-      art.style.scale = String(Math.min(1, w / ARTBOARD_W));
-    };
-    apply(vp.clientWidth);
-    const ro = new ResizeObserver((entries) => apply(entries[0].contentRect.width));
-    ro.observe(vp);
-    return () => ro.disconnect();
-  }, []);
-
-  return (
-    <div className="pf-viewport" ref={viewportRef}>
-      <div className="pf-artboard" ref={artboardRef}>
-        {children}
-      </div>
-      {tag ? <span className="pf-tag">{tag}</span> : null}
-    </div>
-  );
-}
+export { ProductFrame } from "@digithings/web";
 
 /** A mock atlas tearsheet crop — stand-in for a real product screenshot. */
 export function MockTearsheet() {

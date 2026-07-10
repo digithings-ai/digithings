@@ -31,6 +31,29 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
 | `@digithings/web` | `web/` | shared React layer (NavShell, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, the chat family, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
 
+The F1 promotion campaign (#1450) added four more component families to
+`@digithings/web`, each a `web/src/components/<family>/` directory with its own
+barrel, re-exported from `src/index.ts`:
+
+| Family | Components | CSS subpath |
+| ------ | ---------- | ----------- |
+| `finance-charts` | PriceChart, EquityCurve, DrawdownPlot, MonthlyReturns + the chart-host scaffold (`useFinanceChart`, `readFinancePalette`, `financeChartOptions`, `tokenAlpha`, `toChartTime`) and `*_DEMO` datasets | `./styles/finance-charts.css` (MonthlyReturns only — the charts are canvas, zero CSS) |
+| `finance-composites` | StockTicker, OrderBook, SortableTable, PerformanceDashboard, SyncedTearsheet | `./styles/finance-composites.css` |
+| `data-layout` | Odometer/OdometerStrip, DotMatrixStat, BentoGrid/BentoCell, ProductFrame, FeatureCell, TestimonialWall | `./styles/data-layout.css` |
+| `effects-chrome` | Pipeline, RotatingPrompts, StackingPanels, AnnouncementBar, TabStrip (+ `tabId`/`tabPanelId` helpers), ToastStack | `./styles/effects-chrome.css` |
+
+Family notes: the time-series primitives ride **TradingView Lightweight Charts**
+(`lightweight-charts` is a package dependency; hosts fill their pane via
+`autoSize`, so consumers must give the pane a definite height). The four family
+sheets **manage their own layering** (single-class defaults in
+`@layer components`, state/structural grammar unlayered) — import them
+**plainly**, never wrapped in `layer(...)`. All four families carry
+token-backed utilities, so consuming apps need an `@source` line per family
+directory. `PerformanceDashboard` exposes a `children` slot for finance-charts
+content passed in by the page (it never imports charts itself); `ToastStack` is
+imperative-free (`toasts` + `onDismiss` props — app-level toast state stays
+app-owned).
+
 Since the canon migration (#1399, 2026-07): apps declare **no local `@theme`
 block** — `web-theme.css` is the one bridge (its `inline` semantics keep scoped
 liveries live inside utilities); shared sheets import with `layer(components)`;

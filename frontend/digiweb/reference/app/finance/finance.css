@@ -64,100 +64,22 @@
    utilities; the .perf-metric nth-child hairline grid lives in
    @digithings/web/styles/metrics.css, imported from globals.css. */
 
-/* Order book migrated to token-backed utilities in orderbook-reference.tsx
-   (border-hair, bg-surface, text-up/down for the price side + depth tints). */
+/* Order book promoted to @digithings/web (#1450): the <OrderBook/> primitive
+   (components/finance-composites/OrderBook.tsx) carries the token-backed
+   utilities (border-hair, bg-surface, text-up/down + depth tints); no CSS. */
 
-/* Monthly returns heatmap */
-/* Only the scroll wrapper migrated (→ `mt-[1.2rem] overflow-x-auto`). The
-   heatmap table stays in CSS: its td tint interacts with per-cell inline styles,
-   and the YTD money colors rely on descendant specificity to beat the base td. */
+/* Monthly returns heatmap — promoted to @digithings/web (#1450): the
+   <MonthlyReturns/> primitive (components/finance-charts/MonthlyReturns.tsx)
+   carries the scroll wrapper + per-cell color-mix tints; the .mr-table
+   descendant grammar lives in @digithings/web/styles/finance-charts.css,
+   imported from globals.css. */
 
-.mr-table {
-  width: 100%;
-  min-width: 640px;
-  border-collapse: separate;
-  border-spacing: 3px;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 0.68rem;
-}
-
-.mr-table thead th {
-  padding: 0.3rem 0;
-  font-weight: 400;
-  font-size: 0.56rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-mute);
-}
-
-.mr-table tbody th {
-  padding-right: 0.6rem;
-  text-align: right;
-  font-weight: 400;
-  color: var(--ink-soft);
-}
-
-.mr-table td {
-  text-align: center;
-  padding: 0.4rem 0.2rem;
-  border-radius: 4px;
-  color: var(--ink-mute);
-  background: color-mix(in srgb, var(--ink-mute) 8%, transparent);
-}
-
-.mr-ytd-head {
-  color: var(--ink) !important;
-}
-
-.mr-table td.mr-ytd {
-  background: transparent;
-  font-size: 0.72rem;
-}
-
-.mr-table td.mr-ytd.up {
-  color: var(--up);
-}
-
-.mr-table td.mr-ytd.down {
-  color: var(--down);
-}
-
-/* ── stock ticker tape (seamless scrolling market strip) ────────────────── */
-
-.tk {
-  margin-top: 1.2rem;
-  overflow: hidden;
-  border-block: 1px solid var(--hair);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
-}
-
-.tk-track {
-  display: inline-flex;
-  width: max-content;
-  animation: tk-scroll 42s linear infinite;
-  will-change: transform;
-}
-
-.tk:hover .tk-track {
-  animation-play-state: paused;
-}
-
-/* .tk-item / .tk-sym / .tk-px / .tk-chg (+ up/down money colors) migrated to
-   token-backed utilities in stock-ticker-reference.tsx. */
-
-@keyframes tk-scroll {
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tk-track {
-    animation: none;
-  }
-}
+/* ── stock ticker tape ──────────────────────────────────────────────────── */
+/* Promoted to @digithings/web (#1450): the <StockTicker/> primitive
+   (components/finance-composites/StockTicker.tsx) carries the utilities; the
+   .tk mask/keyframe mechanics live in
+   @digithings/web/styles/finance-composites.css, imported from globals.css.
+   (The promoted .tk drops the old margin-top — the consumer adds mt.) */
 
 /* ── portfolio positions blotter ────────────────────────────────────────── */
 /* Blotter shell, table, cells, and P&L colors migrated to token-backed
@@ -180,23 +102,8 @@
 }
 
 /* ── performance dashboard ──────────────────────────────────────────────── */
-/* Shell, header, ratio/alloc typography, and layout migrated to token-backed
-   utilities in performance-dashboard-reference.tsx. Only the .pdash-ratio
-   border-left grid stays here — its :first-child / :nth-child(4) overrides are
-   sibling-index selectors Tailwind can't express. */
-
-.pdash-ratio {
-  border-left: 1px solid var(--hair);
-}
-
-.pdash-ratio:first-child {
-  border-left: none;
-}
-
-@media (max-width: 720px) {
-  /* .pdash-ratios collapses to 3-up via max-[720px]:grid-cols-3; the 4th ratio
-     then starts a new row, so drop its border-left. */
-  .pdash-ratio:nth-child(4) {
-    border-left: none;
-  }
-}
+/* Promoted to @digithings/web (#1450): the <PerformanceDashboard/> primitive
+   (components/finance-composites/PerformanceDashboard.tsx) carries the
+   utilities; the pdash-* sibling-index hairlines (headline cells + ratio
+   strip, keyed off data-cols) live in
+   @digithings/web/styles/finance-composites.css, imported from globals.css. */
