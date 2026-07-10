@@ -564,7 +564,9 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
    offset scrubbing) is deleted: its overflow:hidden clip box hard-cut buried
    cards mid-content. In the deck pattern nothing is clipped — the next
    opaque card's coverage IS the seam (hairline border, no drop shadow). */
-.dqss { position: relative; z-index: 1; border-top: 1px solid var(--hair); }
+/* Shorter deck hold than the reference default (65svh): the runway after the
+   assembled stack read as dead space between sections (user ruling, #1450). */
+.dqss { position: relative; z-index: 1; border-top: 1px solid var(--hair); --deck-tail: 38svh; }
 /* Section head carries the library CTA as a right-aligned action ("see
    all →" grammar): a footer pill after the deck sat stranded in the slots'
    tail runway — the blank scroll room the last card needs to ride its pin. */

@@ -32,8 +32,9 @@
   display: grid;
   gap: 55svh;
   /* tail runway: enough scroll after the last card enters for it to ride up
-     to its pinned offset, so the completed stack is the section's final state */
-  padding-bottom: 65svh;
+     to its pinned offset, so the completed stack is the section's final state.
+     Consumers can shorten the hold via --deck-tail. */
+  padding-bottom: var(--deck-tail, 65svh);
 }
 
 .deck-card {
@@ -46,7 +47,15 @@
 }
 
 /* Progress rail — mono labels pinned beside the stack; the active row lights
-   its dot with the accent. Rendered by DeckStack only when `rail` is given. */
+   its dot with the accent. Rendered by DeckStack only when `rail` is given.
+   The column wrapper stretches to the grid row MINUS the tail runway (via
+   bottom margin), so the sticky pin releases with the last card instead of
+   hanging through the empty scroll-hold. */
+.deck-rail-col {
+  align-self: stretch;
+  min-height: 0;
+  margin-bottom: var(--deck-tail, 65svh);
+}
 .deck-rail-pin {
   position: sticky;
   top: 38vh;
@@ -88,7 +97,7 @@
 }
 
 /* Narrow: no stacking — the cards simply appear in sequence. The JS side
-   (DeckStack) gates its scale/brightness transforms off below 901px too. */
+   (DeckStack) gates its scale transform off below 901px too. */
 @media (max-width: 900px) {
   .deck-slots {
     gap: 0.9rem;
@@ -100,7 +109,7 @@
     top: 0;
   }
 
-  .deck-rail-pin {
+  .deck-rail-col {
     display: none;
   }
 }
