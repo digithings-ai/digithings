@@ -1,4 +1,9 @@
 import { ReactNode, ElementType } from 'react';
+import {
+  Badge as ControlBadge,
+  type BadgeProps as ControlBadgeProps,
+  type BadgeReferenceVariant,
+} from '@digithings/web';
 
 interface StatCardProps {
   label: string;
@@ -9,18 +14,28 @@ interface StatCardProps {
   valueClass?: string;
 }
 
-interface BadgeProps {
-  children: ReactNode;
-  variant?: 'default' | 'blue' | 'green' | 'red' | 'amber';
-  className?: string;
-}
+/** Olympus's historical tone names, kept so call sites need zero churn. */
+type OlympusBadgeVariant = 'default' | 'blue' | 'green' | 'red' | 'amber';
+
+type BadgeProps = Omit<
+  Extract<ControlBadgeProps, { dress?: 'reference' }>,
+  'dress' | 'variant'
+> & {
+  variant?: OlympusBadgeVariant;
+};
 
 interface SectionTitleProps {
   children: ReactNode;
   className?: string;
 }
 
-/** Reusable stat card for KPI display */
+/** Reusable stat card for KPI display.
+ *
+ * F4 ruling (#1450): stays LOCAL — the promoted controls Card (ctl-card-ref:
+ * 12px radius, ruled header rows, no shadow/hover) and the metrics grammar
+ * (PerfMetrics: n-up hairline grid, mono values) both render a different
+ * look, and the `.glass-card` class here is load-bearing for MotionLayer's
+ * scroll-reveal system (globals.css `html.motion-on .glass-card`). */
 export function StatCard({
   label,
   value,
@@ -45,22 +60,23 @@ export function StatCard({
   );
 }
 
-/** Badge variant */
-export function Badge({ children, variant = 'default', className = '' }: BadgeProps) {
-  const variants: Record<NonNullable<BadgeProps['variant']>, string> = {
-    default: 'bg-ink/10 text-ink-soft border-hair',
-    blue: 'bg-accent/15 text-accent border-accent/30',
-    green: 'bg-up/15 text-up border-up/30',
-    red: 'bg-down/15 text-down border-down/30',
-    amber: 'bg-warn/15 text-warn border-warn/30',
-  };
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide border ${variants[variant]} ${className}`}
-    >
-      {children}
-    </span>
-  );
+/** Olympus tone → shared reference-dress tone (same color semantics). */
+const BADGE_TONE: Record<OlympusBadgeVariant, BadgeReferenceVariant> = {
+  default: 'neutral',
+  blue: 'accent',
+  green: 'up',
+  red: 'down',
+  amber: 'warn',
+};
+
+/** Badge — thin re-export of the shared @digithings/web controls Badge
+ * (#1419 shim pattern, adopted for F4 #1450). Pinned to dress="reference"
+ * (the .dg-tier mono micro-caps hairline pill); olympus's historical tone
+ * names map onto the shared tones so every call site keeps its color
+ * semantics with zero churn. Extra props (data-testid, aria-*) now pass
+ * through to the rendered span. */
+export function Badge({ variant = 'default', ...props }: BadgeProps) {
+  return <ControlBadge dress="reference" variant={BADGE_TONE[variant]} {...props} />;
 }
 
 /** Section heading used inside pages */

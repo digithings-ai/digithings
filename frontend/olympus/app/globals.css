@@ -10,8 +10,20 @@
    grammars this dashboard reuses. */
 @import "@digithings/design/tokens.css";
 @import "@digithings/web/styles/web-theme.css";
+/* Shared controls dress (Badge — F4 #1450). Imported PLAINLY on purpose:
+   controls-core.css manages its own layering (defaults in @layer components,
+   state/structural rules unlayered — see its header). No @source needed:
+   the controls carry no Tailwind utilities. */
+@import "@digithings/web/styles/controls-core.css";
+/* NumberedStages spine/node art (system → How it works, F4 #1450). */
+@import "@digithings/web/styles/stages.css";
 @import "@digithings/design/quant-native/styles.css";
 @import "@digithings/design/tearsheet/styles.css";
+
+/* Tailwind never scans package sources — the stages component carries
+   token-backed utilities, so point Tailwind at it (path relative to this
+   file). */
+@source "../../digiweb/web/src/components/stages";
 
 /* ── Fonts (next/font routing) ───────────────────────────────────────────
    tokens.css names the families literally ("Geist", "Geist Mono",

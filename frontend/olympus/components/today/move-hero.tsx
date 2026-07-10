@@ -133,9 +133,9 @@ export function MoveHero({
           <div className="flex items-center gap-2 flex-wrap">
             <AsOfBadge date={asOf} />
             {runType ? (
-              <Badge variant="default" className="uppercase tracking-wider">
-                {runType}
-              </Badge>
+              // Reference badge dress is already uppercase mono micro-caps —
+              // the old `uppercase tracking-wider` utilities are redundant.
+              <Badge variant="default">{runType}</Badge>
             ) : null}
             <Badge variant={accent.badge}>{regimeLabel}</Badge>
           </div>
