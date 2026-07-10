@@ -8,11 +8,12 @@
 @import "@digithings/web/styles/nav-shell.css";
 @import "@digithings/web/styles/docs.css";
 @import "@digithings/web/styles/terminal-manifest.css";
-/* Homepage primitives (#1450): NumberedStages spine (stages.css), count-up
-   StatCounter dividers (metrics.css), the WordReveal pinned-blur claim
-   (word-reveal.css) and the stack Marquee (marquee.css). */
+/* Homepage primitives (#1450): NumberedStages spine (stages.css), the
+   digit-roll OdometerStrip metrics band (data-layout.css, #1452 promotion),
+   the WordReveal pinned-blur claim (word-reveal.css) and the stack Marquee
+   (marquee.css). */
 @import "@digithings/web/styles/stages.css";
-@import "@digithings/web/styles/metrics.css";
+@import "@digithings/web/styles/data-layout.css";
 @import "@digithings/web/styles/word-reveal.css";
 @import "@digithings/web/styles/marquee.css";
 /* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
@@ -31,7 +32,7 @@
 @source "../../digiweb/web/src/components/docs";
 @source "../../digiweb/web/src/components/chat";
 @source "../../digiweb/web/src/components/stages";
-@source "../../digiweb/web/src/components/metrics";
+@source "../../digiweb/web/src/components/data-layout";
 @source "../../digiweb/web/src/components/typography";
 @source "../../digiweb/web/src/components/marquee";
 

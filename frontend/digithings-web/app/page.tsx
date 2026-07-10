@@ -3,12 +3,12 @@ import {
   Footer,
   Marquee,
   NumberedStages,
+  OdometerStrip,
   Reveal,
-  StatCounter,
   WordReveal,
-  type CounterStat,
   type MarqueeItem,
   type NumberedStage,
+  type OdometerStat,
 } from "@digithings/web";
 import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "./_nav";
 import { DtNav } from "@/components/DtNav";
@@ -18,9 +18,9 @@ import { ModuleManifest } from "@/components/landing/ModuleManifest";
 // v8 landing for the DigiThings platform — 100% reference-sourced + expressive
 // (#1450). A mouse-following mesh-gradient hero (HeroMesh + reveal-field
 // HeroGraph) opens, then every visual block is a promoted @digithings/web
-// primitive or token-backed utility: a drifting Marquee stack strip, a count-up
-// StatCounter metrics band, the shared TerminalManifest, the NumberedStages
-// principles spine, and the one big WordReveal pinned-blur claim. The mesh /
+// primitive or token-backed utility: a drifting Marquee stack strip, a
+// digit-roll OdometerStrip metrics band, the shared TerminalManifest, the
+// NumberedStages principles spine, and the one big WordReveal claim. The mesh /
 // graph / counters / reveal are client islands; the page stays a server
 // component and exports statically. Every motion moment honors
 // prefers-reduced-motion and reads with no JS (html.no-js fallbacks).
@@ -39,13 +39,16 @@ const STACK: MarqueeItem[] = [
   { name: "Docker", icon: "docker" },
 ];
 
-// Real, honest facts — each count-up figure is a property of the stack, not a
+// Real, honest facts — each figure is a property of the stack, not a
 // projection. "10 modules" matches the architecture head + the manifest total.
-const METRICS: CounterStat[] = [
-  { value: 10, label: "modules" },
-  { value: 100, suffix: "%", label: "self-hosted" },
-  { value: 0, label: "data retained" },
-  { value: 1, label: "compose file" },
+// Rendered by the OdometerStrip (#1452 promotion): each digit is a 0–9 reel
+// that rolls to its value on arrival; reduced motion and no-JS ship the
+// settled final figures.
+const METRICS: OdometerStat[] = [
+  { value: "10", label: "modules" },
+  { value: "100%", label: "self-hosted" },
+  { value: "0", label: "data retained" },
+  { value: "1", label: "compose file" },
 ];
 
 // The four properties of every module — verbatim from the prior principles grid,
@@ -121,7 +124,7 @@ export default function Home() {
               </p>
             </Reveal>
             <Reveal>
-              <StatCounter stats={METRICS} className="mx-auto max-w-[880px]" />
+              <OdometerStrip stats={METRICS} className="mx-auto max-w-[880px]" />
             </Reveal>
           </div>
         </section>
