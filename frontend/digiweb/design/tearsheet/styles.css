@@ -1,5 +1,14 @@
 /* ==========================================================================
    @digithings/design — tearsheet grammar (canon §06)
+
+   DEPRECATED (#1463): this grammar was promoted into the finance-tearsheet
+   family — the canonical sheet is @digithings/web/styles/finance-tearsheet.css
+   (same .ts-* rules, self-layering per the cascade contract, PLUS the
+   @media print grammar that used to live app-side in digiquant-web). New
+   consumers import THAT sheet plainly; this file stays only until
+   digiquant-web and olympus swap their imports, then it is deleted. Do not
+   edit both — the web sheet is the source of truth.
+
    The strategy tearsheet + library family (.ts-*), shared by digiquant-web
    (/strategies) and olympus. Consumes the [data-theme] semantic tokens so
    the whole surface works in light AND dark. Positive P&L aliases to
