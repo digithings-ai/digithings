@@ -1,34 +1,35 @@
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "strategy": "eth_slapper",
   "symbol": "ETH-USD",
   "engine": "nautilus",
-  "generated_at": "2026-07-10T18:19:07+00:00",
+  "generated_at": "2026-07-11T01:43:44+00:00",
   "data_source": "Coinbase daily OHLCV (CCXT)",
   "period_start": "2018-01-01",
-  "period_end": "2026-07-09",
-  "bars": 3112,
+  "period_end": "2026-07-07",
+  "bars": 3110,
   "initial_capital": 1000.0,
-  "final_equity": 63481420.35749193,
-  "net_profit": 63480420.35749193,
-  "net_profit_pct": 6348042.035749193,
+  "final_equity": 62807973.31440696,
+  "signal_delay_days": 3,
+  "net_profit": 62806973.31440696,
+  "net_profit_pct": 6280697.3314406965,
   "max_drawdown_pct": -59.21918961854268,
   "sharpe_ratio": null,
   "sortino_ratio": null,
   "calmar_ratio": null,
-  "profit_factor": 6.335736602415592,
+  "profit_factor": 6.279131179557,
   "win_rate_pct": 64.91228070175438,
   "total_trades": 57,
-  "avg_trade": 1113691.5852191567,
+  "avg_trade": 1101876.7248141572,
   "overall": {
     "trades": 57,
-    "net_profit": 63480420.35749193,
-    "net_profit_pct": 6348042.035749193,
-    "gross_profit": 75377638.13408779,
+    "net_profit": 62806973.31440696,
+    "net_profit_pct": 6280697.3314406965,
+    "gross_profit": 74704191.09100282,
     "gross_loss": -11897217.776595851,
     "percent_profitable": 64.91228070175438,
-    "profit_factor": 6.335736602415592,
-    "avg_trade": 1113691.5852191567,
+    "profit_factor": 6.279131179557,
+    "avg_trade": 1101876.7248141572,
     "wins": 37,
     "losses": 20
   },
@@ -46,13 +47,13 @@
   },
   "short": {
     "trades": 29,
-    "net_profit": 39009096.63439238,
-    "net_profit_pct": 3900909.663439238,
-    "gross_profit": 42194776.31233451,
+    "net_profit": 38335649.59130741,
+    "net_profit_pct": 3833564.959130741,
+    "gross_profit": 41521329.269249536,
     "gross_loss": -3185679.677942127,
     "percent_profitable": 65.51724137931035,
-    "profit_factor": 13.245140936326443,
-    "avg_trade": 1345141.2632549098,
+    "profit_factor": 13.03374270701043,
+    "avg_trade": 1321918.9514243933,
     "wins": 19,
     "losses": 10
   },
@@ -12496,14 +12497,6 @@
     {
       "t": "2026-07-07",
       "v": 62807973.31440696
-    },
-    {
-      "t": "2026-07-08",
-      "v": 63533204.25650342
-    },
-    {
-      "t": "2026-07-09",
-      "v": 63481420.35749193
     }
   ],
   "drawdown_curve": [
@@ -24946,14 +24939,6 @@
     {
       "t": "2026-07-07",
       "v": -9.49406912885589
-    },
-    {
-      "t": "2026-07-08",
-      "v": -8.44901548284148
-    },
-    {
-      "t": "2026-07-09",
-      "v": -8.523635785596845
     }
   ],
   "ohlc_bars": [
@@ -46726,20 +46711,6 @@
       "h": 1811.15,
       "l": 1756.54,
       "c": 1770.09
-    },
-    {
-      "t": "2026-07-08",
-      "o": 1770.23,
-      "h": 1783.71,
-      "l": 1710.95,
-      "c": 1741.8
-    },
-    {
-      "t": "2026-07-09",
-      "o": 1741.85,
-      "h": 1760.57,
-      "l": 1720.0,
-      "c": 1743.82
     }
   ],
   "trades": [
@@ -47646,17 +47617,18 @@
       "entry_date": "2026-05-19",
       "entry_price": 2110.06,
       "exit_date": "",
-      "exit_price": 1743.82,
+      "exit_price": 1770.09,
       "qty": 0.0,
-      "pnl": 9388779.789091729,
-      "pnl_pct": 17.356852411779755,
-      "equity_after": 63481420.35749193,
+      "pnl": 8715332.746006757,
+      "pnl_pct": 16.111864117608032,
+      "equity_after": 62807973.31440696,
       "exit_reason": "open",
       "max_runup_pct": null,
       "max_drawdown_pct": null
     }
   ],
   "notes": [
-    "NautilusTrader backtest, ETH Slapper; 100% equity compounding, trade window from 2018-01-01."
+    "NautilusTrader backtest, ETH Slapper; 100% equity compounding, trade window from 2018-01-01.",
+    "Public signal delay: end date shifted back 3 days; all figures are as of 2026-07-07."
   ]
 }
