@@ -303,7 +303,7 @@ The graph is compiled once per `build_workflow_graph()` call. In practice, `work
 Three-layer structure:
 
 1. **Primitives** (`tools/`): stateless callables not exposed to the LLM directly.
-2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. DigiSearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` in `builtin.py:585`.
+2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. DigiSearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
 3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `sitaas_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (one tool, `digivault_search_notes`) activates only when `DIGIVAULT_URL` is set.
 
 The registry is a module-level dict (`_tools`, `_skills` in `registry.py`). It is global to the process — all requests share the same registry. `register_tool` raises `ValueError` on duplicate names, so plugins loaded via `load_entrypoint_tools()` must use unique names.

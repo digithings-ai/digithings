@@ -1,23 +1,20 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { buildPipelineDayData, fanoutIdForKey } from '@/lib/pipeline-graph-data';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import { PIPELINE_TOPOLOGY } from '@/lib/pipeline-topology';
 import type { PipelineStageId } from '@/lib/pipeline-topology';
 import type { ExpansionState, LaidOutNode } from '@/lib/pipeline-layout';
 import type { PipelineStage } from '@/lib/pipeline-links';
-import { parsePipelineParams } from '@/lib/pipeline-links';
-import type { RegimeChip } from './PipelineSummaryStrip';
+import { DIGEST_DOCUMENT_KEYS, parsePipelineParams, resolvePresentDigestKey } from '@/lib/pipeline-links';
+import type { RegimeChip } from '@/lib/render-pipeline-payloads';
+import { regimeChipsFromMacroPayload, summarizeRecommendedPortfolio } from '@/lib/render-pipeline-payloads';
 import PipelineSummaryStrip from './PipelineSummaryStrip';
 import PipelineDaySelector from './PipelineDaySelector';
 import PipelineCanvas from './PipelineCanvas';
 import PipelineNodeDetail from './PipelineNodeDetail';
-
-export interface PipelineClientProps {
-  /** Initial URL search params (passed from the server page) */
-  searchParams?: Record<string, string>;
-}
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -54,11 +51,16 @@ function buildInitialExpansion(
   return { expandedStages, expandedFanouts };
 }
 
-export default function PipelineClient({ searchParams = {} }: PipelineClientProps) {
+export default function PipelineClient() {
+  // Static export (`output: 'export'`) — there is no server to hand this page a
+  // `searchParams` prop, so deep links (`?date=&stage=&node=`) must be read
+  // client-side, same as `/why` (`components/why/why-client.tsx`). Must be
+  // Suspense-wrapped by the caller (`app/pipeline/page.tsx`) per Next.js's rules
+  // for `useSearchParams`.
+  const searchParams = useSearchParams();
   const params = useMemo(
-    () => parsePipelineParams(new URLSearchParams(new URLSearchParams(searchParams).toString())),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    () => parsePipelineParams(searchParams),
+    [searchParams],
   );
 
   const [selectedDate, setSelectedDate] = useState(params.date ?? today());
@@ -71,7 +73,7 @@ export default function PipelineClient({ searchParams = {} }: PipelineClientProp
 
   // Summary strip state
   const [headline, setHeadline] = useState<string | null>(null);
-  const [regimeChips] = useState<RegimeChip[]>([]);
+  const [regimeChips, setRegimeChips] = useState<RegimeChip[]>([]);
   const [decision, setDecision] = useState<string | null>(null);
 
   // Node detail
@@ -88,6 +90,13 @@ export default function PipelineClient({ searchParams = {} }: PipelineClientProp
     let cancelled = false;
 
     void (async () => {
+      // Reset before the fetch, not just on success — otherwise switching to a
+      // date with no digest/rebalance/macro doc silently keeps showing the
+      // PREVIOUS date's headline/decision/chips.
+      setHeadline(null);
+      setDecision(null);
+      setRegimeChips([]);
+
       try {
         const { createClient } = await import('@supabase/supabase-js');
         const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -95,53 +104,65 @@ export default function PipelineClient({ searchParams = {} }: PipelineClientProp
         if (!url || !key) return;
 
         const supabase = createClient(url, key);
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-        // Load available dates (last 30 days of pipeline runs)
-        const { data: dateRows } = await supabase
-          .from('documents')
-          .select('date')
-          .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
-          .order('date', { ascending: false });
+        // Independent reads — run them together instead of one round-trip at a time.
+        const [datesRes, docsRes, digestRes, rebalanceRes, macroRes] = await Promise.all([
+          supabase
+            .from('documents')
+            .select('date')
+            .gte('date', thirtyDaysAgo)
+            .order('date', { ascending: false }),
+          supabase.from('documents').select('document_key').eq('date', selectedDate),
+          // The digest is published as `digest` on baseline days, `digest-delta`
+          // on delta days (the majority of days) — see DIGEST_DOCUMENT_KEYS.
+          supabase
+            .from('documents')
+            .select('payload')
+            .in('document_key', DIGEST_DOCUMENT_KEYS)
+            .eq('date', selectedDate)
+            .maybeSingle(),
+          supabase
+            .from('documents')
+            .select('payload')
+            .eq('document_key', 'pm-rebalance')
+            .eq('date', selectedDate)
+            .maybeSingle(),
+          supabase
+            .from('documents')
+            .select('payload')
+            .eq('document_key', 'macro')
+            .eq('date', selectedDate)
+            .maybeSingle(),
+        ]);
 
-        if (!cancelled && dateRows) {
-          const uniqueDates = [...new Set((dateRows as { date: string }[]).map((r) => r.date))].sort().reverse();
+        if (cancelled) return;
+
+        if (datesRes.data) {
+          const uniqueDates = [...new Set((datesRes.data as { date: string }[]).map((r) => r.date))]
+            .sort()
+            .reverse();
           if (uniqueDates.length > 0) setAvailableDates(uniqueDates);
         }
 
-        // Load documents for the selected date
-        const { data: docs } = await supabase
-          .from('documents')
-          .select('document_key')
-          .eq('date', selectedDate);
-
-        if (!cancelled && docs) {
-          const built = buildPipelineDayData(docs as { document_key: string }[]);
-          setDayData(built);
+        if (docsRes.data) {
+          setDayData(buildPipelineDayData(docsRes.data as { document_key: string }[]));
         }
 
-        // Try to fetch digest headline
-        const { data: digestRow } = await supabase
-          .from('documents')
-          .select('content')
-          .eq('document_key', 'digest')
-          .eq('date', selectedDate)
-          .maybeSingle();
+        // Headline comes from the digest's structured `headline` field — pipeline
+        // documents leave `documents.content` empty and carry everything in `payload`.
+        const digestPayload = digestRes.data?.payload as Record<string, unknown> | undefined;
+        const headlineText = typeof digestPayload?.headline === 'string' ? digestPayload.headline.trim() : '';
+        if (headlineText) setHeadline(headlineText);
 
-        if (!cancelled && digestRow?.content) {
-          const firstLine = (digestRow.content as string).split('\n').find((l: string) => l.trim().length > 10);
-          if (firstLine) setHeadline(firstLine.replace(/^#+\s*/, '').trim());
+        // Decision chip: summarize the day's PM rebalance book (target weights),
+        // not decision_log (a per-ticker analyst-call audit trail, not a per-day summary).
+        const summary = summarizeRecommendedPortfolio(rebalanceRes.data?.payload);
+        if (summary) {
+          setDecision(`${summary.holdingsCount} holdings · ${summary.investedPct.toFixed(0)}% invested`);
         }
 
-        // Try to fetch decision summary
-        const { data: decisionRow } = await supabase
-          .from('decision_log')
-          .select('summary')
-          .eq('date', selectedDate)
-          .maybeSingle();
-
-        if (!cancelled && decisionRow?.summary) {
-          setDecision(decisionRow.summary as string);
-        }
+        setRegimeChips(regimeChipsFromMacroPayload(macroRes.data?.payload));
       } catch {
         // Supabase not configured or no data — degrade gracefully
       }
@@ -149,6 +170,15 @@ export default function PipelineClient({ searchParams = {} }: PipelineClientProp
 
     return () => { cancelled = true; };
   }, [selectedDate]);
+
+  // A '?node=digest' deep link (from Overview / the command palette, which don't
+  // know today's baseline-vs-delta cadence) is a sentinel, not necessarily this
+  // day's real key — derive the actual key to fetch/highlight once the day's
+  // documents load, rather than storing it (avoids a setState-in-effect).
+  const resolvedActiveDocumentKey = useMemo(() => {
+    if (activeDocumentKey !== 'digest') return activeDocumentKey;
+    return resolvePresentDigestKey(dayData) ?? activeDocumentKey;
+  }, [activeDocumentKey, dayData]);
 
   const handleNodeActivate = useCallback((node: LaidOutNode) => {
     setActiveDocumentKey(node.documentKey ?? null);
@@ -177,13 +207,13 @@ export default function PipelineClient({ searchParams = {} }: PipelineClientProp
         <PipelineCanvas
           day={dayData}
           initialExpansion={initialExpansion}
-          selectedNodeId={activeDocumentKey ?? undefined}
+          selectedNodeId={resolvedActiveDocumentKey ?? undefined}
           onNodeActivate={handleNodeActivate}
         />
 
-        {activeDocumentKey !== null && (
+        {resolvedActiveDocumentKey !== null && (
           <PipelineNodeDetail
-            documentKey={activeDocumentKey}
+            documentKey={resolvedActiveDocumentKey}
             date={selectedDate}
             onClose={() => setActiveDocumentKey(null)}
           />

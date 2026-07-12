@@ -7,16 +7,38 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat
 COPY package.json package-lock.json ./
 COPY frontend/digichat/package.json frontend/digichat/
-COPY frontend/design/package.json frontend/design/
+COPY frontend/digichat-ui/package.json frontend/digichat-ui/
+COPY frontend/digiweb/design/package.json frontend/digiweb/design/
+COPY frontend/digiweb/web/package.json frontend/digiweb/web/
 COPY frontend/olympus/package.json frontend/olympus/
 RUN npm ci --workspace frontend/digichat --include-workspace-root
 
 FROM node:22-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+# next.config.ts imports security-headers.ts, which reads DIGICHAT_EMBED_HOSTS
+# once at import time to compute the embed CSP frame-ancestors list — Next.js
+# evaluates this during `next build` and bakes it into the routes manifest, so
+# it must be passed as a build arg, not just a runtime container env var.
+# Deliberately DIGICHAT_EMBED_HOSTS (plain hostnames), not DIGICHAT_EMBED_TENANTS
+# (which also carries each tenant's secret token) — build-args persist in image
+# layer history and cloud-build logs (az acr build etc.), and the CSP computation
+# never reads the token anyway. DIGICHAT_EMBED_TENANTS stays runtime-only.
+ARG DIGICHAT_EMBED_HOSTS=""
+ENV DIGICHAT_EMBED_HOSTS=$DIGICHAT_EMBED_HOSTS
 COPY --from=deps /app ./
-COPY frontend/design ./frontend/design
+COPY frontend/digiweb/design ./frontend/digiweb/design
+COPY frontend/digiweb/web ./frontend/digiweb/web
+COPY frontend/digichat-ui ./frontend/digichat-ui
 COPY frontend/digichat ./frontend/digichat
+# package-lock.json is macOS-generated; Linux optional natives are not locked
+# (see .github/workflows/test-digichat.yml, which needs the -gnu equivalents
+# on its own non-Alpine runner — this image is musl/Alpine, hence -musl here).
+RUN npm install \
+      @rolldown/binding-linux-x64-musl@1.0.0-rc.16 \
+      lightningcss-linux-x64-musl@1.32.0 \
+      @tailwindcss/oxide-linux-x64-musl@4.2.2 \
+      --no-save --no-audit --no-fund
 RUN npm run build --workspace frontend/digichat
 
 FROM node:22-alpine AS runner

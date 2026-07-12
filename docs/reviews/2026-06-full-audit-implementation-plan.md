@@ -889,7 +889,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-081 → AUDIT-081
 - **Title:** Replace ticker.js innerHTML with textContent/escape
 - **Component:** design
-- **Files:** `frontend/design/src/ticker.js` (or path per tree)
+- **Files:** `frontend/digiweb/design/src/ticker.js` (or path per tree)
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** grep no innerHTML in ticker; manual landings check
@@ -898,7 +898,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-082 → AUDIT-082
 - **Title:** Replace typewriter.js innerHTML with textContent
 - **Component:** design
-- **Files:** `frontend/design/src/typewriter.js`
+- **Files:** `frontend/digiweb/design/src/typewriter.js`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** grep clean; landings typewriter works
@@ -1279,7 +1279,7 @@ Frontends and optional stack: see §5.4 checklist. Post-merge cron watch: [`POST
 | A6-digiclaw | `digiclaw/**`, `tests/dc/**` | 004, 072–074 |
 | A7-digibase+smith | `digibase/**`, `digismith/**`, `tests/db/**`, `tests/dsm/**` | 039–040, 066–071 |
 | A8-digichat | `frontend/digichat/**` | 010, 032–034, 075–079, 105 |
-| A9-olympus+design | `frontend/olympus/**`, `frontend/design/**`, `frontend/digithings/**`, `frontend/digiquant/**` | 035–038, 080–083 |
+| A9-olympus+design | `frontend/olympus/**`, `frontend/digiweb/design/**`, `frontend/digithings/**`, `frontend/digiquant/**` | 035–038, 080–083 |
 | A10-docs | `**/AGENTS.md`, `**/ARCHITECTURE.md`, `docs/**`, `CLAUDE.md` | 111–126, 096 |
 | A11-agents | `agents.yml`, `agents/sources/**` | 091–094, 123 |
 

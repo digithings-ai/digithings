@@ -51,7 +51,7 @@ NautilusTrader-backed strategy engine with backtest and optimisation nodes wired
 Document ingestion, chunking, embedding, and hybrid vector/keyword search. Pluggable backends. Powers the SITAAS internal document search deployment.
 
 ### DigiChat — chat interface and BFF
-Next.js production chat UI deployed at chat.digithings.ai. BYOK (bring-your-own-key) flow, model selector, Auth.js authentication, Drizzle ORM, adaptive UI scoped by access level.
+Next.js production chat UI (`frontend/digichat`) — BYOK (bring-your-own-key) flow, model selector, Auth.js authentication, Drizzle ORM, adaptive UI scoped by access level. Not deployed publicly yet; the digithings.ai demo still runs a separate bespoke widget pending the gateway cutover ([ADR-0018](../adr/0018-digichat-path-routing.md), epic [#1248](https://github.com/digithings-ai/digithings/issues/1248)).
 
 ### DigiKey — auth control plane
 JWT-based authentication with scoped API keys (RS256, JWKS endpoint), SSO federation groundwork, org and project membership model.

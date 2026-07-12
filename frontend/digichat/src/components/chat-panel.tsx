@@ -100,7 +100,7 @@ function RagSourcesTrace({ sources }: { sources: unknown[] }) {
           return (
             <div
               key={`${sid}-${idx}`}
-              className="rounded-md border border-border/35 bg-black/25 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground"
+              className="rounded-md border border-border/35 bg-term-bg px-2 py-1.5 text-[11px] leading-snug text-muted-foreground"
             >
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="font-mono text-[10px] text-foreground/90">{sid}</span>
@@ -255,7 +255,7 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
                 <span className="truncate">{label}</span>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <pre className="mt-2 max-h-56 overflow-auto rounded-md border border-border/40 bg-black/35 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                <pre className="mt-2 max-h-56 overflow-auto rounded-md border border-border/40 bg-term-bg p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
                   {JSON.stringify(part, null, 2)}
                 </pre>
               </CollapsibleContent>
@@ -546,8 +546,9 @@ export function ChatPanel({
 
           {error ? (
             <div className="dc-term-row dc-term-row-assistant">
-              <span className="dc-term-marker" style={{ color: "var(--accent-digikey)" }}>✗</span>
-              <div className="dc-term-body" style={{ color: "var(--accent-digikey)" }}>
+              {/* error state rides the four-state system (--down) — a livery is an identity, never a semantic (canon §16) */}
+              <span className="dc-term-marker" style={{ color: "var(--down)" }}>✗</span>
+              <div className="dc-term-body" style={{ color: "var(--down)" }}>
                 {error.message}
               </div>
             </div>

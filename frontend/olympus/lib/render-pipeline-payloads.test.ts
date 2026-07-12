@@ -19,6 +19,7 @@ import {
   renderRebalanceMarkdown,
   renderRiskDebateMarkdown,
   renderSegmentReportMarkdown,
+  regimeChipsFromMacroPayload,
   summarizeRecommendedPortfolio,
 } from './render-pipeline-payloads';
 import { digestItemsToStrings, extractDigestContextBullets } from './snapshot-context';
@@ -389,6 +390,35 @@ describe('renderDigestMarkdownFromSnapshot shape routing', () => {
     const md = renderDigestMarkdownFromSnapshot(V1_SNAPSHOT as never);
     expect(md).toContain('# DIGEST — 2026-04-27');
     expect(md).toContain('## Sector Scorecard');
+  });
+});
+
+describe('regimeChipsFromMacroPayload (#1259 — Pipeline summary strip)', () => {
+  it('builds one chip per 4-factor field with the expected label/value/color', () => {
+    const chips = regimeChipsFromMacroPayload({
+      segment: 'macro',
+      growth: 'slowing',
+      inflation: 'cooling',
+      policy: 'easing',
+      risk_appetite: 'mixed',
+    });
+    expect(chips).toEqual([
+      { label: 'Growth', value: 'slowing', color: 'amber' },
+      { label: 'Inflation', value: 'cooling', color: 'green' },
+      { label: 'Policy', value: 'easing', color: 'green' },
+      { label: 'Risk appetite', value: 'mixed', color: 'amber' },
+    ]);
+  });
+
+  it('drops missing factors and defaults unknown tokens to muted (never throws)', () => {
+    expect(regimeChipsFromMacroPayload({ growth: 'expanding' })).toEqual([
+      { label: 'Growth', value: 'expanding', color: 'green' },
+    ]);
+    expect(regimeChipsFromMacroPayload({ growth: 'sideways' })).toEqual([
+      { label: 'Growth', value: 'sideways', color: 'muted' },
+    ]);
+    expect(regimeChipsFromMacroPayload(null)).toEqual([]);
+    expect(regimeChipsFromMacroPayload(undefined)).toEqual([]);
   });
 });
 

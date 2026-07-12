@@ -18,10 +18,10 @@ describe('matrix-format', () => {
 
   describe('directionStyle', () => {
     it('gives green ▲ for bullish, red ▼ for bearish, amber ◆ for watch', () => {
-      expect(directionStyle('bullish')).toMatchObject({ text: 'text-fin-green', glyph: '▲' });
-      expect(directionStyle('short')).toMatchObject({ text: 'text-fin-red', glyph: '▼' });
-      expect(directionStyle('watch')).toMatchObject({ text: 'text-fin-amber', glyph: '◆' });
-      expect(directionStyle('mixed')).toMatchObject({ text: 'text-text-secondary', glyph: '•' });
+      expect(directionStyle('bullish')).toMatchObject({ text: 'text-up', glyph: '▲' });
+      expect(directionStyle('short')).toMatchObject({ text: 'text-down', glyph: '▼' });
+      expect(directionStyle('watch')).toMatchObject({ text: 'text-warn', glyph: '◆' });
+      expect(directionStyle('mixed')).toMatchObject({ text: 'text-ink-soft', glyph: '•' });
     });
   });
 

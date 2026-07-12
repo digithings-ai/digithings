@@ -220,7 +220,7 @@ describe('IntelligenceTab — focusCcy cross-link', () => {
     const html = renderFocused(rows, why, 'JPY');
     // The focused card carries a data marker + a highlight ring class.
     expect(html).toMatch(/data-focus-ccy="JPY"/);
-    expect(html).toContain('ring-fin-blue');
+    expect(html).toContain('ring-accent');
   });
 
   it('expands nothing when focusCcy is null', () => {

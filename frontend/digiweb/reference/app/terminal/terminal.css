@@ -1,0 +1,227 @@
+/* Terminal page — diegetic CLI session + budget sidebar.
+   .terminal-layout and the whole .terminal-shell cluster (box, header, pre, CLI
+   line colours, lead prompt) are migrated to utilities in
+   terminal-budget-reference.tsx. The budget sidebar stays as CSS: its .on state
+   (li.on) carries a 2-colour color-mix border that has no token utility. */
+
+.budget-shell {
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.budget-shell .badge {
+  display: inline-block;
+  padding: 0.16rem 0.5rem;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.budget-title {
+  margin-top: 0.9rem;
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+}
+
+.budget-value {
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+}
+
+.budget-shell ul {
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.budget-shell li {
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  padding: 0.22rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--ink-mute);
+  letter-spacing: 0.08em;
+}
+
+.budget-shell li.on {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+  background: var(--accent-weak);
+}
+
+/* Streaming transcript — the digichat turn grammar. Promoted (#1418): the
+   pane, turn rows, and blink caret are <ChatTranscript>/<ChatMessage>/
+   <ChatStreamCursor> from @digithings/web — chat-core.css owns the shell
+   shadow, the light-theme surface override, and the caret keyframes. Kept
+   here: the .st-tool chip, a page-local flourish with a 2-colour color-mix
+   border (indent matches the chat-msg grid body: 1.25rem col + 0.55rem gap). */
+
+.st-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.3rem 0 0.3rem 1.8rem;
+  padding: 0.15rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--hair));
+  border-radius: 8px;
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+
+/* Code review — unified diff. The diff colorway is the THIRD color domain
+   (canon §13): added/removed as pastel washes, never the saturated money
+   hues (--up/--down are P&L only). */
+
+.rv-frame {
+  --rv-add: #86c98f; /* pastel green — diff domain, not --up */
+  --rv-del: #e2929e; /* pastel red — diff domain, not --down */
+  margin-top: 1.2rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+  max-width: 720px;
+}
+
+/* .rv-head / .rv-path / .rv-stat migrated to utilities in
+   code-review-reference.tsx. Everything below stays: the +/- counts, washes and
+   marks read --rv-add / --rv-del (the diff colour domain) defined on .rv-frame,
+   and .rv-chip carries a 2-colour color-mix border. */
+
+.rv-add-count {
+  color: var(--rv-add);
+}
+
+.rv-del-count {
+  color: var(--rv-del);
+}
+
+.rv-chip {
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--hair));
+  color: var(--warn);
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.rv-diff {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  line-height: 1.9;
+  overflow-x: auto;
+}
+
+.rv-row {
+  display: grid;
+  grid-template-columns: 2.4rem 2.4rem 1.2rem 1fr;
+  align-items: baseline;
+  white-space: pre;
+}
+
+.rv-ln {
+  text-align: right;
+  padding-right: 0.5rem;
+  color: var(--ink-mute);
+  font-size: 0.64rem;
+  user-select: none;
+}
+
+.rv-mark {
+  text-align: center;
+  color: var(--ink-mute);
+  user-select: none;
+}
+
+.rv-code {
+  color: var(--ink-soft);
+  padding-right: 1rem;
+}
+
+.rv-add {
+  background: color-mix(in srgb, var(--rv-add) 13%, transparent);
+}
+
+.rv-add .rv-mark,
+.rv-add .rv-code {
+  color: color-mix(in srgb, var(--rv-add) 70%, var(--ink));
+}
+
+.rv-del {
+  background: color-mix(in srgb, var(--rv-del) 13%, transparent);
+}
+
+.rv-del .rv-mark,
+.rv-del .rv-code {
+  color: color-mix(in srgb, var(--rv-del) 70%, var(--ink));
+}
+
+/* Code sample — copyable command switcher + snippet. The block box, tab/head
+   rows, language label, and code/prompt/multiline text are migrated to
+   utilities in code-sample-reference.tsx. Kept as CSS: the light-theme surface
+   override (combinator wins over bg-term-bg under light), and the .cs-tab /
+   .cs-copy controls — their transitions, hovers, and .on / .is-copied states
+   carry 2-colour color-mix borders with no token utility. */
+
+:root[data-theme="light"] .cs-block {
+  background: var(--surface);
+}
+
+.cs-tab {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-mute);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 0.22rem 0.55rem;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+
+.cs-tab:hover {
+  color: var(--ink-soft);
+}
+
+.cs-tab.on {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.cs-copy {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--ink-mute);
+  background: transparent;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.cs-copy:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.cs-copy.is-copied {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 45%, var(--hair));
+}

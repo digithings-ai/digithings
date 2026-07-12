@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Footer } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
-import { DqNav } from "@/components/landing/DqNav";
+import { SiteNav } from "@/components/landing/SiteNav";
 import { AmbientMesh } from "@/components/landing/AmbientMesh";
 import { StrategyLibrary } from "@/components/tearsheet/strategy-library";
 import { type StrategyIndexEntry } from "@/components/tearsheet/types";
@@ -17,12 +17,12 @@ const strategies = index as StrategyIndexEntry[];
 export default function StrategiesPage() {
   return (
     <>
-      <DqNav />
-      <main className="dq-subpage dq-subpage-library">
+      <SiteNav />
+      <main className="dq-subpage pb-[clamp(4.5rem,10vw,7rem)]">
         <AmbientMesh />
-        <div className="wrap">
+        <div className="wrap pb-[1.5rem]">
           <header className="dq-sechead">
-            <div className="dq-eyebrow">{"// strategies"}</div>
+            <div className="kicker">{"// strategies"}</div>
             <h1 className="dq-title">Strategy library</h1>
             <p className="dq-sub">
               Full tearsheets — equity, drawdown, trade log, and risk metrics. Each run is a

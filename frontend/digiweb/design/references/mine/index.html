@@ -1,0 +1,1108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>the design mine — reference specimens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@300;400;500&display=swap" />
+<style>
+/* ============================================================
+   THE DESIGN MINE — extracted specimens from graphite.com,
+   cursor.com, x.ai, rendered alongside the LIVE digiquant.io v7
+   language. Purpose: mine, blend, converge — every redesign move
+   must be traceable to a specimen here + a live v7 anchor.
+   Provenance per specimen: [live repo] [live fetch 2026-07-02]
+   [deep scan 2026-06-29] [approximation].
+   ============================================================ */
+:root{
+  /* live digiquant v7 tokens (frontend/digiweb/design/tokens.css, dark) */
+  --bg:#0B0C0E; --surface:#121417; --hair:rgba(255,255,255,.09); --hair2:rgba(255,255,255,.16);
+  --ink:#ECEEF0; --soft:#9AA0A6; --mute:#6B7177;
+  --em:#4fa37a; --em-weak:rgba(79,163,122,.14); --cy:#3DD6C4;
+  --up:#3FB984; --down:#E0654B; --warn:#E0B341;
+  --glide:cubic-bezier(.22,1,.36,1);
+  /* graphite (deep scan; accent corrected 2026-07-02 — scans record #ff8833) */ --gr-bg:#0a0a0a; --gr-s1:#18181b; --gr-s2:#27272a; --gr-s3:#3f3f46; --gr-accent:#ff8833;
+  /* cursor (deep scan) */ --cu-bg:#f7f8f3; --cu-border:#e3e2dd; --cu-ink:#1a1a18; --cu-warm:#d3c9b9; --cu-dark:#141414;
+  /* x.ai (deep scan) */ --xa-bg:#0a0a0a; --xa-s:#191919; --xa-hair:#212327; --xa-ink:#fafafa; --xa-mute:#8a8a8a;
+  --serif:"Fraunces",Georgia,serif; --sans:"Geist",system-ui,sans-serif; --mono:"Geist Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;padding:0 0 6rem}
+.wrap{max-width:1180px;margin-inline:auto;padding-inline:clamp(1rem,4vw,2.5rem)}
+header.mine{padding:4.5rem 0 2.5rem;border-bottom:1px solid var(--hair)}
+h1{font-family:var(--serif);font-weight:400;font-size:clamp(2.2rem,5vw,3.4rem);letter-spacing:-.02em;line-height:1.05}
+h1 em{font-style:italic;color:var(--em)}
+.lede{color:var(--soft);max-width:62ch;margin-top:1rem;font-size:.98rem}
+.legend{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1.4rem}
+.prov{font-family:var(--mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--hair2);border-radius:999px;padding:.22rem .6rem;color:var(--soft)}
+.prov.live{color:var(--up);border-color:rgba(63,185,132,.4)}
+.prov.fetch{color:var(--cy);border-color:rgba(61,214,196,.35)}
+section{padding:3.5rem 0 0}
+.sec-eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--em)}
+h2{font-family:var(--serif);font-weight:400;font-size:clamp(1.5rem,2.6vw,2.1rem);letter-spacing:-.01em;margin:.5rem 0 .4rem}
+.sec-note{color:var(--soft);font-size:.9rem;max-width:70ch}
+.grid{display:grid;gap:1rem;margin-top:1.6rem}
+.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.spec{border:1px solid var(--hair);border-radius:12px;background:var(--surface);padding:1.2rem;display:flex;flex-direction:column;gap:.8rem;min-width:0}
+.spec-h{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap}
+.spec-src{font-family:var(--mono);font-size:.72rem;color:var(--ink);letter-spacing:.04em}
+.spec-note{font-size:.8rem;color:var(--soft);line-height:1.55}
+.vals{font-family:var(--mono);font-size:.68rem;color:var(--mute);line-height:1.9;letter-spacing:.02em}
+.stage{border-radius:8px;padding:1.1rem;min-height:96px;display:flex;flex-direction:column;justify-content:center;gap:.4rem;overflow:hidden}
+.chips{display:flex;gap:.45rem;flex-wrap:wrap}
+.chip{width:44px;height:44px;border-radius:8px;border:1px solid var(--hair2);position:relative}
+.chip i{position:absolute;left:0;right:0;top:calc(100% + 3px);font-family:var(--mono);font-style:normal;font-size:.56rem;color:var(--mute);text-align:center;letter-spacing:0}
+.chips{padding-bottom:1.1rem}
+.replay{align-self:flex-start;font-family:var(--mono);font-size:.68rem;background:none;border:1px solid var(--hair2);border-radius:6px;color:var(--soft);padding:.3rem .7rem;cursor:pointer}
+.replay:hover{color:var(--ink)}
+.pillF{display:inline-flex;align-items:center;gap:.4rem;border-radius:999px;padding:.55rem 1.25rem;font-size:.85rem;font-weight:500;border:1px solid transparent}
+.pillO{display:inline-flex;align-items:center;border-radius:999px;padding:.55rem 1.25rem;font-size:.85rem;background:transparent}
+.ln{display:block;overflow:hidden;padding-bottom:.18em;margin-bottom:-.18em}
+.ln>span{display:block;transform:translateY(110%);transition:transform .9s var(--glide)}
+.on .ln>span{transform:none}
+.rail{height:2px;background:var(--hair);border-radius:1px;overflow:hidden;margin-top:.7rem}
+.rail>div{height:100%;width:0%;background:var(--em);transition:width .3s linear}
+.pin-panel{opacity:.25;transition:opacity .5s var(--glide)}
+.pin-panel.on{opacity:1}
+.blend-tag{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--bg);background:var(--em);border-radius:4px;padding:.18rem .5rem;font-weight:500}
+.clipDemo{clip-path:inset(0 100% 0 0);transition:clip-path .9s var(--glide)}
+.clipDemo.on{clip-path:inset(0 0 0 0)}
+.tick{display:inline-block;background:var(--em);height:14px;vertical-align:bottom;margin-right:6px;opacity:.85}
+@media (prefers-reduced-motion: reduce){
+  .ln>span{transform:none !important;transition:none}
+  *{animation:none !important}
+}
+</style>
+</head>
+<body>
+
+<header class="mine"><div class="wrap">
+  <div class="sec-eyebrow">// frontend/digiweb/design/references/mine</div>
+  <h1>The design mine — <em>specimens to converge on.</em></h1>
+  <p class="lede">Extracted design elements from the reference set, rendered next to the <b>live digiquant.io</b> language. Every design move gets mined here first: pick a specimen, blend it with a live anchor (class names cited), review the blend, then ship. No move without a specimen; no specimen without provenance. The distilled rules live in the <a href="../../spec/index.html" style="color:var(--ink);text-decoration:underline;text-decoration-color:var(--em)">canon</a>.</p>
+  <div class="legend">
+    <span class="prov live">live repo = origin/main @ 1fba70d — the DEPLOYED branch (verified 2026-07-02)</span>
+    <span class="prov fetch">live fetch 2026-07-02 — graphite.com</span>
+    <span class="prov">deep scan 2026-06-29 — cursor.com · x.ai (bot-blocked to fetch)</span>
+    <span class="prov">approximation — typeface stand-ins labeled</span>
+    <span class="prov fetch">extended refs, live 2026-07-02 — hermes-agent.nousresearch.com · figma.com · anthropic.com (CSS tokens via fetch) — §17</span>
+  </div>
+</div></header>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 01</div>
+  <h2>Palettes — restraint is the shared move</h2>
+  <p class="sec-note">All three references are near-monochrome with one scarce accent. v7 already is too — the emerald must stay an <i>event</i> (active node, live value, one primary CTA), never wallpaper.</p>
+  <div class="grid g4">
+    <div class="spec"><div class="spec-h"><span class="spec-src">digiquant v7</span><span class="prov live">live repo</span></div>
+      <div class="chips">
+        <span class="chip" style="background:#0B0C0E"><i>#0B0C0E</i></span>
+        <span class="chip" style="background:#121417"><i>#121417</i></span>
+        <span class="chip" style="background:rgba(255,255,255,.09)"><i>hair .09</i></span>
+        <span class="chip" style="background:#4fa37a"><i>#4fa37a</i></span>
+        <span class="chip" style="background:#3FB984"><i>up</i></span>
+        <span class="chip" style="background:#E0654B"><i>down</i></span>
+      </div>
+      <div class="vals">--bg / --surface / --hair · accent-digiquant #4fa37a (emerald)<br>P&amp;L: --up #3FB984 · --down #E0654B · --warn #E0B341<br>mesh teals: 61,214,196 · 38,120,110 · 63,185,132 · 30,90,120</div>
+      <p class="spec-note">The anchor. Everything below converges toward this, not away from it.</p>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite.com</span><span class="prov">deep scan</span></div>
+      <div class="chips">
+        <span class="chip" style="background:#0a0a0a"><i>#0a0a0a</i></span>
+        <span class="chip" style="background:#18181b"><i>#18181b</i></span>
+        <span class="chip" style="background:#27272a"><i>#27272a</i></span>
+        <span class="chip" style="background:#3f3f46"><i>#3f3f46</i></span>
+        <span class="chip" style="background:#ff5c0a"><i>accent</i></span>
+      </div>
+      <div class="vals">elevation by luminance steps, not shadows<br>hairlines: white @ 8–10% · accent only on primary CTA</div>
+      <p class="spec-note">Mine: the <b>stepped-surface depth</b>. v7 already avoids shadows — formalize the 3-step surface scale.</p>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">cursor.com</span><span class="prov">deep scan</span></div>
+      <div class="chips">
+        <span class="chip" style="background:#f7f8f3"><i>#f7f8f3</i></span>
+        <span class="chip" style="background:#e3e2dd"><i>#e3e2dd</i></span>
+        <span class="chip" style="background:#d3c9b9"><i>#d3c9b9</i></span>
+        <span class="chip" style="background:#1a1a18"><i>#1a1a18</i></span>
+        <span class="chip" style="background:#141414"><i>editor</i></span>
+      </div>
+      <div class="vals">warm paper chrome · ALL saturation lives inside the product frame (syntax colors)</div>
+      <p class="spec-note">Mine: <b>color only inside the frame</b> — maps to v7 light mode + our terminal panels carrying the color.</p>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai</span><span class="prov">deep scan</span></div>
+      <div class="chips">
+        <span class="chip" style="background:#0a0a0a"><i>#0a0a0a</i></span>
+        <span class="chip" style="background:#191919"><i>#191919</i></span>
+        <span class="chip" style="background:#212327"><i>#212327</i></span>
+        <span class="chip" style="background:#fafafa"><i>ink</i></span>
+        <span class="chip" style="background:#8a8a8a"><i>mute</i></span>
+      </div>
+      <div class="vals">chrome is 100% monochrome · color = an event (demo content, one footer bloom)</div>
+      <p class="spec-note">Mine: <b>color-as-event → P&amp;L semantics</b>. On dashboards a green number means money, nothing else is colored.</p>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 02</div>
+  <h2>Display type — four attitudes</h2>
+  <p class="sec-note">v7's voice is the Fraunces italic-emphasis serif (<span class="vals" style="font-size:.72rem">.dqhero-h1 · clamp(2.5rem,6vw,4.7rem) · -0.025em · em→accent italic</span>). The references contribute <i>scale courage</i> (x.ai), <i>tightness</i> (Cursor), and <i>softness in motion</i> (Graphite) — not replacement faces.</p>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">digiquant v7 — hero serif</span><span class="prov live">live repo</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair)">
+        <div id="lnDemo" class="on" style="font-family:var(--serif);font-weight:400;font-size:clamp(1.7rem,3.4vw,2.6rem);line-height:1.06;letter-spacing:-.025em">
+          <span class="ln"><span>A quant hedge fund.</span></span>
+          <span class="ln"><span><em style="font-style:italic;color:var(--em)">In a box you own.</em></span></span>
+        </div>
+      </div>
+      <button class="replay" data-replay="lnDemo">↻ replay .ln reveal</button>
+      <div class="vals">Fraunces 400 · .ln overflow-hidden line reveal · em = italic + accent</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — mono at display scale</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair)">
+        <div style="font-family:var(--mono);font-weight:300;font-size:clamp(2.2rem,5vw,3.6rem);letter-spacing:-.024em;color:var(--xa-ink);line-height:.95">Grok 4.2</div>
+        <div style="font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;color:var(--xa-mute);text-transform:uppercase;margin-top:.5rem">weight 300 · tracking −0.024em</div>
+      </div>
+      <div class="vals">Geist Mono 300 at 96–320px on landing · mine the attitude at panel scale for metrics (see 07 · B2)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">cursor.com — tight literal sans</span><span class="prov">deep scan · approximation</span></div>
+      <div class="stage" style="background:var(--cu-bg);border:1px solid var(--cu-border)">
+        <div style="font-family:var(--sans);font-weight:600;font-size:clamp(1.4rem,2.6vw,2rem);letter-spacing:-.035em;line-height:1.12;color:var(--cu-ink)">Cursor is your coding agent for building ambitious software.</div>
+      </div>
+      <div class="vals">one plain identity sentence · tracking-tight · leading 1.1 · zero hype adjectives</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite.com — hero verbatim</span><span class="prov fetch">live fetch</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="font-family:var(--sans);font-weight:500;font-size:clamp(1.4rem,2.6vw,2rem);letter-spacing:-.02em;line-height:1.12;color:#fafafa">The next generation of code review.</div>
+        <div style="font-size:.8rem;color:#a1a1aa;margin-top:.5rem">Graphite is the AI code review platform where teams ship higher quality code, faster.</div>
+      </div>
+      <div class="vals">headline + one-line sub + 2 CTAs ("Get started for free" / "Request a demo") · face ≈ Matter (stand-in: Geist 500)<br><b style="color:var(--up);font-weight:500">LIVE-VERIFIED 2026-07-02:</b> matterFont · 60px · weight 500 · tracking −1.5px · line-height 1.0 · canvas lab(2.75) ≈ #0a0a0a · body/nav text 14px</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 03</div>
+  <h2>Motion lab — one house curve, evidential motion only</h2>
+  <p class="sec-note">v7 already ships the glide token (<span class="vals" style="font-size:.72rem">--ease-glide: cubic-bezier(.22,1,.36,1)</span>) — Graphite's core trick is simply applying ONE such curve <i>everywhere</i>. Cursor adds: motion lives inside the product frame. x.ai adds: numbers may count, nothing else moves. All demos respect prefers-reduced-motion.</p>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">the house curve vs default</span><span class="prov live">live repo</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair);gap:1rem">
+        <div><div class="vals" style="margin-bottom:.3rem">--ease-glide (ours = graphite's move)</div><div style="height:10px;position:relative"><div id="dotA" style="position:absolute;width:10px;height:10px;border-radius:50%;background:var(--em)"></div></div></div>
+        <div><div class="vals" style="margin-bottom:.3rem">generic ease-in-out (the template tell)</div><div style="height:10px;position:relative"><div id="dotB" style="position:absolute;width:10px;height:10px;border-radius:50%;background:var(--mute)"></div></div></div>
+      </div>
+      <button class="replay" data-run="curves">↻ run curves</button>
+      <div class="vals">rule: every transition on the site rides --ease-glide · ~.5–.9s · transform/opacity only<br><b style="color:var(--up);font-weight:500">LIVE-VERIFIED 2026-07-02 — graphite's actual curve, verbatim from their CSS (they name it --ease-glide too):</b><br>linear(0,.012 0.9%,.05 2%,.411 9.2%,.517 11.8%,.611 14.6%,.694 17.7%,.765 21.1%,.824 24.8%,.872 28.9%,.91 33.4%,.939 38.4%,.977 50.9%,.994 68.4%,1)<br>full token set: --ease-cubic-in-out (.66,0,.34,1) · --ease-out (0,0,.2,1) · --ease-in-out (.4,0,.2,1) · plus (.16,1,.3,1) — near-identical to our cubic-bezier(.22,1,.36,1)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — pinned tour (mini)</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div id="pinStage" style="font-family:var(--mono);font-size:.78rem;line-height:1.7">
+          <div class="pin-panel on" data-pin="0" style="color:#fafafa">01 · write — stacked PRs, small diffs</div>
+          <div class="pin-panel" data-pin="1" style="color:#fafafa">02 · review — AI first pass, humans decide</div>
+          <div class="pin-panel" data-pin="2" style="color:#fafafa">03 · merge — queue lands it clean</div>
+        </div>
+        <div class="rail"><div id="pinRail" style="background:var(--gr-accent)"></div></div>
+      </div>
+      <button class="replay" data-run="pin">↻ run pin cycle</button>
+      <div class="vals">position:sticky stage + tall track · ONE flagship pin per page · v7 anchor: OlympusScene already pins — enhance it, add nothing<br><b style="color:var(--up);font-weight:500">LIVE-VERIFIED anatomy (see live captures below):</b> LEFT product stage with corner "+" registration marks (blueprint framing — kinship with our qn-blueprint-bg) + mono caption · RIGHT collapsed tab rail, each item with a left-edge indicator; the ACTIVE item expands into a card with body copy and a vertical progress bar that scrubs with scroll</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">cursor — diegetic motion (in-frame)</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--cu-dark);border:1px solid #2a2a2a">
+        <div style="font-family:var(--mono);font-size:.72rem;color:#9a9a94">agent · <span style="color:#e8e8e2">migrate auth to JWT</span></div>
+        <div class="rail" style="background:#2a2a2a"><div id="cuBar" style="background:#7ee0c0"></div></div>
+        <div id="cuLine" style="font-family:var(--mono);font-size:.72rem;color:#7a7a74;min-height:1.2em;margin-top:.35rem"></div>
+      </div>
+      <button class="replay" data-run="diegetic">↻ run in-frame demo</button>
+      <div class="vals">the page scroll stays calm; only the product moves · specific content: "Worked for 14m 22s", never "~15 min"</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — count-up on a real number</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair)">
+        <div id="countUp" style="font-family:var(--mono);font-weight:300;font-size:2.6rem;letter-spacing:-.02em;color:var(--xa-ink)">0.00</div>
+        <div style="font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;color:var(--xa-mute);text-transform:uppercase">btc slapper · profit factor · shipped backtest</div>
+      </div>
+      <button class="replay" data-run="count">↻ run count-up</button>
+      <div class="vals">counters ONLY on genuinely impressive, true numbers (8.72 is real) — a count-up on filler reads as slop</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 04</div>
+  <h2>Surfaces &amp; frames — flat, hairline, product-in-context</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">v7 price-card (live) + graphite luminance steps</span><span class="prov live">live repo</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair);flex-direction:row;gap:.8rem;align-items:stretch">
+        <div style="flex:1;border:1px solid var(--hair);border-radius:12px;background:var(--surface);padding:.9rem">
+          <div style="font-weight:600;font-size:.95rem">Self hosted</div>
+          <div style="font-family:var(--mono);font-size:.72rem;color:var(--soft);margin:.2rem 0 .6rem">open core · <span style="color:var(--up)">free</span></div>
+          <div class="vals">border --hair · radius 12 · flat</div>
+        </div>
+        <div style="flex:1;border:1px solid rgba(79,163,122,.45);border-radius:12px;background:linear-gradient(180deg,var(--em-weak),var(--surface));padding:.9rem">
+          <div style="font-weight:600;font-size:.95rem">Managed</div>
+          <div style="font-family:var(--mono);font-size:.72rem;color:var(--soft);margin:.2rem 0 .6rem">contact us</div>
+          <div class="vals">.accent variant — the ONE allowed tint</div>
+        </div>
+      </div>
+      <div class="vals">graphite lesson formalized: depth = surface steps (#0B0C0E → #121417 → hair borders), never box-shadow</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">cursor — product frame, cropped real UI</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--cu-bg);border:1px solid var(--cu-border)">
+        <div style="border:1px solid var(--cu-border);border-radius:12px;background:#fff;overflow:hidden;transform:translateY(6px)">
+          <div style="border-bottom:1px solid var(--cu-border);padding:.45rem .7rem;font-family:var(--mono);font-size:.66rem;color:#8a8a80">olympus · portfolio — cropped, implies more app beyond the edge</div>
+          <div style="padding:.7rem;font-family:var(--mono);font-size:.72rem;color:#1a1a18;line-height:1.8">BTC-USD &nbsp;<span style="color:#0E8C7F">+2.14%</span> · exposure 0.31×<br>ETH-USD &nbsp;<span style="color:#C9533B">−0.88%</span> · exposure 0.12×</div>
+        </div>
+      </div>
+      <div class="vals">radius 12 · 1px border · soft shadow (light mode only) · frame edge CROPS the UI · real panels, never comps</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 05</div>
+  <h2>Buttons &amp; CTAs — one loud thing per viewport</h2>
+  <div class="grid g4">
+    <div class="spec"><div class="spec-h"><span class="spec-src">digiquant v7</span><span class="prov live">live repo</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair)">
+        <span class="pillF" style="background:var(--em);color:#071410">Open Olympus →</span>
+        <span class="pillO" style="border:1px solid var(--hair2);color:var(--ink);margin-top:.5rem">Browse strategies</span>
+      </div>
+      <div class="vals">.btn-primary emerald + .btn-ghost · hover: translateY(-2px) on --ease-glide</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — scarcity rule</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair)">
+        <span class="pillF" style="background:#fafafa;color:#0a0a0a">Get API key</span>
+        <span class="pillO" style="border:1px solid #3a3a3e;color:#fafafa;margin-top:.5rem;font-family:var(--mono);font-size:.75rem;letter-spacing:.06em">EXPLORE →</span>
+      </div>
+      <div class="vals">exactly ONE filled pill per viewport · secondaries = outline or mono text-link</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">cursor — command IS the CTA</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--cu-bg);border:1px solid var(--cu-border)">
+        <span class="pillF" style="background:#1a1a18;color:#f7f8f3">Download for macOS</span>
+        <span style="display:inline-flex;gap:.5rem;align-items:center;margin-top:.55rem;border:1px solid var(--cu-border);border-radius:8px;padding:.45rem .7rem;font-family:var(--mono);font-size:.7rem;color:#1a1a18;background:#fff">curl https://cursor.com/install -fsS | bash <b style="color:#8a8a80;font-weight:400">copy</b></span>
+      </div>
+      <div class="vals">OS-detected literal label · copyable install row · zero "Get started" vagueness</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — CTAs verbatim</span><span class="prov fetch">live fetch</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <span class="pillF" style="background:var(--gr-accent);color:#160a02">Get started for free</span>
+        <span class="pillO" style="border:1px solid rgba(255,255,255,.2);color:#fafafa;margin-top:.5rem">Request a demo</span>
+      </div>
+      <div class="vals">accent appears HERE and almost nowhere else · secondary is outline<br><b style="color:var(--up);font-weight:500">LIVE-VERIFIED:</b> nav primary "Sign up →" is a WHITE fill · r8 (not a pill) · 14px · layered soft shadow (0 1px 3px + 0 1px 2px @ 10%) · with a faint prismatic halo on a wrapper — their one "loud" element · nav itself is a floating rounded capsule bar, and "Log in" carries a G keyboard-hint chip</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 06</div>
+  <h2>Nav — quiet, literal, scroll-aware</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">digiquant v7 .dqnav</span><span class="prov live">live repo</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair);padding:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.8rem 1rem;border-bottom:1px solid var(--hair)">
+          <span style="font-weight:600;font-size:.9rem">digi<span style="color:var(--em)">quant</span></span>
+          <span style="display:flex;gap:1rem;font-size:.78rem;color:var(--soft)">Pipeline · Olympus · Strategies · Pricing</span>
+        </div>
+      </div>
+      <div class="vals">fixed · transparent at top → blur + bg when .scrolled (graphite-verified) · auto-hide on scroll-down is ours alone — none of the references do it; kept as the house signature (canon §08) · graphite hover doctrine: links white @60% → 100% opacity, never a hue change</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — mono uppercase wayfinding</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair);padding:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.8rem 1rem;border-bottom:1px solid var(--xa-hair)">
+          <span style="font-family:var(--mono);font-weight:500;font-size:.85rem;color:#fafafa">xAI</span>
+          <span style="display:flex;gap:1rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;color:var(--xa-mute)">GROK &nbsp;API&nbsp; COMPANY &nbsp;NEWS &nbsp;CAREERS</span>
+        </div>
+      </div>
+      <div class="vals">mine for Olympus/dev pages only — dashboards get mono labels, marketing keeps v7's sans links</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 07 — the point of the mine</div>
+  <h2>Convergence blends — v7 × reference, ready to review</h2>
+  <p class="sec-note">Each blend = a live anchor evolved with exactly one mined move. These blends became canon grammar (§04–§10).</p>
+  <div class="grid g2">
+    <div class="spec" style="grid-column:1/-1"><div class="spec-h"><span class="spec-src">B1 · hero, converged</span><span class="blend-tag">v7 mesh+Fraunces × cursor literal CTAs × x.ai scarcity</span></div>
+      <div class="stage" style="background:radial-gradient(60rem 24rem at 70% -20%,rgba(38,120,110,.35),transparent 60%),radial-gradient(40rem 20rem at 10% 120%,rgba(61,214,196,.16),transparent 60%),var(--bg);border:1px solid var(--hair);padding:2.2rem 1.6rem;align-items:center;text-align:center">
+        <div class="sec-eyebrow" style="color:var(--em)">// research → execution, one graph</div>
+        <div id="b1h" class="on" style="font-family:var(--serif);font-weight:400;font-size:clamp(2rem,4.4vw,3.2rem);line-height:1.05;letter-spacing:-.025em;margin-top:.6rem">
+          <span class="ln"><span>A quant hedge fund.</span></span>
+          <span class="ln"><span><em style="font-style:italic;color:var(--em)">In a box you own.</em></span></span>
+        </div>
+        <div style="display:flex;gap:.7rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:1.3rem">
+          <span class="pillF" style="background:var(--em);color:#071410">Open Olympus →</span>
+          <span style="display:inline-flex;gap:.5rem;align-items:center;border:1px solid var(--hair);border-radius:8px;padding:.5rem .8rem;font-family:var(--mono);font-size:.72rem;color:var(--soft)"><span style="color:var(--em)">$</span> git clone github.com/digithings-ai <b style="color:var(--mute);font-weight:400">copy</b></span>
+        </div>
+      </div>
+      <div class="vals">keeps: HeroMesh canvas (static stand-in here) · .dqhero-h1 Fraunces · .ln reveal · emerald — adds: command-as-CTA row, one filled pill only · drops: nothing from live</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">B2 · metrics, converged</span><span class="blend-tag">v7 hairline rows × x.ai mono display × color-as-event</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair)">
+        <div style="font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;color:var(--mute);text-transform:uppercase">btc slapper · 2018 → 2026 · shipped backtest</div>
+        <div style="display:flex;gap:1.6rem;flex-wrap:wrap;margin-top:.6rem">
+          <div><div style="font-family:var(--mono);font-weight:300;font-size:2.1rem;letter-spacing:-.02em">8.72</div><div class="vals">profit factor</div></div>
+          <div><div style="font-family:var(--mono);font-weight:300;font-size:2.1rem;letter-spacing:-.02em;color:var(--up)">75.9%</div><div class="vals">win rate</div></div>
+          <div><div style="font-family:var(--mono);font-weight:300;font-size:2.1rem;letter-spacing:-.02em;color:var(--down)">−30.5%</div><div class="vals">max drawdown</div></div>
+        </div>
+      </div>
+      <div class="vals">keeps: real tearsheet numbers (public/strategies/index.json) · adds: mono-300 display scale, green/red ONLY on P&amp;L · replaces: StrategySuite stat styling, not its scrolly</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">B3 · real-content frame</span><span class="blend-tag">cursor frame × v7 skin × real olympus panel</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair)">
+        <div style="border:1px solid var(--hair2);border-radius:12px;background:var(--surface);overflow:hidden">
+          <div style="border-bottom:1px solid var(--hair);padding:.45rem .7rem;font-family:var(--mono);font-size:.64rem;color:var(--mute);display:flex;justify-content:space-between"><span>olympus · pipeline — live panel, cropped</span><span style="color:var(--up)">● running</span></div>
+          <div style="padding:.7rem;font-family:var(--mono);font-size:.72rem;line-height:1.9;color:var(--soft)">atlas · signal BTC-USD long · conf 0.83<br>hermes · kelly cap 0.31× · dd guard −30%<br>kairos · routed via nautilus · <span style="color:var(--up)">filled</span></div>
+        </div>
+      </div>
+      <div class="vals">rule: frames show REAL surfaces (Olympus, DigiChat, tearsheets) cropped at the edge — never illustrated abstractions · specific values, never round</div>
+    </div>
+  </div>
+  <p class="sec-note" style="margin-top:1.2rem"><b style="color:var(--ink);font-weight:500">Deliberately absent:</b> bento grids, trust/logo strips, stat-counter strips on filler numbers, closing-CTA bands, glass/glow/mesh-on-content — the round-1 slop list. If a move isn't in the mine with provenance, it doesn't ship.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 08 — batch 1</div>
+  <h2>Developer bands &amp; live-UI mocks — the product is the proof</h2>
+  <p class="sec-note">All three references sell by showing a working UI with oddly-specific values. Our analogs are Olympus telemetry, DigiChat transcripts, and digikey quickstarts.</p>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — tabbed API band</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair)">
+        <div style="font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;color:var(--xa-mute);text-transform:uppercase">For developers</div>
+        <div style="font-family:var(--sans);font-weight:500;font-size:1.05rem;color:var(--xa-ink);margin:.2rem 0 .5rem">One API. Every modality.</div>
+        <div style="border:1px solid var(--xa-hair);border-radius:8px;background:var(--xa-s);overflow:hidden">
+          <div style="display:flex;gap:.9rem;border-bottom:1px solid var(--xa-hair);padding:.4rem .7rem;font-family:var(--mono);font-size:.64rem">
+            <span style="color:var(--xa-ink)">Python</span><span style="color:var(--xa-mute)">TypeScript</span><span style="color:var(--xa-mute)">cURL</span><span style="margin-left:auto;color:var(--xa-mute)">copy</span>
+          </div>
+          <pre style="margin:0;padding:.6rem .7rem;font-family:var(--mono);font-size:.66rem;line-height:1.8;color:#c9c9c9">from xai_sdk import Client
+client = Client(api_key=os.getenv("XAI_API_KEY"))
+chat = client.chat.create(model="grok-4.3")</pre>
+        </div>
+      </div>
+      <div class="vals">stats row verbatim: "1M+ API calls per day · &lt;200ms median latency" (real numbers) · card #191919 / border #212327 / r8 / 24px pad · "compatible with OpenAI and Anthropic SDKs"<br>→ ours: digikey token exchange + <b style="color:var(--soft)">make stack-local</b> quickstart, curl/Python/TS tabs</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — code-agent terminal mock</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-s);border:1px solid var(--xa-hair);font-family:var(--mono);font-size:.68rem;line-height:2;color:#c9c9c9">
+        <div style="color:var(--xa-mute)">projects/main | 11.60% | <span style="color:var(--xa-ink)">❯ Migrate auth from sessions to JWT</span></div>
+        <div style="color:var(--xa-mute)">Thinking…</div>
+        <div>▸ read_file src/middleware/auth.ts <span style="color:var(--xa-mute)">68 lines</span></div>
+        <div>▸ grep "session" src/ <span style="color:var(--xa-mute)">4 matches</span></div>
+        <div style="color:var(--xa-mute)">| Audit auth middleware <span style="color:#7ee0c0">explore [running]</span></div>
+      </div>
+      <div class="vals">"Thought for 4.1s" · ▸ tool-call row grammar · animation lives inside the frame only<br>→ ours: this IS Atlas/Hermes pipeline telemetry — ▸ rows for tool calls in Olympus + digichat mocks (extends B3)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">cursor — agent task-list pills</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--cu-bg);border:1px solid var(--cu-border)">
+        <div style="border:1px solid var(--cu-border);border-radius:12px;background:#fff;padding:.7rem">
+          <div style="font-family:var(--mono);font-size:.6rem;color:#8a8a80;margin-bottom:.45rem">cursor.com/agent · This Week</div>
+          <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+            <span style="border:1px solid var(--cu-border);border-radius:999px;padding:.2rem .6rem;font-size:.66rem;color:#1a1a18">Explored 12 files</span>
+            <span style="border:1px solid var(--cu-border);border-radius:999px;padding:.2rem .6rem;font-size:.66rem;color:#1a1a18">Worked for 14m 22s</span>
+            <span style="border:1px solid var(--cu-border);border-radius:999px;padding:.2rem .6rem;font-size:.66rem;color:#1a1a18">Agent · Opus 4.8</span>
+          </div>
+          <div style="border:1px solid var(--cu-border);border-radius:8px;padding:.4rem .6rem;font-size:.68rem;color:#8a8a80;margin-top:.5rem">Add a follow up…</div>
+        </div>
+      </div>
+      <div class="vals">status-pill vocabulary = the specificity doctrine ("14m 22s", never "~15 min")<br>→ ours: digichat session pills — "routed → digiquant · 3 tools · 1.84s"</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — inline diff review + CLI rows</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1);font-family:var(--mono);font-size:.66rem;line-height:1.9">
+        <div style="color:#71717a"><span style="color:#52525b">41</span>&nbsp;&nbsp;const session = <span style="color:#f0999b">getSession(req)</span></div>
+        <div style="color:#a0e3a6"><span style="color:#52525b">42</span>+ const claims = verifyJwt(req)</div>
+        <div style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:.4rem .6rem;margin-top:.4rem;background:#18181b">
+          <span style="color:#e8e8ed">Diamond · AI review</span><span style="color:#a1a1a6"> — prefer constant-time compare here.</span>
+          <span style="color:#52525b;margin-left:.5rem">👍 👎</span>
+        </div>
+        <div style="margin-top:.5rem;color:#a1a1a6">$ gt create &nbsp;·&nbsp; $ gt submit</div>
+      </div>
+      <div class="vals">line numbers · AI comment bubble WITH feedback controls · code face ligatures OFF (liga 0) · pastel semantics: error #ffa6b2, success #a0e3a6<br>→ ours: annotated backtest diff / strategy-review bubble; product-verb commands as section anchors (dq backtest · dq optimize)</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 09 — batch 2</div>
+  <h2>Pricing, tables &amp; conversion — precision over persuasion</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — two-path pricing</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair);flex-direction:row;gap:.7rem;align-items:stretch">
+        <div style="flex:1;border:1px solid var(--xa-hair);border-radius:8px;padding:.8rem;background:var(--xa-s)">
+          <div style="font-size:.8rem;font-weight:500;color:var(--xa-ink)">Build on your own</div>
+          <div style="font-family:var(--mono);font-size:.62rem;color:var(--xa-mute);line-height:2;margin-top:.3rem">all models · usage-based pricing<br>auto-increasing rate limits · docs</div>
+        </div>
+        <div style="flex:1;border:1px solid var(--xa-hair);border-radius:8px;padding:.8rem;background:var(--xa-s)">
+          <div style="font-size:.8rem;font-weight:500;color:var(--xa-ink)">Get extra support</div>
+          <div style="font-family:var(--mono);font-size:.62rem;color:var(--xa-mute);line-height:2;margin-top:.3rem">onboarding · custom limits<br>SSO, audit log · <span style="color:var(--xa-ink)">Contact Sales</span></div>
+        </div>
+      </div>
+      <div class="vals">exactly TWO paths, one filled CTA total — the open-core shape: self-hosted vs managed (our live /#pricing already converges here)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — per-unit precision table</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair);font-family:var(--mono);font-size:.66rem">
+        <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:.3rem;color:var(--xa-mute);text-transform:uppercase;letter-spacing:.1em;font-size:.56rem;border-bottom:1px solid var(--xa-hair);padding-bottom:.35rem">model · context · $/M tokens</div>
+        <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:.3rem;padding:.45rem 0;border-bottom:1px solid var(--xa-hair);color:#c9c9c9">grok-4.3 <span>256k</span><span>$3.00</span></div>
+        <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:.3rem;padding:.45rem 0;color:#c9c9c9">grok-build-0.1 <span>128k</span><span>$0.85</span></div>
+      </div>
+      <div class="vals">exact versions + exact units, hairline rows, mono numerals — the tearsheet-table voice; our strategies table already speaks it (8.72 / 75.9% / −30.5%)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — pricing system</span><span class="prov fetch">live fetch 2026-07-02</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="display:flex;gap:.5rem;font-family:var(--mono);font-size:.6rem;flex-wrap:wrap">
+          <span style="border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:.2rem .55rem;color:#a1a1a6">Hobby · Free · "Sign up"</span>
+          <span style="border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:.2rem .55rem;color:#a1a1a6">Starter · $20 · "Get started"</span>
+          <span style="border:1px solid var(--gr-accent);border-radius:999px;padding:.2rem .55rem;color:#e8e8ed">Team · $40 · "Start free trial" · Most popular</span>
+          <span style="border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:.2rem .55rem;color:#a1a1a6">Enterprise · no price · "Request a demo"</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:.62rem;color:#a1a1a6;margin-top:.6rem">matrix cells: ✓ · Limited · Basic · Advanced — grouped rows (PRs, Inbox, Stacking, AI reviews, Admin) · toggle "Annual billing (20% off)"</div>
+      </div>
+      <div class="vals">per-tier CTA verbs escalate with commitment · enterprise never shows a price · billing toggle · grouped comparison matrix — our /#pricing FAQ+matrix (develop) already matches this shape</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">friction-reducer line (all three)</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="font-size:.78rem;color:#a1a1a6">Free for your first 30 days. No credit card required. Synced with your GitHub account.</div>
+        <div style="border-top:1px solid rgba(255,255,255,.1);margin-top:.6rem;padding-top:.6rem;font-family:var(--mono);font-size:.7rem;color:var(--soft)">ours: <span style="color:var(--ink)">open core · self-hosted · BYOK · audit-on by default</span></div>
+      </div>
+      <div class="vals">one muted line of true trust facts directly under the hero CTA — NOT a logo strip, NOT a stat counter · mono-dot-separated fits the v7 label grammar</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 10 — batch 3</div>
+  <h2>Footers &amp; site chrome — utility rows, one personality moment</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — footer with status dot</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;font-size:.68rem;color:#a1a1a6">
+          <span>Features</span><span>Company</span><span>Resources</span><span>Connect</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(255,255,255,.1);margin-top:.7rem;padding-top:.6rem;font-family:var(--mono);font-size:.62rem">
+          <span style="color:#a1a1a6"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--up);margin-right:.4rem"></span>All systems operational</span>
+          <span style="color:#52525b">© Graphite 2026</span>
+        </div>
+      </div>
+      <div class="vals">4 columns (2×2 on mobile) · ~80px top pad · status link + green dot · footer-only accent blocks (orange/yellow/cyan/blue, marquee) = the sanctioned personality zone<br>→ ours: status dot → /healthz ({"ok": true}) · footer color play stays IN the footer<br><b style="color:var(--up);font-weight:500">LIVE-VERIFIED:</b> the neon brand sign is a WHITE neon photograph (single hue, not multicolor) · the status text itself renders green, not muted · link pills in columns: "Careers 0" count · "Agents NEW"</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">cursor — footer utility row</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--cu-bg);border:1px solid var(--cu-border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+          <span style="display:inline-flex;border:1px solid var(--cu-border);border-radius:8px;overflow:hidden;font-size:.66rem;color:#1a1a18">
+            <span style="padding:.3rem .6rem;background:#fff">System</span><span style="padding:.3rem .6rem">Light</span><span style="padding:.3rem .6rem">Dark</span>
+          </span>
+          <span style="border:1px solid var(--cu-border);border-radius:8px;padding:.3rem .6rem;font-size:.66rem;color:#1a1a18">English ↓</span>
+          <span style="font-size:.64rem;color:#8a8a80">© 2026 Anysphere, Inc. · SOC 2 Certified</span>
+        </div>
+      </div>
+      <div class="vals">segmented theme control System/Light/Dark (~40×29 each) · language selector · trust-cert link in the small print<br>→ ours: v7 ThemeToggle as a footer segmented control · SOC2 slot → open-core security docs link</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">footer brand moment (graphite + x.ai)</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:radial-gradient(30rem 10rem at 50% 130%,rgba(79,163,122,.28),transparent 65%),var(--bg);border:1px solid var(--hair);align-items:center;text-align:center">
+        <div style="font-family:var(--mono);font-weight:500;font-size:1.4rem;letter-spacing:-.01em">digi<span style="color:var(--em)">quant</span></div>
+        <div class="vals" style="margin-top:.3rem">one ambient bloom, footer only — quarantined from chrome</div>
+      </div>
+      <div class="vals">graphite: neon-sign brand image at page bottom · x.ai: warm gradient bloom (sunset #ff7a17 / dusk #7c3aed / twilight #c4b5fd — illustration-only palette)<br>→ ours: a single emerald mesh bloom under the wordmark; everything above stays hairline-flat</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — announcement bar</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1);padding:0">
+        <div style="display:flex;justify-content:center;align-items:center;gap:.6rem;min-height:44px;border-bottom:1px solid rgba(255,255,255,.1);font-size:.7rem;color:#e8e8ed;padding:.3rem 2rem;position:relative">
+          <span>Cursor Cloud Agents are now in Graphite. Create, review, and ship without leaving your PR.</span>
+          <span style="color:var(--gr-accent)">Read more →</span>
+          <span style="position:absolute;right:.6rem;color:#52525b">✕</span>
+        </div>
+      </div>
+      <div class="vals">48px · above nav · ENTIRE bar clickable · dismissible · a11y region "Announcement" · x.ai variant: hero pill "New — Grok Build Beta"<br>→ ours: only with real news (release, launch) — content-gated, never evergreen marketing</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 11 — mobile</div>
+  <h2>Mobile nav — dialog semantics, conversion never leaves the bar</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — mobile nav sheet (390×844)</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1);padding:0;max-width:280px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem .7rem;border-bottom:1px solid rgba(255,255,255,.1);font-size:.66rem;color:#e8e8ed">
+          <span style="font-weight:600">graphite</span>
+          <span style="display:flex;gap:.5rem;align-items:center"><span style="color:#a1a1a6">Log in</span><span style="background:var(--gr-accent);color:#160a02;border-radius:999px;padding:.2rem .55rem;font-weight:500">Sign up</span><span style="color:#a1a1a6">✕</span></span>
+        </div>
+        <div style="font-size:.7rem;color:#e8e8ed">
+          <div style="padding:.65rem .7rem;border-bottom:1px solid rgba(255,255,255,.07)">Features <span style="float:right;color:#52525b">＋</span></div>
+          <div style="padding:.65rem .7rem;border-bottom:1px solid rgba(255,255,255,.07)">Resources <span style="float:right;color:#52525b">＋</span></div>
+          <div style="padding:.65rem .7rem;border-bottom:1px solid rgba(255,255,255,.07)">Customers</div>
+          <div style="padding:.65rem .7rem">Pricing</div>
+        </div>
+        <div style="display:flex;gap:.7rem;padding:.55rem .7rem;border-top:1px solid rgba(255,255,255,.1);font-size:.62rem;color:#52525b">GitHub · Slack · X · ©2026</div>
+      </div>
+      <div class="vals">announcement 48px + header 62px · Log in + Sign up BOTH stay visible in the bar · sheet = semantic dialog "Navigation", full-width, no scrim · rows 50px, expandable groups · social row in sheet footer · their Menu tap-target is 28×28 — ours stays ≥40×40<br>→ scan verdict: v7's dqnav sheet (blur backdrop, Escape/backdrop close, full-width primary) is already the better pattern — mine the 50px rows + dialog semantics + social footer only</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">mobile degradation rules (all three)</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair);font-family:var(--mono);font-size:.7rem;line-height:2.1;color:var(--soft)">
+        <div>pinned sections → <span style="color:var(--ink)">plain stack</span> (no pin) on mobile</div>
+        <div>secondary bands → <span style="color:var(--ink)">horizontal 262px card strips</span></div>
+        <div>hero CTAs → <span style="color:var(--ink)">full-width ~342×44</span>, stacked</div>
+        <div>copy sits <span style="color:var(--ink)">above</span> its product image</div>
+        <div>auto-hide nav: <span style="color:var(--down)">none of the three do it</span></div>
+      </div>
+      <div class="vals">graphite hero wraps 3 lines @390 · cursor demo pane 720px tall dominates below fold · cursor changelog/blog cards 262px wide at x=19/290/562/833<br>→ ours: OlympusScene pin → stack fallback is the sanctioned mobile behavior; h-scroll strips for changelog-class content</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 12 — batch 4</div>
+  <h2>Frames, layout tokens &amp; micro-type — the numbers behind the calm</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — ProductFrame CQ scaling</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1);font-family:var(--mono);font-size:.7rem;line-height:2;color:#a1a1a6">
+        <div>artboard: <span style="color:#e8e8ed">fixed 800px</span> — authored once, never reflowed</div>
+        <div>scale: <span style="color:#e8e8ed">min(1, calc((100cqw − 2rem) / 800px))</span></div>
+        <div>page max-width <span style="color:#e8e8ed">~1216px</span> · start with 3–4 breakpoints, not nine</div>
+      </div>
+      <div class="vals">screenshots stay pixel-faithful and scale proportionally per container — the enabling technique behind B3's "real surfaces, cropped" · our ProductFrame CSS already uses this pattern (keep, formalize)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — card + spacing tokens</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair)">
+        <div style="font-family:var(--mono);font-size:.62rem;color:var(--xa-mute);margin-bottom:.4rem">8px grid — 2 · 4 · 8 · 16 · 24 · 32 · 48 · 64</div>
+        <div><span class="tick" style="width:2px"></span><span class="tick" style="width:4px"></span><span class="tick" style="width:8px"></span><span class="tick" style="width:16px"></span><span class="tick" style="width:24px"></span><span class="tick" style="width:32px"></span><span class="tick" style="width:48px"></span><span class="tick" style="width:64px"></span></div>
+        <div style="font-family:var(--mono);font-size:.62rem;color:var(--xa-mute);margin-top:.6rem">card: #191919 · 1px #212327 · r8 · 24px pad · no shadow — section-y ~64px (graphite 64–80 · cursor ~96)</div>
+      </div>
+      <div class="vals">pills (9999px) are the ONLY non-rect interactive shape — dashboards keep rectangles (our --r-sm/md) · proposes formalizing our --section-y against these three data points</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — micro-type, pastel semantics, focus ring</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;font-family:var(--mono);font-size:.64rem">
+          <span style="border:1px solid #ffa6b2;color:#ffa6b2;border-radius:6px;padding:.15rem .5rem">error #ffa6b2</span>
+          <span style="border:1px solid #a0e3a6;color:#a0e3a6;border-radius:6px;padding:.15rem .5rem">success #a0e3a6</span>
+          <span style="border:1px solid var(--down);color:var(--down);border-radius:6px;padding:.15rem .5rem">ours: --down #E0654B</span>
+          <span style="border:1px solid var(--up);color:var(--up);border-radius:6px;padding:.15rem .5rem">ours: --up #3FB984</span>
+        </div>
+        <input placeholder="focus me — emerald ring, x.ai pattern" style="margin-top:.7rem;background:transparent;border:1px solid var(--hair2);border-radius:8px;padding:.5rem .7rem;font-family:var(--mono);font-size:.7rem;color:var(--ink);outline:none" onfocus="this.style.boxShadow='0 0 0 2px rgba(79,163,122,.5)'" onblur="this.style.boxShadow='none'">
+      </div>
+      <div class="vals">text #e8e8ed / #a1a1a6 · body 16/400 · h1 36/500 · h3 24/600 · code ligatures OFF (liga 0) · buttons r8–10, never pills in core UI · x.ai focus ring #2563eb (their one saturated chrome color) → ours rides emerald · pastel-vs-saturated semantics: keep our P&amp;L colors saturated (they carry money meaning), use pastels only for form validation</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — clip-path section reveal</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div id="clipDemo" class="clipDemo on" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;background:#18181b;padding:.8rem;font-family:var(--mono);font-size:.7rem;color:#e8e8ed">section wipes in via clip-path inset — riding the same glide curve</div>
+      </div>
+      <button class="replay" data-replay="clipDemo">↻ replay wipe</button>
+      <div class="vals">clip-path reveals between bands + translateY/opacity enters, ALL on the linear() glide (~0.6s) · candidate: CSS scroll-driven animations with scroll-trigger.js fallback · the missing transition primitive between our sections</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 13 — batch 5</div>
+  <h2>Content bands — proof of life, honestly sourced</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">cursor — changelog band</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--cu-bg);border:1px solid var(--cu-border)">
+        <div style="display:flex;gap:.6rem;align-items:baseline;border-bottom:1px solid var(--cu-border);padding-bottom:.5rem;font-size:.72rem;color:#1a1a18">
+          <span style="font-family:var(--mono);font-size:.62rem;border:1px solid var(--cu-border);border-radius:999px;padding:.08rem .45rem">3.9</span>
+          <span style="color:#8a8a80;font-family:var(--mono);font-size:.64rem">Jun 22, 2026</span><span>Customize Cursor</span>
+        </div>
+        <div style="display:flex;gap:.6rem;align-items:baseline;padding-top:.5rem;font-size:.72rem;color:#1a1a18">
+          <span style="color:#8a8a80;font-family:var(--mono);font-size:.64rem">Jun 29, 2026</span><span>Cursor Mobile App for iOS</span>
+          <span style="margin-left:auto;color:#8a8a80;font-size:.66rem">See what's new →</span>
+        </div>
+      </div>
+      <div class="vals">date + mono version badge + title · mobile: 262px horizontal strip · /changelog: versions + "### Improvements (N)" lists · blog metadata atom: tag + author + read time<br>→ ours: GitHub releases feed — dated entries ARE the proof of life (no stat filler needed)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — news cards + headline grammar</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair)">
+        <div style="border:1px solid var(--xa-hair);border-radius:8px;background:var(--xa-s);padding:.7rem">
+          <div style="font-size:.8rem;color:var(--xa-ink);font-weight:500">Introducing /goal</div>
+          <div style="font-family:var(--mono);font-size:.6rem;color:var(--xa-mute);margin-top:.2rem">Jun 22, 2026 · Read More</div>
+        </div>
+        <div style="font-family:var(--mono);font-size:.62rem;color:var(--xa-mute);margin-top:.5rem">grid: title + date + one-line dek · "All posts" · archive to 2023</div>
+      </div>
+      <div class="vals">headline grammar is action-verbs on shipped things: "Introducing /goal" · "Grok on Databricks" — never thought-leadership titles<br>→ ours: "Introducing Kairos" · "Atlas on NautilusTrader"</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite + cursor — social-proof atoms</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;color:#a1a1a6;text-transform:uppercase">Semgrep × Graphite</div>
+        <div style="font-size:.82rem;color:#e8e8ed;margin-top:.25rem">How stacked PRs help Semgrep engineers move faster</div>
+        <div style="border-top:1px solid rgba(255,255,255,.1);margin-top:.6rem;padding-top:.5rem;font-size:.7rem;color:#a1a1a6">"{impact statement}" — Diana Hu, General Partner, Y Combinator <span style="font-family:var(--mono);font-size:.6rem">(figure + blockquote, cursor)</span></div>
+      </div>
+      <div class="vals">the minable atoms: "{Org} × {Product}" mono label + outcome headline · semantic figure/blockquote + Name, Title, Company attribution · carousel furniture itself = generic, skip<br>→ ours: "{OSS adopter} × digiquant" — REAL attribution only, ships dormant until real quotes exist</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite + cursor — FAQ verbatims</span><span class="prov fetch">live fetch + scan</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair);font-family:var(--mono);font-size:.7rem;line-height:2.1;color:var(--soft)">
+        <div>graphite h2: <span style="color:var(--ink)">"Frequently asked questions"</span> → closes with <span style="color:var(--ink)">"Still have questions? Reach out to our team."</span></div>
+        <div>cursor h2: <span style="color:var(--ink)">"Questions &amp; Answers"</span> — topics: payment, usage limits, data privacy</div>
+      </div>
+      <div class="vals">honest practical topics (limits, privacy) — not marketing softballs · collapsed by default, 3 shown (live /pricing fetch)<br>→ ours: the live /#pricing FAQ (develop) already converges — native details/summary, hairline rows</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 14 — batch 6</div>
+  <h2>Interactive micro-patterns — small moves, real interactivity</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">x.ai — rotating hero prompts · cursor — Q&amp;A mock</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--xa-bg);border:1px solid var(--xa-hair);font-family:var(--mono);font-size:.7rem;line-height:2;color:#c9c9c9">
+        <div style="color:var(--xa-mute)">rotating teasers, verbatim:</div>
+        <div>"Explain quantum entanglement simply"</div>
+        <div style="border-top:1px solid var(--xa-hair);margin-top:.4rem;padding-top:.4rem;color:var(--xa-mute)">cursor codebase Q&amp;A: <span style="color:#c9c9c9">"Where are these menu label colors defined?"</span></div>
+      </div>
+      <div class="vals">prompts rotate + link into the product · the question is a REAL developer question, not marketing<br>→ ours: digichat hero rotates real quant prompts — "size a kelly-capped BTC position" · "explain this drawdown" — each opens the live chat pre-filled</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — feature icon picker strip</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="display:flex;gap:.45rem;flex-wrap:wrap">
+          <span style="width:40px;height:40px;border:1px solid var(--gr-accent);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.56rem;color:#e8e8ed">PRs</span>
+          <span style="width:40px;height:40px;border:1px solid rgba(255,255,255,.14);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.56rem;color:#a1a1a6">AI</span>
+          <span style="width:40px;height:40px;border:1px solid rgba(255,255,255,.14);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.56rem;color:#a1a1a6">Chat</span>
+          <span style="width:40px;height:40px;border:1px solid rgba(255,255,255,.14);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.56rem;color:#a1a1a6">MQ</span>
+          <span style="width:40px;height:40px;border:1px solid rgba(255,255,255,.14);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.56rem;color:#a1a1a6">Inbox</span>
+        </div>
+      </div>
+      <div class="vals">7 icon tabs ~53×53 below the hero — tapping switches the featured product context; horizontal-scrolls on mobile · one-viewport alternative to scroll-pinning<br>→ ours: the HeroFeaturePicker primitive already exists in frontend/digiweb/design (built, unwired) — candidate for the Olympus module tour</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">graphite — feature-cell grammar + overlay tag</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--gr-bg);border:1px solid rgba(255,255,255,.1)">
+        <div style="position:relative;border:1px solid rgba(255,255,255,.14);border-radius:8px;background:#18181b;height:64px">
+          <span style="position:absolute;left:.5rem;bottom:.5rem;font-family:var(--mono);font-size:.58rem;border:1px solid rgba(255,255,255,.2);border-radius:4px;padding:.12rem .4rem;color:#e8e8ed;background:#0a0a0a">AI code reviews</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:.62rem;color:#a1a1a6;margin-top:.55rem">[eyebrow] → h3 outcome (4–8 words) → one-sentence mechanism → "Learn more →" → product visual</div>
+      </div>
+      <div class="vals">the universal cell structure across ALL THREE sites · the unmined atom: the overlay label TAG on product screenshots<br>→ ours: tag Olympus/tearsheet crops "atlas · research" / "hermes · risk" in mono</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">a11y invisibles (cursor + graphite)</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair);font-family:var(--mono);font-size:.7rem;line-height:2.1;color:var(--soft)">
+        <div>skip link <span style="color:var(--ink)">"Skip to content" → #main</span></div>
+        <div>hidden SR description <span style="color:var(--ink)">explaining what the hero demo shows</span></div>
+        <div>mobile menu = <span style="color:var(--ink)">semantic dialog "Navigation"</span></div>
+      </div>
+      <div class="vals">zero-pixel-cost credibility — the mine previously only covered prefers-reduced-motion<br>→ ours: add all three to the reference pages by default</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 15 — copy grammar</div>
+  <h2>Copy — literal verbs, owned voice</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">headline formulas (verbatim)</span><span class="prov">deep scan + live fetch</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair);font-family:var(--mono);font-size:.68rem;line-height:2.1;color:var(--soft)">
+        <div>graphite — [era]+[category]: <span style="color:var(--ink)">"The next generation of code review."</span></div>
+        <div>cursor — [product] is [role] for [ambition]: <span style="color:var(--ink)">"Cursor is your coding agent for building ambitious software."</span></div>
+        <div>x.ai — [quality]+[category] for [outcome]: <span style="color:var(--ink)">"Frontier AI models for everything you build."</span></div>
+        <div style="border-top:1px solid var(--hair);margin-top:.3rem;padding-top:.3rem">ours (live): <span style="color:var(--em)">"A quant hedge fund. In a box you own."</span> · <span style="color:var(--em)">"Build agents on infrastructure you own."</span></div>
+      </div>
+      <div class="vals">sub-head rule: short sub + big visual, OR modality enumeration + one credibility anchor ("Trained on the world's largest supercluster")</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">literal-CTA mapping — theirs → ours</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair);font-family:var(--mono);font-size:.66rem;line-height:2.1;color:var(--soft)">
+        <div>Download for macOS → <span style="color:var(--ink)">git clone · docker compose</span></div>
+        <div>Get API Key → <span style="color:var(--ink)">make stack-local · issue a key</span></div>
+        <div>Get started → <span style="color:var(--ink)">ask digichat · open olympus</span></div>
+        <div>Start free trial → <span style="color:var(--ink)">run a backtest</span></div>
+        <div>Explore → / Contact sales → <span style="color:var(--ink)">read docs · contact@digithings.ai</span></div>
+      </div>
+      <div class="vals">rule verbatim: "Avoid: 'Get started' without naming the destination." · per-tier CTA verbs escalate with commitment (Sign up → Get started → Start free trial → Request a demo)</div>
+    </div>
+    <div class="spec" style="grid-column:1/-1"><div class="spec-h"><span class="spec-src">voice + per-surface doctrine</span><span class="prov">deep scan</span></div>
+      <div class="stage" style="background:var(--bg);border:1px solid var(--hair);font-family:var(--mono);font-size:.68rem;line-height:2.1;color:var(--soft)">
+        <div>voice: <span style="color:var(--ink)">technical, precise, ownership-oriented — closer to x.ai infrastructure than cursor consumer warmth</span></div>
+        <div>naming: <span style="color:var(--ink)">lowercase products (digithings · digiquant · digichat) · proper nouns Olympus, Atlas, Hermes, NautilusTrader</span></div>
+        <div>surface leads: <span style="color:var(--ink)">digithings.ai = cursor IA + x.ai API band · digiquant.io = graphite outcomes · digichat = product-as-hero · olympus/twelve-x = x.ai mono, no fluff</span></div>
+        <div>social proof: <span style="color:var(--ink)">{NN}% + label / {Org} × digiquant — real numbers and real orgs only</span></div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 16 — live captures</div>
+  <h2>graphite.com, photographed live — 2026-07-02</h2>
+  <p class="sec-note">Playwright + system Chrome (extension and cursor.com/x.ai are corp-blocked; graphite is reachable). These captures corroborate the specimens above and add what scans missed: the dotted-grid canvas texture, the capsule nav with prismatic Sign-up halo, the "+" registration marks on the product stage, and the white neon footer sign.</p>
+  <div class="grid" style="grid-template-columns:1fr">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/graphite-nav-announcement.png" alt="Graphite homepage top: announcement bar, capsule nav, dotted-grid canvas" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.6rem .9rem">announcement bar (verbatim ✓) · capsule nav · Sign up prismatic halo · dotted-grid atmosphere</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/graphite-pinned-tour.png" alt="Graphite pinned feature tour mid-scroll: left product stage with registration marks, right tab rail with vertical progress" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.6rem .9rem">THE flagship pin, mid-scroll: left stage ("+" registration marks, mono caption "PR page") · right tab rail, active card expanded with vertical scrub bar</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/graphite-footer-neon.png" alt="Graphite footer: four link columns, green all-systems-operational status, white neon brand sign" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.6rem .9rem">footer: 4 columns + green status dot/text + WHITE neon sign (the one personality moment)</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 17 — extended references, live-extracted 2026-07-02</div>
+  <h2>hermes-agent · anthropic · figma — three new veins</h2>
+  <p class="sec-note">Maintainer-added references, all reachable and live-extracted (Playwright/system Chrome; anthropic via direct CSS fetch — its stylesheet exposed the full official token set).</p>
+  <div class="grid g2">
+    <div class="spec" style="grid-column:1/-1"><div class="spec-h"><span class="spec-src">hermes-agent.nousresearch.com — mythological single-hue brutalism</span><span class="prov fetch">live capture</span></div>
+      <div class="stage" style="background:#0000F2;align-items:flex-start">
+        <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.16em;color:#F5F5F5;opacity:.8">OPEN SOURCE • MIT LICENSE</div>
+        <div style="font-family:var(--serif);font-weight:300;font-size:clamp(1.8rem,3.6vw,2.8rem);letter-spacing:.03em;line-height:.95;color:#F5F5F5;text-transform:uppercase;margin-top:.4rem">The agent<br>that grows<br>with you</div>
+        <div style="display:flex;gap:.6rem;margin-top:.9rem;flex-wrap:wrap">
+          <span style="background:#F5F5F5;color:#0000F2;font-family:var(--mono);font-size:.66rem;letter-spacing:.08em;padding:.45rem .9rem">DOWNLOAD FOR MAC OS</span>
+          <span style="background:#F5F5F5;color:#0000F2;font-family:var(--mono);font-size:.66rem;padding:.45rem .9rem">curl -fsSL …/install.sh | bash ⧉</span>
+        </div>
+      </div>
+      <div class="vals">whole site on Klein blue rgb(0,0,242), ALL content monochrome white · display: spaced ALL-CAPS serif 71.6px / weight 300 / +2.15px tracking (poster grammar) · r0 sharp corners everywhere · mono-uppercase labels + NUMBERED kickers ("#1 CONNECT") · engraved classical Hermes with radiating line burst as hero art, halftone duotone feature tiles · blue↔white section inversion · platform triptych (Mac/Windows/Linux) · terminal install as hero CTA with platform tabs<br>→ ours: <b style="color:var(--soft)">the mythology move is OURS to take further</b> — Atlas/Hermes/Kairos subsystem pages as single-hue engraved-deity posters (emerald duotone, not their blue) · numbered mono kickers already live in .principle-num · "open source · MIT" eyebrow = our exact trust line · AVOID: copying Klein blue or whole-site single-hue (that is their identity)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">anthropic.com — official tokens, editorial ivory</span><span class="prov fetch">CSS fetch</span></div>
+      <div class="chips">
+        <span class="chip" style="background:#faf9f5"><i>#faf9f5</i></span>
+        <span class="chip" style="background:#f0eee6"><i>#f0eee6</i></span>
+        <span class="chip" style="background:#e8e6dc"><i>#e8e6dc</i></span>
+        <span class="chip" style="background:#141413"><i>#141413</i></span>
+        <span class="chip" style="background:#d97757"><i>clay</i></span>
+        <span class="chip" style="background:#c6613f"><i>accent</i></span>
+      </div>
+      <div class="vals">ivory stack #faf9f5/#f0eee6/#e8e6dc + oat/manilla · slate ink #141413/#3d3d3a/#5e5d59 · clay #d97757, accent #c6613f + muted accessory palette (kraft #d4a27f · sky #6a9bcc · olive #788c5d · fig #c46686) · <b style="color:var(--soft)">Anthropic Serif for PARAGRAPHS</b> (serif body!), Sans for UI, JetBrains Mono code · display 4.5/4/3rem bold lh 1.1 tracking 0 · radius .25/.5/1rem · motion = a uniform .2s ease on color/opacity ONLY (near-zero movement — restraint as identity) · hero verbatim: "AI research and products that put safety at the frontier"<br>→ ours: the LIGHT-MODE master reference (our weakest theme) — warm ivory instead of stark white, serif-as-body for docs/architecture prose, muted accessory hues for illustration accents only</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">figma.com — artifact-collage hero</span><span class="prov fetch">live capture</span></div>
+      <div class="stage" style="background:#ffffff;border:1px solid var(--cu-border)">
+        <div style="display:flex;gap:.8rem;align-items:center">
+          <div style="flex:1;font-family:var(--sans);font-weight:500;font-size:1.15rem;letter-spacing:-.03em;line-height:1.1;color:#000">The intelligent canvas for infinite creativity</div>
+          <div style="flex:1.2;display:grid;grid-template-columns:1fr 1fr;gap:.3rem">
+            <span style="height:34px;background:#5f4b8b;border-radius:6px"></span>
+            <span style="height:34px;background:#e8f0e4;border-radius:6px"></span>
+            <span style="height:34px;background:#f3e559;border-radius:6px"></span>
+            <span style="height:34px;background:#1a1a1a;border-radius:6px"></span>
+          </div>
+        </div>
+      </div>
+      <div class="vals">figmaSans 56px/400/−1.25px, left-rail headline · chrome pure black-on-white, zero decoration · hero = a COLLAGE of real product artifacts (poster, video editor, mobile, health cards) carrying ALL the color · black r8 CTAs · figmaMono token · literal labels "Explore design tools / Explore build tools"<br>→ ours: Cursor's restraint doctrine proven at consumer scale — digithings.ai hero option: a collage of REAL Olympus panel + tearsheet + DigiChat transcript artifacts, color only inside them</div>
+    </div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr;margin-top:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/hermes-agent-hero.jpg" alt="Hermes Agent hero: Klein blue canvas, spaced serif caps, engraved Hermes figure, terminal install CTA" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.6rem .9rem">hermes-agent hero — engraved deity + line burst · spaced serif caps · install-via-terminal block with platform tabs</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/hermes-agent-features.jpg" alt="Hermes Agent features: platform triptych then white band with numbered kickers and halftone duotone tiles" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.6rem .9rem">platform triptych → white inversion band · numbered kickers (#1 CONNECT) · halftone duotone feature tiles · FEATURE|PREVIEW corner tabs</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/figma-hero.jpg" alt="Figma hero: black-on-white chrome, left-rail headline, collage of colorful real product artifacts" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.6rem .9rem">figma hero — quiet chrome, artifact collage carries the color (cookie banner in shot)</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 18 — extended references II, fetched 2026-07-02</div>
+  <h2>magma.build · rig.ai — the ownership-copy kin</h2>
+  <p class="sec-note">Maintainer-added (via One Page Love). Both socket-blocked to Playwright — provenance is live fetch (structure/copy verbatim) + the OPL design review (palette/type/stack). These two share OUR positioning: proprietary/local-first AI you own — their copy strategies validate and sharpen ours.</p>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">magma.build — editorial conviction, dark + ember</span><span class="prov fetch">fetch + OPL review</span></div>
+      <div class="stage" style="background:#141210;border:1px solid rgba(255,255,255,.1)">
+        <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.16em;color:#c4732a;text-transform:uppercase">// built on convictions</div>
+        <div style="font-family:var(--serif);font-weight:400;font-size:clamp(1.5rem,3vw,2.2rem);line-height:1.08;color:#efece6;margin-top:.4rem">Own your <em style="color:#c4732a">intelligence</em></div>
+        <div style="font-family:var(--mono);font-size:.62rem;color:#8a857c;margin-top:.6rem">"Scroll to dig" ↓</div>
+      </div>
+      <div class="vals">dark + orange accents · Neue Montreal (grotesk) + Feature Deck (display serif) with ITALIC emphasis on key terms — the serif+grotesk pairing our Fraunces+Geist already is · grid layout, long scroll, GSAP scroll effects, marquee · "Built on Convictions" (4 statements) · 3-step process · monolith/rock imagery · hero verbatim: "Own your intelligence" / CTA "Here's How we can help" / scroll hint "Scroll to dig"<br>→ ours: validation of the serif-italic-emphasis grammar (.dqhero-h1 em) · reframe our principles as CONVICTIONS (stronger voice) · a mono ticker-marquee is quant-native IF it carries real data — decorative marquee stays banned</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">rig.ai — local-first narrative, dark + signal red</span><span class="prov fetch">fetch + OPL review</span></div>
+      <div class="stage" style="background:#0c0c0e;border:1px solid rgba(255,255,255,.1)">
+        <div style="font-family:var(--sans);font-weight:600;font-size:1.05rem;letter-spacing:-.02em;color:#f2f2f2">On-device AI coding. No cloud. No limits.</div>
+        <div style="font-family:var(--mono);font-size:.66rem;color:#9a9aa0;margin-top:.5rem">λ rig init</div>
+        <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(255,255,255,.1);margin-top:.6rem;padding-top:.5rem;font-family:var(--mono);font-size:.6rem">
+          <span style="color:#e2483d">● All systems local</span><span style="color:#5a5a60">Step 01 / 02 / 03</span>
+        </div>
+      </div>
+      <div class="vals">dark + RED accent · Chalet + Chivo Mono + Instrument Sans · long-scroll PROBLEM→SOLUTION narrative · terminal mockup (λ prompt) · comparison BAR CHARTS · capability blocks (Offline / Unlimited / Privacy / Latency) · numbered "Step 01/02/03" · FAQ accordion · Astro · footer status: <b style="color:var(--soft)">"All systems local"</b> — the operational-status pun for local-first<br>→ ours: the problem→solution long-scroll is a digiquant.io narrative option (the problem: rented quant infra; the solution: the desk you own) · comparison charts on REAL backtest metrics · footer status pun: "all systems yours" wired to /healthz · their red stays theirs — our signal is emerald + P&amp;L colors</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 19 — okx.com, live-captured 2026-07-02</div>
+  <h2>OKX — exchange-grade trust, live data as design</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">stacked declarative hero + trust IA</span><span class="prov fetch">live capture</span></div>
+      <div class="stage" style="background:#000;align-items:flex-start">
+        <div style="font-family:var(--sans);font-weight:700;font-size:clamp(1.6rem,3.2vw,2.4rem);line-height:1.3;color:#fff">Secure.<br>Transparent.<br>Reliable.</div>
+        <div style="display:flex;gap:.6rem;margin-top:.9rem">
+          <span style="background:#fff;color:#000;border-radius:999px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:600">Sign up</span>
+          <span style="border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:999px;padding:.5rem 1.2rem;font-size:.85rem">▣ Download app</span>
+        </div>
+      </div>
+      <div class="vals">pure #000 canvas · OKXSans 48px/700 · ONE WORD PER LINE, period-terminated — the three words ARE the brand promise · white pill CTAs (r100, 20px) · QR tile as a standalone download affordance · trust IA in chrome: "Proof of Reserves · Security of funds · Status" · easing set incl. overshoot cubic-bezier(.12,.4,.29,1.46)<br>→ ours: the stacked declarative maps 1:1 to the pipeline — <b style="color:var(--soft)">"Research. Risk. Execution."</b> as a digiquant hero option · trust IA analog: "audit-on · real backtests · open core" as chrome-level links · we already OWN a QR brand mark (favicon) — OKX shows it as a first-class affordance</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">live price cards — real data at scale</span><span class="prov fetch">live capture</span></div>
+      <div class="stage" style="background:#000">
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+          <div style="border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:.7rem .9rem;min-width:120px">
+            <div style="font-size:.72rem;color:#fff">BTC</div>
+            <div style="font-family:var(--mono);font-size:.72rem;color:#9a9a9a">€53,758.08</div>
+            <div style="font-family:var(--mono);font-size:.95rem;font-weight:500;color:var(--up)">+1.66%</div>
+          </div>
+          <div style="border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:.7rem .9rem;min-width:120px">
+            <div style="font-size:.72rem;color:#fff">XRP</div>
+            <div style="font-family:var(--mono);font-size:.72rem;color:#9a9a9a">€0.94439</div>
+            <div style="font-family:var(--mono);font-size:.95rem;font-weight:500;color:var(--up)">+1.54%</div>
+          </div>
+        </div>
+      </div>
+      <div class="vals">"Build your portfolio" left-rail + a GRID OF LIVE PRICE CARDS (real prices, green/red deltas) as the section's entire visual · volt/chartreuse action color lives ONLY inside the product phone mock (buttons €541.23 balances — specific numbers everywhere) · left-rail headline + right product = consistent section grammar<br>→ ours: the exchange-scale proof of our doctrine — real BTC/ETH/SOL strategy cards with live tearsheet deltas as a digiquant.io section; volt stays theirs, our in-product signal is emerald + P&amp;L</div>
+    </div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr;margin-top:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/okx-hero.jpg" alt="OKX hero: pure black, stacked Secure/Transparent/Reliable headline, white pill CTAs, phone mock with volt action buttons" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.6rem .9rem">okx hero — stacked declarative · white pills · volt signal confined to the product mock (cookie banner in shot)</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 20 — extended references III, 2026-07-02</div>
+  <h2>langchain · apple · wealthsimple · hebbia</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">langchain.com — the convergence diagram</span><span class="prov fetch">live capture</span></div>
+      <div class="stage" style="background:rgb(3,7,16)">
+        <div style="font-family:var(--sans);font-weight:300;font-size:clamp(1.2rem,2.4vw,1.8rem);letter-spacing:-.03em;color:#bfe3ff;text-align:center;text-shadow:0 0 22px rgba(120,180,255,.35)">Powering the Agent Development Lifecycle</div>
+        <div style="display:flex;justify-content:center;gap:.5rem;margin-top:.8rem;font-family:var(--mono);font-size:.62rem">
+          <span style="border:1px solid rgba(140,180,220,.3);border-radius:999px;padding:.2rem .6rem;color:#9fc3e8">Build</span>
+          <span style="border:1px solid rgba(140,180,220,.3);border-radius:999px;padding:.2rem .6rem;color:#9fc3e8">Test</span>
+          <span style="border:1px solid rgba(140,180,220,.3);border-radius:999px;padding:.2rem .6rem;color:#9fc3e8">Deploy</span>
+          <span style="border:1px solid rgba(140,180,220,.3);border-radius:999px;padding:.2rem .6rem;color:#9fc3e8">Monitor</span>
+        </div>
+      </div>
+      <div class="vals">blue-black canvas rgb(3,7,16) · TWK Lausanne 56/300/−1.68 with an ICE-BLUE luminous glow on the display type · Aeonik body · MONO buttons ("Start building" r6, pale-blue #e5f4ff primary) · hero visual: converging curved paths flowing into ONE stream, mono pill labels on the lifecycle stages · ease (.645,.045,.355,1)<br>→ ours: <b style="color:var(--soft)">the convergence diagram IS the digigraph supervisor story</b> (many intents → one graph) — candidate digithings.ai hero visual; they're our actual substrate (LangGraph), so the kinship is honest · a single luminous-type moment in emerald is the ONE glow exception worth debating</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">apple.com/ca — the product-tile formula</span><span class="prov fetch">live capture</span></div>
+      <div class="stage" style="background:#eaf2f8;border:1px solid #dde;align-items:center;text-align:center">
+        <div style="font-family:var(--sans);font-weight:600;font-size:1.4rem;letter-spacing:-.02em;color:#1d1d1f">MacBook Air</div>
+        <div style="font-size:.85rem;color:#1d1d1f">Now supercharged by M5.</div>
+        <div style="display:flex;gap:.5rem;margin-top:.5rem">
+          <span style="background:#0071e3;color:#fff;border-radius:999px;padding:.35rem .95rem;font-size:.75rem">Learn more</span>
+          <span style="border:1px solid #0071e3;color:#0071e3;border-radius:999px;padding:.35rem .95rem;font-size:.75rem">Buy</span>
+        </div>
+      </div>
+      <div class="vals">the formula, tile after tile: product NAME (SF Pro 34–56/600, centered) → ONE benefit sentence → dual pill CTAs (filled Learn more / outline Buy) → the product photographed ENORMOUS on a soft tinted field · zero other copy · ease (.4,0,.6,1)<br>→ ours: the hierarchy-discipline lesson — each surface tile = name → one line → two literal CTAs → the REAL product shown large (full-res Olympus/tearsheet in ProductFrame). Our product photography IS the screenshot</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">wealthsimple — dated-claim trust</span><span class="prov">fetch only (browser-blocked)</span></div>
+      <div class="stage" style="background:#f9f8f7;border:1px solid #e5e2dd">
+        <div style="font-family:var(--sans);font-weight:700;font-size:1.5rem;color:#1a1a1a">More is more</div>
+        <div style="font-size:.8rem;color:#4a4a4a;margin-top:.3rem">Being better than a bank means more of everything.</div>
+        <div style="font-family:var(--mono);font-size:.62rem;color:#8a8a85;margin-top:.6rem">Trusted by over 4 million Canadians · As of April 21, 2026</div>
+      </div>
+      <div class="vals">warm off-white #f9f8f7 · FuturaBT-Heavy display (tokens leaked via its own block page) · confident 3-word hero "More is more" · product cards with lifestyle imagery · trust = REAL numbers with a DATED verification line ("As of April 21, 2026")<br>→ ours: <b style="color:var(--soft)">the dated-claim pattern</b> — our tearsheets already carry generated_at; surface it ("backtest as of 2026-06-30") as a trust signal · warm-neutral light canvas corroborates the Anthropic ivory direction (§17)</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">hebbia — institutional luxury</span><span class="prov fetch">live capture</span></div>
+      <div class="stage" style="background:linear-gradient(120deg,#181410,#101010 60%);align-items:flex-start">
+        <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.16em;color:#b8ad9d;text-transform:uppercase">AI for finance</div>
+        <div style="font-family:var(--serif);font-weight:400;font-size:clamp(1.6rem,3.2vw,2.4rem);letter-spacing:.02em;line-height:1.02;color:#efe9dd;text-transform:uppercase;margin-top:.35rem">Institutional<br>Intelligence</div>
+        <span style="border:1px solid rgba(255,255,255,.2);border-radius:2px;padding:.35rem .8rem;font-size:.66rem;letter-spacing:.08em;color:#5f7cff;margin-top:.7rem;text-transform:uppercase">Contact sales</span>
+      </div>
+      <div class="vals">warm black #101010 + bronze/champagne sheen · engraved ALL-CAPS SERIF display ("INSTITUTIONAL INTELLIGENCE") · mono-uppercase eyebrow "AI FOR FINANCE" + nav · r2 sharp CTAs, electric-blue text accent · bronze architectural 3D + documentary photography · Selecta body · overshoot bezier (0.4,0.05,0.22,1.2)<br>→ ours: the institutional-luxury register for digiquant's "the desk a fund would build" — serif-caps display sits one step from our Fraunces; second independent sighting of spaced-serif-caps in finance-AI (with hermes-agent, §17) = it's a genre convention we can own in emerald/warm-dark</div>
+    </div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr;margin-top:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/langchain-hero.jpg" alt="LangChain hero: luminous ice-blue display type over blue-black, converging lifecycle paths with Build/Test/Deploy/Monitor pills" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.6rem .9rem">langchain — luminous type + the convergence diagram (Build/Test/Deploy/Monitor → one stream)</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/hebbia-hero.jpg" alt="Hebbia hero: INSTITUTIONAL INTELLIGENCE in engraved serif caps on warm black with bronze forms" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.6rem .9rem">hebbia — engraved serif caps, warm black + bronze, AI FOR FINANCE eyebrow</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/apple-tile.jpg" alt="Apple homepage tile: MacBook Air name, one benefit line, Learn more and Buy pills, giant product photo" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.6rem .9rem">apple — the tile formula: name · one line · two CTAs · the product, enormous</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 21 — parallel batch: finance-AI kin, live 2026-07-02</div>
+  <h2>rogo.ai · fiscal.ai — subtraction is the category's confident move</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">rogo.ai — one-typeface authority</span><span class="prov fetch">live capture</span></div>
+      <div class="vals">ABC Arizona Mix (serif-hybrid) 64px/400 · tracking −3.2px (−5%) · line-height 0.95 · hero = EMPTY monochrome video field, the headline stands alone ("For the most ambitious firms in finance") · two canvases only: gray-video dark ↔ warm paper · QUOTE-AS-DISPLAY trust device: customer quote set at headline scale in the serif, one card open + others collapsed behind "+" · grayscale client logos · announcement bar carries a dated factual claim ("$160M Series D — Learn more")<br>→ ours: the quote-card form replaces banned trust strips — one wide Fraunces-set card carrying a REAL tearsheet stat ("PF 8.72 · 2018→2026") with mono dated attribution, flanked by collapsed "+" strategy cards · steal the −5%-tracked 0.95-lh hero confidence</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">fiscal.ai — the numbered progress rail</span><span class="prov fetch">live capture</span></div>
+      <div class="vals">canvas #1C1C21 → ink #05080F · Space Grotesk 64px/500/−3% · paper-not-white CTAs #F9F8F6 · ONE orange accent rationed to kickers + rail dots · cinematic threshold film hero (doors/staircases as "access to data") · scrollytelling: GIANT dimmed numerals + dotted hairline progress rail, past steps stay visible but muted · CTA glyph grammar: "↳ Request Demo" · easing set incl. expo-out (.16,1,.3,1) @150ms · copy register: "Clean auditable financial data updated in minutes after earnings"<br>→ ours: the rail is a near-perfect pipeline fit — giant dimmed Fraunces numerals, emerald dots + 1px hairline, Geist Mono step titles (ingest → orchestrate → backtest → execute) · CTA prefix grammar in OUR glyphs: "$ run backtest" · warm paper #F9F8F6 for light elements on dark · time-bound auditable copy register = our doctrine's voice</div>
+    </div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:1rem;gap:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/rogo-quote-display.jpg" alt="Rogo: customer quote set at display scale in serif, expandable card row" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">rogo — quote-as-display + 1-open/N-collapsed cards</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/fiscal-progress-rail.jpg" alt="Fiscal: numbered progress rail scrollytelling with giant dimmed numerals and orange rail" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">fiscal — kicker + numbered rail + art plate</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 22 — parallel batch: dev-tool masters, live 2026-07-02</div>
+  <h2>tailwindcss · nextjs — the product as the page's own material</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">tailwindcss.com — the self-annotating page</span><span class="prov fetch">live capture</span></div>
+      <div class="vals">Inter 96px/−5%/lh 1.0 display · IBM Plex Mono with "ss02","zero" — SLASHED ZERO enabled · diagonal-hatched gutter stripes + hairline rules + dotted-grid demo paper (construction framing as identity) · the page prints ITS OWN utility classes in mono above real elements · code panel (tabs, line numbers, syntax) paired with the live UI it produces · a draggable hairline divider splitting one component light|dark · dry-wit one-liners in feature copy<br>→ ours: <b style="color:var(--soft)">config-provenance kickers</b> — print the real strategy config in Geist Mono above the tearsheet it generated ("// strategy: momentum_xsec · costs: 2bps") · strategy.yaml → live equity-curve panel pairing · comparison slider = gross vs net-of-costs on one curve · adopt slashed-zero + tabular figures for ALL P&amp;L tables</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">nextjs.org — the terminal one-liner</span><span class="prov fetch">live capture</span></div>
+      <div class="vals">GeistSans 64px/600/−5%/lh 1.0 (their face IS ours) · dashed blueprint grid + circular registration arcs at whisper opacity · hero furniture: "▲ ~ npx create-next-app@latest" — the whole onboarding story as ONE mono line, brand glyph as prompt · category-claim headline: "The React Framework for the Web" · verb-only CTAs (Deploy · Learn) · ONE entrance animation (--a-duration 1.08s, expo-family) then static · page 5,165px — half of tailwind's, discipline<br>→ ours: "$ uvx digiquant backtest strategies/momentum.yaml" under the hero CTAs, our QR mark as prompt glyph · dark-invert the blueprint grid = chart-paper (kinship with qn-blueprint-bg AND graphite's registration marks — third sighting) · headline shape: "The agentic stack for quant finance" · one-entrance-then-static motion token</div>
+    </div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:1rem;gap:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/tailwind-self-annotating.jpg" alt="Tailwind hero: mono utility-class annotations above the real headline, hatched gutters, code panel" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">tailwind — self-annotating hero + construction framing</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/nextjs-blueprint-hero.jpg" alt="Next.js hero: dashed blueprint grid with registration arcs, one-line headline, npx one-liner under CTAs" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">nextjs — blueprint grid + the npx one-liner as hero furniture</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 23 — parallel batch: spacex.com, live 2026-07-02</div>
+  <h2>SpaceX — the canvas is the content, the timestamp is the argument</h2>
+  <div class="grid g2">
+    <div class="spec" style="grid-column:1/-1">
+      <div class="vals">pure #000 · off-white #F0F0FA (blue-cast, never #fff) · D-DIN-Bold 48–80px uppercase, lh 0.9–1.0, tracking −1px at display / +0.09em at 13px labels (tracking inversely proportional to size) · NO section backgrounds, NO cards — background:transparent everywhere, full-bleed DATED mission footage is the only surface · every section: bottom-left gravity — mono date kicker (Roboto Mono "MAY 22, 2026") → uppercase headline → ≤3 lines → exactly ONE ghost CTA (rgba(0,0,0,.5) fill · 35%-alpha hairline · r4 · 0.5s expo-out hover) with → arrow · 100vh sections BUTT-JOINTED, no dividers · <b style="color:var(--soft)">reality check: the famous stat counters are GONE</b> — numbers now live as provenance (dated kickers, ordinal mission names, dated filenames)<br>→ ours: <b style="color:var(--soft)">the hero IS the terminal</b> — a live/replayed backtest equity curve as the full-bleed background layer, "// BACKTEST 2026-06-29 · BTC-USD · NAUTILUS" as the kicker, one emerald-hairline ghost CTA ("RUN BACKTEST →") · butt-jointed dark sections, hairline rules only where a seam must read · provenance-as-typography = our dated-claims doctrine, executed by the most credibility-rich brand alive</div>
+    </div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr;margin-top:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/spacex-hero.jpg" alt="SpaceX hero: full-bleed Starship launch footage, transparent nav, mono date kicker, bottom-left uppercase title, ghost WATCH CTA" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">spacex — full-bleed dated footage · bottom-left gravity · one ghost CTA</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 24 — parallel batch: ai4finance · robinhood eu, 2026-07-02</div>
+  <h2>Open-source telemetry · consumer fintech, editorial-grade</h2>
+  <div class="grid g2">
+    <div class="spec"><div class="spec-h"><span class="spec-src">ai4finance.org — live telemetry as proof</span><span class="prov">fetch only (SPA never paints without JS)</span></div>
+      <div class="vals">true-black canvas · trust section = a LIVE downloads dashboard ("Total Downloads (30 Days)" · "Clones + PyPI combined" · "Last 30 days · avg N/day") · command-literal captions: "git clone across all repos" / "pip install across all packages" · card grammar: name + category tag + claim + 3 chips · two-CTA world: Star on GitHub + Join Discord · <b style="color:var(--down)">anti-pattern witnessed: the page renders NOTHING without JS hydration</b> — six pure-black screenshots<br>→ ours: a live proof strip from OUR telemetry (PyPI pulls · backtests run · MCP calls) captioned with the literal command in mono · chart-footer grammar "last 30 days · avg N/day" · and the warning: our reference pages must render content-first, no JS-gated content</div>
+    </div>
+    <div class="spec"><div class="spec-h"><span class="spec-src">robinhood eu — regular-weight giant serif + the real ticket</span><span class="prov fetch">live capture</span></div>
+      <div class="vals">WARM near-black rgb(17,14,8) — temperature-shifted, not #000 · Martina Plantijn serif 84px at WEIGHT 400, −1px, lh 1.05 (scale shouts, weight stays literary) · #CCFF00 acid lime quarantined to act-now elements only · hero = metaphor object (brass astrolabe), product only after scroll · the marketing image is a REAL margin order ticket: "Bid $102,125.98 · Ask $102,176.22 · Estimated margin required $775.00" — density as persuasion · full risk disclosure typeset IN the section, compliance as trust furniture · monochrome flow-field texture (hundreds of 1px dashes)<br>→ ours: warm/green-shift our canvas (test ≈#0A0F0C under emerald) · Fraunces stays ~400 at 72–96px — never bold it · accent-quarantine formalized (emerald = interactive + --up only) · real Olympus order/backtest panels as the marketing shots · our doctrine line typeset under CTAs the way they set risk text · flow-field texture is legal IF it encodes real order-flow</div>
+    </div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr;margin-top:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/robinhood-order-ticket.jpg" alt="Robinhood EU: real margin order ticket as marketing image beside serif heading and in-section risk disclosure" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">robinhood — the real order ticket + in-flow risk text + flow-field texture</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 25 — our own deployed baseline, photographed 2026-07-02</div>
+  <h2>digithings.ai · digiquant.io — main @ 1fba70d, built locally, pixel-identical to production</h2>
+  <p class="sec-note">Production domains are corp-blocked to the browser, so the exact deployed commit was built from the main-reference worktree and captured on localhost. Finding: <b style="color:var(--ink);font-weight:500">the deployed StrategySuite already practices the whole doctrine</b> — dated stamps ("as of 2026-06-29"), real entries, bar counts, P&amp;L color-as-event, mono labels, live status dots. The references above didn't teach us this; they confirmed it. The baseline is stronger than round-1 assumed.</p>
+  <div class="grid" style="grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/digiquant-deployed-hero.jpg" alt="Deployed digiquant.io hero: teal mesh and neural field, Fraunces serif headline with italic emerald line, scroll cue" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">digiquant.io deployed hero — mesh + Fraunces + italic emerald: already ownable</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/digithings-deployed-hero.jpg" alt="Deployed digithings.ai hero" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">digithings.ai deployed hero — mesh + trust lede + module graph below</figcaption>
+    </figure>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr;margin-top:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/digiquant-deployed-strategysuite.jpg" alt="Deployed StrategySuite: asset cards with live status, dated position panels, P&L colored metrics, Chart/Table toggle" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">the deployed StrategySuite: dated real positions, P&amp;L metrics, mono labels — the doctrine, already shipping</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 26 — framer.com + their animation-tools article, live 2026-07-02</div>
+  <h2>framer — the hero IS the product (independent confirmation) · and the industry's motion-tooling map</h2>
+  <p class="sec-note">Reachable live. Signatures: pure <b style="color:var(--ink);font-weight:500">#000 canvas</b> (observed — we deliberately keep warm near-black instead), GT Walsheim Medium 54px at <b style="color:var(--ink);font-weight:500">−4% tracking</b>, ≤5 nav links + white paper CTA r8, and the big one: <b style="color:var(--ink);font-weight:500">the hero furniture is the live editor itself</b> — real UI, real counts inside frames ("Articles 320 · Creators 256 · Categories 18"), agent panel showing real timings ("Thought 12s · Analyzed hero section 3s"). Same doctrine as our "the hero is the terminal" (canon §10), arrived at independently. Divergence we reject: decorative 3D image tickers between sections (motion outside the product frame). Their blog's tool map, fetched same day: <b style="color:var(--ink);font-weight:500">Motion</b> ("90% less code than GSAP" for basics, "75% lighter" for scroll), GSAP (imperative, heavier, precision choreography), Lottie ("60% smaller than GIFs", dotLottie "98% smaller"), Rive (smaller still, state machines), Spline (3D), Jitter (marketing). Notably: <b style="color:var(--ink);font-weight:500">the article never once mentions reduced-motion, accessibility, or restraint</b> — that silence is the industry default the canon exists to reject.</p>
+  <div class="grid" style="grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/framer-hero.jpg" alt="framer.com hero: pure black, tight grotesk headline, the live Framer editor as hero furniture with real agent panel" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">framer.com hero — the product IS the hero: live editor, real agent timings, #000 canvas, paper CTA r8</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/framer-product-frames.jpg" alt="framer.com mid-page: cropped dark product frames with real CMS counts, restrained blue accent on Publish only" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">cropped hairline frames · real counts (320/256/18/7) · accent only on the interactive verb (Publish)</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 27 — parallel batch: sanity.io · clerk.com, live 2026-07-02</div>
+  <h2>sanity · clerk — code as the hero CTA, springs in production</h2>
+  <p class="sec-note"><b style="color:var(--ink);font-weight:500">sanity</b>: Waldenburg 112px at <b style="color:var(--ink);font-weight:500">−4% tracking</b> (the third −4% display sighting — framer, sanity, and our own −.025em are converging on the same compression), black hero → white body inversion, and the big validation: <b style="color:var(--ink);font-weight:500">the hero CTA is a copyable command</b> — "npm create sanity@latest" in a mono frame, exactly our §04 cmd component. One loud action color (#ff4500) used solely on the act-now verb. <b style="color:var(--ink);font-weight:500">clerk</b>: ships spring-shaped linear() easings in production CSS — "linear(0, .2074, .5111, .7346, .8679, .9388, .9735, …, 1)" — the second vendor after graphite; JSX component tags (&lt;SignUp /&gt;, &lt;UserButton /&gt;) ARE the hero product (config-as-content, again); r6 CTAs, 75ms micro-durations, dark cards on warm light. Rejected from both: logo bars, funding-round-as-trust ("Series C" banner — we date backtests, not fundraises).</p>
+  <div class="grid" style="grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/sanity-hero.jpg" alt="sanity.io hero: black canvas, 112px Waldenburg at −4% tracking, npm create command as hero CTA" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">sanity hero — the invocation IS the CTA · 112px/−4.48px · one loud verb color</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/clerk-cards.jpg" alt="clerk.com dark feature cards with security compliance copy and JSX component overlay" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">clerk — JSX tags as product shape · SOC 2 dated compliance as copy · dark cards, hairline depth</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 28 — parallel batch: motion.dev · gsap.com, live 2026-07-02</div>
+  <h2>motion · gsap — the two motion vendors argue our law for us</h2>
+  <p class="sec-note"><b style="color:var(--ink);font-weight:500">motion.dev</b> (the library we sanctioned in canon §09) practices restraint: near-black #0f1312, a mathematical wave curve as hero art (precision drawn, not animated), a mono metadata stripe — "// OPEN SOURCE // MIT LICENSE · V12.42.2" — which is our kicker/provenance grammar verbatim, motion demos embedded INSIDE component frames (diegetic, law 05), and a no-fill sharp-cornered mono CTA in #ffdb2a. <b style="color:var(--ink);font-weight:500">gsap.com</b> (the library we rejected) is the counter-example in the same genre: floating gradient shapes, continuous keyframe loops, staggered body text — motion as spectacle. Honest caveat: that is fair dogfooding for an animation vendor; it is exactly wrong for a proof-selling quant site. The pairing is the §09 implementation doctrine, argued visually by the vendors themselves.</p>
+  <div class="grid" style="grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/motion-hero.jpg" alt="motion.dev hero: wave curve graph on near-black with mono metadata stripe and yellow accents" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">motion.dev — the curve as hero art · mono provenance stripe · restraint from the motion vendor itself</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/gsap-hero.jpg" alt="gsap.com hero: Animate Anything headline with floating neon gradient shapes" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">gsap — motion as spectacle: the anti-pattern we quarantine, shown for the record</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-eyebrow">// 29 — linear.app, live 2026-07-02 · solo depth</div>
+  <h2>linear — restraint masterclass, and the clone-clichés we must not wear</h2>
+  <p class="sec-note">Palette: #080a0a bg · #f7f8f8 ink · Inter Variable 64px at weight <b style="color:var(--ink);font-weight:500">510</b> / −1.4px · hairlines #1a1a1a as the ONLY hierarchy tool · --duration .18s and almost no homepage motion at all — the famous fluency lives in-product, the marketing page holds still (our law 05, practiced at their scale). Steal-worthy: <b style="color:var(--ink);font-weight:500">numbered section grammar</b> ("1.0 Intake →", "2.0 Plan →" — versioning as navigation, kin to our sec-nums and fiscal's rail); changelog cards with REAL dates (JUN 30, 2026) and concrete initiative names; code diffs shown unblurred on the homepage. <b style="color:var(--ink);font-weight:500">The clone-cliché list (recorded so we never wear it)</b>: isometric wireframe boxes · left-text/right-visual repeated every section · generic centered nav · fake minimalism. On cyan: linear's accents read cyan-adjacent — ours (#3DD6C4) is digichat's product livery from our own token history, worn in-product only, never as marketing paint; that distinction is the defense.</p>
+  <div class="grid" style="grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem">
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/linear-feature.jpg" alt="linear.app feature section: left text, right Gantt roadmap UI, numbered CTA 2.0 Plan" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">linear feature grammar — numbered CTAs ("2.0 Plan →") · real product UI, orthogonal, cropped</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface)">
+      <img src="live/linear-code.jpg" alt="linear.app homepage code diff viewer with syntax highlighting and numbered breadcrumbs" style="width:100%;display:block">
+      <figcaption class="vals" style="padding:.5rem .8rem">unblurred code diffs on a marketing page — technical depth treated with respect (mono testifies)</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<footer style="margin-top:4rem;border-top:1px solid var(--hair)"><div class="wrap" style="padding-top:1.4rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.6rem">
+  <span class="vals">frontend/digiweb/design/references/mine · 28 references, live-verified where reachable</span>
+  <span class="vals">the distilled rules live in spec/ — the canon</span>
+</div></footer>
+
+<script>
+(function(){
+var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function replayLn(id){var el=document.getElementById(id);if(!el||reduce)return;el.classList.remove('on');void el.offsetWidth;setTimeout(function(){el.classList.add('on');},60);}
+document.querySelectorAll('[data-replay]').forEach(function(b){b.addEventListener('click',function(){replayLn(b.getAttribute('data-replay'));});});
+function runCurves(){if(reduce)return;var a=document.getElementById('dotA'),bt=document.getElementById('dotB');[a,bt].forEach(function(d){d.style.transition='none';d.style.left='0px';});void a.offsetWidth;a.style.transition='left 1.1s cubic-bezier(.22,1,.36,1)';bt.style.transition='left 1.1s ease-in-out';var w=a.parentElement.clientWidth-10;a.style.left=w+'px';bt.style.left=w+'px';}
+var pinT=null;
+function runPin(){var panels=document.querySelectorAll('#pinStage .pin-panel'),rail=document.getElementById('pinRail');if(pinT)clearInterval(pinT);if(reduce){panels.forEach(function(p){p.classList.add('on');});rail.style.width='100%';return;}var i=0;function show(k){panels.forEach(function(p,j){p.classList.toggle('on',j===k);});rail.style.width=Math.round(((k+1)/panels.length)*100)+'%';}show(0);pinT=setInterval(function(){i=(i+1)%panels.length;show(i);if(i===panels.length-1){clearInterval(pinT);pinT=null;}},1100);}
+function runDiegetic(){var bar=document.getElementById('cuBar'),line=document.getElementById('cuLine');if(reduce){bar.style.width='100%';line.textContent='✓ done · worked for 14m 22s · explored 12 files';return;}bar.style.transition='none';bar.style.width='0%';line.textContent='';void bar.offsetWidth;bar.style.transition='width 2.4s linear';bar.style.width='100%';var msg='✓ done · worked for 14m 22s · explored 12 files';var i=0;var t=setInterval(function(){line.textContent=msg.slice(0,++i);if(i>=msg.length)clearInterval(t);},2400/msg.length);}
+function runCount(){var el=document.getElementById('countUp');if(reduce){el.textContent='8.72';return;}var t0=null,dur=1400;function step(ts){if(!t0)t0=ts;var k=Math.min(1,(ts-t0)/dur);var e=1-Math.pow(1-k,3);el.textContent=(e*8.72).toFixed(2);if(k<1)requestAnimationFrame(step);}requestAnimationFrame(step);}
+var runs={curves:runCurves,pin:runPin,diegetic:runDiegetic,count:runCount};
+document.querySelectorAll('[data-run]').forEach(function(b){b.addEventListener('click',function(){runs[b.getAttribute('data-run')]();});});
+setTimeout(function(){replayLn('lnDemo');replayLn('b1h');runCurves();runPin();runDiegetic();runCount();},400);
+})();
+</script>
+</body>
+</html>

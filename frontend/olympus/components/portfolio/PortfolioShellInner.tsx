@@ -184,7 +184,7 @@ export default function PortfolioShellInner() {
   if (loading) return <AtlasLoader />;
   if (error || !data || !metrics)
     return (
-      <div className="flex items-center justify-center h-screen text-fin-red">
+      <div className="flex items-center justify-center h-screen text-down">
         {error || 'Failed to load'}
       </div>
     );

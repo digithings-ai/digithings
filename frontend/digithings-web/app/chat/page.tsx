@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DigiNav } from "@/components/landing/DigiNav";
+import { DtNav } from "@/components/DtNav";
 import { DigiChatSession } from "@/components/DigiChatSession";
 
 export const metadata: Metadata = {
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default function ChatPage() {
   return (
     <>
-      <DigiNav />
+      <DtNav />
       <main className="dc-page">
         <DigiChatSession />
       </main>

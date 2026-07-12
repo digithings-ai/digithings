@@ -39,7 +39,10 @@ def _run_h2_llm(state: HermesState) -> MarketThesisExplorationOutput:
             "thesis_review": state.phase_hermes.thesis_review,
             "meta": {"research_refs": []},
         },
-        context_keys=("digest",),
+        # Baseline runs publish `digest`, delta runs publish `digest-delta`
+        # (publish_phase.py) — both must be whitelisted or the prior digest
+        # silently drops out of context on whichever cadence is missing (#1270).
+        context_keys=("digest", "digest-delta"),
     )
     if exploration is None:
         return MarketThesisExplorationOutput()

@@ -1,4 +1,5 @@
 import type { Doc } from '@/lib/types';
+import { CATEGORICAL_SERIES } from '@/lib/chart-colors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PM document grouping
@@ -107,18 +108,8 @@ export function groupPmDocs(docs: Doc[]): PmDocGroup[] {
   return groups;
 }
 
-export const ALLOCATION_PALETTE = [
-  '#3B82F6',
-  '#10B981',
-  '#F59E0B',
-  '#EF4444',
-  '#8B5CF6',
-  '#06B6D4',
-  '#F97316',
-  '#EC4899',
-  '#6366F1',
-  '#14B8A6',
-];
+// Hues live in the sanctioned fixed allowlist (lib/chart-colors.ts, #1402).
+export const ALLOCATION_PALETTE: readonly string[] = CATEGORICAL_SERIES;
 
 /** Stable accent color for a category / grouping key (hex, for inline styles). */
 export function allocationAccentFromKey(key: string): string {

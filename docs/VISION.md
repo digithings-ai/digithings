@@ -23,7 +23,7 @@ Two public domains, plus a developer-tooling product line.
 
 ### `digithings.ai` — ecosystem home
 - **Marketing site** (current `website/`) — landing, components, open-source story, case studies.
-- **Embedded DigiChat** at `chat.digithings.ai` — user brings their own API key (or uses a metered tier), chats against an index of DigiThings documentation and high-level component READMEs. Acts as a **"discover the ecosystem"** guide: prospects can ask "I need X, which DigiThings components solve it?" and get grounded answers.
+- **Embedded DigiChat** at `digithings.ai/chat` (path-routed per [ADR-0018](adr/0018-digichat-path-routing.md), not a `chat.` subdomain) — user brings their own API key (or uses a metered tier), chats against an index of DigiThings documentation and high-level component READMEs. Acts as a **"discover the ecosystem"** guide: prospects can ask "I need X, which DigiThings components solve it?" and get grounded answers.
 
 ### `digiquant.io` — financial AI hub
 - **DigiQuant product** — algorithmic strategy generation, backtesting, optimization, broker connections, deployment.
@@ -128,7 +128,7 @@ Cross-cutting:
 
 Seat pricing and metered unit cost are TBD — will be nailed down when Phase 5 planning starts or when the first prospect asks.
 
-### `chat.digithings.ai` launch — BYOK + small metered guest tier
+### `digithings.ai/chat` launch — BYOK + small metered guest tier
 
 - **Primary path:** bring-your-own-key. User pastes an OpenAI/Anthropic/etc. key, stored client-side only, never server-persisted. Verified by code review.
 - **Guest tier:** a small metered pool behind the "Try it now" button on `digithings.ai`. Strict rate limits per IP/session (exact limits TBD). Funded as a marketing expense, not a revenue line.
@@ -152,6 +152,6 @@ The exact boundary evolves. Guardrail: anything that's a meaningful moat for the
 ## Open questions
 
 - Atlas seat price point and metered unit cost (defer to Phase 5 planning).
-- Guest-tier rate limits on `chat.digithings.ai` (defer to Phase 3b implementation).
+- Guest-tier rate limits on `digithings.ai/chat` (defer to Phase 3b implementation).
 - Exact list of "closed" components — only the finance sub-graph implementations + multi-tenant DigiBase + hosting + premium DigiDev add-ons are committed today; others may migrate into the closed column as commercial value becomes clear.
 - Library extraction is uneven: `digillm` and `digifetch` have shipped as standalone open-core libraries, while `digilink` (connector/protocol layer) and `digistore` (storage abstraction) remain designed-but-unshipped — their functions still live inside individual services for now.

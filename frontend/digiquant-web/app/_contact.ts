@@ -1,4 +1,4 @@
-/** Shared contact tier copy for homepage #contact and /contact. */
+/** Contact tier copy for the standalone /contact route. */
 
 export const CONTACT_SELF_FEATURES = [
   "The complete stack — research, portfolio management, and execution",
