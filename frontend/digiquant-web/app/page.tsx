@@ -14,6 +14,7 @@ import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
+import { LiveTickerRow } from "@/components/landing/LiveTickerRow";
 import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
 import { OlympusScene } from "@/components/landing/OlympusScene";
 import { StrategySuite } from "@/components/landing/StrategySuite";
@@ -86,6 +87,13 @@ export default function Home() {
             <div className="dqhero-scroll" aria-hidden="true" />
           </div>
         </HeroMesh>
+
+        {/* Market-pulse tape right under the hero: the shared StockTicker fed
+            live (crypto keyless from Coinbase, majors from the feed). A client
+            island; SSR-safe (renders a muted "connecting" line until quotes
+            arrive). Distinct register from the "Built on" logo marquee below —
+            mono price rails, not drifting glyphs. */}
+        <LiveTickerRow />
 
         <section className="border-y border-hair" aria-label="Built on">
           <Marquee
