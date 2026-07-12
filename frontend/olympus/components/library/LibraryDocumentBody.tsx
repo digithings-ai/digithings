@@ -59,10 +59,8 @@ export default function LibraryDocumentBody({
         />
       );
     default:
-      return (
-        <SafeMarkdown className="prose prose-invert max-w-none text-sm leading-relaxed">
-          {normalizedMarkdown}
-        </SafeMarkdown>
-      );
+      // SafeMarkdown scopes the canonical .chat-md typography (chat-core.css)
+      // — no local prose-* classes (#1450).
+      return <SafeMarkdown>{normalizedMarkdown}</SafeMarkdown>;
   }
 }

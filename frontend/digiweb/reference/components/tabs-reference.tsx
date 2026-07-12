@@ -1,0 +1,207 @@
+"use client";
+
+import { useState } from "react";
+import { m, useReducedMotion } from "motion/react";
+import { TabStrip, tabId, tabPanelId, type TabItem } from "@digithings/web";
+
+/**
+ * Reusable tab strip with a sliding active indicator. The indicator is a single
+ * absolutely-positioned element whose transform/width are measured from the
+ * active tab and written straight to a ref, so the slide is a CSS transition —
+ * no `layoutId` (the app's LazyMotion runs `domAnimation`, which omits layout
+ * animations) and no per-frame React state.
+ * Consumes the shared <TabStrip/> primitive from @digithings/web.
+ */
+const VIEWS: TabItem[] = [
+  { id: "overview", label: "Overview" },
+  { id: "positions", label: "Positions" },
+  { id: "orders", label: "Orders" },
+  { id: "logs", label: "Logs" },
+];
+
+const POSITIONS = [
+  { sym: "BTC-PERP", qty: "+1.20", pnl: 4820, up: true },
+  { sym: "ETH-PERP", qty: "+8.00", pnl: 1290, up: true },
+  { sym: "SOL-PERP", qty: "−140", pnl: -640, up: false },
+];
+
+const ORDERS = [
+  { sym: "BTC-PERP", side: "buy", px: "63,410", qty: "0.40" },
+  { sym: "ETH-PERP", side: "sell", px: "3,088", qty: "4.00" },
+  { sym: "SOL-PERP", side: "buy", px: "142.6", qty: "60" },
+];
+
+const LOGS = [
+  "12:04:31  fill  BTC-PERP  +0.40 @ 63,410",
+  "12:04:29  ack   order 8f2c accepted",
+  "12:04:27  risk  gross exposure 0.62× limit",
+  "12:03:58  sig   trend_xsec → long BTC",
+];
+
+const MODES: TabItem[] = [
+  { id: "backtest", label: "backtest" },
+  { id: "paper", label: "paper" },
+  { id: "live", label: "live" },
+];
+
+const MODE_NOTE = [
+  "Replays historical bars — no venue connection.",
+  "Live market data, simulated fills, zero capital at risk.",
+  "Routes to the broker. Gated behind human approval.",
+];
+
+const SECTIONS: TabItem[] = [
+  { id: "signals", label: "Signals" },
+  { id: "consensus", label: "Consensus" },
+  { id: "ideas", label: "Trade ideas" },
+  { id: "matrix", label: "Matrix" },
+  { id: "digest", label: "Digest" },
+  { id: "briefs", label: "Briefs" },
+];
+
+export function TabsReference() {
+  const [view, setView] = useState(0);
+  const [mode, setMode] = useState(1);
+  const [section, setSection] = useState(0);
+  const reduced = useReducedMotion();
+
+  const panelMotion = reduced
+    ? {}
+    : { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.22 } };
+
+  const activeId = VIEWS[view].id;
+
+  return (
+    <section className="section-block">
+      <p className="kicker">{"// tabs"}</p>
+      <h2 className="title">Panels, with a slider.</h2>
+      <p className="section-copy">
+        A tab strip whose active indicator slides between labels — measured from the live tab
+        geometry and animated with a CSS transition, so it survives a resize and honours
+        reduced-motion. Arrow keys move between tabs; the panel below crossfades in. Three
+        dresses: an underline for content regions, a pill for a compact mode switch, and a chip
+        row for dashboard sub-navs — it may wrap, and the slider follows across rows.
+      </p>
+
+      <div className="mt-[1.4rem]">
+        <TabStrip
+          tabs={VIEWS}
+          active={view}
+          onChange={setView}
+          variant="underline"
+          label="Account view"
+        />
+
+        <div
+          className="min-h-[8.5rem] pt-[1.1rem]"
+          role="tabpanel"
+          id={tabPanelId("Account view", activeId)}
+          aria-labelledby={tabId("Account view", activeId)}
+        >
+          <m.div key={view} {...panelMotion}>
+            {activeId === "overview" && (
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-[0.9rem]">
+                {[
+                  { k: "Equity", v: "$1.284M" },
+                  { k: "Day P&L", v: "+$5.47K", up: true },
+                  { k: "Sharpe", v: "2.31" },
+                  { k: "Exposure", v: "0.62×" },
+                ].map((s) => (
+                  <div
+                    key={s.k}
+                    className="flex flex-col gap-[0.25rem] rounded-[9px] border border-hair bg-surface/60 px-[0.85rem] py-[0.7rem]"
+                  >
+                    <span className="font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
+                      {s.k}
+                    </span>
+                    <span className={`font-mono text-[1.05rem] ${s.up ? "text-up" : "text-ink"}`}>
+                      {s.v}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeId === "positions" && (
+              <div className="flex flex-col">
+                {POSITIONS.map((p) => (
+                  <div
+                    key={p.sym}
+                    className="flex items-center gap-[1rem] border-b border-hair px-[0.2rem] py-[0.5rem] font-mono text-[0.78rem]"
+                  >
+                    <span className="flex-1 text-ink">{p.sym}</span>
+                    <span className="tabular-nums text-ink-soft">{p.qty}</span>
+                    <span
+                      className={`min-w-[5rem] text-right tabular-nums ${p.up ? "text-up" : "text-down"}`}
+                    >
+                      {p.up ? "+" : "−"}${Math.abs(p.pnl).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeId === "orders" && (
+              <div className="flex flex-col">
+                {ORDERS.map((o) => (
+                  <div
+                    key={o.sym}
+                    className="flex items-center gap-[1rem] border-b border-hair px-[0.2rem] py-[0.5rem] font-mono text-[0.78rem]"
+                  >
+                    <span
+                      className={`min-w-[2.6rem] text-[0.58rem] uppercase tracking-[0.08em] ${o.side === "buy" ? "text-up" : "text-down"}`}
+                    >
+                      {o.side}
+                    </span>
+                    <span className="flex-1 text-ink">{o.sym}</span>
+                    <span className="tabular-nums text-ink-soft">{o.qty}</span>
+                    <span className="tabular-nums text-ink-soft">{o.px}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeId === "logs" && (
+              <div className="flex flex-col gap-[0.35rem]">
+                {LOGS.map((l) => (
+                  <p key={l} className="m-0 font-mono text-[0.72rem] text-ink-soft">
+                    {l}
+                  </p>
+                ))}
+              </div>
+            )}
+          </m.div>
+        </div>
+      </div>
+
+      <div className="mt-8">
+        <TabStrip
+          tabs={MODES}
+          active={mode}
+          onChange={setMode}
+          variant="pill"
+          label="Execution mode"
+        />
+        <p className="mt-[0.9rem] font-mono text-[0.74rem] text-ink-mute">{MODE_NOTE[mode]}</p>
+      </div>
+
+      {/* chip — the dashboard sub-nav dress (olympus subpage tab bars). The note
+          below is not a tabpanel, so linkPanels={false} keeps aria-controls off
+          the tabs rather than emitting dangling references. */}
+      <div className="mt-8 max-w-[26rem]">
+        <TabStrip
+          tabs={SECTIONS}
+          active={section}
+          onChange={setSection}
+          variant="chip"
+          label="Workspace sections"
+          linkPanels={false}
+        />
+        <p className="mt-[0.9rem] font-mono text-[0.74rem] text-ink-mute">
+          {SECTIONS[section].label} — constrained width on purpose: the chip row wraps and the
+          slider follows.
+        </p>
+      </div>
+    </section>
+  );
+}

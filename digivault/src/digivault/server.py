@@ -9,16 +9,20 @@ from __future__ import annotations
 
 import logging
 import os
+import time as _time
+from collections import deque as _deque
+from threading import Lock as _Lock
 from typing import Any  # noqa: ANN401 — frontmatter / orchestrator argument maps are arbitrary
 
 from digibase.cors import install_cors
-from digibase.errors import register_fastapi_error_handlers
+from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware
 from digikey.scopes import scope_grants_required
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from digivault import __version__
@@ -52,6 +56,60 @@ app = FastAPI(
 install_metrics(app, service="digivault", version=__version__)
 install_cors(app, service="digivault")
 app.add_middleware(DigiAuthMiddleware, service="digivault", path_scopes=digivault_path_scopes)
+
+# ── rate limiting (per-IP sliding window; mirrors digisearch/server.py) ──────
+_rl_windows: dict[str, _deque] = {}
+_rl_lock = _Lock()
+_RATE_LIMITS: dict[str, tuple[int, int]] = {
+    "/v1/orchestrator_tools": (30, 60),
+    "/v1/orchestrator_invoke": (10, 60),
+}
+_DEFAULT_RATE_LIMIT = (30, 60)
+_UNLIMITED_PATHS = {"/healthz"}
+
+
+def _rl_check(request: Request, max_req: int, window: int) -> JSONResponse | None:
+    if os.environ.get("DIGI_DISABLE_RATE_LIMIT", "").lower() in ("1", "true", "yes"):
+        return None
+    xff = request.headers.get("X-Forwarded-For")
+    ip = (
+        xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+    )
+    if ip == "testclient":
+        return None
+    now = _time.monotonic()
+    cutoff = now - window
+    with _rl_lock:
+        if ip not in _rl_windows:
+            _rl_windows[ip] = _deque()
+        q = _rl_windows[ip]
+        while q and q[0] < cutoff:
+            q.popleft()
+        if len(q) >= max_req:
+            return json_error_response(
+                status_code=429,
+                code="rate_limit_exceeded",
+                message=f"Rate limit exceeded: {max_req} requests per {window}s.",
+                request=request,
+                service="digivault",
+                headers={"Retry-After": str(window)},
+            )
+        q.append(now)
+    return None
+
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    """Per-IP rate limiting. orchestrator_invoke: 10/min; others: 30/min."""
+    path = request.url.path
+    if path not in _UNLIMITED_PATHS:
+        max_req, window = _RATE_LIMITS.get(path, _DEFAULT_RATE_LIMIT)
+        result = _rl_check(request, max_req, window)
+        if result is not None:
+            return result
+    return await call_next(request)
+
+
 install_request_id_middleware(app)
 install_request_id_logging()
 

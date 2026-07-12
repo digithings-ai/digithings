@@ -4,23 +4,16 @@
  * /embed — minimal unauthenticated chat surface for iframe embedding.
  *
  *   ?accent=digithings|digiquant|digichat   (default: digichat)
+ *   ?host=<the embedding page's own origin> — see resolveEmbedHost() (#1372)
+ *   ?token=<per-tenant secret>
+ *   ?welcome= / ?placeholder= / ?suggestions= — UI overrides (DataTapStream)
  *
- * Policy:
- *   - First N=EMBED_FREE_TURN_LIMIT (3) user turns are free.
- *   - After the limit, the gate card is shown with two CTAs:
- *     (1) reveal BYOK input → BYOK key unlocks unlimited turns in-place,
- *     (2) "Open DigiChat" → https://chat.digithings.ai.
- *   - BYOK key is stored via the shared useBYOKKey hook (localStorage),
- *     never duplicated.
- *
- * Frame-ancestors CSP is set in next.config.ts; this page assumes it is loaded
- * inside an iframe on digithings.ai / digiquant.io (or standalone for dev).
+ * Uses the shared @digithings/digichat-ui DigiChatSession widget.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
-import { Send, Key, ExternalLink, Eye, EyeOff } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { DigiChatSession } from "@digithings/digichat-ui";
+import { Key, ExternalLink, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,52 +23,56 @@ import {
   validateBYOKModel,
   type BYOKProvider,
 } from "@/hooks/use-byok-key";
-import { formatEmbedChatError } from "@/lib/embed-chat-error";
-import { p } from "@/lib/base-path";
+import { useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
 import {
   emit,
   useEmbedGate,
   EMBED_FREE_TURN_LIMIT,
 } from "@/lib/embed-gate";
+import { readEmbedUiParams } from "@/lib/embed-ui-params";
+import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
+import {
+  useEmbedTenantConfig,
+  type EmbedTenantClientConfig,
+} from "@/hooks/use-embed-tenant-config";
 
 type Accent = "digithings" | "digiquant" | "digichat";
 
 const ACCENTS: readonly Accent[] = ["digithings", "digiquant", "digichat"];
 
-function resolveAccent(raw: string | null | undefined): Accent {
-  if (raw && (ACCENTS as readonly string[]).includes(raw)) return raw as Accent;
-  return "digichat";
-}
-
-/**
- * Per-accent scoped overrides. We don't fork the whole token set — just
- * `--accent` (and the matching foreground). These colors mirror the
- * marketing-site brand hues; digichat keeps the neutral dark value from
- * globals.css's `.dark` block.
- *
- * Using CSS vars (not raw hex in JSX) per the unit's conventions; the inline
- * <style> lives in this page so the embed layout stays zero-dependency on
- * tokens.css (which #240 owns).
- */
 const ACCENT_CSS = `
 .accent-digithings { --accent: #7c3aed; --accent-foreground: #f5f3ff; }
 .accent-digiquant  { --accent: #10b981; --accent-foreground: #ecfdf5; }
 .accent-digichat   { --accent: #1f1f1f; --accent-foreground: #e6e6e6; }
 `;
 
+const DEFAULT_WELCOME =
+  "Ask a question at the bottom of the page to get started.\n\nAsk anything — the first few turns are free.";
+
+function resolveAccent(raw: string | null | undefined): Accent {
+  if (raw && (ACCENTS as readonly string[]).includes(raw)) return raw as Accent;
+  return "digichat";
+}
+
 type EmbedPageProps = {
-  searchParams: Promise<{ accent?: string }> | { accent?: string };
+  searchParams:
+    | Promise<{ accent?: string; token?: string; host?: string }>
+    | { accent?: string; token?: string; host?: string };
 };
 
 export default function EmbedPage({ searchParams }: EmbedPageProps) {
   const [accent, setAccent] = useState<Accent>("digichat");
+  const [token, setToken] = useState<string | undefined>(undefined);
+  const [host, setHost] = useState<string | undefined>(undefined);
+  const tenantCfg = useEmbedTenantConfig(token, host);
 
-  // Next 15/16: searchParams may be a Promise — resolve both shapes.
   useEffect(() => {
     let cancelled = false;
     Promise.resolve(searchParams).then((sp) => {
       if (cancelled) return;
       setAccent(resolveAccent(sp?.accent));
+      setToken(sp?.token);
+      setHost(sp?.host);
     });
     return () => {
       cancelled = true;
@@ -86,201 +83,173 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
     emit("embed_loaded", { accent });
   }, [accent]);
 
+  // Tenant theme drives the canon [data-theme] on <html> — the semantic
+  // tokens are scoped :root[data-theme="…"] (tokens.css), so a subtree class
+  // alone no longer flips the palette. Default stays dark like the pre-canon
+  // embed (this page is its own iframe document, so the root flip is scoped
+  // to the embed). The .dark/.light classes follow via ThemeClassSync
+  // (providers.tsx); the wrapper div below keeps its class for the Tailwind
+  // `dark:` variant inside the subtree.
+  //
+  // The app-wide ThemeProvider (providers.tsx, from @digithings/web) installs a
+  // persistent prefers-color-scheme listener that rewrites <html data-theme> to
+  // the OS scheme whenever there is no `dt-theme` localStorage key — always the
+  // case for an anonymous embed visitor, who never toggles the theme. Without a
+  // guard, a mid-session OS light↔dark switch would silently flip a tenant's
+  // forced theme. Re-assert the tenant theme via a MutationObserver so it wins
+  // over any external writer; the guarded write (only when it actually differs)
+  // keeps the observer loop-free.
+  useEffect(() => {
+    const el = document.documentElement;
+    const desired = tenantCfg.theme === "light" ? "light" : "dark";
+    const apply = () => {
+      if (el.getAttribute("data-theme") !== desired) {
+        el.setAttribute("data-theme", desired);
+      }
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, [tenantCfg.theme]);
+
+  const accentStyle = tenantCfg.accent
+    ? ({
+        "--accent": tenantCfg.accent.color,
+        "--accent-foreground": tenantCfg.accent.foreground,
+      } as React.CSSProperties)
+    : undefined;
+
   return (
     <>
       <style>{ACCENT_CSS}</style>
       <div className="dc-grain" aria-hidden />
-      <div className={`dark accent-${accent} relative z-10 flex min-h-dvh flex-col`}>
-        <EmbedChat accent={accent} />
+      <div
+        className={`${tenantCfg.theme === "light" ? "light" : "dark"} accent-${accent} relative z-10 flex min-h-0 flex-1 flex-col bg-background text-foreground`}
+        style={accentStyle}
+      >
+        <EmbedChat accent={accent} tenantCfg={tenantCfg} token={token} host={host} />
       </div>
     </>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Chat
-// ---------------------------------------------------------------------------
-
-function EmbedChat({ accent }: { accent: Accent }) {
+function EmbedChat({
+  accent,
+  tenantCfg,
+  token,
+  host,
+}: {
+  accent: Accent;
+  tenantCfg: EmbedTenantClientConfig;
+  token?: string;
+  host?: string;
+}) {
   const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } =
     useBYOKKey();
-  const gate = useEmbedGate(byokIsSet);
+  const ungated = tenantCfg.gateMode === "ungated";
+  const showByok = !ungated;
+  const gate = useEmbedGate(byokIsSet || ungated, host);
 
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        // Reuses the main authenticated chat route. In production the embed
-        // is expected to run with BYOK (unlimited) or behind a demo-session
-        // cookie on the host site; the free-tier gate here is purely a
-        // client-side UX affordance (per #241 non-goals: no backend rate
-        // limiting).
-        api: p("/api/chat"),
-        prepareSendMessagesRequest: ({ messages, body }) => {
-          const headers: Record<string, string> = {
-            "content-type": "application/json",
-            "X-Embed-Host": gate.host,
-            "X-Embed-Accent": accent,
-          };
-          if (byokKey) {
-            headers["X-BYOK-Key"] = byokKey;
-            headers["X-BYOK-Provider"] = byokProvider;
-            if (byokProvider === "openrouter" && byokModel.trim()) {
-              headers["X-BYOK-Model"] = byokModel.trim();
-            }
-          }
-          return {
-            body: {
-              ...(typeof body === "object" && body !== null ? body : {}),
-              messages,
-            },
-            headers,
-          };
-        },
-      }),
-    [byokKey, byokProvider, byokModel, gate.host, accent],
-  );
-
-  const { messages, sendMessage, status, error, regenerate } = useChat<UIMessage>({
-    transport,
+  const chat = useEmbedDigiChat({
+    accent,
+    token,
+    host,
+    embedHost: gate.host,
+    byokKey: byokIsSet ? byokKey : undefined,
+    byokProvider,
+    byokModel,
   });
-  const chatError = formatEmbedChatError(error);
 
-  const [text, setText] = useState("");
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const uiParams = useMemo(() => {
+    if (typeof window === "undefined") return {};
+    return readEmbedUiParams(window.location.search);
+  }, []);
 
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages, status]);
+  const welcomeIntro = useMemo(() => {
+    if (uiParams.welcome) return uiParams.welcome;
+    if (tenantCfg.welcome) return tenantCfg.welcome;
+    if (ungated) {
+      return "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
+    }
+    return DEFAULT_WELCOME.replace(
+      "the first few turns are free",
+      `the first ${EMBED_FREE_TURN_LIMIT} are free`,
+    );
+  }, [uiParams.welcome, tenantCfg.welcome, ungated]);
 
-  const busy = status === "streaming" || status === "submitted";
+  const placeholder = uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…";
+  const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
+  const headerTitle = tenantCfg.title;
 
-  const onSubmit = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
-      const t = text.trim();
-      if (!t || busy) return;
-      if (gate.locked) return;
-
-      sendMessage({
-        role: "user",
-        parts: [{ type: "text", text: t }],
-      });
+  const wrappedSend = useCallback(
+    (question: string) => {
+      if (gate.locked && !ungated) return;
+      void chat.send(question);
       emit("embed_turn_submitted", {
         accent,
         turn: gate.turns + 1,
         byok: byokIsSet,
       });
-      gate.increment();
-      setText("");
+      if (!ungated) gate.increment();
     },
-    [text, busy, gate, sendMessage, accent, byokIsSet],
+    [chat, gate, ungated, accent, byokIsSet],
   );
 
-  return (
-    <>
-      <header className="flex items-center justify-between border-b border-border px-4 py-2">
-        <span className="text-sm font-semibold tracking-tight">DigiChat</span>
-        <span
-          className="text-[10px] uppercase tracking-wider text-muted-foreground"
-          aria-label={`Turns used: ${gate.turns} of ${gate.limit}`}
-        >
-          {byokIsSet ? "BYOK unlocked" : `${gate.turns}/${gate.limit} free`}
-        </span>
-      </header>
-
-      <div
-        ref={scrollRef}
-        className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
-        role="log"
-        aria-live="polite"
-      >
-        {messages.length === 0 && !gate.locked && (
-          <p className="text-sm text-muted-foreground">
-            Ask a question to get started. The first {EMBED_FREE_TURN_LIMIT} are
-            free.
-          </p>
-        )}
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
-        ))}
-        {chatError ? (
-          <div
-            className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-            role="alert"
-          >
-            <p>{chatError}</p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mt-2"
-              onClick={() => regenerate()}
+  const headerSlot =
+    headerTitle || !ungated ? (
+      <header className="dc-brand">
+        {headerTitle ? <span>{headerTitle}</span> : <span>digichat</span>}
+        {headerTitle ? (
+          <span className="dc-brand-by">
+            (
+            <a
+              href="https://digithings.ai"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="dc-brand-link"
             >
-              Retry
-            </Button>
-          </div>
+              by digichat
+            </a>
+            )
+          </span>
         ) : null}
-      </div>
+        {!ungated ? (
+          <span className="dc-header-meta" aria-label={`Turns used: ${gate.turns} of ${gate.limit}`}>
+            {byokIsSet ? "BYOK unlocked" : `${gate.turns}/${gate.limit} free`}
+          </span>
+        ) : null}
+      </header>
+    ) : null;
 
-      {gate.locked ? (
-        <PaywallCard />
-      ) : (
-        <form
-          onSubmit={onSubmit}
-          className="flex gap-2 border-t border-border p-3"
-        >
-          <Input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="ask digichat…"
-            aria-label="Message"
-            disabled={busy}
-          />
-          <Button
-            type="submit"
-            size="icon"
-            disabled={busy || !text.trim()}
-            aria-label="Send message"
-            style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
-          >
-            <Send className="size-4" />
-          </Button>
-        </form>
-      )}
-    </>
-  );
-}
+  const footerSlot =
+    tenantCfg.attribution && !headerTitle ? (
+      <p className="dc-attribution">
+        powered by digichat — a{" "}
+        <a href="https://digithings.ai" target="_blank" rel="noreferrer noopener">
+          digithings
+        </a>{" "}
+        product.
+      </p>
+    ) : null;
 
-// ---------------------------------------------------------------------------
-// Message bubble — plain text only, intentionally minimal.
-// ---------------------------------------------------------------------------
-
-function MessageBubble({ message }: { message: UIMessage }) {
-  const text = message.parts
-    .filter((p): p is { type: "text"; text: string } => p.type === "text")
-    .map((p) => p.text)
-    .join("");
-  const mine = message.role === "user";
   return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-          mine
-            ? "bg-[color:var(--accent)] text-[color:var(--accent-foreground)]"
-            : "bg-muted text-foreground"
-        }`}
-      >
-        {text || <span className="opacity-60">…</span>}
-      </div>
-    </div>
+    <DigiChatSession
+      welcomeIntro={welcomeIntro}
+      suggestions={suggestions}
+      placeholder={placeholder}
+      showByok={showByok}
+      showStatusBar={false}
+      layout="embed"
+      chat={{ ...chat, send: wrappedSend }}
+      headerSlot={headerSlot}
+      footerSlot={footerSlot}
+      formReplacement={gate.locked && !ungated ? <PaywallCard /> : undefined}
+      showIntro={!gate.locked}
+      ariaLabel={headerTitle ?? "digichat embed"}
+    />
   );
 }
-
-// ---------------------------------------------------------------------------
-// Paywall / BYOK reveal
-// ---------------------------------------------------------------------------
 
 function PaywallCard() {
   const { setKey } = useBYOKKey();

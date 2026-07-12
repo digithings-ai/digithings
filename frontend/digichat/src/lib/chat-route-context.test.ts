@@ -75,7 +75,7 @@ describe("resolveEmbedChatTenant", () => {
       headers: { "x-embed-host": "https://digithings.ai" },
     });
     const ctx = resolveEmbedChatTenant(req);
-    expect(ctx).toEqual({ tenantSlug: "embed", ownerUserSub: "embed:anonymous" });
+    expect(ctx).toEqual({ tenantSlug: "embed", ownerUserSub: "embed:anonymous", embedConfig: null });
   });
 
   it("returns 503 when embed host present but gate closed", () => {

@@ -15,9 +15,9 @@ export function ThesisProvenanceStrip({
   const stage = stageForDocumentKey(documentKey);
   const href = buildPipelineHref({ date, stage, node: documentKey });
   return (
-    <section className="flex flex-wrap items-center gap-2 border-t border-border-subtle pt-4 text-sm">
-      <span className="text-text-muted">Provenance</span>
-      <span className="font-mono text-xs text-text-secondary">{date}</span>
+    <section className="flex flex-wrap items-center gap-2 border-t border-hair pt-4 text-sm">
+      <span className="text-ink-mute">Provenance</span>
+      <span className="font-mono text-xs text-ink-soft">{date}</span>
       <Link href={href} className="ml-auto inline-flex items-center gap-1 text-accent hover:underline">
         Open the pipeline day
         <ArrowUpRight size={14} aria-hidden />

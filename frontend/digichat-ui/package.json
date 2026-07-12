@@ -1,0 +1,32 @@
+{
+  "name": "@digithings/digichat-ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared DigiChat terminal session UI — used by digithings-web /chat and digichat /embed.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles/session.css": "./src/styles/session.css",
+    "./styles/cursor.css": "./src/styles/cursor.css",
+    "./styles/tokens-shadcn-bridge.css": "./src/styles/tokens-shadcn-bridge.css"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "dependencies": {
+    "@digithings/web": "*",
+    "mermaid": "^11.16.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0"
+  }
+}

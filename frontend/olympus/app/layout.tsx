@@ -1,6 +1,6 @@
 import './globals.css';
 import { ReactNode } from 'react';
-import { Geist, Geist_Mono, Instrument_Serif } from 'next/font/google';
+import { Geist, Geist_Mono, Fraunces } from 'next/font/google';
 import { DashboardProvider } from '@/lib/dashboard-context';
 import { AppShellProvider } from '@/components/app-shell-context';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -24,12 +24,11 @@ const geistMono = Geist_Mono({
   display: 'swap',
 });
 
-// Editorial display serif — the digiquant.io house headline face. Self-hosted by
-// next/font so it satisfies the Olympus CSP (font-src 'self' data:).
-const instrumentSerif = Instrument_Serif({
+// Editorial display serif — the digiquant.io house headline face (Fraunces).
+// Self-hosted by next/font so it satisfies the Olympus CSP (font-src 'self' data:).
+const fraunces = Fraunces({
   subsets: ['latin'],
-  weight: '400',
-  variable: '--font-instrument-serif',
+  variable: '--font-fraunces',
   display: 'swap',
 });
 
@@ -44,11 +43,11 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={instrumentSerif.variable} suppressHydrationWarning>
+    <html lang="en" className={fraunces.variable} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
-      <body className={`qn-blueprint-bg accent-digiquant min-h-screen bg-bg-primary text-text-primary antialiased ${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable}`}>
+      <body className={`qn-blueprint-bg min-h-screen bg-bg text-ink antialiased ${geistSans.variable} ${geistMono.variable} ${fraunces.variable}`}>
         <ThemeProvider>
           <MotionLayer />
           <DashboardProvider>

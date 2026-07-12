@@ -38,13 +38,11 @@ export function AsOfBadge({
 
   const label = `as of ${formatAsOf(date)}${agePart}`;
   if (stale) {
-    return (
-      <Badge variant="amber" className="font-mono">
-        {label} · stale
-      </Badge>
-    );
+    // Reference badge dress is already mono — the old `font-mono` utility
+    // is redundant.
+    return <Badge variant="amber">{label} · stale</Badge>;
   }
-  return <span className="font-mono text-[10px] text-text-muted tracking-wide">{label}</span>;
+  return <span className="font-mono text-[10px] text-ink-mute tracking-wide">{label}</span>;
 }
 
 /** "2026-06-13" → "Jun 13". Falls back to the raw string on a parse miss. */

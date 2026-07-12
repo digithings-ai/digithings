@@ -4,50 +4,127 @@
     {
       "name": "DigiGraph",
       "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "cd /Users/chrisstefan/Code/digithings && set -a; [ -f .env ] && source .env; set +a; export DIGI_PROJECT_CONFIG=./projects/local/config.yaml; export OPENAI_API_BASE=https://ollama.com/v1; [ -n \"$OLLAMA_API_KEY\" ] && export OPENAI_API_KEY=\"$OLLAMA_API_KEY\"; export OLLAMA_MODEL=minimax-m2.7:cloud; export DIGI_ALLOWED_ORIGINS=http://localhost:5174,http://localhost:3000; export DIGIKEY_PUBLIC_KEY_PEM=$(cat ./projects/local/dev_public_key.pem); export DIGIKEY_ISSUER=digikey-local; export DIGIKEY_AUDIENCE=digi-ecosystem; PYTHONPATH=/Users/chrisstefan/Code/digithings/digigraph/src:/Users/chrisstefan/Code/digithings/digiquant/src:/Users/chrisstefan/Code/digithings .venv/bin/python -m uvicorn digigraph.server:app --host 127.0.0.1 --port 18000"],
+      "runtimeArgs": [
+        "-c",
+        "cd \"$(git rev-parse --show-toplevel)\" && set -a; [ -f .env ] && source .env; set +a; export DIGI_PROJECT_CONFIG=./projects/local/config.yaml; export OPENAI_API_BASE=https://ollama.com/v1; [ -n \"$OLLAMA_API_KEY\" ] && export OPENAI_API_KEY=\"$OLLAMA_API_KEY\"; export OLLAMA_MODEL=minimax-m2.7:cloud; export DIGI_ALLOWED_ORIGINS=http://localhost:5174,http://localhost:3000; export DIGIKEY_PUBLIC_KEY_PEM=$(cat ./projects/local/dev_public_key.pem); export DIGIKEY_ISSUER=digikey-local; export DIGIKEY_AUDIENCE=digi-ecosystem; PYTHONPATH=digigraph/src:digiquant/src:. .venv/bin/python -m uvicorn digigraph.server:app --host 127.0.0.1 --port 18000"
+      ],
       "port": 18000
     },
     {
       "name": "DigiQuant",
       "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "PYTHONPATH=/Users/chrisstefan/Code/digithings/digiquant/src:/Users/chrisstefan/Code/digithings /Users/chrisstefan/Code/digithings/.venv/bin/python -m uvicorn digiquant.server:app --host 127.0.0.1 --port 18001"],
+      "runtimeArgs": [
+        "-c",
+        "cd \"$(git rev-parse --show-toplevel)\" && PYTHONPATH=digiquant/src:. .venv/bin/python -m uvicorn digiquant.server:app --host 127.0.0.1 --port 18001"
+      ],
       "port": 18001
     },
     {
       "name": "DigiSearch",
       "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "PYTHONPATH=/Users/chrisstefan/Code/digithings/digisearch/src:/Users/chrisstefan/Code/digithings /Users/chrisstefan/Code/digithings/.venv/bin/python -m uvicorn digisearch.server:app --host 127.0.0.1 --port 8002"],
+      "runtimeArgs": [
+        "-c",
+        "cd \"$(git rev-parse --show-toplevel)\" && PYTHONPATH=digisearch/src:. .venv/bin/python -m uvicorn digisearch.server:app --host 127.0.0.1 --port 8002"
+      ],
       "port": 8002
     },
     {
       "name": "Website",
-      "runtimeExecutable": "/Users/chrisstefan/Code/digithings/.venv/bin/python",
-      "runtimeArgs": ["-m", "http.server", "3000", "--directory", "website"],
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": [
+        "-c",
+        "cd \"$(git rev-parse --show-toplevel)\" && .venv/bin/python -m http.server 3000 --directory website"
+      ],
       "port": 3000
     },
     {
       "name": "DigiChat (Next.js)",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "digichat"],
-      "port": 3000
+      "runtimeArgs": [
+        "--workspace",
+        "frontend/digichat",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3005"
+      ],
+      "port": 3005
     },
     {
       "name": "digiquant-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--workspace", "frontend/digiquant-web", "run", "dev", "--", "--port", "4011"],
+      "runtimeArgs": [
+        "--workspace",
+        "frontend/digiquant-web",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4011"
+      ],
       "port": 4011
     },
     {
       "name": "digithings-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--workspace", "frontend/digithings-web", "run", "dev", "--", "--port", "4012"],
+      "runtimeArgs": [
+        "--workspace",
+        "frontend/digithings-web",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4012"
+      ],
       "port": 4012
     },
     {
+      "name": "design-reference",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--workspace",
+        "design-reference",
+        "run",
+        "dev"
+      ],
+      "port": 4013,
+      "autoPort": true
+    },
+    {
       "name": "demos",
-      "runtimeExecutable": "/Users/chrisstefan/Code/digithings/.venv/bin/python",
-      "runtimeArgs": ["-m", "http.server", "4020", "--directory", "frontend/design/demos/digiquant-landing"],
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": [
+        "-c",
+        "cd \"$(git rev-parse --show-toplevel)\" && .venv/bin/python -m http.server 4020 --directory frontend/digiweb/design/demos/digiquant-landing"
+      ],
       "port": 4020
+    },
+    {
+      "name": "design-smoke-local",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4030",
+        "--directory",
+        "frontend/digiweb/design"
+      ],
+      "port": 4030
+    },
+    {
+      "name": "olympus",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--workspace",
+        "frontend/olympus",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4014"
+      ],
+      "port": 4014
     }
   ]
 }

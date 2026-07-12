@@ -66,8 +66,8 @@ describe('EventDetailPanel', () => {
     const html = render({ event, opinions, onClose: () => {} });
     expect(html).toContain('Core PCE Price Index');
     expect(html).toContain('US');
-    // High-impact event is flagged as a high risk level with the fin-red token.
-    expect(html).toContain('text-fin-red');
+    // High-impact event is flagged as a high risk level with the down token.
+    expect(html).toContain('text-down');
     expect(html.toLowerCase()).toContain('high');
   });
 

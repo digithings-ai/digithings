@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Footer } from "@digithings/web";
 import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
-import { DigiNav } from "@/components/landing/DigiNav";
+import { DtNav } from "@/components/DtNav";
 import { DocsLayout } from "@/components/docs/DocsLayout";
 
 export const metadata: Metadata = {
@@ -17,8 +17,8 @@ export const metadata: Metadata = {
 export default function DocsPage() {
   return (
     <>
-      <DigiNav />
-      <main className="docs-main dq-subpage">
+      <DtNav />
+      <main className="pt-[var(--dq-nav-h)] pb-[clamp(2rem,5vw,4rem)]">
         <DocsLayout />
       </main>
       <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />

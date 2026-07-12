@@ -39,8 +39,10 @@ echo "digithings.ai" > dist/CNAME
 
 # Sanity: landing must exist and carry the module manifest (the per-module pages
 # were folded into the home-page terminal manifest, so /modules/* no longer exists).
+# Match the aria-label, not an implementation class — the pane is the shared
+# <TerminalManifest> primitive since #1416 (was app-local .dt-manifest markup).
 [ -f dist/index.html ] || { echo "ERROR: dist/index.html missing — build did not export" >&2; exit 1; }
-grep -q "dt-manifest" dist/index.html || { echo "ERROR: module manifest missing from home page" >&2; exit 1; }
+grep -q 'aria-label="digithings module manifest"' dist/index.html || { echo "ERROR: module manifest missing from home page" >&2; exit 1; }
 
 # Cloudflare Pages Functions live at the PROJECT ROOT (this script's CWD = repo root),
 # NOT inside the static output dir. The /api/chat docs-assistant Function is authored

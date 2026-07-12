@@ -77,6 +77,7 @@ export default function PerformanceTab() {
   );
 
   const { data, loading, error } = useDashboard();
+  const lastUpdated = data?.portfolio?.meta?.last_updated ?? null;
   const [comparableOverride, setComparableOverride] = useState<string[] | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(true);
   const [comparableHistory, setComparableHistory] = useState<BenchmarkHistoryMap>({});
@@ -260,7 +261,7 @@ export default function PerformanceTab() {
   if (loading) return <AtlasLoader fullScreen={false} />;
   if (error || !data || !metrics)
     return (
-      <div className="flex items-center justify-center min-h-[40vh] text-fin-red">
+      <div className="flex items-center justify-center min-h-[40vh] text-down">
         {error || 'Failed to load'}
       </div>
     );
@@ -277,16 +278,19 @@ export default function PerformanceTab() {
       <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0 space-y-1">
-            <p className="text-[11px] font-semibold text-text-muted tracking-wide">Summary</p>
+            <p className="text-[11px] font-semibold text-ink-mute tracking-wide">
+              Summary
+              {lastUpdated ? <span className="font-mono font-normal"> · as of {lastUpdated}</span> : null}
+            </p>
             {/* Performance summary sentence */}
             {snaps.length >= 2 && (
-              <p className="text-sm text-text-secondary">
+              <p className="text-sm text-ink-soft">
                 Portfolio{' '}
-                <span className={rangeReturn != null ? (rangeReturn >= 0 ? 'text-fin-green font-semibold' : 'text-fin-red font-semibold') : ''}>
+                <span className={rangeReturn != null ? (rangeReturn >= 0 ? 'text-up font-semibold' : 'text-down font-semibold') : ''}>
                   {rangeReturn != null ? (rangeReturn >= 0 ? `+${rangeReturn.toFixed(2)}%` : `${rangeReturn.toFixed(2)}%`) : formatPct(metrics.portfolio_pnl)}
                 </span>
                 {' '}since inception{dailyRet != null && (
-                  <>, <span className={dailyRet >= 0 ? 'text-fin-green font-semibold' : 'text-fin-red font-semibold'}>{dailyRet >= 0 ? '+' : ''}{dailyRet.toFixed(2)}%</span> today</>)
+                  <>, <span className={dailyRet >= 0 ? 'text-up font-semibold' : 'text-down font-semibold'}>{dailyRet >= 0 ? '+' : ''}{dailyRet.toFixed(2)}%</span> today</>)
                 }.
               </p>
             )}
@@ -301,7 +305,7 @@ export default function PerformanceTab() {
             label="Portfolio NAV"
             value={fmtNav(latestNav)}
             icon={TrendingUp}
-            iconColor="text-fin-blue"
+            iconColor="text-accent"
             subtitle="End of range (level)"
           />
           <StatCard
@@ -309,7 +313,7 @@ export default function PerformanceTab() {
             value={totalReturnValue}
             valueClass={pnlColor(range === 'itd' ? metrics.portfolio_pnl : rangeReturn)}
             icon={BarChart3}
-            iconColor="text-fin-green"
+            iconColor="text-up"
             subtitle={totalReturnLabel}
           />
           <StatCard
@@ -317,7 +321,7 @@ export default function PerformanceTab() {
             value={dailyRet != null ? formatPct(dailyRet) : '—'}
             valueClass={pnlColor(dailyRet)}
             icon={Activity}
-            iconColor="text-fin-amber"
+            iconColor="text-warn"
             subtitle={
               dailyRet == null
                 ? 'Not enough data in range'
@@ -328,13 +332,13 @@ export default function PerformanceTab() {
             label="Active Positions"
             value={positions.length}
             icon={Target}
-            iconColor="text-fin-blue"
+            iconColor="text-accent"
           />
         </div>
       </section>
 
       <section className="space-y-3">
-        <p className="text-[11px] font-semibold text-text-muted tracking-wide">Return &amp; risk</p>
+        <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Return &amp; risk</p>
         <PerformanceChartWorkspace
           view={view}
           onViewChange={setView}
@@ -355,7 +359,7 @@ export default function PerformanceTab() {
       </section>
 
       <section className="space-y-3">
-        <p className="text-[11px] font-semibold text-text-muted tracking-wide">Positions</p>
+        <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Positions</p>
         <PositionPnlTable
           key={`${priceChartAnchorDate ?? 'no-anchor'}|${snaps[0]?.date ?? ''}`}
           positions={positions}
@@ -368,18 +372,18 @@ export default function PerformanceTab() {
       </section>
 
       <section className="space-y-3">
-        <p className="text-[11px] font-semibold text-text-muted tracking-wide">Diagnostics</p>
+        <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Diagnostics</p>
         <div className="glass-card overflow-hidden">
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="w-full flex items-center justify-between px-6 py-4 hover:bg-white/[0.02] transition-colors"
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-ink/[0.02] transition-colors"
           >
             <h3 className="text-lg font-semibold">Advanced statistics</h3>
             {showAdvanced ? (
-              <ChevronUp size={18} className="text-text-muted" />
+              <ChevronUp size={18} className="text-ink-mute" />
             ) : (
-              <ChevronDown size={18} className="text-text-muted" />
+              <ChevronDown size={18} className="text-ink-mute" />
             )}
           </button>
           {showAdvanced && serverMetrics && (

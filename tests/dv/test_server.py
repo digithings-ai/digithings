@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,6 +21,17 @@ from digivault.path_scopes import SCOPE_WRITE  # noqa: E402
 from digivault.supabase_store import SupabaseStore  # noqa: E402
 
 pytestmark = pytest.mark.unit
+
+
+def _fake_rl_request(
+    ip: str = "203.0.113.5", headers: dict[str, str] | None = None
+) -> SimpleNamespace:
+    """Stand-in for a Starlette Request — only what `_rl_check` reads."""
+    return SimpleNamespace(
+        headers=headers or {},
+        client=SimpleNamespace(host=ip),
+        state=SimpleNamespace(),
+    )
 
 
 def _fake_request(scopes: list[str] | None = None) -> SimpleNamespace:
@@ -138,6 +150,69 @@ def test_orchestrator_invoke_create_note_succeeds_with_write_scope(vault_dir: Pa
     assert resp.ok is True
     assert resp.data is not None
     assert resp.data["name"] == "c"
+
+
+def test_healthz_not_rate_limited_under_burst() -> None:
+    client = TestClient(server.app)
+    for _ in range(50):
+        assert client.get("/healthz").status_code == 200
+
+
+def test_testclient_traffic_bypasses_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """TestClient requests report client host 'testclient' — exempt so test suites stay green."""
+    monkeypatch.delenv("DIGI_DISABLE_RATE_LIMIT", raising=False)
+    client = TestClient(server.app)
+    for _ in range(50):
+        assert client.get("/v1/status").status_code == 200
+
+
+def test_rl_check_blocks_after_limit_then_recovers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGI_DISABLE_RATE_LIMIT", raising=False)
+    server._rl_windows.clear()
+    req = _fake_rl_request("203.0.113.9")
+
+    for _ in range(3):
+        assert server._rl_check(req, max_req=3, window=60) is None
+
+    blocked = server._rl_check(req, max_req=3, window=60)
+    assert blocked is not None
+    assert blocked.status_code == 429
+    assert blocked.headers.get("retry-after") == "60"
+    body = json.loads(bytes(blocked.body))
+    assert body["error"]["code"] == "rate_limit_exceeded"
+
+
+def test_rl_check_is_per_ip(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGI_DISABLE_RATE_LIMIT", raising=False)
+    server._rl_windows.clear()
+    ip_a = _fake_rl_request("203.0.113.10")
+    ip_b = _fake_rl_request("203.0.113.11")
+
+    assert server._rl_check(ip_a, max_req=1, window=60) is None
+    # ip_a is now at its limit; ip_b has a fresh bucket.
+    assert server._rl_check(ip_a, max_req=1, window=60) is not None
+    assert server._rl_check(ip_b, max_req=1, window=60) is None
+
+
+def test_rl_check_reads_x_forwarded_for(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGI_DISABLE_RATE_LIMIT", raising=False)
+    server._rl_windows.clear()
+    req = _fake_rl_request("10.0.0.1", headers={"X-Forwarded-For": "203.0.113.20, 10.0.0.1"})
+    assert server._rl_check(req, max_req=1, window=60) is None
+    blocked = server._rl_check(req, max_req=1, window=60)
+    assert blocked is not None
+    # Second request from the same forwarded IP is blocked — proves the bucket
+    # key is the forwarded address (203.0.113.20), not the proxy hop (10.0.0.1).
+    assert server._rl_windows.get("203.0.113.20") is not None
+    assert "10.0.0.1" not in server._rl_windows
+
+
+def test_rl_check_disabled_via_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DIGI_DISABLE_RATE_LIMIT", "1")
+    server._rl_windows.clear()
+    req = _fake_rl_request("203.0.113.30")
+    for _ in range(20):
+        assert server._rl_check(req, max_req=1, window=60) is None
 
 
 def test_orchestrator_invoke_search_notes(monkeypatch: pytest.MonkeyPatch) -> None:

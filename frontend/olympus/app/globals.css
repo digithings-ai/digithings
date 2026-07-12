@@ -1,85 +1,104 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/* ── DigiThings design (quant-native flavor) ────────────────────── */
+/* ── DigiThings design canon ─────────────────────────────────────────────
+   tokens.css declares the [data-theme] semantic tokens; web-theme.css is THE
+   Tailwind v4 bridge (`@theme inline`) that turns them into utilities
+   (text-ink, bg-surface, border-hair, text-up/down, font-mono, …). Olympus
+   declares NO bridge of its own (#1402) — it extends the canon below with
+   app-local vars only. quant-native + tearsheet are the shared component
+   grammars this dashboard reuses. */
 @import "@digithings/design/tokens.css";
+@import "@digithings/web/styles/web-theme.css";
+/* Shared controls dress (Badge — F4 #1450). Imported PLAINLY on purpose:
+   controls-core.css manages its own layering (defaults in @layer components,
+   state/structural rules unlayered — see its header). No @source needed:
+   the controls carry no Tailwind utilities. */
+@import "@digithings/web/styles/controls-core.css";
+/* NumberedStages spine/node art (system → How it works, F4 #1450). */
+@import "@digithings/web/styles/stages.css";
+/* effects-chrome (TabStrip — subpage tab bar) manages its own layering:
+   import PLAINLY, never layer(…) — see the sheet header / MIGRATION.md. */
+@import "@digithings/web/styles/effects-chrome.css";
 @import "@digithings/design/quant-native/styles.css";
+/* finance-tearsheet family (#1463) — the print-grade .ts-* grammar (replaces
+   the deprecated @digithings/design/tearsheet sheet). Imported PLAINLY on
+   purpose: the sheet manages its own layering, and its @media print grammar
+   (light-token pin, chrome hides, break rules) is the family's differentiator.
+   Olympus's §13 dashboard variants + shell print rules live later in this
+   file, so cascade ties resolve to the app. */
+@import "@digithings/web/styles/finance-tearsheet.css";
+/* chat-core (#1418, adopted by olympus in #1450) — imported PLAINLY on
+   purpose (MIGRATION.md rule 2 exception): its element combinators are
+   deliberately unlayered so they keep beating plain utilities. Olympus uses
+   only the .chat-md markdown grammar — the canonical markdown typography
+   that <ChatMarkdown> (via SafeMarkdown) scopes around rendered documents
+   and memo notes. */
+@import "@digithings/web/styles/chat-core.css";
+/* Controls layer (#1419/#1450) — dress + state machinery for the shared
+   behavioral controls (twelve-x's BriefPanel rides the Sheet). Imported
+   PLAINLY on purpose: the sheet manages its own @layer components /
+   unlayered split (MIGRATION.md rule 2 exception). */
+@import "@digithings/web/styles/controls-overlay.css";
 
-/* ── Custom Theme (preserves Olympus financial dark palette) ───── */
-@theme {
-  /* Unified with the digiquant.io design system: the bg-, text-, border- and
-     fin- utility names are KEPT (so the ~40 components using them reskin with no
-     edits), but they now resolve to the canonical tokens from tokens.css
-     (:root[data-theme]) instead of hardcoded hex. Requires data-theme on <html>
-     (set in layout.tsx THEME_INIT + ThemeProvider); without it these fall back to
-     the legacy :root palette. Light/dark now reskin from one source of truth. */
-  /* Background */
-  --color-bg-primary: var(--bg);
-  --color-bg-secondary: var(--term-bg); /* recessed insets (tooltips, table heads) */
-  --color-bg-glass: var(--surface);
+/* Tailwind never scans package sources (MIGRATION.md rule 3) — generate the
+   utilities the shared ChatMarkdown shell carries (min-w-0, text-[0.88rem],
+   leading-[1.6]). */
+@source "../../digiweb/web/src/components/chat/ChatMarkdown.tsx";
 
-  /* Borders */
-  --color-border-subtle: var(--hair);
-  --color-border-glow: var(--hair-2);
+/* Tailwind never scans package sources — point it at the shared components
+   this app renders (load-bearing; see MIGRATION.md rule 3). */
+@source "../../digiweb/web/src/components/stages";
+@source "../../digiweb/web/src/components/effects-chrome";
 
-  /* Text */
-  --color-text-primary: var(--ink);
-  --color-text-secondary: var(--ink-soft);
-  --color-text-muted: var(--ink-mute);
+/* Tailwind never scans package sources — generate the token utilities the
+   shared controls carry (MIGRATION.md rule 3). */
+@source "../../digiweb/web/src/components/controls";
 
-  /* Financial semantic colors → cyan accent + P&L up/down (from tokens.css) */
-  --color-fin-blue: var(--accent);
-  --color-fin-green: var(--up);
-  --color-fin-red: var(--down);
-  --color-fin-amber: var(--warn);
-  --color-fin-purple: var(--accent); /* legacy alias → single accent source */
+/* Tailwind never scans package sources (MIGRATION.md rule 3) — the shared
+   finance-charts scaffold's ChartTipShell renders here via lib/lw-chart. */
+@source "../../digiweb/web/src/components/finance-charts";
 
-  /* Glass → flat panel (kept var name; shadow softened) */
-  --shadow-glass: 0 18px 40px -28px rgba(0, 0, 0, 0.6);
+/* Tailwind never scans package sources — the performance tear sheet renders
+   the shared finance-tearsheet family (MIGRATION.md rule 3). */
+@source "../../digiweb/web/src/components/finance-tearsheet";
 
-  /* Fonts — Geist Sans + Geist Mono + Instrument Serif display, self-hosted by
-     next/font (layout.tsx). The display family is overridden below to the
-     next/font-loaded face (tokens.css names it literally, which the hashed
-     next/font family would miss — cf. #684). */
+/* ── Fonts (next/font routing) ───────────────────────────────────────────
+   tokens.css names the families literally ("Geist", "Geist Mono",
+   "Instrument Serif") — but olympus self-hosts Geist Sans + Geist Mono +
+   Fraunces through next/font (layout.tsx), which exposes them ONLY via the
+   hashed --font-geist-sans / --font-geist-mono / --font-fraunces variables
+   (#684). Re-declare the
+   canon font tokens (equal specificity, later source) so both the web-theme
+   body defaults and the font-sans/mono/display utilities resolve to faces
+   that actually ship under the Olympus CSP (font-src 'self' data:). */
+:root[data-theme] {
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-display: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  /* quant-native still reads the legacy token name — route it to canon mono
+     so .qn-* text uses the shipped face instead of a JetBrains Mono that
+     never loads. */
+  --font-family-mono: var(--font-mono);
 }
 
-/* tokens.css declares --font-display: "Instrument Serif" literally under
-   :root[data-theme]; re-declare here (equal specificity, later source) so the
-   next/font-loaded, CSP-safe face is used instead of a name that never ships. */
-:root[data-theme] {
-  --font-display: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
-}
-
-/* ── Base ──────────────────────────────────────────────────────────────── */
+/* ── Olympus-local vars (token-derived — no raw palette hex) ─────────────
+   Kept OUT of the theme namespace on purpose: these are app-local custom
+   props, not utility tokens. --shadow-glass is a depth cue (black-based
+   shadow, not a themed color); consumers use var(--shadow-glass) directly. */
 html {
-  /* AtlasLoader mark: light strokes; inverted in html.light */
-  --atlas-loader-ink: #ffffff;
+  --shadow-glass: 0 18px 40px -28px rgba(0, 0, 0, 0.6);
+}
+html.light {
+  --shadow-glass: 0 18px 40px -30px rgba(0, 0, 0, 0.18);
 }
 
-/* Unified cyan accent: override the legacy per-module --accent (green) that the
-   body's .accent-digiquant class sets, so sidebar/chrome accents are cyan and
-   follow the theme. Higher specificity than .accent-digiquant. */
-body.accent-digiquant { --accent: var(--color-fin-blue); }
-
-body {
-  /* next/font exposes the downloaded families ONLY through these variables
-     (layout.tsx attaches inter.variable / spaceMono.variable to <body>).
-     Asking for 'Inter' by name silently fell back to system fonts (#684). */
-  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Route every design-token mono usage to the font actually loaded by
-   next/font (Space Mono), instead of a JetBrains Mono that never ships. */
-body {
-  --font-family-mono: var(--font-geist-mono), ui-monospace, monospace;
-}
+/* P&L semantics: quant-native still points .qn-up/.qn-down at module accents
+   (digiquant green / digiclaw brown). On this dashboard money colors are the
+   canon --up/--down tokens ONLY — re-point them here (same specificity, later
+   source) rather than editing the shared design package. */
+.qn-up   { color: var(--up); }
+.qn-down { color: var(--down); }
 
 /* ── Overview stat strip (subtle entrance) ─────────────────────────────── */
 @keyframes atlas-stat-enter {
@@ -119,43 +138,50 @@ html.motion-on [data-reveal].reveal-in {
   html.motion-on [data-reveal] { opacity: 1 !important; transform: none !important; transition: none !important; }
 }
 
-/* ── Panel (formerly glass-card; flattened for a terminal/TradingView feel) ── */
+/* ── Surface system (x.ai-style flat — EVOLUTION.md §3 Olympus / §10 · #1216) ──
+   Olympus is FLAT: no glass morphism on content (anti-pattern #8). Panels use
+   `--surface` + a 1px `--hair` border, hover to `--hair-2`. `--shadow-glass`
+   is a deliberately subtle depth cue for the terminal/TradingView feel, not a
+   decorative drop shadow. `backdrop-blur` is used ONLY on sticky/overlay
+   chrome (nav, mobile app bar, command palette, sidebar) — never on content
+   cards. `.glass-card` is a legacy *name* for this flat panel; new components
+   should read as flat surfaces. */
 .glass-card {
-  background: var(--color-bg-glass);
-  border: 1px solid var(--color-border-subtle);
+  background: var(--surface);
+  border: 1px solid var(--hair);
   border-radius: 8px;
   box-shadow: var(--shadow-glass);
   transition: border-color 0.2s ease, transform 0.2s ease;
 }
 .glass-card:hover {
-  border-color: var(--color-border-glow);
+  border-color: var(--hair-2);
 }
 
 /* ── Recharts override (quant-native, token-driven) ────────────────────── */
 .recharts-cartesian-grid line {
-  stroke: var(--color-border-subtle);
+  stroke: var(--hair);
   stroke-opacity: 0.6;
   stroke-width: 1;
 }
 .recharts-text {
-  fill: var(--color-text-muted);
-  font-family: var(--font-family-mono);
+  fill: var(--ink-mute);
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 .recharts-default-tooltip {
-  background: var(--color-bg-secondary) !important;
-  border: 1px solid var(--color-border-subtle) !important;
+  background: var(--term-bg) !important;
+  border: 1px solid var(--hair) !important;
   border-radius: 8px !important;
-  font-family: var(--font-family-mono) !important;
+  font-family: var(--font-mono) !important;
   font-size: 12px !important;
 }
 
-/* ── Light-mode blueprint grid override (tokens.css is dark-only) ──────── */
+/* ── Light-mode blueprint grid override (quant-native's is dark-only) ──── */
 html.light .qn-blueprint-bg {
   background-image: repeating-linear-gradient(
     to bottom,
-    rgba(0, 0, 0, 0.035) 0,
-    rgba(0, 0, 0, 0.035) 1px,
+    color-mix(in srgb, var(--ink) 3.5%, transparent) 0,
+    color-mix(in srgb, var(--ink) 3.5%, transparent) 1px,
     transparent 1px,
     transparent 8px
   );
@@ -163,7 +189,7 @@ html.light .qn-blueprint-bg {
 
 /* ── Quant-native sidebar accents ──────────────────────────────────────── */
 .qn-sidebar-label {
-  font-family: var(--font-family-mono);
+  font-family: var(--font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-size: 11px;
@@ -172,22 +198,27 @@ html.light .qn-blueprint-bg {
   border-left: 2px solid var(--accent, var(--accent-digiquant));
 }
 
-/* ── Markdown prose overrides ──────────────────────────────────────────── */
+/* ── Markdown prose overrides (typography plugin) ────────────────────────
+   NOT dead after the #1450 .chat-md adoption — two surfaces still render
+   `.prose`: DigestDocumentView (kept local on purpose; its jump-to-section
+   TOC drives custom h2/h3 components whose utilities would lose to the
+   unlayered .chat-md heading rules) and twelve-x BriefPanel (F5 scope).
+   Remove this block + the @plugin line only when both are off `.prose`. */
 .prose {
-  --tw-prose-body: var(--color-text-secondary);
-  --tw-prose-headings: var(--color-text-primary);
-  --tw-prose-links: var(--color-fin-blue);
-  --tw-prose-bold: var(--color-text-primary);
-  --tw-prose-counters: var(--color-text-muted);
-  --tw-prose-bullets: var(--color-text-muted);
-  --tw-prose-hr: var(--color-border-subtle);
-  --tw-prose-quotes: var(--color-text-secondary);
-  --tw-prose-quote-borders: var(--color-fin-blue);
-  --tw-prose-code: var(--color-text-primary);
-  --tw-prose-pre-code: var(--color-text-secondary);
-  --tw-prose-pre-bg: rgba(0, 0, 0, 0.4);
-  --tw-prose-th-borders: var(--color-border-subtle);
-  --tw-prose-td-borders: var(--color-border-subtle);
+  --tw-prose-body: var(--ink-soft);
+  --tw-prose-headings: var(--ink);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--ink);
+  --tw-prose-counters: var(--ink-mute);
+  --tw-prose-bullets: var(--ink-mute);
+  --tw-prose-hr: var(--hair);
+  --tw-prose-quotes: var(--ink-soft);
+  --tw-prose-quote-borders: var(--accent);
+  --tw-prose-code: var(--ink);
+  --tw-prose-pre-code: var(--ink-soft);
+  --tw-prose-pre-bg: var(--term-bg);
+  --tw-prose-th-borders: var(--hair);
+  --tw-prose-td-borders: var(--hair);
 }
 
 /* ── Starfield canvas ──────────────────────────────────────────────────── */
@@ -210,7 +241,7 @@ html.light .qn-blueprint-bg {
   font-size: 0.7rem;
   background: none;
   border: 1px solid transparent;
-  color: var(--color-text-muted);
+  color: var(--ink-mute);
   border-radius: 4px;
   cursor: default;
   transition: all 0.15s;
@@ -218,7 +249,7 @@ html.light .qn-blueprint-bg {
   line-height: 1;
 }
 .cal-day.has-data {
-  color: var(--color-text-secondary);
+  color: var(--ink-soft);
   cursor: pointer;
   font-weight: 500;
 }
@@ -231,16 +262,16 @@ html.light .qn-blueprint-bg {
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: var(--color-fin-blue);
+  background: var(--accent);
 }
 .cal-day.has-data:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
 }
 .cal-day.selected {
-  background: color-mix(in srgb, var(--color-fin-blue) 16%, transparent);
-  color: var(--color-fin-blue);
-  border-color: color-mix(in srgb, var(--color-fin-blue) 40%, transparent);
+  background: var(--accent-weak);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   font-weight: 700;
 }
 
@@ -248,23 +279,23 @@ html.light .qn-blueprint-bg {
 @keyframes atlas-logo-build-collapse {
   0% {
     transform: scale(0.82);
-    filter: drop-shadow(0 0 0 rgba(59, 130, 246, 0));
+    filter: drop-shadow(0 0 0 transparent);
   }
   35% {
     transform: scale(1);
-    filter: drop-shadow(0 0 18px rgba(59, 130, 246, 0.30));
+    filter: drop-shadow(0 0 18px color-mix(in srgb, var(--accent) 30%, transparent));
   }
   55% {
     transform: scale(0.72);
-    filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.18));
+    filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 18%, transparent));
   }
   72% {
     transform: scale(1.03);
-    filter: drop-shadow(0 0 22px rgba(59, 130, 246, 0.34));
+    filter: drop-shadow(0 0 22px color-mix(in srgb, var(--accent) 34%, transparent));
   }
   100% {
     transform: scale(1);
-    filter: drop-shadow(0 0 0 rgba(59, 130, 246, 0));
+    filter: drop-shadow(0 0 0 transparent);
   }
 }
 
@@ -297,11 +328,11 @@ html.light .qn-blueprint-bg {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: var(--color-text-secondary);
+  color: var(--ink-soft);
 }
 .atlas-loader-screen {
   height: 100vh;
-  background: var(--color-bg-primary);
+  background: var(--bg);
 }
 
 .atlas-loader {
@@ -322,7 +353,7 @@ html.light .qn-blueprint-bg {
 }
 
 .atlas-loader-stroke {
-  stroke: var(--atlas-loader-ink);
+  stroke: var(--ink);
   --atlas-stroke-len: 220;
   stroke-dasharray: var(--atlas-stroke-len);
   stroke-dashoffset: var(--atlas-stroke-len);
@@ -345,7 +376,7 @@ html.light .qn-blueprint-bg {
   }
 }
 
-/* ── Scrollbar styling ─────────────────────────────────────────────────── */
+/* ── Scrollbar styling (ink-derived, converts with the theme) ──────────── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -354,16 +385,35 @@ html.light .qn-blueprint-bg {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+/* ── Shared-Sheet scrim (olympus overlay convention) ─────────────────────
+   The @digithings/web Sheet ships digichat's compat scrim (bg-bg/10 + 4px
+   blur — a kept delta, see controls-overlay.css header). Olympus overlay
+   chrome dims with black-based scrims (command palette black/75, sidebar
+   drawer black/60, twelve-x slide-overs black/50) — re-dress the sheet
+   overlay to match, keyed off the control's data-slot hook (an attribute
+   selector, so no new app-local class family). Unlayered + later in source
+   than the package import, so it outranks both the utility background and
+   the package's unlayered @supports blur. Black-based dim layer, not a
+   themed color (same ruling as --shadow-glass above). */
+[data-slot="sheet-overlay"] {
+  background: rgb(0 0 0 / 0.5);
+}
+@supports (backdrop-filter: blur(2px)) {
+  [data-slot="sheet-overlay"] {
+    backdrop-filter: blur(2px);
+  }
 }
 
 /* ── twelve-x: divergent consensus score bar (frozen visual-spec recipe) ──
    Ported from the demo's `divergentBarMulti` / `.dbar-*` recipe. A zero-centered
-   track with a green (bull) / red (bear) fill growing out from the center, plus
+   track with an up (bull) / down (bear) fill growing out from the center, plus
    legend-coded reference ticks (t-actual bright, t-yday accent, t-ago muted).
    Used by ConsensusScoreBar; without these rules the bar has no geometry. */
 .dbar-wrap {
@@ -375,7 +425,7 @@ html.light .qn-blueprint-bg {
   position: relative;
   height: 8px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--color-text-muted) 18%, transparent);
+  background: color-mix(in srgb, var(--ink-mute) 18%, transparent);
   overflow: hidden;
 }
 .dbar-zero {
@@ -385,7 +435,7 @@ html.light .qn-blueprint-bg {
   left: 50%;
   width: 1px;
   transform: translateX(-50%);
-  background: color-mix(in srgb, var(--color-text-muted) 55%, transparent);
+  background: color-mix(in srgb, var(--ink-mute) 55%, transparent);
   z-index: 1;
 }
 .dbar-fill {
@@ -397,11 +447,11 @@ html.light .qn-blueprint-bg {
 }
 .dbar-fill.bull {
   left: 50%;
-  background: var(--color-fin-green);
+  background: var(--up);
 }
 .dbar-fill.bear {
   right: 50%;
-  background: var(--color-fin-red);
+  background: var(--down);
 }
 .dbar-tick {
   position: absolute;
@@ -412,13 +462,13 @@ html.light .qn-blueprint-bg {
   z-index: 2;
 }
 .dbar-tick.t-actual {
-  background: var(--color-text-primary);
+  background: var(--ink);
 }
 .dbar-tick.t-yday {
-  background: var(--color-fin-blue);
+  background: var(--accent);
 }
 .dbar-tick.t-ago {
-  background: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+  background: color-mix(in srgb, var(--ink-mute) 70%, transparent);
 }
 
 /* ── twelve-x: events timeline (Gantt) styling hooks ──────────────────────
@@ -439,115 +489,34 @@ html.light .qn-blueprint-bg {
   transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
 }
 .tl-card:hover {
-  border-color: var(--color-border-glow);
+  border-color: var(--hair-2);
   transform: translateY(-1px);
 }
 
-/* ── Light theme (class + data-theme toggled on html via ThemeProvider) ──── */
-html.light {
-  /* Color tokens (bg/text/border/fin-*) now resolve from tokens.css
-     :root[data-theme="light"] through the @theme var() mappings — same values
-     as before, one source. Only Olympus-specific, non-token vars remain here. */
-  --shadow-glass: 0 18px 40px -30px rgba(0, 0, 0, 0.18);
-  --atlas-loader-ink: #14181b;
-}
-
-html.light ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
-}
-
-html.light ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.22);
-}
-
-html.light .prose-invert {
-  --tw-prose-body: var(--color-text-secondary);
-  --tw-prose-headings: var(--color-text-primary);
-  --tw-prose-links: var(--color-fin-blue);
-  --tw-prose-bold: var(--color-text-primary);
-  --tw-prose-quotes: var(--color-text-secondary);
-}
-
-/* ── Performance tear sheet (ported from digiquant-web) ─────────────
-   Dependency-free SVG tear sheet. Every var below resolves from the
-   shared @digithings/design/tokens.css already imported above:
-     --up   ≡ --color-fin-green   --down ≡ --color-fin-red
-     --ink  ≡ --color-text-primary --hair ≡ --color-border-subtle
-     --accent = cyan #3DD6C4 (chrome/links only — F5 token rule).
-   The @media print block makes the page print-to-PDF crisply: it hides
-   the OLYMPUS shell chrome (sidebar #app-sidebar-nav and the mobile app
-   bar via [data-print-hide]) — NOT digiquant-web's .site-nav/.footer
-   (those class names don't exist in Olympus). */
-.ts-page { padding-top: clamp(1.6rem, 4vw, 2.8rem); padding-bottom: clamp(3rem, 6vw, 5rem); position: relative; z-index: 1; }
-
-.ts-status { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.9rem; padding: 4rem 0; text-align: center; }
-.ts-status-error { color: var(--down); }
-
-.ts-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; padding-bottom: 1.4rem; border-bottom: 1px solid var(--hair); }
-.ts-back { display: inline-block; color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.02em; margin-bottom: 0.9rem; }
-.ts-back:hover { color: var(--accent); }
-.ts-h1 { font-family: var(--font-sans); font-size: clamp(1.7rem, 3.6vw, 2.6rem); font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; color: var(--ink); margin: 0 0 0.85rem; }
-.ts-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
-.ts-meta-text { color: var(--ink-mute); font-size: 0.85rem; font-family: var(--font-mono); }
-
-.ts-chip { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 0.76rem; letter-spacing: 0.02em; color: var(--ink); border: 1px solid var(--accent-weak); background: var(--accent-weak); border-radius: 999px; padding: 0.22rem 0.65rem; }
-.ts-chip-soft { color: var(--ink-soft); border-color: var(--hair); background: var(--surface); }
-
+/* ── Tearsheet: olympus-local layer ─────────────────────────────────
+   The base .ts-* grammar (canon §06) is the shared finance-tearsheet
+   family: @digithings/web/styles/finance-tearsheet.css, imported at the
+   top of this file (#1463). Below are ONLY olympus’s deliberate variants
+   (§13 dashboard adaptations — tighter panels/KPIs, sans-scale charts,
+   .ts-btn/.ts-notes additions) — unlayered and after the family import,
+   so they beat both the family’s @layer components defaults and its
+   unlayered ties. The @media print block keeps olympus’s page geometry
+   and shell-chrome hides; everything else in print (light-token pin,
+   .ts-* chrome hides, break rules) now comes from the family sheet. */
 .ts-header-actions { display: flex; align-items: center; gap: 0.7rem; }
 .ts-btn { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.02em; color: var(--ink); border: 1px solid var(--accent-weak); background: var(--accent-weak); border-radius: var(--r-sm); padding: 0.45rem 0.85rem; cursor: pointer; transition: border-color 0.2s var(--ease), color 0.2s var(--ease); }
 .ts-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-.ts-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(186px, 1fr)); gap: 0.9rem; margin-bottom: 1.4rem; }
 .ts-kpi { min-width: 0; border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface); padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.3rem; }
-.ts-kpi-label { font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.1em; text-transform: uppercase; font-family: var(--font-mono); }
-.ts-kpi-value { font-family: var(--font-mono); font-size: clamp(1.2rem, 1.05rem + 0.9vw, 1.65rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: var(--ink); overflow-wrap: anywhere; }
-.ts-kpi-sub { font-size: 0.76rem; color: var(--ink-mute); overflow-wrap: anywhere; }
-.is-pos { color: var(--up); }
-.is-neg { color: var(--down); }
-
 .ts-panel { border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface); padding: 1.25rem 1.3rem 1.35rem; margin-bottom: 1.1rem; }
 .ts-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
-.ts-panel-label { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-mute); letter-spacing: 0.12em; text-transform: uppercase; }
 .ts-panel-body { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.6; }
-.ts-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
 .ts-subhead { font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.1em; text-transform: uppercase; margin: 0.4rem 0 0.6rem; }
 
 .ts-chart { width: 100%; }
 .ts-svg { width: 100%; height: auto; display: block; overflow: visible; }
-.ts-grid { stroke: var(--hair); stroke-width: 1; }
-.ts-grid-zero { stroke: var(--hair-2); }
 .ts-axis { fill: var(--ink-mute); font-family: var(--font-mono); font-size: 17px; }
 .ts-svg-empty { fill: var(--ink-mute); font-family: var(--font-mono); font-size: 22px; }
-.ts-line { stroke-width: 2; }
-.ts-area { opacity: 0.14; stroke: none; }
-.ts-tone-accent.ts-line { stroke: var(--accent); }
-.ts-tone-accent.ts-area { fill: var(--accent); }
-.ts-tone-up.ts-line { stroke: var(--up); }
-.ts-tone-up.ts-area { fill: var(--up); }
-.ts-tone-down.ts-line { stroke: var(--down); }
-.ts-tone-down.ts-area { fill: var(--down); }
-.ts-bar.ts-tone-up { fill: var(--up); opacity: 0.82; }
-.ts-bar.ts-tone-down { fill: var(--down); opacity: 0.82; }
 .ts-bar-labels { display: flex; justify-content: space-around; font-family: var(--font-mono); font-size: 0.68rem; color: var(--ink-mute); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 0.3rem; }
-
-.ts-scale { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-mute); letter-spacing: 0.08em; text-transform: uppercase; }
-.ts-select { background: var(--surface-2); border: 1px solid var(--hair); color: var(--ink); font-family: var(--font-mono); font-size: 0.78rem; padding: 0.2rem 0.5rem; border-radius: var(--r-sm); }
-
-.ts-table-wrap { width: 100%; overflow-x: auto; }
-.ts-table-scroll { max-height: 520px; overflow-y: auto; }
-.ts-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-.ts-table th, .ts-table td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--hair); white-space: nowrap; }
-.ts-table thead th { position: sticky; top: 0; background: var(--surface); color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; z-index: 1; }
-.ts-table tbody th[scope="row"] { color: var(--ink-soft); font-weight: 400; }
-.ts-table td { color: var(--ink); font-family: var(--font-mono); }
-.ts-num { text-align: right; }
-.ts-breakdown td { text-align: right; }
-.ts-breakdown th:first-child, .ts-breakdown td:first-child { text-align: left; }
-
-.ts-dir { display: inline-block; padding: 0.05rem 0.55rem; border: 1px solid currentColor; border-radius: 999px; font-size: 0.72rem; font-family: var(--font-mono); }
-.ts-dir-long { color: var(--up); }
-.ts-dir-short { color: var(--down); }
-
 .ts-notes { list-style: none; margin: 1.4rem 0 0; padding: 1.3rem 0 0; border-top: 1px solid var(--hair); color: var(--ink-mute); font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
 .ts-notes li { padding-left: 1em; position: relative; }
 .ts-notes li::before { content: "·"; position: absolute; left: 0; color: var(--accent); }
@@ -558,17 +527,19 @@ html.light .prose-invert {
 }
 
 @media print {
+  /* Olympus shell chrome — hidden so the printed PDF is just the tear sheet.
+     The .ts-* chrome hides, light-token pin, color-adjust, break-inside and
+     scroll-release rules all come from the family sheet. */
+  #app-sidebar-nav, [data-print-hide] { display: none !important; }
+  /* Olympus page geometry (shipped look): zero printer margin, the sheet
+     carries its own 14/13mm padding — overrides the family’s 12/14mm @page
+     margins + zero .ts-page padding. */
   @page { margin: 0; }
-  html, body { background: var(--bg) !important; }
-  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-  /* Olympus shell chrome — hidden so the printed PDF is just the tear sheet. */
-  #app-sidebar-nav, [data-print-hide],
-  .ts-header-actions, .ts-back, .ts-scale { display: none !important; }
   .ts-page { padding: 14mm 13mm; }
-  .ts-header { margin-bottom: 1.4rem; }
-  .ts-panel, .ts-kpi { break-inside: avoid; page-break-inside: avoid; box-shadow: none; }
-  .ts-grid-2 { grid-template-columns: 1fr 1fr; }
-  .ts-table-scroll { max-height: none; overflow: visible; }
-  .ts-table thead th { position: static; }
-  a { color: inherit; }
+  /* Shipped print header: looser than the family pin (1.1rem/0.85rem/1.55rem). */
+  .ts-header { margin-bottom: 1.4rem; padding-bottom: 1.4rem; }
+  .ts-h1 { font-size: clamp(1.7rem, 3.6vw, 2.6rem); }
+  /* The family hides .ts-panel-head (digiquant’s heads are toolbars); olympus’s
+     heads are the printed track labels — content, so they stay. */
+  .ts-panel-head { display: flex !important; }
 }

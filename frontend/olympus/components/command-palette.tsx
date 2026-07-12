@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useAppShell } from '@/components/app-shell-context';
-import { buildPipelineHref } from '@/lib/pipeline-links';
+import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
 import { buildDocumentSearchItems } from '@/lib/document-search';
 import type { Doc } from '@/lib/types';
 
@@ -116,8 +116,17 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     icon: Brain,
   }));
 
-  // Recent run dates: up to 5 most recent unique dates with a digest
-  const recentDates = [...new Set(docs.filter((d) => d.path === 'digest' || d.path === 'Digest').map((d) => d.date))]
+  // Recent run dates: up to 5 most recent unique dates with a digest. `path` is
+  // the raw `document_key` (see queries.ts) — baseline days publish `digest`,
+  // delta days (the majority) publish `digest-delta`; both must match here or
+  // this list silently drops every non-baseline day.
+  const recentDates = [
+    ...new Set(
+      docs
+        .filter((d) => (DIGEST_DOCUMENT_KEYS as readonly string[]).includes(d.path))
+        .map((d) => d.date),
+    ),
+  ]
     .sort()
     .reverse()
     .slice(0, 5);
@@ -256,9 +265,9 @@ export default function CommandPalette() {
   return (
     <div className="fixed inset-0 z-[2000] flex items-start justify-center pt-[12vh] px-3 sm:px-4" role="dialog" aria-modal="true" aria-label="Command palette">
       <button type="button" className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" onClick={() => closeCommandPalette()} aria-label="Close" />
-      <div className="relative w-full max-w-lg rounded-xl border border-border-subtle bg-bg-secondary shadow-2xl shadow-black/50 overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-border-subtle px-3 py-2.5">
-          <Search size={16} className="text-text-muted shrink-0" aria-hidden />
+      <div className="relative w-full max-w-lg rounded-xl border border-hair bg-term-bg shadow-2xl shadow-black/50 overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-hair px-3 py-2.5">
+          <Search size={16} className="text-ink-mute shrink-0" aria-hidden />
           <input
             type="search"
             value={q}
@@ -267,7 +276,7 @@ export default function CommandPalette() {
               setSelectedIndex(0);
             }}
             placeholder="Jump to a page, thesis, or document (ticker / segment)…"
-            className="flex-1 min-w-0 bg-transparent text-sm text-text-primary placeholder:text-text-muted focus:outline-none py-1.5"
+            className="flex-1 min-w-0 bg-transparent text-sm text-ink placeholder:text-ink-mute focus:outline-none py-1.5"
             autoComplete="off"
             autoFocus
             aria-label="Search commands"
@@ -275,7 +284,7 @@ export default function CommandPalette() {
           <button
             type="button"
             onClick={() => closeCommandPalette()}
-            className="rounded-md p-1.5 text-text-muted hover:text-text-primary hover:bg-text-primary/[0.07]"
+            className="rounded-md p-1.5 text-ink-mute hover:text-ink hover:bg-ink/[0.07]"
             aria-label="Close"
           >
             <X size={16} />
@@ -288,7 +297,7 @@ export default function CommandPalette() {
           aria-label="Commands"
         >
           {filtered.length === 0 ? (
-            <li className="px-4 py-8 text-center text-sm text-text-muted">No matches</li>
+            <li className="px-4 py-8 text-center text-sm text-ink-mute">No matches</li>
           ) : (
             filtered.map((item, index) => {
               const Icon = item.icon;
@@ -304,14 +313,14 @@ export default function CommandPalette() {
                     onMouseEnter={() => setSelectedIndex(index)}
                     className={`w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors ${
                       active
-                        ? 'bg-fin-blue/15 ring-1 ring-inset ring-fin-blue/35'
-                        : 'hover:bg-text-primary/[0.06]'
+                        ? 'bg-accent/15 ring-1 ring-inset ring-accent/35'
+                        : 'hover:bg-ink/[0.06]'
                     }`}
                   >
-                    <Icon size={16} className="text-fin-blue shrink-0 mt-0.5" aria-hidden />
+                    <Icon size={16} className="text-accent shrink-0 mt-0.5" aria-hidden />
                     <span className="min-w-0">
-                      <span className="block text-sm font-medium text-text-primary">{item.title}</span>
-                      <span className="block text-[11px] text-text-muted truncate">{item.hint}</span>
+                      <span className="block text-sm font-medium text-ink">{item.title}</span>
+                      <span className="block text-[11px] text-ink-mute truncate">{item.hint}</span>
                     </span>
                   </button>
                 </li>

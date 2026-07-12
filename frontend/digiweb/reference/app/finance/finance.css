@@ -1,0 +1,108 @@
+/* Finance page — price chart, performance metrics, order book. */
+
+/* Price chart (Lightweight Charts host) */
+
+.pc-frame {
+  margin-top: 1.2rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 0.6rem;
+  /* a definite, fluid pane height for the chart's autoSize to fill */
+  height: clamp(320px, 44vh, 480px);
+}
+
+/* the stacked tearsheet (equity + drawdown panes) needs more room */
+.pc-frame--tall {
+  height: clamp(420px, 62vh, 620px);
+}
+
+/* .pc-host migrated to `h-full w-full` utilities on the chart hosts
+   (price-chart / equity-curve / drawdown-plot / synced-tearsheet). */
+
+/* Charting rules — a numbered house-rules list */
+
+.chart-rules {
+  margin-top: 1.2rem;
+  padding: 0;
+  list-style: none;
+  counter-reset: rule;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.chart-rules li {
+  counter-increment: rule;
+  position: relative;
+  display: grid;
+  grid-template-columns: 2.4rem 1fr;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.85rem 1.1rem;
+  border-top: 1px solid var(--hair);
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.chart-rules li:first-child {
+  border-top: none;
+}
+
+.chart-rules li::before {
+  content: counter(rule, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+}
+
+/* Performance metrics grid — promoted to @digithings/web (#1415): the
+   <PerfMetrics/> primitive (components/metrics/PerfMetrics.tsx) carries the
+   utilities; the .perf-metric nth-child hairline grid lives in
+   @digithings/web/styles/metrics.css, imported from globals.css. */
+
+/* Order book promoted to @digithings/web (#1450): the <OrderBook/> primitive
+   (components/finance-composites/OrderBook.tsx) carries the token-backed
+   utilities (border-hair, bg-surface, text-up/down + depth tints); no CSS. */
+
+/* Returns matrix — the former <MonthlyReturns/> heatmap was deprecated into
+   the finance-tearsheet family's <ReturnsMatrix/> (#1463): one matrix
+   grammar. The .ts-matrix CSS-grid grammar lives in
+   @digithings/web/styles/finance-tearsheet.css, imported from globals.css. */
+
+/* ── stock ticker tape ──────────────────────────────────────────────────── */
+/* Promoted to @digithings/web (#1450): the <StockTicker/> primitive
+   (components/finance-composites/StockTicker.tsx) carries the utilities; the
+   .tk mask/keyframe mechanics live in
+   @digithings/web/styles/finance-composites.css, imported from globals.css.
+   (The promoted .tk drops the old margin-top — the consumer adds mt.) */
+
+/* ── portfolio positions blotter ────────────────────────────────────────── */
+/* Blotter shell, table, cells, and P&L colors migrated to token-backed
+   utilities in portfolio-reference.tsx. Only the .pos-side pill group stays
+   here: the --short variant border is a two-color ink+hair mix. */
+
+.pos-side {
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  color: var(--ink-soft);
+}
+
+.pos-side--short {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ink) 30%, var(--hair));
+}
+
+/* ── performance dashboard ──────────────────────────────────────────────── */
+/* Promoted to @digithings/web (#1450): the <PerformanceDashboard/> primitive
+   (components/finance-composites/PerformanceDashboard.tsx) carries the
+   utilities; the pdash-* sibling-index hairlines (headline cells + ratio
+   strip, keyed off data-cols) live in
+   @digithings/web/styles/finance-composites.css, imported from globals.css. */
