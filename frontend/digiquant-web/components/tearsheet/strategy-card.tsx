@@ -11,6 +11,7 @@ import {
 } from "@digithings/web";
 import { AssetLogoFor } from "./asset-logo";
 import { LiveMetricsBadge } from "./live-metrics";
+import { SignalDelayChip } from "./signal-delay";
 import { symbolBase } from "./strategy-names";
 import { cagrPctFromGrowth } from "./stats";
 import { type StrategyIndexEntry } from "./types";
@@ -28,6 +29,11 @@ export function StrategyCard({ e }: { e: StrategyIndexEntry }) {
           <div className="ts-card-title-text">
             <span className="ts-card-name">{asset}</span>
             <span className="ts-card-period">{e.period_start} → {e.period_end}</span>
+            {e.signal_delay_days ? (
+              <div className="mt-1.5">
+                <SignalDelayChip days={e.signal_delay_days} />
+              </div>
+            ) : null}
           </div>
         </div>
         <LiveMetricsBadge generatedAt={e.generated_at} className="ts-card-live" />
