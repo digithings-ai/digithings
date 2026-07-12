@@ -33,6 +33,8 @@ export interface TearsheetData {
   data_source: string;
   period_start: string;
   period_end: string;
+  /** Days the live signal trails the backtest (schema 1.2+); absent / 0 = none. */
+  signal_delay_days?: number;
   bars: number;
   initial_capital: number;
   final_equity: number;
@@ -68,6 +70,8 @@ export interface StrategyIndexEntry {
   engine: string;
   period_start: string;
   period_end: string;
+  /** Days the live signal trails the backtest (index.json, schema 1.2+); absent / 0 = none. */
+  signal_delay_days?: number;
   net_profit_pct: number;
   max_drawdown_pct: number;
   profit_factor: number;
