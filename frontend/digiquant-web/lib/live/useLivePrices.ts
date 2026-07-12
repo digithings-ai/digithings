@@ -60,11 +60,11 @@ export function useLivePrices(options: UseLivePricesOptions = {}): LivePriceMap 
     void (async () => {
       const { data, error } = await client
         .from("public_price_latest")
-        .select("ticker, close")
+        .select("ticker, close, change_pct")
         .in("ticker", seedSymbols);
       if (cancelled || error || !Array.isArray(data)) return;
       const seeds = data
-        .map((r) => seedRowToLive(r as { ticker?: unknown; close?: unknown }))
+        .map((r) => seedRowToLive(r as { ticker?: unknown; close?: unknown; change_pct?: unknown }))
         .filter((q): q is LiveQuote => q !== null);
       if (seeds.length) setQuotes((prev) => applyQuotes(prev, seeds));
     })();
