@@ -154,6 +154,13 @@ components:
     arch_doc: digichat/ARCHITECTURE.md
     test_cmd: "npm run test --workspace digichat"
 
+  - name: digiskills
+    port: null
+    description: "Compiles a codebase/docs source into an installable Agent Skill package"
+    agents_doc: digiskills/AGENTS.md
+    arch_doc: digiskills/ARCHITECTURE.md
+    test_cmd: "pytest -m unit -k digiskills -v"
+
 agent_capabilities:
   - id: agents-init
     description: "Generate platform adapter files from agents.yml"
@@ -238,6 +245,8 @@ claude_code_surface:
       path: .claude/skills/triage/SKILL.md
     - name: ci-triage
       path: .claude/skills/ci-triage/SKILL.md
+    - name: digiweb
+      path: .claude/skills/digiweb/SKILL.md
   commands:
     - name: /normalize
       path: .claude/commands/normalize.md

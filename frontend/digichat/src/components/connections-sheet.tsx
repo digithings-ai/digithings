@@ -155,9 +155,16 @@ export function ConnectionsSheet() {
                 ).map((k) => (
                   <Badge
                     key={k}
-                    variant={health[k] === "ok" ? "default" : "secondary"}
-                    className={
-                      health[k] === "ok" ? "bg-emerald-600/90 hover:bg-emerald-600" : "bg-amber-900/40"
+                    variant="secondary"
+                    // §08 four-state status colors via tokens: ok → --up,
+                    // unknown → mute, anything else → --warn. Weak washes,
+                    // never hardcoded hues.
+                    style={
+                      health[k] === "ok"
+                        ? { background: "color-mix(in srgb, var(--up) 15%, transparent)", color: "var(--up)" }
+                        : health[k] == null
+                          ? { background: "transparent", color: "var(--ink-mute, #6b7177)" }
+                          : { background: "color-mix(in srgb, var(--warn) 14%, transparent)", color: "var(--warn)" }
                     }
                   >
                     {k}: {health[k] ?? "—"}
@@ -217,7 +224,10 @@ export function ConnectionsSheet() {
             </div>
 
             {persistence && !persistence.serverDatabaseConfigured ? (
-              <div className="rounded-md border border-amber-900/40 bg-amber-950/20 p-3 text-xs text-muted-foreground">
+              <div
+                className="rounded-md border p-3 text-xs text-muted-foreground"
+                style={{ borderColor: "color-mix(in srgb, var(--warn) 30%, transparent)" }}
+              >
                 <p className="font-medium text-foreground">Postgres not configured</p>
                 <p className="mt-1">
                   <strong>database: skipped</strong> means <code className="text-[11px]">DIGICHAT_DATABASE_URL</code> is unset

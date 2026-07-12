@@ -28,10 +28,10 @@ Blocker-removal for epic #174 (live website demos) and user-stated P0.
 - [ ] HTTPS enforced + cert issued by GH (wait for propagation; verify via `curl -I https://digiquant.io`).
 
 ### Sync workflow (in monorepo)
-- [ ] `.github/workflows/deploy-digiquant.yml` added. Triggers: `push` to `develop` touching `frontend/digiquant/**` or `frontend/design/**`, plus `workflow_dispatch`.
+- [ ] `.github/workflows/deploy-digiquant.yml` added. Triggers: `push` to `develop` touching `frontend/digiquant/**` or `frontend/digiweb/design/**`, plus `workflow_dispatch`.
 - [ ] Builds the same dist shape as `static.yml` but from `frontend/digiquant/`:
   - `dist/` ← `frontend/digiquant/.`
-  - `dist/design/` ← `frontend/design/`
+  - `dist/design/` ← `frontend/digiweb/design/`
 - [ ] Pushes `dist/` to `digithings-ai/digiquant-web` `main` via a deploy key or PAT stored as monorepo secret `DIGIQUANT_WEB_DEPLOY_TOKEN`. Commit message references the source SHA.
 - [ ] Workflow runs cleanly on a `workflow_dispatch` before merge.
 

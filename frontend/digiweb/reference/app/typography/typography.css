@@ -1,0 +1,169 @@
+/* Typography page — scroll-linked word reveals.
+
+   Variant 1 (pinned blur) was promoted to @digithings/web as <WordReveal/>
+   (#1450): its shared pinned-track / display-line / .word mechanics + the
+   reduced-motion and no-JS static fallbacks now live in
+   @digithings/web/styles/word-reveal.css, imported from reference/app/globals.css.
+   The muted (variant 2) and outline (variant 3) variants below stay reference-
+   only; they reuse the promoted .wr-track / .wr-sticky / .word-line pinned-track
+   shell and add only their own per-word color treatments. */
+
+/* ── variant 2: muted base (.wr-muted) ───────────────────────────────── */
+
+.wr-muted-word {
+  display: inline-block;
+  margin-right: 0.35em;
+  /* readable resting state; the motion-driven inline color-mix deepens it
+     toward var(--ink). Browsers without color-mix drop the inline value and
+     keep this — the text is always legible. */
+  color: var(--ink-mute);
+}
+
+/* ── variant 3: outline fill (.wr-outline) ───────────────────────────── */
+
+.wr-outline-line {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: clamp(1.5rem, 4.4vw, 2.75rem);
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+  max-width: 22ch;
+}
+
+.wr-outline-word {
+  display: inline-block;
+  margin-right: 0.35em;
+  color: transparent;
+  /* house pattern (frontend/digiweb/design/site/site.css .colo-word): hairline
+     stroke, color-mix upgrade where supported */
+  -webkit-text-stroke: 1px var(--ink);
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--ink) 30%, transparent);
+}
+
+.wr-outline-word.is-accent {
+  -webkit-text-stroke: 1px var(--accent);
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+/* static final state (reduced-motion branch renders plain spans) */
+.wr-outline-line.is-final .wr-outline-word {
+  color: var(--ink);
+}
+
+.wr-outline-line.is-final .wr-outline-word.is-accent {
+  color: var(--accent);
+}
+
+/* fallback: without text-stroke the outlines would be invisible — show
+   solid readable text. !important beats the motion-driven inline color. */
+@supports not (-webkit-text-stroke: 1px #000) {
+  .wr-outline-word {
+    color: var(--ink) !important;
+  }
+
+  .wr-outline-word.is-accent {
+    color: var(--accent) !important;
+  }
+}
+
+/* ── reduced motion (variants 2 & 3 only) ──────────────────────────────────
+   The useReducedMotion hook renders the static branch; this covers pre-hydration
+   paint and forces final states regardless of inline styles. The shared pinned
+   track (.wr-track / .wr-sticky) and variant-1 (.word) fallbacks now live in
+   the promoted @digithings/web/styles/word-reveal.css. */
+@media (prefers-reduced-motion: reduce) {
+  .wr-muted-word,
+  .wr-outline-word {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
+    color: var(--ink) !important;
+  }
+
+  .wr-outline-word.is-accent {
+    color: var(--accent) !important;
+  }
+}
+
+/* Copy & voice grammar — layout / card / title / grid / arrow / note migrated to
+   token-backed Tailwind utilities on the tsx (see copy-grammar-reference.tsx).
+   Kept below: combinator + :last-child + modifier rules that can't be expressed
+   as element utilities (row divider, dt/dd typography, the doctrine grid). */
+
+.cg-row {
+  display: grid;
+  gap: 0.1rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--hair) 60%, transparent);
+}
+
+.cg-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.cg-row dt {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+}
+
+.cg-row dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.cg-ours dt {
+  color: var(--accent);
+}
+
+.cg-ours dd {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.05rem;
+}
+
+.cg-list--doctrine .cg-row {
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: baseline;
+}
+
+.cg-list--doctrine dt {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cg-list--doctrine dd {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 760px) {
+  .cg-list--doctrine .cg-row {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+}
+
+/* ── type specimen (evaluate the live type theme) ─────────────────────────
+   Container / row / role / display / body / mono layout migrated to token-backed
+   Tailwind utilities on the tsx (see type-specimen.tsx). Kept below: the
+   :first-child divider reset and the `em` / `p` child rules — combinator/pseudo
+   selectors that can't be element utilities. */
+
+.spec-row:first-child {
+  border-top: none;
+}
+
+.spec-italic em {
+  font-style: italic;
+  color: var(--accent);
+}
+
+.spec-mono p {
+  margin: 0;
+}

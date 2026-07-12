@@ -38,7 +38,7 @@ export default function AppFrame({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      <Suspense fallback={<aside className="w-[260px] shrink-0 border-r border-border-subtle bg-bg-glass" />}>
+      <Suspense fallback={<aside className="w-[260px] shrink-0 border-r border-hair bg-surface" />}>
         <Sidebar />
       </Suspense>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto max-h-screen">

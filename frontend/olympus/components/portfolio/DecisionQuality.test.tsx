@@ -6,7 +6,7 @@ import DecisionQuality from './DecisionQuality';
 
 function decision(over: Partial<TableRow<'decision_log'>>): TableRow<'decision_log'> {
   return {
-    id: 1,
+    id: '1',
     ticker: 'AAA',
     date: '2026-06-01',
     run_date: '2026-06-01',
@@ -24,8 +24,8 @@ function decision(over: Partial<TableRow<'decision_log'>>): TableRow<'decision_l
 describe('DecisionQuality', () => {
   it('renders the calibration scorecard from injected decisions', () => {
     const decisions = [
-      decision({ id: 1, ticker: 'NVDA', conviction: 5, alpha: 0.08 }),
-      decision({ id: 2, ticker: 'SPY', conviction: 1, alpha: 0.01 }),
+      decision({ id: '1', ticker: 'NVDA', conviction: 5, alpha: 0.08 }),
+      decision({ id: '2', ticker: 'SPY', conviction: 1, alpha: 0.01 }),
     ];
     const html = renderToStaticMarkup(createElement(DecisionQuality, { decisions }));
     expect(html).toContain('Decision quality');

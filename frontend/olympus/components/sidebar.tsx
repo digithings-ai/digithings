@@ -7,7 +7,6 @@ import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { AtlasMark } from '@/components/atlas-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
-import StatusDot from '@/components/status-dot';
 import { NAV, type NavItem } from '@/lib/nav';
 
 function routeActive(pathname: string, base: string, href: string): boolean {
@@ -77,10 +76,10 @@ export default function Sidebar() {
           ${sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-6'}
           ${
             isActive
-              ? 'text-text-primary bg-white/[0.04] qn-sidebar-link-active'
+              ? 'text-ink bg-ink/[0.04] qn-sidebar-link-active'
               : demoted
-                ? 'text-text-muted hover:text-text-secondary hover:bg-white/[0.02]'
-                : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.03]'
+                ? 'text-ink-mute hover:text-ink-soft hover:bg-ink/[0.02]'
+                : 'text-ink-soft hover:text-ink hover:bg-ink/[0.03]'
           }
         `}
       >
@@ -106,7 +105,7 @@ export default function Sidebar() {
       <aside
         id="app-sidebar-nav"
         className={`
-          bg-bg-glass backdrop-blur-[12px] border-r border-border-subtle
+          bg-surface backdrop-blur-[12px] border-r border-hair
           flex flex-col shrink-0
           fixed top-0 left-0 h-screen z-[1000] transition-all duration-300 ease-out
           w-[260px]
@@ -115,7 +114,7 @@ export default function Sidebar() {
           ${sidebarCollapsed ? 'md:w-[72px]' : 'md:w-[260px]'}
         `}
       >
-        <div className="border-b border-border-subtle shrink-0 px-6 py-5 min-h-[72px] flex flex-col justify-center">
+        <div className="border-b border-hair shrink-0 px-6 py-5 min-h-[72px] flex flex-col justify-center">
           <div
             className={`flex items-center justify-between gap-2 w-full ${sidebarCollapsed ? 'md:hidden' : ''}`}
           >
@@ -126,7 +125,7 @@ export default function Sidebar() {
             <button
               type="button"
               onClick={toggleSidebar}
-              className="hidden md:flex rounded-lg p-2 text-text-muted hover:text-text-primary hover:bg-white/[0.06] border border-border-subtle shrink-0"
+              className="hidden md:flex rounded-lg p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair shrink-0"
               aria-label="Collapse sidebar"
             >
               <ChevronLeft size={18} />
@@ -139,7 +138,7 @@ export default function Sidebar() {
             <button
               type="button"
               onClick={toggleSidebar}
-              className="rounded-lg p-2 text-text-muted hover:text-text-primary hover:bg-white/[0.06] border border-border-subtle"
+              className="rounded-lg p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair"
               aria-label="Expand sidebar"
             >
               <ChevronRight size={18} />
@@ -152,29 +151,26 @@ export default function Sidebar() {
             <button
               type="button"
               onClick={openCommandPalette}
-              className="hidden md:flex items-center gap-2 mx-6 mb-1 rounded-lg border border-border-subtle px-3 py-1.5 text-xs text-text-muted hover:text-text-secondary hover:bg-white/[0.03] transition-colors"
+              className="hidden md:flex items-center gap-2 mx-6 mb-1 rounded-lg border border-hair px-3 py-1.5 text-xs text-ink-mute hover:text-ink-soft hover:bg-ink/[0.03] transition-colors"
               aria-label="Search"
             >
               <Search size={14} className="shrink-0" />
               <span className="flex-1 text-left">Search…</span>
-              <kbd className="font-mono text-[10px] text-text-muted">⌘K</kbd>
+              <kbd className="font-mono text-[10px] text-ink-mute">⌘K</kbd>
             </button>
           )}
           {primary.map(renderLink)}
           {demoted.length > 0 ? (
-            <div className="mt-auto pt-4 border-t border-border-subtle/60">{demoted.map(renderLink)}</div>
+            <div className="mt-auto pt-4 border-t border-hair/60">{demoted.map(renderLink)}</div>
           ) : null}
         </nav>
 
         <div
-          className={`border-t border-border-subtle mt-auto overflow-visible relative z-10 ${
+          className={`border-t border-hair mt-auto overflow-visible relative z-10 ${
             sidebarCollapsed ? 'md:px-2 px-6 py-4' : 'px-6 py-4'
           }`}
         >
           <SidebarSettings sidebarCollapsed={sidebarCollapsed} />
-          <div className={sidebarCollapsed ? 'mt-3 flex justify-center' : 'mt-3'}>
-            <StatusDot compact={sidebarCollapsed} />
-          </div>
         </div>
       </aside>
     </>

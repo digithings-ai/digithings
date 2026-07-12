@@ -19,6 +19,7 @@ on:
 permissions:
   contents: write
   issues: write
+  pull-requests: write
 
 jobs:
   tearsheets:
@@ -60,12 +61,17 @@ jobs:
         run: python digiquant/scripts/fetch_coinbase.py --through-yesterday
 
       - name: Generate tearsheets (from Supabase calibrations)
+        # --signal-delay-days 3 (#1462): public tearsheets lag reality by 3 days
+        # (end-date shift) so the live position can't be read off the curve.
         run: |
           python digiquant/scripts/generate_tearsheets.py \
             --from-supabase \
-            --push-supabase
+            --push-supabase \
+            --signal-delay-days 3
 
       - name: Commit refreshed static JSON (if changed)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -74,8 +80,24 @@ jobs:
             echo "No tearsheet changes to commit."
             exit 0
           fi
+          # develop rejects direct pushes (GH013 ruleset) — land via a PR
+          # branch instead. Fixed branch name, force-pushed each run; the PR
+          # is created once and reused while open.
+          BRANCH="chore/tearsheet-refresh"
+          git checkout -B "$BRANCH"
           git commit -m "chore(digiquant): refresh Slapper tearsheets [skip ci]"
-          git push
+          git push -f origin "$BRANCH"
+          PR=$(gh pr list --head "$BRANCH" --base develop --state open --json number --jq '.[0].number // empty')
+          if [ -z "$PR" ]; then
+            gh pr create --base develop --head "$BRANCH" \
+              --title "chore(digiquant): refresh Slapper tearsheets" \
+              --body "Automated nightly tearsheet refresh. develop blocks direct pushes (GH013 ruleset), so the pipeline lands its static JSON via this PR."
+            PR=$(gh pr list --head "$BRANCH" --base develop --state open --json number --jq '.[0].number')
+          fi
+          gh pr merge "$PR" --merge || {
+            echo "::warning::Tearsheet refresh PR #$PR could not be auto-merged — merge it manually."
+            exit 1
+          }
 
       - name: Update persistent failure issue
         if: failure()

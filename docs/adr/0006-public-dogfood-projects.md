@@ -2,6 +2,7 @@
 
 **Status:** accepted
 **Date:** 2026-04-18
+**Note (2026-07-01):** this ADR's references to `chat.digithings.ai` (the ADR-0002 subdomain plan for where `docs/projects/digithings-guide/` is indexed/served) are superseded by [ADR-0018](0018-digichat-path-routing.md), which serves DigiChat at `digithings.ai/chat` instead. The `projects/` vs. `docs/projects/` split decided here is unaffected.
 
 ## Context
 

@@ -45,14 +45,14 @@ digigraph:
 
 digichat:
   - frontend/digichat/**
-  - frontend/design/**
+  - frontend/digiweb/design/**
   - package.json
   - package-lock.json
   - .github/workflows/test-digichat.yml
 
 olympus:
   - frontend/olympus/**
-  - frontend/design/**
+  - frontend/digiweb/design/**
   - package.json
   - package-lock.json
   - .github/workflows/test-olympus.yml
@@ -60,8 +60,8 @@ olympus:
 web:
   - frontend/digithings-web/**
   - frontend/digiquant-web/**
-  - frontend/web/**
-  - frontend/design/**
+  - frontend/digiweb/web/**
+  - frontend/digiweb/design/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
@@ -75,7 +75,9 @@ score:
   - digismith/**
   - digikey/**
   - digivault/**
-  - frontend/**
+  # frontend/** intentionally excluded from scoring (#1310): score.py is a
+  # Python-oriented anti-pattern heuristic that misfires on CSS/JS; gitleaks
+  # still runs on frontend PRs for secrets, and app builds still gate breakage.
   - scripts/**
   - tests/**
   - agents.yml
@@ -89,9 +91,20 @@ e2e_contract:
   - digikey/**
   - .github/workflows/test-e2e.yml
 
+# Mirrors the pytest invocation in test-nautilus.yml — every file that
+# tests/dq/conftest.py collect_ignores without the nautilus extra (#1501).
 nautilus_smoke:
   - digiquant/**
+  - tests/dq/conftest.py
+  - tests/dq/test_api.py
+  - tests/dq/test_audit.py
+  - tests/dq/test_backtest.py
+  - tests/dq/test_calibrations_loader.py
   - tests/dq/test_nautilus_runner.py
+  - tests/dq/test_pipeline_graph.py
+  - tests/dq/test_strategies.py
+  - tests/dq/test_tearsheet_isolation.py
+  - tests/dq/test_v1_jobs.py
   - .github/workflows/test-nautilus.yml
 
 atlas_graph:

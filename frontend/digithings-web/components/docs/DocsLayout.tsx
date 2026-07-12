@@ -1,18 +1,31 @@
 "use client";
-import { Fragment, useEffect, useState, type ReactNode } from "react";
-import { modules, type ModuleNode, StackRow, Emblem } from "@digithings/web";
-import { CopyButton } from "@/lib/CopyButton";
-import { apiDocs, type ModuleApiDoc } from "@/lib/apiDocs";
+import { Fragment, useState, type ReactNode } from "react";
+import {
+  modules,
+  type ModuleNode,
+  StackRow,
+  Emblem,
+  DocsLayout as DocsShell,
+  type DocsNavGroup,
+  EndpointDoc,
+  type DocsEndpoint,
+  DocsCodeBlock,
+  Reveal,
+} from "@digithings/web";
+import { apiDocs, type ModuleApiDoc, type Endpoint } from "@/lib/apiDocs";
 import { guides, type Block } from "@/lib/sharedDocs";
 import { guideToMarkdown, moduleToMarkdown } from "@/lib/docsSerializers";
-import { EndpointDoc } from "./Endpoint";
 
 /**
- * Full docs experience: shared guides (Getting started / Authentication /
- * Conventions) + a complete per-module API reference, a sticky tier-grouped
- * sidebar with scroll-spy, and "copy as Markdown" for AI agents. Content is the
- * shared module data (@digithings/web) merged with the authored apiDocs/guides —
- * all static, so the site exports cleanly.
+ * Full docs experience on the shared docs family (@digithings/web): DocsShell
+ * owns the responsive sidebar + scroll-spy + mobile disclosure, EndpointDoc /
+ * DocsCodeBlock own the endpoint and code-block chrome. This file keeps only
+ * what is digithings content: the tier-grouped nav model, the shared guides
+ * (Getting started / Authentication / Conventions), the per-module reference
+ * merged from apiDocs, and "copy as Markdown" for AI agents. Section heads
+ * (guide titles, module headers) enter on the shared <Reveal/> — heads only,
+ * bodies stay static, and reduced-motion/no-JS render everything standing
+ * (#1450 polish). All static content, so the site exports cleanly.
  */
 const ordered = [...modules].sort((a, b) => a.graphOrder - b.graphOrder);
 const TIERS: { key: ModuleNode["tier"]; label: string }[] = [
@@ -20,6 +33,42 @@ const TIERS: { key: ModuleNode["tier"]; label: string }[] = [
   { key: "support", label: "Support" },
   { key: "roadmap", label: "Roadmap" },
 ];
+
+// Two-tone module wordmark for nav labels: shared DocsShell labels are
+// ReactNode, so the brand styling travels in the markup (the plain half
+// inherits the link's state color; the suffix is always accent).
+function ModuleWordmark({ id }: { id: string }) {
+  return (
+    <>
+      digi<span className="text-accent">{id.replace(/^digi/, "")}</span>
+    </>
+  );
+}
+
+const NAV: DocsNavGroup[] = [
+  { label: "Guides", items: guides.map((g) => ({ id: g.id, label: g.title })) },
+  ...TIERS.map((t) => ({
+    label: t.label,
+    items: ordered
+      .filter((m) => m.tier === t.key)
+      .map((m) => ({ id: m.id, label: <ModuleWordmark id={m.id} /> })),
+  })).filter((g) => g.items.length > 0),
+];
+
+// App boundary: apiDocs examples are keyed by language id; the shared CodeTabs
+// takes display labels, so the bash→curl naming decision lives here.
+const EXAMPLE_LABEL: Record<string, string> = {
+  bash: "curl",
+  python: "Python",
+  typescript: "TypeScript",
+};
+
+function toDocsEndpoint(ep: Endpoint): DocsEndpoint {
+  return {
+    ...ep,
+    examples: ep.examples?.map((e) => ({ label: EXAMPLE_LABEL[e.lang] ?? e.lang, code: e.code })),
+  };
+}
 
 // ── inline backtick → <code> for guide text ──────────────────────────────────
 function Inline({ text }: { text: string }): ReactNode {
@@ -44,15 +93,7 @@ function Blocks({ blocks }: { blocks: Block[] }) {
     <>
       {blocks.map((b, i) => {
         if (b.kind === "h") return <h3 key={i} className="doc-guide-h">{b.text}</h3>;
-        if (b.kind === "code")
-          return (
-            <div key={i} className="doc-code">
-              <CopyButton text={b.code} className="dc-code-copy" ariaLabel="Copy code" />
-              <pre>
-                <code>{b.code}</code>
-              </pre>
-            </div>
-          );
+        if (b.kind === "code") return <DocsCodeBlock key={i} code={b.code} />;
         if (b.kind === "list")
           return (
             <ul key={i} className="doc-guide-list">
@@ -106,14 +147,11 @@ function CopyMd({ text, label }: { text: string; label: string }) {
 
 function RunBlock({ label, code }: { label: string; code: string }) {
   return (
-    <div className="doc-run-line">
-      <span className="doc-run-label">{label}</span>
-      <div className="doc-code">
-        <CopyButton text={code} className="dc-code-copy" ariaLabel={`Copy ${label}`} />
-        <pre>
-          <code>{code}</code>
-        </pre>
-      </div>
+    <div className="mt-[0.5rem] flex flex-col gap-[0.25rem]">
+      <span className="font-mono text-[0.68rem] uppercase tracking-[0.1em] text-ink-mute">
+        {label}
+      </span>
+      <DocsCodeBlock code={code} copyLabel={`Copy ${label}`} />
     </div>
   );
 }
@@ -124,7 +162,9 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
   const isRoad = m.tier === "roadmap";
   return (
     <article className="doc-mod" id={m.id}>
-      <header className="doc-mod-head">
+      {/* Entrance on the section head only — the body stays static so the
+          reference never gates content on scroll (#1450 polish). */}
+      <Reveal as="header" className="doc-mod-head">
         <Emblem id={m.emblem} size={32} />
         <div className="doc-mod-title">
           <h2>
@@ -135,7 +175,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
         </div>
         <span className={`doc-badge${isRoad ? " is-road" : ""}`}>{m.tier}</span>
         <CopyMd text={moduleToMarkdown(m)} label="Markdown" />
-      </header>
+      </Reveal>
 
       <p className="doc-tagline">{m.tagline}</p>
 
@@ -153,14 +193,14 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
           <h3>Authentication</h3>
           {d.authNote && <p className="doc-summary">{d.authNote}</p>}
           {d.scopes && d.scopes.length > 0 && (
-            <table className="doc-fields">
+            <table className="doc-fields w-full border-collapse text-[0.84rem]">
               <tbody>
                 {d.scopes.map((s) => (
                   <tr key={s.scope}>
-                    <td className="doc-f-name">
+                    <td className="whitespace-nowrap">
                       <code className="dc-code-inline">{s.scope}</code>
                     </td>
-                    <td className="doc-f-desc">{s.grants}</td>
+                    <td className="w-full leading-[1.5] text-ink-soft">{s.grants}</td>
                   </tr>
                 ))}
               </tbody>
@@ -182,16 +222,18 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
       {d.env && d.env.length > 0 && (
         <section className="doc-block">
           <h3>Configuration</h3>
-          <table className="doc-fields">
+          <table className="doc-fields w-full border-collapse text-[0.84rem]">
             <tbody>
               {d.env.map((e) => (
                 <tr key={e.name}>
-                  <td className="doc-f-name">
+                  <td className="whitespace-nowrap">
                     <code className="dc-code-inline">{e.name}</code>
-                    {e.required && <span className="doc-req" title="required">*</span>}
+                    {e.required && <span className="ml-[0.15rem] text-down" title="required">*</span>}
                   </td>
-                  <td className="doc-f-type">{e.def ? e.def : "—"}</td>
-                  <td className="doc-f-desc">{e.description}</td>
+                  <td className="whitespace-nowrap font-mono text-[0.78rem] text-ink-mute">
+                    {e.def ? e.def : "—"}
+                  </td>
+                  <td className="w-full leading-[1.5] text-ink-soft">{e.description}</td>
                 </tr>
               ))}
             </tbody>
@@ -203,14 +245,14 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
         <section className="doc-block">
           <h3>Endpoints</h3>
           {d.baseUrlVar && (
-            <p className="doc-meta-line">
+            <p className="m-0 mt-[0.5rem] text-[0.8rem] text-ink-mute">
               Base URL <code className="dc-code-inline">${d.baseUrlVar}</code> — the service URL from{" "}
               <code className="dc-code-inline">docker-compose.yml</code>.
             </p>
           )}
-          <div className="doc-endpoints">
+          <div className="mt-[0.5rem] flex flex-col gap-[1rem]">
             {d.endpoints.map((ep) => (
-              <EndpointDoc key={`${ep.method} ${ep.path}`} ep={ep} />
+              <EndpointDoc key={`${ep.method} ${ep.path}`} ep={toDocsEndpoint(ep)} />
             ))}
           </div>
         </section>
@@ -293,79 +335,33 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
 }
 
 export function DocsLayout() {
-  const [active, setActive] = useState(guides[0]?.id ?? "");
-
-  useEffect(() => {
-    const ids = [...guides.map((g) => g.id), ...ordered.map((m) => m.id)];
-    const els = ids.map((id) => document.getElementById(id)).filter((e): e is HTMLElement => !!e);
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible[0]) setActive(visible[0].target.id);
-      },
-      { rootMargin: "-20% 0px -70% 0px", threshold: 0 },
-    );
-    els.forEach((el) => obs.observe(el));
-    return () => obs.disconnect();
-  }, []);
-
   return (
-    <div className="docs-shell">
-      <aside className="docs-side">
-        <nav aria-label="docs">
-          <div className="docs-side-group">
-            <span className="docs-side-label">Guides</span>
-            {guides.map((g) => (
-              <a key={g.id} href={`#${g.id}`} className={active === g.id ? "is-active" : ""}>
-                {g.title}
-              </a>
-            ))}
-          </div>
-          {TIERS.map((t) => {
-            const rows = ordered.filter((m) => m.tier === t.key);
-            if (!rows.length) return null;
-            return (
-              <div className="docs-side-group" key={t.key}>
-                <span className="docs-side-label">{t.label}</span>
-                {rows.map((m) => (
-                  <a key={m.id} href={`#${m.id}`} className={active === m.id ? "is-active" : ""}>
-                    <span className="dt-d">digi</span>
-                    <span className="dt-s">{m.id.replace(/^digi/, "")}</span>
-                  </a>
-                ))}
-              </div>
-            );
-          })}
-        </nav>
-      </aside>
+    <DocsShell
+      nav={NAV}
+      ariaLabel="docs"
+      contentsLabel="contents"
+      hero={{
+        kicker: "// api docs",
+        title: "digithings API reference.",
+        lede:
+          "Complete, end-to-end reference for the stack — setup, authentication, and every module's " +
+          "endpoints with request/response schemas and runnable examples. Copy any page (or the whole " +
+          "reference) as Markdown to drop into an AI agent.",
+        actions: <CopyMd text={PAGE_MD} label="Copy all as Markdown" />,
+      }}
+    >
+      {guides.map((g) => (
+        <section className="doc-guide" id={g.id} key={g.id}>
+          <Reveal as="h2" className="doc-guide-title">
+            {g.title}
+          </Reveal>
+          <Blocks blocks={g.blocks} />
+        </section>
+      ))}
 
-      <div className="docs-content">
-        <header className="docs-hero">
-          <span className="kicker">{"// api docs"}</span>
-          <h1>digithings API reference.</h1>
-          <p>
-            Complete, end-to-end reference for the stack — setup, authentication, and every module&apos;s
-            endpoints with request/response schemas and runnable examples. Copy any page (or the whole
-            reference) as Markdown to drop into an AI agent.
-          </p>
-          <div className="docs-hero-actions">
-            <CopyMd text={PAGE_MD} label="Copy all as Markdown" />
-          </div>
-        </header>
-
-        {guides.map((g) => (
-          <section className="doc-guide" id={g.id} key={g.id}>
-            <h2 className="doc-guide-title">{g.title}</h2>
-            <Blocks blocks={g.blocks} />
-          </section>
-        ))}
-
-        {ordered.map((m) => (
-          <ModuleDoc key={m.id} m={m} />
-        ))}
-      </div>
-    </div>
+      {ordered.map((m) => (
+        <ModuleDoc key={m.id} m={m} />
+      ))}
+    </DocsShell>
   );
 }

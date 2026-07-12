@@ -61,16 +61,16 @@ export default function TodayTab({
 
         <section className="glass-card flex min-w-0 flex-col p-4 lg:overflow-hidden">
           <header className="mb-3 flex shrink-0 items-baseline gap-2">
-            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-text-secondary">
+            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-soft">
               Broker briefs
             </h2>
-            <span className="ml-auto font-mono text-[10px] text-text-muted">
+            <span className="ml-auto font-mono text-[10px] text-ink-mute">
               {briefs.length} {briefs.length === 1 ? 'brief' : 'briefs'}
             </span>
             {briefs.length > 0 ? (
               <button
                 type="button"
-                className="text-[11px] text-fin-blue hover:underline"
+                className="text-[11px] text-accent hover:underline"
                 onClick={onSeeAllBriefs}
               >
                 see all →
@@ -79,7 +79,7 @@ export default function TodayTab({
           </header>
 
           {briefs.length === 0 ? (
-            <p className="text-sm text-text-muted">No research briefs for today yet.</p>
+            <p className="text-sm text-ink-mute">No research briefs for today yet.</p>
           ) : (
             // The scroller is absolutely positioned at `lg` so the brief list never
             // inflates the grid row — the row height is driven by the consensus chart
@@ -91,22 +91,22 @@ export default function TodayTab({
                   <li key={`${b.source_file}-${b.run_date}-${n}`}>
                     <button
                       type="button"
-                      className="w-full rounded-lg border border-border-subtle bg-bg-secondary p-3 text-left transition-colors hover:border-fin-blue/50"
+                      className="w-full rounded-lg border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
                       onClick={() => openBrief(b.source_file, b.run_date)}
                     >
-                      <div className="flex items-center gap-2 text-[11px] text-text-muted">
-                        <span className="font-semibold text-text-secondary">
+                      <div className="flex items-center gap-2 text-[11px] text-ink-mute">
+                        <span className="font-semibold text-ink-soft">
                           {b.broker_name ?? 'Unknown desk'}
                         </span>
                         {b.trader_relevance ? (
                           <span className="uppercase">· {b.trader_relevance}</span>
                         ) : null}
                       </div>
-                      <p className="mt-1 truncate text-sm font-medium text-text-primary">
+                      <p className="mt-1 truncate text-sm font-medium text-ink">
                         {b.document_title ?? b.source_file}
                       </p>
                       {b.central_thesis ? (
-                        <p className="mt-1 line-clamp-2 text-xs text-text-secondary">
+                        <p className="mt-1 line-clamp-2 text-xs text-ink-soft">
                           {b.central_thesis}
                         </p>
                       ) : null}
@@ -122,13 +122,13 @@ export default function TodayTab({
       {/* Full-width single-day timeline (replaces the old compact events tile). */}
       <section className="glass-card p-4">
         <header className="mb-3 flex items-baseline gap-2">
-          <h2 className="text-[13px] font-semibold uppercase tracking-wide text-text-secondary">
+          <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-soft">
             Today&rsquo;s timeline
           </h2>
-          <span className="ml-auto font-mono text-[10px] text-text-muted">00:00 – 24:00</span>
+          <span className="ml-auto font-mono text-[10px] text-ink-mute">00:00 – 24:00</span>
         </header>
         {timelineEvents.length === 0 ? (
-          <p className="text-sm text-text-muted">No macro events scheduled today.</p>
+          <p className="text-sm text-ink-mute">No macro events scheduled today.</p>
         ) : (
           <EventsTimeline events={timelineEvents} mode="single" day={today} />
         )}

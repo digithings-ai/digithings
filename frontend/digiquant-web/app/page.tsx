@@ -1,20 +1,52 @@
-import Link from "next/link";
-import { Footer, Reveal } from "@digithings/web";
+import {
+  Colophon,
+  Footer,
+  OdometerStrip,
+  PricingTierCard,
+  Reveal,
+  WordReveal,
+  subsystems,
+  type OdometerStat,
+} from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
-import { DqNav } from "@/components/landing/DqNav";
+import { SiteNav } from "@/components/landing/SiteNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
+import { LiveTickerRow } from "@/components/landing/LiveTickerRow";
+import { OlympusPortfolioPanel } from "@/components/landing/OlympusPortfolioPanel";
 import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
 import { OlympusScene } from "@/components/landing/OlympusScene";
 import { StrategySuite } from "@/components/landing/StrategySuite";
 import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
+import strategyIndex from "@/public/strategies/index.json";
+import type { StrategyIndexEntry } from "@/components/tearsheet/types";
 
-// v7 scroll-driven landing: mesh hero → linear pipeline → Olympus scrolly →
-// strategy suite → contact. Client islands; page stays a server component.
+// Real figures only — each one is mined from shipped data, never invented:
+// subsystem count from the shared subsystems registry (Atlas · Hermes ·
+// Kairos), trade count summed from the published tearsheets' strategies
+// index at build time, the 7 pipeline stages from ResearchPipeline's FLOW
+// (01 research → 07 execution), and the zero is Kairos's loopback-only
+// default — nothing reaches a live venue until a human flips the gate.
+const TOTAL_TRADES = (strategyIndex as StrategyIndexEntry[]).reduce(
+  (n, s) => n + s.total_trades,
+  0,
+);
+const METRICS: OdometerStat[] = [
+  { value: String(subsystems.length), label: "subsystems" },
+  { value: "7", label: "pipeline stages" },
+  { value: String(TOTAL_TRADES), label: "backtested trades" },
+  { value: "0", label: "ungated live orders" },
+];
+
+// v7 scroll-driven landing, now wearing the flagship expressive grammar
+// (#1450): mesh hero → live market ticker → digit-roll OdometerStrip →
+// linear pipeline → Olympus scrolly → strategy suite → the one WordReveal
+// claim → pricing. Client islands; page stays a server component. Every
+// motion moment honors prefers-reduced-motion and reads with no JS.
 export default function Home() {
   return (
     <>
-      <DqNav />
+      <SiteNav />
       <main>
         <HeroMesh>
           <h1 className="dqhero-h1">
@@ -32,75 +64,34 @@ export default function Home() {
             researches, <b>Hermes</b> sizes the risk, <b>Kairos</b> executes. Open-source and
             self-hosted, so a fund that once needed a team now runs for one.
           </p>
-          <div className="dqhero-cta">
-            <Link className="btn btn-primary" href="/#olympus">
-              Open Olympus <span aria-hidden="true">→</span>
-            </Link>
-            <Link className="btn btn-ghost" href="/strategies">
-              Browse strategies
-            </Link>
-          </div>
-          <div className="trust-strip" style={{ marginTop: "1.7rem" }}>
-            <span className="trust-strip__item">NautilusTrader</span>
-            <span className="trust-strip__item">open core</span>
-            <span className="trust-strip__item">Atlas · Hermes · Kairos</span>
-          </div>
-          {/* Real values (no placeholders): 3 reference strategies (BTC/ETH/SOL,
-              public/strategies/index.json) and the 3 specialist agents named in
-              the lede. Static render — the count-up is the vanilla stat-counter.js
-              path (dead in React); a React count-up is a follow-up, not wired here. */}
-          <div className="stat-counter-row" style={{ marginTop: "2.1rem" }}>
-            <div className="stat-counter">
-              <span className="stat-counter__value">3</span>
-              <span className="stat-counter__label">reference strategies</span>
-            </div>
-            <div className="stat-counter">
-              <span className="stat-counter__value">3</span>
-              <span className="stat-counter__label">specialist agents</span>
-            </div>
+          <div className="dqhero-cta dqhero-scrollcue">
+            <span className="dqhero-scroll-label">Scroll to explore</span>
+            <div className="dqhero-scroll" aria-hidden="true" />
           </div>
         </HeroMesh>
 
-        <section className="section" id="features">
+        {/* The single market-pulse tape right under the hero: one shared
+            StockTicker row carrying crypto (keyless Coinbase WS) then the equity
+            majors (seeded from the daily-close view, live intraday from the
+            feed). A client island; SSR-safe (renders a muted "connecting" line
+            until quotes arrive). */}
+        <LiveTickerRow />
+
+        <section className="section" id="metrics">
           <div className="wrap">
-            <Reveal className="section-head center">
-              <span className="kicker">{"// what's inside"}</span>
-              <h2>Research, execution, and the terms to run it.</h2>
+            <Reveal>
+              <div style={{ textAlign: "center" }}>
+                <span className="kicker">{"// by the numbers"}</span>
+                <h2 className="dq-title">The desk, in four numbers.</h2>
+                <p className="dq-sub" style={{ marginInline: "auto" }}>
+                  No projections — every figure is a property of the shipped stack: the
+                  subsystems, the pipeline, and the published tearsheets. Live stays zero until a
+                  human flips the gate.
+                </p>
+              </div>
             </Reveal>
-            <Reveal className="bento">
-              <Link className="bento__cell" href="#olympus">
-                <div className="bento__kicker">{"// pipeline"}</div>
-                <div className="bento__title">Research → execution</div>
-                <p className="bento__body">
-                  Atlas researches, Hermes sizes the risk, Kairos executes — one live pipeline you can
-                  watch end to end.
-                </p>
-                <span className="bento__cta">
-                  See the pipeline <span aria-hidden="true">→</span>
-                </span>
-              </Link>
-              <Link className="bento__cell" href="/strategies">
-                <div className="bento__kicker">{"// strategies"}</div>
-                <div className="bento__title">Reference strategies</div>
-                <p className="bento__body">
-                  BTC, ETH, and SOL reference strategies with full backtest tearsheets — clone and run
-                  them yourself.
-                </p>
-                <span className="bento__cta">
-                  Browse strategies <span aria-hidden="true">→</span>
-                </span>
-              </Link>
-              <Link className="bento__cell bento__cell--span-2" href="#pricing">
-                <div className="bento__kicker">{"// pricing"}</div>
-                <div className="bento__title">Own it, or have it hosted</div>
-                <p className="bento__body">
-                  Open core and free to self-host, or a managed Olympus runner with an SLA — the same
-                  engine either way.
-                </p>
-                <span className="bento__cta">
-                  See pricing <span aria-hidden="true">→</span>
-                </span>
-              </Link>
+            <Reveal>
+              <OdometerStrip stats={METRICS} className="mx-auto mt-[2.2rem] max-w-[880px]" />
             </Reveal>
           </div>
         </section>
@@ -109,7 +100,23 @@ export default function Home() {
 
         <OlympusScene />
 
+        {/* The payoff of the Olympus pipeline: the research book Atlas/Hermes
+            maintain, marked live off the same feed. Client island; SSR-safe
+            (renders a plain "connects on deploy" card without env vars). */}
+        <OlympusPortfolioPanel />
+
         <StrategySuite />
+
+        {/* No .section padding here: the WordReveal track is its own breathing
+            room (the line rides in, pins at mid-viewport for a beat, and the
+            page flows on) — section padding on top of it reads as a dead gap.
+            The claim reuses the hero's own words ("In a box you own") — one
+            voice, no re-voicing. */}
+        <section id="claim" aria-label="Research to execution, in a box you own">
+          <div className="wrap">
+            <WordReveal id="claim-reveal" text="Research to execution. In a box you own." />
+          </div>
+        </section>
 
         <section className="section" id="pricing">
           <div className="wrap">
@@ -123,34 +130,38 @@ export default function Home() {
                 </p>
               </div>
             </Reveal>
+            {/* Tier cards are the shared PricingTierCard (hero voice, #1417) —
+                one grammar with the /contact tiers; the featured tier wears the
+                shared flat accent wash. The app owns the grid (three-up from
+                768px, the old site.css .pricing breakpoint). */}
             <div style={{ marginTop: "2.2rem" }}>
-              <Reveal className="pricing">
+              <Reveal className="grid grid-cols-1 gap-[1.25rem] min-[768px]:grid-cols-3">
                 {PRICING_TIERS.map((tier) => (
-                  <div
+                  <PricingTierCard
                     key={tier.id}
-                    className={`pricing__tier${tier.featured ? " pricing__tier--featured" : ""}`}
-                  >
-                    <div className="pricing__name">{tier.name}</div>
-                    <div className="pricing__price">
-                      {tier.price}
-                      {tier.cadence ? <small> {tier.cadence}</small> : null}
-                    </div>
-                    <p className="pricing__desc">{tier.desc}</p>
-                    <ul className="pricing__features">
-                      {tier.features.map((feature) => (
-                        <li key={feature}>{feature}</li>
-                      ))}
-                    </ul>
-                    <div className="pricing__cta">
-                      {tier.id === "self" ? (
+                    variant="hero"
+                    nameAs="h3"
+                    className="h-full"
+                    accent={tier.featured}
+                    name={tier.name}
+                    priceLine={
+                      <>
+                        {tier.price}
+                        {tier.cadence ? <span className="text-ink-mute"> {tier.cadence}</span> : null}
+                      </>
+                    }
+                    description={tier.desc}
+                    features={[...tier.features]}
+                    cta={
+                      tier.id === "self" ? (
                         <CloneRepoButton />
                       ) : tier.cta ? (
                         <a className="btn btn-primary" href={tier.cta.href}>
                           {tier.cta.label} <span aria-hidden="true">→</span>
                         </a>
-                      ) : null}
-                    </div>
-                  </div>
+                      ) : null
+                    }
+                  />
                 ))}
               </Reveal>
             </div>
@@ -173,26 +184,11 @@ export default function Home() {
             </div>
           </div>
         </section>
-
-        <section aria-label="Get started">
-          <Reveal className="closing-cta">
-            <div className="closing-cta__inner">
-              <h2 className="closing-cta__title">One graph, research to execution.</h2>
-              <p className="closing-cta__sub">
-                Backtest, optimize, and route strategies on NautilusTrader with Atlas and Hermes.
-              </p>
-              <div className="closing-cta__actions">
-                <Link className="btn btn-primary" href="/#olympus">
-                  Open Olympus
-                </Link>
-                <Link className="closing-cta__secondary" href="/strategies">
-                  Browse strategies <span aria-hidden="true">→</span>
-                </Link>
-              </div>
-            </div>
-          </Reveal>
-        </section>
       </main>
+      {/* sweep: the homepage opts into the reference footer's glow sweep
+          (flagship grammar, #1450) — subpage consumers keep the
+          outline-only default. */}
+      <Colophon name="digi" suffix="quant" sweep />
       <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
     </>
   );

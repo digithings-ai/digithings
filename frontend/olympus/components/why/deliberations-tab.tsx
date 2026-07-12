@@ -2,9 +2,8 @@
 
 import { useState } from 'react';
 import { Calendar, FileText, GitBranch, Scale, TrendingUp } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import DocumentExpandInline from '@/components/library/DocumentExpandInline';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { canonicalPmTitle } from '@/components/portfolio/tabs/palette-and-format';
 import { useDashboard } from '@/lib/dashboard-context';
 import { docMatchesLibraryScope } from '@/lib/library-doc-tier';
@@ -43,33 +42,33 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
 
   return (
     <div className="glass-card p-0 overflow-hidden">
-      <div className="px-5 py-3 border-b border-border-subtle bg-bg-secondary flex items-center gap-2">
-        <GitBranch size={14} className="text-fin-blue shrink-0" aria-hidden />
-        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">Rebalance memo</h3>
-        <span className="ml-auto text-[10px] text-text-muted font-mono">automated</span>
+      <div className="px-5 py-3 border-b border-hair bg-term-bg flex items-center gap-2">
+        <GitBranch size={14} className="text-accent shrink-0" aria-hidden />
+        <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">Rebalance memo</h3>
+        <span className="ml-auto text-[10px] text-ink-mute font-mono">automated</span>
       </div>
       <div className="px-5 py-4 space-y-4 text-sm">
         {summary ? (
-          <div className="rounded-lg border border-fin-blue/15 bg-fin-blue/[0.04] p-4">
-            <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-3">
+          <div className="rounded-lg border border-accent/15 bg-accent/[0.04] p-4">
+            <p className="text-[11px] font-semibold text-ink-mute uppercase tracking-wider mb-3">
               Post-risk-sizing book summary
             </p>
             <div className="grid grid-cols-3 gap-3 text-xs">
               <div>
-                <p className="text-[10px] uppercase tracking-wider text-text-muted">Invested</p>
-                <p className="text-base font-semibold tabular-nums text-text-primary">
+                <p className="text-[10px] uppercase tracking-wider text-ink-mute">Invested</p>
+                <p className="text-base font-semibold tabular-nums text-ink">
                   {summary.investedPct.toFixed(2)}%
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider text-text-muted">Cash</p>
-                <p className="text-base font-semibold tabular-nums text-text-primary">
+                <p className="text-[10px] uppercase tracking-wider text-ink-mute">Cash</p>
+                <p className="text-base font-semibold tabular-nums text-ink">
                   {summary.cashPct.toFixed(2)}%
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider text-text-muted">Holdings</p>
-                <p className="text-base font-semibold tabular-nums text-text-primary">
+                <p className="text-[10px] uppercase tracking-wider text-ink-mute">Holdings</p>
+                <p className="text-base font-semibold tabular-nums text-ink">
                   {summary.holdingsCount}
                 </p>
               </div>
@@ -78,20 +77,18 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
         ) : null}
         {notes ? (
           <div>
-            <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2">
+            <p className="text-[11px] font-semibold text-ink-mute uppercase tracking-wider mb-2">
               Narrative / memo notes
             </p>
-            <div className="prose prose-invert max-w-none text-sm">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(notes)}</ReactMarkdown>
-            </div>
+            <SafeMarkdown>{cleanMemoProse(notes)}</SafeMarkdown>
           </div>
         ) : null}
         {actions.length > 0 ? (
           <div className="overflow-x-auto">
-            <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2">Actions</p>
+            <p className="text-[11px] font-semibold text-ink-mute uppercase tracking-wider mb-2">Actions</p>
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-border-subtle text-text-muted">
+                <tr className="border-b border-hair text-ink-mute">
                   <th className="py-2 pr-3 font-medium">Ticker</th>
                   <th className="py-2 pr-3 font-medium">Action</th>
                   <th className="py-2 pr-3 font-medium text-right">Current</th>
@@ -104,21 +101,21 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
                   const act = String(a.action ?? '').toLowerCase();
                   const acColor =
                     act === 'add' || act === 'new'
-                      ? 'text-fin-green'
+                      ? 'text-up'
                       : act === 'trim' || act === 'exit'
-                        ? 'text-fin-red/90'
-                        : 'text-text-secondary';
+                        ? 'text-down/90'
+                        : 'text-ink-soft';
                   const fmtPct = (v: unknown) =>
                     v == null || Number.isNaN(Number(v)) ? '—' : `${Number(v).toFixed(2)}%`;
                   const targetPct =
                     (a as Record<string, unknown>).target_pct ?? (a as Record<string, unknown>).recommended_pct;
                   return (
-                    <tr key={i} className="border-b border-border-subtle/60 align-top">
-                      <td className="py-2 pr-3 font-mono text-fin-blue">{String(a.ticker ?? '—')}</td>
+                    <tr key={i} className="border-b border-hair/60 align-top">
+                      <td className="py-2 pr-3 font-mono text-accent">{String(a.ticker ?? '—')}</td>
                       <td className={`py-2 pr-3 font-medium ${acColor}`}>{String(a.action ?? '—')}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{fmtPct(a.current_pct)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{fmtPct(targetPct)}</td>
-                      <td className="py-2 text-text-secondary whitespace-pre-wrap">
+                      <td className="py-2 text-ink-soft whitespace-pre-wrap">
                         {cleanMemoProse(String(a.rationale ?? '—'))}
                       </td>
                     </tr>
@@ -128,9 +125,7 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
             </table>
           </div>
         ) : !notes ? (
-          <div className="prose prose-invert max-w-none text-sm">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
-          </div>
+          <SafeMarkdown>{md}</SafeMarkdown>
         ) : null}
       </div>
     </div>
@@ -144,28 +139,28 @@ function RiskDebatePanel({ payload }: { payload: Record<string, unknown> }) {
 
   return (
     <div className="glass-card p-0 overflow-hidden">
-      <div className="px-5 py-3 border-b border-border-subtle bg-bg-secondary flex items-center gap-2">
-        <Scale size={14} className="text-fin-amber shrink-0" aria-hidden />
-        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">Risk debate</h3>
-        <span className="ml-auto text-[10px] text-text-muted font-mono">automated</span>
+      <div className="px-5 py-3 border-b border-hair bg-term-bg flex items-center gap-2">
+        <Scale size={14} className="text-warn shrink-0" aria-hidden />
+        <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">Risk debate</h3>
+        <span className="ml-auto text-[10px] text-ink-mute font-mono">automated</span>
       </div>
       <div className="px-5 py-4 grid md:grid-cols-2 gap-4 text-sm">
         {agg ? (
           <div>
-            <p className="text-[11px] font-semibold text-fin-green uppercase tracking-wider mb-1">Aggressive</p>
-            <p className="text-text-secondary text-xs leading-relaxed">{cleanMemoProse(agg)}</p>
+            <p className="text-[11px] font-semibold text-up uppercase tracking-wider mb-1">Aggressive</p>
+            <p className="text-ink-soft text-xs leading-relaxed">{cleanMemoProse(agg)}</p>
           </div>
         ) : null}
         {con ? (
           <div>
-            <p className="text-[11px] font-semibold text-fin-amber uppercase tracking-wider mb-1">Conservative</p>
-            <p className="text-text-secondary text-xs leading-relaxed">{cleanMemoProse(con)}</p>
+            <p className="text-[11px] font-semibold text-warn uppercase tracking-wider mb-1">Conservative</p>
+            <p className="text-ink-soft text-xs leading-relaxed">{cleanMemoProse(con)}</p>
           </div>
         ) : null}
         {tension ? (
-          <div className="md:col-span-2 border-t border-border-subtle pt-3">
-            <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1">Key tension</p>
-            <p className="text-text-secondary text-xs leading-relaxed">{cleanMemoProse(tension)}</p>
+          <div className="md:col-span-2 border-t border-hair pt-3">
+            <p className="text-[11px] font-semibold text-ink-mute uppercase tracking-wider mb-1">Key tension</p>
+            <p className="text-ink-soft text-xs leading-relaxed">{cleanMemoProse(tension)}</p>
           </div>
         ) : null}
       </div>
@@ -180,23 +175,23 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
 
   return (
     <div className="glass-card p-0 overflow-hidden">
-      <div className="px-5 py-3 border-b border-border-subtle bg-bg-secondary flex items-center gap-2">
-        <TrendingUp size={14} className="text-fin-blue shrink-0" aria-hidden />
-        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">Ticker debates</h3>
-        <span className="ml-auto text-[10px] text-text-muted font-mono">
+      <div className="px-5 py-3 border-b border-hair bg-term-bg flex items-center gap-2">
+        <TrendingUp size={14} className="text-accent shrink-0" aria-hidden />
+        <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">Ticker debates</h3>
+        <span className="ml-auto text-[10px] text-ink-mute font-mono">
           automated · {bulletins.length} ticker{bulletins.length !== 1 ? 's' : ''}
         </span>
       </div>
-      <div className="divide-y divide-border-subtle">
+      <div className="divide-y divide-hair">
         {bulletins.map((d) => {
           const p = d.payload;
           const stance = s(p.net_stance).trim().toLowerCase();
           const stanceColor =
             stance === 'bullish'
-              ? 'text-fin-green'
+              ? 'text-up'
               : stance === 'bearish'
-                ? 'text-fin-red'
-                : 'text-fin-amber';
+                ? 'text-down'
+                : 'text-warn';
           const bull = s(p.bull_thesis).trim();
           const bear = s(p.bear_thesis).trim();
           const delta = s(p.conviction_delta).trim();
@@ -205,20 +200,20 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
           return (
             <div key={d.ticker} className="px-5 py-4 space-y-3">
               <div className="flex items-baseline gap-3">
-                <span className="font-mono text-sm font-semibold text-fin-blue">{d.ticker}</span>
+                <span className="font-mono text-sm font-semibold text-accent">{d.ticker}</span>
                 {stance ? <span className={`text-xs font-medium capitalize ${stanceColor}`}>{stance}</span> : null}
-                {delta ? <span className="text-[11px] text-text-muted">conviction Δ {sign}</span> : null}
+                {delta ? <span className="text-[11px] text-ink-mute">conviction Δ {sign}</span> : null}
               </div>
-              <div className="grid md:grid-cols-2 gap-3 text-xs text-text-secondary leading-relaxed">
+              <div className="grid md:grid-cols-2 gap-3 text-xs text-ink-soft leading-relaxed">
                 {bull ? (
                   <div>
-                    <p className="text-[10px] font-semibold text-fin-green/80 uppercase tracking-wider mb-1">Bull</p>
+                    <p className="text-[10px] font-semibold text-up/80 uppercase tracking-wider mb-1">Bull</p>
                     <p>{cleanMemoProse(bull)}</p>
                   </div>
                 ) : null}
                 {bear ? (
                   <div>
-                    <p className="text-[10px] font-semibold text-fin-red/80 uppercase tracking-wider mb-1">Bear</p>
+                    <p className="text-[10px] font-semibold text-down/80 uppercase tracking-wider mb-1">Bear</p>
                     <p>{cleanMemoProse(bear)}</p>
                   </div>
                 ) : null}
@@ -253,7 +248,7 @@ export function DeliberationsTab() {
 
   if (!showArtifacts && pmDocs.length === 0) {
     return (
-      <div className="glass-card px-5 py-12 text-center text-sm text-text-muted">
+      <div className="glass-card px-5 py-12 text-center text-sm text-ink-mute">
         No deliberations yet — bull/bear debates, the risk debate, and the rebalance memo appear here after a run.
       </div>
     );
@@ -264,9 +259,9 @@ export function DeliberationsTab() {
       {showArtifacts && pipe ? (
         <section className="space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-[11px] font-semibold text-text-muted tracking-wide">Latest run</p>
+            <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Latest run</p>
             {pipe.snapshot_date ? (
-              <span className="text-[11px] text-text-muted font-mono">{pipe.snapshot_date}</span>
+              <span className="text-[11px] text-ink-mute font-mono">{pipe.snapshot_date}</span>
             ) : null}
           </div>
           {isRebalancePayload(pipe.pm_rebalance) && pipe.pm_rebalance ? (
@@ -284,12 +279,12 @@ export function DeliberationsTab() {
       {pmDocs.length > 0 ? (
         <section className="space-y-3">
           <div className="flex items-center gap-2 px-0.5">
-            <Calendar size={15} className="text-fin-amber shrink-0" aria-hidden />
-            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">PM memo history</h3>
-            <span className="text-[11px] text-text-muted">{pmDocs.length} document{pmDocs.length !== 1 ? 's' : ''}</span>
+            <Calendar size={15} className="text-warn shrink-0" aria-hidden />
+            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">PM memo history</h3>
+            <span className="text-[11px] text-ink-mute">{pmDocs.length} document{pmDocs.length !== 1 ? 's' : ''}</span>
           </div>
           <div className="glass-card p-0 overflow-hidden">
-            <div className="divide-y divide-border-subtle">
+            <div className="divide-y divide-hair">
               {pmDocs.map((d) => {
                 const active = activeId === d.id;
                 return (
@@ -298,13 +293,13 @@ export function DeliberationsTab() {
                       type="button"
                       onClick={() => setActiveId(active ? null : d.id)}
                       aria-expanded={active}
-                      className={`w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-white/[0.03] transition-colors ${
-                        active ? 'bg-fin-amber/[0.06]' : ''
+                      className={`w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-ink/[0.03] transition-colors ${
+                        active ? 'bg-warn/[0.06]' : ''
                       }`}
                     >
-                      <FileText size={14} className="text-fin-amber/70 shrink-0" />
+                      <FileText size={14} className="text-warn/70 shrink-0" />
                       <span className="font-mono text-sm">{canonicalPmTitle(d.path)}</span>
-                      <span className="ml-auto text-[11px] font-mono text-text-muted">{d.date ?? ''}</span>
+                      <span className="ml-auto text-[11px] font-mono text-ink-mute">{d.date ?? ''}</span>
                     </button>
                     {active ? (
                       <DocumentExpandInline

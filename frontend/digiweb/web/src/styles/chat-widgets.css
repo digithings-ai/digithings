@@ -1,0 +1,175 @@
+/* ==========================================================================
+   @digithings/web — chat activity-widget CSS (components/chat/*, #1418).
+   The digichat activity grammar promoted from the chatbot reference family:
+   collapsible tool-call blocks (ChatToolCall), the thinking/reasoning
+   disclosure (ChatThinking), and the framed-embed widget grammar
+   (ChatWidgetFrame / ChatWidgetButton). Import AFTER the token bridge, in the
+   app's globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/chat-widgets.css";
+     @source "<path-to>/digiweb/web/src/components/chat";
+   The @source line is load-bearing (path relative to the app's globals.css):
+   the components carry token-backed utilities, and Tailwind does not scan
+   package sources on its own.
+
+   Utilities in the components carry layout/spacing/color/type. This file
+   holds only what must stay CSS: caret/dot art, the aria-expanded rotate
+   combinators, color-mix rails and hover states, and the pulse/reveal
+   keyframes (all off under reduced motion).
+   ========================================================================== */
+
+/* ── collapsible tool-call block (ChatToolCall) ─────────────────────── */
+
+.tc {
+  border-left: 2px solid color-mix(in srgb, var(--accent) 40%, var(--term-hair));
+}
+
+.tc--err {
+  border-left-color: color-mix(in srgb, var(--down) 55%, var(--term-hair));
+}
+
+.tc-caret {
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-left: 4px solid var(--term-mute);
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  transition: transform 0.18s var(--ease);
+}
+
+.tc-head[aria-expanded="true"] .tc-caret {
+  transform: rotate(90deg);
+}
+
+/* a live (running) call breathes its status mark */
+.tc-run {
+  animation: tc-run-pulse 1.2s var(--ease) infinite;
+}
+
+@keyframes tc-run-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ── thinking / reasoning disclosure (ChatThinking) ─────────────────── */
+
+.think-chip {
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.think-chip:hover {
+  color: var(--ink-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--hair));
+}
+
+.think-caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  transition: transform 0.2s var(--ease);
+}
+
+.think-chip.open .think-caret {
+  transform: rotate(90deg);
+}
+
+.think-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.think-dot.is-live {
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: think-pulse 1.8s var(--ease) infinite;
+}
+
+@keyframes think-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.think-steps {
+  border-left: 2px solid color-mix(in srgb, var(--accent) 30%, var(--hair));
+}
+
+.think-steps li {
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.4s var(--ease), transform 0.4s var(--ease);
+}
+
+.think-steps li::before {
+  content: "";
+  position: absolute;
+  left: -1.62rem;
+  top: 0.5rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 55%, var(--hair));
+}
+
+.think-steps.in li {
+  opacity: 1;
+  transform: none;
+}
+
+/* ── widget-frame action buttons (ChatWidgetButton) ─────────────────── */
+
+.cw-btn {
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.cw-btn--primary {
+  color: var(--surface-inverse, #06110f);
+}
+
+.cw-btn--ghost:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.cw-btn--danger {
+  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
+}
+
+.cw-btn--danger:hover {
+  background: color-mix(in srgb, var(--down) 10%, transparent);
+}
+
+/* ── reduced motion ─────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-caret,
+  .think-caret {
+    transition: none;
+  }
+  .tc-run,
+  .think-dot.is-live {
+    animation: none;
+  }
+  .think-steps li {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

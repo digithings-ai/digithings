@@ -16,10 +16,10 @@ describe('ConvictionMeter (F6 unsigned cyan)', () => {
 });
 
 describe('SignedConvictionBadge (F6 signed)', () => {
-  it('prefixes a sign and is the fin-green/red semantic only', () => {
+  it('prefixes a sign and is the up/red semantic only', () => {
     expect(renderToStaticMarkup(createElement(SignedConvictionBadge, { value: 3 }))).toContain('+3');
-    expect(renderToStaticMarkup(createElement(SignedConvictionBadge, { value: 3 }))).toContain('text-fin-green');
+    expect(renderToStaticMarkup(createElement(SignedConvictionBadge, { value: 3 }))).toContain('text-up');
     expect(renderToStaticMarkup(createElement(SignedConvictionBadge, { value: -2 }))).toContain('−2');
-    expect(renderToStaticMarkup(createElement(SignedConvictionBadge, { value: -2 }))).toContain('text-fin-red');
+    expect(renderToStaticMarkup(createElement(SignedConvictionBadge, { value: -2 }))).toContain('text-down');
   });
 });

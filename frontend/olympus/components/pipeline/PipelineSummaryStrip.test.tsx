@@ -46,7 +46,7 @@ describe('PipelineSummaryStrip', () => {
     expect(html).toContain('4 holdings');
   });
 
-  it('uses fin-amber for amber chips (not fin-green/fin-red for non-financial values)', () => {
+  it('uses warn for amber chips (not up/down for non-financial values)', () => {
     const html = renderToStaticMarkup(
       createElement(PipelineSummaryStrip, {
         headline: 'Test',
@@ -54,8 +54,8 @@ describe('PipelineSummaryStrip', () => {
         decision: null,
       }),
     );
-    // amber chip should use fin-amber token, not fin-green or fin-red
-    expect(html).toContain('fin-amber');
+    // amber chip should use warn token, not up or down
+    expect(html).toContain('warn');
     expect(html).not.toContain('fin-purple');
   });
 });

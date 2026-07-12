@@ -153,7 +153,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | **High** | No Olympus workflow in CI; Cloudflare deploys without monorepo gate | `.github/workflows/ci.yml` |
 | **High** | Committed `public/dashboard-data.json` (~284 KB) publicly downloadable | `frontend/olympus/public/` |
 | **Medium** | ReactMarkdown without `rehype-sanitize` across 7+ library views | `components/library/*` |
-| **Medium** | `innerHTML` with unescaped data in design package (ticker, typewriter) | `frontend/design/*.js` |
+| **Medium** | `innerHTML` with unescaped data in design package (ticker, typewriter) | `frontend/digiweb/design/*.js` |
 | **Medium** | Missing `og.png`; relative OG URLs break social previews | `frontend/digithings/index.html` |
 | **Medium** | Docs reference missing `deploy-digiquant.yml`; `static.yml` retired | READMEs, ADR-0012 |
 

@@ -1,5 +1,7 @@
 # Task: Simplify frontend folder naming
 
+**Historical record — completed task.** The `chat.digithings.ai` domain target named below (ADR-0002) was later superseded by [ADR-0018](../../adr/0018-digichat-path-routing.md), which routes DigiChat at `digithings.ai/chat`. The folder-rename work itself is unaffected and already shipped.
+
 **Title:** `[agent] Rename frontend/digithings/ → frontend/digithings/ and frontend/digiquant/ → frontend/digiquant/`
 
 **Labels:** `agent-task`, `component:root`, `priority:high`, `complexity:S`, `type:migration`, `risk:low`
@@ -35,7 +37,7 @@ frontend/
 - [ ] `docs/adr/0002-domain-unification.md` updated if it mentions old paths.
 - [ ] `AGENTS.md` root updated if it mentions `frontend/digithings/` or `frontend/digiquant/`.
 - [ ] READMEs inside the renamed dirs updated (title + any self-references).
-- [ ] `frontend/design/README.md` updated if it lists consumers by old name.
+- [ ] `frontend/digiweb/design/README.md` updated if it lists consumers by old name.
 - [ ] GitHub Pages deploy from `static.yml` still serves digithings.ai after merge (verify on develop push or via workflow_dispatch).
 - [ ] Any documentation of the setup in `docs/` grepped for `frontend/digithings` or `frontend/digiquant` — all updated.
 
@@ -56,4 +58,4 @@ frontend/
 
 - No content changes inside the renamed folders.
 - No deployment target changes — CNAMEs unchanged, Pages still serves digithings.ai from the same artifact.
-- No change to `frontend/digichat/` or `frontend/design/`.
+- No change to `frontend/digichat/` or `frontend/digiweb/design/`.

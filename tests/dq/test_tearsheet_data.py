@@ -166,8 +166,8 @@ def test_from_nautilus_duck_types_result() -> None:
 # ── Schema 1.1: ohlc_bars + signal-type entry_label ──────────────────────────
 
 
-def test_schema_version_is_1_1() -> None:
-    assert SCHEMA_VERSION == "1.1"
+def test_schema_version_is_1_2() -> None:
+    assert SCHEMA_VERSION == "1.2"
 
 
 def test_ohlc_bars_default_empty_and_back_compatible() -> None:
@@ -187,7 +187,7 @@ def test_ohlc_bars_roundtrip() -> None:
     assert len(ts.ohlc_bars) == 2
     assert ts.ohlc_bars[0] == OHLCBar(t="2020-01-01", o=100.0, h=110.0, l=95.0, c=105.0)
     payload = json.loads(ts.to_json())
-    assert payload["schema_version"] == "1.1"
+    assert payload["schema_version"] == "1.2"
     assert payload["ohlc_bars"][1] == {
         "t": "2020-01-02",
         "o": 105.0,

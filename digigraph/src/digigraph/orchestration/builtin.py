@@ -27,8 +27,10 @@ from digigraph.trace_events import rag_sources_from_results
 from digigraph.vertical_orchestrator import (
     fetch_digisearch_tool_dicts,
     fetch_digiquant_tool_dicts,
+    fetch_digivault_tool_dicts,
     invoke_digisearch_tool,
     invoke_digiquant_tool,
+    invoke_digivault_tool,
 )
 
 logger = logging.getLogger(__name__)
@@ -116,6 +118,11 @@ def _digisearch_available(_context: ToolContext) -> bool:
     return bool(url and url.strip())
 
 
+def _digivault_available(_context: ToolContext) -> bool:
+    url = os.environ.get("DIGIVAULT_URL", "")
+    return bool(url and url.strip())
+
+
 def _digi_bearer_from_context(context: ToolContext) -> str | None:
     st = context.state
     if isinstance(st, dict):
@@ -130,6 +137,10 @@ def _digisearch_service_base() -> str:
 
 def _digiquant_service_base() -> str:
     return DigiProjectConfig.load().get_digiquant_url()
+
+
+def _digivault_service_base() -> str:
+    return DigiProjectConfig.load().get_digivault_url()
 
 
 def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[str, Any]:
@@ -169,6 +180,75 @@ def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[s
                 "required": ["query"],
             },
         },
+    }
+
+
+def _schema_from_digivault_manifest(ctx: ToolContext) -> dict[str, Any]:
+    try:
+        by_name = fetch_digivault_tool_dicts(
+            _digivault_service_base(),
+            _digi_bearer_from_context(ctx),
+            ctx.request_id,
+        )
+        t = by_name.get("digivault_search_notes")
+        if t:
+            return t
+    except _ORCHESTRATOR_CLIENT_ERRORS as exc:
+        logger.warning("DigiVault manifest fetch failed for digivault_search_notes: %s", exc)
+    return {
+        "type": "function",
+        "function": {
+            "name": "digivault_search_notes",
+            "description": (
+                "Full-text search over the DigiThings architecture vault. "
+                "Requires DIGIVAULT_URL and POST /v1/orchestrator_tools."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+        },
+    }
+
+
+def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
+    q = args.get("query", "")
+    if not q or not str(q).strip():
+        return "No search query provided."
+    try:
+        inv = invoke_digivault_tool(
+            _digivault_service_base(),
+            "digivault_search_notes",
+            args,
+            bearer_token=_digi_bearer_from_context(context),
+            request_id=context.request_id,
+        )
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
+        return f"DigiVault orchestrator invoke failed: {e}"
+    if not inv.get("ok"):
+        return json.dumps(inv)
+    data = inv.get("data")
+    if not isinstance(data, dict):
+        return "No results found."
+    hits = data.get("hits", [])
+    if not hits:
+        return "No matching documentation was found in the digivault for that query."
+    results = [
+        {
+            "content": h.get("body_markdown"),
+            "score": h.get("rank"),
+            "doc_id": h.get("vault_path"),
+            "metadata": {"title": h.get("title"), "tags": h.get("tags")},
+        }
+        for h in hits
+        if isinstance(h, dict)
+    ]
+    payload_for_llm = _search_payload_for_llm(results, len(results))
+    return {
+        "content": json.dumps(payload_for_llm),
+        "results": results,
+        "rag_sources": rag_sources_from_results(results),
     }
 
 
@@ -666,6 +746,12 @@ def _register_tools() -> None:
         schema_factory=lambda ctx: _schema_from_digisearch_manifest(ctx, "digisearch_fetch_all"),
     )
     register_tool(
+        "digivault_search_notes",
+        None,
+        _handle_digivault_search,
+        schema_factory=_schema_from_digivault_manifest,
+    )
+    register_tool(
         "visualization_agent",
         VISUALIZATION_AGENT_TOOL,
         _handle_visualization,
@@ -761,6 +847,11 @@ def _register_skills() -> None:
         "sitaas_rag",
         _sitaas_rag_tool_names(),
         when=lambda ctx: ctx.has_run_data_dir,
+    )
+    register_skill(
+        "digivault",
+        ["digivault_search_notes"],
+        when=lambda ctx: _digivault_available(ctx),
     )
 
 

@@ -19,6 +19,7 @@ function thesisHref(id: string): string {
  */
 export default function ThesesTab() {
   const { data } = useDashboard();
+  const lastUpdated = data?.portfolio?.meta?.last_updated ?? null;
 
   const theses = useMemo(() => data?.portfolio?.strategy?.theses ?? [], [data]);
   const positions = useMemo(() => data?.positions ?? [], [data]);
@@ -44,11 +45,14 @@ export default function ThesesTab() {
       {/* Market views */}
       <section className="space-y-4">
         <div className="flex items-baseline justify-between gap-3">
-          <h2 className="font-display text-2xl text-text-primary">Market views</h2>
-          <p className="text-xs text-text-muted">Ordered by conviction</p>
+          <h2 className="font-display text-2xl text-ink">Market views</h2>
+          <p className="text-xs text-ink-mute">
+            Ordered by conviction
+            {lastUpdated ? <span className="font-mono"> · as of {lastUpdated}</span> : null}
+          </p>
         </div>
         {marketSorted.length === 0 ? (
-          <div className="glass-card p-6 text-sm text-text-muted">
+          <div className="glass-card p-6 text-sm text-ink-mute">
             No market views recorded yet.
           </div>
         ) : (
@@ -67,9 +71,9 @@ export default function ThesesTab() {
 
       {/* Vehicle theses */}
       <section className="space-y-4">
-        <h2 className="font-display text-2xl text-text-primary">Vehicle theses</h2>
+        <h2 className="font-display text-2xl text-ink">Vehicle theses</h2>
         {vehicleGroups.length === 0 ? (
-          <div className="glass-card p-6 text-sm text-text-muted">
+          <div className="glass-card p-6 text-sm text-ink-mute">
             No single-name theses recorded yet.
           </div>
         ) : (
@@ -77,16 +81,16 @@ export default function ThesesTab() {
             {vehicleGroups.map((group) => (
               <div key={group.marketId ?? '_unlinked'} className="space-y-2">
                 <div className="flex items-baseline gap-2 px-1">
-                  <h3 className="text-sm font-semibold text-text-secondary">
+                  <h3 className="text-sm font-semibold text-ink-soft">
                     {group.marketName ?? 'Unlinked expressions'}
                   </h3>
                   {group.marketId === null ? (
-                    <span className="text-xs text-text-muted">not yet tied to a market view</span>
+                    <span className="text-xs text-ink-mute">not yet tied to a market view</span>
                   ) : (
-                    <span className="text-xs text-text-muted">expresses this view</span>
+                    <span className="text-xs text-ink-mute">expresses this view</span>
                   )}
                 </div>
-                <div className="glass-card divide-y divide-border-subtle overflow-hidden p-0">
+                <div className="glass-card divide-y divide-hair overflow-hidden p-0">
                   {group.theses.map((t) => (
                     <VehicleThesisRow
                       key={t.id}
@@ -104,7 +108,7 @@ export default function ThesesTab() {
 
       {/* History — one quiet line on single-day data */}
       {trackingSince ? (
-        <p className="text-xs text-text-muted">
+        <p className="text-xs text-ink-mute">
           Tracking theses from <span className="font-mono">{trackingSince}</span>.
         </p>
       ) : null}

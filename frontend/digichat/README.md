@@ -52,17 +52,3 @@ npm run dev
 # renders at http://localhost:3000/embed?accent=digithings
 ```
 
-## `/welcome` — public product-as-hero marketing route
-
-`src/app/welcome/` is a **public** marketing page (no auth gate; `/` and `/login`
-are unchanged). It shows the DigiChat terminal UI as the visual hero via a frozen,
-non-interactive "screenshot" (`welcome-hero.tsx` — hardcoded content reusing the
-`app-shell`/`dc-term-*` classes, **not** the live `ChatShell`, which needs a session),
-plus a BYOK/API `CodeSampleBand` (`code-sample-band.tsx`, curl/Python/TypeScript tabs).
-
-The shared `.code-sample-band` styles are scoped under `.welcome-codeband` in
-`welcome.css`, which sets the dark `--term-*` token values locally — the shared
-`@digithings/design/site/site.css` is **not** imported (its `--term-*` are defined on
-`:root[data-theme]`, which digichat doesn't set). Sample snippets + their pure
-selection logic live in `src/lib/code-sample-band-data.ts` (unit-tested).
-

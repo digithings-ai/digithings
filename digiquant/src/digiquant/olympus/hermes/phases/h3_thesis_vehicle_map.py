@@ -39,7 +39,10 @@ def _run_h3_llm(state: HermesState) -> ThesisVehicleMapOutput:
             "market_thesis_exploration": state.phase_hermes.market_thesis_exploration,
             "meta": {"source_exploration_key": "market-thesis-exploration"},
         },
-        context_keys=("digest",),
+        # Baseline runs publish `digest`, delta runs publish `digest-delta`
+        # (publish_phase.py) — both must be whitelisted or the prior digest
+        # silently drops out of context on whichever cadence is missing (#1270).
+        context_keys=("digest", "digest-delta"),
     )
     if vehicle_map is None:
         return ThesisVehicleMapOutput()
