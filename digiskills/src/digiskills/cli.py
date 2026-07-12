@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 
 from digiskills.compiler import compile_skill
+from digiskills.ingest import LocalPathCorpusBuilder
 from digiskills.models import SkillSource, SourceKind
 from digiskills.package import write_skill_package, write_skill_zip
 
@@ -43,6 +44,17 @@ def compile_cmd(
         help="Model string for --llm synthesis (default: DIGISKILLS_SYNTHESIS_MODEL env or openrouter/auto)",
     ),
     zip_output: bool = typer.Option(False, "--zip", help="Also write a <out>/<name>.zip archive"),
+    max_files: int | None = typer.Option(
+        None, "--max-files", help="Max files to ingest (default 500)"
+    ),
+    max_file_chars: int | None = typer.Option(
+        None,
+        "--max-file-chars",
+        help="Max chars per file before truncation (default 200000). Raise for large OpenAPI specs.",
+    ),
+    max_total_chars: int | None = typer.Option(
+        None, "--max-total-chars", help="Max chars across the whole corpus (default 2000000)"
+    ),
 ) -> None:
     """Compile a local path into an installable Agent Skill package."""
     skill_source = SkillSource(
@@ -58,7 +70,21 @@ def compile_cmd(
 
         synthesizer = DigiLLMSynthesizer(model=model)
 
-    result = compile_skill(skill_source, synthesizer=synthesizer)
+    # Only build an explicit corpus builder when a cap is overridden — otherwise
+    # let compile_skill pick the default LocalPathCorpusBuilder. Each unset cap
+    # falls back to the builder's own default.
+    corpus_builder = None
+    if max_files is not None or max_file_chars is not None or max_total_chars is not None:
+        overrides = {
+            "max_files": max_files,
+            "max_file_chars": max_file_chars,
+            "max_total_chars": max_total_chars,
+        }
+        corpus_builder = LocalPathCorpusBuilder(
+            **{k: v for k, v in overrides.items() if v is not None}
+        )
+
+    result = compile_skill(skill_source, corpus_builder=corpus_builder, synthesizer=synthesizer)
     for warning in result.warnings:
         typer.echo(f"warning: {warning}", err=True)
 
