@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.dq.conftest import SKIP_NATIVE_CRASH
+
 
 @pytest.mark.unit
 def test_digiquant_audit_log_writes_jsonl_and_redacts(tmp_path: Path) -> None:
@@ -32,12 +34,8 @@ def test_digiquant_audit_log_writes_jsonl_and_redacts(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.skipif(
-    os.environ.get("CI") == "true",
-    # Runs two real engines (backtest + optimize) in one process; the second
-    # aborts because NautilusTrader inits Rust logging once per interpreter. See #42.
-    reason="Second in-process Nautilus engine aborts (exit 134) — see #42",
-)
+# Runs two real engines (backtest + optimize) in one process — see SKIP_NATIVE_CRASH.
+@SKIP_NATIVE_CRASH
 def test_api_run_backtest_and_run_optimize_write_audit(tmp_path: Path) -> None:
     """POST /run_backtest and /run_optimize produce audit log entries when Nautilus available."""
     pytest.importorskip("nautilus_trader")

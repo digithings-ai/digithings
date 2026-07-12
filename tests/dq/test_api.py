@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,15 +12,7 @@ from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.models import BacktestResult
 from digiquant.server import app
 from tests.digi_test_jwt import auth_headers
-
-# Real Nautilus engines can't share a process: NautilusTrader initializes its
-# Rust logging once per interpreter (see #1389), so a second real engine aborts
-# (exit 134) regardless of OS. The CI lane runs every dq file in one pytest
-# process, so gate real-engine tests behind CI. See #42.
-_SKIP_NATIVE_CRASH = pytest.mark.skipif(
-    os.environ.get("CI") == "true",
-    reason="Real Nautilus engine aborts as a second in-process engine (exit 134) — see #42",
-)
+from tests.dq.conftest import SKIP_NATIVE_CRASH
 
 SAMPLE_BACKTEST_PAYLOAD = {
     "strategy_name": "mean_reversion_tech",
@@ -99,7 +90,7 @@ class TestHealth:
 class TestRunBacktest:
     """POST /run_backtest. Requires data_path or data_dir (or DIGIQUANT_DATA_DIR)."""
 
-    @_SKIP_NATIVE_CRASH
+    @SKIP_NATIVE_CRASH
     def test_returns_200_with_valid_body_when_nautilus_available(
         self, client: TestClient, data_dir: Path
     ) -> None:
@@ -193,7 +184,7 @@ class TestCheckDrift:
 class TestRunOptimize:
     """POST /run_optimize. Requires data_path or data_dir."""
 
-    @_SKIP_NATIVE_CRASH
+    @SKIP_NATIVE_CRASH
     def test_returns_200_with_valid_body_when_nautilus_available(
         self, client: TestClient, data_dir: Path
     ) -> None:
@@ -279,7 +270,7 @@ class TestRunExport:
 class TestRunPipeline:
     """POST /run_pipeline. Requires data_path or data_dir."""
 
-    @_SKIP_NATIVE_CRASH
+    @SKIP_NATIVE_CRASH
     def test_returns_200_with_backtest_optimize_export_when_nautilus_available(
         self, client: TestClient, data_dir: Path
     ) -> None:

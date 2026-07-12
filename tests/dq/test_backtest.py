@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import time
 from pathlib import Path
 from unittest.mock import patch
@@ -12,15 +11,7 @@ import pytest
 from digiquant.backtest import run_backtest
 from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.models import BacktestResult
-
-# Real Nautilus engines can't share a process: NautilusTrader initializes its
-# Rust logging once per interpreter (see #1389), so a second real engine aborts
-# (exit 134) regardless of OS. The CI lane runs every dq file in one pytest
-# process, so gate real-engine tests behind CI. See #42.
-_SKIP_NATIVE_CRASH = pytest.mark.skipif(
-    os.environ.get("CI") == "true",
-    reason="Real Nautilus engine aborts as a second in-process engine (exit 134) — see #42",
-)
+from tests.dq.conftest import SKIP_NATIVE_CRASH
 
 
 @pytest.mark.unit
@@ -116,7 +107,7 @@ class TestRunBacktest:
             )
 
 
-@_SKIP_NATIVE_CRASH
+@SKIP_NATIVE_CRASH
 @pytest.mark.unit
 class TestRunBacktestReal:
     """Run real Nautilus backtest when nautilus_trader and test data are available."""
