@@ -13,9 +13,12 @@
  * lib/TABLES.md). Money colors (--up/--down via text-up/text-down) mark P&L
  * direction only; weight bars wear the module accent (a share, not a return).
  *
- * Data facts this markup is built on (verified against the live views):
- *   - NAV is an index (base 100); latest ≈ 98.75. So the headline is a level,
- *     and "since inception" = level − 100.
+ * Data facts this markup is built on (verified against the live views + the
+ * writer, digiquant/src/digiquant/olympus/hermes/portfolio_materialize.py):
+ *   - NAV is a base-100 normalized paper index (that file: "NAV is a base-100
+ *     normalized index", _SEED_NAV = 100.0). Inception is 100, seeded the day
+ *     before the first stored row — which is why that row's day return is null.
+ *     So the headline is a level and "since inception" = level − 100.
  *   - weight_pct / cash_pct / invested_pct are 0–100; every *_pct return is in
  *     percent points; metrics_as_of is a YYYY-MM-DD string.
  *   - Today's book is macro ETFs (no crypto legs), so the live lane ticks only
@@ -165,8 +168,11 @@ export function OlympusPortfolioPanel() {
     );
   }
 
-  const liveNav = liveTotalValue ?? latestNav ?? 0;
-  const sinceInception = liveNav - 100;
+  // base 100 (see docblock): since-inception is level − 100. `latestNav` is
+  // sourced from the NAV series, so it is null only if that series is empty
+  // (positions without NAV) — guard so the headline can never read "−100%".
+  const liveNav = liveTotalValue ?? latestNav;
+  const sinceInception = liveNav == null ? null : liveNav - 100;
   const latest = nav.length > 0 ? nav[nav.length - 1] : null;
   const liveCount = positions.filter((p) => p.isLive).length;
   const investable = positions.filter((p) => p.ticker !== "CASH");
@@ -175,8 +181,18 @@ export function OlympusPortfolioPanel() {
     {
       label: "portfolio NAV",
       value: fmtNum(liveNav, 2),
-      note: `${signedPct(sinceInception)} since inception · base 100`,
-      noteTone: sinceInception > 0 ? "up" : sinceInception < 0 ? "down" : undefined,
+      note:
+        sinceInception == null
+          ? "base 100 · paper index"
+          : `${signedPct(sinceInception)} since inception · base 100`,
+      noteTone:
+        sinceInception == null
+          ? undefined
+          : sinceInception > 0
+            ? "up"
+            : sinceInception < 0
+              ? "down"
+              : undefined,
     },
     {
       label: "live vs last close",
