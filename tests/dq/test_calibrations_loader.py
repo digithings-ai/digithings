@@ -13,6 +13,8 @@ from digiquant.strategies.calibrations_loader import (
     resolve_calibrations,
 )
 
+pytestmark = pytest.mark.unit
+
 
 def test_merge_trade_start() -> None:
     out = merge_trade_start({"rsi_length": 14}, "2018-01-01")
