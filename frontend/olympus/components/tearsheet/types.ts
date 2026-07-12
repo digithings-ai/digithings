@@ -1,29 +1,13 @@
-/** Shapes emitted by `digiquant.tearsheet_data` (the unified TearsheetData schema). */
+/**
+ * Shapes emitted by `digiquant.tearsheet_data` (the unified TearsheetData schema).
+ * The chart-facing shapes (TearsheetSeriesPoint, TearsheetTrade) are owned by the
+ * finance-tearsheet family (#1463); the full payload schema and the Olympus
+ * wrapper below stay app-local data wiring.
+ */
 
+import type { TearsheetSeriesPoint, TearsheetTrade } from '@digithings/web';
 import type { DecisionTrackRecord } from '@/lib/decision-track-record';
 import type { TableRow } from '@/lib/database.types';
-
-export interface TearsheetPoint {
-  t: string;
-  v: number;
-}
-
-export interface TearsheetTrade {
-  n: number;
-  direction: "long" | "short";
-  entry_label: string;
-  entry_date: string;
-  entry_price: number;
-  exit_date: string;
-  exit_price: number;
-  qty: number;
-  pnl: number;
-  pnl_pct: number;
-  equity_after: number;
-  exit_reason: string;
-  max_runup_pct: number;
-  max_drawdown_pct: number;
-}
 
 export interface TearsheetBreakdown {
   trades: number;
@@ -63,8 +47,8 @@ export interface TearsheetData {
   overall: TearsheetBreakdown;
   long: TearsheetBreakdown;
   short: TearsheetBreakdown;
-  equity_curve: TearsheetPoint[];
-  drawdown_curve: TearsheetPoint[];
+  equity_curve: TearsheetSeriesPoint[];
+  drawdown_curve: TearsheetSeriesPoint[];
   trades: TearsheetTrade[];
   notes: string[];
 }
