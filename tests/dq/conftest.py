@@ -30,6 +30,8 @@ if importlib.util.find_spec("nautilus_trader") is None:
         "test_nautilus_runner.py",
         "test_pipeline_graph.py",
         "test_strategies.py",
+        # Spawned tearsheet workers import digiquant.strategies (→ nautilus).
+        "test_tearsheet_isolation.py",
         "test_v1_jobs.py",
     ]
 

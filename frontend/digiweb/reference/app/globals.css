@@ -6,11 +6,20 @@
 @import "@digithings/web/styles/pricing.css";
 @import "@digithings/web/styles/stages.css";
 @import "@digithings/web/styles/metrics.css";
+@import "@digithings/web/styles/word-reveal.css";
+@import "@digithings/web/styles/marquee.css";
 @import "@digithings/web/styles/terminal-manifest.css";
 @import "@digithings/web/styles/chat-core.css";
 @import "@digithings/web/styles/chat-widgets.css";
 @import "@digithings/web/styles/controls-core.css";
 @import "@digithings/web/styles/controls-overlay.css";
+@import "@digithings/web/styles/finance-composites.css";
+/* finance-tearsheet manages its own layering (print grammar unlayered) —
+   import PLAINLY, never wrapped in layer(...) (see the sheet header). */
+@import "@digithings/web/styles/finance-tearsheet.css";
+@import "@digithings/web/styles/data-layout.css";
+@import "@digithings/web/styles/deck.css";
+@import "@digithings/web/styles/effects-chrome.css";
 
 /* Shared components (@digithings/web) carry token-backed utilities, and
    Tailwind never scans package sources on its own — point it at them
@@ -20,9 +29,17 @@
 @source "../../web/src/components/pricing";
 @source "../../web/src/components/stages";
 @source "../../web/src/components/metrics";
+@source "../../web/src/components/typography";
+@source "../../web/src/components/marquee";
 @source "../../web/src/components/TerminalManifest.tsx";
 @source "../../web/src/components/chat";
 @source "../../web/src/components/controls";
+@source "../../web/src/components/finance-charts";
+@source "../../web/src/components/finance-composites";
+@source "../../web/src/components/finance-tearsheet";
+@source "../../web/src/components/data-layout";
+@source "../../web/src/components/deck";
+@source "../../web/src/components/effects-chrome";
 
 /* Shared base for every design-reference page. Family-specific styles live
    next to their page (app/<family>/<family>.css) — keep this file small. */

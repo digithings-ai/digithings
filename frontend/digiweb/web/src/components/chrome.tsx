@@ -1,7 +1,8 @@
 "use client";
 /** Shared nav, footer, and module card. Brand + links are passed in so both
  *  marketing apps reuse the same chrome. */
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { m, useReducedMotion, useScroll, useTransform } from "motion/react";
 import { ThemeToggle } from "./ThemeProvider";
 import { Emblem } from "./emblems";
 import { StackRow } from "./StackLogo";
@@ -51,17 +52,56 @@ export function Footer({ links, meta }: { links: NavLink[]; meta: string }) {
 }
 
 /** The page's last word (canon §08): the module's name at giant scale,
- *  1px hairline outline — never a glow. Scroll-scrubbed with zero JS via
- *  CSS `animation-timeline: view()` (@supports-gated in site.css); under
+ *  1px hairline outline by default — plus an opt-in scroll-scrubbed glow
+ *  sweep. The outline rise/fill is scroll-scrubbed with zero JS via CSS
+ *  `animation-timeline: view()` (@supports-gated in site.css); under
  *  reduced motion or without support the name simply stands. The suffix
  *  wears var(--accent), so each app's livery (or the umbrella's ink)
- *  dresses it automatically. aria-hidden: punctuation, not content. */
-export function Colophon({ name, suffix }: { name: string; suffix?: string }) {
+ *  dresses it automatically. aria-hidden: punctuation, not content.
+ *
+ *  `sweep` (default false — the outline-only ruling stands for every
+ *  existing consumer) adds the reference footer's personality moment: an
+ *  accent glow passing left→right across the wordmark, scrubbed by the
+ *  colophon's own scroll progress (same offsets/transform as
+ *  reference/components/footer-reference.tsx). A duplicate overlay span
+ *  carries the gradient clipped to its glyphs; reduced motion (and no-JS)
+ *  park the band off-screen so no glow travels. Requires a MotionProvider
+ *  in the consuming app. */
+export function Colophon({
+  name,
+  suffix,
+  sweep = false,
+}: {
+  name: string;
+  suffix?: string;
+  sweep?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const reduced = useReducedMotion();
+  // 0 = the colophon's top enters the viewport bottom; 1 = scrolled to its
+  // end. The band travels off-left → off-right across the middle of that
+  // range, so the highlight crosses the wordmark once as you scroll into it.
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end end"],
+  });
+  const sweepPos = useTransform(scrollYProgress, [0.38, 0.96], [120, -20]);
+  const backgroundPosition = useTransform(sweepPos, (v) => `${v}% 0`);
+
   return (
-    <div className="colophon" aria-hidden="true">
+    <div className="colophon" aria-hidden="true" ref={ref}>
       <span className="colo-word">
         {name}
         {suffix ? <b>{suffix}</b> : null}
+        {sweep ? (
+          <m.span
+            className="colo-sweep"
+            style={reduced ? undefined : { backgroundPosition }}
+          >
+            {name}
+            {suffix}
+          </m.span>
+        ) : null}
       </span>
     </div>
   );

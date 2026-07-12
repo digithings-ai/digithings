@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { m, useReducedMotion } from "motion/react";
-
-type Tab = { id: string; label: string };
+import { TabStrip, tabId, tabPanelId, type TabItem } from "@digithings/web";
 
 /**
  * Reusable tab strip with a sliding active indicator. The indicator is a single
@@ -11,98 +10,9 @@ type Tab = { id: string; label: string };
  * active tab and written straight to a ref, so the slide is a CSS transition —
  * no `layoutId` (the app's LazyMotion runs `domAnimation`, which omits layout
  * animations) and no per-frame React state.
+ * Consumes the shared <TabStrip/> primitive from @digithings/web.
  */
-function TabStrip({
-  tabs,
-  active,
-  onChange,
-  variant,
-  label,
-}: {
-  tabs: Tab[];
-  active: number;
-  onChange: (i: number) => void;
-  variant: "underline" | "pill";
-  label: string;
-}) {
-  const listRef = useRef<HTMLDivElement>(null);
-  const inkRef = useRef<HTMLSpanElement>(null);
-  const mounted = useRef(false);
-  const reduced = useReducedMotion();
-
-  const position = useCallback(
-    (animate: boolean) => {
-      const list = listRef.current;
-      const ink = inkRef.current;
-      if (!list || !ink) return;
-      const el = list.querySelectorAll<HTMLButtonElement>('[role="tab"]')[active];
-      if (!el) return;
-      ink.style.transition = animate ? "" : "none";
-      ink.style.transform = `translateX(${el.offsetLeft}px)`;
-      ink.style.width = `${el.offsetWidth}px`;
-      if (!animate) {
-        // flush the jump before restoring the transition so it never animates
-        void ink.offsetWidth;
-        ink.style.transition = "";
-      }
-    },
-    [active],
-  );
-
-  useLayoutEffect(() => {
-    position(mounted.current && !reduced);
-    mounted.current = true;
-  }, [position, reduced]);
-
-  useLayoutEffect(() => {
-    const onResize = () => position(false);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [position]);
-
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    let next = active;
-    if (e.key === "ArrowRight") next = (active + 1) % tabs.length;
-    else if (e.key === "ArrowLeft") next = (active - 1 + tabs.length) % tabs.length;
-    else if (e.key === "Home") next = 0;
-    else if (e.key === "End") next = tabs.length - 1;
-    else return;
-    e.preventDefault();
-    onChange(next);
-    listRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
-  };
-
-  const base = label.replace(/\s+/g, "-");
-
-  return (
-    <div
-      ref={listRef}
-      className={`tab-strip ${variant}`}
-      role="tablist"
-      aria-label={label}
-      onKeyDown={onKeyDown}
-    >
-      <span ref={inkRef} className={`tab-ink ${variant}`} aria-hidden="true" />
-      {tabs.map((t, i) => (
-        <button
-          key={t.id}
-          type="button"
-          role="tab"
-          id={`${base}-tab-${t.id}`}
-          aria-selected={i === active}
-          aria-controls={`${base}-panel-${t.id}`}
-          tabIndex={i === active ? 0 : -1}
-          className="tab-btn"
-          onClick={() => onChange(i)}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-const VIEWS: Tab[] = [
+const VIEWS: TabItem[] = [
   { id: "overview", label: "Overview" },
   { id: "positions", label: "Positions" },
   { id: "orders", label: "Orders" },
@@ -128,7 +38,7 @@ const LOGS = [
   "12:03:58  sig   trend_xsec → long BTC",
 ];
 
-const MODES: Tab[] = [
+const MODES: TabItem[] = [
   { id: "backtest", label: "backtest" },
   { id: "paper", label: "paper" },
   { id: "live", label: "live" },
@@ -140,9 +50,19 @@ const MODE_NOTE = [
   "Routes to the broker. Gated behind human approval.",
 ];
 
+const SECTIONS: TabItem[] = [
+  { id: "signals", label: "Signals" },
+  { id: "consensus", label: "Consensus" },
+  { id: "ideas", label: "Trade ideas" },
+  { id: "matrix", label: "Matrix" },
+  { id: "digest", label: "Digest" },
+  { id: "briefs", label: "Briefs" },
+];
+
 export function TabsReference() {
   const [view, setView] = useState(0);
   const [mode, setMode] = useState(1);
+  const [section, setSection] = useState(0);
   const reduced = useReducedMotion();
 
   const panelMotion = reduced
@@ -158,8 +78,9 @@ export function TabsReference() {
       <p className="section-copy">
         A tab strip whose active indicator slides between labels — measured from the live tab
         geometry and animated with a CSS transition, so it survives a resize and honours
-        reduced-motion. Arrow keys move between tabs; the panel below crossfades in. Two dresses:
-        an underline for content regions, a pill for a compact mode switch.
+        reduced-motion. Arrow keys move between tabs; the panel below crossfades in. Three
+        dresses: an underline for content regions, a pill for a compact mode switch, and a chip
+        row for dashboard sub-navs — it may wrap, and the slider follows across rows.
       </p>
 
       <div className="mt-[1.4rem]">
@@ -174,8 +95,8 @@ export function TabsReference() {
         <div
           className="min-h-[8.5rem] pt-[1.1rem]"
           role="tabpanel"
-          id={`Account-view-panel-${activeId}`}
-          aria-labelledby={`Account-view-tab-${activeId}`}
+          id={tabPanelId("Account view", activeId)}
+          aria-labelledby={tabId("Account view", activeId)}
         >
           <m.div key={view} {...panelMotion}>
             {activeId === "overview" && (
@@ -262,6 +183,24 @@ export function TabsReference() {
           label="Execution mode"
         />
         <p className="mt-[0.9rem] font-mono text-[0.74rem] text-ink-mute">{MODE_NOTE[mode]}</p>
+      </div>
+
+      {/* chip — the dashboard sub-nav dress (olympus subpage tab bars). The note
+          below is not a tabpanel, so linkPanels={false} keeps aria-controls off
+          the tabs rather than emitting dangling references. */}
+      <div className="mt-8 max-w-[26rem]">
+        <TabStrip
+          tabs={SECTIONS}
+          active={section}
+          onChange={setSection}
+          variant="chip"
+          label="Workspace sections"
+          linkPanels={false}
+        />
+        <p className="mt-[0.9rem] font-mono text-[0.74rem] text-ink-mute">
+          {SECTIONS[section].label} — constrained width on purpose: the chip row wraps and the
+          slider follows.
+        </p>
       </div>
     </section>
   );

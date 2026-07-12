@@ -11,7 +11,8 @@ const FAMILIES = [
   { href: "/layout-patterns", label: "Layout", blurb: "Feature cell, bento grid, scaled product frames." },
   { href: "/typography", label: "Typography", blurb: "Scroll-linked word reveals and the copy & voice grammar." },
   { href: "/data", label: "Data", blurb: "Dot matrix, count-up stats, card deck, pricing, matrix." },
-  { href: "/finance", label: "Finance", blurb: "Lightweight-Charts tearsheet, order book, money metrics." },
+  { href: "/finance", label: "Finance", blurb: "Lightweight-Charts dashboards, order book, money metrics." },
+  { href: "/tearsheet", label: "Tearsheet", blurb: "Print-grade SVG tearsheet: synced charts, matrix, trade log, cards." },
   { href: "/effects", label: "Effects", blurb: "Cursor-follow graph, terminals, pipeline, ambient mesh." },
   { href: "/chrome", label: "Chrome", blurb: "Announcement bar, scroll-aware nav, tabs, colophon footer." },
   { href: "/terminal", label: "Terminal", blurb: "Diegetic CLI session and streaming chat transcript." },
@@ -24,7 +25,7 @@ export function ContentsOverview() {
   return (
     <section className="section-block contents-overview">
       <p className="kicker">{"// contents"}</p>
-      <h2 className="title">Ten families, one system.</h2>
+      <h2 className="title">Thirteen families, one system.</h2>
       <p className="section-copy">
         Every page is one family of design elements, all sharing the same tokens, livery, and
         motion laws. Start anywhere — the top bar carries the same map.

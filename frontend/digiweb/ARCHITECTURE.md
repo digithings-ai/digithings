@@ -31,6 +31,48 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
 | `@digithings/web` | `web/` | shared React layer (NavShell, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, the chat family, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
 
+The F1 promotion campaign (#1450) added four more component families to
+`@digithings/web`, each a `web/src/components/<family>/` directory with its own
+barrel, re-exported from `src/index.ts`:
+
+| Family | Components | CSS subpath |
+| ------ | ---------- | ----------- |
+| `finance-charts` | PriceChart, EquityCurve, DrawdownPlot + two chart scaffolds: rebuild-on-data `useFinanceChart` (with `readFinancePalette`, `financeChartOptions`, `tokenAlpha`, `toChartTime`) and the persistent dashboard lifecycle `useLightweightChart` (`chartChromeOptions`, `hostMonoFont`, `toLineData`/`timeToISO`, `useChartTip`/`ChartTipShell`, `useFinanceChartPalette`/`getFinancePalette` — converged from olympus `lib/lw-chart.tsx`, #1450 batch E) and `*_DEMO` datasets. (MonthlyReturns and its `finance-charts.css` were deprecated into finance-tearsheet's ReturnsMatrix, #1463.) | — (the charts are canvas, zero CSS; `ChartTipShell` is utility-classed, covered by the family `@source` line) |
+| `finance-composites` | StockTicker, OrderBook, SortableTable, PerformanceDashboard, SyncedTearsheet | `./styles/finance-composites.css` |
+| `data-layout` | Odometer/OdometerStrip, DotMatrixStat, BentoGrid/BentoCell, ProductFrame, FeatureCell, TestimonialWall | `./styles/data-layout.css` |
+| `effects-chrome` | Pipeline, RotatingPrompts, StackingPanels, AnnouncementBar, TabStrip (+ `tabId`/`tabPanelId` helpers), ToastStack | `./styles/effects-chrome.css` |
+
+The #1463 reverse-promotion added the **`finance-tearsheet`** family — the
+print-grade SVG tearsheet grammar (`.ts-*`) promoted from
+`frontend/digiquant-web/components/tearsheet/`:
+
+| Family | Components | CSS subpath |
+| ------ | ---------- | ----------- |
+| `finance-tearsheet` | CandlestickChart (trade entry/exit markers + hover cards), TimeSeries, SignedBars, TradeReturnChart (linear/log/symlog scales; one shared normalized `ViewWindow` synced across charts; `LOOKBACK_OPTIONS`/`viewWindowForPreset`/`matchLookbackPreset`), ReturnsMatrix (3 metrics × 3 periods — THE matrix grammar), KpiStrip/Kpi, TradeLogTable/DirectionPill (ReactNode cells, open-row state), TearsheetCard(+Kpis/Kpi) anchor dress, LiveBadge, `runTearsheetPrint`/`PRINT_FULL_VIEW` (flushSync + `window.print` PDF pipeline), format/tone helpers, `TEARSHEET_DEMO` | `./styles/finance-tearsheet.css` (self-layering; the ENTIRE `@media print` grammar lives here, unlayered — the family's differentiator) |
+
+Engine ruling: canvas families are for screen-only dashboards; any surface
+with a PDF export composes finance-tearsheet — see [CHARTS.md](CHARTS.md).
+`@digithings/design/tearsheet/styles.css` is deprecated in favour of the
+family sheet (kept only until digiquant-web/olympus swap their imports).
+
+Family notes: the dashboard time-series primitives ride **TradingView
+Lightweight Charts** (`lightweight-charts` is a package dependency; hosts fill
+their pane via `autoSize`, so consumers must give the pane a definite height);
+the finance-tearsheet charts are **dependency-free SVG** (the PDF pipeline
+constraint — [CHARTS.md](CHARTS.md)). The family sheets **manage their own
+layering** (single-class defaults in `@layer components`, state/structural —
+and, for finance-tearsheet, print — grammar unlayered) — import them
+**plainly**, never wrapped in `layer(...)`. The families carry
+token-backed utilities, so consuming apps need an `@source` line per family
+directory. `PerformanceDashboard` exposes a `children` slot for finance-charts
+content passed in by the page (it never imports charts itself); `ToastStack` is
+imperative-free (`toasts` + `onDismiss` props — app-level toast state stays
+app-owned). `TabStrip` wears three dresses (`underline`, `pill`, and `chip` —
+the dashboard sub-nav chip row, which may flex-wrap; the ink follows across
+rows), takes `ReactNode` labels, and accepts `linkPanels={false}` to omit
+`aria-controls` when the consumer owns no panel ids (wrapper-adaption cases
+like olympus's subpage tab bar).
+
 Since the canon migration (#1399, 2026-07): apps declare **no local `@theme`
 block** — `web-theme.css` is the one bridge (its `inline` semantics keep scoped
 liveries live inside utilities); shared sheets import with `layer(components)`;

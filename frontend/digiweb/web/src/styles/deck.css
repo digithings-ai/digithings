@@ -1,0 +1,115 @@
+/* Deck stack — sticky stacking card deck (the cavemen.dev pattern), promoted
+   from the design reference's card deck (data/card-deck, #1450).
+   <DeckStack/> renders the shared .deck-slots container (+ the optional
+   .deck-rail progress column); <DeckCard/> is one sticky card. Wiring and
+   the component contract live in components/deck/DeckStack.tsx.
+
+   Import this sheet PLAINLY (no layer(…)) — it manages its own layering per
+   the cascade contract (MIGRATION.md): the single-class card surface default
+   sits in @layer components so an app dress class (unlayered app CSS) or
+   call-site token utilities can re-dress a card, while the sticky cascade,
+   slots runway, rail state rules and the narrow-viewport collapse stay
+   unlayered on purpose — structural mechanics must outrank plain utilities. */
+
+/* Card surface — opaque surface + 1px hairline + radius. Deliberately NO
+   drop shadow and NO clip box: the seam between stacked cards is the next
+   opaque card covering this one. */
+@layer components {
+  .deck-card {
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    padding: 1rem;
+  }
+}
+
+/* Cards are DIRECT children of one shared container: a sticky element can
+   never leave its containing block, so per-card wrappers would drag each
+   card away as its own wrapper scrolls past. Sharing the container keeps
+   every card pinned until the whole deck ends; the gap is the scroll
+   runway between pins. */
+.deck-slots {
+  display: grid;
+  gap: 55svh;
+  /* tail runway: enough scroll after the last card enters for it to ride up
+     to its pinned offset, so the completed stack is the section's final state.
+     Consumers can shorten the hold via --deck-tail. */
+  padding-bottom: var(--deck-tail, 65svh);
+}
+
+.deck-card {
+  position: sticky;
+  /* nav clearance (--deck-top; the 5rem default fits the reference's
+     ~3.4rem site nav + breathing room) + a per-card cascade (--deck-peek)
+     so every pinned card keeps a visible top edge under the one covering it. */
+  top: calc(var(--deck-top, 5rem) + var(--deck-peek, 2.4rem) * var(--stack-index, 0));
+  will-change: transform;
+}
+
+/* Progress rail — mono labels pinned beside the stack; the active row lights
+   its dot with the accent. Rendered by DeckStack only when `rail` is given.
+   The column wrapper stretches to the grid row MINUS the tail runway (via
+   bottom margin), so the sticky pin releases with the last card instead of
+   hanging through the empty scroll-hold. */
+.deck-rail-col {
+  align-self: stretch;
+  min-height: 0;
+  margin-bottom: var(--deck-tail, 65svh);
+}
+.deck-rail-pin {
+  position: sticky;
+  top: 38vh;
+}
+
+.deck-rail {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 0.8rem;
+  border-left: 1px solid var(--hair);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.deck-rail li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.deck-rail .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink-mute) 20%, transparent);
+  flex-shrink: 0;
+}
+
+.deck-rail li.on {
+  color: var(--ink);
+}
+
+.deck-rail li.on .dot {
+  background: var(--accent);
+}
+
+/* Narrow: no stacking — the cards simply appear in sequence. The JS side
+   (DeckStack) gates its scale transform off below 901px too. */
+@media (max-width: 900px) {
+  .deck-slots {
+    gap: 0.9rem;
+    padding-bottom: 0;
+  }
+
+  .deck-card {
+    position: relative;
+    top: 0;
+  }
+
+  .deck-rail-col {
+    display: none;
+  }
+}

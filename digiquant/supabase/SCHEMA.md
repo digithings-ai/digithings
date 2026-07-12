@@ -90,6 +90,19 @@ local alias still `project_id "digiquant-atlas"`). Migration 046 adds the strate
 | `strategy_tearsheets` | `(strategy_id)` | Latest tearsheet payload (`metrics` jsonb, `equity_curve` jsonb, `as_of`). |
 | `strategy_signals` | `(strategy_id)` | Current state: `position` (long/flat/short), `last_signal_date`, `last_price`, `as_of`. |
 
+### Public portfolio surface — views only, new in migration 050 (#1461/#1462)
+
+The anon-readable read surface for digiquant.io's live portfolio page (user ruling
+2026-07-10, #1462: performance metrics only, never research notes). Curated
+security-definer views — the SELECT list is the privacy allowlist; no new tables.
+They pair with the `functions/prices-live/` edge function (see [`README.md`](README.md)).
+
+| View | Backed by | Purpose |
+|------|-----------|---------|
+| `public_portfolio_positions` | `positions` | Latest-date position book, performance columns only. **Excludes** `rationale`, `pm_notes`, `thesis_id`, `conviction`, `stop_loss_pct`, `target_pct_gain`, `horizon_days`. |
+| `public_nav_history` | `nav_history` | NAV series + cash/invested % + derived `day_return_pct`. |
+| `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback while `prices-live` is dormant / market closed. |
+
 ## RLS (consistent across all tables above)
 
 - Every table has `ENABLE ROW LEVEL SECURITY`.
@@ -102,6 +115,19 @@ local alias still `project_id "digiquant-atlas"`). Migration 046 adds the strate
   anon policy, so anon reads return an empty set (not an error) while the service
   role keeps full access. The fitted calibration is private; mirrors the
   `atlas_run_diagnostics` idiom (migration 033).
+- **Exception — strategy store lockdown (migration 051, #1462):** `strategies`,
+  `strategy_signals`, and `strategy_trades` had their anon policies dropped AND their
+  anon/authenticated grants revoked — anon access to live signals would bypass the
+  3-day public signal delay (PR #1479). `strategy_tearsheets` keeps its anon policy
+  (the pipeline writes the delayed view there). The Atlas research tables
+  (`documents`, `theses`, `decision_log`, `deliberation_*`, `positions` incl.
+  `rationale`/`pm_notes`) stay anon-readable **by design** — see
+  [`README.md`](README.md), "What is public on purpose".
+- **Views (migrations 041, 050):** RLS does not apply to views; the curated public
+  views are intentionally security-DEFINER (`security_invoker = false`) so the column
+  projection — not base-table policy — decides what anon sees, with explicit
+  `REVOKE ALL` + `GRANT SELECT TO anon, authenticated`. Supabase's advisor flags
+  `security_definer_view`; expected and accepted for this pattern.
 
 ## Dead / deprecated
 

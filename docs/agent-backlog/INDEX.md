@@ -8,6 +8,7 @@ Update this file when themes start/complete. Link **GitHub Issues** (not bare TO
 |-------|--------|----------------|--------------|
 | Design evolution (Graphite/Cursor/xAI primitives) | done | [#1200](https://github.com/digithings-ai/digithings/issues/1200) epic, #1201–#1231 · [backlog index](design-evolution/INDEX.md) | [`EVOLUTION.md`](../../frontend/digiweb/design/EVOLUTION.md) — all phases shipped except the #1212 changelog band (deferred: no releases data source) · extends #235 |
 | Agent ops & doc hygiene | in_progress | _(add GitHub issue URLs)_ | [ADR template](../adr/0000-template.md) |
+| DigiSkills — agent-skill compiler | in_progress | [#1453](https://github.com/digithings-ai/digithings/issues/1453) epic, #1454 P0 (ADR, done), #1458 P1 (compiler core, done), [#1472](https://github.com/digithings-ai/digithings/issues/1472) P2 (dogfood) | [ADR-0023](../adr/0023-digiskills-agent-skill-compiler.md) |
 | _(example) DigiGraph hub mode_ | todo |  | |
 
 ## Quick links

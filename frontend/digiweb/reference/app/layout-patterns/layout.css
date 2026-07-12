@@ -1,55 +1,15 @@
 /* Layout page — feature cell grammar + product frame technique. */
 
-/* Feature cells — base layout/type migrated to token utilities in
-   feature-cell-reference.tsx; only the combinator + :hover rules remain. */
+/* Feature cells — promoted to @digithings/web (#1450): the <FeatureCell/>
+   primitive (components/data-layout/FeatureCell.tsx) carries the utilities;
+   the fc-* combinator + :hover rules live in
+   @digithings/web/styles/data-layout.css, imported from globals.css. */
 
-.fc-cell:nth-child(even) .fc-copy {
-  order: 2;
-}
-
-.fc-link:hover {
-  text-decoration: underline;
-}
-
-/* Product frame — fixed artboard scaled to its container (container query) */
-
-.pf-viewport {
-  position: relative;
-  container-type: inline-size;
-  border: 1px solid var(--hair);
-  border-radius: 10px;
-  background: var(--bg);
-  overflow: hidden;
-  /* the artboard is 800 wide; height tracks it via the same scale factor */
-  aspect-ratio: 800 / 300;
-}
-
-.pf-artboard {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 800px;
-  height: 300px;
-  transform-origin: top left;
-  /* scale factor is measured and written by ProductFrame (ResizeObserver);
-     origin top-left so the scaled artboard pins to the frame corner */
-}
-
-.pf-tag {
-  position: absolute;
-  right: 0.6rem;
-  top: 0.6rem;
-  z-index: 2;
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.06em;
-  color: var(--ink);
-  background: color-mix(in srgb, var(--bg) 78%, transparent);
-  backdrop-filter: blur(6px);
-  border: 1px solid var(--hair);
-  border-radius: 5px;
-  padding: 0.15rem 0.45rem;
-}
+/* Product frame — promoted to @digithings/web (#1450): the <ProductFrame/>
+   primitive (components/data-layout/ProductFrame.tsx) owns the scale
+   mechanic; the pf-viewport/artboard/tag CSS lives in
+   @digithings/web/styles/data-layout.css, imported from globals.css. The
+   .pf-solo wrapper and .pf-mock-* demo tearsheet below stay with the page. */
 
 .pf-solo {
   margin-top: 1.2rem;
@@ -122,96 +82,11 @@
   color: var(--down);
 }
 
-@media (max-width: 760px) {
-  .fc-cell:nth-child(even) .fc-copy {
-    order: 0;
-  }
-}
-
-/* Bento grid — asymmetric module grid, livery per cell */
-
-.bento-grid {
-  margin-top: 1.2rem;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: 8.5rem;
-  gap: 0.9rem;
-}
-
-/* layout/border/padding migrated to utilities in bento-grid-reference.tsx;
-   position/overflow anchor the ::before hairline, background stays so the
-   .bento-hero color-mix tint wins via source order, transition keeps var(--ease). */
-.bento-cell {
-  position: relative;
-  background: var(--surface);
-  overflow: hidden;
-  transition: border-color 0.25s var(--ease), transform 0.25s var(--ease);
-}
-
-/* accent hairline that fills on hover — the mod-card grammar */
-.bento-cell::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 2px;
-  background: var(--accent);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.3s var(--ease);
-}
-
-.bento-cell:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
-}
-
-.bento-cell:hover::before {
-  transform: scaleX(1);
-}
-
-.bento-hero {
-  grid-column: span 2;
-  grid-row: span 2;
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
-}
-
-.bento-wide {
-  grid-column: span 2;
-}
-
-.bento-tall {
-  grid-row: span 2;
-}
-
-/* bento-cell-top / tier / role / name base migrated to utilities in
-   bento-grid-reference.tsx; only the .bento-hero descendant override remains. */
-.bento-hero .bento-name {
-  font-size: 1.3rem;
-}
-
-@media (max-width: 760px) {
-  .bento-grid {
-    grid-template-columns: 1fr;
-    grid-auto-rows: auto;
-  }
-
-  .bento-hero,
-  .bento-wide,
-  .bento-tall {
-    grid-column: auto;
-    grid-row: auto;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bento-cell {
-    transition: border-color 0.25s var(--ease);
-  }
-
-  .bento-cell:hover {
-    transform: none;
-  }
-}
+/* Bento grid — promoted to @digithings/web (#1450): the <BentoGrid/> +
+   <BentoCell/> primitives (components/data-layout/BentoGrid.tsx) carry the
+   utilities; the bento-* structural CSS (::before hover hairline, hero wash,
+   span rules, responsive collapse) lives in
+   @digithings/web/styles/data-layout.css, imported from globals.css. */
 
 /* Numbered stages — promoted to @digithings/web (#1415): the <NumberedStages/>
    primitive (components/stages/NumberedStages.tsx) carries the utilities; the

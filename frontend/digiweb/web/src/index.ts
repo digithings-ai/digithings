@@ -33,12 +33,16 @@ export { PricingMatrix, type PricingMatrixProps, type PricingMatrixTier, type Pr
 export { NumberedStages, type NumberedStage } from "./components/stages/NumberedStages";
 export { PerfMetrics, type PerfMetric } from "./components/metrics/PerfMetrics";
 export { StatCounter, type CounterStat } from "./components/metrics/StatCounter";
+// promoted primitives (#1450)
+export { WordReveal, type WordRevealProps } from "./components/typography/WordReveal";
+export { Marquee, type MarqueeItem, type MarqueeProps } from "./components/marquee/Marquee";
 export {
   TerminalManifest,
   type TerminalManifestRow,
   type TerminalManifestStatus,
   type TerminalManifestProps,
 } from "./components/TerminalManifest";
+export { DeckStack, DeckCard, type DeckStackProps, type DeckCardProps } from "./components/deck/DeckStack";
 // chat family (#1418)
 export { ChatTranscript, type ChatTranscriptProps } from "./components/chat/ChatTranscript";
 export { ChatMessage, type ChatMessageProps, type ChatRole, type ChatTone } from "./components/chat/ChatMessage";
@@ -102,6 +106,167 @@ export {
   type SheetContentProps,
   type TooltipContentProps,
 } from "./components/controls";
+
+// finance-charts family (#1450)
+export {
+  PriceChart,
+  EquityCurve,
+  DrawdownPlot,
+  useFinanceChart,
+  useFinanceChartPalette,
+  getFinancePalette,
+  readFinancePalette,
+  financeChartOptions,
+  tokenAlpha,
+  toChartTime,
+  useLightweightChart,
+  chartChromeOptions,
+  hostMonoFont,
+  toLineData,
+  timeToISO,
+  useChartTip,
+  ChartTipShell,
+  PRICE_CHART_DEMO,
+  EQUITY_CURVE_DEMO,
+  DRAWDOWN_DEMO,
+  type PriceChartProps,
+  type EquityCurveProps,
+  type DrawdownPlotProps,
+  type FinanceChartPalette,
+  type FinanceSeriesPoint,
+  type OhlcPoint,
+  type CrosshairLabelToken,
+  type ChartChrome,
+  type ChartTip,
+  type UseLightweightChartConfig,
+  type UseLightweightChartResult,
+} from "./components/finance-charts";
+
+// finance-composites family (#1450)
+export {
+  StockTicker,
+  OrderBook,
+  SortableTable,
+  PerformanceDashboard,
+  SyncedTearsheet,
+  type TickerItem,
+  type StockTickerProps,
+  type OrderBookLevel,
+  type OrderBookProps,
+  type SortableColumn,
+  type SortableTableProps,
+  type DashboardHeadline,
+  type DashboardRatio,
+  type DashboardAllocation,
+  type PerformanceDashboardProps,
+  type TearsheetPoint,
+  type SyncedTearsheetProps,
+} from "./components/finance-composites";
+
+// data-layout family (#1450)
+export {
+  Odometer,
+  OdometerStrip,
+  DotMatrixStat,
+  BentoGrid,
+  BentoCell,
+  ProductFrame,
+  FeatureCell,
+  TestimonialWall,
+  type OdometerStat,
+  type DotMatrixStatProps,
+  type BentoSpan,
+  type ProductFrameProps,
+  type FeatureCellProps,
+  type TestimonialQuote,
+  type TestimonialWallProps,
+} from "./components/data-layout";
+
+// effects-chrome family (#1450)
+export {
+  Pipeline,
+  RotatingPrompts,
+  StackingPanels,
+  AnnouncementBar,
+  TabStrip,
+  tabBaseId,
+  tabId,
+  tabPanelId,
+  ToastStack,
+  type PipelineProps,
+  type PipelineColumn,
+  type PipelineNode,
+  type PipelineStatus,
+  type PipelineSummaryItem,
+  type RotatingPromptsProps,
+  type StackingPanelsProps,
+  type StackingPanel,
+  type AnnouncementBarProps,
+  type TabStripProps,
+  type TabItem,
+  type ToastStackProps,
+  type ToastItem,
+  type ToastTone,
+} from "./components/effects-chrome";
+
+// finance-tearsheet family (#1463) — print-grade SVG tearsheet grammar
+// (charts share one ViewWindow; the PDF pipeline re-renders them, so SVG is
+// a hard constraint — see frontend/digiweb/CHARTS.md for the canvas split)
+export {
+  CandlestickChart,
+  TimeSeries,
+  SignedBars,
+  TradeReturnChart,
+  ReturnsMatrix,
+  SegToggle,
+  ChartLegend,
+  ChartResetButton,
+  KpiStrip,
+  Kpi,
+  TradeLogTable,
+  DirectionPill,
+  TearsheetCard,
+  TearsheetCardKpis,
+  TearsheetCardKpi,
+  LiveBadge,
+  LOOKBACK_OPTIONS,
+  viewWindowForPreset,
+  viewWindowLastYear,
+  matchLookbackPreset,
+  viewsNear,
+  PRINT_FULL_VIEW,
+  runTearsheetPrint,
+  isOpenTrade,
+  fmtCompact,
+  fmtPct,
+  fmtMoney,
+  fmtNum,
+  toneClass,
+  dailyReturnsFromEquity,
+  annualizedVolPct,
+  TEARSHEET_DEMO,
+  type CandlestickChartProps,
+  type TimeSeriesProps,
+  type SignedBarsProps,
+  type TradeReturnChartProps,
+  type ReturnsPeriod,
+  type MatrixMetric,
+  type ChartScale,
+  type ChartTone,
+  type ViewWindow,
+  type LookbackPreset,
+  type KpiStripProps,
+  type KpiProps,
+  type TradeLogTableProps,
+  type TradeLogColumn,
+  type TradeLogRow,
+  type TearsheetCardProps,
+  type LiveBadgeProps,
+  type TearsheetSeriesPoint,
+  type TearsheetOhlcBar,
+  type TearsheetTrade,
+  type TradeReturnBar,
+} from "./components/finance-tearsheet";
 
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
 export { subsystems, subsystemById, type Subsystem } from "./data/subsystems";

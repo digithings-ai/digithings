@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
-
 /**
  * Sortable data table — a strategy leaderboard you can reorder by any column.
  * Click a header to sort (toggles asc/desc), the active column shows a caret and
  * carries aria-sort; numeric columns sort numerically, text lexically. Returns
  * wear the up colour, drawdown the down colour; everything else stays ink.
+ * Consumes the shared <SortableTable/> primitive from @digithings/web.
+ * Client component — the column `format`/`rowKey` functions can't cross the
+ * RSC serialization boundary, so the specimen owns the client edge.
  */
+import { SortableTable, type SortableColumn } from "@digithings/web";
+
 type Row = { strat: string; cagr: number; pf: number; win: number; dd: number; sharpe: number };
 
 const ROWS: Row[] = [
@@ -19,43 +22,28 @@ const ROWS: Row[] = [
   { strat: "momentum", cagr: 41.0, pf: 2.1, win: 52, dd: -24.6, sharpe: 1.4 },
 ];
 
-type Col = {
-  key: keyof Row;
-  label: string;
-  num: boolean;
-  fmt: (v: Row[keyof Row]) => string;
-  tone?: "up" | "down";
-};
-
-const COLS: Col[] = [
-  { key: "strat", label: "strategy", num: false, fmt: (v) => String(v) },
-  { key: "cagr", label: "cagr", num: true, fmt: (v) => `+${(v as number).toFixed(1)}%`, tone: "up" },
-  { key: "pf", label: "pf", num: true, fmt: (v) => (v as number).toFixed(2) },
-  { key: "win", label: "win", num: true, fmt: (v) => `${v}%` },
-  { key: "dd", label: "max dd", num: true, fmt: (v) => `${(v as number).toFixed(1)}%`, tone: "down" },
-  { key: "sharpe", label: "sharpe", num: true, fmt: (v) => (v as number).toFixed(2) },
+const COLS: SortableColumn<Row>[] = [
+  { key: "strat", label: "strategy", emphasis: true },
+  {
+    key: "cagr",
+    label: "cagr",
+    numeric: true,
+    format: (v) => `+${(v as number).toFixed(1)}%`,
+    tone: "up",
+  },
+  { key: "pf", label: "pf", numeric: true, format: (v) => (v as number).toFixed(2) },
+  { key: "win", label: "win", numeric: true, format: (v) => `${v}%` },
+  {
+    key: "dd",
+    label: "max dd",
+    numeric: true,
+    format: (v) => `${(v as number).toFixed(1)}%`,
+    tone: "down",
+  },
+  { key: "sharpe", label: "sharpe", numeric: true, format: (v) => (v as number).toFixed(2) },
 ];
 
 export function SortableTableReference() {
-  const [sortKey, setSortKey] = useState<keyof Row>("pf");
-  const [dir, setDir] = useState<"asc" | "desc">("desc");
-
-  const sorted = [...ROWS].sort((a, b) => {
-    const av = a[sortKey];
-    const bv = b[sortKey];
-    const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
-    return dir === "asc" ? cmp : -cmp;
-  });
-
-  const onSort = (key: keyof Row) => {
-    if (key === sortKey) {
-      setDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setDir(key === "strat" ? "asc" : "desc");
-    }
-  };
-
   return (
     <section className="section-block" id="sortable-table">
       <p className="kicker">{"// sortable table"}</p>
@@ -66,42 +54,13 @@ export function SortableTableReference() {
         text lexically. Returns wear the up color, drawdown the down.
       </p>
 
-      <div className="mt-[1.2rem] overflow-x-auto rounded-[12px] border border-hair bg-surface">
-        <table className="srt-table">
-          <thead>
-            <tr>
-              {COLS.map((c) => {
-                const active = c.key === sortKey;
-                return (
-                  <th
-                    key={c.key}
-                    className={c.num ? "srt-r" : "srt-l"}
-                    aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
-                  >
-                    <button type="button" className={`srt-head${active ? " is-active" : ""}`} onClick={() => onSort(c.key)}>
-                      {c.label}
-                      <span className="srt-caret" aria-hidden="true">
-                        {active ? (dir === "asc" ? "▲" : "▼") : "↕"}
-                      </span>
-                    </button>
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((row) => (
-              <tr key={row.strat}>
-                {COLS.map((c) => (
-                  <td key={c.key} className={`${c.num ? "srt-r" : "srt-l"}${c.tone ? ` ${c.tone}` : ""}${c.key === "strat" ? " srt-sym" : ""}`}>
-                    {c.fmt(row[c.key])}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <SortableTable
+        rows={ROWS}
+        columns={COLS}
+        rowKey={(r) => r.strat}
+        defaultSort={{ key: "pf", dir: "desc" }}
+        className="mt-[1.2rem]"
+      />
     </section>
   );
 }

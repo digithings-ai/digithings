@@ -2,9 +2,8 @@
 
 import { useState } from 'react';
 import { Calendar, FileText, GitBranch, Scale, TrendingUp } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import DocumentExpandInline from '@/components/library/DocumentExpandInline';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { canonicalPmTitle } from '@/components/portfolio/tabs/palette-and-format';
 import { useDashboard } from '@/lib/dashboard-context';
 import { docMatchesLibraryScope } from '@/lib/library-doc-tier';
@@ -81,9 +80,7 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
             <p className="text-[11px] font-semibold text-ink-mute uppercase tracking-wider mb-2">
               Narrative / memo notes
             </p>
-            <div className="prose prose-invert max-w-none text-sm">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(notes)}</ReactMarkdown>
-            </div>
+            <SafeMarkdown>{cleanMemoProse(notes)}</SafeMarkdown>
           </div>
         ) : null}
         {actions.length > 0 ? (
@@ -128,9 +125,7 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
             </table>
           </div>
         ) : !notes ? (
-          <div className="prose prose-invert max-w-none text-sm">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
-          </div>
+          <SafeMarkdown>{md}</SafeMarkdown>
         ) : null}
       </div>
     </div>

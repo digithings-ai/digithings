@@ -1,57 +1,21 @@
-"use client";
-
-import { useRef } from "react";
-import { useInView, useReducedMotion } from "motion/react";
-
 /**
  * Odometer counter — the mechanical digit-roll (Revolut's sleek counters), the
  * companion to the count-up stat. Each digit is a 0–9 reel; on scroll-into-view
  * every reel rolls to its target with a staggered delay. Non-digit characters
  * ($ , . %) sit static between reels. The whole figure carries an aria-label so
- * screen readers read the value once; reels are decorative. Reduced motion
- * drops the roll and shows the final value.
+ * screen readers read the value once; reels are decorative. Reduced motion and
+ * no-JS both show the settled value (SSR ships the reels on their final digit).
+ * Consumes the shared <OdometerStrip/> primitive from @digithings/web.
+ * Interactive display template.
  */
-const STATS = [
+import { OdometerStrip, type OdometerStat } from "@digithings/web";
+
+const STATS: OdometerStat[] = [
   { label: "equity under test", value: "$1,284,000" },
   { label: "backtests run", value: "3,102" },
   { label: "profit factor", value: "2.31" },
   { label: "modules", value: "12" },
 ];
-
-function Odometer({ value }: { value: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { amount: 0.6, once: true });
-  const reduced = useReducedMotion();
-  const settled = inView || reduced;
-
-  return (
-    <span className="odo" ref={ref} aria-label={value}>
-      {value.split("").map((c, i) =>
-        /[0-9]/.test(c) ? (
-          <span className="odo-reel" key={i} aria-hidden="true">
-            <span
-              className="odo-strip"
-              style={{
-                transform: `translateY(${-(settled ? Number(c) : 0) * 10}%)`,
-                transitionDelay: `${i * 55}ms`,
-              }}
-            >
-              {Array.from({ length: 10 }, (_, n) => (
-                <span className="odo-digit" key={n}>
-                  {n}
-                </span>
-              ))}
-            </span>
-          </span>
-        ) : (
-          <span className="odo-sep" key={i} aria-hidden="true">
-            {c}
-          </span>
-        ),
-      )}
-    </span>
-  );
-}
 
 export function OdometerReference() {
   return (
@@ -65,16 +29,7 @@ export function OdometerReference() {
         without the roll.
       </p>
 
-      <div className="mt-[1.2rem] grid grid-cols-4 overflow-hidden rounded-[12px] border border-hair bg-surface max-[720px]:grid-cols-2">
-        {STATS.map((s) => (
-          <div className="odo-cell" key={s.label}>
-            <Odometer value={s.value} />
-            <span className="mt-[0.55rem] block font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">
-              {s.label}
-            </span>
-          </div>
-        ))}
-      </div>
+      <OdometerStrip stats={STATS} className="mt-[1.2rem]" />
     </section>
   );
 }

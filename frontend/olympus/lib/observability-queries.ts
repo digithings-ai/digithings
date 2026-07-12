@@ -22,12 +22,12 @@ import type { TableRow, ViewRow } from './database.types';
 import type { AtlasRunDiagnostics } from './types';
 import { computeEffectivePortfolioRiskMetrics } from './portfolio-risk-metrics';
 import { backtestDecisions, type DecisionInput } from './decision-track-record';
+import type { TearsheetSeriesPoint } from '@digithings/web';
 import type {
   DecisionLogRow,
   OlympusTearsheet,
   TearsheetBreakdown,
   TearsheetData,
-  TearsheetPoint,
 } from '@/components/tearsheet/types';
 
 const DECISION_LIMIT = 1000;
@@ -138,7 +138,7 @@ function latestDateRows<T extends { date: string | null }>(rows: T[]): { rows: T
 }
 
 /** Drawdown (%) from a peak-to-current equity curve — mirrors tearsheet_data._drawdown_from_equity. */
-function drawdownFromEquity(points: TearsheetPoint[]): TearsheetPoint[] {
+function drawdownFromEquity(points: TearsheetSeriesPoint[]): TearsheetSeriesPoint[] {
   if (!points.length) return [];
   let peak = points[0].v;
   return points.map((p) => {
@@ -172,7 +172,7 @@ export function buildOlympusTearsheet(args: {
 }): OlympusTearsheet {
   const navAsc = [...args.nav].sort((a, b) => a.date.localeCompare(b.date));
   const navPoints = navAsc.length;
-  const equity: TearsheetPoint[] = navAsc.map((r) => ({ t: r.date, v: r.nav }));
+  const equity: TearsheetSeriesPoint[] = navAsc.map((r) => ({ t: r.date, v: r.nav }));
   const snaps = navAsc.map((r) => ({ date: r.date, nav: r.nav }));
   const drawdown = navPoints >= 2 ? drawdownFromEquity(equity) : [];
   const risk = computeEffectivePortfolioRiskMetrics(

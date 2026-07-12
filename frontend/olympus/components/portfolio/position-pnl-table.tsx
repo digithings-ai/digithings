@@ -5,6 +5,13 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { DashboardPositionEvent, Position, PositionHistoryRow, Thesis } from '@/lib/types';
 import PositionDrilldown from '@/components/portfolio/PositionDrilldown';
 
+/*
+ * Ruling (#1450 F4 batch D): stays a local table. The row drilldown is always
+ * live at the only call site (PerformanceTab always derives an anchor date),
+ * P&L % wears per-cell sign-dependent money colors, and three columns hide
+ * responsively — all outside the promoted <SortableTable/> leaderboard
+ * grammar — see lib/TABLES.md.
+ */
 export function PositionPnlTable({
   positions,
   priceChartAnchorDate,

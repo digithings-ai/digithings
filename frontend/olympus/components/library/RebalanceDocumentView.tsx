@@ -1,7 +1,6 @@
 'use client';
 
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { cleanMemoProse, summarizeRecommendedPortfolio } from '@/lib/render-pipeline-payloads';
 
 // Legacy shape: body.rebalance_table rows
@@ -97,9 +96,7 @@ export default function RebalanceDocumentView({
   // ── Fallback ─────────────────────────────────────────────────────────────
   if (!isLiveShape && !legacyRows.length && !pmNotes) {
     return (
-      <div className="prose prose-invert max-w-none text-sm">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
-      </div>
+      <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
     );
   }
 
@@ -142,9 +139,7 @@ export default function RebalanceDocumentView({
             <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
               Narrative / memo notes
             </h3>
-            <div className="prose prose-invert max-w-none text-sm">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(liveNotes)}</ReactMarkdown>
-            </div>
+            <SafeMarkdown>{cleanMemoProse(liveNotes)}</SafeMarkdown>
           </div>
         ) : null}
 
@@ -240,9 +235,7 @@ export default function RebalanceDocumentView({
           <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
             Narrative / memo notes
           </h3>
-          <div className="prose prose-invert max-w-none text-sm">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(pmNotes)}</ReactMarkdown>
-          </div>
+          <SafeMarkdown>{cleanMemoProse(pmNotes)}</SafeMarkdown>
         </div>
       ) : null}
 

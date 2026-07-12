@@ -7,9 +7,16 @@
 The reference grammar for lightweight-charts lives in the digiweb design
 reference (`frontend/digiweb/reference/components/equity-curve-reference.tsx`,
 `drawdown-plot-reference.tsx`): token-themed via CSS-variable reads with SSR
-fallbacks, `autoSize: true`, no custom candle renderers. The olympus-local
-scaffold is `lib/lw-chart.tsx`; every color continues to come from
-`lib/chart-colors.ts` (the single sanctioned color source, #1402).
+fallbacks, `autoSize: true`, no custom candle renderers. Since #1450 batch E
+the scaffold itself lives in `@digithings/web` (the finance-charts family's
+`lw-chart.tsx`: persistent `useLightweightChart` lifecycle with `isAlive()`
+disposal guard, `toLineData`/`timeToISO` adapters, `useChartTip`/
+`ChartTipShell` tooltip plumbing, `chartChromeOptions` token chrome shared
+with `useFinanceChart`); `lib/lw-chart.tsx` here is a thin adapter binding
+that scaffold to olympus's ChartColors — every color continues to come from
+`lib/chart-colors.ts` (the single sanctioned color source, #1402), which
+stays olympus-local (fixed categorical/benchmark hues are app vocabulary,
+not package surface).
 
 ## Classification
 
@@ -39,15 +46,19 @@ ticker/bucket/leg, stacked composition, trivial sparklines) stays on recharts.
 | `components/observability/DecisionScorecardTab.tsx` | Hit-rate by conviction bucket bars | Categorical (x = conviction bucket). |
 | `components/twelve-x/ConsensusTab.tsx` | Consensus score lines (x = run_date) + position-split stacked area | The stacked split is composition (no lw grammar) and both panes share one currency-selection/smoothing state; splitting one view across two engines costs more than canon buys. Honest note: the score-lines pane *is* time-indexed — if it is ever decoupled from the split pane it becomes a migrate candidate. |
 
-`components/tearsheet/OlympusTearsheetView.tsx` draws pure print-oriented SVG
-(no recharts import — it only mentions recharts in a comment) and is out of
-scope for both engines.
+`components/tearsheet/OlympusTearsheetView.tsx` renders the shared
+finance-tearsheet family's print-oriented SVG charts (`TimeSeries`,
+`SignedBars` from `@digithings/web`, #1463) and is out of scope for both
+engines here — print-grade surfaces are pure SVG by hard constraint (the PDF
+pipeline re-renders them via `runTearsheetPrint`); the canvas-vs-SVG split
+ruling lives in `frontend/digiweb/CHARTS.md`.
 
 ## Grammar for new charts
 
 - New **time-series** chart → `useLightweightChart` from `lib/lw-chart.tsx`
   (token theming, autoSize, theme-reactive re-skin, reduced-motion handling
-  come for free). Colors only from `lib/chart-colors.ts`.
+  come for free — the lifecycle itself is the shared `@digithings/web`
+  finance-charts scaffold). Colors only from `lib/chart-colors.ts`.
 - New **categorical/composition** chart → recharts, colors only from
   `lib/chart-colors.ts` (`useChartColors()` for semantic hues, the fixed
   allowlist for series identity).

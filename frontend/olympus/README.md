@@ -7,7 +7,7 @@ Next.js 15 investment-intelligence dashboard for **DigiQuant Olympus** — the u
 
 Olympus matches the digiquant.io aesthetic by importing the shared canon
 tokens, **the** Tailwind v4 bridge (`web-theme.css`), and the quant-native +
-tearsheet primitives directly in `app/globals.css`:
+finance-tearsheet grammars directly in `app/globals.css`:
 
 ```css
 @import "tailwindcss";
@@ -15,8 +15,13 @@ tearsheet primitives directly in `app/globals.css`:
 @import "@digithings/design/tokens.css";
 @import "@digithings/web/styles/web-theme.css";        /* THE @theme inline bridge (#1402) */
 @import "@digithings/design/quant-native/styles.css";
-@import "@digithings/design/tearsheet/styles.css";
+@import "@digithings/web/styles/finance-tearsheet.css"; /* print-grade .ts-* family (#1463) */
 ```
+
+The performance tear sheet (`/portfolio/performance`) renders the shared
+finance-tearsheet family (`TimeSeries`, `SignedBars`, `Kpi`/`KpiStrip`,
+`runTearsheetPrint` from `@digithings/web`); olympus keeps its §13 dashboard
+variants and shell print rules app-side at the bottom of `globals.css`.
 
 The root layout scopes the page to the DigiQuant accent and blueprint
 background:
@@ -62,6 +67,18 @@ Global `.recharts-*` overrides in `globals.css` now reference the canon tokens
 (`--hair`, `--ink-mute`, `--font-mono`) so the remaining categorical charts
 follow the shared palette. Every chart color — both engines — comes from
 `lib/chart-colors.ts` (the single sanctioned color source, #1402).
+
+### Table grammar
+
+The portfolio tables stay app-local: the promoted `<SortableTable/>`
+leaderboard (`@digithings/web` finance-composites) cannot host their row
+drilldown, sector grouping, per-cell money tones, or responsive column
+hiding (#1450 F4 batch D). The twelve-x tables stay local too: the frozen
+Consensus — G10 spec exceeds the primitive's string-cell API, and MatrixTab
+has no sortable tabular surface at all (#1450 F5 tables). The per-file
+rulings — and what adoption would take — live in
+[`lib/TABLES.md`](lib/TABLES.md). New *flat* leaderboards should adopt the
+primitive instead of hand-rolling sort state.
 
 ## Supabase / RLS
 

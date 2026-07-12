@@ -397,16 +397,27 @@ a { color: inherit; text-decoration: none; }
 .footer-meta { font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-mute); }
 
 /* ── colophon — the page's last word (canon §08) ────────────────────────
-   The module's name at giant scale, 1px hairline outline (an outline,
-   never a glow). Scroll-scrubbed with zero JS: CSS scroll-driven
-   animation behind @supports; reduced-motion / no-support renders the
-   name standing. The <b> suffix reads var(--accent) — livery on module
-   sites, ink on the umbrella (which collapses --accent to ink). */
+   The module's name at giant scale, 1px hairline outline by default.
+   Scroll-scrubbed with zero JS: CSS scroll-driven animation behind
+   @supports; reduced-motion / no-support renders the name standing. The
+   <b> suffix reads var(--accent) — livery on module sites, ink on the
+   umbrella (which collapses --accent to ink). An opt-in glow sweep
+   (Colophon `sweep` prop, .colo-sweep below) is the one sanctioned
+   exception to outline-only. */
 .colophon { overflow: hidden; padding: 5rem 0 0; user-select: none; pointer-events: none; }
 /* fallback stroke first: without color-mix() support the refined declaration
-   drops, and transparent fill + no stroke would render nothing. */
-.colo-word { display: block; font-family: var(--font-mono); font-weight: 500; font-size: clamp(3rem, 15.5vw, 15rem); line-height: 0.82; letter-spacing: -0.05em; white-space: nowrap; text-align: center; color: transparent; -webkit-text-stroke: 1px var(--ink); -webkit-text-stroke: 1px color-mix(in srgb, var(--ink) 30%, transparent); }
+   drops, and transparent fill + no stroke would render nothing.
+   position: relative anchors the optional .colo-sweep overlay. */
+.colo-word { position: relative; display: block; font-family: var(--font-mono); font-weight: 500; font-size: clamp(3rem, 15.5vw, 15rem); line-height: 0.82; letter-spacing: -0.05em; white-space: nowrap; text-align: center; color: transparent; -webkit-text-stroke: 1px var(--ink); -webkit-text-stroke: 1px color-mix(in srgb, var(--ink) 30%, transparent); }
 .colo-word b { font-weight: 500; color: transparent; -webkit-text-stroke: 1px var(--accent); -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 70%, transparent); }
+/* Opt-in glow sweep (Colophon `sweep` prop) — a light passing left-to-right
+   across the sign, ported from the reference footer specimen. A duplicate
+   overlay span carries an accent gradient clipped to its own glyphs; the
+   component (Motion) scrubs background-position from off-left to off-right
+   against the colophon's scroll progress. Parked off-screen by default
+   (132% ≈ band clear of the left edge), so no-JS and reduced-motion both
+   show just the static outlined wordmark, no glow. */
+.colo-sweep { display: block; position: absolute; inset: 0; -webkit-text-stroke-width: 0; color: transparent; background: linear-gradient(100deg, transparent 38%, color-mix(in srgb, var(--accent) 72%, transparent) 50%, transparent 62%); background-size: 250% 100%; background-repeat: no-repeat; background-position: 132% 0; -webkit-background-clip: text; background-clip: text; }
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     /* entry-based ranges: the colophon sits at the document's end, so
