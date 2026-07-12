@@ -20,7 +20,7 @@ const chipTitleStyle: React.CSSProperties = {
 export function ToolInvocationCard({ part }: { part: MsgPart }) {
   if (!isToolOrDynamicToolUIPart(part)) {
     return (
-      <pre className="overflow-x-auto rounded-md border border-border/50 bg-black/40 p-3 text-xs">
+      <pre className="overflow-x-auto rounded-md border border-border/50 bg-term-bg p-3 text-xs">
         {JSON.stringify(part, null, 2)}
       </pre>
     );
@@ -35,7 +35,7 @@ export function ToolInvocationCard({ part }: { part: MsgPart }) {
             {part.state}
           </span>
         </summary>
-        <pre className="mt-2 max-h-40 overflow-auto rounded border border-border/40 bg-black/35 p-2 font-mono text-[11px]">
+        <pre className="mt-2 max-h-40 overflow-auto rounded border border-border/40 bg-term-bg p-2 font-mono text-[11px]">
           {JSON.stringify({ input: part.input, output: part.output }, null, 2)}
         </pre>
       </details>
@@ -50,7 +50,7 @@ export function ToolInvocationCard({ part }: { part: MsgPart }) {
           {part.state}
         </span>
       </summary>
-      <pre className="mt-2 max-h-48 overflow-auto rounded border border-border/40 bg-black/35 p-2 font-mono text-[11px]">
+      <pre className="mt-2 max-h-48 overflow-auto rounded border border-border/40 bg-term-bg p-2 font-mono text-[11px]">
         {JSON.stringify(part, null, 2)}
       </pre>
     </details>

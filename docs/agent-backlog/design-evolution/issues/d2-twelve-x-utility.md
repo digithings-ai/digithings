@@ -1,6 +1,6 @@
 ## Goal
 
-Polish **twelve-x** FX research UI toward x.ai + Cursor utility: mono uppercase stat headers, outline filter pills, key-metric counter strip ([`EVOLUTION.md` §3 twelve-x](../../../../frontend/design/EVOLUTION.md)).
+Polish **twelve-x** FX research UI toward x.ai + Cursor utility: mono uppercase stat headers, outline filter pills, key-metric counter strip ([`EVOLUTION.md` §3 twelve-x](../../../../frontend/digiweb/design/EVOLUTION.md)).
 
 ## Component
 
@@ -26,7 +26,7 @@ Manual: twelve-x tab navigation + filter interaction
 ## Documentation to Update
 
 - [ ] `frontend/olympus/ARCHITECTURE.md` — twelve-x UI conventions
-- [ ] `frontend/design/EVOLUTION.md`
+- [ ] `frontend/digiweb/design/EVOLUTION.md`
 
 ## Out of Scope
 

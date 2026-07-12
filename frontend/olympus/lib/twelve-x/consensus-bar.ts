@@ -8,6 +8,8 @@
  * versions — ConsensusTab can import these unchanged.
  */
 
+import { CURRENCY_COLORS, CURRENCY_FALLBACK } from '../chart-colors';
+
 /** Max absolute consensus score; the bar half-track represents `[0, SCORE_MAX]`. */
 export const SCORE_MAX = 2;
 /** |score| ≥ STRONG_BAND ⇒ strong conviction. */
@@ -15,30 +17,17 @@ export const STRONG_BAND = 1.25;
 /** |score| ≥ LEAN_BAND ⇒ directional lean (below ⇒ neutral). */
 export const LEAN_BAND = 0.35;
 
-/** Stable per-currency colors (G10 order). */
-const CURRENCY_COLORS: Record<string, string> = {
-  USD: '#3B82F6',
-  EUR: '#10B981',
-  JPY: '#F59E0B',
-  GBP: '#EF4444',
-  CHF: '#8B5CF6',
-  CAD: '#06B6D4',
-  AUD: '#F97316',
-  NZD: '#EC4899',
-  SEK: '#6366F1',
-  NOK: '#14B8A6',
-};
-
-/** Map a currency code to its stable chart color, falling back to slate. */
+/** Map a currency code to its stable chart color, falling back to slate.
+ * Hues live in the sanctioned fixed allowlist (lib/chart-colors.ts, #1402). */
 export function currencyColor(ccy: string): string {
-  return CURRENCY_COLORS[ccy] ?? '#94a3b8';
+  return CURRENCY_COLORS[ccy] ?? CURRENCY_FALLBACK;
 }
 
-/** score → `.fin-*` text color (strong/lean bands). */
+/** score → P&L text color class (strong/lean bands). */
 export function scoreColorClass(score: number): string {
-  if (score >= LEAN_BAND) return 'text-fin-green';
-  if (score <= -LEAN_BAND) return 'text-fin-red';
-  return 'text-text-secondary';
+  if (score >= LEAN_BAND) return 'text-up';
+  if (score <= -LEAN_BAND) return 'text-down';
+  return 'text-ink-soft';
 }
 
 /** score → human-readable conviction label. */

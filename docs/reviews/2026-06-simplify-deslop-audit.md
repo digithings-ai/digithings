@@ -266,7 +266,7 @@ No `any` / `as any` in TS; **~22** `catch (` sites; slop is **comment density** 
 | `components/portfolio/PerformanceTab.tsx:170` | Deslop | S | deps disable — encode comparableKey |
 | `components/app-shell-context.tsx:33` | Reuse | S | Same sidebar width pattern as digichat shell |
 
-### frontend/design/ + static landings — effort **M**
+### frontend/digiweb/design/ + static landings — effort **M**
 
 | Path:line | Cat | Sev | One-line fix |
 |-----------|-----|-----|--------------|

@@ -83,6 +83,36 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
     emit("embed_loaded", { accent });
   }, [accent]);
 
+  // Tenant theme drives the canon [data-theme] on <html> — the semantic
+  // tokens are scoped :root[data-theme="…"] (tokens.css), so a subtree class
+  // alone no longer flips the palette. Default stays dark like the pre-canon
+  // embed (this page is its own iframe document, so the root flip is scoped
+  // to the embed). The .dark/.light classes follow via ThemeClassSync
+  // (providers.tsx); the wrapper div below keeps its class for the Tailwind
+  // `dark:` variant inside the subtree.
+  //
+  // The app-wide ThemeProvider (providers.tsx, from @digithings/web) installs a
+  // persistent prefers-color-scheme listener that rewrites <html data-theme> to
+  // the OS scheme whenever there is no `dt-theme` localStorage key — always the
+  // case for an anonymous embed visitor, who never toggles the theme. Without a
+  // guard, a mid-session OS light↔dark switch would silently flip a tenant's
+  // forced theme. Re-assert the tenant theme via a MutationObserver so it wins
+  // over any external writer; the guarded write (only when it actually differs)
+  // keeps the observer loop-free.
+  useEffect(() => {
+    const el = document.documentElement;
+    const desired = tenantCfg.theme === "light" ? "light" : "dark";
+    const apply = () => {
+      if (el.getAttribute("data-theme") !== desired) {
+        el.setAttribute("data-theme", desired);
+      }
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, [tenantCfg.theme]);
+
   const accentStyle = tenantCfg.accent
     ? ({
         "--accent": tenantCfg.accent.color,

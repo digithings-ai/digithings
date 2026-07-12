@@ -5,15 +5,23 @@ Next.js 15 investment-intelligence dashboard for **DigiQuant Olympus** — the u
 
 ## Quant-native visual layer
 
-Olympus matches the digiquant.io aesthetic by importing the shared tokens and
-the quant-native primitives directly in `app/globals.css`:
+Olympus matches the digiquant.io aesthetic by importing the shared canon
+tokens, **the** Tailwind v4 bridge (`web-theme.css`), and the quant-native +
+finance-tearsheet grammars directly in `app/globals.css`:
 
 ```css
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @import "@digithings/design/tokens.css";
+@import "@digithings/web/styles/web-theme.css";        /* THE @theme inline bridge (#1402) */
 @import "@digithings/design/quant-native/styles.css";
+@import "@digithings/web/styles/finance-tearsheet.css"; /* print-grade .ts-* family (#1463) */
 ```
+
+The performance tear sheet (`/portfolio/performance`) renders the shared
+finance-tearsheet family (`TimeSeries`, `SignedBars`, `Kpi`/`KpiStrip`,
+`runTearsheetPrint` from `@digithings/web`); olympus keeps its §13 dashboard
+variants and shell print rules app-side at the bottom of `globals.css`.
 
 The root layout scopes the page to the DigiQuant accent and blueprint
 background:
@@ -32,9 +40,11 @@ background:
   Atlas-specific green where appropriate.
 - `.qn-metric` — tabular, mono, right-aligned numeric cells. Applied to the
   server-metrics strip; extend to additional metric sites as needed.
-- `.qn-up` / `.qn-down` — muted emerald / copper for directional P&L. Do
-  **not** reuse these for error states — those still use the
-  existing `--color-fin-red` / `--color-fin-amber` tokens.
+- `.qn-up` / `.qn-down` — directional P&L text, re-pointed in `globals.css` to
+  the canon `--up` / `--down` tokens (money-color semantics, fixed per theme —
+  they never follow a livery). Error and warning states draw from the canon set
+  too, via `text-down` / `text-warn`; the old `--color-fin-red` /
+  `--color-fin-amber` tokens were removed in #1402.
 
 ### Page chrome
 
@@ -43,11 +53,32 @@ at the top of `<main>` with route crumbs on the left and an `Open digiquant.io`
 link plus version/env label on the right. The version label reads
 `process.env.NEXT_PUBLIC_OLYMPUS_VERSION` and falls back to `v0.1 · dev`.
 
-### Recharts theming
+### Chart theming
 
-Global `.recharts-*` overrides in `globals.css` now reference tokens
-(`--border-color`, `--text-secondary`, `--font-family-mono`) so charts follow
-the shared palette. No chart library was swapped.
+Time-series charts (NAV/equity curves, drawdown, rolling risk, price + position
+panes) render on **lightweight-charts** — #1420 migrated six such charts off
+recharts onto the shared `useLightweightChart` scaffold (`lib/lw-chart.tsx`).
+recharts stays for categorical/composition surfaces (bars keyed by
+ticker/bucket, 100%-stacked allocation, trivial sparklines), which
+lightweight-charts has no grammar for. The engine ruling and the full per-file
+inventory live in [`lib/CHARTS.md`](lib/CHARTS.md).
+
+Global `.recharts-*` overrides in `globals.css` now reference the canon tokens
+(`--hair`, `--ink-mute`, `--font-mono`) so the remaining categorical charts
+follow the shared palette. Every chart color — both engines — comes from
+`lib/chart-colors.ts` (the single sanctioned color source, #1402).
+
+### Table grammar
+
+The portfolio tables stay app-local: the promoted `<SortableTable/>`
+leaderboard (`@digithings/web` finance-composites) cannot host their row
+drilldown, sector grouping, per-cell money tones, or responsive column
+hiding (#1450 F4 batch D). The twelve-x tables stay local too: the frozen
+Consensus — G10 spec exceeds the primitive's string-cell API, and MatrixTab
+has no sortable tabular surface at all (#1450 F5 tables). The per-file
+rulings — and what adoption would take — live in
+[`lib/TABLES.md`](lib/TABLES.md). New *flat* leaderboards should adopt the
+primitive instead of hand-rolling sort state.
 
 ## Supabase / RLS
 
@@ -191,12 +222,16 @@ realized return). So the portfolio + performance panels populate from the first
 run that produces a rebalance. `theses` / `portfolio_metrics` remain
 operator/refresh-script territory and may still be empty.
 
-## Token collision notes
+## Theme tokens
 
-Atlas declares its own Tailwind v4 `@theme` palette
-(`--color-bg-primary`, `--color-text-primary`, etc). The design
-tokens live in the separate `--bg-primary` / `--text-primary` namespace, so
-they coexist without collision. Components that need the shared palette
-reference the design names (`var(--border-color)`,
-`var(--accent-digiquant)`), while Tailwind utilities continue to resolve
-the Atlas palette.
+Olympus declares **no** Tailwind `@theme` bridge of its own — #1402 deleted the
+old app-local `@theme` palette (`--color-bg-primary`, `--color-text-primary`,
+`--color-fin-*`). `app/globals.css` now imports the shared bridge
+(`@digithings/web/styles/web-theme.css`) over the canon tokens
+(`@digithings/design/tokens.css`), so every utility (`bg-surface`, `text-ink`,
+`border-hair`, `text-up` / `text-down`, `font-mono`) resolves to the one canon
+palette. The only app-local custom props left in `globals.css` are non-utility
+depth cues (`--shadow-glass`) and the next/font family re-declarations that
+route the canon font tokens to the self-hosted Geist / Fraunces faces (#684) —
+no color palette. See [`../digiweb/MIGRATION.md`](../digiweb/MIGRATION.md) for
+the canon wiring and the `@theme inline` bridge rule.

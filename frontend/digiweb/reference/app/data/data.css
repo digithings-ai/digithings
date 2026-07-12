@@ -1,0 +1,412 @@
+/* Data page — dot-matrix stat, card deck, pricing precision table. */
+
+/* Dot-matrix stat — promoted to @digithings/web (#1450): <DotMatrixStat/>
+   (components/data-layout/DotMatrixStat.tsx) carries the utilities; the
+   dms-* LED cluster lives in @digithings/web/styles/data-layout.css,
+   imported from globals.css. (The former generic .dot/.dot.on pair is gone —
+   its last composer, the card-deck rail, promoted to
+   @digithings/web/styles/deck.css and carries its own self-contained
+   .deck-rail .dot rules.) */
+
+/* .dot-matrix-copy .label / .value / .note → utilities in dot-matrix-stat.tsx */
+
+/* Card deck — promoted to @digithings/web (#1450): the <DeckStack/> /
+   <DeckCard/> primitives (components/deck/DeckStack.tsx) carry the wrapper
+   utilities; the sticky + --stack-index mechanics, slots runway, rail state
+   and narrow collapse live in @digithings/web/styles/deck.css, imported from
+   globals.css. CardDeck (components/card-deck.tsx) is the thin consumer.
+   The deck-CONTENT variants below stay here: they are specimen card bodies
+   (deck-cards.tsx), not deck mechanics — the deck knows nothing about card
+   content. */
+
+.deck-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.8rem;
+}
+
+.deck-card-head h3 {
+  font-size: 1.2rem;
+}
+
+.deck-card-head span {
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+}
+
+.deck-card p {
+  margin-top: 0.35rem;
+  color: var(--ink-soft);
+}
+
+.deck-card dl {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.deck-card dt {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  letter-spacing: 0.08em;
+}
+
+.deck-card dd {
+  margin-top: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+}
+
+.deck-card dd.up {
+  color: var(--up);
+}
+
+.deck-card dd.down {
+  color: var(--down);
+}
+
+/* Deck card variants (content-only; the deck stays agnostic) */
+
+.deck-changelog-version {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+}
+
+.deck-changelog ul {
+  margin-top: 1rem;
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.deck-changelog li {
+  position: relative;
+  padding-left: 1.1rem;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.deck-changelog li::before {
+  content: "+";
+  position: absolute;
+  left: 0;
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+}
+
+.deck-quote {
+  margin: 0;
+  padding: 0.4rem 0.2rem;
+}
+
+.deck-quote blockquote {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-style: italic;
+  font-size: clamp(1.25rem, 2.6vw, 1.6rem);
+  letter-spacing: -0.013em;
+  line-height: 1.3;
+}
+
+.deck-quote figcaption {
+  margin-top: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.deck-alert-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+.deck-alert-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--ink-mute);
+}
+
+.deck-alert-status.down .deck-alert-dot {
+  background: var(--down);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--down) 44%, transparent);
+}
+
+.deck-alert-status.up .deck-alert-dot {
+  background: var(--up);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--up) 44%, transparent);
+}
+
+.deck-alert-time {
+  margin-left: auto;
+  color: var(--ink-mute);
+}
+
+.deck-alert h3 {
+  margin-top: 0.8rem;
+  font-size: 1.2rem;
+}
+
+/* Pricing + comparison matrix — promoted to @digithings/web (#1415).
+   Structure/behavior live in web/src/components/pricing/Pricing.tsx and
+   PricingMatrix.tsx (token-backed utilities); the CSS leave-rules (accent
+   tier wash, ✓ feature markers, billing-toggle state machinery) live in
+   @digithings/web/styles/pricing.css, imported via globals.css. */
+
+/* (The former @media (max-width: 900px) deck collapse moved to
+   @digithings/web/styles/deck.css with the rest of the deck mechanics; the
+   .dot-matrix-card / .deck wrapper collapses are max-[900px]:grid-cols-1
+   utilities in dot-matrix-stat.tsx / DeckStack.tsx.) */
+
+/* Changelog rail — horizontal scroll strip with drag, snap, and edge fades */
+
+/* .cr-head + .cr-nav wrappers → utilities in changelog-rail-reference.tsx */
+
+.cr-arrow {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.cr-arrow:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+/* Edge fades: the rail reads as a strip that continues past both sides */
+.cr-mask {
+  margin-top: 1.2rem;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 2.2rem,
+    #000 calc(100% - 2.2rem),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 2.2rem,
+    #000 calc(100% - 2.2rem),
+    transparent 100%
+  );
+}
+
+.cr-track {
+  display: flex;
+  gap: 0.9rem;
+  overflow-x: auto;
+  padding: 0.2rem 2.2rem;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.cr-track::-webkit-scrollbar {
+  display: none;
+}
+
+.cr-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.cr-card {
+  scroll-snap-align: start;
+  flex: 0 0 16.5rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 1.1rem;
+  user-select: none;
+}
+
+/* .cr-card-head + .cr-version → utilities in changelog-rail-reference.tsx.
+   .cr-tag stays CSS: it pairs with .cr-tag-feature / -breaking (specificity tie
+   + two-color mix borders). */
+
+.cr-tag {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  color: var(--ink-mute);
+}
+
+.cr-tag-feature {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 40%, var(--hair));
+}
+
+.cr-tag-breaking {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
+}
+
+/* .cr-date + .cr-title → utilities in changelog-rail-reference.tsx */
+
+.cr-card ul {
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.cr-card li {
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.cr-card li::before {
+  content: "+";
+  position: absolute;
+  left: 0;
+  font-family: var(--font-mono);
+  color: var(--ink-mute);
+}
+
+/* Stat counter — promoted to @digithings/web (#1415): the <StatCounter/>
+   primitive (components/metrics/StatCounter.tsx) carries the utilities; the
+   .sc-stat nth-child border grid lives in @digithings/web/styles/metrics.css,
+   imported from globals.css. */
+
+/* Roadmap Gantt — initiative bars across a month axis */
+
+/* .rg-scroll wrapper (mt / overflow-x-auto) → utilities in
+   roadmap-gantt-reference.tsx. The .rg grid below stays CSS: it reads / sets
+   --rg-label-w / --rg-cols / --rg-now, uses calc + two-color mixes + ::before. */
+
+.rg {
+  --rg-label-w: 11rem;
+  min-width: 620px;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 0.9rem 1rem 1rem;
+  font-family: var(--font-mono);
+}
+
+/* header: label spacer + one cell per month */
+.rg-head {
+  display: grid;
+  grid-template-columns: var(--rg-label-w) repeat(var(--rg-cols), 1fr);
+  border-bottom: 1px solid var(--hair);
+  padding-bottom: 0.5rem;
+}
+
+.rg-month {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+  text-align: center;
+}
+
+.rg-body {
+  position: relative;
+  padding-top: 0.7rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.rg-row {
+  display: grid;
+  grid-template-columns: var(--rg-label-w) repeat(var(--rg-cols), 1fr);
+  align-items: center;
+}
+
+.rg-label {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  padding-right: 0.6rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rg-bar {
+  height: 1.5rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--hair));
+  display: flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  overflow: hidden;
+}
+
+.rg-bar-span {
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--accent) 75%, var(--ink));
+  white-space: nowrap;
+}
+
+/* "now" marker: label width + fractional offset across the timeline area */
+.rg-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--rg-label-w) + (var(--rg-now) / var(--rg-cols)) * (100% - var(--rg-label-w)));
+  width: 1px;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+.rg-now::before {
+  content: "now";
+  position: absolute;
+  top: -0.1rem;
+  left: 0.2rem;
+  font-size: 0.52rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+/* ── marquee ticker (infinite "built on" strip) ─────────────────────────────
+   Promoted to @digithings/web (#1450): the <Marquee/> primitive
+   (components/marquee/Marquee.tsx) carries the item chip utilities + accent dot;
+   the overflow + edge-fade mask, the seamless-loop keyframes (mq-left/mq-right),
+   pause-on-hover and the reduced-motion stop live in
+   @digithings/web/styles/marquee.css, imported from reference/app/globals.css. */
+
+/* ── odometer — promoted to @digithings/web (#1450) ─────────────────────── */
+
+/* The <Odometer/> + <OdometerStrip/> primitives
+   (components/data-layout/Odometer.tsx) carry the utilities; the .odo-strip
+   reel mechanic and the .odo-cell data-cols hairline grid live in
+   @digithings/web/styles/data-layout.css, imported from globals.css. */
+
+/* ── sortable data table ─────────────────────────────────────────────────────────── */
+/* Promoted to @digithings/web (#1450): the <SortableTable/> primitive
+   (components/finance-composites/SortableTable.tsx) carries the utilities;
+   the .srt-* grammar (header states, hairline rows, td money colors) lives in
+   @digithings/web/styles/finance-composites.css, imported from globals.css. */

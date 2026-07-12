@@ -1,0 +1,52 @@
+import { ChatThinking } from "@digithings/web";
+
+/**
+ * Thinking chain — the model's reasoning steps streamed into the transcript as
+ * it works, each line revealing when scrolled into view. Consumes the shared
+ * <ChatThinking> primitive (@digithings/web); the steps here are illustrative
+ * example data.
+ */
+const STEPS = [
+  "The user wants an 8-year backtest of trend_xsec on ETH.",
+  "trend_xsec is cross-sectional, but this is a single symbol — fall back to the time-series variant.",
+  "Default fees look wrong for ETH-USD; use the venue's maker/taker schedule.",
+  "Cap sizing with Kelly at 0.5× so the drawdown stays bounded.",
+  "Route the run through digiquant · nautilus and stream the tearsheet back.",
+];
+
+export function ChatThinkingReference() {
+  return (
+    <section className="section-block">
+      <p className="kicker">{"// thinking chain"}</p>
+      <h2 className="title">Reasoning, folded by default.</h2>
+      <p className="section-copy">
+        Before the answer, the model&apos;s chain of thought collapses into a single chip — expand
+        it to audit the steps, leave it folded to just read the result. The steps stream in as they
+        arrive; a live run pulses, a finished one reports how long it took. Reduced motion shows the
+        whole chain at rest.
+      </p>
+
+      <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-[12px] border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
+        <div className="flex gap-[0.55rem] items-baseline justify-start">
+          <div className="chat-bubble--user min-w-0 border-0 bg-transparent p-0 font-mono text-[0.84rem] leading-[1.6] text-term-ink">
+            backtest trend_xsec on ETH, last eight years
+          </div>
+        </div>
+
+        <div className="flex gap-[0.55rem] items-baseline chat-turn--assistant">
+          <span className="shrink-0 font-mono text-[0.86rem] leading-[1.5] text-accent" aria-hidden="true">
+            ▸
+          </span>
+          <div className="chat-stack flex flex-col gap-[0.55rem] min-w-0 flex-1">
+            <ChatThinking label="Thought for 4.2s" steps={STEPS} live defaultOpen />
+
+            <div className="min-w-0 border-0 rounded-none bg-transparent p-0 text-ink-soft text-[0.88rem] leading-[1.6]">
+              Done — trend_xsec (time-series), 8y ETH-USD, Kelly-capped 0.5×. PF 2.31, max drawdown
+              −18.4%. Tearsheet below.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}

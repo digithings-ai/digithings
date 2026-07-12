@@ -13,17 +13,17 @@ function CriteriaList({
   tone: 'confirm' | 'break';
   emptyLabel: string;
 }) {
-  const accent = tone === 'confirm' ? 'text-fin-green' : 'text-fin-red';
+  const accent = tone === 'confirm' ? 'text-up' : 'text-down';
   const Icon = tone === 'confirm' ? Check : X;
   return (
     <div className="glass-card p-5">
-      <h3 className="mb-4 text-sm font-semibold text-text-primary">{title}</h3>
+      <h3 className="mb-4 text-sm font-semibold text-ink">{title}</h3>
       {items.length === 0 ? (
-        <p className="text-xs text-text-muted">{emptyLabel}</p>
+        <p className="text-xs text-ink-mute">{emptyLabel}</p>
       ) : (
         <ul className="space-y-3">
           {items.map((item, i) => (
-            <li key={i} className="flex items-start gap-3 text-sm leading-relaxed text-text-secondary">
+            <li key={i} className="flex items-start gap-3 text-sm leading-relaxed text-ink-soft">
               <Icon size={15} className={`mt-0.5 shrink-0 ${accent}`} aria-hidden />
               <span>{item}</span>
             </li>

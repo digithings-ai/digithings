@@ -3,8 +3,19 @@
 import { useEffect, useId, useState } from "react";
 
 /**
- * Renders a ```mermaid fenced block as an SVG diagram. Lazy-imports mermaid so
- * it stays out of the initial bundle when no diagram is shown.
+ * MermaidBlock — renders a ```mermaid fenced block from streamed model output as
+ * an SVG diagram, so the assistant can visualize pipelines and architecture.
+ *
+ * Safety: mermaid is initialized with `securityLevel: "strict"` (HTML labels off,
+ * click handlers/scripts stripped) and the source is attacker-influenceable model
+ * text. We render via `mermaid.render()`, which returns an SVG *string* that we
+ * inject into a contained node — the only `innerHTML` use across the chat
+ * surfaces, justified by strict mode + the fact that mermaid sanitizes its own
+ * output. The library is lazy-imported (dynamic `import`) so it stays out of the
+ * initial bundle when no diagram is shown.
+ *
+ * The raw source stays one click away via a "view source" toggle, and any parse
+ * error falls back to showing the code verbatim — never a broken diagram.
  */
 export function MermaidBlock({ code }: { code: string }) {
   const [svg, setSvg] = useState("");

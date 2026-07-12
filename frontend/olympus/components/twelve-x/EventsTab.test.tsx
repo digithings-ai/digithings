@@ -152,7 +152,7 @@ describe('EventsTab event-detail slide-over', () => {
     // List rows are clickable buttons (open the slide-over) rather than disabled.
     expect(html).toContain('Core PCE Price Index');
     // The legacy inline expand container must be gone.
-    expect(html).not.toContain('border-t border-border-subtle/60');
+    expect(html).not.toContain('border-t border-hair/60');
   });
 });
 

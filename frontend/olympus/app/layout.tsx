@@ -47,7 +47,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
-      <body className={`qn-blueprint-bg accent-digiquant min-h-screen bg-bg-primary text-text-primary antialiased ${geistSans.variable} ${geistMono.variable} ${fraunces.variable}`}>
+      <body className={`qn-blueprint-bg min-h-screen bg-bg text-ink antialiased ${geistSans.variable} ${geistMono.variable} ${fraunces.variable}`}>
         <ThemeProvider>
           <MotionLayer />
           <DashboardProvider>

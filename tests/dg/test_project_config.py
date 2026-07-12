@@ -83,6 +83,17 @@ def test_digi_project_config_allowed_tools() -> None:
     assert cfg.get_allowed_tools() == ["digisearch", "todo"]
 
 
+def test_get_digivault_url_defaults_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGIVAULT_URL", raising=False)
+    assert DigiProjectConfig({}).get_digivault_url() == "http://digivault:8004"
+
+    monkeypatch.setenv("DIGIVAULT_URL", "http://example.test:8004")
+    assert DigiProjectConfig({}).get_digivault_url() == "http://example.test:8004"
+
+    cfg = DigiProjectConfig({"services": {"digivault_url": "http://from-config:8004"}})
+    assert cfg.get_digivault_url() == "http://from-config:8004"
+
+
 def test_digi_project_config_indexes_dir_discovery(tmp_path: Path) -> None:
     """When indexes_dir is set, indexes are discovered from that directory."""
     (tmp_path / "indexes").mkdir()

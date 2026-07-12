@@ -16,10 +16,25 @@ gitignored ``calibrations.json``. The trade window (``trade_start``) is enforced
 inside the strategy, so warmup uses earlier bars while reported trades match the
 TradingView Strategy Tester window.
 
+Each strategy's backtest runs in its own spawned process: NautilusTrader's Rust
+logging can only initialize once per process, so a second in-process
+``BacktestEngine`` aborts the interpreter (#1389). Isolation also means one
+crashing strategy cannot take down the rest — failures are collected and the
+script exits non-zero if any strategy failed.
+
+``--signal-delay-days N`` (#1462) lags the public view of every strategy by N
+calendar days: the OHLCV frame is truncated so the run ends N days before the
+freshest cached bar, and the whole tearsheet is generated from that shorter
+series. End-date shift — not redaction — so the equity curve, drawdown, trade
+log, open-position state, and headline metrics are self-consistent by
+construction and none of them can leak the live position. Payloads declare the
+lag via ``signal_delay_days``.
+
 Usage:
     python scripts/generate_tearsheets.py
     python scripts/generate_tearsheets.py --strategy eth_slapper
     python scripts/generate_tearsheets.py --cache-dir digiquant/data/price-history
+    python scripts/generate_tearsheets.py --signal-delay-days 3
 """
 
 from __future__ import annotations
@@ -27,9 +42,17 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import multiprocessing
+import signal
 import sys
+from datetime import timedelta
 from decimal import Decimal
+from multiprocessing.connection import Connection
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import polars as pl
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -56,6 +79,30 @@ _PUBLISHED_BASELINE: dict[str, dict[str, float | int]] = {
 
 def load_settings() -> dict:
     return json.loads(SETTINGS_PATH.read_text())
+
+
+def apply_signal_delay(ohlcv: pl.DataFrame, signal_delay_days: int) -> pl.DataFrame:
+    """Truncate OHLCV so the run's end date lags the cached end by N calendar days.
+
+    End-date shift (#1462): the public tearsheets are generated as if the run
+    happened ``signal_delay_days`` days ago. Every derived artifact (equity
+    curve, drawdown, trade log, open-position state, headline metrics) is then
+    self-consistent by construction — there is no per-field redaction to get
+    wrong. The cutoff is calendar days from the newest bar's timestamp, not a
+    bar count, so gaps in the series still yield a true N-day lag.
+
+    ``0`` is an exact no-op (the frame is returned unchanged); negative values
+    would peek into the future and raise ``ValueError``.
+    """
+    import polars as pl
+
+    if signal_delay_days < 0:
+        raise ValueError(f"signal_delay_days must be >= 0, got {signal_delay_days}")
+    if signal_delay_days == 0 or ohlcv.is_empty():
+        return ohlcv
+    ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
+    cutoff = ohlcv[ts_col].max() - timedelta(days=signal_delay_days)
+    return ohlcv.filter(pl.col(ts_col) <= cutoff)
 
 
 def _mult(direction: str, entry_price: float, price: float) -> float:
@@ -139,7 +186,9 @@ def _avg_trade_pct(trades: list[dict]) -> float:
     return sum(t["pnl_pct"] for t in trades) / len(trades)
 
 
-def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict, calibration: dict | None = None):
+def run_nautilus(
+    strategy: str, symbol: str, ohlcv, settings: dict, calibration: dict | None = None
+):
     """Run the Nautilus backtest; return (positions_report_df, bars_list, ohlc_bars, signal_log).
 
     ``bars_list`` is [(date_str, close_float), ...] for the mark-to-market curve.
@@ -299,9 +348,9 @@ def carry_open_at_period_end(
 ) -> list[dict]:
     """Always-in-market: a close on the final bar is live MTM, not a flat book.
 
-    Nautilus may record ``ts_closed`` on the last daily bar when the backtest ends
-  while still positioned. For tearsheet / digiquant.io we keep that leg open so
-    the current-position banner matches TradingView's open trade at series end.
+      Nautilus may record ``ts_closed`` on the last daily bar when the backtest ends
+    while still positioned. For tearsheet / digiquant.io we keep that leg open so
+      the current-position banner matches TradingView's open trade at series end.
     """
     if not trades or not bars_list:
         return trades
@@ -396,6 +445,7 @@ def run_and_write(
     *,
     cal_source: str,
     push_supabase: bool = False,
+    signal_delay_days: int = 0,
 ) -> dict | None:
     from digiquant.data.prices.history_cache import load_cached
     from digiquant.strategies.calibrations_loader import resolve_calibrations
@@ -404,6 +454,14 @@ def run_and_write(
     ohlcv = load_cached(symbol, cache_dir)
     if ohlcv is None or ohlcv.is_empty():
         logger.error("No data for %s in %s", symbol, cache_dir)
+        return None
+    # Public signal delay (#1462): shift the whole run's end date back, so all
+    # published artifacts describe the same (lagged) point in time.
+    ohlcv = apply_signal_delay(ohlcv, signal_delay_days)
+    if ohlcv.is_empty():
+        logger.error(
+            "No data left for %s after applying %d-day signal delay", symbol, signal_delay_days
+        )
         return None
 
     d = settings["defaults"]
@@ -415,7 +473,14 @@ def run_and_write(
         source=cal_source,  # type: ignore[arg-type]
         trade_start=trade_start or None,
     )
-    logger.info("Running Nautilus backtest: %s (%s, %d bars, cal=%s)", strategy, symbol, len(ohlcv), cal_source)
+    logger.info(
+        "Running Nautilus backtest: %s (%s, %d bars, cal=%s, signal_delay=%dd)",
+        strategy,
+        symbol,
+        len(ohlcv),
+        cal_source,
+        signal_delay_days,
+    )
     positions, bars_list, ohlc_bars, signal_log = run_nautilus(
         strategy, symbol, ohlcv, settings, calibration=calibration
     )
@@ -463,16 +528,23 @@ def run_and_write(
         for t in closed
     ]
 
+    notes = [
+        f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
+        f"100% equity compounding, trade window from {trade_start}."
+    ]
+    if signal_delay_days:
+        notes.append(
+            f"Public signal delay: end date shifted back {signal_delay_days} days; "
+            f"all figures are as of {window[-1][0] if window else ''}."
+        )
     td = from_nautilus_run(
         summary,
         trade_dicts,
         equity_curve,
         data_source=d.get("data_source", "Coinbase daily OHLCV (CCXT)"),
         ohlc_bars=[b for b in ohlc_bars if not trade_start or b[0] >= trade_start],
-        notes=[
-            f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
-            f"100% equity compounding, trade window from {trade_start}."
-        ],
+        notes=notes,
+        signal_delay_days=signal_delay_days,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -514,6 +586,7 @@ def run_and_write(
         "kind": settings["strategies"][strategy].get("kind", "long_short"),
         "period_start": td.period_start,
         "period_end": td.period_end,
+        "signal_delay_days": td.signal_delay_days,
         "net_profit_pct": td.net_profit_pct,
         "max_drawdown_pct": td.max_drawdown_pct,
         "profit_factor": td.profit_factor,
@@ -542,6 +615,7 @@ def _push_tearsheet_to_supabase(strategy: str, td, equity_curve: list[tuple[str,
         "total_trades": td.total_trades,
         "period_start": td.period_start,
         "period_end": td.period_end,
+        "signal_delay_days": td.signal_delay_days,
         "final_equity": td.final_equity,
         "generated_at": td.generated_at,
     }
@@ -554,6 +628,121 @@ def _push_tearsheet_to_supabase(strategy: str, td, equity_curve: list[tuple[str,
         equity_curve=curve,
     )
     logger.info("  Pushed tearsheet summary → strategy_tearsheets (%s)", strategy)
+
+
+def _strategy_worker(
+    conn: Connection,
+    strategy: str,
+    symbol: str,
+    settings: dict,
+    cache_dir: Path,
+    output_dir: Path,
+    cal_source: str,
+    push_supabase: bool,
+    signal_delay_days: int,
+) -> None:
+    """Child-process entry point: run one strategy end-to-end, report via ``conn``."""
+    status: tuple[str, dict | str | None]
+    try:
+        entry = run_and_write(
+            strategy,
+            symbol,
+            settings,
+            cache_dir,
+            output_dir,
+            cal_source=cal_source,
+            push_supabase=push_supabase,
+            signal_delay_days=signal_delay_days,
+        )
+        if entry is not None:
+            status = ("ok", entry)
+        else:
+            status = ("error", "no tearsheet produced (see logs above)")
+    except Exception as exc:
+        logger.exception("Tearsheet run failed for %s", strategy)
+        status = ("error", f"{type(exc).__name__}: {exc}")
+    try:
+        conn.send(status)
+    finally:
+        conn.close()
+    if status[0] != "ok":
+        raise SystemExit(1)
+
+
+def _describe_exitcode(exitcode: int | None) -> str:
+    """Human-readable process exit description (signal-aware)."""
+    if exitcode is None:
+        return "unknown exit"
+    if exitcode < 0:
+        try:
+            name = signal.Signals(-exitcode).name
+        except ValueError:
+            name = f"signal {-exitcode}"
+        return f"killed by {name}"
+    return f"exit code {exitcode}"
+
+
+def _interpret_worker_result(
+    result: tuple[str, dict | str | None] | None,
+    exitcode: int | None,
+) -> tuple[dict | None, str | None]:
+    """Map a worker's pipe message + exit code to ``(index_entry, error)``."""
+    if result is None:
+        return None, f"backtest process died before reporting ({_describe_exitcode(exitcode)})"
+    kind, payload = result
+    if kind == "ok" and isinstance(payload, dict):
+        return payload, None
+    return None, str(payload)
+
+
+def run_strategy_isolated(
+    strategy: str,
+    symbol: str,
+    settings: dict,
+    cache_dir: Path,
+    output_dir: Path,
+    *,
+    cal_source: str,
+    push_supabase: bool = False,
+    signal_delay_days: int = 0,
+) -> tuple[dict | None, str | None]:
+    """Run one strategy's backtest in its own spawned process; return (entry, error).
+
+    NautilusTrader's Rust logging can only initialize once per process
+    (``log::set_boxed_logger``); a fresh in-process ``BacktestEngine`` per strategy
+    panics on the second engine — "Failed to initialize logging: attempted to set a
+    logger after the logging system was already initialized" — and SIGABRTs the
+    whole run (#1389). A spawned process per strategy gives each engine a clean
+    slate and contains any engine crash to that one strategy.
+    """
+    ctx = multiprocessing.get_context("spawn")
+    parent_conn, child_conn = ctx.Pipe(duplex=False)
+    proc = ctx.Process(
+        target=_strategy_worker,
+        args=(
+            child_conn,
+            strategy,
+            symbol,
+            settings,
+            cache_dir,
+            output_dir,
+            cal_source,
+            push_supabase,
+            signal_delay_days,
+        ),
+        name=f"tearsheet-{strategy}",
+    )
+    proc.start()
+    child_conn.close()
+    result: tuple[str, dict | str | None] | None = None
+    try:
+        result = parent_conn.recv()
+    except EOFError:
+        result = None
+    finally:
+        parent_conn.close()
+    proc.join()
+    return _interpret_worker_result(result, proc.exitcode)
 
 
 def main() -> None:
@@ -585,7 +774,16 @@ def main() -> None:
         action="store_true",
         help="Upsert headline metrics to strategy_tearsheets after each run",
     )
+    parser.add_argument(
+        "--signal-delay-days",
+        type=int,
+        default=0,
+        help="Lag the public tearsheets by N calendar days: truncate OHLCV so the run "
+        "ends N days before the freshest cached bar (end-date shift, #1462). Default 0.",
+    )
     args = parser.parse_args()
+    if args.signal_delay_days < 0:
+        parser.error("--signal-delay-days must be >= 0")
 
     from digiquant.strategies.calibrations_loader import pick_calibration_source
 
@@ -603,9 +801,10 @@ def main() -> None:
 
     targets = {args.strategy: strategies[args.strategy]} if args.strategy else strategies
 
-    entries = []
+    entries: list[dict] = []
+    failures: list[tuple[str, str]] = []
     for strat, cfg in targets.items():
-        entry = run_and_write(
+        entry, error = run_strategy_isolated(
             strat,
             cfg["symbol"],
             settings,
@@ -613,22 +812,36 @@ def main() -> None:
             args.output_dir,
             cal_source=cal_source,
             push_supabase=args.push_supabase,
+            signal_delay_days=args.signal_delay_days,
         )
-        if entry:
+        if entry is not None:
             entries.append(entry)
         else:
-            logger.error("FAILED: %s", strat)
+            failures.append((strat, error or "unknown error"))
+            logger.error("FAILED: %s — %s", strat, error)
 
     if entries:
         idx_path = args.output_dir / "index.json"
-        if args.strategy and idx_path.exists():
-            existing = [
-                e for e in json.loads(idx_path.read_text()) if e["strategy"] != args.strategy
-            ]
-            entries = existing + entries
-        idx_path.write_text(json.dumps(entries, indent=2))
-        logger.info("Updated index.json (%d strategies)", len(entries))
-    logger.info("Done.")
+        merged = list(entries)
+        if idx_path.exists() and (args.strategy or failures):
+            # Partial run (single strategy, or some strategies failed): keep prior
+            # index entries for strategies not refreshed here, so one failure does
+            # not drop a live strategy card from digiquant.io.
+            refreshed = {e["strategy"] for e in entries}
+            prior = [e for e in json.loads(idx_path.read_text()) if e["strategy"] not in refreshed]
+            merged = prior + entries
+        idx_path.write_text(json.dumps(merged, indent=2))
+        logger.info("Updated index.json (%d strategies)", len(merged))
+
+    succeeded = {e["strategy"] for e in entries}
+    logger.info("Done: %d/%d strategies succeeded.", len(succeeded), len(targets))
+    for strat in targets:
+        if strat in succeeded:
+            logger.info("  OK      %s", strat)
+        else:
+            logger.error("  FAILED  %s: %s", strat, dict(failures).get(strat, "unknown error"))
+    if failures:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
