@@ -55,7 +55,10 @@ export interface UseLivePricesOptions {
   /**
    * Coinbase product_ids to stream live from the public WS, e.g.
    * `["BTC-USD","ETH-USD","SOL-USD"]`. Streams regardless of Supabase config —
-   * this is the keyless lane and never touches the Supabase client.
+   * this is the keyless lane and never touches the Supabase client. These are
+   * also seeded from `public_price_latest` (which carries the `-USD` closes),
+   * so crypto shows a stale value before Coinbase connects / when it is dark —
+   * no need to also list them in `symbols`.
    */
   cryptoProductIds?: string[];
   /**

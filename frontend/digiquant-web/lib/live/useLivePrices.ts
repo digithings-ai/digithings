@@ -49,15 +49,19 @@ export function useLivePrices(options: UseLivePricesOptions = {}): LivePriceMap 
 
   const [quotes, setQuotes] = useState<LivePriceMap>({});
 
-  // Lane 1 — one-shot daily-close seed from public_price_latest.
+  // Lane 1 — one-shot daily-close seed from public_price_latest. Seeds the UNION
+  // of equities + crypto product_ids: `public_price_latest` carries the `-USD`
+  // closes too, so crypto still shows a (stale) value before Coinbase connects
+  // and when that lane is dark — consumers keep the two lists disjoint.
   useEffect(() => {
-    if (!client || symbols.length === 0) return;
+    const seedSymbols = [...new Set<string>([...symbols, ...cryptoProductIds])];
+    if (!client || seedSymbols.length === 0) return;
     let cancelled = false;
     void (async () => {
       const { data, error } = await client
         .from("public_price_latest")
         .select("ticker, close")
-        .in("ticker", symbols);
+        .in("ticker", seedSymbols);
       if (cancelled || error || !Array.isArray(data)) return;
       const seeds = data
         .map((r) => seedRowToLive(r as { ticker?: unknown; close?: unknown }))
@@ -67,8 +71,8 @@ export function useLivePrices(options: UseLivePricesOptions = {}): LivePriceMap 
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- symbolsKey tracks `symbols` content
-  }, [client, symbolsKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keys track array content
+  }, [client, symbolsKey, cryptoKey]);
 
   // Lane 2 — equity quotes over the Supabase Realtime broadcast.
   useEffect(() => {
