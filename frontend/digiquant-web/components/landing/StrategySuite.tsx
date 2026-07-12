@@ -25,12 +25,19 @@ import {
   type RefObject,
 } from "react";
 import Link from "next/link";
-import { DeckCard, DeckStack } from "@digithings/web";
+import {
+  CandlestickChart,
+  DeckCard,
+  DeckStack,
+  SegToggle,
+  fmtNum,
+  fmtPct,
+  toneClass,
+  viewWindowForPreset,
+} from "@digithings/web";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
 import { CurrentPosition } from "@/components/tearsheet/current-position";
 import { LiveMetricsBadge } from "@/components/tearsheet/live-metrics";
-import { CandlestickChart, SegToggle, viewWindowForPreset } from "@/components/tearsheet/charts";
-import { fmtNum, fmtPct, toneClass } from "@/components/tearsheet/format";
 import { PivotStatsTable } from "@/components/tearsheet/pivot-stats-table";
 import { chartFullSpan, clipOhlc } from "@/components/tearsheet/series";
 import { avgTradePct, cagrPct, tradesPerYear } from "@/components/tearsheet/stats";
