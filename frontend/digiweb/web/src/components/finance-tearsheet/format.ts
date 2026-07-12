@@ -1,4 +1,9 @@
-/** Number formatting shared by the tearsheet renderer, charts, and library cards. */
+/**
+ * Number formatting shared by the finance-tearsheet charts, tables, and card
+ * KPIs (#1463) — verbatim from
+ * frontend/digiquant-web/components/tearsheet/format.ts so promoted surfaces
+ * render figure-for-figure identical.
+ */
 
 /** Compact axis/KPI formatting so huge compounded figures never overflow. */
 export function fmtCompact(v: number | null | undefined): string {
@@ -29,6 +34,7 @@ export function fmtNum(v: number | null | undefined, d = 0): string {
   return v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
+/** Money tone class for a signed value: `.is-pos` / `.is-neg` / none at 0. */
 export function toneClass(v: number | null | undefined): string {
   if (v === null || v === undefined) return "";
   return v > 0 ? "is-pos" : v < 0 ? "is-neg" : "";

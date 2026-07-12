@@ -1,20 +1,31 @@
+"use client";
 /**
- * Dependency-free SVG charts for strategy tearsheets (React port of the
- * standalone renderer). Pure vector output (no canvas, no libs) so the tearsheet
- * prints to PDF crisply. Charts render into a 0 0 1000 H viewBox and scale to the
- * container width. Colours come from CSS custom properties on the chart classes
- * (theme-aware via [data-theme]). Supports linear / log / symlog y scales —
- * symlog handles series that cross zero (cumulative P&L).
+ * Dependency-free SVG charts for finance tearsheets (#1463) — promoted
+ * verbatim from frontend/digiquant-web/components/tearsheet/charts.tsx.
+ * Pure vector output (no canvas, no libs) so the tearsheet prints to PDF
+ * crisply: the PDF pipeline flushSync-re-renders these same component
+ * instances at full span and calls window.print(), so print-first pure-SVG
+ * is a hard constraint here. Canvas engines are the DASHBOARD grammar
+ * (finance-charts / finance-composites) — see frontend/digiweb/CHARTS.md
+ * before swapping engines on any surface.
  *
- * Engine ruling (#1450 F2): these surfaces stay SVG — the PDF export re-renders
- * the same components, so the promoted lightweight-charts finance family
- * (canvas) is not adopted here. See ./CHARTS.md before swapping engines.
+ * Charts render into a 0 0 1000 H viewBox and scale to the container width.
+ * Colours come from CSS custom properties on the chart classes (theme-aware
+ * via [data-theme]). Supports linear / log / symlog y scales — symlog
+ * handles series that cross zero (cumulative P&L). The series surfaces
+ * (CandlestickChart, TimeSeries, TradeReturnChart) share one normalized
+ * ViewWindow: wheel-zoom / drag-pan / double-click reset stay synced across
+ * charts, with lookback presets matched back via `matchLookbackPreset`.
  */
 import { type ReactNode, type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fmtCompact, fmtMoney, fmtNum, fmtPct, toneClass } from "./format";
-import { annualizedVolPct, dailyReturnsFromEquity } from "./stats";
-import { isOpenTrade, type TradeReturnBar } from "./trades";
-import { type OHLCBar, type TearsheetPoint, type TearsheetTrade } from "./types";
+import {
+  isOpenTrade,
+  type TearsheetOhlcBar,
+  type TearsheetSeriesPoint,
+  type TearsheetTrade,
+  type TradeReturnBar,
+} from "./types";
 
 const W = 1000;
 const PAD = { top: 30, right: 18, bottom: 34, left: 68 };
@@ -181,7 +192,7 @@ function TradeTipContent({ trade, showPnlMoney = false }: { trade: TearsheetTrad
   );
 }
 
-function OhlcTipContent({ bar }: { bar: OHLCBar }) {
+function OhlcTipContent({ bar }: { bar: TearsheetOhlcBar }) {
   return (
     <dl className="ts-chart-tip-dl">
       <div>
@@ -394,8 +405,8 @@ function axisLabelY(y: number, plotTop: number, plotBottom: number): number {
   return Math.max(plotTop + 11, Math.min(plotBottom - 2, y + 4));
 }
 
-export type Scale = "linear" | "log" | "symlog";
-export type Tone = "accent" | "up" | "down";
+export type ChartScale = "linear" | "log" | "symlog";
+export type ChartTone = "accent" | "up" | "down";
 
 /** A normalized x-domain window (fractions 0..1 over a chart's full date span). */
 export interface ViewWindow {
@@ -565,7 +576,7 @@ function viewHandlers(
   return { padRight: pad.right, onWheel, onMouseDown, onDoubleClick };
 }
 
-function makeScale(kind: Scale) {
+function makeScale(kind: ChartScale) {
   if (kind === "log") {
     return { f: (v: number) => Math.log10(Math.max(v, 1e-9)), inv: (y: number) => Math.pow(10, y) };
   }
@@ -618,7 +629,7 @@ function logTicks(realLo: number, realHi: number, targetCount = 6): number[] {
 }
 
 // Decade ticks for symlog, in real (untransformed) space.
-function decadeTicks(kind: Scale, realLo: number, realHi: number): number[] {
+function decadeTicks(kind: ChartScale, realLo: number, realHi: number): number[] {
   const ticks: number[] = [];
   const maxAbs = Math.max(Math.abs(realLo), Math.abs(realHi));
   if (maxAbs <= 0) return [0];
@@ -739,10 +750,10 @@ function Empty({ height, msg, vbW = W }: { height: number; msg: string; vbW?: nu
 }
 
 export interface TimeSeriesProps {
-  points: TearsheetPoint[];
+  points: TearsheetSeriesPoint[];
   height?: number;
-  scale?: Scale;
-  tone?: Tone;
+  scale?: ChartScale;
+  tone?: ChartTone;
   fmt?: (v: number) => string;
   zeroBaseline?: boolean;
   /** Shared normalized x-window (date span fraction). Omit ⇒ full range, static. */
@@ -755,6 +766,8 @@ export interface TimeSeriesProps {
   fullSpan?: [string, string];
   /** Double-click / internal reset target (defaults to full range). */
   resetView?: ViewWindow;
+  /** When false, omit hover tooltips (static print-first panes). */
+  interactive?: boolean;
 }
 
 /**
@@ -764,10 +777,10 @@ export interface TimeSeriesProps {
  * share a span stay locked to the same calendar window regardless of sampling.
  */
 function sliceByView(
-  points: TearsheetPoint[],
+  points: TearsheetSeriesPoint[],
   view: ViewWindow | undefined,
   fullSpan: [string, string] | undefined,
-): TearsheetPoint[] {
+): TearsheetSeriesPoint[] {
   if (!view || (view.lo <= 0 && view.hi >= 1) || points.length === 0) return points;
   const t0 = new Date((fullSpan ? fullSpan[0] : points[0].t)).getTime();
   const t1 = new Date((fullSpan ? fullSpan[1] : points[points.length - 1].t)).getTime();
@@ -791,10 +804,10 @@ function sliceByView(
 
 /** Slice OHLC bars to the same calendar window as ``sliceByView``. */
 function sliceBarsByView(
-  bars: OHLCBar[],
+  bars: TearsheetOhlcBar[],
   view: ViewWindow | undefined,
   fullSpan: [string, string] | undefined,
-): OHLCBar[] {
+): TearsheetOhlcBar[] {
   if (!view || (view.lo <= 0 && view.hi >= 1) || bars.length === 0) return bars;
   const t0 = new Date((fullSpan ? fullSpan[0] : bars[0].t)).getTime();
   const t1 = new Date((fullSpan ? fullSpan[1] : bars[bars.length - 1].t)).getTime();
@@ -817,7 +830,7 @@ function sliceBarsByView(
   return bars.slice(Math.max(0, nearest - 1), Math.min(bars.length, nearest + 1));
 }
 
-function barIndexForDate(bars: OHLCBar[], iso: string): number {
+function barIndexForDate(bars: TearsheetOhlcBar[], iso: string): number {
   if (!iso) return -1;
   const exact = bars.findIndex((b) => b.t === iso);
   if (exact >= 0) return exact;
@@ -836,10 +849,10 @@ function barIndexForDate(bars: OHLCBar[], iso: string): number {
 }
 
 export interface CandlestickChartProps {
-  bars: OHLCBar[];
+  bars: TearsheetOhlcBar[];
   trades: TearsheetTrade[];
   height?: number;
-  scale?: Scale;
+  scale?: ChartScale;
   view?: ViewWindow;
   onView?: (v: ViewWindow) => void;
   fullSpan?: [string, string];
@@ -871,7 +884,7 @@ function CandlestickChartBody({
   resetView,
   interactive = true,
   compact = false,
-}: CandlestickChartProps & { bars: OHLCBar[]; height: number }) {
+}: CandlestickChartProps & { bars: TearsheetOhlcBar[]; height: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<ChartHoverTip | null>(null);
   const { vbW, pad } = useChartLayout(wrapRef, height, compact);
@@ -1090,7 +1103,8 @@ function TimeSeriesBody({
   onView,
   fullSpan,
   resetView,
-}: TimeSeriesProps & { points: TearsheetPoint[]; height: number }) {
+  interactive = true,
+}: TimeSeriesProps & { points: TearsheetSeriesPoint[]; height: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<ChartHoverTip | null>(null);
   const { vbW, pad } = useChartLayout(wrapRef, height, false);
@@ -1172,8 +1186,14 @@ function TimeSeriesBody({
   const onChartMouseLeave = useCallback(() => setHover(null), []);
 
   return (
-    <ChartHoverShell hover={hover} wrapRef={wrapRef}>
-      <Svg height={height} vbW={vbW} control={control} onMouseMove={onChartMouseMove} onMouseLeave={onChartMouseLeave}>
+    <ChartHoverShell hover={interactive ? hover : null} wrapRef={wrapRef}>
+      <Svg
+        height={height}
+        vbW={vbW}
+        control={control}
+        onMouseMove={interactive ? onChartMouseMove : undefined}
+        onMouseLeave={interactive ? onChartMouseLeave : undefined}
+      >
       <defs>
         <clipPath id="ts-series-clip">
           <rect x={pad.left} y={plotTop} width={plotW} height={plotH} />
@@ -1258,6 +1278,8 @@ export interface TradeReturnChartProps {
   onView?: (v: ViewWindow) => void;
   fullSpan?: [string, string];
   resetView?: ViewWindow;
+  /** When false, omit hover tooltips (static print-first panes). */
+  interactive?: boolean;
 }
 
 function sliceTradeBarsByView(
@@ -1305,6 +1327,7 @@ function TradeReturnChartBody({
   view,
   onView,
   resetView,
+  interactive = true,
 }: TradeReturnChartProps & { bars: TradeReturnBar[]; height: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<ChartHoverTip | null>(null);
@@ -1381,8 +1404,14 @@ function TradeReturnChartBody({
   const onChartMouseLeave = useCallback(() => setHover(null), []);
 
   return (
-    <ChartHoverShell hover={hover} wrapRef={wrapRef}>
-      <Svg height={height} vbW={vbW} control={control} onMouseMove={onChartMouseMove} onMouseLeave={onChartMouseLeave}>
+    <ChartHoverShell hover={interactive ? hover : null} wrapRef={wrapRef}>
+      <Svg
+        height={height}
+        vbW={vbW}
+        control={control}
+        onMouseMove={interactive ? onChartMouseMove : undefined}
+        onMouseLeave={interactive ? onChartMouseLeave : undefined}
+      >
       <defs>
         <clipPath id="ts-pnl-clip">
           <rect x={pad.left} y={plotTop} width={plotW} height={plotH} />
@@ -1421,285 +1450,3 @@ function TradeReturnChartBody({
   );
 }
 
-// ----------------------------- Returns matrix ------------------------------
-
-export type ReturnsPeriod = "monthly" | "quarterly" | "annual";
-export type MatrixMetric = "return" | "drawdown" | "volatility";
-
-const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const QUARTER_LABELS = ["Q1", "Q2", "Q3", "Q4"];
-
-/** A single rendered cell value (or null = no data in that slot). */
-interface MatrixCell {
-  value: number | null;
-}
-interface MatrixRow {
-  year: number;
-  cells: MatrixCell[];
-  yearValue: number | null;
-}
-
-/** Number of columns per granularity (the trailing Year column is separate). */
-function colCount(period: ReturnsPeriod): number {
-  return period === "monthly" ? 12 : period === "quarterly" ? 4 : 1;
-}
-
-function slotOf(month: number, period: ReturnsPeriod): number {
-  return period === "monthly" ? month : period === "quarterly" ? Math.floor(month / 3) : 0;
-}
-
-function bucketEquityBySlot(points: TearsheetPoint[], period: ReturnsPeriod) {
-  const lastInSlot = new Map<string, number>();
-  const pointsInSlot = new Map<string, TearsheetPoint[]>();
-  const yearLast = new Map<number, number>();
-  let minYear = Infinity;
-  let maxYear = -Infinity;
-
-  for (const p of points) {
-    const d = new Date(p.t);
-    const year = d.getUTCFullYear();
-    const slot = slotOf(d.getUTCMonth(), period);
-    const key = `${year}:${slot}`;
-    lastInSlot.set(key, p.v);
-    const bucket = pointsInSlot.get(key) ?? [];
-    bucket.push(p);
-    pointsInSlot.set(key, bucket);
-    yearLast.set(year, p.v);
-    if (year < minYear) minYear = year;
-    if (year > maxYear) maxYear = year;
-  }
-  return { lastInSlot, pointsInSlot, yearLast, minYear, maxYear };
-}
-
-function bucketDrawdownBySlot(points: TearsheetPoint[], period: ReturnsPeriod) {
-  const minInSlot = new Map<string, number>();
-  const yearMin = new Map<number, number>();
-  let minYear = Infinity;
-  let maxYear = -Infinity;
-
-  for (const p of points) {
-    const d = new Date(p.t);
-    const year = d.getUTCFullYear();
-    const slot = slotOf(d.getUTCMonth(), period);
-    const key = `${year}:${slot}`;
-    const prev = minInSlot.get(key);
-    minInSlot.set(key, prev === undefined ? p.v : Math.min(prev, p.v));
-    const yPrev = yearMin.get(year);
-    yearMin.set(year, yPrev === undefined ? p.v : Math.min(yPrev, p.v));
-    if (year < minYear) minYear = year;
-    if (year > maxYear) maxYear = year;
-  }
-  return { minInSlot, yearMin, minYear, maxYear };
-}
-
-/**
- * Period matrix from equity (returns, vol) or drawdown curve (max DD per slot).
- */
-function buildMatrixRows(
-  equity: TearsheetPoint[],
-  drawdown: TearsheetPoint[] | undefined,
-  period: ReturnsPeriod,
-  metric: MatrixMetric,
-): MatrixRow[] {
-  if (!equity || equity.length === 0) return [];
-  const cols = colCount(period);
-
-  if (metric === "drawdown") {
-    if (!drawdown || drawdown.length === 0) return [];
-    const { minInSlot, yearMin, minYear, maxYear } = bucketDrawdownBySlot(drawdown, period);
-    if (!Number.isFinite(minYear)) return [];
-    const rows: MatrixRow[] = [];
-    for (let year = minYear; year <= maxYear; year++) {
-      const cells: MatrixCell[] = [];
-      for (let s = 0; s < cols; s++) {
-        const v = minInSlot.get(`${year}:${s}`);
-        cells.push({ value: v === undefined ? null : v });
-      }
-      const yv = yearMin.get(year);
-      rows.push({ year, cells, yearValue: yv === undefined ? null : yv });
-    }
-    return rows;
-  }
-
-  const { lastInSlot, pointsInSlot, yearLast, minYear, maxYear } = bucketEquityBySlot(
-    equity,
-    period,
-  );
-  if (!Number.isFinite(minYear)) return [];
-
-  if (metric === "volatility") {
-    const rows: MatrixRow[] = [];
-    for (let year = minYear; year <= maxYear; year++) {
-      const cells: MatrixCell[] = [];
-      for (let s = 0; s < cols; s++) {
-        const pts = pointsInSlot.get(`${year}:${s}`);
-        const vol =
-          pts && pts.length >= 2 ? annualizedVolPct(dailyReturnsFromEquity(pts)) : null;
-        cells.push({ value: vol });
-      }
-      const yearPts = equity.filter((p) => new Date(p.t).getUTCFullYear() === year);
-      const yearVol =
-        yearPts.length >= 2 ? annualizedVolPct(dailyReturnsFromEquity(yearPts)) : null;
-      rows.push({ year, cells, yearValue: yearVol });
-    }
-    return rows;
-  }
-
-  const opening = equity[0].v;
-  const rows: MatrixRow[] = [];
-  let prevClose = opening;
-
-  for (let year = minYear; year <= maxYear; year++) {
-    const cells: MatrixCell[] = [];
-    for (let s = 0; s < cols; s++) {
-      const close = lastInSlot.get(`${year}:${s}`);
-      if (close === undefined) {
-        cells.push({ value: null });
-      } else {
-        const ret = prevClose > 0 ? (close / prevClose - 1) * 100 : null;
-        cells.push({ value: ret });
-        prevClose = close;
-      }
-    }
-    const last = yearLast.get(year);
-    const yearValue =
-      last !== undefined && prevCloseAtYearStart(year, minYear, opening, yearLast) > 0
-        ? (last / prevCloseAtYearStart(year, minYear, opening, yearLast) - 1) * 100
-        : null;
-    rows.push({ year, cells, yearValue: yearValue });
-  }
-  return rows;
-}
-
-/** Equity carried into `year`: the prior year's last close, or the opening for the
- *  first year. Keeps the Year column consistent with the chained cell logic. */
-function prevCloseAtYearStart(year: number, minYear: number, opening: number, yearLast: Map<number, number>): number {
-  if (year === minYear) return opening;
-  // Walk back to the most recent prior year that actually has data.
-  for (let y = year - 1; y >= minYear; y--) {
-    const v = yearLast.get(y);
-    if (v !== undefined) return v;
-  }
-  return opening;
-}
-
-/** Inline cell background: tone-coloured with alpha scaled by |value| relative to max-abs. */
-function cellBg(value: number | null, maxAbs: number, metric: MatrixMetric): string {
-  if (value === null) return "transparent";
-  if (value === 0 && metric === "return") return "transparent";
-  const tone =
-    metric === "drawdown" || metric === "volatility"
-      ? "var(--down)"
-      : value > 0
-        ? "var(--up)"
-        : "var(--down)";
-  const mag = maxAbs > 0 ? Math.abs(value) / maxAbs : 0;
-  const pct = Math.round(14 + Math.min(1, mag) * 58);
-  return `color-mix(in srgb, ${tone} ${pct}%, transparent)`;
-}
-
-/** Compact cell % — sheds decimals as magnitude grows so wide crypto returns
- *  (hundreds / thousands of %) fit the narrow grid cells without truncation. */
-function fmtCellPct(v: number | null): string {
-  if (v === null) return "";
-  const a = Math.abs(v);
-  if (a >= 1000) return fmtCompact(v) + "%";
-  if (a >= 100) return v.toFixed(0) + "%";
-  return v.toFixed(1) + "%";
-}
-
-function fmtCellValue(v: number | null, metric: MatrixMetric): string {
-  if (v === null) return "";
-  if (metric === "volatility") return v.toFixed(1) + "%";
-  return fmtCellPct(v);
-}
-
-/**
- * Calendar heatmap of period returns derived from the equity curve. Rows = years,
- * columns = months / quarters / a single annual cell, plus a trailing compounded
- * "Year" column. Pure CSS-grid table (no SVG) so it reflows and scrolls on mobile.
- */
-export function ReturnsMatrix({
-  points,
-  drawdown,
-  period,
-  metric = "return",
-}: {
-  points: TearsheetPoint[];
-  drawdown?: TearsheetPoint[];
-  period: ReturnsPeriod;
-  metric?: MatrixMetric;
-}) {
-  const rows = buildMatrixRows(points, drawdown, period, metric);
-  if (rows.length === 0) {
-    return (
-      <div className="ts-status">
-        {metric === "drawdown" && !drawdown?.length ? "drawdown data unavailable" : "no data"}
-      </div>
-    );
-  }
-
-  const cols = colCount(period);
-  const labels = period === "monthly" ? MONTH_LABELS : period === "quarterly" ? QUARTER_LABELS : ["Year"];
-  const showYearCol = period !== "annual";
-
-  let maxAbs = 0;
-  for (const r of rows) {
-    for (const c of r.cells) if (c.value !== null) maxAbs = Math.max(maxAbs, Math.abs(c.value));
-    if (showYearCol && r.yearValue !== null) maxAbs = Math.max(maxAbs, Math.abs(r.yearValue));
-  }
-
-  const gridTemplate = `minmax(3rem, auto) repeat(${cols + (showYearCol ? 1 : 0)}, minmax(0, 1fr))`;
-  const metricLabel = metric === "return" ? "returns" : metric === "drawdown" ? "drawdown" : "volatility";
-
-  return (
-    <div className="ts-table-wrap ts-matrix-wrap">
-      <div
-        className="ts-matrix ts-matrix-fill"
-        style={{ gridTemplateColumns: gridTemplate }}
-        role="table"
-        aria-label={`${period} ${metricLabel}`}
-      >
-        <div className="ts-matrix-corner" role="columnheader" />
-        {labels.map((l) => (
-          <div key={l} className="ts-matrix-head" role="columnheader">{l}</div>
-        ))}
-        {showYearCol ? <div className="ts-matrix-head ts-matrix-year-head" role="columnheader">Year</div> : null}
-        {rows.map((r) => (
-          <div key={r.year} className="ts-matrix-row" role="row" style={{ display: "contents" }}>
-            <div className="ts-matrix-rowlabel" role="rowheader">{r.year}</div>
-            {r.cells.map((c, i) => (
-              <div
-                key={i}
-                className={"ts-matrix-cell" + (c.value === null ? " is-empty" : "")}
-                style={{ background: cellBg(c.value, maxAbs, metric) }}
-                role="cell"
-                title={
-                  c.value === null
-                    ? "no data"
-                    : `${labels[i]} ${r.year}: ${fmtCellValue(c.value, metric)}`
-                }
-              >
-                {fmtCellValue(c.value, metric)}
-              </div>
-            ))}
-            {showYearCol ? (
-              <div
-                className={"ts-matrix-cell ts-matrix-year" + (r.yearValue === null ? " is-empty" : "")}
-                style={{ background: cellBg(r.yearValue, maxAbs, metric) }}
-                role="cell"
-                title={
-                  r.yearValue === null
-                    ? "no data"
-                    : `${r.year} total: ${fmtCellValue(r.yearValue, metric)}`
-                }
-              >
-                {fmtCellValue(r.yearValue, metric)}
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
