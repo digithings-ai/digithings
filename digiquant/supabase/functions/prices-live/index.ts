@@ -133,7 +133,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
   for (const row of rows ?? []) {
     const ticker = (row as { ticker: string | null }).ticker?.trim().toUpperCase();
-    if (ticker) symbols.add(ticker);
+    // "CASH" is the portfolio's cash-sleeve pseudo-ticker, not a security — and
+    // Finnhub happily quotes it as Pathward Financial (NASDAQ: CASH), which the
+    // 2026-07-12 smoke test proved would put a fake mover in the broadcast.
+    if (ticker && ticker !== "CASH") symbols.add(ticker);
   }
   const symbolList = [...symbols].sort().slice(0, MAX_SYMBOLS);
   if (symbols.size > MAX_SYMBOLS) {
