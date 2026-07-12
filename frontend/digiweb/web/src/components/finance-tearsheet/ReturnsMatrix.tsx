@@ -192,8 +192,7 @@ function cellBg(value: number | null, maxAbs: number, metric: MatrixMetric): str
 
 /** Compact cell % — sheds decimals as magnitude grows so wide crypto returns
  *  (hundreds / thousands of %) fit the narrow grid cells without truncation. */
-function fmtCellPct(v: number | null): string {
-  if (v === null) return "";
+function fmtCellPct(v: number): string {
   const a = Math.abs(v);
   if (a >= 1000) return fmtCompact(v) + "%";
   if (a >= 100) return v.toFixed(0) + "%";
