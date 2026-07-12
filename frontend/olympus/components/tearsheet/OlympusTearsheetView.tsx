@@ -5,27 +5,29 @@
  * "Olympus": a live-NAV track + an Olympus-specific decision track-record track,
  * each degrading independently against its own empty-state predicate, plus the
  * absorbed Attribution diagnostics. One serif H1, one primary KPI strip (NOT a
- * MetricCard wall), two labeled .ts-panel tracks. Pure-SVG charts (no recharts in
- * the tracks) so window.print() yields a crisp PDF; the Download PDF button is
- * enabled in ALL states. F5 token rule: signed financial values use up/red
- * (toneClass); cyan --accent is reserved for the equity line + header chrome.
+ * MetricCard wall), two labeled .ts-panel tracks. Render surfaces come from the
+ * shared finance-tearsheet family (#1463): pure-SVG charts print to PDF crisply
+ * via runTearsheetPrint, enabled in ALL states. The tracks stay static
+ * (interactive={false} — no hover tips, matching the shipped dashboard).
+ * F5 token rule: signed financial values use up/red (toneClass); cyan --accent
+ * is reserved for the equity line + header chrome.
  */
 import type React from 'react';
+import { useState } from 'react';
+import {
+  Kpi,
+  KpiStrip,
+  SignedBars,
+  TimeSeries,
+  fmtCompact,
+  fmtNum,
+  fmtPct,
+  runTearsheetPrint,
+  toneClass,
+} from '@digithings/web';
 import AttributionTab from '@/components/observability/AttributionTab';
 import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
-import { SignedBars, TimeSeries } from './charts';
-import { fmtCompact, fmtNum, fmtPct, toneClass } from './format';
 import type { OlympusTearsheet } from './types';
-
-function Kpi({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
-  return (
-    <div className="ts-kpi">
-      <span className="ts-kpi-label">{label}</span>
-      <span className="ts-kpi-value">{value}</span>
-      {sub ? <span className="ts-kpi-sub">{sub}</span> : null}
-    </div>
-  );
-}
 
 function Toned({ v, children }: { v: number | null | undefined; children: React.ReactNode }) {
   const c = toneClass(v);
@@ -38,6 +40,12 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
   const { live, decision } = data;
   const hasLiveCurve = data.navPoints >= 2;
   const hasTrackRecord = data.nResolved >= 1;
+
+  // The SVG tracks are static (no zoom state), but the flushSync re-render that
+  // runTearsheetPrint drives through this setter makes the recharts Attribution
+  // section re-read the pinned light data-theme (useChartColors reads it at
+  // render) before the print dialog opens — so paper output stays coherent.
+  const [, setPrinting] = useState(false);
 
   const resolvedAlphasPct = data.decisionRows
     .filter((r) => r.status === 'resolved' && r.alpha != null)
@@ -59,14 +67,20 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
           </div>
         </div>
         <div className="ts-header-actions">
-          <button type="button" className="ts-btn" onClick={() => window.print()}>
+          <button
+            type="button"
+            className="ts-btn"
+            onClick={() =>
+              runTearsheetPrint({ documentTitle: 'Olympus — AI-intelligence strategy', setPrinting })
+            }
+          >
             Download PDF
           </button>
         </div>
       </header>
 
       {/* Primary KPI strip — single headline NAV + the decision differentiators (not a 2×4 wall) */}
-      <div className="ts-kpis">
+      <KpiStrip ariaLabel="Headline performance">
         <Kpi
           label="NAV"
           value={data.latestNav != null ? fmtNum(data.latestNav, 2) : '—'}
@@ -93,7 +107,7 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
           value={hasTrackRecord ? fmtNum(decision.information_ratio, 2) : '—'}
           sub={hasTrackRecord ? 'mean α / σ(α)' : 'in flight'}
         />
-      </div>
+      </KpiStrip>
 
       {/* Track 1 — Live NAV */}
       <section className="ts-panel">
@@ -104,11 +118,11 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
           <div className="ts-grid-2">
             <div className="ts-chart">
               <div className="ts-subhead">Equity curve</div>
-              <TimeSeries points={live.equity_curve} scale="linear" tone="accent" fmt={fmtCompact} height={260} />
+              <TimeSeries points={live.equity_curve} scale="linear" tone="accent" fmt={fmtCompact} height={260} interactive={false} />
             </div>
             <div className="ts-chart">
               <div className="ts-subhead">Drawdown</div>
-              <TimeSeries points={live.drawdown_curve} tone="down" fmt={(v) => `${v.toFixed(1)}%`} zeroBaseline height={260} />
+              <TimeSeries points={live.drawdown_curve} tone="down" fmt={(v) => `${v.toFixed(1)}%`} zeroBaseline height={260} interactive={false} />
             </div>
           </div>
         ) : (
@@ -127,14 +141,14 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
         </div>
         {hasTrackRecord ? (
           <>
-            <div className="ts-kpis">
+            <KpiStrip ariaLabel="Decision track-record metrics">
               <Kpi label="Hit rate" value={fmtPct(decision.hit_rate * 100)} />
               <Kpi label="Mean alpha" value={<Toned v={decision.mean_alpha_pct}>{fmtPct(decision.mean_alpha_pct)}</Toned>} />
               <Kpi label="Information ratio" value={fmtNum(decision.information_ratio, 2)} />
               <Kpi label="Sortino" value={fmtNum(decision.sortino_ratio, 2)} />
               <Kpi label="Decision max DD" value={<span className="is-neg">{fmtPct(decision.max_drawdown_pct)}</span>} />
               <Kpi label="N decisions" value={fmtNum(decision.n_trades)} />
-            </div>
+            </KpiStrip>
 
             <div className="ts-grid-2">
               <div className="ts-chart">
