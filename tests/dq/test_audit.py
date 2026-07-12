@@ -17,7 +17,9 @@ def test_digiquant_audit_log_writes_jsonl_and_redacts(tmp_path: Path) -> None:
     try:
         from digiquant.audit import audit_log
 
-        audit_log("run_backtest", agent_id="digiquant", payload={"run_id": "x", "api_key": "secret"})
+        audit_log(
+            "run_backtest", agent_id="digiquant", payload={"run_id": "x", "api_key": "secret"}
+        )
         lines = audit_path.read_text().strip().split("\n")
         assert len(lines) == 1
         data = json.loads(lines[0])
@@ -30,6 +32,12 @@ def test_digiquant_audit_log_writes_jsonl_and_redacts(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.skipif(
+    os.environ.get("CI") == "true",
+    # Runs two real engines (backtest + optimize) in one process; the second
+    # aborts because NautilusTrader inits Rust logging once per interpreter. See #42.
+    reason="Second in-process Nautilus engine aborts (exit 134) — see #42",
+)
 def test_api_run_backtest_and_run_optimize_write_audit(tmp_path: Path) -> None:
     """POST /run_backtest and /run_optimize produce audit log entries when Nautilus available."""
     pytest.importorskip("nautilus_trader")
@@ -40,6 +48,8 @@ def test_api_run_backtest_and_run_optimize_write_audit(tmp_path: Path) -> None:
     data_dir.mkdir()
     generate_synthetic_ohlcv(["AAPL"], freq="1d").write_csv(data_dir / "AAPL.csv")
     os.environ["AUDIT_LOG_PATH"] = str(tmp_path / "events.jsonl")
+    # REM-055 path containment rejects data outside DIGIQUANT_DATA_ROOT.
+    os.environ["DIGIQUANT_DATA_ROOT"] = str(tmp_path)
     try:
         from fastapi.testclient import TestClient
 
@@ -57,3 +67,4 @@ def test_api_run_backtest_and_run_optimize_write_audit(tmp_path: Path) -> None:
         assert "run_optimize" in event_types
     finally:
         os.environ.pop("AUDIT_LOG_PATH", None)
+        os.environ.pop("DIGIQUANT_DATA_ROOT", None)

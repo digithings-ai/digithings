@@ -21,6 +21,10 @@ import sys
 # Skip collection of modules that transitively import nautilus_trader when the
 # extra isn't installed (CI excludes [nautilus] due to SIGABRT — see #42).
 # Runtime-level `_SKIP_NATIVE_CRASH` fires too late; collection must short-circuit.
+# Files listed here never run in the plain digiquant lane — any new entry MUST
+# also be added to the pytest invocation in .github/workflows/test-nautilus.yml
+# and the nautilus_smoke filter in scripts/ci_paths.yaml, or it runs in no CI
+# lane at all (#1501).
 if importlib.util.find_spec("nautilus_trader") is None:
     collect_ignore = [
         "test_api.py",

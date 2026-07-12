@@ -14,10 +14,13 @@ from digiquant.models import BacktestResult
 from digiquant.server import app
 from tests.digi_test_jwt import auth_headers
 
-# SIGABRT on Linux CI when Nautilus engine runs under pytest+uvloop. See #42.
+# Real Nautilus engines can't share a process: NautilusTrader initializes its
+# Rust logging once per interpreter (see #1389), so a second real engine aborts
+# (exit 134) regardless of OS. The CI lane runs every dq file in one pytest
+# process, so gate real-engine tests behind CI. See #42.
 _SKIP_NATIVE_CRASH = pytest.mark.skipif(
     os.environ.get("CI") == "true",
-    reason="Native crash (exit 134) under Linux CI — tracked in #42",
+    reason="Real Nautilus engine aborts as a second in-process engine (exit 134) — see #42",
 )
 
 SAMPLE_BACKTEST_PAYLOAD = {
@@ -34,15 +37,29 @@ def _api_error_message(data: dict) -> str:
 
 
 @pytest.fixture
-def data_dir(tmp_path: Path) -> Path:
+def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create temp dir with AAPL, MSFT, GOOGL OHLCV CSVs."""
+    # REM-055 path containment rejects data outside DIGIQUANT_DATA_ROOT
+    # (defaults to cwd) — declare the tmp dir as the root.
+    monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path))
     for sym in ["AAPL", "MSFT", "GOOGL"]:
         generate_synthetic_ohlcv([sym], freq="1d").write_csv(tmp_path / f"{sym}.csv")
     return tmp_path
+
+
 SAMPLE_BACKTEST_RESULT_FIELDS = [
-    "run_id", "strategy_name", "symbols", "start_time", "end_time",
-    "total_pnl", "total_return_pct", "sharpe_ratio", "max_drawdown_pct",
-    "num_trades", "status", "message",
+    "run_id",
+    "strategy_name",
+    "symbols",
+    "start_time",
+    "end_time",
+    "total_pnl",
+    "total_return_pct",
+    "sharpe_ratio",
+    "max_drawdown_pct",
+    "num_trades",
+    "status",
+    "message",
 ]
 
 
@@ -197,8 +214,13 @@ class TestRunOptimize:
     ) -> None:
         # Patch run_backtest + force single worker so the patch applies (ProcessPool workers
         # spawn new processes and don't inherit unittest.mock patches).
-        with patch("digiquant.optimize.run_backtest", side_effect=RuntimeError("nautilus not installed")), \
-             patch("digiquant.optimize._DEFAULT_WORKERS", 1):
+        with (
+            patch(
+                "digiquant.optimize.run_backtest",
+                side_effect=RuntimeError("nautilus not installed"),
+            ),
+            patch("digiquant.optimize._DEFAULT_WORKERS", 1),
+        ):
             r = client.post(
                 "/run_optimize",
                 json={"strategy_name": "ema_cross", "symbols": ["AAPL"], "data_dir": str(data_dir)},

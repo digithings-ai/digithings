@@ -91,9 +91,20 @@ e2e_contract:
   - digikey/**
   - .github/workflows/test-e2e.yml
 
+# Mirrors the pytest invocation in test-nautilus.yml — every file that
+# tests/dq/conftest.py collect_ignores without the nautilus extra (#1501).
 nautilus_smoke:
   - digiquant/**
+  - tests/dq/conftest.py
+  - tests/dq/test_api.py
+  - tests/dq/test_audit.py
+  - tests/dq/test_backtest.py
+  - tests/dq/test_calibrations_loader.py
   - tests/dq/test_nautilus_runner.py
+  - tests/dq/test_pipeline_graph.py
+  - tests/dq/test_strategies.py
+  - tests/dq/test_tearsheet_isolation.py
+  - tests/dq/test_v1_jobs.py
   - .github/workflows/test-nautilus.yml
 
 atlas_graph:

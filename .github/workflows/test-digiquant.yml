@@ -30,4 +30,5 @@ jobs:
       - name: Pytest
         # Modules transitively importing nautilus_trader are dropped at
         # collection by tests/dq/conftest.py when the extra isn't installed.
+        # Those files run in test-nautilus.yml instead (#1501).
         run: python -m pytest tests/dq/ -m unit -v --tb=short
