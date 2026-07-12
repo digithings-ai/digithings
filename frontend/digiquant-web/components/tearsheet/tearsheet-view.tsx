@@ -45,6 +45,7 @@ import { AssetLogoFor } from "./asset-logo";
 import { CurrentPosition, TradeReturnCell } from "./current-position";
 import { LiveMetricsBadge } from "./live-metrics";
 import { PivotStatsPivotToggle, PivotStatsTable } from "./pivot-stats-table";
+import { SignalDelayChip } from "./signal-delay";
 import type { StatsPivot } from "./pivot-stats";
 import { StrategyNotes } from "./strategy-notes";
 import { strategyDisplayName, symbolBase } from "./strategy-names";
@@ -363,6 +364,7 @@ export function TearsheetView({ slug }: { slug: string }) {
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data.generated_at} />
             <span className="ts-chip">{data.symbol}</span>
+            <SignalDelayChip days={data.signal_delay_days} detail="full" />
             <span className="ts-meta-text">{data.period_start} → {data.period_end} · {fmtNum(data.bars)} bars</span>
           </div>
         </div>

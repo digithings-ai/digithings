@@ -21,6 +21,12 @@
 /* finance-tearsheet family (#1463): the full .ts-* grammar INCLUDING the
    @media print export grammar — self-layering, so imported plainly. */
 @import "@digithings/web/styles/finance-tearsheet.css";
+/* finance-composites family (#1461/#1462 live surfaces): the seamless
+   StockTicker tape (.tk-*) that the homepage live-market row wears, plus the
+   PerformanceDashboard hairline grammar (.pdash-*) the Olympus live-portfolio
+   panel composes. Single-class defaults self-layer into @layer components;
+   imported plainly per the sheet's own cascade contract. */
+@import "@digithings/web/styles/finance-composites.css";
 
 /* Shared components (@digithings/web) carry token-backed utilities, and
    Tailwind never scans package sources on its own — point it at them. */
@@ -31,6 +37,7 @@
 @source "../../digiweb/web/src/components/typography";
 @source "../../digiweb/web/src/components/deck";
 @source "../../digiweb/web/src/components/finance-tearsheet";
+@source "../../digiweb/web/src/components/finance-composites";
 
 :root[data-theme] {
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
