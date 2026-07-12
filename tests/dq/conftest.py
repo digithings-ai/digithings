@@ -27,6 +27,8 @@ if importlib.util.find_spec("nautilus_trader") is None:
         "test_audit.py",
         "test_backtest.py",
         "test_calibrations_loader.py",
+        # Patches calibrations_loader, which imports digiquant.strategies (→ nautilus).
+        "test_mcp_tearsheet_tool.py",
         "test_nautilus_runner.py",
         "test_pipeline_graph.py",
         "test_strategies.py",

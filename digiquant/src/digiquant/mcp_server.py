@@ -294,7 +294,9 @@ def create_mcp_server() -> Any:
         tearsheet JSON to the digiquant.io frontend. ``strategy=None`` runs all three.
 
         Reads structure from ``strategies/settings.json`` (public) and calibrations
-        from ``calibrations.json`` (private). Returns the index entries written.
+        from ``calibrations.json`` (private; Supabase fallback). Each strategy runs
+        in its own spawned process (#1389). Returns JSON with the index entries
+        ``written`` and per-strategy ``failures``.
         """
         import sys
         from pathlib import Path
@@ -307,17 +309,45 @@ def create_mcp_server() -> Any:
         except ImportError as exc:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
+        try:
+            # Pulls digiquant.strategies (→ nautilus_trader) via the package __init__.
+            from digiquant.strategies.calibrations_loader import pick_calibration_source
+        except ImportError as exc:
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        gt.load_repo_env()
+        try:
+            cal_source = pick_calibration_source()
+        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
         settings = gt.load_settings()
+        if strategy is not None and strategy not in settings["strategies"]:
+            known = ", ".join(sorted(settings["strategies"]))
+            return json.dumps({"error": f"Unknown strategy {strategy!r}; expected one of: {known}"})
         cache = Path(cache_dir) if cache_dir else gt.DEFAULT_CACHE
         targets = (
             {strategy: settings["strategies"][strategy]} if strategy else settings["strategies"]
         )
-        results = []
+        written: list[dict] = []
+        failures: list[dict] = []
+        # One spawned process per strategy: Nautilus' Rust logging initializes once
+        # per process (#1389), so an in-process run_and_write loop here would SIGABRT
+        # this MCP server on the second engine.
         for strat, cfg in targets.items():
-            entry = gt.run_and_write(strat, cfg["symbol"], settings, cache, gt.FRONTEND_STRATEGIES)
-            if entry:
-                results.append(entry)
-        return json.dumps(results, indent=2, default=str)
+            entry, error = gt.run_strategy_isolated(
+                strat,
+                cfg["symbol"],
+                settings,
+                cache,
+                gt.FRONTEND_STRATEGIES,
+                cal_source=cal_source,
+            )
+            if entry is not None:
+                written.append(entry)
+            else:
+                failures.append({"strategy": strat, "error": error or "unknown error"})
+        return json.dumps({"written": written, "failures": failures}, indent=2, default=str)
 
     @mcp.tool()
     def digiquant_validate_slapper_vs_tradingview(
