@@ -89,7 +89,7 @@ async function fetchQuote(symbol: string, apiKey: string): Promise<QuoteOut> {
   return { c: q.c, d: q.d ?? null, dp: q.dp ?? null, t: q.t };
 }
 
-Deno.serve(async (_req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   const at = new Date();
 
   // 1) Dormant gate — the key is a one-time human step (see digiquant/supabase/README.md).
@@ -100,7 +100,13 @@ Deno.serve(async (_req: Request): Promise<Response> => {
   }
 
   // 2) Market-hours gate — no point burning quota when US markets are shut.
-  if (!isExtendedUsMarketHours(at)) {
+  //    `{"force": true}` overrides THIS gate only (ops smoke tests, see README);
+  //    it can never bypass the key. Costs one full fetch+broadcast cycle.
+  const force = await req
+    .json()
+    .then((body: unknown) => (body as { force?: unknown } | null)?.force === true)
+    .catch(() => false);
+  if (!force && !isExtendedUsMarketHours(at)) {
     return json({ market: "closed", at: at.toISOString() });
   }
 
@@ -171,6 +177,7 @@ Deno.serve(async (_req: Request): Promise<Response> => {
 
   return json({
     market: "open",
+    forced: force,
     at: at.toISOString(),
     symbols: symbolList.length,
     quoted,
