@@ -15,6 +15,7 @@ import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { LiveTickerRow } from "@/components/landing/LiveTickerRow";
+import { OlympusPortfolioPanel } from "@/components/landing/OlympusPortfolioPanel";
 import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
 import { OlympusScene } from "@/components/landing/OlympusScene";
 import { StrategySuite } from "@/components/landing/StrategySuite";
@@ -127,6 +128,11 @@ export default function Home() {
         <ResearchPipeline />
 
         <OlympusScene />
+
+        {/* The payoff of the Olympus pipeline: the research book Atlas/Hermes
+            maintain, marked live off the same feed. Client island; SSR-safe
+            (renders a plain "connects on deploy" card without env vars). */}
+        <OlympusPortfolioPanel />
 
         <StrategySuite />
 
