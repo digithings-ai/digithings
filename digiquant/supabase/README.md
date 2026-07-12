@@ -1,27 +1,25 @@
-# supabase/ — live price fan-out + public portfolio surface
+# digiquant/supabase/ — the `core` Supabase project
 
-Cross-cutting Supabase infrastructure for the digiquant.io live price feed
-(**#1461**) and the public portfolio read surface (**#1462**). Everything here is
-checked in for review and applied to the live `core` project **manually post-merge**
-(via MCP or `supabase db push` / `supabase functions deploy`) — nothing in this
-directory auto-deploys.
+The single Supabase CLI project dir for the suite-wide **`core`** backend (Olympus/Atlas
+portfolio, market data, strategy store — see
+[ADR 0021](../../docs/adr/0021-digiquant-supabase-project-topology.md)). There is exactly
+**one** migration chain: the numbered files under [`migrations/`](migrations/)
+(`001`–`050`, checked by `digiquant/scripts/atlas/verify-supabase-migrations.sh`).
+[`SCHEMA.md`](SCHEMA.md) inventories the live tables and views.
 
-> **Relationship to `digiquant/supabase/`** — the historical Olympus/Atlas migration
-> chain (`001`–`049`, sequential numbering) lives in
-> [`digiquant/supabase/migrations/`](../digiquant/supabase/migrations/) and targets the
-> **same** `core` project (see
-> [ADR 0021](../docs/adr/0021-digiquant-supabase-project-topology.md)). This top-level
-> directory holds the cross-cutting public-web surface (edge functions + timestamped
-> migrations) that spans `frontend/` and `digiquant/`. Apply order relative to the
-> Atlas chain doesn't matter: this migration only creates views over tables the Atlas
-> chain already owns.
-
-## What lives here
+Everything here is checked in for review and applied to the live project **manually
+post-merge** (via MCP, the SQL editor, or `supabase db push` / `supabase functions
+deploy`) — nothing auto-deploys.
 
 | Path | What it is |
 |---|---|
-| `migrations/20260710120000_public_portfolio_views.sql` | Three anon-readable views — the entire public portfolio read surface |
-| `functions/prices-live/` | Deno edge function: polls Finnhub, broadcasts quotes on Realtime channel `prices:live` |
+| `config.toml` | Supabase CLI project config (local alias `digiquant-atlas`) |
+| `migrations/` | The numbered migration chain — source of truth for the schema |
+| `SCHEMA.md` | Hand-maintained inventory of live tables, views, and RLS conventions |
+| `migrations/050_public_portfolio_views.sql` | Three anon-readable views — the public portfolio read surface (#1461/#1462) |
+| `functions/prices-live/` | Deno edge function: polls Finnhub, broadcasts quotes on Realtime channel `prices:live` (#1461) |
+
+The rest of this README is the operational guide for the **live price feed** (#1461).
 
 ## The two-lane live price feed
 
@@ -55,7 +53,7 @@ the `public_price_latest` view — the latest daily close per ticker from
 
 ## One-time human steps (post-merge)
 
-1. Apply the migration (MCP `apply_migration`, SQL editor, or `supabase db push`).
+1. Apply migration `050` (MCP `apply_migration`, SQL editor, or `supabase db push`).
 2. Deploy the function: `supabase functions deploy prices-live` (keep JWT verification
    **on** — the scheduler passes the anon key, see below).
 3. Create a free API key at [finnhub.io](https://finnhub.io) (Dashboard → API Keys).
@@ -138,8 +136,19 @@ allowlist (performance metrics only, never research notes — user ruling 2026-0
 | `public_nav_history` | NAV series + cash/invested % + derived daily return. |
 | `public_price_latest` | Latest daily close per ticker — the valuation fallback while `prices-live` is dormant or the market is closed. |
 
-**Known follow-up (#1462):** the base tables currently carry a permissive `anon_read`
-SELECT policy predating this ruling, so `positions` is still directly anon-readable —
-including the research columns. Tightening those policies so the views become the
-*only* public surface is deliberately out of scope here (base-table RLS untouched by
-ruling) and tracked on #1462.
+## What is public on purpose, what is locked (#1462 rulings, 2026-07-10)
+
+Many Atlas base tables carry permissive anon SELECT policies predating these rulings.
+The user resolved that split explicitly — both halves are deliberate, not oversights:
+
+- **Locked (migration 051):** the live strategy store — `strategy_signals` (current
+  position), `strategy_trades` (live trade log), `strategies` (config). Anon access
+  here would have bypassed the 3-day public signal delay (`signal_delay_days`,
+  PR #1479). Public strategy data flows only through the delayed static JSON and
+  `strategy_tearsheets` (which keeps its anon policy — the pipeline writes the delayed
+  view there).
+- **Public by design:** the Atlas research internals — `documents`, `theses`,
+  `decision_log`, `deliberation_*`, and the `rationale`/`pm_notes` columns on
+  `positions`. Olympus is an open research project and its dashboard is itself an
+  anon-key client of these tables. Do not "fix" this exposure; the curated views above
+  exist to give digiquant.io a stable, minimal read surface, not to hide the research.

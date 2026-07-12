@@ -12,7 +12,8 @@
 // Outside extended US market hours (13:00–01:00 UTC, Mon–Fri) the function skips
 // fetching entirely and returns 200 {"market": "closed"}.
 //
-// See supabase/README.md for scheduling (pg_cron + pg_net) and frontend consumption.
+// See digiquant/supabase/README.md for scheduling (pg_cron + pg_net) and frontend
+// consumption, and migration 050_public_portfolio_views.sql for the paired views.
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -91,7 +92,7 @@ async function fetchQuote(symbol: string, apiKey: string): Promise<QuoteOut> {
 Deno.serve(async (_req: Request): Promise<Response> => {
   const at = new Date();
 
-  // 1) Dormant gate — the key is a one-time human step (see supabase/README.md).
+  // 1) Dormant gate — the key is a one-time human step (see digiquant/supabase/README.md).
   const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
   if (!finnhubKey) {
     console.log("prices-live: FINNHUB_API_KEY not set — dormant, nothing fetched");

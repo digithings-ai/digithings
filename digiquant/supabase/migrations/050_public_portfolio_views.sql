@@ -1,12 +1,16 @@
--- 20260710120000_public_portfolio_views.sql — Public portfolio read surface (#1461, #1462).
+-- 050_public_portfolio_views.sql — Public portfolio read surface (#1461, #1462).
 --
--- Run with:  supabase db push   (or paste into the Supabase SQL editor / apply via MCP)
+-- Run with:  supabase db push   (or apply via MCP against this project).
 --
 -- User ruling 2026-07-10 (issue #1462): the Olympus/Atlas portfolio becomes publicly
 -- readable — performance metrics ONLY, never research notes. These three views are the
 -- entire public read surface for digiquant.io's live portfolio page; the SELECT list of
--- each view IS the allowlist (same curation pattern as
--- digiquant/supabase/migrations/041_atlas_run_health_view.sql).
+-- each view IS the allowlist (same curation pattern as 041_atlas_run_health_view.sql).
+-- They pair with the prices-live edge function (../functions/prices-live/) — see
+-- README.md in this directory for the full two-lane live price feed design.
+--
+-- ADDITIVE ONLY: three new views + their grants. No FKs, no DROP/ALTER/TRUNCATE of any
+-- existing object; base tables untouched.
 --
 -- Security model — intentional security-DEFINER views (security_invoker = false):
 --   * Base tables (positions, nav_history, price_history) keep their existing RLS
