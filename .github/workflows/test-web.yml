@@ -1,0 +1,41 @@
+name: "Test: web apps"
+
+on:
+  workflow_call:
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ./package-lock.json
+
+      # Install at the monorepo root so npm wires the @digithings/web and
+      # @digithings/design workspace symlinks, then lint each app in-workspace.
+      # No "Install Linux native bindings" step here: these jobs are lint-only
+      # (ESLint is pure JS) and never invoke rolldown / lightningcss / oxide.
+      - name: Install (root workspaces)
+        run: npm ci --no-audit --no-fund
+
+      # Canon ratchet (#1404): frontends stay on token-backed utilities —
+      # no raw palette classes, legacy vocabulary, or color literals outside
+      # the sanctioned allowlist. Playbook: frontend/digiweb/MIGRATION.md
+      - name: Frontend canon guard
+        run: python3 scripts/check_frontend_canon.py
+
+      - name: Lint digithings-web
+        run: npm run lint --workspace digithings-web
+
+      - name: Lint digiquant-web
+        run: npm run lint --workspace digiquant-web

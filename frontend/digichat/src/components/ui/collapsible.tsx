@@ -1,21 +1,11 @@
 "use client"
 
-import { Collapsible as CollapsiblePrimitive } from "@base-ui/react/collapsible"
+// Thin re-export of the shared @digithings/web Collapsible (#1419) — an
+// unstyled 1:1 passthrough of @base-ui/react's Collapsible, exactly like
+// the previous local wrapper (call sites keep dressing trigger/panel).
 
-function Collapsible({ ...props }: CollapsiblePrimitive.Root.Props) {
-  return <CollapsiblePrimitive.Root data-slot="collapsible" {...props} />
-}
-
-function CollapsibleTrigger({ ...props }: CollapsiblePrimitive.Trigger.Props) {
-  return (
-    <CollapsiblePrimitive.Trigger data-slot="collapsible-trigger" {...props} />
-  )
-}
-
-function CollapsibleContent({ ...props }: CollapsiblePrimitive.Panel.Props) {
-  return (
-    <CollapsiblePrimitive.Panel data-slot="collapsible-content" {...props} />
-  )
-}
-
-export { Collapsible, CollapsibleTrigger, CollapsibleContent }
+export {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@digithings/web"

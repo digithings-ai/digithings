@@ -1,3 +1,16 @@
+---
+title: DigiLLM
+type: module
+status: reviewed
+created: 2026-06-15
+tags:
+  - support
+  - llm-routing
+  - library
+relevance:
+  - digigraph
+  - digisearch
+---
 # DigiLLM
 > The single home for LLM client code — provider-agnostic routing, structured output, and tool calling, with no service coupling.
 

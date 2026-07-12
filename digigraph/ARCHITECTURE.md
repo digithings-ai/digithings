@@ -36,7 +36,7 @@ The following is built and functional as of this architecture review (March 2026
 | Supervisor node (opt-in via `DIGI_SUPERVISOR=1`) | Built | `graph/nodes.py` |
 | Orchestrator tool registry | Built | `orchestration/registry.py` |
 | Built-in tools + skills | Built | `orchestration/builtin.py` |
-| Vertical hub clients (DigiSearch, DigiQuant) | Built | `vertical_orchestrator/digisearch_hub.py`, `vertical_orchestrator/digiquant_hub.py` |
+| Vertical hub clients (DigiSearch, DigiQuant, DigiVault) | Built | `vertical_orchestrator/digisearch_hub.py`, `vertical_orchestrator/digiquant_hub.py`, `vertical_orchestrator/digivault_hub.py` |
 | SSE streaming via background thread + queue | Built | `server.py`, `workflow.py` |
 | LLM client (OpenAI SDK, LiteLLM compat) | Built | `digillm` (toolkit) + `llm_client.py` wrappers |
 | In-process LLM response cache (SHA-256, TTL) | Built | `digillm` |
@@ -252,7 +252,8 @@ digigraph/src/digigraph/
 │   └── plugins.py               setuptools entry point loader (digigraph.tools)
 ├── vertical_orchestrator/
 │   ├── digisearch_hub.py        fetch_digisearch_tool_dicts, invoke_digisearch_tool
-│   └── digiquant_hub.py         fetch_digiquant_tool_dicts, invoke_digiquant_tool
+│   ├── digiquant_hub.py         fetch_digiquant_tool_dicts, invoke_digiquant_tool
+│   └── digivault_hub.py         fetch_digivault_tool_dicts, invoke_digivault_tool
 ├── agents/
 │   ├── analysis/                run_analysis_agent, ANALYSIS_AGENT_TOOL
 │   ├── data_engineer/           run_data_engineer_agent, DATA_ENGINEER_AGENT_TOOL
@@ -302,18 +303,19 @@ The graph is compiled once per `build_workflow_graph()` call. In practice, `work
 Three-layer structure:
 
 1. **Primitives** (`tools/`): stateless callables not exposed to the LLM directly.
-2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. DigiSearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` in `builtin.py:585`.
-3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `sitaas_rag` skill activates only when `run_data_dir` is set.
+2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. DigiSearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
+3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `sitaas_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (one tool, `digivault_search_notes`) activates only when `DIGIVAULT_URL` is set.
 
 The registry is a module-level dict (`_tools`, `_skills` in `registry.py`). It is global to the process — all requests share the same registry. `register_tool` raises `ValueError` on duplicate names, so plugins loaded via `load_entrypoint_tools()` must use unique names.
 
 ### 5.4 Vertical Connector Pattern
 
-DigiSearch and DigiQuant each own their tool schemas via `POST /v1/orchestrator_tools`. DigiGraph:
+DigiSearch, DigiQuant, and DigiVault each own their tool schemas via `POST /v1/orchestrator_tools`. DigiGraph:
 
 1. Calls `fetch_digisearch_tool_dicts(base_url, index_config, bearer, request_id)` at schema resolution time. Results are cached in a module-level dict (`_MANIFEST_CACHE`) keyed on `(base_url, index_config)` — this cache is **never invalidated** for the lifetime of the process.
 2. Invokes tools via `invoke_digisearch_tool(base_url, tool, args, ...)` → `POST /v1/orchestrator_invoke`.
 3. The DigiQuant connector follows the same pattern via `digiquant_hub.py`.
+4. The DigiVault connector (`digivault_hub.py`) follows the same pattern for one tool, `digivault_search_notes` — full-text search over the DigiThings architecture vault (Supabase-backed, `SupabaseStore.search`). It has no `index_config` (vault search is not index-scoped), so its manifest cache key is the base URL alone.
 
 The manifest cache uses synchronous `httpx.Client` (blocking calls inside async FastAPI). This can block the event loop thread during tool schema resolution. The current request handling is synchronous (FastAPI's thread pool), so this is acceptable but limits throughput under high concurrency.
 
@@ -422,7 +424,7 @@ The MCP server (`mcp_server.py`) has no built-in authentication layer. The `stre
 
 ### 6.9 Manifest Cache Never Invalidates
 
-The vertical manifest caches in `digisearch_hub.py` and `digiquant_hub.py` are module-level dicts with no TTL or invalidation. If DigiSearch or DigiQuant adds, removes, or changes a tool definition, the cached schema is stale until the DigiGraph process restarts. This affects tool schema accuracy in long-running deployments.
+The vertical manifest caches in `digisearch_hub.py`, `digiquant_hub.py`, and `digivault_hub.py` are module-level dicts with no TTL or invalidation. If DigiSearch, DigiQuant, or DigiVault adds, removes, or changes a tool definition, the cached schema is stale until the DigiGraph process restarts. This affects tool schema accuracy in long-running deployments.
 
 ---
 
@@ -447,7 +449,7 @@ The `MemorySaver` default stores all thread state in a Python dict in the DigiGr
 
 ### 7.4 Vertical Manifest HTTP Blocking
 
-`fetch_digisearch_tool_dicts` and `fetch_digiquant_tool_dicts` make synchronous `httpx` calls at schema resolution time, inside FastAPI's synchronous thread pool. If DigiSearch or DigiQuant is slow or unavailable, this blocks a worker thread for up to 30 seconds (`timeout=30.0`). The first request after startup or cache invalidation pays this cost.
+`fetch_digisearch_tool_dicts`, `fetch_digiquant_tool_dicts`, and `fetch_digivault_tool_dicts` make synchronous `httpx` calls at schema resolution time, inside FastAPI's synchronous thread pool. If DigiSearch, DigiQuant, or DigiVault is slow or unavailable, this blocks a worker thread for up to 30 seconds (`timeout=30.0`). The first request after startup or cache invalidation pays this cost.
 
 ### 7.5 Postgres Checkpoint Path
 
@@ -565,6 +567,16 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - **Model routing:** callers must pass a concrete model string resolved via `config/model_modes.yaml`. The `digi/fast`, `digi/balanced`, `digi/best`, `digi/multimodal` named routes have been removed. Atlas/Hermes phases all use `openrouter/openrouter/auto` (OpenRouter Auto Router); set `OPENROUTER_API_KEY`. See `.env.example` and `config/model_modes.yaml`.
 - Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`).
 
+### 9.7 DigiVault
+
+**Protocol:** HTTP via `digivault_hub.py`
+
+- **Manifest:** `POST /v1/orchestrator_tools` — returns the OpenAI tool dict for `digivault_search_notes`. Cached per `base_url` (no `index_config` — vault search is not index-scoped).
+- **Invoke:** `POST /v1/orchestrator_invoke` — dispatches to `SupabaseStore.search` (the `search_architecture_notes` RPC) on DigiVault's side. Accepts `{tool, arguments}`.
+- **Auth:** Bearer token from `WorkflowState.digi_bearer` is forwarded via `Authorization: Bearer` header; `X-Request-ID` forwarded from `ToolContext.request_id`.
+- **Env:** `DIGIVAULT_URL` (empty = the `digivault` skill is not registered for the request; other skills are unaffected). In Docker: `http://digivault:8004`.
+- **Purpose:** reproduces the vault-grounded documentation search the digithings.ai chat widget calls directly today ([ADR-0018](../docs/adr/0018-digichat-path-routing.md), epic #1248) — the tool DigiChat's BFF needs once traffic moves off the bespoke widget onto DigiGraph.
+
 ---
 
 ## 10. Docker and MCP Composition
@@ -592,6 +604,7 @@ digigraph:
 |----------|------------------|-------------|
 | `DIGIQUANT_URL` | `http://digiquant:8001` | DigiQuant HTTP base URL |
 | `DIGISEARCH_URL` | `http://digisearch:8002` | DigiSearch HTTP base URL; empty = search disabled |
+| `DIGIVAULT_URL` | `http://digivault:8004` | DigiVault HTTP base URL; empty = `digivault_search_notes` disabled |
 | `DIGISMITH_URL` | `http://digismith:8003` | DigiSmith status URL (unused by DigiGraph HTTP) |
 | `DIGIKEY_JWKS_URL` | `http://digikey:8005/.well-known/jwks.json` | JWT public key endpoint |
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer claim |

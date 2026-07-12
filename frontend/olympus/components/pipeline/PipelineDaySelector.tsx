@@ -16,25 +16,25 @@ export default function PipelineDaySelector({ dates, value, onChange }: Pipeline
   const label = formatDate(value);
 
   return (
-    <div className="ml-auto flex items-center gap-2 bg-bg-secondary border border-border-subtle rounded-[9px] px-2.5 py-1.5 font-mono text-[12.5px] tabular-nums">
+    <div className="ml-auto flex items-center gap-2 bg-term-bg border border-hair rounded-[9px] px-2.5 py-1.5 font-mono text-[12.5px] tabular-nums">
       <button
         type="button"
         aria-label="Previous day"
         disabled={!hasPrev}
         onClick={() => hasPrev && onChange(dates[idx - 1])}
-        className="text-text-muted hover:text-text-primary disabled:opacity-30 transition-colors"
+        className="text-ink-mute hover:text-ink disabled:opacity-30 transition-colors"
       >
         <ChevronLeft size={14} />
       </button>
 
-      <span className="text-text-primary whitespace-nowrap">{label}</span>
+      <span className="text-ink whitespace-nowrap">{label}</span>
 
       <button
         type="button"
         aria-label="Next day"
         disabled={!hasNext}
         onClick={() => hasNext && onChange(dates[idx + 1])}
-        className="text-text-muted hover:text-text-primary disabled:opacity-30 transition-colors"
+        className="text-ink-mute hover:text-ink disabled:opacity-30 transition-colors"
       >
         <ChevronRight size={14} />
       </button>

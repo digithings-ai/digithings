@@ -1,7 +1,6 @@
 'use client';
 
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { cleanMemoProse, summarizeRecommendedPortfolio } from '@/lib/render-pipeline-payloads';
 
 // Legacy shape: body.rebalance_table rows
@@ -46,12 +45,12 @@ function actionClass(action: string | undefined): string {
   switch (action) {
     case 'add':
     case 'new':
-      return 'text-fin-green';
+      return 'text-up';
     case 'trim':
     case 'exit':
-      return 'text-fin-red/90';
+      return 'text-down/90';
     default:
-      return 'text-text-secondary';
+      return 'text-ink-soft';
   }
 }
 
@@ -97,9 +96,7 @@ export default function RebalanceDocumentView({
   // ── Fallback ─────────────────────────────────────────────────────────────
   if (!isLiveShape && !legacyRows.length && !pmNotes) {
     return (
-      <div className="prose prose-invert max-w-none text-sm">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
-      </div>
+      <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
     );
   }
 
@@ -108,62 +105,60 @@ export default function RebalanceDocumentView({
     return (
       <div className="space-y-6 text-sm">
         {liveSummary ? (
-          <div className="rounded-lg border border-fin-blue/15 bg-fin-blue/[0.04] p-4">
-            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
+          <div className="rounded-lg border border-accent/15 bg-accent/[0.04] p-4">
+            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-3">
               Post-risk-sizing book summary
             </h3>
             <div className="grid grid-cols-3 gap-3 text-xs">
               <div>
-                <p className="text-[10px] uppercase tracking-wider text-text-muted">Invested</p>
-                <p className="text-base font-semibold tabular-nums text-text-primary">
+                <p className="text-[10px] uppercase tracking-wider text-ink-mute">Invested</p>
+                <p className="text-base font-semibold tabular-nums text-ink">
                   {liveSummary.investedPct.toFixed(2)}%
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider text-text-muted">Cash</p>
-                <p className="text-base font-semibold tabular-nums text-text-primary">
+                <p className="text-[10px] uppercase tracking-wider text-ink-mute">Cash</p>
+                <p className="text-base font-semibold tabular-nums text-ink">
                   {liveSummary.cashPct.toFixed(2)}%
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider text-text-muted">Holdings</p>
-                <p className="text-base font-semibold tabular-nums text-text-primary">
+                <p className="text-[10px] uppercase tracking-wider text-ink-mute">Holdings</p>
+                <p className="text-base font-semibold tabular-nums text-ink">
                   {liveSummary.holdingsCount}
                 </p>
               </div>
             </div>
-            <p className="mt-3 text-[11px] text-text-muted leading-relaxed">
+            <p className="mt-3 text-[11px] text-ink-mute leading-relaxed">
               Structured recommended weights are the source of truth if narrative notes conflict.
             </p>
           </div>
         ) : null}
         {liveNotes ? (
           <div>
-            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
               Narrative / memo notes
             </h3>
-            <div className="prose prose-invert max-w-none text-sm">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(liveNotes)}</ReactMarkdown>
-            </div>
+            <SafeMarkdown>{cleanMemoProse(liveNotes)}</SafeMarkdown>
           </div>
         ) : null}
 
         {liveWeights.length > 0 ? (
           <div className="overflow-x-auto">
-            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
               Recommended weights
             </h3>
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-border-subtle text-text-muted">
+                <tr className="border-b border-hair text-ink-mute">
                   <th className="py-2 pr-3 font-medium">Ticker</th>
                   <th className="py-2 font-medium text-right">Target %</th>
                 </tr>
               </thead>
               <tbody>
                 {liveWeights.map((w, i) => (
-                  <tr key={i} className="border-b border-border-subtle/60">
-                    <td className="py-2 pr-3 font-mono text-fin-blue">{w.ticker ?? '—'}</td>
+                  <tr key={i} className="border-b border-hair/60">
+                    <td className="py-2 pr-3 font-mono text-accent">{w.ticker ?? '—'}</td>
                     {/* Live shape: `target_pct`; fixture / test payloads: `weight_pct`. */}
                     <td className="py-2 text-right tabular-nums">{pct(w.target_pct ?? w.weight_pct)}</td>
                   </tr>
@@ -175,10 +170,10 @@ export default function RebalanceDocumentView({
 
         {liveActions.length > 0 ? (
           <div className="overflow-x-auto">
-            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Actions</h3>
+            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Actions</h3>
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-border-subtle text-text-muted">
+                <tr className="border-b border-hair text-ink-mute">
                   <th className="py-2 pr-3 font-medium">Ticker</th>
                   <th className="py-2 pr-3 font-medium">Action</th>
                   <th className="py-2 pr-3 font-medium text-right">Current</th>
@@ -188,13 +183,13 @@ export default function RebalanceDocumentView({
               </thead>
               <tbody>
                 {liveActions.map((a, i) => (
-                  <tr key={i} className="border-b border-border-subtle/60 align-top">
-                    <td className="py-2 pr-3 font-mono text-fin-blue">{a.ticker ?? '—'}</td>
+                  <tr key={i} className="border-b border-hair/60 align-top">
+                    <td className="py-2 pr-3 font-mono text-accent">{a.ticker ?? '—'}</td>
                     <td className={`py-2 pr-3 font-medium ${actionClass(a.action)}`}>{a.action ?? '—'}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{pct(a.current_pct)}</td>
                     {/* Live shape: `target_pct`; fixture / test payloads: `recommended_pct`. */}
                     <td className="py-2 pr-3 text-right tabular-nums">{pct(a.target_pct ?? a.recommended_pct)}</td>
-                    <td className="py-2 text-text-secondary whitespace-pre-wrap">
+                    <td className="py-2 text-ink-soft whitespace-pre-wrap">
                       {cleanMemoProse(a.rationale ?? '—')}
                     </td>
                   </tr>
@@ -211,25 +206,25 @@ export default function RebalanceDocumentView({
   return (
     <div className="space-y-6 text-sm">
       {ds && (
-        <div className="rounded-lg border border-border-subtle bg-bg-secondary/50 p-4 space-y-1 text-text-secondary">
-          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Delta summary</p>
+        <div className="rounded-lg border border-hair bg-term-bg/50 p-4 space-y-1 text-ink-soft">
+          <p className="text-xs font-semibold text-ink-mute uppercase tracking-wider">Delta summary</p>
           <p>
-            Changes triggered: <span className="text-white">{String(ds.changes_triggered ?? '—')}</span> · Held:{' '}
-            <span className="text-white">{String(ds.held_count ?? '—')}</span>
+            Changes triggered: <span className="text-ink">{String(ds.changes_triggered ?? '—')}</span> · Held:{' '}
+            <span className="text-ink">{String(ds.held_count ?? '—')}</span>
           </p>
           {ds.largest_move != null && String(ds.largest_move).trim() ? (
             <p>
-              Largest move: <span className="text-white">{String(ds.largest_move)}</span>
+              Largest move: <span className="text-ink">{String(ds.largest_move)}</span>
             </p>
           ) : null}
           {Array.isArray(ds.new_entries) && ds.new_entries.length > 0 ? (
             <p>
-              New: <span className="text-fin-blue">{ds.new_entries.join(', ')}</span>
+              New: <span className="text-accent">{ds.new_entries.join(', ')}</span>
             </p>
           ) : null}
           {Array.isArray(ds.exits) && ds.exits.length > 0 ? (
             <p>
-              Exits: <span className="text-fin-red/90">{ds.exits.join(', ')}</span>
+              Exits: <span className="text-down/90">{ds.exits.join(', ')}</span>
             </p>
           ) : null}
         </div>
@@ -237,21 +232,19 @@ export default function RebalanceDocumentView({
 
       {pmNotes ? (
         <div>
-          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+          <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
             Narrative / memo notes
           </h3>
-          <div className="prose prose-invert max-w-none text-sm">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(pmNotes)}</ReactMarkdown>
-          </div>
+          <SafeMarkdown>{cleanMemoProse(pmNotes)}</SafeMarkdown>
         </div>
       ) : null}
 
       {legacyRows.length > 0 ? (
         <div className="overflow-x-auto">
-          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Rebalance table</h3>
+          <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Rebalance table</h3>
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-border-subtle text-text-muted">
+              <tr className="border-b border-hair text-ink-mute">
                 <th className="py-2 pr-3 font-medium">Ticker</th>
                 <th className="py-2 pr-3 font-medium text-right">Current</th>
                 <th className="py-2 pr-3 font-medium text-right">Target</th>
@@ -263,14 +256,14 @@ export default function RebalanceDocumentView({
             </thead>
             <tbody>
               {legacyRows.map((r, i) => (
-                <tr key={i} className="border-b border-border-subtle/60 align-top">
-                  <td className="py-2 pr-3 font-mono text-fin-blue">{r.ticker ?? '—'}</td>
+                <tr key={i} className="border-b border-hair/60 align-top">
+                  <td className="py-2 pr-3 font-mono text-accent">{r.ticker ?? '—'}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{pct(r.current_pct)}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{pct(r.recommended_pct)}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{pct(r.change_pct)}</td>
                   <td className="py-2 pr-3">{r.action ?? '—'}</td>
                   <td className="py-2 pr-3">{r.urgency ?? '—'}</td>
-                  <td className="py-2 text-text-secondary whitespace-pre-wrap">
+                  <td className="py-2 text-ink-soft whitespace-pre-wrap">
                     {cleanMemoProse(r.rationale ?? '—')}
                   </td>
                 </tr>

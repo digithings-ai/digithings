@@ -313,10 +313,10 @@ export default function TwelveXClient() {
   if (error === 'unconfigured') {
     return (
       <div className={`${SUBPAGE_MAX} py-10`}>
-        <div className="glass-card p-10 text-center text-text-muted text-sm">
+        <div className="glass-card p-10 text-center text-ink-mute text-sm">
           FX research is not configured. Set{' '}
-          <code className="font-mono text-text-secondary">NEXT_PUBLIC_TWELVEX_SUPABASE_URL</code> and{' '}
-          <code className="font-mono text-text-secondary">NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY</code>{' '}
+          <code className="font-mono text-ink-soft">NEXT_PUBLIC_TWELVEX_SUPABASE_URL</code> and{' '}
+          <code className="font-mono text-ink-soft">NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY</code>{' '}
           (or the shared Supabase env vars).
         </div>
       </div>
@@ -326,7 +326,7 @@ export default function TwelveXClient() {
   if (error) {
     return (
       <div className={`${SUBPAGE_MAX} py-10`}>
-        <div className="glass-card p-10 text-center text-fin-red text-sm">{error}</div>
+        <div className="glass-card p-10 text-center text-down text-sm">{error}</div>
       </div>
     );
   }

@@ -1,3 +1,18 @@
+---
+title: DigiBase
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - support
+  - library
+relevance:
+  - digigraph
+  - digiquant
+  - digisearch
+  - digismith
+  - digikey
+---
 # DigiBase
 
 > Shared infrastructure library — the utilities every DigiThings service uses, kept minimal and dependency-free.

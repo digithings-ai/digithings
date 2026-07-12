@@ -1,18 +1,52 @@
-import { Footer, Reveal } from "@digithings/web";
+import {
+  Colophon,
+  Footer,
+  OdometerStrip,
+  PricingTierCard,
+  Reveal,
+  WordReveal,
+  subsystems,
+  type OdometerStat,
+} from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
-import { DqNav } from "@/components/landing/DqNav";
+import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
+import { SiteNav } from "@/components/landing/SiteNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
-import { PipelineScene } from "@/components/landing/PipelineScene";
+import { LiveTickerRow } from "@/components/landing/LiveTickerRow";
+import { OlympusPortfolioPanel } from "@/components/landing/OlympusPortfolioPanel";
+import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
+import { OlympusScene } from "@/components/landing/OlympusScene";
 import { StrategySuite } from "@/components/landing/StrategySuite";
+import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
+import strategyIndex from "@/public/strategies/index.json";
+import type { StrategyIndexEntry } from "@/components/tearsheet/types";
 
-// The v7 scroll-driven landing: a mouse-following mesh-gradient hero, a
-// scroll-pinned Olympus pipeline, the real BTC/ETH/SOL backtest suite, and an
-// open-source closing. The mesh / pipeline / suite are client islands; the page
-// itself stays a server component and exports statically.
+// Real figures only — each one is mined from shipped data, never invented:
+// subsystem count from the shared subsystems registry (Atlas · Hermes ·
+// Kairos), trade count summed from the published tearsheets' strategies
+// index at build time, the 7 pipeline stages from ResearchPipeline's FLOW
+// (01 research → 07 execution), and the zero is Kairos's loopback-only
+// default — nothing reaches a live venue until a human flips the gate.
+const TOTAL_TRADES = (strategyIndex as StrategyIndexEntry[]).reduce(
+  (n, s) => n + s.total_trades,
+  0,
+);
+const METRICS: OdometerStat[] = [
+  { value: String(subsystems.length), label: "subsystems" },
+  { value: "7", label: "pipeline stages" },
+  { value: String(TOTAL_TRADES), label: "backtested trades" },
+  { value: "0", label: "ungated live orders" },
+];
+
+// v7 scroll-driven landing, now wearing the flagship expressive grammar
+// (#1450): mesh hero → live market ticker → digit-roll OdometerStrip →
+// linear pipeline → Olympus scrolly → strategy suite → the one WordReveal
+// claim → pricing. Client islands; page stays a server component. Every
+// motion moment honors prefers-reduced-motion and reads with no JS.
 export default function Home() {
   return (
     <>
-      <DqNav />
+      <SiteNav />
       <main>
         <HeroMesh>
           <h1 className="dqhero-h1">
@@ -30,109 +64,131 @@ export default function Home() {
             researches, <b>Hermes</b> sizes the risk, <b>Kairos</b> executes. Open-source and
             self-hosted, so a fund that once needed a team now runs for one.
           </p>
-          <div className="dqhero-cta">
-            <a className="btn btn-primary" href="/olympus/">
-              Open Olympus
-            </a>
-            <a
-              className="btn btn-ghost"
-              href="https://github.com/digithings-ai"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              View on GitHub ↗
-            </a>
+          <div className="dqhero-cta dqhero-scrollcue">
+            <span className="dqhero-scroll-label">Scroll to explore</span>
+            <div className="dqhero-scroll" aria-hidden="true" />
           </div>
         </HeroMesh>
 
-        <PipelineScene />
+        {/* The single market-pulse tape right under the hero: one shared
+            StockTicker row carrying crypto (keyless Coinbase WS) then the equity
+            majors (seeded from the daily-close view, live intraday from the
+            feed). A client island; SSR-safe (renders a muted "connecting" line
+            until quotes arrive). */}
+        <LiveTickerRow />
+
+        <section className="section" id="metrics">
+          <div className="wrap">
+            <Reveal>
+              <div style={{ textAlign: "center" }}>
+                <span className="kicker">{"// by the numbers"}</span>
+                <h2 className="dq-title">The desk, in four numbers.</h2>
+                <p className="dq-sub" style={{ marginInline: "auto" }}>
+                  No projections — every figure is a property of the shipped stack: the
+                  subsystems, the pipeline, and the published tearsheets. Live stays zero until a
+                  human flips the gate.
+                </p>
+              </div>
+            </Reveal>
+            <Reveal>
+              <OdometerStrip stats={METRICS} className="mx-auto mt-[2.2rem] max-w-[880px]" />
+            </Reveal>
+          </div>
+        </section>
+
+        <ResearchPipeline />
+
+        <OlympusScene />
+
+        {/* The payoff of the Olympus pipeline: the research book Atlas/Hermes
+            maintain, marked live off the same feed. Client island; SSR-safe
+            (renders a plain "connects on deploy" card without env vars). */}
+        <OlympusPortfolioPanel />
 
         <StrategySuite />
 
-        <section className="section dqcta" id="open">
-          <Reveal className="wrap">
-            <div className="dq-eyebrow">Open source · MIT</div>
-            <h2 className="dq-title">Your data. Your machines. Your call on every fill.</h2>
-            <p className="dq-sub">
-              Clone the engine, run it on hardware you own, and keep a human gate between every
-              signal and the market. The core is open — the edge is yours.
-            </p>
-            <div className="dqcta-actions">
-              <a
-                className="btn btn-primary"
-                href="https://github.com/digithings-ai"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                View on GitHub ↗
-              </a>
-              <a className="btn btn-ghost" href="/olympus/">
-                Open Olympus
-              </a>
-            </div>
-          </Reveal>
+        {/* No .section padding here: the WordReveal track is its own breathing
+            room (the line rides in, pins at mid-viewport for a beat, and the
+            page flows on) — section padding on top of it reads as a dead gap.
+            The claim reuses the hero's own words ("In a box you own") — one
+            voice, no re-voicing. */}
+        <section id="claim" aria-label="Research to execution, in a box you own">
+          <div className="wrap">
+            <WordReveal id="claim-reveal" text="Research to execution. In a box you own." />
+          </div>
         </section>
 
         <section className="section" id="pricing">
           <div className="wrap">
             <Reveal>
               <div style={{ textAlign: "center" }}>
-                <div className="dq-eyebrow">Pricing</div>
-                <h2 className="dq-title">Open core. Managed tier for Atlas.</h2>
+                <span className="kicker">{"// pricing"}</span>
+                <h2 className="dq-title">Own it, or have it run for you.</h2>
                 <p className="dq-sub" style={{ marginInline: "auto" }}>
-                  Self-host the full stack at no cost. The managed Atlas tier adds SLAs, onboarding,
-                  and operational support.
+                  digiquant is open core. Self-host the whole stack at no cost, join the waitlist for
+                  managed Olympus, or talk to us about enterprise — the same engine either way.
                 </p>
               </div>
             </Reveal>
-            <div className="grid dq-pricing" style={{ marginInline: "auto", marginTop: "2.2rem" }}>
-              <Reveal className="price-card">
-                <h3>Open core</h3>
-                <p className="price">
-                  self-host · <span className="dq-up">free</span>
-                </p>
-                <ul>
-                  <li>Full stack, MIT / Apache-licensed</li>
-                  <li>NautilusTrader execution engine</li>
-                  <li>Research → backtest → execution pipeline</li>
-                  <li>Community support on GitHub</li>
-                </ul>
-                <a
-                  className="btn btn-ghost"
-                  href="https://github.com/digithings-ai"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  View on GitHub <span aria-hidden="true">→</span>
-                </a>
-              </Reveal>
-              <Reveal className="price-card accent">
-                <span className="price-flag">managed</span>
-                <h3>Managed Atlas</h3>
-                <p className="price">contact</p>
-                <ul>
-                  <li>Managed Atlas runner with SLA</li>
-                  <li>Custom strategy onboarding</li>
-                  <li>Priority fixes + roadmap input</li>
-                  <li>Optional on-prem deployment</li>
-                </ul>
-                <a className="btn btn-primary" href="mailto:hello@digithings.ai">
-                  Get in touch <span aria-hidden="true">→</span>
-                </a>
+            {/* Tier cards are the shared PricingTierCard (hero voice, #1417) —
+                one grammar with the /contact tiers; the featured tier wears the
+                shared flat accent wash. The app owns the grid (three-up from
+                768px, the old site.css .pricing breakpoint). */}
+            <div style={{ marginTop: "2.2rem" }}>
+              <Reveal className="grid grid-cols-1 gap-[1.25rem] min-[768px]:grid-cols-3">
+                {PRICING_TIERS.map((tier) => (
+                  <PricingTierCard
+                    key={tier.id}
+                    variant="hero"
+                    nameAs="h3"
+                    className="h-full"
+                    accent={tier.featured}
+                    name={tier.name}
+                    priceLine={
+                      <>
+                        {tier.price}
+                        {tier.cadence ? <span className="text-ink-mute"> {tier.cadence}</span> : null}
+                      </>
+                    }
+                    description={tier.desc}
+                    features={[...tier.features]}
+                    cta={
+                      tier.id === "self" ? (
+                        <CloneRepoButton />
+                      ) : tier.cta ? (
+                        <a className="btn btn-primary" href={tier.cta.href}>
+                          {tier.cta.label} <span aria-hidden="true">→</span>
+                        </a>
+                      ) : null
+                    }
+                  />
+                ))}
               </Reveal>
             </div>
-            <Reveal>
-              <p className="dq-built" style={{ textAlign: "center", marginTop: "2.2rem" }}>
-                digiquant is the quant module of{" "}
-                <a href="https://digithings.ai" target="_blank" rel="noopener noreferrer">
-                  the DigiThings platform
-                </a>{" "}
-                — the same open-core, self-hosted, audit-on stack.
-              </p>
-            </Reveal>
+            <div style={{ marginTop: "3rem", textAlign: "center" }}>
+              <Reveal>
+                <h3 className="dq-title" style={{ fontSize: "clamp(1.3rem, 2.4vw, 1.7rem)" }}>
+                  Questions
+                </h3>
+              </Reveal>
+            </div>
+            <div style={{ marginTop: "1.2rem" }}>
+              <Reveal className="faq">
+                {PRICING_FAQ.map((item, i) => (
+                  <details className="faq__item" name="dq-pricing-faq" key={item.q} open={i === 0}>
+                    <summary className="faq__q">{item.q}</summary>
+                    <p className="faq__a">{item.a}</p>
+                  </details>
+                ))}
+              </Reveal>
+            </div>
           </div>
         </section>
       </main>
+      {/* sweep: the homepage opts into the reference footer's glow sweep
+          (flagship grammar, #1450) — subpage consumers keep the
+          outline-only default. */}
+      <Colophon name="digi" suffix="quant" sweep />
       <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
     </>
   );

@@ -1,0 +1,478 @@
+/* Effects page — landing-page visual effects gathered as living reference.
+   Class names are kept identical to the shipping sites so the imported and
+   ported components render unchanged; each block cites its source. The dg-*
+   scrolly-graph styles are NOT duplicated here — they ship in
+   @digithings/web/styles/web-theme.css, already imported by app/globals.css. */
+
+/* ── demo framing (page-local) ──────────────────────────────────────── */
+
+.fx-demo {
+  margin-top: 1.6rem;
+}
+
+.fx-term-demo {
+  max-width: 720px;
+}
+
+/* ── typed module terminal ──────────────────────────────────────────────
+   Copied verbatim from frontend/digiweb/design/site/site.css §"terminal block"
+   (the package exports ./site/site.css, but importing it wholesale would
+   also pull its reset plus .kicker/.btn-* rules that conflict with this
+   app's globals — so only the terminal rules travel). Consumed by the
+   Terminal component imported from @digithings/web. Always dark: reads the
+   --term-* tokens, not the page surface. */
+
+.term { width: 100%; background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 14px; overflow: hidden; box-shadow: 0 44px 100px -50px rgba(0,0,0,0.45); }
+.term-bar { display: flex; align-items: center; gap: 8px; padding: 0.7rem 0.9rem; background: var(--term-fill); border-bottom: 1px solid var(--term-hair); }
+.term-bar i { width: 11px; height: 11px; border-radius: 50%; background: #3a342c; display: inline-block; }
+.term-bar i:nth-child(1) { background: #ec6a5e; } .term-bar i:nth-child(2) { background: #f4bf4f; } .term-bar i:nth-child(3) { background: #61c554; }
+.term-title { margin-left: auto; font-family: var(--font-mono); font-size: 0.72rem; color: var(--term-mute); }
+.term-body { font-family: var(--font-mono); font-size: clamp(0.76rem, 1.2vw, 0.88rem); line-height: 1.95; color: var(--term-ink); padding: 1.2rem 1.3rem 1.4rem; margin: 0; min-height: 17em; white-space: pre-wrap; }
+.tl-cmd { color: var(--term-ink); } .tl-cmd::before { content: "$ "; color: var(--accent); }
+.tl-out { color: var(--term-mute); }
+.tl-ok::before { content: "✓ "; color: var(--up); } .tl-ok { color: var(--term-mute); } .tl-ok b { color: var(--term-ink); font-weight: 500; }
+.tl-mod { color: var(--term-ink); } .tl-mod b { color: var(--accent); font-weight: 500; }
+.tl-install { color: var(--up); }
+.tl-arrow { color: var(--accent); }
+.term-cursor { display: inline-block; width: 0.6em; height: 1.05em; background: var(--accent); vertical-align: -0.16em; animation: blink 1.05s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* No JS: the Terminal component server-renders an empty transcript (playback
+   is client-driven), so hide the live shell and let the <noscript> static
+   transcript beside it carry the content. html.no-js ships in the layout and
+   is removed pre-paint by an inline script when JS runs. */
+html.no-js .fx-term-live {
+  display: none;
+}
+
+/* ── scrolly module graph — no-JS guard ─────────────────────────────────
+   All dg-* styling comes from web-theme.css. Without JS the component
+   server-renders the pinned 900vh track with the first module focused;
+   collapse it to one static graph + panel so the content simply reads. */
+html.no-js .dg-track {
+  height: auto !important;
+}
+
+html.no-js .dg-stage {
+  position: static;
+  height: auto;
+}
+
+html.no-js .dg-rail {
+  display: none;
+}
+
+/* ── digiquant research pipeline ────────────────────────────────────────
+   Copied verbatim from frontend/digiquant-web/app/globals.css §"PIPELINE"
+   (plus the two .dq-flow-* card fragments the step cards reuse). Wears the
+   digiquant teal via the .accent-digiquant livery class on the section. */
+
+.dq-flow-n { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); letter-spacing: 0.1em; }
+.dq-flow-tool { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); border: 1px solid var(--hair); border-radius: 999px; padding: 0.2rem 0.6rem; align-self: flex-start; }
+
+.dqpipe-steps-wrap { position: relative; max-width: 820px; margin: 0 auto; }
+.dqpipe-steps { list-style: none; position: relative; padding: 0.5rem 0 2rem; margin: 0; }
+.dqpipe-track {
+  position: absolute; left: 50%; top: 0; bottom: 2rem; width: 2px; margin-left: -1px;
+  border-radius: 999px; overflow: hidden;
+  background: color-mix(in srgb, var(--hair-2) 75%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.dqpipe-track-fill {
+  position: absolute; top: 0; left: 0; width: 100%; height: 0%;
+  border-radius: 999px;
+  background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 45%, transparent));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 65%, transparent);
+  transition: height 0.15s linear;
+  will-change: height;
+}
+.dqpipe-step {
+  position: relative; display: flex; justify-content: flex-start; width: 50%;
+  padding: 0.65rem 1.4rem 1.8rem 0;
+  opacity: 0;
+  transform: translateX(-52px) translateY(8px);
+  transition: opacity 0.72s var(--ease), transform 0.72s var(--ease);
+}
+.dqpipe-step.is-right {
+  margin-left: 50%; padding: 0.65rem 0 1.8rem 1.4rem; justify-content: flex-end;
+  transform: translateX(52px) translateY(8px);
+}
+.dqpipe-step.is-visible { opacity: 1; transform: none; }
+.dqpipe-card { position: relative; width: min(100%, 340px); background: var(--surface); border: 1px solid var(--hair); border-left: 2px solid var(--accent); border-radius: var(--r-md); padding: 1.25rem 1.3rem 1.15rem; display: flex; flex-direction: column; gap: 0.45rem; box-shadow: 0 24px 48px -36px color-mix(in srgb, var(--accent) 35%, transparent); }
+.dqpipe-card h3 { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.02em; }
+.dqpipe-card p { font-size: 0.9rem; color: var(--ink-soft); line-height: 1.55; }
+.dqpipe-step.is-right .dqpipe-card { border-left: 1px solid var(--hair); border-right: 2px solid var(--accent); }
+.dqpipe-step.is-exec .dqpipe-card { border-left-color: var(--up); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
+.dqpipe-step.is-exec.is-right .dqpipe-card { border-right-color: var(--up); }
+.dqpipe-step.is-exec .dq-flow-n { color: var(--up); }
+.dqpipe-rail {
+  position: absolute; top: 1.6rem; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--hair-2); background: var(--bg);
+  transition: border-color 0.35s var(--ease), background 0.35s var(--ease), box-shadow 0.35s var(--ease);
+}
+.dqpipe-step.is-visible .dqpipe-rail {
+  border-color: var(--accent); background: var(--accent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.dqpipe-step.is-exec.is-visible .dqpipe-rail { border-color: var(--up); background: var(--up); box-shadow: 0 0 14px color-mix(in srgb, var(--up) 55%, transparent); }
+.dqpipe-step:not(.is-right) .dqpipe-rail { right: -1.45rem; }
+.dqpipe-step.is-right .dqpipe-rail { left: -1.45rem; }
+@media (max-width: 720px) {
+  .dqpipe-track { left: 10px; margin-left: 0; }
+  .dqpipe-step, .dqpipe-step.is-right {
+    width: 100%; margin-left: 0; padding: 0.4rem 0 1.4rem 2rem; justify-content: flex-start;
+    transform: translateX(-36px) translateY(8px);
+  }
+  .dqpipe-step.is-right { transform: translateX(-36px) translateY(8px); }
+  .dqpipe-step.is-visible { transform: none; }
+  .dqpipe-step.is-right .dqpipe-card { border-left: 2px solid var(--accent); border-right: 1px solid var(--hair); }
+  .dqpipe-rail { left: 4px !important; right: auto !important; }
+}
+
+/* No JS: the slide-in classes are only ever added by the observer, so show
+   the assembled state (digiquant-web relies on the same html.no-js pattern). */
+html.no-js .dqpipe-step { opacity: 1; transform: none; }
+html.no-js .dqpipe-track-fill { height: 100%; }
+
+/* ── ambient mesh (contained demo panel) ────────────────────────────────
+   Base .dq-ambient rule copied verbatim from
+   frontend/digithings-web/app/globals.css; on the live sites the canvas
+   pins to the top 86svh of the page. Here .fx-mesh-frame contains it in a
+   360px panel so the bloom renders inside a frame instead of behind a page. */
+
+.dq-ambient { position: absolute; top: 0; left: 0; width: 100%; height: 86svh; z-index: 0; pointer-events: none; filter: blur(54px) saturate(1.12); }
+
+.fx-mesh-frame {
+  position: relative;
+  height: 360px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+}
+
+.fx-mesh-frame .dq-ambient {
+  height: 100%;
+}
+
+.fx-mesh-label {
+  position: relative;
+  z-index: 1;
+  padding: 1.1rem 1.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+/* ── reduced motion ─────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .term-cursor {
+    animation: none;
+  }
+
+  .dqpipe-step {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .dqpipe-track-fill {
+    transition: none;
+  }
+}
+
+/* ── rotating prompts — promoted to @digithings/web (#1450) ──────────────
+   The <RotatingPrompts/> primitive (components/effects-chrome/
+   RotatingPrompts.tsx) carries the prompt shell as utilities; the blinking
+   .prompt-caret @keyframes lives in @digithings/web/styles/effects-chrome.css,
+   imported from globals.css. */
+
+/* ── clip-path section reveal ───────────────────────────────────────── */
+/* .clip-band's static box + its label/copy/code type migrated to token-backed
+   Tailwind utilities on clip-reveal.tsx. The .clip-band class is kept on the
+   element because the @supports scroll-driven clip-wipe below hooks it. */
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .clip-band {
+      animation: clip-wipe linear both;
+      animation-timeline: view();
+      /* Complete the wipe early in the element's entry, so a flush-bottom last
+         section fully reveals during normal scroll rather than only at max
+         scroll. entry% has headroom here (reaches ~100% at the scroll end);
+         cover% would not (a last section never exits, capping cover low). */
+      animation-range: entry 0% entry 40%;
+    }
+  }
+}
+
+@keyframes clip-wipe {
+  from {
+    clip-path: inset(100% 0 0 0);
+    transform: translateY(24px);
+  }
+
+  to {
+    clip-path: inset(0 0 0 0);
+    transform: none;
+  }
+}
+
+/* ── cursor-follow reveal-field graph ───────────────────────────────────── */
+
+.hg-frame {
+  position: relative;
+  height: 24rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+/* .hg-canvas positioning migrated to Tailwind utilities on
+   hero-graph-reference.tsx; .hg-frame (page markup) stays above. */
+
+/* ── pinned zoom-morph section transition (mined from revolut.com) ──────── */
+
+.sm-wrap {
+  position: relative;
+  height: 240vh;
+  margin-top: 1.6rem;
+}
+
+.sm-stage {
+  position: sticky;
+  top: calc(var(--nav-h) + 1rem);
+  height: min(74vh, 560px);
+  border: 1px solid var(--hair);
+  border-radius: 16px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+}
+
+.sm-panel {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  will-change: transform;
+  overflow: hidden;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--ink) 8%, var(--surface)),
+    var(--surface) 60%,
+    color-mix(in srgb, var(--bg) 50%, var(--surface))
+  );
+}
+
+.sm-visual {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--hair) 100%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--hair) 100%, transparent) 1px, transparent 1px);
+  background-size: 100% 18%, 9% 100%;
+  opacity: 0.5;
+}
+
+.sm-visual::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 55%;
+  background: linear-gradient(to top, color-mix(in srgb, var(--accent) 22%, transparent), transparent);
+  clip-path: polygon(0 100%, 0 62%, 18% 46%, 34% 66%, 52% 30%, 70% 50%, 86% 18%, 100% 40%, 100% 100%);
+}
+
+.sm-hero {
+  position: absolute;
+  left: 1.5rem;
+  top: 1.4rem;
+  z-index: 2;
+  will-change: opacity;
+}
+
+.sm-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.sm-hero-title {
+  margin: 0.4rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.5rem, 3.4vw, 2.4rem);
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.sm-copy {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: clamp(1.2rem, 4%, 2.4rem);
+  width: min(42%, 22rem);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5rem;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+.sm-copy-title {
+  margin: 0.35rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.3rem, 2.6vw, 1.8rem);
+  letter-spacing: -0.013em;
+  line-height: 1.12;
+  color: var(--ink);
+}
+
+.sm-copy-body {
+  margin: 0.5rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sm-wrap {
+    height: auto;
+  }
+
+  .sm-stage {
+    position: static;
+    height: clamp(360px, 56vh, 520px);
+  }
+}
+
+/* ── stacking panels — promoted to @digithings/web (#1450) ────────────────
+   The <StackingPanels/> primitive (components/effects-chrome/
+   StackingPanels.tsx) carries content utilities + the scroll handler; the
+   .stk-panel / .stk-dim pinned mechanics live in
+   @digithings/web/styles/effects-chrome.css, imported from globals.css. */
+
+/* ── cross-fade + parallax section transition (mined from revolut.com) ──── */
+/* .cf-wrap margin + the .cf-kicker/.cf-title/.cf-body type migrated to
+   token-backed Tailwind utilities on crossfade-sections.tsx. .cf-block stays
+   as CSS — JS writes its live opacity/--e, the > * combinator drives the
+   per-child parallax, and reduced motion resets both. */
+
+.cf-block {
+  min-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 40rem;
+  will-change: opacity;
+}
+
+/* each child parallaxes from the block's --e by its own --d multiplier */
+.cf-block > * {
+  transform: translateY(calc(var(--e, 0) * var(--d, 1) * 24px));
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cf-block {
+    opacity: 1 !important;
+  }
+
+  .cf-block > * {
+    transform: none;
+  }
+}
+
+/* ── arc-flight routing map (mined from revolut.com's globe) ────────────── */
+
+/* .rm frame migrated to token-backed Tailwind utilities on routing-map.tsx.
+   The animated SVG children below stay as CSS. */
+.rm-grid line {
+  stroke: color-mix(in srgb, var(--hair) 70%, transparent);
+  stroke-width: 1;
+}
+
+.rm-arc-base {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 26%, transparent);
+  stroke-width: 1.2;
+}
+
+.rm-arc-flow {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-dasharray: 0.14 1;
+  stroke-dashoffset: 1;
+  animation: rm-flow 3s linear infinite;
+}
+
+@keyframes rm-flow {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.rm-node {
+  fill: var(--accent);
+}
+
+.rm-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: rm-ping 2.6s var(--ease) infinite;
+}
+
+@keyframes rm-ping {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.7;
+  }
+  80%,
+  100% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+
+.rm-label {
+  fill: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-arc-flow {
+    animation: none;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+    opacity: 0.5;
+  }
+  .rm-ring {
+    animation: none;
+  }
+}
+
+/* ── pipeline workflow viz — promoted to @digithings/web (#1450) ──────────
+   The <Pipeline/> primitive (components/effects-chrome/Pipeline.tsx) carries
+   the outer-box utilities; the pl-* structural CSS (node states, running
+   pulse, detail grids) lives in @digithings/web/styles/effects-chrome.css,
+   imported from globals.css. */

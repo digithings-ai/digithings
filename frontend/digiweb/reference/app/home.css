@@ -1,0 +1,254 @@
+/* Foundations page — livery switcher + buttons/CTA showcase. */
+
+/* .livery-grid migrated to Tailwind utilities on livery-switcher.tsx */
+
+.livery-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+.livery-chip:hover {
+  color: var(--ink);
+}
+
+.livery-chip.on {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--chip, var(--accent)) 55%, var(--hair));
+  background: color-mix(in srgb, var(--chip, var(--accent)) 12%, var(--surface));
+}
+
+.livery-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--chip, var(--accent));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--chip, var(--accent)) 50%, transparent);
+}
+
+/* .livery-preview, .livery-preview-card, .livery-preview-label,
+   .livery-preview-hex, .livery-preview-row migrated to Tailwind utilities
+   on livery-switcher.tsx */
+
+.livery-preview-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  margin-left: auto;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: livery-pulse 2.4s ease-out infinite;
+}
+
+@keyframes livery-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .livery-preview-pulse {
+    animation: none !important;
+  }
+}
+
+/* Feature picker — icon-tab strip + featured panel (one-viewport tour) */
+
+.fp-tabs {
+  margin-top: 1.2rem;
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.3rem;
+  scrollbar-width: none;
+}
+
+.fp-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.fp-tab {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+
+.fp-tab:hover {
+  color: var(--ink);
+}
+
+.fp-tab.on {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.fp-panel {
+  margin-top: 1.2rem;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1.2rem;
+  align-items: center;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 1.6rem;
+  overflow: hidden;
+}
+
+.fp-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    22rem 12rem at 0% 0%,
+    color-mix(in srgb, var(--accent) 10%, transparent),
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+.fp-panel-mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--hair));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+/* .fp-panel-body, .fp-panel-tier, .fp-panel-name, .fp-panel-role,
+   .fp-panel-tagline, .fp-panel-tag migrated to Tailwind utilities on
+   feature-picker-reference.tsx */
+
+@media (max-width: 600px) {
+  .fp-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Contents overview — the reference's front door */
+
+/* .co-grid migrated to Tailwind utilities on contents-overview.tsx */
+
+.co-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.25s var(--ease), transform 0.25s var(--ease);
+}
+
+.co-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s var(--ease);
+}
+
+.co-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
+
+.co-card:hover::before {
+  transform: scaleX(1);
+}
+
+/* .co-index, .co-label, .co-blurb migrated to Tailwind utilities on
+   contents-overview.tsx */
+
+@media (prefers-reduced-motion: reduce) {
+  .co-card {
+    transition: border-color 0.25s var(--ease);
+  }
+
+  .co-card:hover {
+    transform: none;
+  }
+}
+
+/* Theme gallery — global livery chooser */
+
+/* .tg-grid migrated to Tailwind utilities on theme-gallery-reference.tsx */
+
+.tg-swatch {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+.tg-swatch:hover {
+  color: var(--ink);
+}
+
+.tg-swatch.on {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--tg) 60%, var(--hair));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tg) 45%, transparent);
+}
+
+.tg-chip {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  background: var(--tg);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tg) 45%, transparent);
+}
+
+/* monochrome + default chips read against ink, no glow */
+.tg-swatch:first-child .tg-chip,
+.tg-swatch:nth-child(2) .tg-chip {
+  box-shadow: none;
+  border: 1px solid var(--hair);
+}

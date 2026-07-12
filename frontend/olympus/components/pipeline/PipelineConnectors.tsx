@@ -59,7 +59,7 @@ export default function PipelineConnectors({
           <path
             key={`${conn.fromId}→${conn.toId}`}
             d={buildPath(from, to)}
-            stroke="var(--color-border-subtle)"
+            stroke="var(--hair)"
             strokeOpacity="0.9"
             strokeWidth="1.5"
             strokeLinecap="round"
@@ -76,7 +76,7 @@ export default function PipelineConnectors({
           <path
             key={`active:${conn.fromId}→${conn.toId}`}
             d={buildPath(from, to)}
-            stroke="var(--color-fin-blue)"
+            stroke="var(--accent)"
             strokeOpacity="0.55"
             strokeWidth="1.5"
             strokeLinecap="round"

@@ -2,13 +2,15 @@
  * Observability dashboard data access (Pillar 3D).
  *
  * Reads the decision track record (`decision_log`) the Decision Scorecard needs, plus
- * — via `fetchAtlasRunDiagnostics` — the run economics the System surface reads directly
- * from `atlas_run_diagnostics`. Kept separate from `getFullDashboardData` so the main
- * Morning Read bundle stays lean; these fire only when their consumer mounts.
+ * — via `fetchAtlasRunDiagnostics` — run health from the anon-readable
+ * `atlas_run_health` view (migration 041). Kept separate from `getFullDashboardData`
+ * so the main Morning Read bundle stays lean; these fire only when their consumer mounts.
  *
  * Attribution and per-position risk now live on Performance/Holdings (which read their own
- * sources), and System reads run telemetry straight from `atlas_run_diagnostics` — so the
- * stripping `atlas_run_health` view is no longer read here.
+ * sources). System reads run telemetry from `atlas_run_health` — the curated projection
+ * that bypasses the base-table RLS on `atlas_run_diagnostics` (migration 033). Spend
+ * telemetry (cost, tokens, error_summary, breakdown) is intentionally excluded from the
+ * view; economics tiles render "—" on the public anon-key dashboard.
  *
  * Every query is FAIL-SOFT: a missing/forbidden source (e.g. an empty book) resolves to an
  * empty result rather than throwing, so consumers render a clean empty state instead of an
@@ -16,16 +18,16 @@
  */
 
 import { supabase, isSupabaseConfigured } from './supabase';
-import type { TableRow } from './database.types';
+import type { TableRow, ViewRow } from './database.types';
 import type { AtlasRunDiagnostics } from './types';
 import { computeEffectivePortfolioRiskMetrics } from './portfolio-risk-metrics';
 import { backtestDecisions, type DecisionInput } from './decision-track-record';
+import type { TearsheetSeriesPoint } from '@digithings/web';
 import type {
   DecisionLogRow,
   OlympusTearsheet,
   TearsheetBreakdown,
   TearsheetData,
-  TearsheetPoint,
 } from '@/components/tearsheet/types';
 
 const DECISION_LIMIT = 1000;
@@ -78,25 +80,16 @@ export async function fetchObservabilityData(): Promise<ObservabilityData> {
 
 const RUN_DIAGNOSTICS_LIMIT = 30;
 
-/** Lift cached_tokens out of the breakdown jsonb (top-level or by_kind.chat). */
-function cachedTokensOf(breakdown: unknown): number | null {
-  if (!breakdown || typeof breakdown !== 'object') return null;
-  const b = breakdown as Record<string, unknown>;
-  if (typeof b.cached_tokens === 'number') return b.cached_tokens;
-  const byKind = b.by_kind as Record<string, unknown> | undefined;
-  const chat = byKind?.chat as Record<string, unknown> | undefined;
-  return typeof chat?.cached_tokens === 'number' ? chat.cached_tokens : null;
-}
-
 /**
- * Read run economics directly from `atlas_run_diagnostics` (D3) — cost, tokens,
- * cache-hit, grounding, per-phase breakdown — bypassing the stripping
- * `atlas_run_health` view. Fail-soft: empty array on missing source / RLS deny.
+ * Read run health from the anon-readable `atlas_run_health` view (migration 041).
+ * Cost/tokens/grounding fields are null on the public dashboard — the view
+ * deliberately omits operator-internal spend telemetry. Fail-soft: empty array
+ * on missing source / RLS deny.
  */
 export async function fetchAtlasRunDiagnostics(): Promise<AtlasRunDiagnostics[]> {
-  const res = await safeSelect<TableRow<'atlas_run_diagnostics'>>('atlas_run_diagnostics', (sb) =>
+  const res = await safeSelect<ViewRow<'atlas_run_health'>>('atlas_run_health', (sb) =>
     sb
-      .from('atlas_run_diagnostics')
+      .from('atlas_run_health')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(RUN_DIAGNOSTICS_LIMIT)
@@ -110,21 +103,21 @@ export async function fetchAtlasRunDiagnostics(): Promise<AtlasRunDiagnostics[]>
     started_at: r.started_at,
     finished_at: r.finished_at,
     duration_s: r.duration_s,
-    llm_calls: r.llm_calls,
-    prompt_tokens: r.prompt_tokens,
-    completion_tokens: r.completion_tokens,
-    total_tokens: r.total_tokens,
-    cached_tokens: cachedTokensOf(r.breakdown),
-    search_calls: r.search_calls,
-    grounding_ok: r.grounding_ok,
-    grounding_failed: r.grounding_failed,
-    est_cost_usd: r.est_cost_usd,
+    llm_calls: null,
+    prompt_tokens: null,
+    completion_tokens: null,
+    total_tokens: null,
+    cached_tokens: null,
+    search_calls: null,
+    grounding_ok: null,
+    grounding_failed: null,
+    est_cost_usd: null,
     segments_total: r.segments_total,
     segments_ok: r.segments_ok,
     segments_carried: r.segments_carried,
     segments_failed: r.segments_failed,
-    error_summary: r.error_summary,
-    breakdown: (r.breakdown ?? null) as Record<string, unknown> | null,
+    error_summary: null,
+    breakdown: null,
     created_at: r.created_at,
   }));
 }
@@ -145,7 +138,7 @@ function latestDateRows<T extends { date: string | null }>(rows: T[]): { rows: T
 }
 
 /** Drawdown (%) from a peak-to-current equity curve — mirrors tearsheet_data._drawdown_from_equity. */
-function drawdownFromEquity(points: TearsheetPoint[]): TearsheetPoint[] {
+function drawdownFromEquity(points: TearsheetSeriesPoint[]): TearsheetSeriesPoint[] {
   if (!points.length) return [];
   let peak = points[0].v;
   return points.map((p) => {
@@ -179,7 +172,7 @@ export function buildOlympusTearsheet(args: {
 }): OlympusTearsheet {
   const navAsc = [...args.nav].sort((a, b) => a.date.localeCompare(b.date));
   const navPoints = navAsc.length;
-  const equity: TearsheetPoint[] = navAsc.map((r) => ({ t: r.date, v: r.nav }));
+  const equity: TearsheetSeriesPoint[] = navAsc.map((r) => ({ t: r.date, v: r.nav }));
   const snaps = navAsc.map((r) => ({ date: r.date, nav: r.nav }));
   const drawdown = navPoints >= 2 ? drawdownFromEquity(equity) : [];
   const risk = computeEffectivePortfolioRiskMetrics(

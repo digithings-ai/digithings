@@ -43,6 +43,14 @@ jobs:
             exit 0
           fi
 
+          # Bypass: docs/* and chore/* are process/maintenance changes with no
+          # behavior impact — don't force a backlog issue for a CLAUDE.md tweak
+          # or a CI workflow dedupe.
+          if [[ "$PR_BRANCH" =~ ^(docs|chore)/ ]]; then
+            echo "OK — docs/chore branch ($PR_BRANCH); no issue required"
+            exit 0
+          fi
+
           # Implicit link: task/<N>-<slug> branch.
           if [[ "$PR_BRANCH" =~ ^task/([0-9]+)- ]]; then
             echo "OK — branch '$PR_BRANCH' implicitly links to issue #${BASH_REMATCH[1]}"

@@ -6,18 +6,38 @@ runs in the base (non-Nautilus) test environment.
 
 from __future__ import annotations
 
+import importlib.util
 import json
+from pathlib import Path
 
 import pytest
 
 from digiquant.tearsheet_data import (
     SCHEMA_VERSION,
+    OHLCBar,
     TearsheetData,
     from_nautilus,
+    from_nautilus_run,
     from_pine,
 )
 
 pytestmark = pytest.mark.unit
+
+
+def _load_generator():
+    """Import the (non-package) tearsheet generator script by path.
+
+    Nautilus imports are local to ``run_nautilus``, so importing the module is
+    safe in the base test environment; only ``_entry_label`` is exercised here.
+    """
+    script = (
+        Path(__file__).resolve().parents[2] / "digiquant" / "scripts" / "generate_tearsheets.py"
+    )
+    spec = importlib.util.spec_from_file_location("generate_tearsheets", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _pine_summary() -> dict:
@@ -141,3 +161,61 @@ def test_from_nautilus_duck_types_result() -> None:
     assert ts.net_profit == 500.0
     assert ts.final_equity == pytest.approx(1500.0)  # initial + pnl when no curve
     assert ts.total_trades == 12
+
+
+# ── Schema 1.1: ohlc_bars + signal-type entry_label ──────────────────────────
+
+
+def test_schema_version_is_1_2() -> None:
+    assert SCHEMA_VERSION == "1.2"
+
+
+def test_ohlc_bars_default_empty_and_back_compatible() -> None:
+    # Adapters without OHLC (and 1.0 fixtures) leave ohlc_bars as [].
+    ts = from_pine(_pine_summary(), _pine_trades(), equity_curve=[])
+    assert ts.ohlc_bars == []
+    # A 1.0-style payload (no ohlc_bars key) must still validate.
+    again = TearsheetData.model_validate({"strategy": "x", "symbol": "Y", "generated_at": "t"})
+    assert again.ohlc_bars == []
+
+
+def test_ohlc_bars_roundtrip() -> None:
+    bars = [("2020-01-01", 100.0, 110.0, 95.0, 105.0), ("2020-01-02", 105.0, 120.0, 104.0, 118.0)]
+    ts = from_nautilus_run(
+        _pine_summary(), _pine_trades(), equity_curve=[("2020-01-01", 1000.0)], ohlc_bars=bars
+    )
+    assert len(ts.ohlc_bars) == 2
+    assert ts.ohlc_bars[0] == OHLCBar(t="2020-01-01", o=100.0, h=110.0, l=95.0, c=105.0)
+    payload = json.loads(ts.to_json())
+    assert payload["schema_version"] == "1.2"
+    assert payload["ohlc_bars"][1] == {
+        "t": "2020-01-02",
+        "o": 105.0,
+        "h": 120.0,
+        "l": 104.0,
+        "c": 118.0,
+    }
+    # Re-validate to prove the serialized shape is contract-faithful.
+    again = TearsheetData.model_validate(payload)
+    assert again.ohlc_bars[0].c == 105.0
+
+
+@pytest.mark.parametrize(
+    ("signal_type", "direction", "expected"),
+    [
+        ("mean_reversion", "long", "MR Long"),
+        ("mean_reversion", "short", "MR Short"),
+        ("trend", "long", "Trend Long"),
+        ("trend", "short", "Trend Short"),
+        ("trend+mr", "long", "MR&T Long"),
+        ("trend+mr", "short", "MR&T Short"),
+        ("reversal", "long", "Reversal Long"),
+        ("reversal", "short", "Reversal Short"),
+        (None, "long", ""),  # join miss → blank, no crash
+        ("", "short", ""),  # blank type → blank
+        ("bogus", "long", ""),  # unknown type → blank
+    ],
+)
+def test_entry_label_mirrors_pine_taxonomy(signal_type, direction, expected) -> None:
+    gen = _load_generator()
+    assert gen._entry_label(signal_type, direction) == expected

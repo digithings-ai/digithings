@@ -203,9 +203,9 @@ export interface ServerPortfolioMetrics {
 }
 
 /**
- * A single Atlas run's economics + health, read directly from
- * `atlas_run_diagnostics` (NOT the stripping `atlas_run_health` view) per D3.
- * `cached_tokens` is lifted out of the `breakdown` jsonb for convenience.
+ * A single Atlas run's health + optional economics. The public dashboard reads
+ * from the anon-safe `atlas_run_health` view (status, segment counts, timing);
+ * spend telemetry fields are null unless a BFF with service-role access is wired.
  */
 export interface AtlasRunDiagnostics {
   run_id: string;

@@ -1,3 +1,14 @@
+---
+title: DigiVault
+type: module
+status: reviewed
+created: 2026-06-15
+tags:
+  - support
+  - knowledge-vault
+relevance:
+  - digigraph
+---
 # DigiVault
 > The knowledge-vault layer — every note, link, and tag in a managed Obsidian-style markdown vault.
 
@@ -32,11 +43,11 @@ backlinks, lint, and create notes. It reuses DigiKey for JWT auth
 
 It is complementary to two other modules:
 
-- **[DigiStore](digistore.md)** owns *where bytes live* (storage backend
+- **[[digistore|DigiStore]]** owns *where bytes live* (storage backend
   abstraction). DigiVault owns *how knowledge is organized and traversed*
   (frontmatter, wikilinks, backlinks, taxonomy). DigiVault would sit above
   DigiStore, not replace it.
-- **[DigiSearch](digisearch.md)** indexes content for semantic retrieval.
+- **[[digisearch|DigiSearch]]** indexes content for semantic retrieval.
   DigiVault can feed it: a managed vault is a clean ingestion source, and
   DigiVault's tags/links add structure DigiSearch can exploit later.
 

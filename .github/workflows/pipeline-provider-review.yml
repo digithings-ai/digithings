@@ -33,7 +33,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install test deps
-        run: pip install pyyaml openai httpx pytest
+        run: pip install pyyaml openai httpx pytest cryptography
 
       - name: Pytest
         run: python -m pytest tests/provider_review/ -m unit -v --tb=short
@@ -41,8 +41,9 @@ jobs:
   review:
     needs: unit-tests
     permissions:
-      contents: write           # agent commits snapshot updates
+      contents: write           # agent commits snapshot updates on a bot/ branch
       issues: write
+      pull-requests: write      # Step 3b opens a PR for the pushed bot/ branch
     name: Weekly provider review
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -112,7 +113,27 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          claude_args: "--max-turns 40"
+          # Agent mode (auto-detected for schedule/workflow_dispatch) grants no default tool
+          # permissions or permission-mode, unlike tag mode's @claude flow — see issue #1241.
+          # This repo's own .claude/settings.json only pre-approves a handful of Bash commands,
+          # so STEP A-F's Read/WebSearch/WebFetch/Write/Edit/git calls need an explicit grant
+          # here or every one of them is silently denied in headless CI with no human to
+          # approve. Read/Glob/Grep are required even for the /tmp/review/*.json context
+          # files: Claude's session sandboxes directory *listing* (Bash `ls`, etc.) to the
+          # checked-out repo dir, so the agent falls back to `ls`/`cat` via Bash — which then
+          # gets denied twice for every context file — unless it has Read for explicit paths
+          # instead. WebFetch is required alongside WebSearch: STEP A's research follows up
+          # search results by fetching the actual page content, which is a separate tool/grant.
+          # git checkout/push (issue #1243) let STEP F land its commit on a bot/ branch instead
+          # of the protected develop ref it checks out on.
+          # --max-turns 40 was too low once tool access actually worked: a verification run
+          # hit error_max_turns at 41 turns / $7.14 doing real WebSearch+WebFetch research
+          # across ~20 providers, without ever reaching STEP E/F. Raised to 100 to give STEP
+          # A's per-provider research (search + fetch, ~2-3 turns each) headroom to finish
+          # alongside STEP B-F. Raises the per-run cost estimate to roughly $15-20/week.
+          claude_args: >-
+            --max-turns 100
+            --allowedTools "Read,Glob,Grep,WebSearch,WebFetch,Write,Edit,Bash(python scripts/provider_review/generate_docs.py:*),Bash(git checkout:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*)"
           prompt: |
             You are performing the weekly LLM provider review for the DigiThings project.
 
@@ -163,16 +184,55 @@ jobs:
             }
             Write [] if no trigger conditions are found this week.
 
-            STEP F — REGENERATE AND COMMIT:
+            STEP F — REGENERATE, COMMIT, AND PUSH:
             Run `python scripts/provider_review/generate_docs.py` to refresh docs/free-providers/*
             from the updated snapshots (exit code 1 means files were updated — that is expected).
-            Then:
+            Then, on a NEW branch — `develop` is protected and direct commits to it can never be
+            pushed, so never `git commit` on the ref you checked out:
+            git checkout -b bot/provider-review-${{ env.REVIEW_TODAY }}
             git add docs/providers/snapshots/ docs/free-providers/ docs/LLM_PROVIDERS.md
             Commit with message:
-            'docs(providers): weekly snapshot update ${{ env.REVIEW_TODAY }} [skip ci]'
+            'docs(providers): weekly snapshot update ${{ env.REVIEW_TODAY }}'
+            git push -u origin bot/provider-review-${{ env.REVIEW_TODAY }}
+
+            If generate_docs.py made no changes (nothing to add), skip the checkout/commit/push
+            entirely — the next workflow step checks whether the branch exists and no-ops if it
+            doesn't.
 
             Do NOT create GitHub issues — Step 4 handles that.
+            Do NOT open a pull request yourself — the next workflow step handles that.
             Do NOT modify any files outside docs/providers/, docs/free-providers/, and docs/LLM_PROVIDERS.md.
+
+      # ── Step 3b: open a PR for the pushed snapshot-update branch (trusted script, ─
+      # not the sandboxed agent — the agent only ever pushes a branch, never touches develop) ──
+      - name: Step 3b — Open PR for snapshot updates
+        if: steps.keycheck.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          BRANCH="bot/provider-review-${REVIEW_TODAY}"
+          if ! git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null 2>&1; then
+            echo "::notice::No branch $BRANCH pushed by Step 3 — nothing to open a PR for this week."
+            exit 0
+          fi
+          EXISTING=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
+            --json number --jq '.[0].number' 2>/dev/null || echo "")
+          if [ -n "$EXISTING" ]; then
+            echo "::notice::PR #$EXISTING already open for $BRANCH — skipping."
+            exit 0
+          fi
+          gh pr create --repo "$REPO" \
+            --base develop \
+            --head "$BRANCH" \
+            --title "docs(providers): weekly snapshot update ${REVIEW_TODAY}" \
+            --label "housekeeping,automerge-docs" \
+            --body "Automated weekly refresh of provider snapshots, generated by Step 3 (Claude agent) of the [Weekly provider review](../actions/workflows/pipeline-provider-review.yml) job.
+
+          - Updated \`docs/providers/snapshots/*.yaml\` verification status and quota numbers
+          - Regenerated \`docs/free-providers/*\` and \`docs/LLM_PROVIDERS.md\`
+
+          Labeled \`automerge-docs\`; [agent-docs-automerge.yml](../actions/workflows/agent-docs-automerge.yml) verifies the diff is doc-only before enabling auto-merge."
 
       # ── Step 4: Issue creation ──────────────────────────────────────────────
       - name: Step 4 — Create issues for findings

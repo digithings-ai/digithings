@@ -122,11 +122,11 @@ export function SnapshotSkeleton() {
       aria-label="Loading daily snapshot"
       className="glass-card p-6 space-y-4 animate-pulse"
     >
-      <div className="h-3 w-40 rounded bg-white/10" />
-      <div className="h-6 w-3/4 rounded bg-white/10" />
+      <div className="h-3 w-40 rounded bg-ink/10" />
+      <div className="h-6 w-3/4 rounded bg-ink/10" />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="h-20 rounded bg-white/5" />
-        <div className="h-20 rounded bg-white/5" />
+        <div className="h-20 rounded bg-ink/5" />
+        <div className="h-20 rounded bg-ink/5" />
       </div>
     </section>
   );
@@ -137,17 +137,17 @@ export function SnapshotErrorBanner({ message, onRetry }: { message: string; onR
     <section
       data-testid="snapshot-error"
       role="alert"
-      className="glass-card p-5 border-fin-red/30 bg-fin-red/5"
+      className="glass-card p-5 border-down/30 bg-down/5"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <SectionTitle className="text-fin-red">Snapshot unavailable</SectionTitle>
-          <p className="text-sm text-text-secondary break-words">{message}</p>
+          <SectionTitle className="text-down">Snapshot unavailable</SectionTitle>
+          <p className="text-sm text-ink-soft break-words">{message}</p>
         </div>
         <button
           type="button"
           onClick={onRetry}
-          className="shrink-0 rounded-md border border-fin-red/40 bg-fin-red/10 px-3 py-1.5 text-xs font-semibold text-fin-red hover:bg-fin-red/20"
+          className="shrink-0 rounded-md border border-down/40 bg-down/10 px-3 py-1.5 text-xs font-semibold text-down hover:bg-down/20"
         >
           Retry
         </button>
@@ -165,10 +165,10 @@ export function SnapshotEmptyBanner({ reason }: { reason: 'no_recent_row' | 'unc
     <section
       data-testid="snapshot-empty"
       role="status"
-      className="glass-card p-5 border-border-subtle bg-bg-secondary/40"
+      className="glass-card p-5 border-hair bg-term-bg/40"
     >
       <SectionTitle>No snapshot available</SectionTitle>
-      <p className="text-sm text-text-secondary">{message}</p>
+      <p className="text-sm text-ink-soft">{message}</p>
     </section>
   );
 }
@@ -196,11 +196,11 @@ function SnapshotContent({
         <div
           data-testid="snapshot-stale-banner"
           role="status"
-          className="glass-card p-4 border-fin-amber/40 bg-fin-amber/5 flex items-center justify-between gap-3"
+          className="glass-card p-4 border-warn/40 bg-warn/5 flex items-center justify-between gap-3"
         >
           <div>
-            <p className="text-sm font-semibold text-fin-amber">Stale snapshot</p>
-            <p className="text-xs text-text-secondary">
+            <p className="text-sm font-semibold text-warn">Stale snapshot</p>
+            <p className="text-xs text-ink-soft">
               Published {age ?? 'unknown'} (older than {DEFAULT_SNAPSHOT_STALENESS_HOURS}h).
             </p>
           </div>
@@ -211,17 +211,17 @@ function SnapshotContent({
       <article className="glass-card p-6 space-y-5">
         <header className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
               Daily snapshot
             </p>
             <h2
               data-testid="snapshot-headline"
-              className="text-xl font-semibold leading-snug text-text-primary"
+              className="text-xl font-semibold leading-snug text-ink"
             >
               {digest.headline}
             </h2>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-ink-mute">
             <Badge variant={BIAS_VARIANT[digest.bias] ?? 'default'} data-testid="snapshot-bias">
               {biasLabel(digest.bias)}
             </Badge>
@@ -268,10 +268,10 @@ function SnapshotContent({
 export function NarrativeSection({ title, body, testId }: { title: string; body: string; testId: string }) {
   return (
     <div data-testid={testId} className="space-y-1.5">
-      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
         {title}
       </h3>
-      <p className="text-sm leading-relaxed text-text-secondary whitespace-pre-line">{body}</p>
+      <p className="text-sm leading-relaxed text-ink-soft whitespace-pre-line">{body}</p>
     </div>
   );
 }
@@ -280,7 +280,7 @@ export function ActionableList({ items }: { items: ActionableItem[] }) {
   if (!items.length) return null;
   return (
     <div data-testid="snapshot-actionable" className="space-y-2">
-      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
         Actionable summary
       </h3>
       <ul className="space-y-2">
@@ -288,14 +288,14 @@ export function ActionableList({ items }: { items: ActionableItem[] }) {
           <li
             key={`${item.priority}-${i}`}
             data-testid="snapshot-actionable-item"
-            className="rounded-md border border-border-subtle bg-bg-secondary/30 p-3 text-sm"
+            className="rounded-md border border-hair bg-term-bg/30 p-3 text-sm"
           >
-            <div className="flex items-center gap-2 text-xs text-text-muted">
+            <div className="flex items-center gap-2 text-xs text-ink-mute">
               <span className="font-mono">P{item.priority}</span>
               <span aria-hidden="true">·</span>
-              <span className="font-semibold text-text-primary">{item.label}</span>
+              <span className="font-semibold text-ink">{item.label}</span>
             </div>
-            <p className="mt-1 text-text-secondary">{item.rationale}</p>
+            <p className="mt-1 text-ink-soft">{item.rationale}</p>
           </li>
         ))}
       </ul>
@@ -307,7 +307,7 @@ export function RiskList({ items }: { items: RiskItem[] }) {
   if (!items.length) return null;
   return (
     <div data-testid="snapshot-risk-radar" className="space-y-2">
-      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
         Risk radar
       </h3>
       <ul className="space-y-2">
@@ -315,14 +315,14 @@ export function RiskList({ items }: { items: RiskItem[] }) {
           <li
             key={`${item.label}-${i}`}
             data-testid="snapshot-risk-item"
-            className="rounded-md border border-border-subtle bg-bg-secondary/30 p-3 text-sm"
+            className="rounded-md border border-hair bg-term-bg/30 p-3 text-sm"
           >
-            <div className="flex items-center gap-2 text-xs text-text-muted">
+            <div className="flex items-center gap-2 text-xs text-ink-mute">
               <span className="font-mono">{item.horizon_hours}h</span>
               <span aria-hidden="true">·</span>
-              <span className="font-semibold text-text-primary">{item.label}</span>
+              <span className="font-semibold text-ink">{item.label}</span>
             </div>
-            <p className="mt-1 text-text-secondary">{item.trigger}</p>
+            <p className="mt-1 text-ink-soft">{item.trigger}</p>
           </li>
         ))}
       </ul>

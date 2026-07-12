@@ -1,336 +1,369 @@
 "use client";
 /**
- * Vertical scrollytelling strategy suite (ported from v7), wired to REAL data.
+ * Homepage strategy spotlight — the BTC / ETH / SOL tearsheet previews on the
+ * canonical <DeckStack/> sticky cascade (@digithings/web, promoted from the
+ * design reference's card deck, #1450).
  *
- * The left column lists the published strategies from `public/strategies/index.json`.
- * A sticky card on the right swaps as you scroll (IntersectionObserver) or on
- * click, and renders the REAL backtest: a log equity sparkline with real trade
- * markers (fetched from `/strategies/<id>.json`, the same files the full
- * tearsheet uses), real KPIs from the index entry, and the most recent real
- * trades. No simulated/random data — v7's `rnd()`/`series()` are dropped.
- * "No live prices" forbids a live tape, not these static backtest JSONs.
+ * The previous bespoke scroll carousel (a .dqss-stack clip box + JS-measured
+ * per-card offsets and a buried/top/hidden state machine) hard-clipped buried
+ * cards mid-content at its overflow:hidden boundary. The deck pattern has no
+ * clip box, no fixed card height and no shadow: every card is fully rendered
+ * in normal document flow, pins under the nav at a cascaded top offset
+ * (--stack-index), and the next opaque card covering it IS the seam — nothing
+ * is ever cut off, and the content reads top-to-bottom with no JS. The deck
+ * mechanics live in @digithings/web/styles/deck.css (imported from
+ * globals.css, with the components/deck @source line); this file only owns
+ * the tearsheet-preview card content and its data loading.
  */
-import { useEffect, useRef, useState } from "react";
-import { fmtMoney, fmtNum, fmtPct } from "@/components/tearsheet/format";
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import Link from "next/link";
+import {
+  CandlestickChart,
+  DeckCard,
+  DeckStack,
+  KpiStrip,
+  SegToggle,
+  fmtNum,
+  fmtPct,
+  toneClass,
+  viewWindowForPreset,
+} from "@digithings/web";
+import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
+import { CurrentPosition } from "@/components/tearsheet/current-position";
+import { LiveMetricsBadge } from "@/components/tearsheet/live-metrics";
+import { PivotStatsTable } from "@/components/tearsheet/pivot-stats-table";
+import { SignalDelayChip } from "@/components/tearsheet/signal-delay";
+import { chartFullSpan, clipOhlc } from "@/components/tearsheet/series";
+import { avgTradePct, cagrPct, tradesPerYear } from "@/components/tearsheet/stats";
+import { symbolBase } from "@/components/tearsheet/strategy-names";
 import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsheet/types";
 import index from "@/public/strategies/index.json";
 
-// stable display order (majors): BTC → ETH → SOL
-const RANK: Record<string, number> = { btc_slapper: 0, eth_slapper: 1, sol_slapper: 2 };
-const STRATS = (index as StrategyIndexEntry[])
-  .slice()
-  .sort((a, b) => (RANK[a.strategy] ?? 99) - (RANK[b.strategy] ?? 99));
+const SLAPPER_ORDER = ["btc_slapper", "eth_slapper", "sol_slapper"] as const;
+const ALL_STRATS = index as StrategyIndexEntry[];
+const STRATEGIES = SLAPPER_ORDER.map(
+  (id) => ALL_STRATS.find((s) => s.strategy === id) ?? ALL_STRATS[0],
+).filter(Boolean) as StrategyIndexEntry[];
 
-// editorial one-liners (copy; the figures themselves come from the real entry)
-const DESC: Record<string, string> = {
-  btc_slapper:
-    "A regime-switching trend system on bitcoin — long and short across eight years of data, with an 8.7× profit factor.",
-  eth_slapper:
-    "The same engine on ether — fewer, larger swings and a 6.6× profit factor across the full cycle.",
-  sol_slapper:
-    "Solana since 2021 — higher volatility, a 3.6× profit factor, and drawdowns to match the upside.",
-};
+const PREVIEW_PANE_H = 220;
+const PREVIEW_LOOKBACK = "6m" as const;
 
-const base = (symbol: string) => symbol.split("-")[0];
-const signed = (v: number) => (v > 0 ? "+" : "") + fmtPct(v);
+type PreviewMode = "charts" | "tables";
 
-function Logo({ id }: { id: string }) {
-  if (id === "btc_slapper")
-    return (
-      <svg viewBox="0 0 24 24" fill="#f7931a" aria-hidden="true">
-        <path d="M12 2a10 10 0 100 20 10 10 0 000-20zm4.3 8.6c-.2 1.3-1 1.8-2.1 2 .8.3 1.3.9 1.1 2.1-.2 1.5-1.4 1.9-3 1.9l-.4 1.6-1-.2.4-1.6-.8-.2-.4 1.6-1-.2.4-1.6-2-.5.5-1.2s.7.2.7.2c.3.1.4-.1.5-.3l1-4.1c0-.3 0-.5-.4-.6 0 0-.7-.2-.7-.2l.3-1.1 2.1.5.4-1.5 1 .2-.4 1.5.8.2.4-1.5 1 .2-.4 1.6c1.4.3 2.4.8 2.2 2.3zm-2.3.5c.2-.9-1.2-1.1-1.7-1.2l-.5 1.9c.5.1 2 .3 2.2-.7zm-.5 2.9c.2-1-1.5-1.2-2-1.3l-.5 2.1c.6.1 2.3.3 2.5-.8z" />
-      </svg>
-    );
-  if (id === "eth_slapper")
-    return (
-      <svg viewBox="0 0 24 24" fill="#8a92b2" aria-hidden="true">
-        <path d="M12 2l6 10-6 3.5L6 12z" />
-        <path fill="#62688f" d="M12 16.8l6-3.5-6 8.7-6-8.7z" />
-      </svg>
-    );
+function useElementWidth(ref: RefObject<HTMLElement | null>): number {
+  const [width, setWidth] = useState(640);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver(([entry]) => {
+      setWidth(entry.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+
+  return width;
+}
+
+type LoadStatus = "idle" | "loading" | "loaded" | "error";
+
+const tearsheetCache = new Map<string, TearsheetData>();
+const loadStatus = new Map<string, LoadStatus>();
+const inflight = new Map<string, Promise<TearsheetData | null>>();
+const subscribers = new Set<() => void>();
+
+function notifyTearsheetSubscribers() {
+  subscribers.forEach((fn) => fn());
+}
+
+function subscribeTearsheetCache(fn: () => void) {
+  subscribers.add(fn);
+  return () => {
+    subscribers.delete(fn);
+  };
+}
+
+async function fetchTearsheet(strategyId: string): Promise<TearsheetData | null> {
+  const cached = tearsheetCache.get(strategyId);
+  if (cached) return cached;
+
+  const pending = inflight.get(strategyId);
+  if (pending) return pending;
+
+  loadStatus.set(strategyId, "loading");
+  notifyTearsheetSubscribers();
+
+  const promise = fetch(`/strategies/${strategyId}.json`)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    .then((d: TearsheetData) => {
+      tearsheetCache.set(strategyId, d);
+      loadStatus.set(strategyId, "loaded");
+      notifyTearsheetSubscribers();
+      return d;
+    })
+    .catch(() => {
+      loadStatus.set(strategyId, "error");
+      notifyTearsheetSubscribers();
+      return null;
+    })
+    .finally(() => {
+      inflight.delete(strategyId);
+    });
+
+  inflight.set(strategyId, promise);
+  return promise;
+}
+
+function prefetchAllTearsheets(strategyIds: readonly string[]) {
+  void Promise.all(strategyIds.map((id) => fetchTearsheet(id)));
+}
+
+function useTearsheetData(strategyId: string) {
+  const [, bump] = useState(0);
+
+  useEffect(() => subscribeTearsheetCache(() => bump((n) => n + 1)), []);
+
+  useEffect(() => {
+    void fetchTearsheet(strategyId);
+  }, [strategyId]);
+
+  const data = tearsheetCache.get(strategyId) ?? null;
+  const status = loadStatus.get(strategyId) ?? (data ? "loaded" : "idle");
+
+  return { data, status };
+}
+
+function Toned({ v, children }: { v: number | null | undefined; children: ReactNode }) {
+  const c = toneClass(v);
+  return c ? <span className={c}>{children}</span> : <>{children}</>;
+}
+
+/** Family-shaped KPI cell (.ts-kpi grammar) with one extra: the dqss
+ *  container-query hide classes (dqss-kpi-medium / dqss-kpi-optional) ride
+ *  the cell itself, and the family Kpi takes no className — so the preview
+ *  keeps this local wiring instead of degrading the responsive KPI ladder. */
+function Kpi({ label, value, className }: { label: string; value: ReactNode; className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="#14F195" aria-hidden="true">
-      <path d="M6 7h11l-2 2H6zM6 11h11v2H6zM8 16h11l-2-2H8z" />
-    </svg>
+    <div className={"ts-kpi" + (className ? ` ${className}` : "")}>
+      <span className="ts-kpi-label">{label}</span>
+      <span className="ts-kpi-value">{value}</span>
+    </div>
   );
 }
 
-/** Read a CSS color token resolved to rgb() (handles `var()` chains reliably). */
-function readColor(expr: string): string {
-  const probe = document.createElement("span");
-  probe.style.cssText = `color:${expr};position:absolute;left:-9999px`;
-  document.body.appendChild(probe);
-  const c = getComputedStyle(probe).color;
-  probe.remove();
-  return c || "rgb(61,214,196)";
-}
-function withAlpha(rgb: string, a: number): string {
-  const m = rgb.match(/[\d.]+/g);
-  if (!m || m.length < 3) return rgb;
-  return `rgba(${m[0]}, ${m[1]}, ${m[2]}, ${a})`;
-}
+/**
+ * One tearsheet preview card body — header, current position, KPIs,
+ * chart/table toggle. Rendered inside a <DeckCard className="dqss-card">
+ * (the deck card element carries the .dqss-card dress + container queries);
+ * the width probe rides the header, which spans the card's content box.
+ */
+const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
+  entry,
+}: {
+  entry: StrategyIndexEntry;
+}) {
+  const headerRef = useRef<HTMLElement>(null);
+  const cardWidth = useElementWidth(headerRef);
+  const [mode, setMode] = useState<PreviewMode>("charts");
+  const { data, status } = useTearsheetData(entry.strategy);
 
-/** Fraction (0..1) of `date` along the (date-sorted) curve. ISO dates compare lexically. */
-function dateFrac(curve: TearsheetData["equity_curve"], date: string): number {
-  const n = curve.length;
-  if (n < 2) return 1;
-  if (date <= curve[0].t) return 0;
-  if (date >= curve[n - 1].t) return 1;
-  let lo = 0;
-  let hi = n - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (curve[mid].t < date) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo / (n - 1);
-}
-
-function drawChart(canvas: HTMLCanvasElement, data: TearsheetData) {
-  const curve = data.equity_curve;
-  if (!curve || curve.length === 0) return;
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
-  if (!w || !h) return;
-  canvas.width = Math.round(w * dpr);
-  canvas.height = Math.round(h * dpr);
-  const c = canvas.getContext("2d");
-  if (!c) return;
-  c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  c.clearRect(0, 0, w, h);
-
-  const ACC = readColor("var(--accent)");
-  const UP = readColor("var(--up)");
-  const DOWN = readColor("var(--down)");
-  const BG = readColor("var(--bg)");
-  const pad = 10;
-
-  // downsample for the line; log scale absorbs the huge compounded range
-  const N = 160;
-  const ds = curve.length <= N ? curve : Array.from({ length: N }, (_, i) => curve[Math.floor((i * curve.length) / N)]);
-  if (ds[ds.length - 1] !== curve[curve.length - 1]) ds.push(curve[curve.length - 1]);
-  const ld = ds.map((p) => Math.log(Math.max(p.v, 1e-9)));
-  const mn = Math.min(...ld);
-  const mx = Math.max(...ld);
-  const X = (k: number) => pad + (k * (w - 2 * pad)) / (ld.length - 1);
-  const Y = (v: number) => h - pad - ((v - mn) / (mx - mn || 1)) * (h - 2 * pad);
-
-  const g = c.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, withAlpha(ACC, 0.16));
-  g.addColorStop(1, withAlpha(ACC, 0));
-  c.beginPath();
-  c.moveTo(X(0), h - pad);
-  ld.forEach((v, k) => c.lineTo(X(k), Y(v)));
-  c.lineTo(X(ld.length - 1), h - pad);
-  c.closePath();
-  c.fillStyle = g;
-  c.fill();
-
-  c.beginPath();
-  ld.forEach((v, k) => (k ? c.lineTo(X(k), Y(v)) : c.moveTo(X(k), Y(v))));
-  c.strokeStyle = ACC;
-  c.lineWidth = 2;
-  c.stroke();
-
-  // real trade markers: last 6 trades, placed by exit date, coloured by side
-  data.trades.slice(-6).forEach((t) => {
-    const k = Math.round(dateFrac(curve, t.exit_date) * (ld.length - 1));
-    c.beginPath();
-    c.arc(X(k), Y(ld[k]), 4, 0, 7);
-    c.fillStyle = t.direction === "long" ? UP : DOWN;
-    c.fill();
-    c.strokeStyle = BG;
-    c.lineWidth = 1.5;
-    c.stroke();
-  });
-}
-
-export function StrategySuite() {
-  const [activeId, setActiveId] = useState(STRATS[0].strategy);
-  const [data, setData] = useState<TearsheetData | null>(null);
-  const cache = useRef<Map<string, TearsheetData>>(new Map());
-  const itemEls = useRef<(HTMLDivElement | null)[]>([]);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const entry = STRATS.find((s) => s.strategy === activeId) ?? STRATS[0];
-
-  // fetch (and cache) the real tearsheet JSON for the active strategy
-  useEffect(() => {
-    let alive = true;
-    const cached = cache.current.get(activeId);
-    if (cached) {
-      setData(cached);
-      return;
-    }
-    setData(null);
-    fetch(`/strategies/${activeId}.json`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d: TearsheetData) => {
-        if (!alive) return;
-        cache.current.set(activeId, d);
-        setData(d);
-      })
-      .catch(() => {
-        if (alive) setData(null);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [activeId]);
-
-  // (re)draw the equity sparkline when the data or viewport changes
-  useEffect(() => {
-    if (!data || !canvasRef.current) return;
-    const draw = () => canvasRef.current && drawChart(canvasRef.current, data);
-    draw();
-    window.addEventListener("resize", draw, { passive: true });
-    return () => window.removeEventListener("resize", draw);
+  const chartOhlc = useMemo(
+    () => (data?.ohlc_bars ? clipOhlc(data.ohlc_bars, data.period_start) : []),
+    [data],
+  );
+  const fullSpan = useMemo(() => {
+    if (!data) return undefined;
+    return chartFullSpan(data.period_start, data.equity_curve, data.period_end);
   }, [data]);
+  const view6m = useMemo(() => viewWindowForPreset(PREVIEW_LOOKBACK, fullSpan), [fullSpan]);
 
-  // scroll drives the active strategy (centre band)
-  useEffect(() => {
-    const io = new IntersectionObserver(
-      (entries) =>
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            const id = (e.target as HTMLElement).dataset.id;
-            if (id) setActiveId(id);
-          }
-        }),
-      { rootMargin: "-45% 0px -45% 0px", threshold: 0 },
-    );
-    itemEls.current.forEach((el) => el && io.observe(el));
-    return () => io.disconnect();
-  }, []);
+  const title = symbolBase(entry.symbol);
+  const asset = symbolBase(entry.symbol);
+  const periodStart = data?.period_start ?? entry.period_start;
+  const periodEnd = data?.period_end ?? entry.period_end;
 
-  const select = (id: string) => {
-    const el = itemEls.current.find((e) => e?.dataset.id === id);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
-    setActiveId(id);
-  };
+  const cagr = data
+    ? cagrPct(data.initial_capital, data.final_equity, data.period_start, data.period_end)
+    : 0;
+  const maxDd = data?.max_drawdown_pct ?? entry.max_drawdown_pct;
+  const profitFactor = data?.profit_factor ?? entry.profit_factor;
+  const winRate = data?.win_rate_pct ?? entry.win_rate_pct;
+  const avgTrade = data
+    ? avgTradePct(data.trades.map((t) => t.pnl_pct))
+    : entry.avg_trade_pct;
+  const tradesYr = tradesPerYear(
+    data?.total_trades ?? entry.total_trades,
+    periodStart,
+    periodEnd,
+  );
 
-  const kpis: [string, string, string][] = [
-    ["Net profit", signed(entry.net_profit_pct), "is-pos"],
-    ["Profit factor", fmtNum(entry.profit_factor, 2), ""],
-    ["Win rate", fmtPct(entry.win_rate_pct), ""],
-    ["Max DD", fmtPct(entry.max_drawdown_pct), "is-neg"],
-  ];
-  const recent = data ? data.trades.slice(-6).reverse() : [];
+  const chartReady = chartOhlc.length > 0;
+  const chartLoading = !data && (status === "idle" || status === "loading");
+  const chartUnavailable = Boolean(data) && !chartReady;
+  const previewTrades = data?.trades ?? [];
+
+  const symbol = data?.symbol ?? entry.symbol;
+  const bars = data?.bars;
 
   return (
-    <section className="dqss" id="strategies">
-      <div className="wrap">
-        <div className="dqss-intro">
-          <div className="dq-eyebrow">The suite · long / short</div>
-          <h2 className="dq-title">The book, marked to market.</h2>
-          <p className="dq-sub">
-            Long/short systems on crypto majors, backtested on NautilusTrader — each with a full
-            tearsheet and every fill marked on the chart.
-          </p>
-        </div>
-
-        <div className="dqss-grid">
-          <div className="dqss-left">
-            {STRATS.map((s, i) => (
-              <div
-                key={s.strategy}
-                className={`dqss-item${s.strategy === activeId ? " active" : ""}`}
-                data-id={s.strategy}
-                role="button"
-                tabIndex={0}
-                aria-pressed={s.strategy === activeId}
-                ref={(el) => {
-                  itemEls.current[i] = el;
-                }}
-                onClick={() => select(s.strategy)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    select(s.strategy);
-                  }
-                }}
-              >
-                <div className="dqss-tag">
-                  <span className="dqss-logo">
-                    <Logo id={s.strategy} />
-                  </span>
-                  {s.symbol} · NautilusTrader
-                </div>
-                <h3>{s.label ?? s.strategy}</h3>
-                <p>{DESC[s.strategy] ?? "NautilusTrader backtest."}</p>
-                <span className="dqss-dir">{signed(s.net_profit_pct)} net</span>
-              </div>
-            ))}
+    <>
+      <header ref={headerRef} className="ts-header">
+        <div className="ts-header-main">
+          <h1 className="ts-h1 ts-h1-with-logo">
+            <AssetLogoFor
+              strategy={entry.strategy}
+              symbol={entry.symbol}
+              size={cardWidth >= 520 ? 32 : 28}
+              className="ts-header-logo"
+            />
+            <span>{title}</span>
+          </h1>
+          <div className="ts-meta">
+            <LiveMetricsBadge generatedAt={data?.generated_at ?? entry.generated_at} />
+            <span className="ts-chip">{symbol}</span>
+            <SignalDelayChip days={data?.signal_delay_days ?? entry.signal_delay_days} />
+            <span className="ts-meta-text">
+              {periodStart} → {periodEnd}
+              {bars != null ? ` · ${fmtNum(bars)} bars` : ""}
+            </span>
           </div>
+        </div>
+      </header>
 
-          <aside className="dqss-right">
-            <div className="dqss-card">
-              <div className="dqss-card-bar">
-                <span>
-                  {entry.label ?? entry.strategy} · {entry.symbol}
-                </span>
-                <span>
-                  {entry.period_start} → {entry.period_end}
-                </span>
-              </div>
-              <div className="dqss-card-body">
-                <canvas className="dqss-chart" ref={canvasRef} />
-                <div className="dqss-legend">
-                  <span>
-                    <i style={{ background: "var(--up)" }} />
-                    long
-                  </span>
-                  <span>
-                    <i style={{ background: "var(--down)" }} />
-                    short
-                  </span>
-                  <span>
-                    <i style={{ background: "var(--accent)" }} />
-                    equity (log)
-                  </span>
-                </div>
-                <div className="dqss-kpis">
-                  {kpis.map(([l, v, tone]) => (
-                    <div className="dqss-kpi" key={l}>
-                      <div className="l">{l}</div>
-                      <div className={`v ${tone}`}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="dqss-fills">
-                  <h6>Recent trades · {fmtNum(entry.total_trades)} total</h6>
-                  {recent.length ? (
-                    recent.map((t) => (
-                      <div className="dqss-fill" key={t.n}>
-                        <span className={`side ${t.direction === "long" ? "is-pos" : "is-neg"}`}>
-                          {t.direction === "long" ? "LONG" : "SHORT"}
-                        </span>
-                        <span>
-                          {base(entry.symbol)} {fmtMoney(t.exit_price)}
-                        </span>
-                        <span className={t.pnl_pct >= 0 ? "is-pos" : "is-neg"}>
-                          {t.pnl_pct >= 0 ? "+" : ""}
-                          {fmtNum(t.pnl_pct, 1)}%
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="dqss-empty">Loading backtest…</p>
-                  )}
-                </div>
-                <a className="dqss-full" href={`/strategies/${entry.strategy}`}>
-                  View full tearsheet ↗
-                </a>
+      <div className="dqss-preview-position">
+        {data ? (
+          <CurrentPosition data={data} asset={asset} />
+        ) : (
+          <div className="dqss-position-skeleton" aria-hidden="true" />
+        )}
+      </div>
+
+      <KpiStrip primary ariaLabel="Headline performance">
+        <Kpi label="CAGR" value={<Toned v={cagr}>{fmtPct(cagr)}</Toned>} />
+        <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(maxDd)}</span>} />
+        <Kpi
+          className="dqss-kpi-medium"
+          label="Profit factor"
+          value={fmtNum(profitFactor, 2)}
+        />
+        <Kpi className="dqss-kpi-medium" label="Win rate" value={fmtPct(winRate)} />
+        <Kpi
+          className="dqss-kpi-optional"
+          label="Avg trade return"
+          value={<Toned v={avgTrade}>{fmtPct(avgTrade)}</Toned>}
+        />
+        <Kpi
+          className="dqss-kpi-optional"
+          label="Trades / yr"
+          value={fmtNum(tradesYr, 1)}
+        />
+      </KpiStrip>
+
+      <div className="ts-mode-bar dqss-preview-mode">
+        <SegToggle
+          label="Tearsheet view"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "charts", label: "Chart" },
+            { value: "tables", label: "Table" },
+          ]}
+        />
+      </div>
+
+      <section
+        className="ts-panel ts-tab-stack dqss-preview-panel"
+        aria-label={mode === "charts" ? "Price chart" : "Statistics table"}
+      >
+        <div className="dqss-preview-pane">
+          {mode === "charts" ? (
+            <div className="dqss-preview-pane-layer dqss-preview-chart-pane">
+              <div className="ts-chart dqss-preview-chart">
+                {chartLoading ? (
+                  <div className="dqss-chart-skeleton" aria-hidden="true" />
+                ) : chartReady ? (
+                  <CandlestickChart
+                    bars={chartOhlc}
+                    trades={previewTrades}
+                    height={PREVIEW_PANE_H}
+                    view={view6m}
+                    fullSpan={fullSpan}
+                    compact
+                  />
+                ) : (
+                  <div className="dqss-chart-empty">
+                    {chartUnavailable ? "Chart unavailable" : "Could not load chart"}
+                  </div>
+                )}
               </div>
             </div>
-          </aside>
+          ) : (
+            <div className="dqss-preview-pane-layer dqss-preview-table-pane">
+              {data ? (
+                <PivotStatsTable data={data} pivot="direction" compact />
+              ) : (
+                <p className="dqss-chart-empty">Loading statistics…</p>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <p className="dqss-preview-footer">
+        <Link className="dqss-full" href={`/strategies/${entry.strategy}`}>
+          View full tearsheet ↗
+        </Link>
+      </p>
+    </>
+  );
+});
+
+export function StrategySuite() {
+  useEffect(() => {
+    prefetchAllTearsheets(STRATEGIES.map((s) => s.strategy));
+  }, []);
+
+  return (
+    <section className="section dqss" id="strategies">
+      <div className="wrap">
+        <div className="dqss-intro">
+          <div className="dqss-intro-copy">
+            <span className="kicker">{"// pre-built strategy library"}</span>
+            <h2 className="dq-title">Research-grade systems, ready to explore.</h2>
+            <p className="dq-sub">
+              Browse calibrated backtests from the DigiQuant library — equity, drawdown, trade
+              logs, and full tearsheets for every release. More assets join the catalog as they
+              clear the pipeline.
+            </p>
+          </div>
+          <Link href="/strategies" className="dqss-library-pill">
+            Full strategy library
+            <span className="dqss-library-arrow" aria-hidden="true">
+              →
+            </span>
+          </Link>
         </div>
 
-        <p className="dqss-note">
-          // Real NautilusTrader backtests from the strategy library — equity, fills and KPIs are
-          the same data the full tearsheet renders.
-        </p>
+        <DeckStack
+          ariaLabel="Strategy tearsheets"
+          rail={STRATEGIES.map((s) => symbolBase(s.symbol))}
+        >
+          {STRATEGIES.map((entry) => (
+            <DeckCard key={entry.strategy} className="dqss-card">
+              <StrategyTearsheetCard entry={entry} />
+            </DeckCard>
+          ))}
+        </DeckStack>
       </div>
     </section>
   );

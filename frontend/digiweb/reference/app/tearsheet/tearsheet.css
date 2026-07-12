@@ -1,0 +1,4 @@
+/* Tearsheet family page — the .ts-* grammar itself ships in
+   @digithings/web/styles/finance-tearsheet.css (imported plainly from
+   globals.css; it manages its own layering, print grammar unlayered).
+   Nothing page-local yet — specimens compose the shared classes. */

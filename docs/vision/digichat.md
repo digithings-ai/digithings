@@ -1,3 +1,12 @@
+---
+title: DigiChat
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - core
+  - chat
+---
 # DigiChat
 
 > The conversational interface for every DigiThings deployment — your models, your keys, your data.
@@ -20,8 +29,8 @@ Examples:
 
 **Two live deployments:**
 
-digithings.ai — platform demo:
-DigiThings own documentation indexed. Free tier: 3 questions with a cheap fast model. BYOK to continue beyond free. Model selector spans OpenAI, Anthropic, Gemini, Ollama. Sample questions displayed to guide exploration ("What does DigiQuant do?"). Goal: let any visitor experience the DigiThings stack directly.
+digithings.ai — platform demo (the flagship public DigiChat):
+DigiThings' own architecture docs are published into a [[digivault]] vault hosted in the core Supabase (the `architecture_notes` table, synced from `docs/vision/`), and DigiChat retrieves from it with full-text search on every turn — answers are grounded in the real docs, never web search. It runs on OpenRouter's free model pool, so visitors can use it with no sign-up; a lightweight per-IP throttle only deters bot floods (the free pool's own account-wide daily quota still applies — a one-time small credit purchase lifts it ~20x). Served at the edge by a Cloudflare Pages Function (`/api/chat`) using the anon, RLS-gated read key, so no secrets ever reach the browser. The bot introduces itself and can explain its own architecture. Bring-your-own-key — paste a provider key for stronger models, forwarded per-request and never stored — is the planned next step. Sample questions guide exploration ("What does DigiGraph orchestrate?"). Goal: let any visitor experience the DigiThings stack directly.
 
 digiquant.io — investment profiling:
 Entry flow powered by a proprietary investment profiling sub-graph. User inputs investment preferences → DigiChat builds and saves an investment profile to DigiStore (user acquisition + personalization). Shows what strategies and allocations could be constructed for their profile. Paywall trigger: "Ready to build your first strategy? Start with Kairos." Free taste → paid conversion.
@@ -30,7 +39,7 @@ Entry flow powered by a proprietary investment profiling sub-graph. User inputs 
 A client organization deploys DigiChat pointed at their own DigiSearch index. Users log in via their corporate SSO (Microsoft, Google) — DigiKey identifies them, maps them to their organization's project, and issues a JWT with the appropriate index and tool scopes. The UI adapts: only their organization's indexes and approved tools appear. Index results are filtered by user access level.
 
 **Current state (shipped):**
-Next.js BFF + React UI, Auth.js sessions, Drizzle ORM, AI SDK, Postgres for conversation history, BYOK UI flow live, deployed to chat.digithings.ai.
+Next.js BFF + React UI, Auth.js sessions, Drizzle ORM, AI SDK, Postgres for conversation history, BYOK UI flow live — `frontend/digichat` itself is not deployed publicly today. The digithings.ai instance described above still runs a separate bespoke widget (direct OpenRouter calls, its own Supabase vault search) rather than this app; cutting it over to run as the real DigiChat gateway at `digithings.ai/chat` per [ADR-0018](../adr/0018-digichat-path-routing.md) is tracked in epic [#1248](https://github.com/digithings-ai/digithings/issues/1248).
 
 **12-month roadmap:**
 - Model selector settings panel (full provider list, BYOK per provider)

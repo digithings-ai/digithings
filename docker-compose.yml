@@ -101,6 +101,10 @@ services:
       - DIGIQUANT_URL=http://digiquant:8001
       - DIGISEARCH_URL=http://digisearch:8002
       - DIGISMITH_URL=http://digismith:8003
+      # DigiVault is opt-in (dedicated Compose profile, not part of the always-on
+      # core stack) — leave empty by default so the digivault skill stays hidden
+      # unless an operator explicitly enables the profile and sets this.
+      - DIGIVAULT_URL=${DIGIVAULT_URL:-}
       - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
       - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}

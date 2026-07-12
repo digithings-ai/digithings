@@ -8,8 +8,18 @@ import { logStorageFailure } from "@/lib/storage-debug";
 export const EMBED_FREE_TURN_LIMIT = 3;
 const STORAGE_PREFIX = "digichat_embed_turns:";
 
-/** Resolve the host-origin key this embed is running under. */
-export function resolveEmbedHost(): string {
+/**
+ * Resolve the host-origin key this embed is running under.
+ *
+ * @param explicitHost - The embedding page's own origin, passed via the
+ * iframe src's `?host=` param (see embed/page.tsx). Always prefer this: the
+ * embedding site always knows its own origin reliably, whereas client-side
+ * detection below is inherently unreliable for real cross-origin embeds
+ * (#1372) — kept only as a fallback for embed snippets that predate the
+ * `?host=` param.
+ */
+export function resolveEmbedHost(explicitHost?: string | null): string {
+  if (explicitHost) return explicitHost;
   // In SSR / tests, fall back to a stable default.
   if (typeof window === "undefined") return "unknown";
   try {
@@ -19,12 +29,14 @@ export function resolveEmbedHost(): string {
     // referrer may be malformed or cross-origin-blocked
   }
   try {
-    // Accessing window.parent.location will throw for cross-origin iframes;
-    // that's expected in production. The referrer branch above handles that
-    // case; this is only useful for same-origin dev embeds.
+    // Accessing window.parent.location will throw for cross-origin iframes —
+    // that's the expected case in production (#1372): a genuine embed is
+    // always cross-origin, so this branch is only ever useful for same-origin
+    // dev embeds. Never fall back to window.location.origin here — that's
+    // this app's OWN origin, never a signal about who is embedding it.
     return window.parent.location.origin;
   } catch {
-    return window.location.origin;
+    return "unknown";
   }
 }
 
@@ -68,16 +80,40 @@ export type EmbedGate = {
  * Hook: free-tier gate counter.
  *
  * @param byokUnlocked - when true, `locked` is always false regardless of count.
+ * @param explicitHost - see resolveEmbedHost(); the embedding page's own origin.
  * @param limit - override for tests; default EMBED_FREE_TURN_LIMIT.
  */
 export function useEmbedGate(
   byokUnlocked: boolean,
+  explicitHost?: string | null,
   limit: number = EMBED_FREE_TURN_LIMIT,
 ): EmbedGate {
-  // Lazy initializers run once on mount (client-only in a "use client"
-  // component tree). Avoids a setState-in-effect cascade.
-  const [host] = useState<string>(() => resolveEmbedHost());
-  const [turns, setTurns] = useState<number>(() => readTurns(host));
+  // explicitHost arrives asynchronously (resolved from a searchParams Promise
+  // in the caller), so this must react to it changing rather than capture it
+  // once at mount — a one-shot useState lazy initializer would freeze on
+  // whatever explicitHost was on the very first render (undefined), silently
+  // reintroducing #1372 for every message sent afterward.
+  const host = useMemo(() => resolveEmbedHost(explicitHost), [explicitHost]);
+  // Adjust state during render when `host` changes, rather than in an effect
+  // (react-hooks/set-state-in-effect) — this is React's documented pattern
+  // for "resetting state when a prop changes" without an extra render pass.
+  const [turnsFor, setTurnsFor] = useState<{ host: string; turns: number }>(() => ({
+    host,
+    turns: readTurns(host),
+  }));
+  if (turnsFor.host !== host) {
+    setTurnsFor({ host, turns: readTurns(host) });
+  }
+  const turns = turnsFor.turns;
+  const setTurns = useCallback(
+    (updater: number | ((prev: number) => number)) => {
+      setTurnsFor((prev) => ({
+        host: prev.host,
+        turns: typeof updater === "function" ? updater(prev.turns) : updater,
+      }));
+    },
+    [],
+  );
 
   const increment = useCallback(() => {
     setTurns((prev) => {
@@ -85,12 +121,12 @@ export function useEmbedGate(
       writeTurns(host, next);
       return next;
     });
-  }, [host]);
+  }, [host, setTurns]);
 
   const reset = useCallback(() => {
     writeTurns(host, 0);
     setTurns(0);
-  }, [host]);
+  }, [host, setTurns]);
 
   const locked = !byokUnlocked && turns >= limit;
 

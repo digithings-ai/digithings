@@ -231,6 +231,23 @@ def register_provider(prefix: str, base_url: str, api_key_env: str) -> None:
     _EXTERNAL_PROVIDERS[prefix] = {"base_url": base_url, "api_key_env": api_key_env}
 
 
+def is_registered_provider(prefix: str) -> bool:
+    """True if ``prefix`` is a registered external provider (see :func:`register_provider`)."""
+    return prefix in _EXTERNAL_PROVIDERS
+
+
+def get_provider_api_key_env(prefix: str) -> str | None:
+    """Return the API-key env var name for a registered provider, or ``None`` if unregistered.
+
+    Lets callers (e.g. DigiGraph's request-model resolution) check whether a
+    provider's key is configured *before* routing to it, without duplicating
+    this registry or triggering :func:`get_client_for_model`'s ``RuntimeError``
+    on a missing key.
+    """
+    cfg = _EXTERNAL_PROVIDERS.get(prefix)
+    return cfg["api_key_env"] if cfg else None
+
+
 # ── Client cache ──────────────────────────────────────────────────────────────
 # Keyed by provider name (external providers) or ``(api_key, base_url)`` for the
 # default client. Reuses the underlying httpx connection pool across requests.
@@ -309,10 +326,19 @@ def get_client_for_model(model: str) -> OpenAI:
     :func:`get_client` (the ``OPENAI_API_BASE`` / ``OPENAI_API_KEY`` path, which
     also honors the proxy-key and BYOK overrides).
 
+    When a BYOK override is active and its ``base_url`` matches the provider's
+    endpoint, returns an *uncached* client with the user's key (never cached).
+
     Raises:
         RuntimeError: when a registered provider's API key env var is unset.
     """
     provider, _ = _parse_provider_prefix(model)
+    byok_override = _byok_override.get()
+    if provider is not None and byok_override:
+        api_key, base_url = byok_override
+        cfg = _EXTERNAL_PROVIDERS.get(provider)
+        if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
+            return OpenAI(api_key=api_key, base_url=base_url)
     if provider is None:
         return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]

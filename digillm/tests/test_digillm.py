@@ -103,6 +103,23 @@ def test_get_client_for_model_external_provider(monkeypatch: pytest.MonkeyPatch)
     assert c1 is c2  # provider client is cached and reused
 
 
+def test_get_client_for_model_openrouter_byok_uses_user_key() -> None:
+    made: list[dict[str, Any]] = []
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.append(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        with digillm.byok("sk-or-user", "https://openrouter.ai/api/v1"):
+            a = digillm.get_client_for_model("openrouter/openai/gpt-4o-mini")
+            b = digillm.get_client_for_model("openrouter/openai/gpt-4o-mini")
+    assert len(made) == 2
+    assert a is not b
+    assert made[0]["api_key"] == "sk-or-user"
+    assert made[0]["base_url"] == "https://openrouter.ai/api/v1"
+
+
 def test_get_client_for_model_missing_key_raises() -> None:
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         digillm.get_client_for_model("gemini/gemini-2.5-flash")

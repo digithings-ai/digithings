@@ -121,14 +121,14 @@ export default function PipelineCanvas({
   return (
     <div className="flex flex-col flex-1 min-h-0 min-w-0">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-6 py-2 border-b border-border-subtle text-sm text-text-muted flex-wrap">
-        <div className="flex gap-0.5 bg-bg-secondary border border-border-subtle rounded-[9px] p-0.5">
+      <div className="flex items-center gap-2 px-6 py-2 border-b border-hair text-sm text-ink-mute flex-wrap">
+        <div className="flex gap-0.5 bg-term-bg border border-hair rounded-[9px] p-0.5">
           <button
             type="button"
             data-no-pan=""
             aria-label="Zoom out"
             onClick={zoomOut}
-            className="h-7 w-7 flex items-center justify-center rounded-md text-text-muted hover:text-text-primary hover:bg-fin-blue/10"
+            className="h-7 w-7 flex items-center justify-center rounded-md text-ink-mute hover:text-ink hover:bg-accent/10"
           >
             <Minus size={14} />
           </button>
@@ -137,7 +137,7 @@ export default function PipelineCanvas({
             data-no-pan=""
             aria-label="Fit to view"
             onClick={handleFitClick}
-            className="h-7 px-2.5 text-[12px] font-medium rounded-md text-text-muted hover:text-text-primary hover:bg-fin-blue/10"
+            className="h-7 px-2.5 text-[12px] font-medium rounded-md text-ink-mute hover:text-ink hover:bg-accent/10"
           >
             Fit
           </button>
@@ -146,7 +146,7 @@ export default function PipelineCanvas({
             data-no-pan=""
             aria-label="Zoom in"
             onClick={zoomIn}
-            className="h-7 w-7 flex items-center justify-center rounded-md text-text-muted hover:text-text-primary hover:bg-fin-blue/10"
+            className="h-7 w-7 flex items-center justify-center rounded-md text-ink-mute hover:text-ink hover:bg-accent/10"
           >
             <Plus size={14} />
           </button>
@@ -156,7 +156,7 @@ export default function PipelineCanvas({
           type="button"
           data-no-pan=""
           onClick={handleExpandAll}
-          className="h-8 px-3 text-[12px] font-medium rounded-[9px] border border-border-subtle bg-bg-secondary text-text-muted hover:text-text-primary hover:bg-fin-blue/10 flex items-center gap-1.5"
+          className="h-8 px-3 text-[12px] font-medium rounded-[9px] border border-hair bg-term-bg text-ink-mute hover:text-ink hover:bg-accent/10 flex items-center gap-1.5"
         >
           <ChevronDown size={13} />
           Expand all
@@ -166,22 +166,22 @@ export default function PipelineCanvas({
           type="button"
           data-no-pan=""
           onClick={handleCollapseAll}
-          className="h-8 px-3 text-[12px] font-medium rounded-[9px] border border-border-subtle bg-bg-secondary text-text-muted hover:text-text-primary hover:bg-fin-blue/10 flex items-center gap-1.5"
+          className="h-8 px-3 text-[12px] font-medium rounded-[9px] border border-hair bg-term-bg text-ink-mute hover:text-ink hover:bg-accent/10 flex items-center gap-1.5"
         >
           <ChevronRight size={13} />
           Collapse
         </button>
 
-        <span className="text-[11px] text-text-muted ml-auto hidden sm:block">
+        <span className="text-[11px] text-ink-mute ml-auto hidden sm:block">
           drag to pan · scroll to zoom · click a node to open / expand
         </span>
 
         <div className="flex gap-3 flex-wrap">
-          <span className="flex items-center gap-1.5 text-[11px] text-text-muted">
-            <span className="text-fin-blue text-[13px]">→</span> sequential
+          <span className="flex items-center gap-1.5 text-[11px] text-ink-mute">
+            <span className="text-accent text-[13px]">→</span> sequential
           </span>
-          <span className="flex items-center gap-1.5 text-[11px] text-text-muted">
-            <span className="text-fin-blue text-[13px]">↓</span> parallel
+          <span className="flex items-center gap-1.5 text-[11px] text-ink-mute">
+            <span className="text-accent text-[13px]">↓</span> parallel
           </span>
         </div>
       </div>

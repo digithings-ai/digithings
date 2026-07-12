@@ -28,6 +28,7 @@ jobs:
       digigraph: ${{ steps.filter.outputs.digigraph }}
       digichat: ${{ steps.filter.outputs.digichat }}
       olympus: ${{ steps.filter.outputs.olympus }}
+      web: ${{ steps.filter.outputs.web }}
       score: ${{ steps.filter.outputs.score }}
       e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
       nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
@@ -76,16 +77,24 @@ jobs:
               - '.github/workflows/test-digigraph.yml'
             digichat:
               - 'frontend/digichat/**'
-              - 'frontend/design/**'
+              - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-digichat.yml'
             olympus:
               - 'frontend/olympus/**'
-              - 'frontend/design/**'
+              - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-olympus.yml'
+            web:
+              - 'frontend/digithings-web/**'
+              - 'frontend/digiquant-web/**'
+              - 'frontend/digiweb/web/**'
+              - 'frontend/digiweb/design/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/test-web.yml'
             score:
               - 'digibase/**'
               - 'digiclaw/**'
@@ -95,7 +104,6 @@ jobs:
               - 'digismith/**'
               - 'digikey/**'
               - 'digivault/**'
-              - 'frontend/**'
               - 'scripts/**'
               - 'tests/**'
               - 'agents.yml'
@@ -109,7 +117,16 @@ jobs:
               - '.github/workflows/test-e2e.yml'
             nautilus_smoke:
               - 'digiquant/**'
+              - 'tests/dq/conftest.py'
+              - 'tests/dq/test_api.py'
+              - 'tests/dq/test_audit.py'
+              - 'tests/dq/test_backtest.py'
+              - 'tests/dq/test_calibrations_loader.py'
               - 'tests/dq/test_nautilus_runner.py'
+              - 'tests/dq/test_pipeline_graph.py'
+              - 'tests/dq/test_strategies.py'
+              - 'tests/dq/test_tearsheet_isolation.py'
+              - 'tests/dq/test_v1_jobs.py'
               - '.github/workflows/test-nautilus.yml'
             atlas_graph:
               - 'digiquant/src/digiquant/olympus/atlas/**'
@@ -146,6 +163,26 @@ jobs:
               - 'pip-audit-ignore.txt'
               - '.github/workflows/security-pip-audit.yml'
             # CI_PATH_FILTERS_END
+
+  # ── Frontend canon guard (#1404, #1434) — UNCONDITIONAL ─────────────────────
+  # No `needs`/`if` gate on purpose: check_frontend_canon.py does
+  # `git ls-files frontend` and scans ALL frontend files regardless of the
+  # diff, so path-gating it (as the per-app test jobs still do) let a PR
+  # touching only frontend/digichat-ui/** or frontend/digiweb/reference/**
+  # skip the guard entirely — even though digichat-ui is a census app.
+  # Stdlib-only; no npm/pip install needed.
+  frontend-canon:
+    name: Frontend canon guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Frontend canon guard
+        run: python3 scripts/check_frontend_canon.py
 
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
@@ -198,6 +235,11 @@ jobs:
     if: needs.changes.outputs.olympus == 'true'
     uses: ./.github/workflows/test-olympus.yml
 
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    uses: ./.github/workflows/test-web.yml
+
   score:
     needs: changes
     if: needs.changes.outputs.score == 'true'
@@ -243,6 +285,9 @@ jobs:
           pip install -e "./digibase[dev]"
           pip install -e "./digikey[dev]"
           pip install cryptography ruff polars tabulate pyyaml pytest openai httpx
+
+      - name: CI path filters in sync (ci.yml ⇄ ci_paths.yaml)
+        run: python scripts/generate_ci_path_filters.py --check
 
       - name: Validate model routing (config only)
         run: python scripts/validate_model_routing.py --routing

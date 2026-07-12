@@ -1,0 +1,183 @@
+/* Chatbot page — the digichat surface, staged as a terminal CLI (Claude Code /
+   opencode register): one mono scrollback per demo, a `>` prompt for the user,
+   flush assistant output, collapsible tool-call blocks — but with modern
+   affordances (embedded charts/widgets/markdown, colour, collapse). Builder-
+   first: clear hierarchy, minimal chrome, everything monospace-anchored. */
+
+/* Chat shell — surface, turn, mark, stack, bubble, and lead migrated to
+   token-backed Tailwind utilities across the seven chatbot-reference.tsx files
+   (the @theme bridge in globals.css: bg-term-bg, border-term-hair, text-term-ink,
+   text-accent, text-ink-soft). Two mechanics stay in CSS below: .chat-surface
+   keeps its class for the box-shadow (no shadow token) + the ::before session
+   header, and .chat-bubble--user keeps its class for the `> ` prompt ::before. */
+
+.chat-surface {
+  box-shadow: 0 30px 60px -42px rgba(0, 0, 0, 0.65);
+}
+
+/* a faint terminal session header */
+.chat-surface::before {
+  content: "digichat — session";
+  display: block;
+  padding-bottom: 0.7rem;
+  margin-bottom: 0.2rem;
+  border-bottom: 1px solid var(--term-hair);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--term-mute);
+}
+
+/* user input echoed as a prompt line — the `> ` prompt glyph stays as CSS */
+.chat-bubble--user::before {
+  content: "> ";
+  color: var(--accent);
+}
+
+/* ── thinking chain ─────────────────────────────────────────────────── */
+/* Promoted to @digithings/web (#1418): <ChatThinking> in
+   web/src/components/chat/ChatThinking.tsx carries the utilities; the chip
+   background/hover, caret art, pulse keyframe, step rail, and reveal
+   transitions live in @digithings/web/styles/chat-widgets.css. */
+
+/* ── composer ───────────────────────────────────────────────────────── */
+
+/* Composer — layout, spacing, and token colours migrated to utilities in
+   chat-composer-reference.tsx. What stays here is mechanics: the focus-within
+   color-mix border, the ::placeholder colour, hover color-mixes, and the send
+   button's surface-inverse custom-prop colour + transitions. */
+
+.composer {
+  transition: border-color 0.2s var(--ease);
+}
+
+.composer:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+}
+
+.composer-input::placeholder {
+  color: var(--ink-mute);
+}
+
+.composer-icon {
+  transition: color 0.2s var(--ease);
+}
+
+.composer-icon:hover {
+  color: var(--ink);
+}
+
+.composer-model {
+  transition: border-color 0.2s var(--ease);
+}
+
+.composer-model:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
+
+.composer-send {
+  color: var(--surface-inverse, #06110f);
+  transition: opacity 0.2s var(--ease), transform 0.15s var(--ease);
+}
+
+.composer-send:hover:not(:disabled) {
+  transform: translateX(1px);
+}
+
+.composer-send:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ── markdown ───────────────────────────────────────────────────────── */
+/* Promoted to @digithings/web (#1418): the markdown frame is
+   <ChatMarkdown>/<ChatCodeBlock> in web/src/components/chat/ —
+   chat-markdown-reference.tsx renders bare elements inside the .chat-md
+   scope, and the element combinators (color-mix washes, ::marker accents,
+   code figure + copy mechanics) live in
+   @digithings/web/styles/chat-core.css. */
+
+/* ── inline chart ───────────────────────────────────────────────────── */
+/* The .chat-inline-chart canvas-host wrapper migrated to utilities in
+   chat-inline-chart-reference.tsx (w-full, h-[180px], border-hair, rounded,
+   overflow). The Lightweight-Charts instance itself is created in the tsx. */
+
+/* ── inline graph ───────────────────────────────────────────────────── */
+/* .route-graph width/height migrated to utilities (w-full h-auto) in
+   chat-inline-graph-reference.tsx; the class stays on the <svg> for the
+   .route-graph.in .route-edge draw animation. Everything below is SVG paint,
+   color-mix, and keyframes — kept as CSS. */
+
+.route-edge {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  stroke-width: 1.5;
+  stroke-dasharray: 320;
+  stroke-dashoffset: 0;
+}
+
+.route-graph.in .route-edge {
+  stroke-dashoffset: 320;
+  animation: route-draw 0.7s var(--ease) forwards;
+}
+
+.route-graph.in .route-edge:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.route-graph.in .route-edge:nth-child(2) {
+  animation-delay: 0.25s;
+}
+.route-graph.in .route-edge:nth-child(3) {
+  animation-delay: 0.35s;
+}
+.route-graph.in .route-edge:nth-child(4) {
+  animation-delay: 0.55s;
+}
+.route-graph.in .route-edge:nth-child(5) {
+  animation-delay: 0.65s;
+}
+
+@keyframes route-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.route-node rect {
+  fill: var(--surface);
+  stroke: color-mix(in srgb, var(--accent) 30%, var(--hair));
+  stroke-width: 1;
+}
+
+.route-node text {
+  fill: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-anchor: middle;
+}
+
+.route-node--you rect,
+.route-node--vault rect {
+  fill: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-graph.in .route-edge {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ── custom widgets ─────────────────────────────────────────────────── */
+/* Promoted to @digithings/web (#1418): the frame/actions grammar is
+   <ChatWidgetFrame> / <ChatWidgetButton> in
+   web/src/components/chat/ChatWidgetFrame.tsx; the button transition and
+   color-mix hovers live in @digithings/web/styles/chat-widgets.css (.cw-btn).
+   The metrics grid and order detail stay in chat-widgets-reference.tsx as
+   token-backed utilities — frame content, not frame. */
+
+/* ── collapsible tool-call blocks (terminal tool chain) ─────────────────── */
+/* Promoted to @digithings/web (#1418): <ChatToolCall> in
+   web/src/components/chat/ChatToolCall.tsx carries the utilities; the
+   color-mix rails, caret art, aria-expanded rotate, and running pulse live
+   in @digithings/web/styles/chat-widgets.css (.tc*). */

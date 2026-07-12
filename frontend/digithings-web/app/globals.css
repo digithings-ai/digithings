@@ -1,11 +1,258 @@
 @import "tailwindcss";
 @import "@digithings/design/tokens.css";
-@import "@digithings/design/site/site.css";
+/* layer(components): site.css ships a global reset (* { margin: 0 }); unlayered
+   it outranks @layer utilities and silently kills every margin utility —
+   including NavShell's mx-auto centering. Same fix as digiquant-web (#1401). */
+@import "@digithings/design/site/site.css" layer(components);
 @import "@digithings/web/styles/web-theme.css";
+@import "@digithings/web/styles/nav-shell.css";
+@import "@digithings/web/styles/docs.css";
+@import "@digithings/web/styles/terminal-manifest.css";
+/* Homepage primitives (#1450): NumberedStages spine (stages.css), the
+   digit-roll OdometerStrip metrics band (data-layout.css, #1452 promotion),
+   the WordReveal pinned-blur claim (word-reveal.css) and the stack Marquee
+   (marquee.css). */
+@import "@digithings/web/styles/stages.css";
+@import "@digithings/web/styles/data-layout.css";
+@import "@digithings/web/styles/word-reveal.css";
+@import "@digithings/web/styles/marquee.css";
+/* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
+   the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
+   caret's animation shorthand when an element carries both .chat-cursor
+   and .dt-cur). */
+@import "@digithings/web/styles/chat-core.css";
+@import "@digithings/web/styles/chat-widgets.css";
+@import "@digithings/digichat-ui/styles/cursor.css";
+@import "@digithings/digichat-ui/styles/session.css";
+
+/* Tailwind must scan the shared components that carry token utilities —
+   paths relative to this file (frontend/digiweb/web). */
+@source "../../digiweb/web/src/components/NavShell.tsx";
+@source "../../digiweb/web/src/components/TerminalManifest.tsx";
+@source "../../digiweb/web/src/components/docs";
+@source "../../digiweb/web/src/components/chat";
+@source "../../digiweb/web/src/components/stages";
+@source "../../digiweb/web/src/components/data-layout";
+@source "../../digiweb/web/src/components/typography";
+@source "../../digiweb/web/src/components/marquee";
 
 /* Point the token font families at the self-hosted next/font variables. */
 :root[data-theme] {
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-display: var(--font-instrument), Georgia, serif;
+  /* v7 direction: editorial Fraunces serif for display headings (loaded via
+     next/font in layout.tsx). Sans Geist still carries body + data. */
+  --serif: var(--font-fraunces), "Fraunces", Georgia, serif;
+  --font-display: var(--serif);
 }
+
+/* ---- Neutral platform palette (digithings.ai only) ----
+   DigiThings is the platform; accent flavoring belongs to individual modules,
+   not the platform shell. The shared design tokens (tokens.css) define a teal
+   accent that digiquant.io legitimately uses for its green-candle identity — we
+   must NOT change that file (digiquant-web + olympus consume it). Instead we
+   override the semantic accent tokens here, scoped to this app's stylesheet
+   only, collapsing accent to monochrome ink/white. Everything that reads
+   the accent token (terminal cursor, nav hovers, dt- and dc- UI, primary
+   buttons, graph nodes) inherits the neutral tone with no per-rule edits. */
+/* NB: must match tokens.css's `:root[data-theme=…]` specificity (0,2,0) and come
+   after it in source order — a bare `[data-theme=…]` (0,1,0) would lose and the
+   teal accent would leak through. */
+:root[data-theme="dark"] {
+  --accent: var(--ink);
+  --on-accent: var(--bg);
+  --accent-weak: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+:root[data-theme="light"] {
+  --accent: var(--ink);
+  --on-accent: var(--surface);
+  /* stronger than dark-mode 12% so the fixed .glow wash reads on --bg */
+  --accent-weak: color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+/* The shared `.glow` (site.css) drifts vertically (keyframe `translate(…, 2%)`),
+   which leaves a faint un-tinted strip at the very top edge — most visible on
+   subpages and when the auto-hiding nav uncovers the top. Anchor it here so the
+   page shading always reaches the top border. (The shared file also feeds
+   digiquant.io, so we don't touch it.) */
+.glow { animation: none; transform: none; }
+
+/* brand QR mark: transparent, theme-inverted (dark modules in light mode, white
+   in dark) — two <img>s swapped by [data-theme] (Lightning CSS drops mask-image,
+   so a single recolorable mark isn't reliable). */
+.brand-mark { display: inline-block; }
+[data-theme="light"] .brand-mark-dark { display: none; }
+[data-theme="dark"] .brand-mark-light { display: none; }
+
+/* ==========================================================================
+   v7 LANDING CHROME — originally ported from digiquant-web/app/globals.css
+   (itself from frontend/digiweb/design/demos/digiquant-landing/07-scroll-driven.html),
+   since slimmed by the canon migration (#1400): the scroll-aware nav lives in
+   @digithings/web's NavShell (nav-shell.css), the /docs shell in the shared
+   docs family (docs.css), the clean layout/type rules moved into their
+   TSX as token utilities, and the terminal module manifest rides the shared
+   <TerminalManifest> primitive (terminal-manifest.css, #1416). What remains
+   below is what must stay CSS — the mesh-hero entrance art + keyframes.
+   Namespaced `dq*` so nothing collides with shared site.css. Consumes
+   [data-theme] tokens only → light/dark safe.
+   ========================================================================== */
+:root {
+  --dq-nav-h: 62px;
+  /* the shared NavShell (nav-shell.css) reads its own height token —
+     alias it to the app knob so anchors/scroll-padding stay in sync */
+  --nav-shell-h: var(--dq-nav-h);
+  /* the shared docs shell (docs.css) reads its own offset token */
+  --docs-nav-h: var(--dq-nav-h);
+}
+
+/* anchor-scroll: center the whole architecture block (head + manifest) in the viewport */
+html {
+  scroll-behavior: auto;
+  scroll-padding-top: var(--dq-nav-h);
+}
+#architecture {
+  scroll-margin-top: var(--dq-nav-h);
+  min-height: calc(100svh - var(--dq-nav-h));
+  display: flex;
+  align-items: center;
+  padding-block: clamp(1.5rem, 4vh, 2.5rem);
+}
+#architecture .section-head {
+  margin-bottom: clamp(1.25rem, 2.5vw, 1.75rem);
+}
+#contact { scroll-margin-top: calc(var(--dq-nav-h) + 1.5rem); }
+
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* ---- HERO: animated mesh-gradient, scroll-reactive ---- */
+.dqhero { position: relative; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; }
+.dqhero-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; filter: blur(48px) saturate(1.15); }
+.dqhero-veil { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(120% 115% at 50% 34%, color-mix(in srgb, var(--bg) 32%, transparent) 0%, color-mix(in srgb, var(--bg) 12%, transparent) 22%, color-mix(in srgb, var(--bg) 60%, transparent) 60%, var(--bg) 92%); }
+/* reactive intelligence graph: above the veil, below the headline; never blocks
+   clicks. Edge-fade is done in-canvas (destination-in), not via a CSS mask. */
+.dqhero-graph { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+.dqhero-inner { position: relative; z-index: 2; max-width: 900px; padding: 0 1.2rem; will-change: transform, opacity; }
+.dqhero-h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2.5rem, 6vw, 4.7rem); line-height: 1.04; letter-spacing: -0.025em; color: var(--ink); }
+.dqhero-h1 em { font-style: italic; color: var(--accent); }
+/* padding-bottom gives descenders/italic overhang room inside the overflow mask
+   (the reveal still hides the line — the hidden state is pushed past the padding);
+   the negative margin keeps line spacing unchanged. */
+.dqhero-h1 .ln { display: block; overflow: hidden; padding-bottom: 0.22em; margin-bottom: -0.22em; }
+.dqhero-h1 .ln > span { display: block; transform: translateY(calc(108% + 0.24em)); transition: transform 1s var(--ease); }
+.dqhero-h1 .ln:nth-child(2) > span { transition-delay: 0.09s; }
+.dqhero.loaded .dqhero-h1 .ln > span { transform: none; }
+.dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px color-mix(in srgb, var(--bg) 45%, transparent); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
+.dqhero-lede b { color: var(--ink); font-weight: 500; }
+.dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
+.dqhero-cta { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; margin-top: 2.4rem; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
+.dqhero.loaded .dqhero-cta { opacity: 1; transform: none; }
+
+/* no-JS (law 06): the entrance never gates content — html.no-js renders the
+   hero at rest. Keep in sync with the .loaded rules above. */
+html.no-js .dqhero-h1 .ln > span { transform: none; }
+html.no-js .dqhero-lede,
+html.no-js .dqhero-cta { opacity: 1; transform: none; }
+.dqhero-scroll-label { margin: 0; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--accent) 78%, var(--ink)); }
+/* scroll-down cue: accent hairline with a pulse travelling down it */
+.dqhero-scroll { position: relative; width: 2px; height: 88px; overflow: hidden; border-radius: 1px; background: linear-gradient(color-mix(in srgb, var(--accent) 52%, var(--hair-2)), transparent); }
+.dqhero-scroll::after { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 32px; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 18%, transparent)); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent); animation: dq-scrollcue 1.55s var(--ease) infinite; }
+@keyframes dq-scrollcue { 0% { transform: translateY(-32px); opacity: 0; } 18% { opacity: 1; } 82% { opacity: 0.35; } 100% { transform: translateY(88px); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dqhero-h1 .ln > span, .dqhero-lede, .dqhero-cta { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .dqhero-scroll::after { animation: none; opacity: 0.6; transform: none; }
+}
+
+/* Short-viewport nav clearance (#1434): the hero centres its content in
+   100svh, but the NavShell is position:fixed (--dq-nav-h). On short viewports
+   (mobile landscape, split-screen — ~414px tall) a centred, taller-than-
+   viewport headline rides up UNDER the fixed nav. Below this height threshold,
+   top-align the hero and pad past the nav so content always clears it; the
+   section still grows (min-height) so nothing is clipped. Desktop keeps its
+   centred composition — the query never fires above 640px tall. The abspos
+   canvas/veil/graph (inset:0) fill the padding box, so only .dqhero-inner
+   shifts down; the mesh art still covers the full hero. */
+@media (max-height: 640px) {
+  .dqhero {
+    align-items: flex-start;
+    padding-top: calc(var(--dq-nav-h) + 1.25rem);
+    padding-bottom: 2rem;
+  }
+}
+
+/* Mermaid diagrams (MermaidBlock.tsx) — client-rendered SVG for pipeline/architecture
+   visualizations. Centered, contained; a view-source toggle reveals the raw code. */
+.dc-mermaid { margin: 0.7rem 0; }
+.dc-mermaid-fig { margin: 0; display: flex; justify-content: center; padding: 0.6rem; border: 1px solid var(--hair); border-radius: 9px; background: color-mix(in srgb, var(--ink) 3%, transparent); overflow-x: auto; }
+.dc-mermaid-fig svg { max-width: 100%; height: auto; }
+.dc-mermaid-toggle { font: inherit; font-size: 0.7rem; color: var(--ink-mute); background: transparent; border: 0; cursor: pointer; padding: 0.2rem 0; letter-spacing: 0.03em; }
+.dc-mermaid-toggle:hover { color: var(--ink-soft); }
+
+/* BYOK settings panel (ProviderSettings.tsx — digithings-web only) */
+.dc-settings-backdrop { position: fixed; inset: 0; z-index: 80; background: color-mix(in srgb, var(--bg) 35%, transparent); backdrop-filter: blur(4px); display: flex; justify-content: flex-end; }
+.dc-settings-panel { width: min(22rem, 92vw); height: 100%; overflow-y: auto; padding: 1rem 1rem 1.25rem; background: var(--surface); border-left: 1px solid var(--hair); box-shadow: -8px 0 24px color-mix(in srgb, var(--ink) 8%, transparent); font-family: var(--font-mono); font-size: 0.78rem; }
+.dc-settings-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.75rem; }
+.dc-settings-title { margin: 0; font-size: 0.9rem; font-weight: 600; color: var(--ink); }
+.dc-settings-close { font: inherit; font-size: 1.2rem; line-height: 1; color: var(--ink-mute); background: transparent; border: 0; cursor: pointer; padding: 0.1rem 0.35rem; }
+.dc-settings-close:hover { color: var(--ink); }
+.dc-settings-note { margin: 0 0 1rem; padding: 0.5rem 0.6rem; border: 1px solid var(--hair); border-radius: 8px; background: color-mix(in srgb, var(--ink) 4%, transparent); color: var(--ink-mute); line-height: 1.45; font-size: 0.72rem; }
+.dc-settings-field { margin-bottom: 0.85rem; }
+.dc-settings-label { display: block; margin-bottom: 0.35rem; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); }
+.dc-settings-providers { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.dc-settings-provider { font: inherit; font-size: 0.72rem; color: var(--ink-soft); background: transparent; border: 1px solid var(--hair); border-radius: 6px; padding: 0.2rem 0.45rem; cursor: pointer; }
+.dc-settings-provider.is-active { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 30%, var(--hair)); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.dc-settings-keyrow { display: flex; gap: 0.35rem; align-items: center; }
+.dc-settings-input, .dc-settings-select { flex: 1; font: inherit; font-size: 0.76rem; color: var(--ink); background: color-mix(in srgb, var(--ink) 4%, transparent); border: 1px solid var(--hair); border-radius: 6px; padding: 0.35rem 0.5rem; width: 100%; }
+.dc-settings-input:focus, .dc-settings-select:focus { outline: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); outline-offset: 1px; }
+.dc-settings-ghost, .dc-settings-primary { font: inherit; font-size: 0.72rem; border-radius: 6px; padding: 0.28rem 0.55rem; cursor: pointer; border: 1px solid var(--hair); }
+.dc-settings-ghost { color: var(--ink-soft); background: transparent; }
+.dc-settings-ghost:hover:not(:disabled) { color: var(--ink); }
+.dc-settings-ghost:disabled { opacity: 0.45; cursor: default; }
+.dc-settings-primary { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+.dc-settings-primary:hover { opacity: 0.92; }
+.dc-settings-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.dc-settings-error { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--down); }
+.dc-settings-test-ok { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--up); }
+
+/* ---- /docs API reference — app-owned CONTENT chrome only. The shell
+   (responsive sidebar + scroll-spy + mobile disclosure), hero, code blocks,
+   field-table hairlines and the HTTP-method color ramp live in the shared
+   docs family (@digithings/web DocsLayout/CodeTabs/EndpointDoc + docs.css).
+   What remains here is digithings content structure: guides, per-module
+   sections, badges, interface lists, related links, copy-as-Markdown. */
+.docs-copy { font: inherit; font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-soft); background: transparent; border: 1px solid var(--hair); border-radius: 7px; cursor: pointer; padding: 0.3rem 0.65rem; transition: background 0.18s var(--ease), color 0.18s var(--ease); }
+.docs-copy:hover { background: var(--accent-weak); color: var(--ink); }
+
+.doc-block { margin: 0; }
+.doc-block h3 { margin: 0 0 0.5rem; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
+
+/* anchored sections get their scroll offset from the shared docs.css rule
+   (.docs-content :where([id])), driven by --docs-nav-h above. */
+.doc-mod { border-top: 1px solid var(--hair); padding-top: clamp(1.2rem, 3vw, 1.8rem); display: flex; flex-direction: column; gap: 0.7rem; }
+.doc-mod-head { display: flex; align-items: center; gap: 0.7rem; }
+.doc-mod-title { display: flex; flex-direction: column; gap: 0.1rem; margin-right: auto; }
+.doc-mod-title h2 { margin: 0; font-family: var(--font-mono); font-size: 1.05rem; font-weight: 500; letter-spacing: -0.01em; }
+.doc-mod-title .dt-d { color: var(--ink); }
+.doc-mod-title .dt-s { color: var(--accent); }
+.doc-mod-role { font-size: 0.78rem; color: var(--ink-mute); }
+.doc-badge { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-soft); border: 1px solid var(--hair); border-radius: 7px; padding: 0.15rem 0.45rem; white-space: nowrap; }
+.doc-badge.is-road { color: var(--ink-mute); }
+.doc-tagline { margin: 0; color: var(--ink); font-size: 0.96rem; line-height: 1.5; }
+.doc-summary { margin: 0; color: var(--ink-soft); font-size: 0.88rem; line-height: 1.65; }
+
+.doc-links { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.2rem; }
+.doc-links a { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); text-decoration: none; text-underline-offset: 2px; }
+.doc-links a:hover { text-decoration: underline; }
+.doc-links a .dt-d { color: var(--ink); }
+.doc-links a .dt-s { color: var(--accent); }
+
+/* ---- shared guides ---- */
+.doc-guide { border-top: 1px solid var(--hair); padding-top: clamp(1.2rem, 3vw, 1.8rem); display: flex; flex-direction: column; gap: 0.6rem; }
+.doc-guide-title { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(1.4rem, 2.6vw, 1.9rem); letter-spacing: -0.01em; color: var(--ink); }
+.doc-guide-h { margin: 0.6rem 0 0; font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
+.doc-guide-list { margin: 0.2rem 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.6; }
+
+/* ---- public interface / mcp lists ---- */
+.doc-iface { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.doc-iface li { display: flex; flex-direction: column; gap: 0.2rem; }
+.doc-iface-desc { color: var(--ink-soft); font-size: 0.86rem; line-height: 1.55; }

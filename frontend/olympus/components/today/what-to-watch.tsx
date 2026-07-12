@@ -28,13 +28,13 @@ export function WhatToWatch({ actionables, risks, asOfDate }: WhatToWatchProps) 
     <section className="glass-card px-5 py-4 sm:px-6">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Eye size={14} className="text-text-muted" />
-          <h2 className="text-xs font-bold uppercase tracking-widest text-text-muted">
+          <Eye size={14} className="text-ink-mute" />
+          <h2 className="text-xs font-bold uppercase tracking-widest text-ink-mute">
             What to watch
           </h2>
         </div>
         <Link
-          href={buildPipelineHref({ date: asOfDate, node: 'digest' })}
+          href={buildPipelineHref({ date: asOfDate, stage: 'synthesis', node: 'digest' })}
           className="text-[10px] font-medium text-accent hover:underline"
         >
           see the full read →
@@ -45,13 +45,13 @@ export function WhatToWatch({ actionables, risks, asOfDate }: WhatToWatchProps) 
         <ol className="space-y-2.5">
           {acts.map((a, i) => (
             <li key={`${a.label}-${i}`} className="flex gap-3">
-              <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border-subtle font-mono text-[11px] tabular-nums text-text-muted">
+              <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-hair font-mono text-[11px] tabular-nums text-ink-mute">
                 {a.priority ?? i + 1}
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-medium leading-snug text-text-primary">{a.label}</p>
+                <p className="text-sm font-medium leading-snug text-ink">{a.label}</p>
                 {a.rationale ? (
-                  <p className="mt-0.5 text-xs leading-snug text-text-secondary">{a.rationale}</p>
+                  <p className="mt-0.5 text-xs leading-snug text-ink-soft">{a.rationale}</p>
                 ) : null}
               </div>
             </li>
@@ -60,10 +60,10 @@ export function WhatToWatch({ actionables, risks, asOfDate }: WhatToWatchProps) 
       ) : null}
 
       {tails.length > 0 ? (
-        <div className="mt-4 border-t border-border-subtle pt-3">
+        <div className="mt-4 border-t border-hair pt-3">
           <div className="mb-2 flex items-center gap-2">
-            <AlertTriangle size={12} className="text-fin-amber" />
-            <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+            <AlertTriangle size={12} className="text-warn" />
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
               Tail risks
             </h3>
           </div>
@@ -71,13 +71,13 @@ export function WhatToWatch({ actionables, risks, asOfDate }: WhatToWatchProps) 
             {tails.map((r, i) => (
               <li key={`${r.label}-${i}`} className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm leading-snug text-text-secondary">
-                    <span className="font-medium text-text-primary">{r.label}</span>
-                    {r.trigger ? <span className="text-text-muted"> — {r.trigger}</span> : null}
+                  <p className="text-sm leading-snug text-ink-soft">
+                    <span className="font-medium text-ink">{r.label}</span>
+                    {r.trigger ? <span className="text-ink-mute"> — {r.trigger}</span> : null}
                   </p>
                 </div>
                 {r.horizonHours != null ? (
-                  <span className="shrink-0 font-mono text-[10px] tabular-nums text-fin-amber">
+                  <span className="shrink-0 font-mono text-[10px] tabular-nums text-warn">
                     {r.horizonHours}h
                   </span>
                 ) : null}

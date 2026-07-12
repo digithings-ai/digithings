@@ -16,7 +16,7 @@ export function DigigraphTraceCard({ trace }: { trace: DigigraphTracePayload }) 
   const payload = trace.payload ?? {};
   const svc = trace.service?.trim();
   return (
-    <div className="rounded-md border border-border/50 bg-black/30 px-3 py-2 text-xs">
+    <div className="rounded-md border border-border/50 bg-term-bg px-3 py-2 text-xs">
       <div className="mb-1 flex items-center gap-2 font-medium text-muted-foreground">
         <TraceIcon t={t} />
         <span className="uppercase tracking-wide">{t.replace(/_/g, " ")}</span>
@@ -46,7 +46,7 @@ export function DigigraphTraceCard({ trace }: { trace: DigigraphTracePayload }) 
           ))}
         </ul>
       ) : t === "code_block" && typeof payload.content === "string" ? (
-        <pre className="mt-1 max-h-48 overflow-auto rounded bg-black/50 p-2 font-mono text-[11px] leading-relaxed text-emerald-100/90">
+        <pre className="mt-1 max-h-48 overflow-auto rounded bg-term-fill p-2 font-mono text-[11px] leading-relaxed text-term-ink">
           {payload.content as string}
         </pre>
       ) : (

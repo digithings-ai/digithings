@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Fraunces } from "next/font/google";
-import { ThemeProvider, MotionProvider, themeInitScript } from "@digithings/web";
+import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager } from "@digithings/web";
 
 // Editorial serif for the v7 landing direction — self-hosted by next/font so it
 // works under `output: "export"` (no runtime CDN <link>). digiquant-local only.
@@ -40,18 +40,27 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  // suppressHydrationWarning: themeInitScript legitimately flips data-theme
+  // pre-hydration for system-light visitors; scoped to this element only.
   return (
-    <html lang="en" data-theme="dark" className={`${GeistSans.variable} ${GeistMono.variable} ${fraunces.variable}`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable} ${fraunces.variable} no-js`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* Law 06 (content-first): SSR ships html.no-js so stylesheet rules can
+            neutralize JS-gated hiding (hero entrance, [data-motion] reveals,
+            the strategy deck); removed pre-paint when scripts run. */}
+        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
         {/* Single fallback; themeInitScript sets it to the active theme pre-paint. */}
-        <meta name="theme-color" content="#0B0C0E" />
+        <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
       </head>
       <body>
         <div className="grain" aria-hidden="true" />
         <div className="glow" aria-hidden="true" />
         <MotionProvider>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider>
+            <HashScrollManager />
+            {children}
+          </ThemeProvider>
         </MotionProvider>
       </body>
     </html>

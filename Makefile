@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install qr-logo up-observability down-observability atlas-validate
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install qr-logo up-observability down-observability atlas-validate
 
 build:
 	docker compose build
@@ -35,6 +35,13 @@ test-e2e:
 # Internal markdown links (agent-facing docs). Same check as CI workflow docs.yml.
 doc-check:
 	python3 scripts/check_doc_links.py
+
+# Lint the DigiVault-managed docs/vision vault (wikilinks, frontmatter, taxonomy,
+# orphans) against docs/vision/.digivault.yml. Uses the digivault core (pydantic +
+# pyyaml only); -P keeps cwd off sys.path so the real package under digivault/src
+# loads, not the repo-root namespace dir.
+vault-check:
+	PYTHONPATH=digivault/src python3 -P scripts/check_vault.py
 
 # Regenerate frontend/digithings/assets/qrw.svg from scripts/generate-qr.py.
 # Requires: pip install "qrcode==8.0"
@@ -118,6 +125,13 @@ edgar-digisearch-dev: export-edgar-digisearch-dev seed-digisearch-edgar-dev
 openapi-digigraph:
 	@mkdir -p docs/openapi
 	@python -c 'import json; from digigraph.server import app; open("docs/openapi/digigraph.json","w").write(json.dumps(app.openapi(), indent=2))'
+
+# Regenerate the DigiVault API-reference notes (docs/vision/api/) from the authored
+# /docs content (frontend/digithings-web/lib/apiDocs.ts + sharedDocs.ts). Commit the
+# output; the architecture-vault sync upserts it to Supabase on push to main.
+.PHONY: gen-api-vault
+gen-api-vault:
+	node_modules/.bin/tsx scripts/gen-api-vault.ts
 
 # ── Agent development kit ──────────────────────────────────────────────────────
 

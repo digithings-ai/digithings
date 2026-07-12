@@ -1,0 +1,241 @@
+/* ==========================================================================
+   nav-shell.css — state machinery for <NavShell/> (components/NavShell.tsx).
+   Import once in an app's globals.css, after web-theme.css:
+     @import "@digithings/web/styles/nav-shell.css";
+
+   Static layout (row, lead, brand, links strip, tail cluster) is token-backed
+   Tailwind utilities in the component. Everything here is what utilities can't
+   express cleanly: the fixed bar's settle/yield transitions and its two-colour
+   color-mix backdrop band, the JS-toggled state classes (.is-scrolled,
+   .is-hidden, .is-menu-open), the hamburger's parent-state span transforms,
+   descendant dressing of slotted content (.theme-toggle, .btn-icon, sheet
+   links), the portal overlay pair (scrim + sheet), and the breakpoint /
+   reduced-motion guards.
+
+   The bar reads --nav-shell-h (fallback 62px) so apps can retune height in one
+   place — and reuse it for scroll-padding-top / anchor offsets.
+   ========================================================================== */
+
+/* ── the bar: settle after 8px, yield past 180px (scroll-down only) ─────── */
+.nav-shell {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-shell-h, 62px);
+  z-index: 210;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid transparent;
+  transition:
+    transform 0.4s var(--ease),
+    background 0.3s var(--ease),
+    border-color 0.3s var(--ease);
+}
+.nav-shell.is-scrolled {
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom-color: var(--hair);
+}
+.nav-shell.is-hidden {
+  transform: translateY(calc(-1 * var(--nav-shell-h, 62px) - 1px));
+}
+
+/* ── inline links: hover ink on descendants ─────────────────────────────── */
+.nav-shell-links a {
+  transition: color 0.2s var(--ease);
+}
+.nav-shell-links a:hover {
+  color: var(--ink);
+}
+
+/* ── tail cluster: theme toggle, slotted actions, hamburger — borderless,
+      no fill, glyph/lines only (descendant overrides of slotted content) ── */
+.nav-shell-tail .theme-toggle,
+.nav-shell-tail .btn-icon,
+.nav-shell-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: color 0.2s var(--ease);
+}
+.nav-shell-tail .theme-toggle:hover,
+.nav-shell-tail .btn-icon:hover,
+.nav-shell-toggle:hover {
+  color: var(--ink);
+  background: transparent;
+}
+.nav-shell-tail .btn-icon svg {
+  display: block;
+}
+
+/* ── hamburger: two lines folding to an × from the parent state ─────────── */
+.nav-shell-toggle {
+  display: none; /* wide viewports; media query below re-enables */
+  flex-direction: column;
+  gap: 5px;
+  flex-shrink: 0;
+  margin: 0;
+}
+.nav-shell-toggle span {
+  display: block;
+  width: 18px;
+  height: 1.5px;
+  background: currentColor;
+  border-radius: 1px;
+  transition:
+    transform 0.25s var(--ease),
+    opacity 0.2s var(--ease);
+}
+.nav-shell.is-menu-open .nav-shell-toggle span:first-child {
+  transform: translateY(3.25px) rotate(45deg);
+}
+.nav-shell.is-menu-open .nav-shell-toggle span:last-child {
+  transform: translateY(-3.25px) rotate(-45deg);
+}
+
+/* ── menu-open bar dress: solid enough to read over the scrim ───────────── */
+.nav-shell.is-menu-open {
+  border-bottom-color: var(--hair);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.nav-shell.is-menu-open.is-hidden {
+  transform: none;
+}
+
+/* ── portal overlay: full-viewport scrim — dims + aggressively blurs the
+      page behind the menu ──────────────────────────────────────────────── */
+.nav-shell-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  backdrop-filter: blur(40px) saturate(1.3);
+  -webkit-backdrop-filter: blur(40px) saturate(1.3);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.28s var(--ease),
+    visibility 0.28s;
+}
+.nav-shell-backdrop.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* ── portal overlay: the sheet — right-aligned serif link stack + CTA ───── */
+.nav-shell-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  padding: calc(var(--nav-shell-h, 62px) + 1.5rem) clamp(1.25rem, 5vw, 2rem)
+    max(1.25rem, env(safe-area-inset-bottom));
+  background: transparent;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition:
+    visibility 0.28s,
+    transform 0.28s var(--ease);
+}
+.nav-shell-sheet.is-open {
+  visibility: visible;
+  transform: none;
+}
+.nav-shell-sheet-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  flex: 1;
+  width: min(100%, 20rem);
+  margin-left: auto;
+  font-size: 1.35rem;
+  font-family: var(--font-serif, Georgia, serif);
+  color: var(--ink);
+  pointer-events: auto;
+}
+.nav-shell-sheet-links a {
+  display: block;
+  width: 100%;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--hair);
+  color: var(--ink-soft);
+  text-align: right;
+  text-shadow: 0 1px 12px color-mix(in srgb, var(--bg) 70%, transparent);
+  transition: color 0.2s var(--ease);
+}
+.nav-shell-sheet-links a:hover {
+  color: var(--ink);
+}
+.nav-shell-sheet-cta {
+  display: flex;
+  justify-content: flex-end;
+  width: min(100%, 20rem);
+  margin-left: auto;
+  padding-top: 1.5rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  pointer-events: auto;
+}
+.nav-shell-sheet-cta .btn {
+  width: auto;
+  justify-content: center;
+}
+
+/* ── breakpoints (identical to the app navs this supersedes) ────────────── */
+@media (min-width: 881px) {
+  .nav-shell-backdrop,
+  .nav-shell-sheet {
+    display: none;
+  }
+}
+@media (max-width: 880px) {
+  .nav-shell-toggle {
+    display: inline-flex;
+    margin-left: 0.5rem;
+  }
+}
+@media (max-width: 560px) {
+  .nav-shell-toggle {
+    margin-left: 0.65rem;
+  }
+}
+/* Never hide the bar on small screens: thumb-scroll jitters direction, and
+   the bar is the only route back to the menu. */
+@media (max-width: 768px) {
+  .nav-shell.is-hidden {
+    transform: none;
+  }
+}
+
+/* ── reduced motion: same states, instant — the bar still settles, yields
+      and returns; nothing slides or fades ──────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .nav-shell,
+  .nav-shell-toggle span,
+  .nav-shell-links a,
+  .nav-shell-sheet-links a,
+  .nav-shell-backdrop,
+  .nav-shell-sheet {
+    transition: none;
+  }
+}

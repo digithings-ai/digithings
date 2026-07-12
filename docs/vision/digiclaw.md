@@ -1,3 +1,12 @@
+---
+title: DigiClaw
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - support
+  - audit
+---
 # DigiClaw
 
 > The always-on agent layer — scheduled and continuous AI agents that run the ecosystem autonomously.

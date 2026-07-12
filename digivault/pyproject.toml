@@ -27,6 +27,9 @@ service = [
     "typer>=0.12",
 ]
 dev = ["pytest>=8", "ruff>=0.8"]
+# Supabase-backed vault store (digivault.supabase_store). Lazily imported — the
+# core stays pydantic+pyyaml-only; this extra adds the DB read/search path.
+supabase = ["supabase>=2"]
 
 [project.scripts]
 digivault = "digivault.cli:app"

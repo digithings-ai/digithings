@@ -16,10 +16,25 @@ gitignored ``calibrations.json``. The trade window (``trade_start``) is enforced
 inside the strategy, so warmup uses earlier bars while reported trades match the
 TradingView Strategy Tester window.
 
+Each strategy's backtest runs in its own spawned process: NautilusTrader's Rust
+logging can only initialize once per process, so a second in-process
+``BacktestEngine`` aborts the interpreter (#1389). Isolation also means one
+crashing strategy cannot take down the rest — failures are collected and the
+script exits non-zero if any strategy failed.
+
+``--signal-delay-days N`` (#1462) lags the public view of every strategy by N
+calendar days: the OHLCV frame is truncated so the run ends N days before the
+freshest cached bar, and the whole tearsheet is generated from that shorter
+series. End-date shift — not redaction — so the equity curve, drawdown, trade
+log, open-position state, and headline metrics are self-consistent by
+construction and none of them can leak the live position. Payloads declare the
+lag via ``signal_delay_days``.
+
 Usage:
     python scripts/generate_tearsheets.py
     python scripts/generate_tearsheets.py --strategy eth_slapper
     python scripts/generate_tearsheets.py --cache-dir digiquant/data/price-history
+    python scripts/generate_tearsheets.py --signal-delay-days 3
 """
 
 from __future__ import annotations
@@ -27,8 +42,17 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import multiprocessing
+import signal
+import sys
+from datetime import timedelta
 from decimal import Decimal
+from multiprocessing.connection import Connection
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import polars as pl
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -39,10 +63,46 @@ DIGIQUANT_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_STRATEGIES = REPO_ROOT / "frontend" / "digiquant-web" / "public" / "strategies"
 DEFAULT_CACHE = DIGIQUANT_ROOT / "data" / "price-history"
 SETTINGS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "settings.json"
+CALIBRATIONS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "calibrations.json"
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from _env import load_repo_env  # noqa: E402
+
+# Published tearsheet baselines (June 25 commit d0e59144). Warn when regen drifts.
+_PUBLISHED_BASELINE: dict[str, dict[str, float | int]] = {
+    "btc_slapper": {"trades": 79, "min_pf": 8.0},
+    "eth_slapper": {"trades": 57, "min_pf": 6.0},
+    "sol_slapper": {"trades": 46, "min_pf": 3.0},
+}
 
 
 def load_settings() -> dict:
     return json.loads(SETTINGS_PATH.read_text())
+
+
+def apply_signal_delay(ohlcv: pl.DataFrame, signal_delay_days: int) -> pl.DataFrame:
+    """Truncate OHLCV so the run's end date lags the cached end by N calendar days.
+
+    End-date shift (#1462): the public tearsheets are generated as if the run
+    happened ``signal_delay_days`` days ago. Every derived artifact (equity
+    curve, drawdown, trade log, open-position state, headline metrics) is then
+    self-consistent by construction — there is no per-field redaction to get
+    wrong. The cutoff is calendar days from the newest bar's timestamp, not a
+    bar count, so gaps in the series still yield a true N-day lag.
+
+    ``0`` is an exact no-op (the frame is returned unchanged); negative values
+    would peek into the future and raise ``ValueError``.
+    """
+    import polars as pl
+
+    if signal_delay_days < 0:
+        raise ValueError(f"signal_delay_days must be >= 0, got {signal_delay_days}")
+    if signal_delay_days == 0 or ohlcv.is_empty():
+        return ohlcv
+    ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
+    cutoff = ohlcv[ts_col].max() - timedelta(days=signal_delay_days)
+    return ohlcv.filter(pl.col(ts_col) <= cutoff)
 
 
 def _mult(direction: str, entry_price: float, price: float) -> float:
@@ -58,12 +118,48 @@ def _mult(direction: str, entry_price: float, price: float) -> float:
     return 1.0 + (entry_price - price) / entry_price
 
 
+# Signal-type → TradingView-style display label, mirroring the Pine validator's
+# taxonomy (scripts/validation/pine_backtest.py: "MR Long"/"Trend Long"/"MR&T Long",
+# "Reversal Long", + Short variants) so both engines emit the same entry_label strings.
+_SIGNAL_LABELS = {
+    ("mean_reversion", "long"): "MR Long",
+    ("mean_reversion", "short"): "MR Short",
+    ("trend", "long"): "Trend Long",
+    ("trend", "short"): "Trend Short",
+    ("trend+mr", "long"): "MR&T Long",
+    ("trend+mr", "short"): "MR&T Short",
+    ("reversal", "long"): "Reversal Long",
+    ("reversal", "short"): "Reversal Short",
+}
+
+
+def _entry_label(signal_type: str | None, direction: str) -> str:
+    """Map a recorded ``(signal_type, direction)`` to a Pine-style display label.
+
+    Returns "" when the type is missing or unrecognized, so a join miss (e.g. the
+    engine fills an entry on a different bar than the one the strategy recorded)
+    degrades gracefully to a blank label instead of raising.
+    """
+    if not signal_type:
+        return ""
+    return _SIGNAL_LABELS.get((signal_type, direction), "")
+
+
 def _dir_metrics(trades: list[dict], initial: float) -> dict:
     """All/Long/Short performance block from round-trip trades (pnl in quote ccy)."""
     if not trades:
-        return {"trades": 0, "net_profit": 0.0, "net_profit_pct": 0.0, "gross_profit": 0.0,
-                "gross_loss": 0.0, "percent_profitable": 0.0, "profit_factor": None,
-                "avg_trade": 0.0, "wins": 0, "losses": 0}
+        return {
+            "trades": 0,
+            "net_profit": 0.0,
+            "net_profit_pct": 0.0,
+            "gross_profit": 0.0,
+            "gross_loss": 0.0,
+            "percent_profitable": 0.0,
+            "profit_factor": None,
+            "avg_trade": 0.0,
+            "wins": 0,
+            "losses": 0,
+        }
     wins = [t for t in trades if t["pnl"] > 0]
     losses = [t for t in trades if t["pnl"] <= 0]
     gross_profit = sum(t["pnl"] for t in wins)
@@ -83,10 +179,23 @@ def _dir_metrics(trades: list[dict], initial: float) -> dict:
     }
 
 
-def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict):
-    """Run the Nautilus backtest; return (positions_report_df, bars_list).
+def _avg_trade_pct(trades: list[dict]) -> float:
+    """Mean per-trade return (%%), matching frontend ``avgTradePct``."""
+    if not trades:
+        return 0.0
+    return sum(t["pnl_pct"] for t in trades) / len(trades)
+
+
+def run_nautilus(
+    strategy: str, symbol: str, ohlcv, settings: dict, calibration: dict | None = None
+):
+    """Run the Nautilus backtest; return (positions_report_df, bars_list, ohlc_bars, signal_log).
 
     ``bars_list`` is [(date_str, close_float), ...] for the mark-to-market curve.
+    ``ohlc_bars`` is [(date_str, o, h, l, c), ...] for the candlestick chart.
+    ``signal_log`` maps (entry_date, direction) -> signal type recorded by the
+    strategy on entry ("mean_reversion"/"trend"/"trend+mr"/"reversal"); may be
+    empty for strategies that do not populate ``_signal_log``.
     """
     from datetime import datetime, timezone
 
@@ -114,6 +223,11 @@ def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict):
     closes = ohlcv["close"].to_list()
     vols = ohlcv["volume"].to_list() if "volume" in ohlcv.columns else None
     bars_list = [(str(t)[:10], float(c)) for t, c in zip(ts_vals, closes)]
+    # OHLC for the candlestick chart — clipped to the trade window (matches equity).
+    ohlc_bars = [
+        (str(t)[:10], float(o), float(h), float(low), float(c))
+        for t, o, h, low, c in zip(ts_vals, opens, highs, lows, closes)
+    ]
 
     price_prec = int(d.get("price_precision", 2))
     size_prec = int(d.get("size_precision", 8))
@@ -126,14 +240,20 @@ def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict):
         is_inverse=False,
         price_precision=price_prec,
         size_precision=size_prec,
-        price_increment=Price.from_str(f"{10 ** -price_prec:.{price_prec}f}"),
-        size_increment=Quantity.from_str(f"{10 ** -size_prec:.{size_prec}f}"),
+        price_increment=Price.from_str(f"{10**-price_prec:.{price_prec}f}"),
+        size_increment=Quantity.from_str(f"{10**-size_prec:.{size_prec}f}"),
         max_quantity=None,
-        min_quantity=Quantity.from_str(f"{10 ** -size_prec:.{size_prec}f}"),
-        max_notional=None, min_notional=None, max_price=None, min_price=None,
-        margin_init=Decimal("0"), margin_maint=Decimal("0"),
-        maker_fee=Decimal("0"), taker_fee=Decimal("0"),
-        ts_event=0, ts_init=0,
+        min_quantity=Quantity.from_str(f"{10**-size_prec:.{size_prec}f}"),
+        max_notional=None,
+        min_notional=None,
+        max_price=None,
+        min_price=None,
+        margin_init=Decimal("0"),
+        margin_maint=Decimal("0"),
+        maker_fee=Decimal("0"),
+        taker_fee=Decimal("0"),
+        ts_event=0,
+        ts_init=0,
     )
     bar_type = BarType.from_str(f"{symbol}.{venue_name}-{d.get('bar_spec', '1-DAY-LAST')}-EXTERNAL")
 
@@ -167,20 +287,29 @@ def run_nautilus(strategy: str, symbol: str, ohlcv, settings: dict):
 
     engine = BacktestEngine()
     engine.add_venue(
-        venue=Venue(venue_name), oms_type=OmsType.NETTING, account_type=AccountType.MARGIN,
-        base_currency=USD, starting_balances=[Money(d["initial_capital"], USD)],
+        venue=Venue(venue_name),
+        oms_type=OmsType.NETTING,
+        account_type=AccountType.MARGIN,
+        base_currency=USD,
+        starting_balances=[Money(d["initial_capital"], USD)],
     )
     engine.add_instrument(inst)
     engine.add_data(bars)
     strat, _ = get_strategy(
-        strategy_name=strategy, instrument_id=inst.id, bar_type=bar_type,
-        trade_size=Decimal(1), size_pct_equity=float(d["size_pct_equity"]),
+        strategy_name=strategy,
+        instrument_id=inst.id,
+        bar_type=bar_type,
+        trade_size=Decimal(1),
+        size_pct_equity=float(d["size_pct_equity"]),
+        **(calibration or {}),
     )
     engine.add_strategy(strat)
     engine.run()
     positions = engine.trader.generate_positions_report()
+    # Read the strategy's signal-type side-channel BEFORE dispose() tears it down.
+    signal_log = dict(getattr(strat, "_signal_log", {}) or {})
     engine.dispose()
-    return positions, bars_list
+    return positions, bars_list, ohlc_bars, signal_log
 
 
 def trades_from_positions(positions) -> list[dict]:
@@ -189,6 +318,7 @@ def trades_from_positions(positions) -> list[dict]:
     The Nautilus report is read row-wise; missing exits (NaT/NaN) are detected via
     self-inequality, avoiding non-Polars dataframe helpers in DigiQuant code.
     """
+
     def _missing(x) -> bool:
         return x is None or x != x  # NaN/NaT compare unequal to themselves
 
@@ -198,18 +328,47 @@ def trades_from_positions(positions) -> list[dict]:
         direction = "long" if "BUY" in entry else "short"
         ts_close = r.get("ts_closed")
         avg_close = r.get("avg_px_close")
-        rows.append({
-            "direction": direction,
-            "entry_date": str(r.get("ts_opened"))[:10],
-            "entry_price": float(r.get("avg_px_open") or 0.0),
-            "exit_date": "" if _missing(ts_close) else str(ts_close)[:10],
-            "exit_price": None if _missing(avg_close) else float(avg_close),
-        })
+        rows.append(
+            {
+                "direction": direction,
+                "entry_date": str(r.get("ts_opened"))[:10],
+                "entry_price": float(r.get("avg_px_open") or 0.0),
+                "exit_date": "" if _missing(ts_close) else str(ts_close)[:10],
+                "exit_price": None if _missing(avg_close) else float(avg_close),
+            }
+        )
     rows.sort(key=lambda t: t["entry_date"])
     return rows
 
 
-def build_equity_and_trades(trades: list[dict], bars_list, initial_capital: float, trade_start: str):
+def carry_open_at_period_end(
+    trades: list[dict],
+    bars_list: list[tuple[str, float]],
+    trade_start: str,
+) -> list[dict]:
+    """Always-in-market: a close on the final bar is live MTM, not a flat book.
+
+      Nautilus may record ``ts_closed`` on the last daily bar when the backtest ends
+    while still positioned. For tearsheet / digiquant.io we keep that leg open so
+      the current-position banner matches TradingView's open trade at series end.
+    """
+    if not trades or not bars_list:
+        return trades
+    windowed = [(d, c) for d, c in bars_list if not trade_start or d >= trade_start]
+    if not windowed:
+        return trades
+    last_bar_date = windowed[-1][0]
+    out = [dict(t) for t in trades]
+    last = out[-1]
+    if last.get("exit_date") == last_bar_date:
+        last["exit_date"] = ""
+        last["exit_price"] = None
+    return out
+
+
+def build_equity_and_trades(
+    trades: list[dict], bars_list, initial_capital: float, trade_start: str
+):
     """Walk bars to build a TV-style MTM equity curve and per-trade PnL.
 
     Equity compounds at 100% per position (bankruptcy-floored at 0), matching the
@@ -231,15 +390,31 @@ def build_equity_and_trades(trades: list[dict], bars_list, initial_capital: floa
             ep = pos["trade"]["exit_price"] if pos["trade"]["exit_price"] is not None else close
             equity = max(pos["entry_equity"] * _mult(pos["direction"], pos["entry_price"], ep), 0.0)
             t = pos["trade"]
-            closed.append({**t, "exit_price": ep, "pnl": equity - pos["entry_equity"],
-                           "pnl_pct": (equity / pos["entry_equity"] - 1) * 100 if pos["entry_equity"] else 0.0,
-                           "equity_after": equity})
+            closed.append(
+                {
+                    **t,
+                    "exit_price": ep,
+                    "pnl": equity - pos["entry_equity"],
+                    "pnl_pct": (equity / pos["entry_equity"] - 1) * 100
+                    if pos["entry_equity"]
+                    else 0.0,
+                    "equity_after": equity,
+                }
+            )
             pos = None
         if pos is None and date in entries:
             t = entries[date]
-            pos = {"direction": t["direction"], "entry_price": t["entry_price"],
-                   "entry_equity": equity, "trade": t}
-        mtm = pos["entry_equity"] * _mult(pos["direction"], pos["entry_price"], close) if pos else equity
+            pos = {
+                "direction": t["direction"],
+                "entry_price": t["entry_price"],
+                "entry_equity": equity,
+                "trade": t,
+            }
+        mtm = (
+            pos["entry_equity"] * _mult(pos["direction"], pos["entry_price"], close)
+            if pos
+            else equity
+        )
         equity_curve.append((date, max(mtm, 0.0)))
 
     # Open position at the end → unrealized, listed like TradingView's open trade.
@@ -247,29 +422,70 @@ def build_equity_and_trades(trades: list[dict], bars_list, initial_capital: floa
         last_close = bars_list[-1][1]
         eq = max(pos["entry_equity"] * _mult(pos["direction"], pos["entry_price"], last_close), 0.0)
         t = pos["trade"]
-        closed.append({**t, "exit_date": "", "exit_price": last_close,
-                       "pnl": eq - pos["entry_equity"],
-                       "pnl_pct": (eq / pos["entry_equity"] - 1) * 100 if pos["entry_equity"] else 0.0,
-                       "equity_after": eq, "exit_reason": "open"})
+        closed.append(
+            {
+                **t,
+                "exit_date": "",
+                "exit_price": last_close,
+                "pnl": eq - pos["entry_equity"],
+                "pnl_pct": (eq / pos["entry_equity"] - 1) * 100 if pos["entry_equity"] else 0.0,
+                "equity_after": eq,
+                "exit_reason": "open",
+            }
+        )
     return equity_curve, closed
 
 
-def run_and_write(strategy: str, symbol: str, settings: dict, cache_dir: Path, output_dir: Path) -> dict | None:
+def run_and_write(
+    strategy: str,
+    symbol: str,
+    settings: dict,
+    cache_dir: Path,
+    output_dir: Path,
+    *,
+    cal_source: str,
+    push_supabase: bool = False,
+    signal_delay_days: int = 0,
+) -> dict | None:
     from digiquant.data.prices.history_cache import load_cached
+    from digiquant.strategies.calibrations_loader import resolve_calibrations
     from digiquant.tearsheet_data import from_nautilus_run
 
     ohlcv = load_cached(symbol, cache_dir)
     if ohlcv is None or ohlcv.is_empty():
         logger.error("No data for %s in %s", symbol, cache_dir)
         return None
+    # Public signal delay (#1462): shift the whole run's end date back, so all
+    # published artifacts describe the same (lagged) point in time.
+    ohlcv = apply_signal_delay(ohlcv, signal_delay_days)
+    if ohlcv.is_empty():
+        logger.error(
+            "No data left for %s after applying %d-day signal delay", symbol, signal_delay_days
+        )
+        return None
 
     d = settings["defaults"]
     initial_capital = float(d["initial_capital"])
     trade_start = d.get("trade_start") or ""
 
-    logger.info("Running Nautilus backtest: %s (%s, %d bars)", strategy, symbol, len(ohlcv))
-    positions, bars_list = run_nautilus(strategy, symbol, ohlcv, settings)
+    calibration = resolve_calibrations(
+        strategy,
+        source=cal_source,  # type: ignore[arg-type]
+        trade_start=trade_start or None,
+    )
+    logger.info(
+        "Running Nautilus backtest: %s (%s, %d bars, cal=%s, signal_delay=%dd)",
+        strategy,
+        symbol,
+        len(ohlcv),
+        cal_source,
+        signal_delay_days,
+    )
+    positions, bars_list, ohlc_bars, signal_log = run_nautilus(
+        strategy, symbol, ohlcv, settings, calibration=calibration
+    )
     trades = trades_from_positions(positions)
+    trades = carry_open_at_period_end(trades, bars_list, trade_start)
     equity_curve, closed = build_equity_and_trades(trades, bars_list, initial_capital, trade_start)
 
     longs = [t for t in closed if t["direction"] == "long"]
@@ -287,66 +503,345 @@ def run_and_write(strategy: str, symbol: str, settings: dict, cache_dir: Path, o
     window = [t for t in equity_curve]
     period = f"{window[0][0]} → {window[-1][0]}" if window else ""
     summary = {
-        "strategy": strategy, "symbol": symbol, "period": period,
-        "bars": len(window), "initial_capital": initial_capital, "final_equity": final_equity,
-        "net_profit_pct": all_m["net_profit_pct"], "max_drawdown_pct": max_dd,
-        "all": all_m, "long": _dir_metrics(longs, initial_capital),
+        "strategy": strategy,
+        "symbol": symbol,
+        "period": period,
+        "bars": len(window),
+        "initial_capital": initial_capital,
+        "final_equity": final_equity,
+        "net_profit_pct": all_m["net_profit_pct"],
+        "max_drawdown_pct": max_dd,
+        "all": all_m,
+        "long": _dir_metrics(longs, initial_capital),
         "short": _dir_metrics(shorts, initial_capital),
     }
-    trade_dicts = [{**t, "entry_label": t.get("exit_reason", "")} for t in closed]
+    # entry_label carries the per-trade signal type (MR/Trend/MR&T/Reversal),
+    # joined on (entry_date, direction) from the strategy's signal log. Misses
+    # (e.g. a fill recorded on a different bar) fall back to "".
+    trade_dicts = [
+        {
+            **t,
+            "entry_label": _entry_label(
+                signal_log.get((t["entry_date"], t["direction"])), t["direction"]
+            ),
+        }
+        for t in closed
+    ]
 
+    notes = [
+        f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
+        f"100% equity compounding, trade window from {trade_start}."
+    ]
+    if signal_delay_days:
+        notes.append(
+            f"Public signal delay: end date shifted back {signal_delay_days} days; "
+            f"all figures are as of {window[-1][0] if window else ''}."
+        )
     td = from_nautilus_run(
-        summary, trade_dicts, equity_curve,
+        summary,
+        trade_dicts,
+        equity_curve,
         data_source=d.get("data_source", "Coinbase daily OHLCV (CCXT)"),
-        notes=[f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
-               f"100% equity compounding, trade window from {trade_start}."],
+        ohlc_bars=[b for b in ohlc_bars if not trade_start or b[0] >= trade_start],
+        notes=notes,
+        signal_delay_days=signal_delay_days,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / f"{strategy}.json"
     out_path.write_text(td.to_json())
-    logger.info("  Wrote %s | net %.0f%% | maxDD %.1f%% | PF %.2f | win %.1f%% | %d trades",
-                out_path, td.net_profit_pct, td.max_drawdown_pct,
-                td.profit_factor or 0.0, td.win_rate_pct, td.total_trades)
+    logger.info(
+        "  Wrote %s | net %.0f%% | maxDD %.1f%% | PF %.2f | win %.1f%% | %d trades",
+        out_path,
+        td.net_profit_pct,
+        td.max_drawdown_pct,
+        td.profit_factor or 0.0,
+        td.win_rate_pct,
+        td.total_trades,
+    )
+    baseline = _PUBLISHED_BASELINE.get(strategy)
+    if baseline is not None:
+        exp_trades = int(baseline["trades"])
+        min_pf = float(baseline["min_pf"])
+        pf = float(td.profit_factor or 0.0)
+        if td.total_trades != exp_trades or pf < min_pf:
+            logger.warning(
+                "  Baseline drift for %s: got %d trades PF %.2f (expected %d trades, PF >= %.1f). "
+                "Check calibrations.json / Supabase strategy_calibrations before publishing.",
+                strategy,
+                td.total_trades,
+                pf,
+                exp_trades,
+                min_pf,
+            )
+
+    if push_supabase:
+        _push_tearsheet_to_supabase(strategy, td, equity_curve)
 
     return {
-        "strategy": td.strategy, "symbol": td.symbol, "engine": td.engine,
+        "strategy": td.strategy,
+        "symbol": td.symbol,
+        "engine": td.engine,
         "label": settings["strategies"][strategy].get("label", strategy),
-        "period_start": td.period_start, "period_end": td.period_end,
-        "net_profit_pct": td.net_profit_pct, "max_drawdown_pct": td.max_drawdown_pct,
-        "profit_factor": td.profit_factor, "win_rate_pct": td.win_rate_pct,
-        "total_trades": td.total_trades, "generated_at": td.generated_at,
+        "kind": settings["strategies"][strategy].get("kind", "long_short"),
+        "period_start": td.period_start,
+        "period_end": td.period_end,
+        "signal_delay_days": td.signal_delay_days,
+        "net_profit_pct": td.net_profit_pct,
+        "max_drawdown_pct": td.max_drawdown_pct,
+        "profit_factor": td.profit_factor,
+        "win_rate_pct": td.win_rate_pct,
+        "avg_trade_pct": _avg_trade_pct(trade_dicts),
+        "total_trades": td.total_trades,
+        "generated_at": td.generated_at,
         "href": f"/strategies/{td.strategy}",
     }
 
 
+def _push_tearsheet_to_supabase(strategy: str, td, equity_curve: list[tuple[str, float]]) -> None:
+    """Upsert headline metrics + equity curve to strategy_tearsheets (service role)."""
+    from digiquant.data.store.client import build_digiquant_client
+    from digiquant.data.store.strategies import upsert_tearsheet
+
+    client = build_digiquant_client()
+    if client is None:
+        logger.warning("Supabase push skipped — credentials missing")
+        return
+    metrics = {
+        "net_profit_pct": td.net_profit_pct,
+        "max_drawdown_pct": td.max_drawdown_pct,
+        "profit_factor": td.profit_factor,
+        "win_rate_pct": td.win_rate_pct,
+        "total_trades": td.total_trades,
+        "period_start": td.period_start,
+        "period_end": td.period_end,
+        "signal_delay_days": td.signal_delay_days,
+        "final_equity": td.final_equity,
+        "generated_at": td.generated_at,
+    }
+    curve = [{"t": t, "v": v} for t, v in equity_curve]
+    upsert_tearsheet(
+        client,
+        strategy_id=strategy,
+        metrics=metrics,
+        as_of=td.generated_at,
+        equity_curve=curve,
+    )
+    logger.info("  Pushed tearsheet summary → strategy_tearsheets (%s)", strategy)
+
+
+def _strategy_worker(
+    conn: Connection,
+    strategy: str,
+    symbol: str,
+    settings: dict,
+    cache_dir: Path,
+    output_dir: Path,
+    cal_source: str,
+    push_supabase: bool,
+    signal_delay_days: int,
+) -> None:
+    """Child-process entry point: run one strategy end-to-end, report via ``conn``."""
+    status: tuple[str, dict | str | None]
+    try:
+        entry = run_and_write(
+            strategy,
+            symbol,
+            settings,
+            cache_dir,
+            output_dir,
+            cal_source=cal_source,
+            push_supabase=push_supabase,
+            signal_delay_days=signal_delay_days,
+        )
+        if entry is not None:
+            status = ("ok", entry)
+        else:
+            status = ("error", "no tearsheet produced (see logs above)")
+    except Exception as exc:
+        logger.exception("Tearsheet run failed for %s", strategy)
+        status = ("error", f"{type(exc).__name__}: {exc}")
+    try:
+        conn.send(status)
+    finally:
+        conn.close()
+    if status[0] != "ok":
+        raise SystemExit(1)
+
+
+def _describe_exitcode(exitcode: int | None) -> str:
+    """Human-readable process exit description (signal-aware)."""
+    if exitcode is None:
+        return "unknown exit"
+    if exitcode < 0:
+        try:
+            name = signal.Signals(-exitcode).name
+        except ValueError:
+            name = f"signal {-exitcode}"
+        return f"killed by {name}"
+    return f"exit code {exitcode}"
+
+
+def _interpret_worker_result(
+    result: tuple[str, dict | str | None] | None,
+    exitcode: int | None,
+) -> tuple[dict | None, str | None]:
+    """Map a worker's pipe message + exit code to ``(index_entry, error)``."""
+    if result is None:
+        return None, f"backtest process died before reporting ({_describe_exitcode(exitcode)})"
+    kind, payload = result
+    if kind == "ok" and isinstance(payload, dict):
+        return payload, None
+    return None, str(payload)
+
+
+def run_strategy_isolated(
+    strategy: str,
+    symbol: str,
+    settings: dict,
+    cache_dir: Path,
+    output_dir: Path,
+    *,
+    cal_source: str,
+    push_supabase: bool = False,
+    signal_delay_days: int = 0,
+) -> tuple[dict | None, str | None]:
+    """Run one strategy's backtest in its own spawned process; return (entry, error).
+
+    NautilusTrader's Rust logging can only initialize once per process
+    (``log::set_boxed_logger``); a fresh in-process ``BacktestEngine`` per strategy
+    panics on the second engine — "Failed to initialize logging: attempted to set a
+    logger after the logging system was already initialized" — and SIGABRTs the
+    whole run (#1389). A spawned process per strategy gives each engine a clean
+    slate and contains any engine crash to that one strategy.
+    """
+    ctx = multiprocessing.get_context("spawn")
+    parent_conn, child_conn = ctx.Pipe(duplex=False)
+    proc = ctx.Process(
+        target=_strategy_worker,
+        args=(
+            child_conn,
+            strategy,
+            symbol,
+            settings,
+            cache_dir,
+            output_dir,
+            cal_source,
+            push_supabase,
+            signal_delay_days,
+        ),
+        name=f"tearsheet-{strategy}",
+    )
+    proc.start()
+    child_conn.close()
+    result: tuple[str, dict | str | None] | None = None
+    try:
+        result = parent_conn.recv()
+    except EOFError:
+        result = None
+    finally:
+        parent_conn.close()
+    proc.join()
+    return _interpret_worker_result(result, proc.exitcode)
+
+
 def main() -> None:
+    load_repo_env()
     settings = load_settings()
     strategies = settings["strategies"]
-    parser = argparse.ArgumentParser(description="Generate Nautilus tearsheet JSONs for digiquant.io")
+    parser = argparse.ArgumentParser(
+        description="Generate Nautilus tearsheet JSONs for digiquant.io"
+    )
     parser.add_argument("--strategy", choices=list(strategies.keys()), help="Run a single strategy")
-    parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE, help="OHLCV cache directory")
-    parser.add_argument("--output-dir", type=Path, default=FRONTEND_STRATEGIES, help="Output directory")
+    parser.add_argument(
+        "--cache-dir", type=Path, default=DEFAULT_CACHE, help="OHLCV cache directory"
+    )
+    parser.add_argument(
+        "--output-dir", type=Path, default=FRONTEND_STRATEGIES, help="Output directory"
+    )
+    parser.add_argument(
+        "--allow-example-calibrations",
+        action="store_true",
+        help="Permit running without calibrations.json (uses calibrations.example.json — NOT production parity)",
+    )
+    parser.add_argument(
+        "--from-supabase",
+        action="store_true",
+        help="Load calibrations from strategy_calibrations (overrides local file)",
+    )
+    parser.add_argument(
+        "--push-supabase",
+        action="store_true",
+        help="Upsert headline metrics to strategy_tearsheets after each run",
+    )
+    parser.add_argument(
+        "--signal-delay-days",
+        type=int,
+        default=0,
+        help="Lag the public tearsheets by N calendar days: truncate OHLCV so the run "
+        "ends N days before the freshest cached bar (end-date shift, #1462). Default 0.",
+    )
     args = parser.parse_args()
+    if args.signal_delay_days < 0:
+        parser.error("--signal-delay-days must be >= 0")
+
+    from digiquant.strategies.calibrations_loader import pick_calibration_source
+
+    if args.from_supabase:
+        cal_source = "supabase"
+        # Validate early
+        from digiquant.strategies.calibrations_loader import load_calibrations_from_supabase
+
+        load_calibrations_from_supabase()
+    else:
+        cal_source = pick_calibration_source(
+            prefer_supabase=False,
+            allow_example=args.allow_example_calibrations,
+        )
 
     targets = {args.strategy: strategies[args.strategy]} if args.strategy else strategies
 
-    entries = []
+    entries: list[dict] = []
+    failures: list[tuple[str, str]] = []
     for strat, cfg in targets.items():
-        entry = run_and_write(strat, cfg["symbol"], settings, args.cache_dir, args.output_dir)
-        if entry:
+        entry, error = run_strategy_isolated(
+            strat,
+            cfg["symbol"],
+            settings,
+            args.cache_dir,
+            args.output_dir,
+            cal_source=cal_source,
+            push_supabase=args.push_supabase,
+            signal_delay_days=args.signal_delay_days,
+        )
+        if entry is not None:
             entries.append(entry)
         else:
-            logger.error("FAILED: %s", strat)
+            failures.append((strat, error or "unknown error"))
+            logger.error("FAILED: %s — %s", strat, error)
 
     if entries:
         idx_path = args.output_dir / "index.json"
-        if args.strategy and idx_path.exists():
-            existing = [e for e in json.loads(idx_path.read_text()) if e["strategy"] != args.strategy]
-            entries = existing + entries
-        idx_path.write_text(json.dumps(entries, indent=2))
-        logger.info("Updated index.json (%d strategies)", len(entries))
-    logger.info("Done.")
+        merged = list(entries)
+        if idx_path.exists() and (args.strategy or failures):
+            # Partial run (single strategy, or some strategies failed): keep prior
+            # index entries for strategies not refreshed here, so one failure does
+            # not drop a live strategy card from digiquant.io.
+            refreshed = {e["strategy"] for e in entries}
+            prior = [e for e in json.loads(idx_path.read_text()) if e["strategy"] not in refreshed]
+            merged = prior + entries
+        idx_path.write_text(json.dumps(merged, indent=2))
+        logger.info("Updated index.json (%d strategies)", len(merged))
+
+    succeeded = {e["strategy"] for e in entries}
+    logger.info("Done: %d/%d strategies succeeded.", len(succeeded), len(targets))
+    for strat in targets:
+        if strat in succeeded:
+            logger.info("  OK      %s", strat)
+        else:
+            logger.error("  FAILED  %s: %s", strat, dict(failures).get(strat, "unknown error"))
+    if failures:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

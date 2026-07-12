@@ -5,10 +5,10 @@ import { groupRunEpisodes, type RunEpisode, type RunOutcome } from '@/lib/run-ep
 import type { AtlasRunDiagnostics } from '@/lib/types';
 
 const DOT: Record<RunOutcome, string> = {
-  ok: 'bg-fin-green',
-  recovered: 'bg-fin-green',
-  degraded: 'bg-fin-amber',
-  failed: 'bg-fin-red',
+  ok: 'bg-up',
+  recovered: 'bg-up',
+  degraded: 'bg-warn',
+  failed: 'bg-down',
 };
 
 function summary(ep: RunEpisode): string {
@@ -34,12 +34,12 @@ export function RunHealthTimeline({ diagnostics }: { diagnostics: AtlasRunDiagno
               aria-hidden
             />
             <div className="min-w-0">
-              <p className="text-sm text-text-primary">
+              <p className="text-sm text-ink">
                 <span className="font-medium">{ep.runDate ?? '—'}</span>{' '}
-                <span className="text-text-secondary">— {summary(ep)}</span>
+                <span className="text-ink-soft">— {summary(ep)}</span>
               </p>
               {ep.outcome !== 'ok' && ep.errorSummary ? (
-                <p className="mt-0.5 truncate text-xs text-text-muted" title={ep.errorSummary}>
+                <p className="mt-0.5 truncate text-xs text-ink-mute" title={ep.errorSummary}>
                   {ep.errorSummary}
                 </p>
               ) : null}

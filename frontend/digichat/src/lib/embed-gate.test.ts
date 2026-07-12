@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { EMBED_FREE_TURN_LIMIT, emit, readTurns, writeTurns } from "./embed-gate";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EMBED_FREE_TURN_LIMIT, emit, readTurns, resolveEmbedHost, writeTurns } from "./embed-gate";
 
 type Store = Map<string, string>;
 
@@ -65,6 +65,35 @@ describe("embed-gate storage", () => {
     };
     expect(readTurns("x")).toBe(0);
     expect(() => writeTurns("x", 1)).not.toThrow();
+  });
+});
+
+describe("resolveEmbedHost", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("prefers an explicit host over any client-side detection, even during SSR", () => {
+    expect(resolveEmbedHost("https://explicit.example.com")).toBe(
+      "https://explicit.example.com",
+    );
+  });
+
+  it("falls back to document.referrer's origin when no explicit host is given", () => {
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("document", { referrer: "https://parent.example.com/some/page" });
+    expect(resolveEmbedHost()).toBe("https://parent.example.com");
+  });
+
+  it("never falls back to the iframe's own origin — reports 'unknown' when both referrer and window.parent access fail", () => {
+    vi.stubGlobal("document", { referrer: "" });
+    vi.stubGlobal("window", {
+      location: { origin: "https://digichat-own-origin.example.com" },
+      get parent(): never {
+        throw new Error("cross-origin, as expected in production");
+      },
+    });
+    expect(resolveEmbedHost()).toBe("unknown");
   });
 });
 

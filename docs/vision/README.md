@@ -1,3 +1,11 @@
+---
+title: DigiThings — Ecosystem Overview
+type: moc
+status: reviewed
+created: 2026-04-19
+tags:
+  - moc
+---
 # DigiThings — Ecosystem Overview
 > A modular AI production platform that assembles the best open-source infrastructure into a pre-wired stack, with proprietary domain expertise layered on top.
 
@@ -43,7 +51,7 @@ NautilusTrader-backed strategy engine with backtest and optimisation nodes wired
 Document ingestion, chunking, embedding, and hybrid vector/keyword search. Pluggable backends. Powers the SITAAS internal document search deployment.
 
 ### DigiChat — chat interface and BFF
-Next.js production chat UI deployed at chat.digithings.ai. BYOK (bring-your-own-key) flow, model selector, Auth.js authentication, Drizzle ORM, adaptive UI scoped by access level.
+Next.js production chat UI (`frontend/digichat`) — BYOK (bring-your-own-key) flow, model selector, Auth.js authentication, Drizzle ORM, adaptive UI scoped by access level. Not deployed publicly yet; the digithings.ai demo still runs a separate bespoke widget pending the gateway cutover ([ADR-0018](../adr/0018-digichat-path-routing.md), epic [#1248](https://github.com/digithings-ai/digithings/issues/1248)).
 
 ### DigiKey — auth control plane
 JWT-based authentication with scoped API keys (RS256, JWKS endpoint), SSO federation groundwork, org and project membership model.
@@ -113,7 +121,7 @@ The open core is the infrastructure. The proprietary layer is the domain experti
 
 One document per module — positioning, current state, 12-month roadmap, and open vs. proprietary split:
 
-- [DigiGraph](digigraph.md) · [DigiQuant](digiquant.md) · [DigiSearch](digisearch.md) · [DigiChat](digichat.md)
-- [DigiKey](digikey.md) · [DigiSmith](digismith.md) · [DigiClaw](digiclaw.md) · [DigiBase](digibase.md)
-- [DigiLLM](digillm.md) · [DigiFetch](digifetch.md) · [DigiDev](digidev.md) · [Olympus](olympus.md)
-- [DigiLink](digilink.md) · [DigiStore](digistore.md) *(designed, not yet shipped)*
+- [[digigraph|DigiGraph]] · [[digiquant|DigiQuant]] · [[digisearch|DigiSearch]] · [[digichat|DigiChat]]
+- [[digikey|DigiKey]] · [[digismith|DigiSmith]] · [[digiclaw|DigiClaw]] · [[digibase|DigiBase]] · [[digivault|DigiVault]]
+- [[digillm|DigiLLM]] · [[digifetch|DigiFetch]] · [[digidev|DigiDev]] · [[olympus|Olympus]]
+- [[digilink|DigiLink]] · [[digistore|DigiStore]] *(designed, not yet shipped)*

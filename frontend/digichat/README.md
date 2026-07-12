@@ -36,7 +36,7 @@ Docker: `docker compose --profile digichat up -d --build digichat` from repo roo
 `/embed` is a **minimal, unauthenticated** chat surface designed to be iframed from `digithings.ai` and `digiquant.io` for in-site previews.
 
 - **Route:** `GET /embed?accent=<digithings|digiquant|digichat>` (default `digichat`). The query param switches the `--accent` token for host-site color parity — no server-side theming.
-- **Free tier:** first **3 user turns** per host origin, counted client-side in `localStorage` (keyed by `document.referrer` origin). After the limit, a paywall card offers **Bring your own key** (reveals the BYOK input in-place) or **Open DigiChat** (link to `chat.digithings.ai`).
+- **Free tier:** first **3 user turns** per host origin, counted client-side in `localStorage` (keyed by `document.referrer` origin). After the limit, a paywall card offers **Bring your own key** (reveals the BYOK input in-place) or **Open DigiChat** (link to `digithings.ai/chat`).
 - **BYOK:** reuses the shared `useBYOKKey` hook — the embed never duplicates key storage or test logic. A saved key unlocks unlimited turns immediately.
 - **CSP:** `next.config.ts` + `src/lib/security-headers.ts` emit a full CSP on authenticated routes (`frame-ancestors 'none'`, `X-Frame-Options: DENY`, …) and a narrower `frame-ancestors` allowlist on `/embed[/*]` for `digithings.ai` / `digiquant.io` only.
 - **Errors:** failed `/api/chat` responses surface in the embed UI with a Retry action (`formatEmbedChatError`).

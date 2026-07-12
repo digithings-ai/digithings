@@ -27,6 +27,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { QuantComparisonStrip } from "@/components/quant-comparison-strip";
+import { ByokCliFlow } from "@/components/byok-cli-flow";
 import { EChartsCard } from "@/components/echarts-card";
 import { parseChartEnvelope } from "@/lib/chart-spec";
 import { p } from "@/lib/base-path";
@@ -34,6 +35,8 @@ import type { DigigraphTracePayload } from "@/lib/stream-digigraph-trace";
 import { useBYOKKey } from "@/hooks/use-byok-key";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+
+const MAX_INPUT_LINES = 5;
 
 const markdownComponents = {
   code(props: {
@@ -97,7 +100,7 @@ function RagSourcesTrace({ sources }: { sources: unknown[] }) {
           return (
             <div
               key={`${sid}-${idx}`}
-              className="rounded-md border border-border/35 bg-black/25 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground"
+              className="rounded-md border border-border/35 bg-term-bg px-2 py-1.5 text-[11px] leading-snug text-muted-foreground"
             >
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="font-mono text-[10px] text-foreground/90">{sid}</span>
@@ -252,7 +255,7 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
                 <span className="truncate">{label}</span>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <pre className="mt-2 max-h-56 overflow-auto rounded-md border border-border/40 bg-black/35 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                <pre className="mt-2 max-h-56 overflow-auto rounded-md border border-border/40 bg-term-bg p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
                   {JSON.stringify(part, null, 2)}
                 </pre>
               </CollapsibleContent>
@@ -277,6 +280,8 @@ export type ChatPanelProps = {
   onMessagesCommit: (threadId: string, messages: UIMessage[]) => void;
   onTitleDerived?: (threadId: string, title: string) => void;
   headerSlot?: React.ReactNode;
+  byokMode?: boolean;
+  onByokModeChange?: (open: boolean) => void;
   /**
    * Slash-command hook. Receives the raw text (starts with `/`).
    * Return true if the command was handled — the panel will NOT send it
@@ -293,6 +298,8 @@ export function ChatPanel({
   onMessagesCommit,
   onTitleDerived,
   headerSlot,
+  byokMode = false,
+  onByokModeChange,
   onSlashCommand,
 }: ChatPanelProps) {
   const [text, setText] = useState("");
@@ -301,7 +308,7 @@ export function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
-  const { key: byokKey, provider: byokProvider, isSet: byokIsSet } = useBYOKKey();
+  const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } = useBYOKKey();
 
   const transport = useMemo(
     () =>
@@ -314,6 +321,9 @@ export function ChatPanel({
           if (byokKey) {
             h.set("X-BYOK-Key", byokKey);
             h.set("X-BYOK-Provider", byokProvider);
+            if (byokProvider === "openrouter" && byokModel.trim()) {
+              h.set("X-BYOK-Model", byokModel.trim());
+            }
           }
           return {
             body: { ...(typeof body === "object" && body !== null ? body : {}), id, messages },
@@ -321,7 +331,7 @@ export function ChatPanel({
           };
         },
       }),
-    [threadId, byokKey, byokProvider],
+    [threadId, byokKey, byokProvider, byokModel],
   );
 
   const { messages, sendMessage, status, stop, error, regenerate } =
@@ -377,8 +387,15 @@ export function ChatPanel({
   useLayoutEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
+    const style = getComputedStyle(ta);
+    const lineHeight = parseFloat(style.lineHeight) || 21;
+    const padding =
+      parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const maxHeight = lineHeight * MAX_INPUT_LINES + padding;
     ta.style.height = "0px";
-    ta.style.height = `${Math.min(ta.scrollHeight, 220)}px`;
+    const next = Math.min(ta.scrollHeight, maxHeight);
+    ta.style.height = `${next}px`;
+    ta.style.overflowY = ta.scrollHeight > maxHeight ? "auto" : "hidden";
   }, [text]);
 
   const pushSystemNote = useCallback((msg: string) => {
@@ -406,7 +423,11 @@ export function ChatPanel({
           return;
         }
         if (name === "/model") {
-          pushSystemNote("model selector is part of /settings.");
+          pushSystemNote("model selector is part of /key.");
+          return;
+        }
+        if (name === "/key" || name === "/settings") {
+          onByokModeChange?.(true);
           return;
         }
         if (onSlashCommand && onSlashCommand(t)) {
@@ -419,7 +440,7 @@ export function ChatPanel({
       setText("");
       await sendMessage({ text: t });
     },
-    [text, busy, sendMessage, onSlashCommand, pushSystemNote],
+    [text, busy, sendMessage, onSlashCommand, onByokModeChange, pushSystemNote],
   );
 
   const onCopyMessage = useCallback(async (m: UIMessage) => {
@@ -435,6 +456,15 @@ export function ChatPanel({
   const canRegenerate = !busy && !!lastAssistant && messages.length > 0 && status === "ready";
 
   const startsWithSlash = text.trimStart().startsWith("/");
+
+  if (byokMode) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col">
+        {headerSlot}
+        <ByokCliFlow onClose={() => onByokModeChange?.(false)} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -516,8 +546,9 @@ export function ChatPanel({
 
           {error ? (
             <div className="dc-term-row dc-term-row-assistant">
-              <span className="dc-term-marker" style={{ color: "var(--accent-digikey)" }}>✗</span>
-              <div className="dc-term-body" style={{ color: "var(--accent-digikey)" }}>
+              {/* error state rides the four-state system (--down) — a livery is an identity, never a semantic (canon §16) */}
+              <span className="dc-term-marker" style={{ color: "var(--down)" }}>✗</span>
+              <div className="dc-term-body" style={{ color: "var(--down)" }}>
                 {error.message}
               </div>
             </div>
@@ -556,7 +587,7 @@ export function ChatPanel({
           ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Type a message, or / for commands"
+          placeholder="ask digichat"
           className="app-input-field"
           rows={1}
           disabled={busy}

@@ -13,6 +13,12 @@
 # Stray npm installs at repo root — always use workspace-scoped installs under frontend/
 /node_modules/
 
+# Cloudflare Pages Functions for digithings.ai are authored under
+# frontend/digithings-web/functions/ and mirrored to a repo-root functions/ by
+# scripts/build-digithings.sh at build time (CF requires functions/ at the project
+# root). The generated copy is a build artifact — never commit it.
+/functions/
+
 .venv/
 .venv-ci/
 venv/
@@ -119,3 +125,4 @@ canvases/
 docs/projects/sitaas/
 # (Top-level /projects/ is anchored earlier in this file — do not add an
 # unanchored `projects/` rule here, it would also capture docs/projects/.)
+frontend/digichat-ui/node_modules/

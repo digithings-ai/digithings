@@ -8,8 +8,8 @@ on:
   pull_request:
     paths:
       - "frontend/digithings-web/**"
-      - "frontend/web/**"
-      - "frontend/design/**"
+      - "frontend/digiweb/web/**"
+      - "frontend/digiweb/design/**"
       - "scripts/build-digithings.sh"
       - ".github/workflows/deploy-digithings-cloudflare.yml"
   workflow_dispatch:
@@ -40,8 +40,11 @@ jobs:
         run: |
           test -f dist/index.html
           test -f dist/CNAME
-          test -f dist/modules/digigraph/index.html
-          test -f dist/architecture/index.html
+          # /modules/* and /architecture were folded into the home-page module
+          # manifest; assert the manifest rendered instead of those routes.
+          # Match the aria-label, not an implementation class — the pane is the
+          # shared <TerminalManifest> primitive since #1416 (was .dt-manifest).
+          grep -q 'aria-label="digithings module manifest"' dist/index.html
           grep -q digithings.ai dist/CNAME
           # fonts self-hosted; no Google Fonts references in the export
           ! grep -rq "fonts.googleapis.com" dist

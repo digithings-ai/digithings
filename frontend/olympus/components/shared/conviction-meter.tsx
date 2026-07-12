@@ -23,7 +23,7 @@ export function ConvictionMeter({
             key={i}
             data-filled={isFilled ? 'true' : 'false'}
             className={`h-1.5 w-1.5 rounded-full ${
-              isFilled ? 'bg-fin-blue' : 'bg-border-subtle'
+              isFilled ? 'bg-accent' : 'bg-hair'
             }`}
           />
         );

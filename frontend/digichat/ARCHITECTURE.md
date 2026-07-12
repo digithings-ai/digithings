@@ -85,6 +85,42 @@ DigiKey). Both return a short-lived JWT + optional `litellm_proxy_api_key`.
 connection pool. Six tables: `tenants`, `user_tenants`, `api_keys`, `conversations`,
 `conversation_messages`, `quant_runs`. Managed by three migration files in `drizzle/`.
 
+**Design-canon theming** (`src/app/globals.css`, `src/app/layout.tsx`,
+`src/components/providers.tsx` — #1403): the app runs on the shared DigiThings token
+canon. `@digithings/design/tokens.css` defines `[data-theme="dark"|"light"]` semantic
+tokens; `@digithings/web/styles/web-theme.css` is the single Tailwind `@theme inline`
+bridge for token-named utilities; digichat's `globals.css` derives the shadcn variable
+set from those tokens under `:root[data-theme]` scopes (`--background: var(--bg)`,
+`--border: var(--hair)`, `--destructive: var(--down)`, …; dark `--primary`/`--ring`
+wear `--accent-digichat` rose, light runs the deeper phosphor teal). `<html>` ships
+`data-theme="dark"` + `.dark` as SSR defaults; the shared `themeInitScript` re-points
+both pre-paint (`dt-theme` localStorage key, shared with the marketing sites) and a
+`MutationObserver` (`ThemeClassSync` in `providers.tsx`) mirrors every later
+`[data-theme]` flip onto the `.dark`/`.light` classes for the Tailwind `dark:`
+variant. The old `@digithings/digichat-ui` `tokens-shadcn-bridge.css` (shadcn vars →
+token names, the reverse direction) is no longer imported; `/embed` sets
+`[data-theme]` on the root from the tenant `theme` (its own iframe document) and
+per-tenant accent hexes still override at the wrapper. Because the shared
+`ThemeProvider` (in `providers.tsx`, which wraps `/embed` too via the root layout)
+keeps a `prefers-color-scheme` listener that rewrites `[data-theme]` to the OS scheme
+whenever there is no `dt-theme` key — always true for an anonymous embed visitor —
+`/embed` re-asserts the tenant theme with a `MutationObserver` on `html[data-theme]`
+(guarded write, so the observer never loops), so a mid-session OS light↔dark flip
+can't silently override a tenant's forced theme (#1434).
+
+**Shared controls layer** (`src/components/ui/*` — #1419): ten of the fifteen
+shadcn-derived wrappers are now thin re-exports of the `@digithings/web`
+controls family (`button`, `badge`, `card`, `input`, `label` pin
+`dress="chat"`; `avatar`, `collapsible`, `dropdown-menu`, `sheet`, `tooltip`
+re-export bare — the shared default skin is digichat's dress). Import sites
+are unchanged (`@/components/ui/<x>`). `globals.css` imports
+`@digithings/web/styles/controls-core.css` + `controls-overlay.css` before
+the digichat-ui sheets and `@source`s the shared controls directory
+(load-bearing — the behavioral controls carry token-backed utilities).
+`scroll-area`, `separator`, `sidebar`, `skeleton`, `textarea` stay local (no
+shared counterpart yet). Full swap/kept ledger, cascade contract, and
+browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
+
 **Source file reference table**
 
 | File | Purpose |
@@ -143,6 +179,8 @@ probe).
 - Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus optional `data-digigraphTrace` parts.
 - The route resolves upstream auth, builds a `createDigiGraphClient`, then either (a) calls `createDigigraphTraceStreamResponse` for the trace path or (b) calls `streamText` with `smoothStream` for the legacy path.
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
+- **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). IP is read from `cf-connecting-ip`, falling back to the first `X-Forwarded-For` hop — both are spoofable by the client unless a proxy in front strips/overwrites them (true of Cloudflare in the ADR-0018 production deployment, not guaranteed elsewhere). DigiGraph closed the equivalent gap with a `DIGI_TRUSTED_PROXIES` allowlist (`digigraph/ARCHITECTURE.md` §12.8, REM-027); DigiChat has no equivalent yet — acceptable for now since this is a rate-limiting decision, not an authorization one, but tracked as a follow-up.
+- **Anonymous `/embed` requests** (`resolveEmbedChatTenant` in `embed-chat-tenant.ts`) resolve to `{ tenantSlug: "embed", ownerUserSub: "embed:anonymous" }` when `DIGICHAT_EMBED_ENABLED=1` or a valid `X-Embed-Token` is presented; otherwise 503. This path never touches `conversations-repo` — no server-side persistence call exists in this route for any caller (persistence, when it happens, is client-initiated via the separate `/api/conversations` endpoints below, which require a real session).
 
 ### Conversations
 
@@ -352,6 +390,107 @@ mutation. It first creates the conversation row if `remote: false`, then issues 
 with the full message array. This is a full-replace strategy — not an append — so it
 re-sends the entire conversation on every flush. For long threads this may be
 non-trivial in payload size.
+
+This entire dual-path is inapplicable to the anonymous `/embed` surface: `src/app/embed/page.tsx`
+calls only `useChat` against `POST /api/chat` — it never imports `saveLocalThreads`,
+`flushServerSave`, or anything from `conversations-repo`. Even if it did, every
+`/api/conversations*` route calls `requireDigiChatAuth()` first, which 401s a bare
+anonymous request before any read/write — so no Postgres row can be created for
+`ownerUserSub: "embed:anonymous"` (verified by inspection for #1251, not assumed).
+
+### Embed tenant registry & external backends
+
+`DIGICHAT_EMBED_TENANTS` (JSON, keyed by hostname) declares embed tenants:
+per-host `slug`, `backend` (`digigraph` | `external-relay` + https URL),
+`gateMode` (`turn_limited` | `ungated`), `theme` (`dark` | `light`),
+optional `accent` hex pair, `attribution` flag, `aliases`, and a required
+`token`. Parsed fail-fast in `src/lib/embed-tenants.ts`; the same registry
+feeds `/api/chat` tenant resolution (`src/lib/embed-chat-tenant.ts`) and the
+client-safe `GET /api/embed/tenant-config` endpoint — both runtime-only,
+reading `process.env.DIGICHAT_EMBED_TENANTS` fresh per request.
+
+The `/embed` CSP frame-ancestors (`src/lib/security-headers.ts`) is
+different: Next.js evaluates `next.config.ts`'s `headers()` during `next
+build` and bakes the result into the routes manifest, so whatever feeds it
+must be present at **build** time, not just container runtime. `embedFrameAncestors()`
+never reads anything but the registry's hostnames — never the token — so
+it's driven by a separate, non-secret `DIGICHAT_EMBED_HOSTS` env var (plain
+comma-separated hostnames) instead, preferred over deriving hosts from the
+full `DIGICHAT_EMBED_TENANTS` registry when both are set (#1360). This
+matters because a Docker build-arg persists in image layer history and
+cloud-build logs (e.g. `az acr build`) — passing the full token-bearing
+registry there for a value the build never actually reads would leak every
+tenant's token. `DIGICHAT_EMBED_TENANTS` itself stays runtime-only (a
+container env var, never a build-arg).
+
+`external-relay` tenants bypass DigiGraph entirely: `/api/chat` proxies to
+the configured relay via `src/lib/external-relay-stream.ts`, translating
+the relay's SSE contract (`conversation`, `text-delta`, `trace`, `done`,
+`error`) into AI SDK UI message stream parts. Conversation state lives on
+the relay's side (e.g. Azure Foundry conversations); the client echoes the
+relay's conversation id via `X-External-Conversation` (sessionStorage,
+`digichat_embed_conversation:<host>`). The Foundry relay streams incremental
+deltas then re-sends the COMPLETE text as one terminal frame; `external-relay-stream.ts`
+suppresses that duplicate by *holding* a delta equal to the accumulated text and only
+dropping it when the next frame is `done` (a later `text-delta` flushes it) — so a
+legitimately doubled chunk mid-stream is no longer lost (#1434). Both rate limiters (per-IP embed +
+shared BFF bucket, now keyed by the tenant's real slug) run before the
+backend branch. Relay URLs come from config, never the request, so there
+is no open-proxy/SSRF surface. First consumer: DataTapStream (datatap-web)
+via its Azure Function relay.
+
+**`X-Embed-Host` alone is not sufficient authorization (#1339).** A tenant's
+host string is its own public domain, so `resolveEmbedTenantByHost` never
+grants embed access by itself — `resolveVerifiedEmbedTenant`
+(`src/lib/embed-chat-tenant.ts`) additionally requires the request's
+`X-Embed-Token` header to match that tenant's own registry-configured
+`token`. Both `/api/chat` and `GET /api/embed/tenant-config` resolve
+through this verified path; without a matching token a request is treated
+exactly like an unregistered host (generic gated defaults, or the legacy
+`DIGICHAT_EMBED_ENABLED`/`DIGICHAT_EMBED_TOKEN` path), never the specific
+tenant's config or relay. The token is not secret from that tenant's own
+site visitors — it's provisioned out-of-band and baked into the tenant's
+embed snippet as a query param (`<iframe src=".../embed?token=...">`),
+read client-side in `src/app/embed/page.tsx` and forwarded as
+`X-Embed-Token` — the same trust model as a Stripe publishable key or
+reCAPTCHA site key: not guessable by an unrelated caller, but not a bearer
+secret a real visitor needs to protect either.
+
+**Where `X-Embed-Host` actually comes from client-side (#1372).** The embed
+snippet should pass the embedding page's own origin explicitly via `?host=`
+on the iframe `src` (`resolveEmbedHost()` in `src/lib/embed-gate.ts` prefers
+this over anything else) — the embedding site always knows its own origin
+reliably, and passing it explicitly avoids relying on the iframe trying to
+detect its parent. If `?host=` is absent, `resolveEmbedHost()` falls back to
+`document.referrer`'s origin, then (same-origin dev embeds only)
+`window.parent.location.origin`. **Never** fall back further to
+`window.location.origin` — that's this app's own origin, not a signal about
+who is embedding it, and `window.parent.location.origin` throwing is the
+*expected*, *normal* case for every real cross-origin production embed (that
+throw is the whole point of the browser's same-origin policy). A prior
+version of this fallback did exactly that and shipped for a while — meaning
+`X-Embed-Host` was silently wrong (always this app's own origin) for every
+real production embed, so `resolveVerifiedEmbedTenant` could never match a
+real tenant host; every embed silently degraded to the generic gated
+config regardless of token. Confirmed via a live deployment before this fix.
+
+An Origin/Referer check was considered and rejected: on `/api/chat` and
+`/api/embed/tenant-config` themselves, Origin/Referer always reflect this
+app's own origin (that's how cross-origin iframes work — a script fetch
+from inside the iframe reports the iframe's own origin, never the parent
+page's), so it can't distinguish tenants. A signed session cookie set at
+`/embed` load time (using the real Referer on that top-level navigation)
+was also considered, but rejected because it's a third-party cookie from
+the browser's perspective and would be blocked by Safari ITP / Chrome's
+third-party-cookie phase-out for a meaningful share of real visitors,
+silently degrading them to the generic embed experience.
+
+**Deploy-order dependency:** any tenant already present in a deployed
+`DIGICHAT_EMBED_TENANTS` (e.g. DataTapStream) must have a `token` added to
+its registry entry, and the corresponding site's embed snippet must be
+updated to pass `?token=` on the iframe `src`, in the same deploy that
+picks up this change — otherwise `parseEmbedTenants` throws (registry
+entries without a token are invalid) and that tenant's build/boot fails.
 
 ---
 
@@ -595,6 +734,16 @@ secret; only `DIGIKEY_BFF_TOKEN` is needed (a long-lived BFF credential).
 DigiGraph calls DigiSearch internally during workflow execution. The health badge
 in the Ecosystem sheet reflects connectivity only.
 
+DigiGraph and DigiQuant get the same `DIGICHAT_ENABLED_SERVICES` treatment (#1346):
+unlike `digisearchUrl`, `digigraphUrl`/`digiquantUrl`/`digismithUrl` in
+`EcosystemEndpoints` always have a default value (`ecosystem.ts`'s `DEFAULTS`), so
+the health route checks `isServiceCapabilityEnabled(...)` directly rather than URL
+presence — a deployment serving only `external-relay` embed tenants (no DigiGraph
+stack running at all) can omit them from `DIGICHAT_ENABLED_SERVICES` without
+`/api/health` reporting itself unhealthy. Note the `DIGICHAT_ENABLED_SERVICES=""`
+gotcha in `capabilities.ts`: an empty string falls back to the all-enabled default,
+so disabling every service requires a non-matching placeholder value instead.
+
 ### DigiQuant backtest result parsing
 
 DigiChat does not call DigiQuant directly. `BacktestResult`-shaped JSON appears in
@@ -605,9 +754,10 @@ using the extracted `run_id` and metrics.
 
 ### DigiSmith status endpoint
 
-`GET /api/health` probes `{DIGISMITH_INTERNAL_URL}/health`. DigiSmith is not called
-from the chat flow; tracing is handled by DigiGraph emitting `span` trace events in
-the SSE stream. The health badge confirms the tracing service is reachable.
+`GET /api/health` probes `{DIGISMITH_INTERNAL_URL}/health` when `digismith` is in
+`DIGICHAT_ENABLED_SERVICES`. DigiSmith is not called from the chat flow; tracing is
+handled by DigiGraph emitting `span` trace events in the SSE stream. The health
+badge confirms the tracing service is reachable.
 
 ---
 
@@ -645,7 +795,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGIQUANT_INTERNAL_URL` | DigiQuant base URL (health probe) | Recommended |
 | `DIGISMITH_INTERNAL_URL` | DigiSmith base URL (health probe) | Recommended |
 | `DIGISEARCH_INTERNAL_URL` | DigiSearch base URL (health probe) | Optional |
-| `DIGICHAT_ENABLED_SERVICES` | Comma-separated active service IDs | Optional |
+| `DIGICHAT_ENABLED_SERVICES` | Comma-separated active service IDs; unset defaults to all four (`digigraph,digisearch,digiquant,digismith`), explicitly set to `""` to enable none | Optional |
 | `DIGICHAT_DATABASE_URL` | PostgreSQL connection URL | For server persistence |
 | `DIGICHAT_AUTO_MIGRATE` | Run Drizzle migrations on startup (`1` = on) | Docker recommended |
 | `DIGICHAT_BOOTSTRAP_API_KEY` | Static machine API key (env bootstrap) | For machine clients |
@@ -655,6 +805,12 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_MODEL` | DigiGraph model name (default: `sitaas-rag`) | Optional |
 | `DIGICHAT_OPENWEBUI_FORMAT` | Enable OpenWebUI format flag (default: `1`) | Optional |
 | `DIGICHAT_ENDPOINT_HOST_ALLOWLIST` | Comma-separated hosts for SSRF guard | Security hardening |
+| `DIGICHAT_EMBED_ENABLED` | Enable the unauthenticated `/embed` chat surface (`1` = on) | For public embed |
+| `DIGICHAT_EMBED_TOKEN` | Alternative to `DIGICHAT_EMBED_ENABLED`: gate `/embed` on `X-Embed-Token` instead | Optional |
+| `DIGICHAT_EMBED_TENANTS` | Optional JSON registry of embed tenants (see "Embed tenant registry & external backends"). Unset = no external embed tenants; first-party embeds behave exactly as before. Runtime-only — never pass as a Docker build-arg, it carries every tenant's secret `token` and build-args persist in image layer history / cloud-build logs (#1360). Each entry requires a `token` — the embed snippet passes it back as `?token=` / `X-Embed-Token`; a registered host alone is not sufficient authorization (#1339). | Optional |
+| `DIGICHAT_EMBED_HOSTS` | Plain comma-separated embed-tenant hostnames, no secrets. Feeds the `/embed` CSP frame-ancestors at **build** time (safe to pass as a Docker build-arg); preferred over deriving hosts from `DIGICHAT_EMBED_TENANTS` when both are set (#1360). | Optional |
+| `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms) | Optional |
+| `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |
 | `DIGICHAT_VERSION` | Version string returned in health response | Optional |
 | `NEXTAUTH_SECRET` | Legacy Auth.js secret alias (same value as `AUTH_SECRET`) | If using legacy env |
@@ -743,12 +899,24 @@ UI is momentarily empty between submit and first response. Optimistically append
 user message to the local display before the server confirms improves perceived
 responsiveness significantly.
 
-### (d) Add rate limiting on `POST /api/chat` at BFF layer (before DigiGraph)
+### (d) ~~Add rate limiting on `POST /api/chat` at BFF layer~~ — done; extend to distributed storage
 
-DigiGraph rate-limits by caller IP, but behind the BFF all browser requests share the
-BFF's egress IP. A per-user rate limit at the BFF (keyed on `ownerUserSub` + a sliding
-window counter in Redis or in-memory with token bucket) would prevent a single user
-from saturating DigiGraph. This is especially important before any public deployment.
+Per-user/per-tenant rate limiting at the BFF (`checkBffRateLimit`, in-memory sliding
+window) shipped, and #1251 added a per-IP layer in front of it specifically for the
+shared anonymous `embed:anonymous` bucket (`checkEmbedIpRateLimit`). Both are
+in-process (`BoundedTTLMap`), so — like DigiGraph's and DigiSearch's own limiters —
+multiple DigiChat replicas would each enforce independently, multiplying the effective
+limit by replica count. Moving to Redis-backed counters remains open if DigiChat scales
+to multiple instances behind a load balancer.
+
+The new `embed_ip:*` keys share the same 10,000-entry bounded map (`MAX_RATE_LIMIT_KEYS`
+in `bff-rate-limit.ts`) as every other rate-limit key, including authenticated
+`chat:*` buckets, and eviction is FIFO by insertion order (not LRU). An attacker who
+can mint many distinct client IPs (only realistic when not actually behind Cloudflare —
+see the trust-boundary note above) could cycle through enough of them to evict
+legitimate entries, resetting their windows early. Impact is limiter degradation, not
+an auth bypass; segmenting the two key spaces into separate bounded maps would close
+this if it becomes a real concern.
 
 ### (e) Add streaming cancellation (AbortController from client to DigiGraph SSE disconnect)
 
