@@ -109,6 +109,21 @@ The anon key is safe to embed here (it ships in every browser bundle anyway); it
 authenticates the function invocation past JWT verification. Requires the `pg_cron`
 and `pg_net` extensions (Dashboard → Database → Extensions).
 
+### Smoke testing outside market hours
+
+Pass `{"force": true}` to override the market-hours gate (never the key gate) — one
+full fetch + broadcast cycle on demand, so the end-to-end path can be proven on a
+weekend instead of waiting for Monday's open:
+
+```bash
+curl -s -X POST 'https://<PROJECT_REF>.supabase.co/functions/v1/prices-live' \
+  -H 'Authorization: Bearer <SUPABASE_ANON_KEY>' \
+  -H 'Content-Type: application/json' -d '{"force": true}'
+```
+
+The response reports `forced: true`, per-symbol failures, and the broadcast result;
+subscribers on `prices:live` receive the quotes message.
+
 ## How the frontend consumes it
 
 **Live quotes** — subscribe to the broadcast channel with the anon client:
