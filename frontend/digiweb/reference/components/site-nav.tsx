@@ -27,6 +27,7 @@ const PAGES = [
   { href: "/typography", label: "Typography" },
   { href: "/data", label: "Data" },
   { href: "/finance", label: "Finance" },
+  { href: "/tearsheet", label: "Tearsheet" },
   { href: "/effects", label: "Effects" },
   { href: "/chrome", label: "Chrome" },
   { href: "/terminal", label: "Terminal" },
