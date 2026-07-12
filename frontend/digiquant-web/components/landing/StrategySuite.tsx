@@ -40,6 +40,7 @@ import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
 import { CurrentPosition } from "@/components/tearsheet/current-position";
 import { LiveMetricsBadge } from "@/components/tearsheet/live-metrics";
 import { PivotStatsTable } from "@/components/tearsheet/pivot-stats-table";
+import { SignalDelayChip } from "@/components/tearsheet/signal-delay";
 import { chartFullSpan, clipOhlc } from "@/components/tearsheet/series";
 import { avgTradePct, cagrPct, tradesPerYear } from "@/components/tearsheet/stats";
 import { symbolBase } from "@/components/tearsheet/strategy-names";
@@ -230,6 +231,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data?.generated_at ?? entry.generated_at} />
             <span className="ts-chip">{symbol}</span>
+            <SignalDelayChip days={data?.signal_delay_days ?? entry.signal_delay_days} />
             <span className="ts-meta-text">
               {periodStart} → {periodEnd}
               {bars != null ? ` · ${fmtNum(bars)} bars` : ""}
