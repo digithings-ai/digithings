@@ -25,12 +25,20 @@ import {
   type RefObject,
 } from "react";
 import Link from "next/link";
-import { DeckCard, DeckStack } from "@digithings/web";
+import {
+  CandlestickChart,
+  DeckCard,
+  DeckStack,
+  KpiStrip,
+  SegToggle,
+  fmtNum,
+  fmtPct,
+  toneClass,
+  viewWindowForPreset,
+} from "@digithings/web";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
 import { CurrentPosition } from "@/components/tearsheet/current-position";
 import { LiveMetricsBadge } from "@/components/tearsheet/live-metrics";
-import { CandlestickChart, SegToggle, viewWindowForPreset } from "@/components/tearsheet/charts";
-import { fmtNum, fmtPct, toneClass } from "@/components/tearsheet/format";
 import { PivotStatsTable } from "@/components/tearsheet/pivot-stats-table";
 import { chartFullSpan, clipOhlc } from "@/components/tearsheet/series";
 import { avgTradePct, cagrPct, tradesPerYear } from "@/components/tearsheet/stats";
@@ -139,6 +147,10 @@ function Toned({ v, children }: { v: number | null | undefined; children: ReactN
   return c ? <span className={c}>{children}</span> : <>{children}</>;
 }
 
+/** Family-shaped KPI cell (.ts-kpi grammar) with one extra: the dqss
+ *  container-query hide classes (dqss-kpi-medium / dqss-kpi-optional) ride
+ *  the cell itself, and the family Kpi takes no className — so the preview
+ *  keeps this local wiring instead of degrading the responsive KPI ladder. */
 function Kpi({ label, value, className }: { label: string; value: ReactNode; className?: string }) {
   return (
     <div className={"ts-kpi" + (className ? ` ${className}` : "")}>
@@ -234,7 +246,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
         )}
       </div>
 
-      <section className="ts-kpis ts-kpis-primary" aria-label="Headline performance">
+      <KpiStrip primary ariaLabel="Headline performance">
         <Kpi label="CAGR" value={<Toned v={cagr}>{fmtPct(cagr)}</Toned>} />
         <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(maxDd)}</span>} />
         <Kpi
@@ -253,7 +265,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
           label="Trades / yr"
           value={fmtNum(tradesYr, 1)}
         />
-      </section>
+      </KpiStrip>
 
       <div className="ts-mode-bar dqss-preview-mode">
         <SegToggle
