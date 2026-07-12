@@ -1,13 +1,11 @@
 import {
   Colophon,
   Footer,
-  Marquee,
   OdometerStrip,
   PricingTierCard,
   Reveal,
   WordReveal,
   subsystems,
-  type MarqueeItem,
   type OdometerStat,
 } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
@@ -22,23 +20,6 @@ import { StrategySuite } from "@/components/landing/StrategySuite";
 import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
 import strategyIndex from "@/public/strategies/index.json";
 import type { StrategyIndexEntry } from "@/components/tearsheet/types";
-
-// The stack the site copy actually claims (flagship grammar, #1450): the
-// pipeline runs Optuna + NautilusTrader (ResearchPipeline steps 05/06, pricing
-// FAQ), Atlas/Hermes are LangGraph graphs persisting views to Supabase over
-// Polars frames (shared subsystems data), keys ride LiteLLM (pricing FAQ), and
-// the whole box ships as a docker compose command (subsystem pages). Glyphs
-// come from the shared Simple Icons registry where a mark exists;
-// NautilusTrader, Optuna, and LiteLLM have none and read text-only.
-const STACK: MarqueeItem[] = [
-  { name: "NautilusTrader" },
-  { name: "Polars", icon: "polars" },
-  { name: "LangGraph", icon: "langgraph" },
-  { name: "Optuna" },
-  { name: "LiteLLM" },
-  { name: "Supabase", icon: "supabase" },
-  { name: "Docker", icon: "docker" },
-];
 
 // Real figures only — each one is mined from shipped data, never invented:
 // subsystem count from the shared subsystems registry (Atlas · Hermes ·
@@ -58,7 +39,7 @@ const METRICS: OdometerStat[] = [
 ];
 
 // v7 scroll-driven landing, now wearing the flagship expressive grammar
-// (#1450): mesh hero → drifting stack Marquee → digit-roll OdometerStrip →
+// (#1450): mesh hero → live market ticker → digit-roll OdometerStrip →
 // linear pipeline → Olympus scrolly → strategy suite → the one WordReveal
 // claim → pricing. Client islands; page stays a server component. Every
 // motion moment honors prefers-reduced-motion and reads with no JS.
@@ -89,22 +70,12 @@ export default function Home() {
           </div>
         </HeroMesh>
 
-        {/* Market-pulse tape right under the hero: the shared StockTicker fed
-            live (crypto keyless from Coinbase, majors from the feed). A client
-            island; SSR-safe (renders a muted "connecting" line until quotes
-            arrive). Distinct register from the "Built on" logo marquee below —
-            mono price rails, not drifting glyphs. */}
+        {/* The single market-pulse tape right under the hero: one shared
+            StockTicker row carrying crypto (keyless Coinbase WS) then the equity
+            majors (seeded from the daily-close view, live intraday from the
+            feed). A client island; SSR-safe (renders a muted "connecting" line
+            until quotes arrive). */}
         <LiveTickerRow />
-
-        <section className="border-y border-hair" aria-label="Built on">
-          <Marquee
-            items={STACK}
-            tone="mute"
-            speed={42}
-            aria-label="Built on NautilusTrader, Polars, LangGraph, Optuna, LiteLLM, Supabase, and Docker"
-            className="py-[0.95rem]"
-          />
-        </section>
 
         <section className="section" id="metrics">
           <div className="wrap">

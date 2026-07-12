@@ -106,16 +106,26 @@ export function coinbaseTickerToLive(
   };
 }
 
-/** A `public_price_latest` row → a STALE seed {@link LiveQuote} (no day change known). */
-export function seedRowToLive(row: { ticker?: unknown; close?: unknown }, now: number = Date.now()): LiveQuote | null {
+/**
+ * A `public_price_latest` row → a STALE seed {@link LiveQuote}. `change_pct` is
+ * the prior-session daily move (migration 052) so a seeded equity shows its real
+ * last close instead of a flat 0% — a missing/absent change reads as 0. Kept
+ * `stale` so it never counts as a live tick (a broadcast/Coinbase quote always
+ * overwrites it, and the live book valuation ignores it).
+ */
+export function seedRowToLive(
+  row: { ticker?: unknown; close?: unknown; change_pct?: unknown },
+  now: number = Date.now(),
+): LiveQuote | null {
   const symbol = typeof row.ticker === "string" ? row.ticker.trim().toUpperCase() : "";
   const price = num(row.close);
   if (!symbol || price == null) return null;
+  const changePct = num(row.change_pct) ?? 0;
   return {
     symbol,
     price,
-    changePct: 0,
-    up: true,
+    changePct,
+    up: changePct >= 0,
     ts: now,
     stale: true,
     source: "seed",

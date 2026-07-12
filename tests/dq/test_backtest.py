@@ -11,6 +11,7 @@ import pytest
 from digiquant.backtest import run_backtest
 from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.models import BacktestResult
+from tests.dq.conftest import SKIP_NATIVE_CRASH
 
 
 @pytest.mark.unit
@@ -106,6 +107,7 @@ class TestRunBacktest:
             )
 
 
+@SKIP_NATIVE_CRASH
 @pytest.mark.unit
 class TestRunBacktestReal:
     """Run real Nautilus backtest when nautilus_trader and test data are available."""
