@@ -3,47 +3,47 @@
   "strategy": "btc_slapper",
   "symbol": "BTC-USD",
   "engine": "nautilus",
-  "generated_at": "2026-07-13T01:48:19+00:00",
+  "generated_at": "2026-07-14T01:25:06+00:00",
   "data_source": "Coinbase daily OHLCV (CCXT)",
   "period_start": "2018-01-01",
-  "period_end": "2026-07-09",
-  "bars": 3112,
+  "period_end": "2026-07-10",
+  "bars": 3113,
   "initial_capital": 1000.0,
-  "final_equity": 262701506.1334612,
+  "final_equity": 266665361.97426373,
   "signal_delay_days": 3,
-  "net_profit": 262700506.1334612,
-  "net_profit_pct": 26270050.61334612,
+  "net_profit": 266664361.97426373,
+  "net_profit_pct": 26666436.197426375,
   "max_drawdown_pct": -30.50160933702622,
   "sharpe_ratio": null,
   "sortino_ratio": null,
   "calmar_ratio": null,
-  "profit_factor": 8.466099250750865,
-  "win_rate_pct": 75.0,
+  "profit_factor": 8.578754310151728,
+  "win_rate_pct": 76.25,
   "total_trades": 80,
-  "avg_trade": 3283756.3266682653,
+  "avg_trade": 3333304.5246782964,
   "overall": {
     "trades": 80,
-    "net_profit": 262700506.1334612,
-    "net_profit_pct": 26270050.61334612,
-    "gross_profit": 297886283.5134018,
-    "gross_loss": -35185777.37994059,
-    "percent_profitable": 75.0,
-    "profit_factor": 8.466099250750865,
-    "avg_trade": 3283756.3266682653,
-    "wins": 60,
-    "losses": 20
+    "net_profit": 266664361.97426373,
+    "net_profit_pct": 26666436.197426375,
+    "gross_profit": 301850139.3542043,
+    "gross_loss": -35185777.37994056,
+    "percent_profitable": 76.25,
+    "profit_factor": 8.578754310151728,
+    "avg_trade": 3333304.5246782964,
+    "wins": 61,
+    "losses": 19
   },
   "long": {
     "trades": 40,
-    "net_profit": 136986591.6427766,
-    "net_profit_pct": 13698659.164277662,
-    "gross_profit": 148497820.3773092,
-    "gross_loss": -11511228.73453258,
-    "percent_profitable": 72.5,
-    "profit_factor": 12.900257983044852,
-    "avg_trade": 3424664.7910694154,
-    "wins": 29,
-    "losses": 11
+    "net_profit": 140950447.48357913,
+    "net_profit_pct": 14095044.748357913,
+    "gross_profit": 152461676.2181117,
+    "gross_loss": -11511228.73453255,
+    "percent_profitable": 75.0,
+    "profit_factor": 13.24460487530247,
+    "avg_trade": 3523761.187089478,
+    "wins": 30,
+    "losses": 10
   },
   "short": {
     "trades": 40,
@@ -12505,6 +12505,10 @@
     {
       "t": "2026-07-09",
       "v": 262701506.1334612
+    },
+    {
+      "t": "2026-07-10",
+      "v": 266665361.97426373
     }
   ],
   "drawdown_curve": [
@@ -24955,6 +24959,10 @@
     {
       "t": "2026-07-09",
       "v": -4.994530661849514
+    },
+    {
+      "t": "2026-07-10",
+      "v": -3.5610101994548553
     }
   ],
   "ohlc_bars": [
@@ -46741,6 +46749,13 @@
       "h": 63448.46,
       "l": 61636.05,
       "c": 63175.25
+    },
+    {
+      "t": "2026-07-10",
+      "o": 63175.25,
+      "h": 64669.42,
+      "l": 62865.01,
+      "c": 64128.49
     }
   ],
   "trades": [
@@ -48015,11 +48030,11 @@
       "entry_date": "2026-07-09",
       "entry_price": 63175.25000000001,
       "exit_date": "",
-      "exit_price": 63175.25,
+      "exit_price": 64128.49,
       "qty": 0.0,
-      "pnl": -2.9802322387695312e-8,
-      "pnl_pct": -1.1102230246251565e-14,
-      "equity_after": 262701506.1334612,
+      "pnl": 3963855.8408024907,
+      "pnl_pct": 1.5088820384564938,
+      "equity_after": 266665361.97426373,
       "exit_reason": "open",
       "max_runup_pct": null,
       "max_drawdown_pct": null
@@ -48027,6 +48042,6 @@
   ],
   "notes": [
     "NautilusTrader backtest, BTC Slapper; 100% equity compounding, trade window from 2018-01-01.",
-    "Public signal delay: end date shifted back 3 days; all figures are as of 2026-07-09."
+    "Public signal delay: end date shifted back 3 days; all figures are as of 2026-07-10."
   ]
 }
