@@ -1,14 +1,18 @@
 name: "Pipeline: DigiQuant tearsheets"
 
-# Daily Slapper tearsheet regeneration for digiquant.io (#1068).
+# Daily Slapper tearsheet regeneration for digiquant.io (#1068, #1069).
+#
+# DB-driven delivery: the job regenerates and upserts the tearsheet payload
+# (headline metrics + equity curve + trade list + current signal) to Supabase
+# `strategy_tearsheets`. digiquant.io reads that table live at runtime, so there
+# is NO repo commit and NO deploy in this path — updating the row updates the site.
 #
 # Prerequisite (#1067): calibrations uploaded to strategy_calibrations via
 # digiquant/scripts/sync_strategy_calibrations.py (one-time, service role).
 #
 # 1. Fetch latest Coinbase daily OHLCV
 # 2. Backtest with calibrations from Supabase (private IP — never in repo/CI secrets)
-# 3. Commit frontend/digiquant-web/public/strategies/*.json for Cloudflare rebuild
-# 4. Upsert headline metrics to strategy_tearsheets
+# 3. Upsert the tearsheet payload + current signal to Supabase (service role)
 
 on:
   schedule:
@@ -17,9 +21,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   issues: write
-  pull-requests: write
 
 jobs:
   tearsheets:
@@ -60,44 +63,17 @@ jobs:
       - name: Fetch Coinbase daily OHLCV
         run: python digiquant/scripts/fetch_coinbase.py --through-yesterday
 
-      - name: Generate tearsheets (from Supabase calibrations)
-        # --signal-delay-days 3 (#1462): public tearsheets lag reality by 3 days
-        # (end-date shift) so the live position can't be read off the curve.
+      - name: Generate tearsheets + push to Supabase
+        # --push-supabase: upsert the tearsheet payload + current signal to
+        # strategy_tearsheets (service role). --signal-delay-days 3 (#1462):
+        # public figures lag reality by 3 days (end-date shift) so the live
+        # position can't be read off the curve. No repo commit — the DB is the
+        # delivery; digiquant.io reads strategy_tearsheets live.
         run: |
           python digiquant/scripts/generate_tearsheets.py \
             --from-supabase \
             --push-supabase \
             --signal-delay-days 3
-
-      - name: Commit refreshed static JSON (if changed)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add frontend/digiquant-web/public/strategies/
-          if git diff --staged --quiet; then
-            echo "No tearsheet changes to commit."
-            exit 0
-          fi
-          # develop rejects direct pushes (GH013 ruleset) — land via a PR
-          # branch instead. Fixed branch name, force-pushed each run; the PR
-          # is created once and reused while open.
-          BRANCH="chore/tearsheet-refresh"
-          git checkout -B "$BRANCH"
-          git commit -m "chore(digiquant): refresh Slapper tearsheets [skip ci]"
-          git push -f origin "$BRANCH"
-          PR=$(gh pr list --head "$BRANCH" --base develop --state open --json number --jq '.[0].number // empty')
-          if [ -z "$PR" ]; then
-            gh pr create --base develop --head "$BRANCH" \
-              --title "chore(digiquant): refresh Slapper tearsheets" \
-              --body "Automated nightly tearsheet refresh. develop blocks direct pushes (GH013 ruleset), so the pipeline lands its static JSON via this PR."
-            PR=$(gh pr list --head "$BRANCH" --base develop --state open --json number --jq '.[0].number')
-          fi
-          gh pr merge "$PR" --merge || {
-            echo "::warning::Tearsheet refresh PR #$PR could not be auto-merged — merge it manually."
-            exit 1
-          }
 
       - name: Update persistent failure issue
         if: failure()
