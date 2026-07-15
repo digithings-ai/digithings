@@ -2,12 +2,18 @@ name: "Pipeline: DigiQuant tearsheets"
 
 # Daily Slapper tearsheet regeneration for digiquant.io (#1068).
 #
+# Deploys to `main`: digiquant.io is Cloudflare Pages watching `main`, so this job
+# checks out `main`, regenerates, and lands the refresh back on `main` — the live
+# site then updates every day. NOTE: GitHub only fires `schedule:` triggers from the
+# repo default branch (`develop`), so this file must live on `develop`; every step
+# below nonetheless operates on `main` via the explicit `ref: main` checkout.
+#
 # Prerequisite (#1067): calibrations uploaded to strategy_calibrations via
 # digiquant/scripts/sync_strategy_calibrations.py (one-time, service role).
 #
 # 1. Fetch latest Coinbase daily OHLCV
 # 2. Backtest with calibrations from Supabase (private IP — never in repo/CI secrets)
-# 3. Commit frontend/digiquant-web/public/strategies/*.json for Cloudflare rebuild
+# 3. Land frontend/digiquant-web/public/strategies/*.json on `main` → Cloudflare rebuild
 # 4. Upsert headline metrics to strategy_tearsheets
 
 on:
@@ -35,7 +41,12 @@ jobs:
       SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
+      # Operate on the deploy branch: check out `main`, with full history so we
+      # can branch from it and open/merge the refresh PR below.
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -80,19 +91,23 @@ jobs:
             echo "No tearsheet changes to commit."
             exit 0
           fi
-          # develop rejects direct pushes (GH013 ruleset) — land via a PR
-          # branch instead. Fixed branch name, force-pushed each run; the PR
-          # is created once and reused while open.
-          BRANCH="chore/tearsheet-refresh"
+          # Land on `main` (the digiquant.io deploy branch) via a PR + merge.
+          # We keep [skip ci] on the refresh commit so pushing the PR branch does
+          # not spin up the full CI suite — but the MERGE commit that lands on
+          # main carries a clean message, so Cloudflare Pages runs the production
+          # build. (A [skip ci] commit on main's HEAD would make Cloudflare skip
+          # the deploy.) Fixed branch name, force-pushed each run; the PR is
+          # created once and reused while open.
+          BRANCH="chore/tearsheet-refresh-main"
           git checkout -B "$BRANCH"
           git commit -m "chore(digiquant): refresh Slapper tearsheets [skip ci]"
           git push -f origin "$BRANCH"
-          PR=$(gh pr list --head "$BRANCH" --base develop --state open --json number --jq '.[0].number // empty')
+          PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
           if [ -z "$PR" ]; then
-            gh pr create --base develop --head "$BRANCH" \
+            gh pr create --base main --head "$BRANCH" \
               --title "chore(digiquant): refresh Slapper tearsheets" \
-              --body "Automated nightly tearsheet refresh. develop blocks direct pushes (GH013 ruleset), so the pipeline lands its static JSON via this PR."
-            PR=$(gh pr list --head "$BRANCH" --base develop --state open --json number --jq '.[0].number')
+              --body "Automated nightly tearsheet refresh, landed on \`main\` so digiquant.io (Cloudflare Pages) rebuilds daily."
+            PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number')
           fi
           gh pr merge "$PR" --merge || {
             echo "::warning::Tearsheet refresh PR #$PR could not be auto-merged — merge it manually."
