@@ -35,8 +35,9 @@ class PublishDeps:
 
 
 # ``documents.category`` must satisfy the ``chk_documents_category`` CHECK
-# constraint (migration 002/011): one of synthesis, macro, asset-class, equity,
-# sector, alt-data, institutional, portfolio, delta, output, rollup, deep-dive.
+# constraint (migration 002/011/053): one of synthesis, macro, asset-class,
+# equity, sector, alt-data, institutional, portfolio, delta, output, rollup,
+# deep-dive, learning.
 # Map each segment slug to its phase's category; unmapped slugs fall back to the
 # catch-all "output". (Passing the old default "research" violated the
 # constraint and failed every publish — issue #628.)
