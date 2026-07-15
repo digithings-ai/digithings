@@ -3,45 +3,45 @@
   "strategy": "sol_slapper",
   "symbol": "SOL-USD",
   "engine": "nautilus",
-  "generated_at": "2026-07-14T01:25:13+00:00",
+  "generated_at": "2026-07-15T01:21:43+00:00",
   "data_source": "Coinbase daily OHLCV (CCXT)",
   "period_start": "2021-06-17",
-  "period_end": "2026-07-10",
-  "bars": 1850,
+  "period_end": "2026-07-11",
+  "bars": 1851,
   "initial_capital": 1000.0,
-  "final_equity": 793505.2311856784,
+  "final_equity": 779987.0813524908,
   "signal_delay_days": 3,
-  "net_profit": 792505.2311856784,
-  "net_profit_pct": 79250.52311856784,
+  "net_profit": 778987.0813524908,
+  "net_profit_pct": 77898.70813524908,
   "max_drawdown_pct": -58.4256602901686,
   "sharpe_ratio": null,
   "sortino_ratio": null,
   "calmar_ratio": null,
-  "profit_factor": 4.858359329312081,
+  "profit_factor": 4.792545404720209,
   "win_rate_pct": 67.3913043478261,
   "total_trades": 46,
-  "avg_trade": 17228.374590993008,
+  "avg_trade": 16934.50176853241,
   "overall": {
     "trades": 46,
-    "net_profit": 792505.2311856784,
-    "net_profit_pct": 79250.52311856784,
-    "gross_profit": 997904.7711313207,
+    "net_profit": 778987.0813524908,
+    "net_profit_pct": 77898.70813524908,
+    "gross_profit": 984386.6212981332,
     "gross_loss": -205399.53994564232,
     "percent_profitable": 67.3913043478261,
-    "profit_factor": 4.858359329312081,
-    "avg_trade": 17228.374590993008,
+    "profit_factor": 4.792545404720209,
+    "avg_trade": 16934.50176853241,
     "wins": 31,
     "losses": 15
   },
   "long": {
     "trades": 23,
-    "net_profit": 328961.3074024145,
-    "net_profit_pct": 32896.130740241446,
-    "gross_profit": 478218.30025515537,
+    "net_profit": 315443.1575692269,
+    "net_profit_pct": 31544.31575692269,
+    "gross_profit": 464700.1504219678,
     "gross_loss": -149256.99285274083,
     "percent_profitable": 56.52173913043478,
-    "profit_factor": 3.20399259770008,
-    "avg_trade": 14302.665539235413,
+    "profit_factor": 3.1134229729554304,
+    "avg_trade": 13714.919894314215,
     "wins": 13,
     "losses": 10
   },
@@ -7457,6 +7457,10 @@
     {
       "t": "2026-07-10",
       "v": 793505.2311856784
+    },
+    {
+      "t": "2026-07-11",
+      "v": 779987.0813524908
     }
   ],
   "drawdown_curve": [
@@ -14859,6 +14863,10 @@
     {
       "t": "2026-07-10",
       "v": -5.456795841921918
+    },
+    {
+      "t": "2026-07-11",
+      "v": -7.067433238236047
     }
   ],
   "ohlc_bars": [
@@ -27811,6 +27819,13 @@
       "h": 79.6,
       "l": 77.01,
       "c": 78.07
+    },
+    {
+      "t": "2026-07-11",
+      "o": 78.06,
+      "h": 78.8,
+      "l": 76.7,
+      "c": 76.74
     }
   ],
   "trades": [
@@ -28541,11 +28556,11 @@
       "entry_date": "2026-06-16",
       "entry_price": 73.46,
       "exit_date": "",
-      "exit_price": 78.07,
+      "exit_price": 76.74,
       "qty": 0.0,
-      "pnl": 46856.14340676286,
-      "pnl_pct": 6.275524094745433,
-      "equity_after": 793505.2311856784,
+      "pnl": 33337.99357357528,
+      "pnl_pct": 4.465014974135584,
+      "equity_after": 779987.0813524908,
       "exit_reason": "open",
       "max_runup_pct": null,
       "max_drawdown_pct": null
@@ -28553,6 +28568,6 @@
   ],
   "notes": [
     "NautilusTrader backtest, SOL Slapper; 100% equity compounding, trade window from 2018-01-01.",
-    "Public signal delay: end date shifted back 3 days; all figures are as of 2026-07-10."
+    "Public signal delay: end date shifted back 3 days; all figures are as of 2026-07-11."
   ]
 }
