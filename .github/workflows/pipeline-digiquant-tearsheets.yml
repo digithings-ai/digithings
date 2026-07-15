@@ -1,20 +1,18 @@
 name: "Pipeline: DigiQuant tearsheets"
 
-# Daily Slapper tearsheet regeneration for digiquant.io (#1068).
+# Daily Slapper tearsheet regeneration for digiquant.io (#1068, #1069).
 #
-# Deploys to `main`: digiquant.io is Cloudflare Pages watching `main`, so this job
-# checks out `main`, regenerates, and lands the refresh back on `main` — the live
-# site then updates every day. NOTE: GitHub only fires `schedule:` triggers from the
-# repo default branch (`develop`), so this file must live on `develop`; every step
-# below nonetheless operates on `main` via the explicit `ref: main` checkout.
+# DB-driven delivery: the job regenerates and upserts the tearsheet payload
+# (headline metrics + equity curve + trade list + current signal) to Supabase
+# `strategy_tearsheets`. digiquant.io reads that table live at runtime, so there
+# is NO repo commit and NO deploy in this path — updating the row updates the site.
 #
 # Prerequisite (#1067): calibrations uploaded to strategy_calibrations via
 # digiquant/scripts/sync_strategy_calibrations.py (one-time, service role).
 #
 # 1. Fetch latest Coinbase daily OHLCV
 # 2. Backtest with calibrations from Supabase (private IP — never in repo/CI secrets)
-# 3. Land frontend/digiquant-web/public/strategies/*.json on `main` → Cloudflare rebuild
-# 4. Upsert headline metrics to strategy_tearsheets
+# 3. Upsert the tearsheet payload + current signal to Supabase (service role)
 
 on:
   schedule:
@@ -23,9 +21,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   issues: write
-  pull-requests: write
 
 jobs:
   tearsheets:
@@ -41,12 +38,7 @@ jobs:
       SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
-      # Operate on the deploy branch: check out `main`, with full history so we
-      # can branch from it and open/merge the refresh PR below.
       - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -71,48 +63,17 @@ jobs:
       - name: Fetch Coinbase daily OHLCV
         run: python digiquant/scripts/fetch_coinbase.py --through-yesterday
 
-      - name: Generate tearsheets (from Supabase calibrations)
-        # --signal-delay-days 3 (#1462): public tearsheets lag reality by 3 days
-        # (end-date shift) so the live position can't be read off the curve.
+      - name: Generate tearsheets + push to Supabase
+        # --push-supabase: upsert the tearsheet payload + current signal to
+        # strategy_tearsheets (service role). --signal-delay-days 3 (#1462):
+        # public figures lag reality by 3 days (end-date shift) so the live
+        # position can't be read off the curve. No repo commit — the DB is the
+        # delivery; digiquant.io reads strategy_tearsheets live.
         run: |
           python digiquant/scripts/generate_tearsheets.py \
             --from-supabase \
             --push-supabase \
             --signal-delay-days 3
-
-      - name: Commit refreshed static JSON (if changed)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add frontend/digiquant-web/public/strategies/
-          if git diff --staged --quiet; then
-            echo "No tearsheet changes to commit."
-            exit 0
-          fi
-          # Land on `main` (the digiquant.io deploy branch) via a PR + merge.
-          # We keep [skip ci] on the refresh commit so pushing the PR branch does
-          # not spin up the full CI suite — but the MERGE commit that lands on
-          # main carries a clean message, so Cloudflare Pages runs the production
-          # build. (A [skip ci] commit on main's HEAD would make Cloudflare skip
-          # the deploy.) Fixed branch name, force-pushed each run; the PR is
-          # created once and reused while open.
-          BRANCH="chore/tearsheet-refresh-main"
-          git checkout -B "$BRANCH"
-          git commit -m "chore(digiquant): refresh Slapper tearsheets [skip ci]"
-          git push -f origin "$BRANCH"
-          PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
-          if [ -z "$PR" ]; then
-            gh pr create --base main --head "$BRANCH" \
-              --title "chore(digiquant): refresh Slapper tearsheets" \
-              --body "Automated nightly tearsheet refresh, landed on \`main\` so digiquant.io (Cloudflare Pages) rebuilds daily."
-            PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number')
-          fi
-          gh pr merge "$PR" --merge || {
-            echo "::warning::Tearsheet refresh PR #$PR could not be auto-merged — merge it manually."
-            exit 1
-          }
 
       - name: Update persistent failure issue
         if: failure()
