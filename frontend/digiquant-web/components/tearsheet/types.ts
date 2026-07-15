@@ -57,6 +57,21 @@ export interface TearsheetData {
   ohlc_bars?: TearsheetOhlcBar[];
   trades: TearsheetTrade[];
   notes: string[];
+  /** Present when the payload comes from Supabase `strategy_tearsheets.metrics`
+   *  (#1069): index extras that live in settings, not the backtest, plus the
+   *  derived current signal. Absent on legacy static-JSON payloads. */
+  label?: string;
+  kind?: string;
+  avg_trade_pct?: number;
+  current_signal?: CurrentSignal;
+}
+
+export interface CurrentSignal {
+  /** "long" | "short" | "flat" — the leg open at period end. */
+  position: string;
+  entry_label: string;
+  last_signal_date: string;
+  last_price: number | null;
 }
 
 /** Compact card summary in `strategies/index.json` (the library manifest). */
