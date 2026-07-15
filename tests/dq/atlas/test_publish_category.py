@@ -13,7 +13,8 @@ import pytest
 from digiquant.olympus.atlas.phases.publish_phase import _segment_category
 
 # Source of truth: chk_documents_category in
-# digiquant/supabase/migrations/{002_schema_hardening,011_unpartition_snapshots_documents}.sql
+# digiquant/supabase/migrations/{002_schema_hardening,011_unpartition_snapshots_documents,
+# 053_beliefs_category}.sql
 ALLOWED_CATEGORIES = frozenset(
     {
         "synthesis",
@@ -28,6 +29,7 @@ ALLOWED_CATEGORIES = frozenset(
         "output",
         "rollup",
         "deep-dive",
+        "learning",  # beliefs distillation (#1383, migration 053)
     }
 )
 
@@ -87,3 +89,11 @@ class TestPublishCategoryConstraint:
     def test_explicit_categories_are_constraint_valid(self) -> None:
         """The hard-coded digest/analyst/pm categories must also be allow-listed."""
         assert EXPLICIT_CATEGORIES <= ALLOWED_CATEGORIES
+
+    def test_beliefs_category_is_constraint_valid(self) -> None:
+        """Regression for #1383 — beliefs distillation publishes category="learning",
+        which migration 043 forgot to add to chk_documents_category, crashing the
+        Olympus daily pipeline for 11 runs. Pin the value the writer actually emits."""
+        from digiquant.olympus.learning.beliefs_distillation import BELIEFS_CATEGORY
+
+        assert BELIEFS_CATEGORY in ALLOWED_CATEGORIES
