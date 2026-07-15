@@ -8,7 +8,6 @@
  */
 
 import type { FinanceSeriesPoint, OhlcPoint } from "./chart-host";
-import type { MonthlyReturnRow } from "./MonthlyReturns";
 
 /** Deterministic LCG in [0, 1) — stable across renders and runtimes. */
 function lcg(seed: number): () => number {
@@ -78,18 +77,6 @@ function priceChartDemo(n: number): { candles: OhlcPoint[]; volume: FinanceSerie
   return { candles, volume };
 }
 
-/** Monthly % returns 2022–2026, the last year only through June. */
-function monthlyReturnsDemo(): MonthlyReturnRow[] {
-  const rnd = lcg(9973);
-  return [2022, 2023, 2024, 2025, 2026].map((year) => {
-    const values = Array.from({ length: 12 }, (_, m) => {
-      if (year === 2026 && m > 5) return null;
-      return Math.round((rnd() - 0.42) * 24 * 10) / 10;
-    });
-    return { year, values };
-  });
-}
-
 /** Demo cumulative-equity series (210 weekly points from 2022-01-01). */
 export const EQUITY_CURVE_DEMO: FinanceSeriesPoint[] = equityCurveDemo(210);
 
@@ -99,6 +86,3 @@ export const DRAWDOWN_DEMO: FinanceSeriesPoint[] = drawdownDemo(210);
 /** Demo OHLC candles + volume bars (120 daily points from 2026-01-01). */
 export const PRICE_CHART_DEMO: { candles: OhlcPoint[]; volume: FinanceSeriesPoint[] } =
   priceChartDemo(120);
-
-/** Demo monthly-returns heatmap rows (2022–2026, 2026 through June). */
-export const MONTHLY_RETURNS_DEMO: MonthlyReturnRow[] = monthlyReturnsDemo();

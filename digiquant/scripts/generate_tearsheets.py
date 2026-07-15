@@ -528,6 +528,19 @@ def run_and_write(
         for t in closed
     ]
 
+    # Current signal = the leg still open at period end (carry_open_at_period_end
+    # marks it exit_reason="open"); "flat" if the book is closed. last_price is the
+    # as-of (signal-delayed) daily close. This is the digiquant.io position banner.
+    open_leg = next((t for t in trade_dicts if t.get("exit_reason") == "open"), None)
+    current_signal = {
+        "position": open_leg["direction"] if open_leg else "flat",
+        "entry_label": open_leg.get("entry_label", "") if open_leg else "",
+        "last_signal_date": (
+            open_leg["entry_date"] if open_leg else (window[-1][0] if window else "")
+        ),
+        "last_price": bars_list[-1][1] if bars_list else None,
+    }
+
     notes = [
         f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
         f"100% equity compounding, trade window from {trade_start}."
@@ -575,10 +588,7 @@ def run_and_write(
                 min_pf,
             )
 
-    if push_supabase:
-        _push_tearsheet_to_supabase(strategy, td, equity_curve)
-
-    return {
+    index_entry = {
         "strategy": td.strategy,
         "symbol": td.symbol,
         "engine": td.engine,
@@ -597,37 +607,61 @@ def run_and_write(
         "href": f"/strategies/{td.strategy}",
     }
 
+    if push_supabase:
+        _push_tearsheet_to_supabase(strategy, td, equity_curve, current_signal, index_entry)
 
-def _push_tearsheet_to_supabase(strategy: str, td, equity_curve: list[tuple[str, float]]) -> None:
-    """Upsert headline metrics + equity curve to strategy_tearsheets (service role)."""
+    return index_entry
+
+
+def _push_tearsheet_to_supabase(
+    strategy: str,
+    td,
+    equity_curve: list[tuple[str, float]],
+    current_signal: dict,
+    index_entry: dict,
+) -> None:
+    """Upsert the full tearsheet payload + current signal to Supabase (service role).
+
+    The website reads ``strategy_tearsheets`` live, so the row must carry the
+    whole payload digiquant.io renders — the full ``TearsheetData`` (metrics,
+    equity/drawdown curves, OHLC bars, trades), plus the derived ``current_signal``
+    and the index-level extras (label/kind/avg_trade) that live in settings, not
+    ``TearsheetData``. The normalized ``strategy_signals`` row is refreshed too
+    (service-role write) for any relational consumer.
+    """
     from digiquant.data.store.client import build_digiquant_client
-    from digiquant.data.store.strategies import upsert_tearsheet
+    from digiquant.data.store.strategies import upsert_signal, upsert_tearsheet
 
     client = build_digiquant_client()
     if client is None:
         logger.warning("Supabase push skipped — credentials missing")
         return
-    metrics = {
-        "net_profit_pct": td.net_profit_pct,
-        "max_drawdown_pct": td.max_drawdown_pct,
-        "profit_factor": td.profit_factor,
-        "win_rate_pct": td.win_rate_pct,
-        "total_trades": td.total_trades,
-        "period_start": td.period_start,
-        "period_end": td.period_end,
-        "signal_delay_days": td.signal_delay_days,
-        "final_equity": td.final_equity,
-        "generated_at": td.generated_at,
-    }
+
+    payload = td.model_dump(mode="json")
+    payload["current_signal"] = current_signal
+    payload["label"] = index_entry["label"]
+    payload["kind"] = index_entry["kind"]
+    payload["avg_trade_pct"] = index_entry["avg_trade_pct"]
+
     curve = [{"t": t, "v": v} for t, v in equity_curve]
     upsert_tearsheet(
         client,
         strategy_id=strategy,
-        metrics=metrics,
+        metrics=payload,
         as_of=td.generated_at,
         equity_curve=curve,
     )
-    logger.info("  Pushed tearsheet summary → strategy_tearsheets (%s)", strategy)
+    upsert_signal(
+        client,
+        strategy_id=strategy,
+        position=current_signal["position"],
+        as_of=td.generated_at,
+        last_signal_date=current_signal["last_signal_date"] or None,
+        last_price=current_signal["last_price"],
+    )
+    logger.info(
+        "  Pushed tearsheet + %s signal → Supabase (%s)", current_signal["position"], strategy
+    )
 
 
 def _strategy_worker(

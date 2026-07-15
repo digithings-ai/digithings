@@ -117,7 +117,16 @@ jobs:
               - '.github/workflows/test-e2e.yml'
             nautilus_smoke:
               - 'digiquant/**'
+              - 'tests/dq/conftest.py'
+              - 'tests/dq/test_api.py'
+              - 'tests/dq/test_audit.py'
+              - 'tests/dq/test_backtest.py'
+              - 'tests/dq/test_calibrations_loader.py'
               - 'tests/dq/test_nautilus_runner.py'
+              - 'tests/dq/test_pipeline_graph.py'
+              - 'tests/dq/test_strategies.py'
+              - 'tests/dq/test_tearsheet_isolation.py'
+              - 'tests/dq/test_v1_jobs.py'
               - '.github/workflows/test-nautilus.yml'
             atlas_graph:
               - 'digiquant/src/digiquant/olympus/atlas/**'

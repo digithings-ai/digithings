@@ -7,7 +7,7 @@ Next.js 15 investment-intelligence dashboard for **DigiQuant Olympus** — the u
 
 Olympus matches the digiquant.io aesthetic by importing the shared canon
 tokens, **the** Tailwind v4 bridge (`web-theme.css`), and the quant-native +
-tearsheet primitives directly in `app/globals.css`:
+finance-tearsheet grammars directly in `app/globals.css`:
 
 ```css
 @import "tailwindcss";
@@ -15,8 +15,13 @@ tearsheet primitives directly in `app/globals.css`:
 @import "@digithings/design/tokens.css";
 @import "@digithings/web/styles/web-theme.css";        /* THE @theme inline bridge (#1402) */
 @import "@digithings/design/quant-native/styles.css";
-@import "@digithings/design/tearsheet/styles.css";
+@import "@digithings/web/styles/finance-tearsheet.css"; /* print-grade .ts-* family (#1463) */
 ```
+
+The performance tear sheet (`/portfolio/performance`) renders the shared
+finance-tearsheet family (`TimeSeries`, `SignedBars`, `Kpi`/`KpiStrip`,
+`runTearsheetPrint` from `@digithings/web`); olympus keeps its §13 dashboard
+variants and shell print rules app-side at the bottom of `globals.css`.
 
 The root layout scopes the page to the DigiQuant accent and blueprint
 background:

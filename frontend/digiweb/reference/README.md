@@ -29,7 +29,8 @@ is the only shared chrome.
 | `/layout-patterns` | Layout      | feature cell, bento grid, container-scaled product frame, phone mockup (olympus app) |
 | `/typography`      | Typography  | type specimen + live type-suite switcher (5 coordinated suites: display + body + mono), scroll-linked word reveals (blur / muted / outline), copy & voice grammar |
 | `/data`            | Data        | dot-matrix stat, count-up stat, odometer digit-roll, marquee ticker, sticky card deck, changelog rail, sortable data table, pricing, comparison matrix |
-| `/finance`         | Finance     | stock ticker tape, Lightweight-Charts price chart / equity curve / drawdown, synced multi-pane tearsheet, performance dashboard, portfolio blotter, charting rules, performance metrics, monthly-returns heatmap, order book |
+| `/finance`         | Finance     | stock ticker tape, Lightweight-Charts price chart / equity curve / drawdown, synced multi-pane tearsheet (screen-only), performance dashboard, portfolio blotter, charting rules, performance metrics, returns matrix (monthly slice), order book |
+| `/tearsheet`       | Tearsheet   | print-grade SVG tearsheet family (#1463): synced candles with trade markers + hover cards, equity/drawdown/per-trade P&L on one shared zoom window, 3×3 returns matrix, KPI strip, trade log, library cards, live badge, working Download PDF |
 | `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal, section transitions (zoom-morph · stacking · cross-fade), arc-flight routing map (revolut-mined), pipeline workflow viz (sequential + parallel, per-step time/token/cost diagnostics; olympus-ported) |
 | `/chrome`          | Chrome      | announcement bar, command palette, tabs (sliding indicator), toast stack, scroll-aware nav, colophon footer with glow sweep |
 | `/terminal`        | Terminal    | diegetic CLI session + budget, streaming chat transcript |
@@ -62,10 +63,13 @@ is the only shared chrome.
   `prefers-reduced-motion` (render the final state); content must read without
   JS. Import Motion as `m` etc. from `motion/react` (LazyMotion is provided
   app-wide by the root layout).
-- **Charts.** Prices/candles/equity use TradingView **Lightweight Charts**
-  (`lightweight-charts`, self-hosted, our own data, `attributionLogo` off),
-  themed from the tokens and re-themed live on `data-theme` change. Static hero
-  crops stay lightweight SVG. Do not build custom candle renderers. The full
+- **Charts.** DASHBOARD prices/candles/equity use TradingView **Lightweight
+  Charts** (`lightweight-charts`, self-hosted, our own data, `attributionLogo`
+  off), themed from the tokens and re-themed live on `data-theme` change.
+  Static hero crops stay lightweight SVG. PRINT-GRADE surfaces (anything with
+  a PDF export) compose the shared SVG **finance-tearsheet** family instead —
+  do not build new custom candle renderers outside it (the split ruling:
+  `frontend/digiweb/CHARTS.md`). The full canvas
   house rules render as a callout on `/finance` (`CHART_RULES`); in short:
   transparent canvas, token colours only, `autoSize:true` so the chart fills a
   pane with a definite height, money colours (`--up`/`--down`) for P&L only, and

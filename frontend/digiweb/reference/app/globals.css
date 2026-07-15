@@ -13,8 +13,10 @@
 @import "@digithings/web/styles/chat-widgets.css";
 @import "@digithings/web/styles/controls-core.css";
 @import "@digithings/web/styles/controls-overlay.css";
-@import "@digithings/web/styles/finance-charts.css";
 @import "@digithings/web/styles/finance-composites.css";
+/* finance-tearsheet manages its own layering (print grammar unlayered) —
+   import PLAINLY, never wrapped in layer(...) (see the sheet header). */
+@import "@digithings/web/styles/finance-tearsheet.css";
 @import "@digithings/web/styles/data-layout.css";
 @import "@digithings/web/styles/deck.css";
 @import "@digithings/web/styles/effects-chrome.css";
@@ -34,6 +36,7 @@
 @source "../../web/src/components/controls";
 @source "../../web/src/components/finance-charts";
 @source "../../web/src/components/finance-composites";
+@source "../../web/src/components/finance-tearsheet";
 @source "../../web/src/components/data-layout";
 @source "../../web/src/components/deck";
 @source "../../web/src/components/effects-chrome";

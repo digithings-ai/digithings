@@ -25,24 +25,36 @@ import {
   type RefObject,
 } from "react";
 import Link from "next/link";
-import { DeckCard, DeckStack } from "@digithings/web";
+import {
+  CandlestickChart,
+  DeckCard,
+  DeckStack,
+  KpiStrip,
+  SegToggle,
+  fmtNum,
+  fmtPct,
+  toneClass,
+  viewWindowForPreset,
+} from "@digithings/web";
 import { AssetLogoFor } from "@/components/tearsheet/asset-logo";
 import { CurrentPosition } from "@/components/tearsheet/current-position";
 import { LiveMetricsBadge } from "@/components/tearsheet/live-metrics";
-import { CandlestickChart, SegToggle, viewWindowForPreset } from "@/components/tearsheet/charts";
-import { fmtNum, fmtPct, toneClass } from "@/components/tearsheet/format";
 import { PivotStatsTable } from "@/components/tearsheet/pivot-stats-table";
+import { SignalDelayChip } from "@/components/tearsheet/signal-delay";
 import { chartFullSpan, clipOhlc } from "@/components/tearsheet/series";
 import { avgTradePct, cagrPct, tradesPerYear } from "@/components/tearsheet/stats";
 import { symbolBase } from "@/components/tearsheet/strategy-names";
 import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsheet/types";
-import index from "@/public/strategies/index.json";
+import { fetchStrategyIndex, fetchTearsheet as fetchTearsheetLive } from "@/lib/live/strategies";
 
 const SLAPPER_ORDER = ["btc_slapper", "eth_slapper", "sol_slapper"] as const;
-const ALL_STRATS = index as StrategyIndexEntry[];
-const STRATEGIES = SLAPPER_ORDER.map(
-  (id) => ALL_STRATS.find((s) => s.strategy === id) ?? ALL_STRATS[0],
-).filter(Boolean) as StrategyIndexEntry[];
+
+/** Order the live index into the BTC → ETH → SOL spotlight sequence. */
+function orderSlappers(all: StrategyIndexEntry[]): StrategyIndexEntry[] {
+  return SLAPPER_ORDER.map((id) => all.find((s) => s.strategy === id)).filter(
+    (s): s is StrategyIndexEntry => Boolean(s),
+  );
+}
 
 const PREVIEW_PANE_H = 220;
 const PREVIEW_LOOKBACK = "6m" as const;
@@ -94,9 +106,9 @@ async function fetchTearsheet(strategyId: string): Promise<TearsheetData | null>
   loadStatus.set(strategyId, "loading");
   notifyTearsheetSubscribers();
 
-  const promise = fetch(`/strategies/${strategyId}.json`)
-    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-    .then((d: TearsheetData) => {
+  const promise = fetchTearsheetLive(strategyId)
+    .then((d: TearsheetData | null) => {
+      if (!d) throw new Error("live store returned no tearsheet");
       tearsheetCache.set(strategyId, d);
       loadStatus.set(strategyId, "loaded");
       notifyTearsheetSubscribers();
@@ -139,6 +151,10 @@ function Toned({ v, children }: { v: number | null | undefined; children: ReactN
   return c ? <span className={c}>{children}</span> : <>{children}</>;
 }
 
+/** Family-shaped KPI cell (.ts-kpi grammar) with one extra: the dqss
+ *  container-query hide classes (dqss-kpi-medium / dqss-kpi-optional) ride
+ *  the cell itself, and the family Kpi takes no className — so the preview
+ *  keeps this local wiring instead of degrading the responsive KPI ladder. */
 function Kpi({ label, value, className }: { label: string; value: ReactNode; className?: string }) {
   return (
     <div className={"ts-kpi" + (className ? ` ${className}` : "")}>
@@ -218,6 +234,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data?.generated_at ?? entry.generated_at} />
             <span className="ts-chip">{symbol}</span>
+            <SignalDelayChip days={data?.signal_delay_days ?? entry.signal_delay_days} />
             <span className="ts-meta-text">
               {periodStart} → {periodEnd}
               {bars != null ? ` · ${fmtNum(bars)} bars` : ""}
@@ -234,7 +251,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
         )}
       </div>
 
-      <section className="ts-kpis ts-kpis-primary" aria-label="Headline performance">
+      <KpiStrip primary ariaLabel="Headline performance">
         <Kpi label="CAGR" value={<Toned v={cagr}>{fmtPct(cagr)}</Toned>} />
         <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(maxDd)}</span>} />
         <Kpi
@@ -253,7 +270,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
           label="Trades / yr"
           value={fmtNum(tradesYr, 1)}
         />
-      </section>
+      </KpiStrip>
 
       <div className="ts-mode-bar dqss-preview-mode">
         <SegToggle
@@ -315,8 +332,19 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
 });
 
 export function StrategySuite() {
+  const [strategies, setStrategies] = useState<StrategyIndexEntry[]>([]);
+
   useEffect(() => {
-    prefetchAllTearsheets(STRATEGIES.map((s) => s.strategy));
+    let alive = true;
+    void fetchStrategyIndex().then((all) => {
+      if (!alive) return;
+      const ordered = orderSlappers(all);
+      setStrategies(ordered);
+      prefetchAllTearsheets(ordered.map((s) => s.strategy));
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   return (
@@ -342,9 +370,9 @@ export function StrategySuite() {
 
         <DeckStack
           ariaLabel="Strategy tearsheets"
-          rail={STRATEGIES.map((s) => symbolBase(s.symbol))}
+          rail={strategies.map((s) => symbolBase(s.symbol))}
         >
-          {STRATEGIES.map((entry) => (
+          {strategies.map((entry) => (
             <DeckCard key={entry.strategy} className="dqss-card">
               <StrategyTearsheetCard entry={entry} />
             </DeckCard>
