@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_BELIEFS_BACKLOG = 20
 BELIEFS_DOCUMENT_KEY = "beliefs"
 BELIEFS_DOC_TYPE_COLUMN = "Beliefs"
+# Must be allow-listed in chk_documents_category (migration 053); see #1383.
+BELIEFS_CATEGORY = "learning"
 
 __all__ = [
     "DEFAULT_BELIEFS_BACKLOG",
@@ -165,7 +167,7 @@ def distill_beliefs(
         run_type=run_type,
         title=f"Beliefs {run_date.isoformat()}",
         date_str=run_date.isoformat(),
-        category="learning",
+        category=BELIEFS_CATEGORY,
         segment="beliefs",
     )
     mark_decisions_beliefs_folded(
