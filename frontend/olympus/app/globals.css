@@ -21,7 +21,13 @@
    import PLAINLY, never layer(…) — see the sheet header / MIGRATION.md. */
 @import "@digithings/web/styles/effects-chrome.css";
 @import "@digithings/design/quant-native/styles.css";
-@import "@digithings/design/tearsheet/styles.css";
+/* finance-tearsheet family (#1463) — the print-grade .ts-* grammar (replaces
+   the deprecated @digithings/design/tearsheet sheet). Imported PLAINLY on
+   purpose: the sheet manages its own layering, and its @media print grammar
+   (light-token pin, chrome hides, break rules) is the family's differentiator.
+   Olympus's §13 dashboard variants + shell print rules live later in this
+   file, so cascade ties resolve to the app. */
+@import "@digithings/web/styles/finance-tearsheet.css";
 /* chat-core (#1418, adopted by olympus in #1450) — imported PLAINLY on
    purpose (MIGRATION.md rule 2 exception): its element combinators are
    deliberately unlayered so they keep beating plain utilities. Olympus uses
@@ -52,6 +58,10 @@
 /* Tailwind never scans package sources (MIGRATION.md rule 3) — the shared
    finance-charts scaffold's ChartTipShell renders here via lib/lw-chart. */
 @source "../../digiweb/web/src/components/finance-charts";
+
+/* Tailwind never scans package sources — the performance tear sheet renders
+   the shared finance-tearsheet family (MIGRATION.md rule 3). */
+@source "../../digiweb/web/src/components/finance-tearsheet";
 
 /* ── Fonts (next/font routing) ───────────────────────────────────────────
    tokens.css names the families literally ("Geist", "Geist Mono",
@@ -484,13 +494,15 @@ html.light .qn-blueprint-bg {
 }
 
 /* ── Tearsheet: olympus-local layer ─────────────────────────────────
-   The base .ts-* grammar (canon §06) is shared:
-   @digithings/design/tearsheet/styles.css, imported at the top of this
-   file. Below are ONLY olympus’s deliberate variants (§13 dashboard
-   adaptations — tighter panels/KPIs, sans-scale charts, .ts-btn/.ts-notes
-   additions) — they come after the base import, so cascade ties resolve
-   to olympus. The @media print block hides the OLYMPUS shell chrome
-   (#app-sidebar-nav, [data-print-hide]), not digiquant-web’s. */
+   The base .ts-* grammar (canon §06) is the shared finance-tearsheet
+   family: @digithings/web/styles/finance-tearsheet.css, imported at the
+   top of this file (#1463). Below are ONLY olympus’s deliberate variants
+   (§13 dashboard adaptations — tighter panels/KPIs, sans-scale charts,
+   .ts-btn/.ts-notes additions) — unlayered and after the family import,
+   so they beat both the family’s @layer components defaults and its
+   unlayered ties. The @media print block keeps olympus’s page geometry
+   and shell-chrome hides; everything else in print (light-token pin,
+   .ts-* chrome hides, break rules) now comes from the family sheet. */
 .ts-header-actions { display: flex; align-items: center; gap: 0.7rem; }
 .ts-btn { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.02em; color: var(--ink); border: 1px solid var(--accent-weak); background: var(--accent-weak); border-radius: var(--r-sm); padding: 0.45rem 0.85rem; cursor: pointer; transition: border-color 0.2s var(--ease), color 0.2s var(--ease); }
 .ts-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -515,17 +527,19 @@ html.light .qn-blueprint-bg {
 }
 
 @media print {
+  /* Olympus shell chrome — hidden so the printed PDF is just the tear sheet.
+     The .ts-* chrome hides, light-token pin, color-adjust, break-inside and
+     scroll-release rules all come from the family sheet. */
+  #app-sidebar-nav, [data-print-hide] { display: none !important; }
+  /* Olympus page geometry (shipped look): zero printer margin, the sheet
+     carries its own 14/13mm padding — overrides the family’s 12/14mm @page
+     margins + zero .ts-page padding. */
   @page { margin: 0; }
-  html, body { background: var(--bg) !important; }
-  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-  /* Olympus shell chrome — hidden so the printed PDF is just the tear sheet. */
-  #app-sidebar-nav, [data-print-hide],
-  .ts-header-actions, .ts-back, .ts-scale { display: none !important; }
   .ts-page { padding: 14mm 13mm; }
-  .ts-header { margin-bottom: 1.4rem; }
-  .ts-panel, .ts-kpi { break-inside: avoid; page-break-inside: avoid; box-shadow: none; }
-  .ts-grid-2 { grid-template-columns: 1fr 1fr; }
-  .ts-table-scroll { max-height: none; overflow: visible; }
-  .ts-table thead th { position: static; }
-  a { color: inherit; }
+  /* Shipped print header: looser than the family pin (1.1rem/0.85rem/1.55rem). */
+  .ts-header { margin-bottom: 1.4rem; padding-bottom: 1.4rem; }
+  .ts-h1 { font-size: clamp(1.7rem, 3.6vw, 2.6rem); }
+  /* The family hides .ts-panel-head (digiquant’s heads are toolbars); olympus’s
+     heads are the printed track labels — content, so they stay. */
+  .ts-panel-head { display: flex !important; }
 }

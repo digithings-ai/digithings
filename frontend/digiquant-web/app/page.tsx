@@ -1,62 +1,32 @@
 import {
   Colophon,
   Footer,
-  Marquee,
-  OdometerStrip,
   PricingTierCard,
   Reveal,
   WordReveal,
   subsystems,
-  type MarqueeItem,
-  type OdometerStat,
 } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
+import { LiveTickerRow } from "@/components/landing/LiveTickerRow";
+import { OlympusPortfolioPanel } from "@/components/landing/OlympusPortfolioPanel";
 import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
 import { OlympusScene } from "@/components/landing/OlympusScene";
 import { StrategySuite } from "@/components/landing/StrategySuite";
 import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
-import strategyIndex from "@/public/strategies/index.json";
-import type { StrategyIndexEntry } from "@/components/tearsheet/types";
-
-// The stack the site copy actually claims (flagship grammar, #1450): the
-// pipeline runs Optuna + NautilusTrader (ResearchPipeline steps 05/06, pricing
-// FAQ), Atlas/Hermes are LangGraph graphs persisting views to Supabase over
-// Polars frames (shared subsystems data), keys ride LiteLLM (pricing FAQ), and
-// the whole box ships as a docker compose command (subsystem pages). Glyphs
-// come from the shared Simple Icons registry where a mark exists;
-// NautilusTrader, Optuna, and LiteLLM have none and read text-only.
-const STACK: MarqueeItem[] = [
-  { name: "NautilusTrader" },
-  { name: "Polars", icon: "polars" },
-  { name: "LangGraph", icon: "langgraph" },
-  { name: "Optuna" },
-  { name: "LiteLLM" },
-  { name: "Supabase", icon: "supabase" },
-  { name: "Docker", icon: "docker" },
-];
+import { MetricsOdometer } from "@/components/landing/MetricsOdometer";
 
 // Real figures only — each one is mined from shipped data, never invented:
 // subsystem count from the shared subsystems registry (Atlas · Hermes ·
-// Kairos), trade count summed from the published tearsheets' strategies
-// index at build time, the 7 pipeline stages from ResearchPipeline's FLOW
+// Kairos), trade count summed live from the Supabase strategy index (inside
+// <MetricsOdometer/>), the 7 pipeline stages from ResearchPipeline's FLOW
 // (01 research → 07 execution), and the zero is Kairos's loopback-only
 // default — nothing reaches a live venue until a human flips the gate.
-const TOTAL_TRADES = (strategyIndex as StrategyIndexEntry[]).reduce(
-  (n, s) => n + s.total_trades,
-  0,
-);
-const METRICS: OdometerStat[] = [
-  { value: String(subsystems.length), label: "subsystems" },
-  { value: "7", label: "pipeline stages" },
-  { value: String(TOTAL_TRADES), label: "backtested trades" },
-  { value: "0", label: "ungated live orders" },
-];
 
 // v7 scroll-driven landing, now wearing the flagship expressive grammar
-// (#1450): mesh hero → drifting stack Marquee → digit-roll OdometerStrip →
+// (#1450): mesh hero → live market ticker → digit-roll OdometerStrip →
 // linear pipeline → Olympus scrolly → strategy suite → the one WordReveal
 // claim → pricing. Client islands; page stays a server component. Every
 // motion moment honors prefers-reduced-motion and reads with no JS.
@@ -87,15 +57,12 @@ export default function Home() {
           </div>
         </HeroMesh>
 
-        <section className="border-y border-hair" aria-label="Built on">
-          <Marquee
-            items={STACK}
-            tone="mute"
-            speed={42}
-            aria-label="Built on NautilusTrader, Polars, LangGraph, Optuna, LiteLLM, Supabase, and Docker"
-            className="py-[0.95rem]"
-          />
-        </section>
+        {/* The single market-pulse tape right under the hero: one shared
+            StockTicker row carrying crypto (keyless Coinbase WS) then the equity
+            majors (seeded from the daily-close view, live intraday from the
+            feed). A client island; SSR-safe (renders a muted "connecting" line
+            until quotes arrive). */}
+        <LiveTickerRow />
 
         <section className="section" id="metrics">
           <div className="wrap">
@@ -111,7 +78,7 @@ export default function Home() {
               </div>
             </Reveal>
             <Reveal>
-              <OdometerStrip stats={METRICS} className="mx-auto mt-[2.2rem] max-w-[880px]" />
+              <MetricsOdometer subsystemCount={subsystems.length} className="mx-auto mt-[2.2rem] max-w-[880px]" />
             </Reveal>
           </div>
         </section>
@@ -119,6 +86,11 @@ export default function Home() {
         <ResearchPipeline />
 
         <OlympusScene />
+
+        {/* The payoff of the Olympus pipeline: the research book Atlas/Hermes
+            maintain, marked live off the same feed. Client island; SSR-safe
+            (renders a plain "connects on deploy" card without env vars). */}
+        <OlympusPortfolioPanel />
 
         <StrategySuite />
 

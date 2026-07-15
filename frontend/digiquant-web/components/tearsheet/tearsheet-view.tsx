@@ -15,25 +15,37 @@ import {
   CandlestickChart,
   ChartLegend,
   ChartResetButton,
-  TimeSeries,
-  TradeReturnChart,
+  DirectionPill,
+  Kpi,
+  KpiStrip,
+  LOOKBACK_OPTIONS,
+  PRINT_FULL_VIEW,
   ReturnsMatrix,
   SegToggle,
-  LOOKBACK_OPTIONS,
+  TimeSeries,
+  TradeLogTable,
+  TradeReturnChart,
+  fmtCompact,
+  fmtNum,
+  fmtPct,
   matchLookbackPreset,
+  runTearsheetPrint,
+  toneClass,
   viewWindowForPreset,
   viewsNear,
+  type ChartScale,
   type LookbackPreset,
   type MatrixMetric,
-  type Scale,
   type ReturnsPeriod,
+  type TradeLogColumn,
+  type TradeLogRow,
   type ViewWindow,
-} from "./charts";
+} from "@digithings/web";
 import { AssetLogoFor } from "./asset-logo";
 import { CurrentPosition, TradeReturnCell } from "./current-position";
 import { LiveMetricsBadge } from "./live-metrics";
-import { fmtCompact, fmtNum, fmtPct, toneClass } from "./format";
 import { PivotStatsPivotToggle, PivotStatsTable } from "./pivot-stats-table";
+import { SignalDelayChip } from "./signal-delay";
 import type { StatsPivot } from "./pivot-stats";
 import { StrategyNotes } from "./strategy-notes";
 import { strategyDisplayName, symbolBase } from "./strategy-names";
@@ -51,27 +63,26 @@ import {
   tradesForPnlChart,
   tradesForDisplay,
 } from "./trades";
-import { type TearsheetData, type TearsheetTrade, type StrategyIndexEntry } from "./types";
-import { PRINT_FULL_VIEW, runPrintTearsheet } from "./print-tearsheet";
-import index from "@/public/strategies/index.json";
-
-const INDEX = index as StrategyIndexEntry[];
-
-function Kpi({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="ts-kpi">
-      <span className="ts-kpi-label">{label}</span>
-      <span className="ts-kpi-value">{value}</span>
-    </div>
-  );
-}
+import { type TearsheetData, type TearsheetTrade } from "./types";
+import { fetchTearsheet } from "@/lib/live/strategies";
 
 function Toned({ v, children }: { v: number | null | undefined; children: React.ReactNode }) {
   const c = toneClass(v);
   return c ? <span className={c}>{children}</span> : <>{children}</>;
 }
 
-function TradeLogTable({
+/** Trade-log wiring over the family TradeLogTable: the open leg renders its
+ *  live mark and unrealized return (TradeReturnCell), closed rows the exit. */
+const TRADE_LOG_COLUMNS: TradeLogColumn[] = [
+  { label: "Direction" },
+  { label: "Date" },
+  { label: "Asset" },
+  { label: "Entry", numeric: true },
+  { label: "Mark", numeric: true },
+  { label: "Return", numeric: true },
+];
+
+function TradeLog({
   trades,
   data,
   asset,
@@ -80,40 +91,23 @@ function TradeLogTable({
   data: TearsheetData;
   asset: string;
 }) {
-  return (
-    <div className="ts-table-wrap ts-table-scroll">
-      <table className="ts-table ts-trades">
-        <thead>
-          <tr>
-            <th>Direction</th>
-            <th>Date</th>
-            <th>Asset</th>
-            <th className="ts-num">Entry</th>
-            <th className="ts-num">Mark</th>
-            <th className="ts-num">Return</th>
-          </tr>
-        </thead>
-        <tbody>
-          {trades.map((t) => {
-            const open = isOpenTrade(t);
-            const mark = open ? markPriceForTrade(t, data) : t.exit_price;
-            return (
-              <tr key={t.n} className={open ? "ts-trade-open" : undefined}>
-                <td><span className={`ts-dir ts-dir-${t.direction}`}>{t.direction}</span></td>
-                <td>{tradeLogDate(t)}</td>
-                <td>{asset}</td>
-                <td className="ts-num">{fmtNum(t.entry_price, 2)}</td>
-                <td className="ts-num">{fmtNum(mark, 2)}</td>
-                <td className="ts-num">
-                  <TradeReturnCell t={t} data={data} />
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
+  const rows: TradeLogRow[] = trades.map((t) => {
+    const open = isOpenTrade(t);
+    const mark = open ? markPriceForTrade(t, data) : t.exit_price;
+    return {
+      key: t.n,
+      open,
+      cells: [
+        <DirectionPill key="dir" direction={t.direction} />,
+        tradeLogDate(t),
+        asset,
+        fmtNum(t.entry_price, 2),
+        fmtNum(mark, 2),
+        <TradeReturnCell key="ret" t={t} data={data} />,
+      ],
+    };
+  });
+  return <TradeLogTable columns={TRADE_LOG_COLUMNS} rows={rows} />;
 }
 
 type TearsheetMode = "charts" | "tables";
@@ -129,7 +123,7 @@ function PrintHeading({ children }: { children: string }) {
 export function TearsheetView({ slug }: { slug: string }) {
   const [data, setData] = useState<TearsheetData | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [scale, setScale] = useState<Scale>("linear");
+  const [scale, setScale] = useState<ChartScale>("linear");
   const [period, setPeriod] = useState<ReturnsPeriod>("monthly");
   const [matrixMetric, setMatrixMetric] = useState<MatrixMetric>("return");
   const [viewOverride, setViewOverride] = useState<ViewWindow | null>(null);
@@ -142,19 +136,16 @@ export function TearsheetView({ slug }: { slug: string }) {
   const printThemeRef = useRef<string | null>(null);
   const printTitleRef = useRef<string | null>(null);
 
-  const entry = INDEX.find((e) => e.strategy === slug);
-
   useEffect(() => {
     let alive = true;
-    const src = `/strategies/${slug}.json`;
-    fetch(src)
-      .then((r) => {
-        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-        return r.json();
+    fetchTearsheet(slug)
+      .then((d) => {
+        if (!alive) return;
+        if (d) setData(d);
+        else setErr("Could not load tearsheet data — the live store returned nothing.");
       })
-      .then((d: TearsheetData) => { if (alive) setData(d); })
       .catch((e: unknown) => {
-        if (alive) setErr(`Could not load tearsheet data (${src}): ${e instanceof Error ? e.message : String(e)}`);
+        if (alive) setErr(`Could not load tearsheet data: ${e instanceof Error ? e.message : String(e)}`);
       });
     return () => { alive = false; };
   }, [slug]);
@@ -215,7 +206,7 @@ export function TearsheetView({ slug }: { slug: string }) {
   const chartTab = chartTabPick ?? (hasPrice ? "price" : "equity");
 
   useEffect(() => {
-    const sheetTitle = strategyDisplayName(slug, entry?.label);
+    const sheetTitle = strategyDisplayName(slug, data?.label);
     const onBeforePrint = () => {
       printThemeRef.current = document.documentElement.getAttribute("data-theme");
       printTitleRef.current = document.title;
@@ -238,7 +229,7 @@ export function TearsheetView({ slug }: { slug: string }) {
       window.removeEventListener("beforeprint", onBeforePrint);
       window.removeEventListener("afterprint", onAfterPrint);
     };
-  }, [slug, entry?.label]);
+  }, [slug, data?.label]);
 
   const avgTrade = useMemo(() => avgTradePct(data ? data.trades.map((t) => t.pnl_pct) : []), [data]);
 
@@ -290,7 +281,7 @@ export function TearsheetView({ slug }: { slug: string }) {
   if (err) return <p className="ts-status ts-status-error">{err}</p>;
   if (!data) return <p className="ts-status">Loading tearsheet…</p>;
 
-  const title = strategyDisplayName(slug, entry?.label);
+  const title = strategyDisplayName(slug, data?.label);
   const asset = symbolBase(data.symbol);
   const cagr = cagrPct(data.initial_capital, data.final_equity, data.period_start, data.period_end);
 
@@ -298,7 +289,7 @@ export function TearsheetView({ slug }: { slug: string }) {
   const chartScale = printing ? "linear" : scale;
 
   const handlePrint = () => {
-    runPrintTearsheet({ strategyTitle: title, setPrinting });
+    runTearsheetPrint({ documentTitle: `${title} — DigiQuant`, setPrinting });
   };
 
   const zoomed = !viewsNear(view, presetView);
@@ -368,6 +359,7 @@ export function TearsheetView({ slug }: { slug: string }) {
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data.generated_at} />
             <span className="ts-chip">{data.symbol}</span>
+            <SignalDelayChip days={data.signal_delay_days} detail="full" />
             <span className="ts-meta-text">{data.period_start} → {data.period_end} · {fmtNum(data.bars)} bars</span>
           </div>
         </div>
@@ -388,7 +380,7 @@ export function TearsheetView({ slug }: { slug: string }) {
 
       <CurrentPosition data={data} asset={asset} />
 
-      <section className="ts-kpis ts-kpis-primary" aria-label="Headline performance">
+      <KpiStrip primary ariaLabel="Headline performance">
         <Kpi label="CAGR" value={<Toned v={cagr}>{fmtPct(cagr)}</Toned>} />
         <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(data.max_drawdown_pct)}</span>} />
         <Kpi label="Profit factor" value={fmtNum(data.profit_factor, 2)} />
@@ -398,7 +390,7 @@ export function TearsheetView({ slug }: { slug: string }) {
           label="Trades / yr"
           value={fmtNum(tradesPerYear(data.total_trades, data.period_start, data.period_end), 1)}
         />
-      </section>
+      </KpiStrip>
 
       <div className="ts-mode-bar">
         <SegToggle
@@ -506,7 +498,7 @@ export function TearsheetView({ slug }: { slug: string }) {
           </div>
           <div className="ts-tab-pane" hidden={tableTab !== "trades"}>
             <PrintHeading>Trade log</PrintHeading>
-            <TradeLogTable trades={sortedTrades} data={data} asset={asset} />
+            <TradeLog trades={sortedTrades} data={data} asset={asset} />
           </div>
         </div>
       </section>

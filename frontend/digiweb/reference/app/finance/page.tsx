@@ -11,7 +11,7 @@ import { StockTickerReference } from "@/components/stock-ticker-reference";
 import { SyncedTearsheetReference } from "@/components/synced-tearsheet-reference";
 
 const CHART_RULES = [
-  "Lightweight Charts (TradingView's open-source engine) is the only price/series primitive — custom SVG candles are retired.",
+  "Lightweight Charts (TradingView's open-source engine) is the price/series primitive for DASHBOARD surfaces. Print-grade surfaces (PDF-exporting tearsheets) compose the SVG finance-tearsheet family instead — canvas rasterizes in print. The split ruling: frontend/digiweb/CHARTS.md.",
   "We feed it our own backtest data. No external feed, no market connection; attributionLogo is off, so there's no TradingView branding.",
   "The canvas background is always transparent and every color is read from a design token (--up/--down, --hair, --accent, --font-mono) — never hard-coded.",
   "A MutationObserver on data-theme re-applies the palette, so charts re-theme live on light/dark and livery changes.",
@@ -86,8 +86,10 @@ export default function FinancePage() {
           Equity and its underwater drawdown in a single chart, split into stacked panes. Because
           they share one time scale, the x-axis, crosshair and zoom move together — hover the top
           pane and the drawdown reads the same bar. Both series come from the same walk, so every
-          dip lines up with the red beneath it. This is the multi-chart primitive; add a pane per
-          series rather than stacking separate charts.
+          dip lines up with the red beneath it. This is the multi-chart primitive for screen-only
+          dashboards; add a pane per series rather than stacking separate charts. Print-grade
+          tearsheets — anything with a PDF export — compose the SVG{" "}
+          <a href="/tearsheet">finance-tearsheet family</a> instead.
         </p>
         <div className="pc-frame pc-frame--tall">
           <SyncedTearsheetReference />

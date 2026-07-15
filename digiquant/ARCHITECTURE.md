@@ -197,7 +197,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_export` | Exports strategy config to a target artifact |
 | `digiquant_run_pipeline` | Runs the full LangGraph pipeline |
 | `digiquant_fetch_coinbase_ohlcv` | Fetches daily OHLCV from Coinbase (CCXT) into the price-history cache |
-| `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend |
+| `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend. Delegates each strategy to `generate_tearsheets.run_strategy_isolated` (spawn-per-strategy, #1389 — a second in-process engine would SIGABRT the long-lived server); resolves calibrations file → Supabase (example only via `allow_example_calibrations`), accepts `signal_delay_days` (#1462), and returns `{"entries", "failures"}` with per-strategy errors as data. Does **not** write `index.json` (the CLI `main()` owns that) |
 | `digiquant_validate_slapper_vs_tradingview` | Trade-level parity check of a Slapper strategy against a TradingView "List of Trades" CSV export |
 
 The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by DigiGraph's hub dispatch to alias the pipeline call.
@@ -223,7 +223,7 @@ Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank
 
 **Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
 
-**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read the committed JSON under `frontend/digiquant-web/public/strategies/` (`index.json` manifest + per-strategy `*.json`). These are **static artifacts**, not live Supabase/API queries. Cloudflare Pages rebuilds when `main` changes.
+**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read **live from Supabase `strategy_tearsheets`** at runtime (#1069): the client fetches the row via the shared anon browser client (`frontend/digiquant-web/lib/live/`), so a fresh nightly upsert updates the site with **no rebuild or redeploy**. The static-JSON artifacts under `public/strategies/` were removed. Build-time still needs the *route list* (`generateStaticParams` in `app/strategies/[id]/page.tsx` hardcodes the three Slapper slugs); the public env (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`) must be set in the Cloudflare Pages build for the client to light up.
 
 Regenerate only when calibrations are available from **one** of:
 
@@ -235,12 +235,12 @@ Without real calibrations, `SlapperStrategy` falls back to `calibrations.example
 **Daily pipeline (intended):**
 
 ```bash
-python digiquant/scripts/fetch_coinbase.py
+python digiquant/scripts/fetch_coinbase.py --through-yesterday
 python digiquant/scripts/generate_tearsheets.py --from-supabase --push-supabase --signal-delay-days 3
-git add frontend/digiquant-web/public/strategies/ && git commit  # static site rebuild
+# No git commit — the DB is the delivery; the site reads strategy_tearsheets live.
 ```
 
-`--from-supabase` loads fitted params from `strategy_calibrations`. `--push-supabase` writes headline metrics + equity curve to `strategy_tearsheets` (anon-readable for a future live UI) — with the delay active, both the static JSON and this upsert carry the same delayed view. The digiquant.io site still serves the committed JSON under `public/strategies/` until the frontend fetches Supabase at runtime.
+`--from-supabase` loads fitted params from `strategy_calibrations`. `--push-supabase` upserts the **full tearsheet payload** into `strategy_tearsheets.metrics` — the complete `TearsheetData` (headline metrics, equity/drawdown curves, OHLC bars, trades) plus a derived `current_signal` (position / last signal date / last price) and the index extras (`label`/`kind`/`avg_trade_pct`) — and refreshes the normalized `strategy_signals` row. digiquant.io reads that one anon-readable row live, so updating it updates the site with no deploy. The scheduled job (`pipeline-digiquant-tearsheets.yml`) is the same three steps: fetch → generate `--push-supabase --signal-delay-days 3`, no repo write.
 
 **One-time upload** (after optimizing in TradingView):
 
@@ -1006,6 +1006,20 @@ read goes live only once the repointed ingest has populated `core`.
 has no anon policy — anon reads return an empty set (not a permission error) while the service
 role keeps full access (mirrors the `atlas_run_diagnostics` idiom, migration 033). Run
 `get_advisors(type="security")` after applying; expect zero `rls_disabled_in_public` findings.
+
+**Live price fan-out + public portfolio surface (#1461/#1462).** Migration
+[`supabase/migrations/050_public_portfolio_views.sql`](supabase/migrations/050_public_portfolio_views.sql)
+adds digiquant.io's public read surface to this project's single migration chain: three
+curated anon-readable views — `public_portfolio_positions`, `public_nav_history`,
+`public_price_latest` — exposing performance metrics only (never
+`rationale`/`pm_notes`/risk parameters; user ruling 2026-07-10, #1462). They pair with
+the `supabase/functions/prices-live/` Deno edge function, which polls Finnhub
+server-side (key held as a Supabase secret, dormant until `FINNHUB_API_KEY` is set) and
+fans quotes out to browsers on the Realtime broadcast channel `prices:live`. Crypto
+quotes take the other lane — streamed client-side from Coinbase's public WebSocket. See
+[`supabase/README.md`](supabase/README.md) for the two-lane design, pg_cron + pg_net
+scheduling, and the one-time setup steps, and [`supabase/SCHEMA.md`](supabase/SCHEMA.md)
+for the view inventory.
 
 ## DigiSearch Integration (#199)
 

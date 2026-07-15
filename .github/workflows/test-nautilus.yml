@@ -22,5 +22,22 @@ jobs:
           pip install -e "./digiquant[dev,nautilus]"
           pip install pandas cryptography
 
-      - name: Nautilus runner unit smoke
-        run: python -m pytest tests/dq/test_nautilus_runner.py -m unit -v --tb=short
+      - name: Nautilus-gated unit tests
+        # Runs every file that tests/dq/conftest.py drops from collection when
+        # the nautilus extra is absent (collect_ignore) — the plain digiquant
+        # lane (test-digiquant.yml) never sees them (#1501). Keep this list in
+        # sync with conftest.py's collect_ignore AND the nautilus_smoke filter
+        # in scripts/ci_paths.yaml. If a file reintroduces the Linux SIGABRT
+        # (exit 134, #42), drop it here with a comment citing #42.
+        run: |
+          python -m pytest \
+            tests/dq/test_api.py \
+            tests/dq/test_audit.py \
+            tests/dq/test_backtest.py \
+            tests/dq/test_calibrations_loader.py \
+            tests/dq/test_nautilus_runner.py \
+            tests/dq/test_pipeline_graph.py \
+            tests/dq/test_strategies.py \
+            tests/dq/test_tearsheet_isolation.py \
+            tests/dq/test_v1_jobs.py \
+            -m unit -v --tb=short

@@ -18,7 +18,15 @@
 @import "@digithings/web/styles/word-reveal.css";
 @import "@digithings/web/styles/marquee.css";
 @import "@digithings/web/styles/deck.css";
-@import "@digithings/design/tearsheet/styles.css";
+/* finance-tearsheet family (#1463): the full .ts-* grammar INCLUDING the
+   @media print export grammar — self-layering, so imported plainly. */
+@import "@digithings/web/styles/finance-tearsheet.css";
+/* finance-composites family (#1461/#1462 live surfaces): the seamless
+   StockTicker tape (.tk-*) that the homepage live-market row wears, plus the
+   PerformanceDashboard hairline grammar (.pdash-*) the Olympus live-portfolio
+   panel composes. Single-class defaults self-layer into @layer components;
+   imported plainly per the sheet's own cascade contract. */
+@import "@digithings/web/styles/finance-composites.css";
 
 /* Shared components (@digithings/web) carry token-backed utilities, and
    Tailwind never scans package sources on its own — point it at them. */
@@ -28,6 +36,8 @@
 @source "../../digiweb/web/src/components/data-layout";
 @source "../../digiweb/web/src/components/typography";
 @source "../../digiweb/web/src/components/deck";
+@source "../../digiweb/web/src/components/finance-tearsheet";
+@source "../../digiweb/web/src/components/finance-composites";
 
 :root[data-theme] {
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
@@ -86,234 +96,13 @@
    the app-local `.price-card-accent` vertical gradient is deleted, keeping one
    accent grammar across every pricing surface. An app-local override could not
    compose anyway: card utilities beat @layer components.) */
-/* Tearsheet grammar (.ts-*) lives in @digithings/design/tearsheet/styles.css
-   (imported at the top of this file). App-local tearsheet bits below:
-   the @media print grammar further down (library page rhythm moved to
-   utilities on app/strategies/page.tsx). */
-
-/* Screen: print chrome hidden until export. */
-.ts-print-brand,
-.ts-print-footer,
-.ts-print-heading { display: none; }
-
+/* Tearsheet grammar (.ts-*) — screen AND print — is the promoted
+   finance-tearsheet family sheet (@digithings/web, imported at the top of
+   this file, #1463). Only the app layout shells below need print resets:
+   they are digiquant-web chrome, not family grammar. */
 @media print {
-  @page {
-    size: auto;
-    margin: 12mm 14mm;
-  }
-
-  /* Print pins the LIGHT theme as literals: print cannot rely on data-theme
-     (a dark-mode visitor must still get paper-white output), so each value
-     below mirrors its :root[data-theme="light"] token from tokens.css —
-     named per line. Paper deviations are deliberate: pure #ffffff instead of
-     the off-white canvas, and opaque hairlines instead of alpha ones (alpha
-     borders dither on some print engines). Everything else in this @media
-     block consumes these pinned custom properties, never raw literals. */
-  :root[data-theme],
-  :root[data-theme="dark"],
-  :root[data-theme="light"],
-  html.ts-printing {
-    color-scheme: light;
-    --bg: #ffffff;                          /* --bg light = #FBFBF9; paper stays pure white */
-    --surface: #ffffff;                     /* --surface light = #FFFFFF */
-    --surface-2: #ffffff;                   /* --surface-2 light = #F4F4F1; flattened to paper */
-    --hair: #dddddd;                        /* --hair light = rgba(10,15,20,.10), opaque for print */
-    --hair-2: #cccccc;                      /* --hair-2 light = rgba(10,15,20,.18), opaque for print */
-    --ink: #14181b;                         /* --ink light */
-    --ink-soft: #5c636a;                    /* --ink-soft light */
-    --ink-mute: #8a9097;                    /* --ink-mute light */
-    --accent: #0e8c7f;                      /* --accent light */
-    --accent-weak: rgba(14, 140, 127, 0.1); /* --accent-weak light (.12 → .1 on paper) */
-    --on-accent: #ffffff;                   /* --on-accent light */
-    --up: #0e8c7f;                          /* --up light (paper phosphor) */
-    --down: #c9533b;                        /* --down light */
-    --warn: #b5832a;                        /* --warn light */
-  }
-
-  html, body {
-    background: var(--bg) !important;
-    color: var(--ink) !important;
-  }
-  body {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-    color-adjust: exact;
-  }
-
-  /* chrome dies in print (canon §17): nav, footer, decorative layers,
-     toolbars, and toggles — the print brand/footer elements replace them. */
-  .grain,
-  .glow,
-  .site-nav,
-  .nav-shell,
-  .footer,
-  .ts-header-actions,
-  .ts-back,
-  .ts-scale,
-  .ts-charts-toolbar,
-  .ts-panel-head,
-  .ts-panel-tools,
-  .ts-seg,
-  .ts-reset,
-  .ts-hint,
-  .ts-mode-bar,
-  .nav-toggle,
-  .theme-toggle {
-    display: none !important;
-  }
-  .ts-strategy-notes {
-    break-inside: avoid;
-    page-break-inside: avoid;
-    margin-top: 1rem;
-  }
-  .ts-strategy-notes-summary { display: none !important; }
-  .ts-strategy-notes-body {
-    display: flex !important;
-    padding-top: 0;
-  }
-  .ts-strategy-notes-body::before {
-    content: "Notes";
-    display: block;
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--ink-mute);
-    margin-bottom: 0.35rem;
-  }
-  .ts-live-badge {
-    display: none !important;
-  }
-
-  .ts-print-brand {
-    display: flex !important;
-    align-items: center;
-    gap: 0.55rem;
-    margin-bottom: 1.1rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--hair);
-  }
-  .ts-print-brand-word {
-    font-family: var(--font-mono);
-    font-size: 0.95rem;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    color: var(--ink);
-    text-transform: lowercase;
-  }
-  .ts-print-brand-link {
-    margin-left: auto;
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    color: var(--accent);
-    text-decoration: none;
-  }
-
-  .ts-print-footer {
-    display: flex !important;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.45rem 1rem;
-    margin-top: 1.6rem;
-    padding-top: 0.85rem;
-    border-top: 1px solid var(--hair);
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    color: var(--ink-mute);
-  }
-  .ts-print-footer-brand {
-    font-weight: 600;
-    color: var(--ink);
-    text-transform: lowercase;
-  }
-  .ts-print-footer a {
-    color: var(--accent);
-    text-decoration: none;
-  }
-  .ts-print-footer-note { margin-left: auto; }
-
-  .ts-print-heading {
-    display: block !important;
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--ink-mute);
-    margin: 0 0 0.65rem;
-  }
-  .ts-tab-stack > .ts-print-heading:first-child {
-    font-size: 0.78rem;
-    color: var(--ink);
-    margin-top: 0;
-    margin-bottom: 0.85rem;
-    padding-bottom: 0.35rem;
-    border-bottom: 1px solid var(--hair);
-  }
-
-  .ts-tab-stack[hidden] { display: block !important; }
-  .ts-tab-pane[hidden] { display: block !important; min-height: auto; }
-  .ts-tab-content { min-height: auto; }
-  .ts-tab-pane {
-    break-inside: avoid;
-    page-break-inside: avoid;
-    margin-bottom: 1.25rem;
-    padding-bottom: 0.35rem;
-  }
-  .ts-tab-pane-matrix { break-inside: auto; page-break-inside: auto; }
-
   .dq-subpage { padding-top: 0; }
-  .ts-page { padding: 0; }
   .wrap { max-width: none; padding: 0; }
-  .ts-header {
-    margin-bottom: 1.1rem;
-    padding-bottom: 0.85rem;
-    border-bottom: 1px solid var(--hair);
-  }
-  .ts-h1 { font-size: 1.55rem; }
-
-  .ts-panel,
-  .ts-kpi,
-  .ts-card,
-  .ts-position {
-    break-inside: avoid;
-    page-break-inside: avoid;
-    box-shadow: none !important;
-    background: var(--surface) !important;
-    border: 1px solid var(--hair) !important;
-  }
-  .ts-position-live { border-color: var(--hair) !important; }
-  .ts-chip {
-    background: var(--surface) !important;
-    border-color: var(--hair) !important;
-  }
-  .ts-trade-open { background: var(--surface) !important; }
-
-  .ts-grid-2 { grid-template-columns: 1fr 1fr; }
-  .ts-table-scroll,
-  .ts-breakdown-wrap,
-  .ts-pivot-wrap {
-    max-height: none !important;
-    overflow: visible !important;
-  }
-  .ts-table thead th {
-    position: static;
-    background: var(--surface) !important;
-  }
-  .ts-table th,
-  .ts-table td {
-    border-color: var(--hair) !important;
-  }
-  .ts-trades tr { break-inside: avoid; page-break-inside: avoid; }
-
-  .ts-matrix-cell {
-    border-color: var(--hair) !important;
-    background: var(--surface) !important;
-  }
-
-  .ts-svg.is-interactive { pointer-events: none; }
-  a { color: inherit; text-decoration: none; }
 }
 
 /* ==========================================================================
