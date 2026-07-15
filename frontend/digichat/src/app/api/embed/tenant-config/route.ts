@@ -15,6 +15,7 @@ export async function GET(req: Request): Promise<Response> {
         welcome: cfg.welcome,
         suggestions: cfg.suggestions ?? getTenantSuggestionPool(cfg.slug),
         placeholder: cfg.placeholder,
+        lockedContact: cfg.lockedContact,
       }
     : { slug: "embed", gateMode: "turn_limited", theme: "dark", accent: null, attribution: false };
   return new Response(JSON.stringify(body), {
