@@ -171,6 +171,39 @@ describe("parseEmbedTenants", () => {
       )
     ).toThrow(/theme/);
   });
+
+  it("throws when lockedContact is not a string", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: { type: "digigraph" },
+            gateMode: "turn_limited",
+            token: "t",
+            lockedContact: 123,
+          },
+        })
+      )
+    ).toThrow(/lockedContact/);
+  });
+
+  it("parses a valid lockedContact", () => {
+    vi.stubEnv(
+      "DIGICHAT_EMBED_TENANTS",
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "turn_limited",
+          token: "t",
+          lockedContact: "info@example.com",
+        },
+      })
+    );
+    resetEmbedTenantRegistryForTests();
+    expect(resolveEmbedTenantByHost("example.com")?.lockedContact).toBe("info@example.com");
+  });
 });
 
 describe("resolveEmbedTenantByHost", () => {

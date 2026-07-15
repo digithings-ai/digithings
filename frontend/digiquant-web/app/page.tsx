@@ -1,12 +1,10 @@
 import {
   Colophon,
   Footer,
-  OdometerStrip,
   PricingTierCard,
   Reveal,
   WordReveal,
   subsystems,
-  type OdometerStat,
 } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
@@ -18,25 +16,14 @@ import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
 import { OlympusScene } from "@/components/landing/OlympusScene";
 import { StrategySuite } from "@/components/landing/StrategySuite";
 import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
-import strategyIndex from "@/public/strategies/index.json";
-import type { StrategyIndexEntry } from "@/components/tearsheet/types";
+import { MetricsOdometer } from "@/components/landing/MetricsOdometer";
 
 // Real figures only — each one is mined from shipped data, never invented:
 // subsystem count from the shared subsystems registry (Atlas · Hermes ·
-// Kairos), trade count summed from the published tearsheets' strategies
-// index at build time, the 7 pipeline stages from ResearchPipeline's FLOW
+// Kairos), trade count summed live from the Supabase strategy index (inside
+// <MetricsOdometer/>), the 7 pipeline stages from ResearchPipeline's FLOW
 // (01 research → 07 execution), and the zero is Kairos's loopback-only
 // default — nothing reaches a live venue until a human flips the gate.
-const TOTAL_TRADES = (strategyIndex as StrategyIndexEntry[]).reduce(
-  (n, s) => n + s.total_trades,
-  0,
-);
-const METRICS: OdometerStat[] = [
-  { value: String(subsystems.length), label: "subsystems" },
-  { value: "7", label: "pipeline stages" },
-  { value: String(TOTAL_TRADES), label: "backtested trades" },
-  { value: "0", label: "ungated live orders" },
-];
 
 // v7 scroll-driven landing, now wearing the flagship expressive grammar
 // (#1450): mesh hero → live market ticker → digit-roll OdometerStrip →
@@ -91,7 +78,7 @@ export default function Home() {
               </div>
             </Reveal>
             <Reveal>
-              <OdometerStrip stats={METRICS} className="mx-auto mt-[2.2rem] max-w-[880px]" />
+              <MetricsOdometer subsystemCount={subsystems.length} className="mx-auto mt-[2.2rem] max-w-[880px]" />
             </Reveal>
           </div>
         </section>

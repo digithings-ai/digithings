@@ -29,6 +29,13 @@ export type EmbedTenantConfig = {
   /** Default input placeholder (URL ?placeholder= wins). */
   placeholder?: string;
   /**
+   * Contact email shown when the free-turn gate locks (turn_limited tenants).
+   * When set, the paywall becomes a "contact us" message with a mailto link
+   * instead of the default bring-your-own-key prompt — for tenants who'd
+   * rather route capped visitors to sales than offer BYOK.
+   */
+  lockedContact?: string;
+  /**
    * Per-tenant secret. Knowing a tenant's host string is public (it's the
    * tenant's own domain) so registry membership alone must never grant
    * embed access — callers must also present this value as X-Embed-Token.
@@ -140,6 +147,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.placeholder !== undefined && typeof v.placeholder !== "string") {
     throw new Error(`${ctx}: placeholder must be a string`);
   }
+  if (v.lockedContact !== undefined && typeof v.lockedContact !== "string") {
+    throw new Error(`${ctx}: lockedContact must be a string`);
+  }
 
   return {
     slug: v.slug,
@@ -154,6 +164,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     welcome: typeof v.welcome === "string" ? v.welcome : undefined,
     suggestions,
     placeholder: typeof v.placeholder === "string" ? v.placeholder : undefined,
+    lockedContact: typeof v.lockedContact === "string" ? v.lockedContact : undefined,
   };
 }
 

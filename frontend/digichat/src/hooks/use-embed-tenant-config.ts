@@ -14,6 +14,7 @@ export type EmbedTenantClientConfig = {
   welcome?: string;
   suggestions?: string[];
   placeholder?: string;
+  lockedContact?: string;
 };
 
 /** Legacy defaults — deliberately the *gated* configuration, so a slow or
