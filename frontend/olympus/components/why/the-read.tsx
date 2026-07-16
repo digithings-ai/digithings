@@ -51,7 +51,7 @@ export function TheReadBody({ digest }: { digest: DigestPayload }) {
                   title={isToday ? 'Refreshed in the latest run' : 'Carried from the last baseline'}
                 >
                   <span
-                    className={`h-1 w-1 rounded-full ${isToday ? 'bg-up' : 'bg-ink-mute/50'}`}
+                    className={`h-1 w-1 rounded-full ${isToday ? 'bg-accent' : 'bg-ink-mute/50'}`}
                     aria-hidden
                   />
                   {seg}

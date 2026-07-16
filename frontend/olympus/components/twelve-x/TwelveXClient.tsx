@@ -326,7 +326,7 @@ export default function TwelveXClient() {
   if (error) {
     return (
       <div className={`${SUBPAGE_MAX} py-10`}>
-        <div className="glass-card p-10 text-center text-down text-sm">{error}</div>
+        <div className="glass-card p-10 text-center text-warn text-sm">{error}</div>
       </div>
     );
   }

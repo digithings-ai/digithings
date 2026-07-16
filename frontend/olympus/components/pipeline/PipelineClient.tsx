@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { buildPipelineDayData, fanoutIdForKey } from '@/lib/pipeline-graph-data';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
@@ -65,6 +65,12 @@ export default function PipelineClient() {
 
   const [selectedDate, setSelectedDate] = useState(params.date ?? today());
   const [availableDates, setAvailableDates] = useState<string[]>([selectedDate]);
+  // Only auto-snap the landing date while the user hasn't chosen one: seeding
+  // with UTC "today" opens on a date with zero documents every day between
+  // 00:00 UTC and the ~12:00 UTC run (US evenings) — snap to the latest real
+  // run instead. An explicit ?date= deep link or a selector click wins.
+  const dateExplicit = useRef(Boolean(params.date));
+  const [dayLoading, setDayLoading] = useState(true);
   const [dayData, setDayData] = useState<PipelineDayData>({
     fanoutCounts: {},
     fanoutKeys: {},
@@ -96,6 +102,7 @@ export default function PipelineClient() {
       setHeadline(null);
       setDecision(null);
       setRegimeChips([]);
+      setDayLoading(true);
 
       try {
         const { createClient } = await import('@supabase/supabase-js');
@@ -108,20 +115,25 @@ export default function PipelineClient() {
 
         // Independent reads — run them together instead of one round-trip at a time.
         const [datesRes, docsRes, digestRes, rebalanceRes, macroRes] = await Promise.all([
+          // Run dates come from daily_snapshots (exactly one row per run day).
+          // Deriving them from `documents` selects EVERY row (~40-60/day), and
+          // the PostgREST 1000-row default cap silently truncated the oldest
+          // dates out of the 30-day window.
           supabase
-            .from('documents')
+            .from('daily_snapshots')
             .select('date')
             .gte('date', thirtyDaysAgo)
             .order('date', { ascending: false }),
           supabase.from('documents').select('document_key').eq('date', selectedDate),
           // The digest is published as `digest` on baseline days, `digest-delta`
-          // on delta days (the majority of days) — see DIGEST_DOCUMENT_KEYS.
+          // on delta days (the majority of days). A backfilled date can carry
+          // BOTH keys — `.maybeSingle()` errors on >1 row and blanked the
+          // headline, so fetch both and pick by DIGEST_DOCUMENT_KEYS precedence.
           supabase
             .from('documents')
-            .select('payload')
+            .select('document_key, payload')
             .in('document_key', DIGEST_DOCUMENT_KEYS)
-            .eq('date', selectedDate)
-            .maybeSingle(),
+            .eq('date', selectedDate),
           supabase
             .from('documents')
             .select('payload')
@@ -142,7 +154,16 @@ export default function PipelineClient() {
           const uniqueDates = [...new Set((datesRes.data as { date: string }[]).map((r) => r.date))]
             .sort()
             .reverse();
-          if (uniqueDates.length > 0) setAvailableDates(uniqueDates);
+          if (uniqueDates.length > 0) {
+            setAvailableDates(uniqueDates);
+            // Landing-date snap: no explicit choice + the seeded date has no
+            // run → jump to the latest run. Runs at most once per load (after
+            // the snap, selectedDate IS in uniqueDates).
+            if (!dateExplicit.current && !uniqueDates.includes(selectedDate)) {
+              setSelectedDate(uniqueDates[0]);
+              return; // the effect re-runs for the snapped date
+            }
+          }
         }
 
         if (docsRes.data) {
@@ -151,7 +172,11 @@ export default function PipelineClient() {
 
         // Headline comes from the digest's structured `headline` field — pipeline
         // documents leave `documents.content` empty and carry everything in `payload`.
-        const digestPayload = digestRes.data?.payload as Record<string, unknown> | undefined;
+        const digestRows = (digestRes.data ?? []) as { document_key: string; payload: unknown }[];
+        const digestRow = DIGEST_DOCUMENT_KEYS
+          .map((k) => digestRows.find((r) => r.document_key === k))
+          .find(Boolean);
+        const digestPayload = digestRow?.payload as Record<string, unknown> | undefined;
         const headlineText = typeof digestPayload?.headline === 'string' ? digestPayload.headline.trim() : '';
         if (headlineText) setHeadline(headlineText);
 
@@ -165,6 +190,8 @@ export default function PipelineClient() {
         setRegimeChips(regimeChipsFromMacroPayload(macroRes.data?.payload));
       } catch {
         // Supabase not configured or no data — degrade gracefully
+      } finally {
+        if (!cancelled) setDayLoading(false);
       }
     })();
 
@@ -184,6 +211,13 @@ export default function PipelineClient() {
     setActiveDocumentKey(node.documentKey ?? null);
   }, []);
 
+  const handleDateChange = useCallback((date: string) => {
+    dateExplicit.current = true;
+    setSelectedDate(date);
+  }, []);
+
+  const noRunForDate = !dayLoading && dayData.presentKeys.size === 0;
+
   return (
     <div className="flex flex-col flex-1 min-h-0 min-w-0">
       {/* Summary strip row */}
@@ -193,13 +227,20 @@ export default function PipelineClient() {
             headline={headline}
             regimeChips={regimeChips}
             decision={decision}
+            loading={dayLoading}
           />
           <PipelineDaySelector
             dates={availableDates}
             value={selectedDate}
-            onChange={setSelectedDate}
+            onChange={handleDateChange}
           />
         </div>
+        {noRunForDate && (
+          <p className="font-mono text-[12px] text-ink-mute" role="status">
+            No pipeline run recorded for this date — the graph below shows the
+            expected shape, not real output.
+          </p>
+        )}
       </div>
 
       {/* Canvas + NodeDetail */}

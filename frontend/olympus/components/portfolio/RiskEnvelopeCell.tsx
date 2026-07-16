@@ -44,7 +44,7 @@ export default function RiskEnvelopeCell({
             <div className="absolute inset-y-0 left-0 w-1/2 rounded-l-full bg-down/40" />
             <div className="absolute inset-y-0 right-0 w-1/2 rounded-r-full bg-up/40" />
             <div
-              className="absolute -top-0.5 h-2 w-0.5 bg-[var(--accent)]"
+              className="absolute -top-0.5 h-2 w-0.5 bg-accent"
               style={{ left: `${entryPct}%` }}
               aria-hidden
             />

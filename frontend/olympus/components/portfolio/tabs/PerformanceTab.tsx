@@ -313,7 +313,7 @@ export default function PerformanceTab() {
             value={totalReturnValue}
             valueClass={pnlColor(range === 'itd' ? metrics.portfolio_pnl : rangeReturn)}
             icon={BarChart3}
-            iconColor="text-up"
+            iconColor="text-accent"
             subtitle={totalReturnLabel}
           />
           <StatCard

@@ -31,7 +31,7 @@ export function BriefPanelBody({
   const analysts = useMemo(() => asStringList(brief?.analyst_names), [brief?.analyst_names]);
 
   if (loading) return <p className="text-sm text-ink-mute">Loading brief…</p>;
-  if (error) return <p className="text-sm text-down">{error}</p>;
+  if (error) return <p className="text-sm text-warn">{error}</p>;
   if (!brief) return null;
 
   return (

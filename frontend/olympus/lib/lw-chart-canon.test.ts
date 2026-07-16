@@ -10,16 +10,12 @@ const MIGRATED = [
   'components/portfolio/performance-chart-workspace.tsx',
   'components/portfolio/performance-drawdown-chart.tsx',
   'components/portfolio/performance-rolling-chart.tsx',
-  'components/portfolio/PositionPriceChart.tsx',
-  'components/portfolio/PositionContributionChart.tsx',
   'components/portfolio/PositionDrilldown.tsx',
 ];
 
 /** Categorical/composition surfaces — sanctioned to stay on recharts. */
 const RECHARTS_SANCTIONED = [
   'components/portfolio/sleeve-stacked-chart.tsx',
-  'components/portfolio/PositionContributionEventBars.tsx',
-  'components/portfolio/nav-sparkline.tsx',
   'components/observability/AttributionTab.tsx',
   'components/observability/DecisionScorecardTab.tsx',
   'components/twelve-x/ConsensusTab.tsx',

@@ -18,11 +18,11 @@ const VIEWS: { key: EventsView; label: string }[] = [
   { key: 'timeline', label: 'Timeline' },
 ];
 
-/** Impact → .fin-* color + dot styling. */
+/** Impact → .fin-* color + dot styling. Severity is chrome, not P&L (F5): high uses --warn, never --down. */
 function impactClass(impact: string): { text: string; dot: string } {
   const i = impact.trim().toLowerCase();
-  if (i === 'high') return { text: 'text-down', dot: 'bg-down' };
-  if (i === 'medium') return { text: 'text-warn', dot: 'bg-warn' };
+  if (i === 'high') return { text: 'text-warn', dot: 'bg-warn' };
+  if (i === 'medium') return { text: 'text-warn/70', dot: 'bg-warn/60' };
   return { text: 'text-ink-mute', dot: 'bg-ink-mute/60' };
 }
 

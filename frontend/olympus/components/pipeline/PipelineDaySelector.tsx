@@ -3,15 +3,32 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export interface PipelineDaySelectorProps {
+  /** Available run dates, newest first (PipelineClient sorts descending). */
   dates: string[];
   value: string;
   onChange: (date: string) => void;
 }
 
-export default function PipelineDaySelector({ dates, value, onChange }: PipelineDaySelectorProps) {
+/**
+ * Chevron targets against a NEWEST-FIRST date list: "previous" (chevron-left)
+ * is the chronologically older day = the HIGHER index; "next" is the newer
+ * day = the LOWER index. Exported for unit tests — the original index math
+ * assumed an ascending list and shipped with the arrows inverted (#1538).
+ */
+export function adjacentDates(
+  dates: string[],
+  value: string,
+): { prev: string | null; next: string | null } {
   const idx = dates.indexOf(value);
-  const hasPrev = idx > 0;
-  const hasNext = idx < dates.length - 1;
+  if (idx === -1) return { prev: null, next: null };
+  return {
+    prev: idx < dates.length - 1 ? dates[idx + 1] : null,
+    next: idx > 0 ? dates[idx - 1] : null,
+  };
+}
+
+export default function PipelineDaySelector({ dates, value, onChange }: PipelineDaySelectorProps) {
+  const { prev, next } = adjacentDates(dates, value);
 
   const label = formatDate(value);
 
@@ -20,8 +37,8 @@ export default function PipelineDaySelector({ dates, value, onChange }: Pipeline
       <button
         type="button"
         aria-label="Previous day"
-        disabled={!hasPrev}
-        onClick={() => hasPrev && onChange(dates[idx - 1])}
+        disabled={!prev}
+        onClick={() => prev && onChange(prev)}
         className="text-ink-mute hover:text-ink disabled:opacity-30 transition-colors"
       >
         <ChevronLeft size={14} />
@@ -32,8 +49,8 @@ export default function PipelineDaySelector({ dates, value, onChange }: Pipeline
       <button
         type="button"
         aria-label="Next day"
-        disabled={!hasNext}
-        onClick={() => hasNext && onChange(dates[idx + 1])}
+        disabled={!next}
+        onClick={() => next && onChange(next)}
         className="text-ink-mute hover:text-ink disabled:opacity-30 transition-colors"
       >
         <ChevronRight size={14} />

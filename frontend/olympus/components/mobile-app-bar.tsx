@@ -15,7 +15,7 @@ export default function MobileAppBar() {
     <header
       data-print-hide
       className="sticky top-0 z-[997] flex shrink-0 border-b border-hair bg-surface/95 pt-[env(safe-area-inset-top,0px)] backdrop-blur-md md:hidden"
-      aria-label="Atlas"
+      aria-label="Olympus"
     >
       <div className="flex min-h-[72px] w-full items-center justify-between gap-2 px-4 sm:px-6">
         <button

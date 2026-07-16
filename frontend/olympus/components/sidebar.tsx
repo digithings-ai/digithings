@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
 import { AtlasMark } from '@/components/atlas-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
@@ -64,12 +65,12 @@ export default function Sidebar() {
   const renderLink = (item: NavItem) => {
     const { href, label, icon: Icon, demoted } = item;
     const isActive = routeActive(pathname, base, href);
-    return (
+    const link = (
       <Link
         key={href}
         href={href}
         onClick={() => setMobileNavOpen(false)}
-        title={sidebarCollapsed ? label : undefined}
+        aria-current={isActive ? 'page' : undefined}
         data-demoted={demoted ? 'true' : undefined}
         className={`
           flex items-center gap-3 py-3 text-sm font-medium transition-all
@@ -86,6 +87,15 @@ export default function Sidebar() {
         <Icon size={demoted ? 18 : 20} className="shrink-0" />
         <span className={`qn-sidebar-label ${sidebarCollapsed ? 'md:sr-only' : ''}`}>{label}</span>
       </Link>
+    );
+    if (!sidebarCollapsed) return link;
+    // Collapsed rail: the label is sr-only, so surface it as the shared
+    // @digithings/web Tooltip (hover + focus, announced) instead of title=.
+    return (
+      <Tooltip key={href}>
+        <TooltipTrigger render={link} />
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
     );
   };
 
@@ -104,8 +114,9 @@ export default function Sidebar() {
 
       <aside
         id="app-sidebar-nav"
+        aria-label="Sidebar"
         className={`
-          bg-surface backdrop-blur-[12px] border-r border-hair
+          bg-surface/95 backdrop-blur-md border-r border-hair
           flex flex-col shrink-0
           fixed top-0 left-0 h-screen z-[1000] transition-all duration-300 ease-out
           w-[260px]
@@ -146,7 +157,7 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <nav className="flex-1 py-4 flex flex-col">
+        <nav aria-label="Primary" className="flex-1 py-4 flex flex-col">
           {sidebarCollapsed ? null : (
             <button
               type="button"
@@ -159,10 +170,12 @@ export default function Sidebar() {
               <kbd className="font-mono text-[10px] text-ink-mute">⌘K</kbd>
             </button>
           )}
-          {primary.map(renderLink)}
-          {demoted.length > 0 ? (
-            <div className="mt-auto pt-4 border-t border-hair/60">{demoted.map(renderLink)}</div>
-          ) : null}
+          <TooltipProvider delay={200}>
+            {primary.map(renderLink)}
+            {demoted.length > 0 ? (
+              <div className="mt-auto pt-4 border-t border-hair/60">{demoted.map(renderLink)}</div>
+            ) : null}
+          </TooltipProvider>
         </nav>
 
         <div
