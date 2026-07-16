@@ -5,10 +5,11 @@ import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 import { hasResolvedTime, eventInstant } from '@/lib/twelve-x/fetch';
 import { useTwelveX } from './context';
 
+// Severity is chrome, not P&L (F5): high impact uses --warn, never --down.
 function impactClass(impact: string): string {
   const i = (impact ?? '').trim().toLowerCase();
-  if (i === 'high') return 'bg-down';
-  if (i === 'medium') return 'bg-warn';
+  if (i === 'high') return 'bg-warn';
+  if (i === 'medium') return 'bg-warn/60';
   return 'bg-ink-mute/60';
 }
 

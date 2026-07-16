@@ -77,12 +77,27 @@ describe('PipelineNode', () => {
       );
       expect(html).toContain('cursor-default');
       expect(html).toContain('aria-disabled="true"');
-      expect(html).toContain('No output for this step on this day');
+      // The explanation moved from a native title= to the promoted
+      // @digithings/web Tooltip (#1538) — SSR emits the trigger wiring; the
+      // bubble itself only renders on hover/focus.
+      expect(html).toContain('tooltip-trigger');
       expect(html).not.toContain('cursor-pointer');
       // Inline style, not a Tailwind class — the `.glass-card.reveal-in` mount
       // animation rule (app/globals.css) sets `opacity:1` with higher CSS
       // specificity than an `opacity-50` utility class would have.
       expect(html).toContain('opacity:0.5');
+    });
+
+    it('non-inert nodes carry no tooltip trigger', () => {
+      const html = renderToStaticMarkup(
+        createElement(PipelineNode, {
+          node: { ...leafNoData, documentKey: 'macro' },
+          expandable: false,
+          expanded: false,
+          onActivate: () => {},
+        }),
+      );
+      expect(html).not.toContain('tooltip-trigger');
     });
 
     it('does not render a fanout-parent substep as inert even without a documentKey', () => {

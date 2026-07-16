@@ -29,7 +29,7 @@ export default function ProposedByPipelineShelf({ proposed }: { proposed: Propos
             </div>
             <a
               href={buildPipelineHref({ date: d.runDate, stage: 'selection', node: d.node })}
-              className="inline-flex items-center gap-1 text-xs text-[var(--accent)] hover:underline"
+              className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
             >
               Open in Pipeline
               <ExternalLink size={12} aria-hidden />

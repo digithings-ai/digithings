@@ -6,12 +6,12 @@ import { CalendarClock, Globe, Users, X } from 'lucide-react';
 import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 import type { MatchedOpinions } from './EventsTab';
 
-/** Impact → trader-facing RISK level + .fin-* color. */
+/** Impact → trader-facing RISK level + .fin-* color. Severity is chrome, not P&L (F5): high uses --warn. */
 function riskLevel(impact: string): { label: string; text: string; dot: string } {
   const i = (impact ?? '').trim().toLowerCase();
-  if (i === 'high') return { label: 'High risk', text: 'text-down', dot: 'bg-down' };
+  if (i === 'high') return { label: 'High risk', text: 'text-warn', dot: 'bg-warn' };
   if (i === 'medium' || i === 'med')
-    return { label: 'Medium risk', text: 'text-warn', dot: 'bg-warn' };
+    return { label: 'Medium risk', text: 'text-warn/70', dot: 'bg-warn/60' };
   return { label: 'Low risk', text: 'text-ink-mute', dot: 'bg-ink-mute/60' };
 }
 
