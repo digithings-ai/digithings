@@ -1,6 +1,12 @@
 /* ==========================================================================
    @digithings/web — shared controls layer CSS (components/controls/*, #1419).
-   The static control atoms: Button, Badge, Card, Input, Label, Avatar.
+   The static control atoms: Button, Badge, Card, Input, Label, Avatar —
+   plus the promoted controls patterns (#1548): Skeleton (sk-*), EmptyState
+   (ctl-empty*), SegmentedControl/Pager/IconButton (nb-*), TagsInput (tg-*),
+   SearchBar (ctl-search / sb-*). The #1548 families carry the reference
+   dress only (their olympus-side dress deltas await a product ruling); they
+   follow the same layering split as the chat dress — single-class defaults
+   in @layer components, state/structural rules unlayered.
 
    Every control carries TWO dresses (per the E3 ruling — API compatibility
    beats aesthetic purity, digichat's rendered look must be reproducible
@@ -1074,10 +1080,408 @@
   height: 0.75rem;
 }
 
+/* ── Skeleton — the sk-* shimmer grammar (#1548, from
+      reference/app/controls/controls.css). Shape defaults in
+      @layer components so call-site width/height utilities can size them
+      (olympus's snapshot skeleton uses h-20 blocks); the ::after shimmer,
+      keyframes, and reduced-motion guard stay unlayered ─────────────────── */
+
+@layer components {
+  .sk {
+    position: relative;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--ink) 9%, transparent);
+    border-radius: 6px;
+  }
+
+  .sk-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  .sk-line {
+    height: 0.72rem;
+  }
+
+  .sk-line--sm {
+    height: 0.5rem;
+  }
+
+  .sk-btn {
+    width: 6.6rem;
+    height: 2rem;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  .sk-block {
+    height: 1.5rem;
+    width: 60%;
+    border-radius: 5px;
+  }
+}
+
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--ink) 13%, transparent),
+    transparent
+  );
+  animation: sk-shimmer 1.5s var(--ease) infinite;
+}
+
+@keyframes sk-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ── EmptyState — the no-results / first-run / error triple (#1548). The
+      specimen wore token utilities (empty-states-reference.tsx); translated
+      value-for-value here (the /NN washes as the color-mix(in oklab, …)
+      Tailwind v4 emits). Defaults in @layer components; the error-variant
+      glyph tint is a structural (descendant) rule and stays unlayered ───── */
+
+@layer components {
+  .ctl-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    background: color-mix(in oklab, var(--surface) 55%, transparent);
+    padding: 1.8rem 1.3rem;
+    text-align: center;
+  }
+
+  .ctl-empty-glyph {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin-bottom: 0.15rem;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--ink) 8%, transparent);
+    color: var(--ink-mute);
+  }
+
+  .ctl-empty-title {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
+    font-weight: 400;
+    color: var(--ink);
+  }
+
+  .ctl-empty-body {
+    margin: 0 0 0.4rem;
+    max-width: 24ch;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--ink-mute);
+  }
+}
+
+/* the error state is the only one that spends the down color */
+.ctl-empty--error .ctl-empty-glyph {
+  background: color-mix(in oklab, var(--down) 12%, transparent);
+  color: var(--down);
+}
+
+/* ── NavButtons — segmented switch, pager, icon buttons (#1548, from
+      reference/app/controls/controls.css). Defaults in @layer components;
+      hover/disabled and the aria-pressed / aria-current selection states
+      (replacing the specimen's .on classes) stay unlayered. Order matters:
+      the aria selection rules sit after :hover at equal specificity, so a
+      hovered selected cell keeps the selected dress, as in the specimen ── */
+
+@layer components {
+  .nb-seg-group {
+    display: inline-flex;
+    overflow: hidden;
+    border: 1px solid var(--hair);
+    border-radius: 8px;
+  }
+
+  .nb-seg {
+    padding: 0.4rem 0.85rem;
+    border: none;
+    border-left: 1px solid var(--hair);
+    background: var(--surface);
+    color: var(--ink-mute);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
+  }
+
+  .nb-pager {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .nb-page,
+  .nb-page-edge {
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.6rem;
+    border: 1px solid var(--hair);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+  }
+
+  .nb-icon {
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-mute);
+    cursor: pointer;
+    transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
+  }
+}
+
+.nb-seg:first-child {
+  border-left: none;
+}
+
+.nb-seg:hover {
+  color: var(--ink-soft);
+}
+
+.nb-seg[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--accent-weak);
+}
+
+.nb-page:hover:not([aria-current="page"]),
+.nb-page-edge:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
+
+.nb-page[aria-current="page"] {
+  color: var(--surface-inverse, #06110f);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.nb-page-edge:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nb-icon:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+/* ── TagsInput — chips multi-select (#1548, from
+      reference/app/controls/controls.css; the specimen's baked-in
+      margin-top moved to the consumer). Defaults in @layer components;
+      focus-within, hovers, and the chipless-input stretch (structural
+      :first-child) stay unlayered ─────────────────────────────────────── */
+
+@layer components {
+  .tg-field {
+    width: min(100%, 30rem);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--hair);
+    border-radius: 10px;
+    background: var(--surface);
+    cursor: text;
+    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  }
+
+  .tg-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.22rem 0.35rem 0.22rem 0.6rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--hair));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  .tg-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.1rem;
+    border: none;
+    background: transparent;
+    color: var(--ink-mute);
+    cursor: pointer;
+    border-radius: 999px;
+    transition: color 0.15s var(--ease);
+  }
+
+  .tg-input {
+    min-width: 7rem;
+    border: none;
+    background: transparent;
+    padding: 0.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--ink);
+    outline: none;
+  }
+
+  .tg-input::placeholder {
+    color: var(--ink-mute);
+  }
+
+  .tg-suggest-row {
+    margin-top: 0.7rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .tg-suggest-label {
+    margin-right: 0.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.56rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-mute);
+  }
+
+  .tg-suggest-chip {
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--hair);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+  }
+}
+
+.tg-field:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* the input stretches to the full row only while the field is chipless
+   (the specimen's conditional flex-1: placeholder gets full width; once
+   chips exist the input sits compact after the last one) */
+.tg-field .tg-input:first-child {
+  flex: 1 1 0%;
+}
+
+.tg-x:hover {
+  color: var(--ink);
+}
+
+.tg-suggest-chip:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
+
+/* ── SearchBar — glyph · input · clear/hint (#1548, from
+      reference/app/controls/controls.css + the specimen's input/clear
+      utilities; the baked-in margin-top moved to the consumer). Defaults
+      in @layer components; focus-within, hover, and the UA search-cancel
+      reset stay unlayered. The reference `/` keycap hint (.sb-hint) stays
+      in the reference's controls.css — it is consumer markup, and its
+      unlayered .kbd override depends on that sheet's import order ──────── */
+
+@layer components {
+  .ctl-search {
+    width: min(100%, 26rem);
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--hair);
+    border-radius: 10px;
+    background: var(--surface);
+    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  }
+
+  .sb-glyph {
+    display: inline-flex;
+    color: var(--ink-mute);
+  }
+
+  .sb-input {
+    flex: 1 1 0%;
+    border: none;
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--ink);
+    outline: none;
+  }
+
+  .sb-input::placeholder {
+    color: var(--ink-mute);
+  }
+
+  .sb-clear {
+    padding: 0.1rem 0.2rem;
+    border: none;
+    background: transparent;
+    color: var(--ink-mute);
+    font-size: 0.7rem;
+    cursor: pointer;
+  }
+}
+
+.ctl-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* native search UA affordance has no Tailwind utility — kept as the
+   .sb-input class's rule; the clear button replaces it */
+.sb-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.sb-clear:hover {
+  color: var(--ink);
+}
+
 /* ── reduced motion ─────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   .ctl-btn-spinner {
     animation: none !important;
+  }
+
+  /* skeletons go static — the ink-tint placeholder stays, the sweep stops */
+  .sk::after {
+    animation: none;
   }
 }

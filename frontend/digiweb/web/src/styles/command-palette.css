@@ -1,0 +1,222 @@
+/* ==========================================================================
+   @digithings/web — command-palette family structural CSS
+   (components/command-palette/<CommandPalette/>: the ⌘K command bar shell).
+
+   Import AFTER the token bridge, in the app's globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/command-palette.css";
+     @source "<path-to>/digiweb/web/src/components/command-palette";
+   Import this sheet PLAINLY (no layer(...)) — it manages its own layering:
+
+   - single-class DEFAULT rules sit in `@layer components`, where the app's
+     `utilities` layer wins — call-site utilities can retune a default;
+   - STATE / STRUCTURAL rules (pseudo-classes/-elements, the .on active row,
+     descendant selectors) stay UNLAYERED on purpose so they keep beating
+     plain call-site utilities — the cascade contract from MIGRATION.md.
+     Wrapping this import in layer(…) demotes the state rules and breaks
+     the rendered look.
+
+   Consumer-supplied custom props (fallbacks baked in):
+     --cp-z   overlay z-index (falls back to 40) — set it at the call site
+              when the app's chrome stacks higher than the reference's.
+
+   .cp-trigger is the open affordance (a demo/search button dressed like the
+   input row) — it ships with the family even though the shell itself never
+   renders it. .cp-kbd is the palette's own keycap (the reference's global
+   .kbd, carried here so the shell is self-contained in any app).
+   ========================================================================== */
+
+@layer components {
+  .cp-trigger {
+    margin-top: 1.2rem;
+    width: min(100%, 26rem);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem 0.8rem 0.7rem 1rem;
+    border: 1px solid var(--hair);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--ink-mute);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+  }
+
+  .cp-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: var(--cp-z, 40);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 14vh;
+  }
+
+  .cp-scrim {
+    position: absolute;
+    inset: 0;
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  .cp-panel {
+    position: relative;
+    width: min(92vw, 34rem);
+    max-height: 62vh;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--hair);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--surface) 92%, var(--bg));
+    box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+  }
+
+  .cp-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.8rem 0.9rem;
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .cp-search-glyph {
+    color: var(--ink-mute);
+    display: inline-flex;
+  }
+
+  .cp-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    outline: none;
+  }
+
+  .cp-results {
+    overflow-y: auto;
+    padding: 0.4rem;
+  }
+
+  .cp-group-label {
+    padding: 0.5rem 0.6rem 0.25rem;
+    font-family: var(--font-mono);
+    font-size: 0.56rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-mute);
+  }
+
+  .cp-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.6rem;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .cp-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--accent);
+  }
+
+  .cp-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    background: var(--accent);
+  }
+
+  .cp-label {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cp-desc {
+    display: block;
+    font-size: 0.62rem;
+    color: var(--ink-mute);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cp-row-key {
+    color: var(--ink-mute);
+  }
+
+  .cp-empty {
+    padding: 1.4rem 0.6rem;
+    text-align: center;
+    color: var(--ink-mute);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+
+  .cp-foot {
+    display: flex;
+    gap: 1.2rem;
+    padding: 0.6rem 0.9rem;
+    border-top: 1px solid var(--hair);
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--ink-mute);
+  }
+
+  .cp-kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 0.3rem;
+    border: 1px solid var(--hair);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    line-height: 1;
+    color: var(--ink-soft);
+    vertical-align: middle;
+  }
+}
+
+/* ── state / structural (unlayered on purpose — the cascade contract) ───── */
+
+.cp-trigger:hover {
+  color: var(--ink-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--hair));
+}
+
+.cp-input::placeholder {
+  color: var(--ink-mute);
+}
+
+.cp-row.on {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--ink);
+}
+
+.cp-foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
