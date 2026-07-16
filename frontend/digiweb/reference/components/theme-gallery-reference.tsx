@@ -45,7 +45,7 @@ export function ThemeGallery() {
             style={{ ["--tg" as string]: o.hex }}
             onClick={() => applyLivery(o.id)}
           >
-            <span className="tg-chip" aria-hidden="true" />
+            <span className="tg-swatch-chip" aria-hidden="true" />
             <span className="tg-label">{o.label}</span>
           </button>
         ))}

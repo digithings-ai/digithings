@@ -26,7 +26,7 @@ vi.mock('@/lib/observability-queries', async () => {
 });
 
 vi.mock('@/components/observability/AttributionTab', () => ({ default: () => null }));
-vi.mock('@/components/AtlasLoader', () => ({ default: () => null }));
+vi.mock('@/components/page-skeleton', () => ({ default: () => null }));
 
 vi.mock('react', async () => {
   const actual = await vi.importActual<typeof import('react')>('react');

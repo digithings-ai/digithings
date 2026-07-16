@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AtlasLoader from '@/components/AtlasLoader';
+import PageSkeleton from '@/components/page-skeleton';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import { OlympusTearsheetView } from '@/components/tearsheet/OlympusTearsheetView';
@@ -44,7 +44,8 @@ export default function PerformancePage() {
         {error ? (
           <p className="ts-status ts-status-error">{error}</p>
         ) : !data ? (
-          <AtlasLoader fullScreen={false} />
+          // bare: .ts-page already owns the container + padding (#1548)
+          <PageSkeleton bare />
         ) : (
           <OlympusTearsheetView data={data} />
         )}

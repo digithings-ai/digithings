@@ -13,8 +13,8 @@ import {
   type SeriesMarker,
   type Time,
 } from 'lightweight-charts';
+import { SearchBar, SyncedTearsheet, TagChip, type TearsheetPoint } from '@digithings/web';
 import type { NavChartPoint, PerfChartPoint } from '@/lib/types';
-import { PerformanceDrawdownChart } from '@/components/portfolio/performance-drawdown-chart';
 import { PerformanceRollingChart } from '@/components/portfolio/performance-rolling-chart';
 import type { PerformanceChartView } from '@/lib/performance-series';
 import { buildDailyReturnsWithNavIndex } from '@/lib/performance-series';
@@ -28,7 +28,7 @@ import { ChartTipShell, toLineData, useChartTip, useLightweightChart } from '@/l
 const VIEW_OPTIONS: { id: PerformanceChartView; label: string; hint: string }[] = [
   { id: 'nav', label: 'NAV vs comparables', hint: 'Indexed series; legend removes an overlay' },
   { id: 'daily_returns', label: 'Daily returns', hint: 'Day-over-day % with cumulative NAV' },
-  { id: 'drawdown', label: 'Drawdown', hint: 'Peak-to-trough underwater %' },
+  { id: 'drawdown', label: 'Drawdown', hint: 'NAV with peak-to-trough underwater %' },
   {
     id: 'rolling',
     label: 'Risk-adjusted',
@@ -266,20 +266,13 @@ function ComparableDropdown({
   return (
     <div ref={rootRef} className="flex flex-wrap items-center gap-2">
       {selected.map((t) => (
-        <span
+        <TagChip
           key={t}
-          className="inline-flex items-center gap-0.5 pl-2 pr-1 py-0.5 rounded-md text-[11px] font-mono font-medium border border-accent/35 bg-accent/10 text-accent"
-        >
-          {t}
-          <button
-            type="button"
-            onClick={() => onRemove(t)}
-            className="p-0.5 rounded hover:bg-ink/10 text-ink-soft hover:text-ink leading-none"
-            aria-label={`Remove ${t}`}
-          >
-            ×
-          </button>
-        </span>
+          className="tg-chip-quant"
+          label={t}
+          onRemove={() => onRemove(t)}
+          removeAriaLabel={`Remove ${t}`}
+        />
       ))}
 
       <div className="relative">
@@ -297,14 +290,13 @@ function ComparableDropdown({
 
         {open && (
           <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,18rem)] rounded-lg border border-hair bg-term-bg shadow-xl overflow-hidden">
-            <input
+            <SearchBar
               id="comparable-ticker-search"
-              type="search"
+              className="ctl-search-row"
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={setQ}
               placeholder="Search all tickers…"
               aria-label="Search tickers in price history"
-              className="w-full px-2.5 py-2 text-sm bg-term-bg border-b border-hair text-ink placeholder:text-ink-mute focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent/30"
               autoComplete="off"
               autoFocus
             />
@@ -504,6 +496,19 @@ export function PerformanceChartWorkspace({
   activityMarkerDates?: string[];
   activityEventsByDate?: Record<string, { ticker: string; event: string }[]>;
 }) {
+  // Drawdown view rides the shared <SyncedTearsheet/> (#1548): one
+  // lightweight-charts instance, NAV pane over the underwater pane, shared
+  // time axis / crosshair / zoom. Memoized — the primitive rebuilds its
+  // chart when the series identities change (range switches swap the data).
+  const tearsheetEquity = useMemo<TearsheetPoint[]>(
+    () => snaps.map((s) => ({ time: s.date, value: s.nav })),
+    [snaps]
+  );
+  const tearsheetDrawdown = useMemo<TearsheetPoint[]>(
+    () => drawdownData.map((d) => ({ time: d.date, value: d.drawdown })),
+    [drawdownData]
+  );
+
   return (
     <div className="glass-card p-0 overflow-hidden">
       <div className="p-4 border-b border-hair bg-term-bg/60 space-y-3">
@@ -566,7 +571,17 @@ export function PerformanceChartWorkspace({
 
         {view === 'drawdown' && (
           <div className="h-[min(520px,58vh)] min-h-[360px] w-full">
-            <PerformanceDrawdownChart data={drawdownData} />
+            {tearsheetDrawdown.length < 2 ? (
+              <div className="h-full flex items-center justify-center text-ink-mute text-sm">
+                Not enough NAV history for drawdown.
+              </div>
+            ) : (
+              <SyncedTearsheet
+                equity={tearsheetEquity}
+                drawdown={tearsheetDrawdown}
+                ariaLabel="Portfolio NAV with underwater drawdown"
+              />
+            )}
           </div>
         )}
 

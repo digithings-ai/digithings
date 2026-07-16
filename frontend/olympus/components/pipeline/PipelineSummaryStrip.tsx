@@ -1,3 +1,4 @@
+import { Skeleton } from '@digithings/web';
 import type { RegimeChip, RegimeChipColor } from '@/lib/render-pipeline-payloads';
 
 export type { RegimeChip, RegimeChipColor };
@@ -35,9 +36,9 @@ export default function PipelineSummaryStrip({
         {headline ? (
           <span className="text-[14.5px] leading-snug text-ink">{headline}</span>
         ) : loading ? (
-          // Skeleton pulse — a placeholder must not wear the exact type style
-          // of a real headline (SnapshotSkeleton bar recipe).
-          <span className="block h-4 max-w-[420px] rounded bg-ink/10 animate-pulse" />
+          // Skeleton bar — a placeholder must not wear the exact type style
+          // of a real headline. sk shimmer per the #1548 one-grammar ruling.
+          <Skeleton className="block h-4 max-w-[420px]" />
         ) : (
           <span className="text-[14.5px] leading-snug text-ink-mute">
             No digest for this day
