@@ -10,7 +10,8 @@
 
 export type EmbedBackendConfig =
   | { type: "digigraph" }
-  | { type: "external-relay"; url: string };
+  | { type: "external-relay"; url: string }
+  | { type: "foundry"; projectEndpoint: string; agentName: string };
 
 export type EmbedTenantConfig = {
   slug: string;
@@ -96,8 +97,25 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       throw new Error(`${ctx}: backend.url must be https`);
     }
     backendCfg = { type: "external-relay", url: backend.url };
+  } else if (backend?.type === "foundry") {
+    if (typeof backend.projectEndpoint !== "string" || !backend.projectEndpoint.trim()) {
+      throw new Error(`${ctx}: foundry backend requires a "projectEndpoint"`);
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(backend.projectEndpoint);
+    } catch {
+      throw new Error(`${ctx}: backend.projectEndpoint is not a valid URL`);
+    }
+    if (parsed.protocol !== "https:") {
+      throw new Error(`${ctx}: backend.projectEndpoint must be https`);
+    }
+    if (typeof backend.agentName !== "string" || !backend.agentName.trim()) {
+      throw new Error(`${ctx}: foundry backend requires an "agentName"`);
+    }
+    backendCfg = { type: "foundry", projectEndpoint: backend.projectEndpoint, agentName: backend.agentName };
   } else {
-    throw new Error(`${ctx}: backend.type must be "digigraph" or "external-relay"`);
+    throw new Error(`${ctx}: backend.type must be "digigraph", "external-relay", or "foundry"`);
   }
 
   if (v.gateMode !== "turn_limited" && v.gateMode !== "ungated") {
