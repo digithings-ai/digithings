@@ -123,7 +123,7 @@ export default function AllocationsPositionsTable(props: {
         <label className="flex items-center gap-2 text-[11px] text-ink-mute select-none">
           <input
             type="checkbox"
-            className="accent-[var(--accent)]"
+            className="accent-accent"
             checked={showInactive}
             onChange={(e) => setShowInactive(e.target.checked)}
           />
@@ -196,7 +196,7 @@ export default function AllocationsPositionsTable(props: {
                               aria-hidden
                             >
                               <span
-                                className="block h-full rounded-full bg-[var(--accent)]/40"
+                                className="block h-full rounded-full bg-accent/40"
                                 style={{ width: `${pctOfMax}%` }}
                               />
                             </span>
@@ -270,7 +270,7 @@ export default function AllocationsPositionsTable(props: {
                                 node: `analyst/${p.ticker.toUpperCase()}`,
                               })}
                               onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 text-[var(--accent)] hover:underline"
+                              className="inline-flex items-center gap-1 text-accent hover:underline"
                               title={`Open ${p.ticker} decision in Pipeline`}
                             >
                               <SignedConvictionBadge value={dec.conviction} />

@@ -1,6 +1,7 @@
 'use client';
 
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
 import type { LaidOutNode } from '@/lib/pipeline-layout';
 
 export interface PipelineNodeProps {
@@ -26,8 +27,13 @@ export default function PipelineNode({
   // open anything (PipelineCanvas.handleNodeClick no-ops on a missing
   // documentKey) — render it visibly inert instead of looking identical to a
   // real, clickable node (#1259 follow-up: a PM couldn't tell "no data today"
-  // from "broken").
+  // from "broken"). State-only steps (thesis, screener, consolidate, preflight)
+  // are inert EVERY day by design — say so instead of the misleading
+  // "no output today" (#1538).
   const isInert = !expandable && !node.documentKey;
+  const inertTitle = node.stateOnly
+    ? 'Runs in pipeline state only — never publishes a document'
+    : 'No output for this step on this day';
 
   // Branches read as nested cards: recessed inset + tighter 6px radius. Standard
   // nodes use the shared .glass-card primitive (flat panel, 8px radius, hover
@@ -45,14 +51,13 @@ export default function PipelineNode({
     .filter(Boolean)
     .join(' ');
 
-  return (
+  const card = (
     <div
       role="button"
       tabIndex={isInert ? -1 : 0}
       aria-disabled={isInert || undefined}
       aria-expanded={expandable ? expanded : undefined}
       aria-label={node.label}
-      title={isInert ? 'No output for this step on this day' : undefined}
       className={cardClass}
       style={{
         left: node.x,
@@ -116,5 +121,18 @@ export default function PipelineNode({
         )}
       </div>
     </div>
+  );
+
+  if (!isInert) return card;
+
+  // Inert nodes explain themselves via the promoted @digithings/web Tooltip
+  // (hover + focus + touch, token-themed) instead of a native title= bubble.
+  return (
+    <TooltipProvider delay={200}>
+      <Tooltip>
+        <TooltipTrigger render={card} />
+        <TooltipContent side="bottom">{inertTitle}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

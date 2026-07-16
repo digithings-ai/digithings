@@ -9,6 +9,7 @@ import {
   useState,
   type ElementType,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
   Activity,
@@ -203,9 +204,14 @@ export default function CommandPalette() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        if (open) closeCommandPalette();
-        else openCommandPalette();
-        setSelectedIndex(0);
+        if (open) {
+          closeCommandPalette();
+        } else {
+          // Reset BEFORE opening so a reopen never flashes the previous query.
+          setQ('');
+          setSelectedIndex(0);
+          openCommandPalette();
+        }
       }
       if (e.key === 'Escape') {
         closeCommandPalette();
@@ -262,7 +268,7 @@ export default function CommandPalette() {
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[2000] flex items-start justify-center pt-[12vh] px-3 sm:px-4" role="dialog" aria-modal="true" aria-label="Command palette">
       <button type="button" className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" onClick={() => closeCommandPalette()} aria-label="Close" />
       <div className="relative w-full max-w-lg rounded-xl border border-hair bg-term-bg shadow-2xl shadow-black/50 overflow-hidden">
@@ -295,40 +301,46 @@ export default function CommandPalette() {
           className="max-h-[min(52vh,420px)] overflow-y-auto py-1"
           role="listbox"
           aria-label="Commands"
+          aria-activedescendant={filtered.length > 0 ? `cmd-option-${selectedIndex}` : undefined}
         >
           {filtered.length === 0 ? (
-            <li className="px-4 py-8 text-center text-sm text-ink-mute">No matches</li>
+            <li role="presentation" className="px-4 py-8 text-center text-sm text-ink-mute">
+              No matches
+            </li>
           ) : (
             filtered.map((item, index) => {
               const Icon = item.icon;
               const active = index === selectedIndex;
               return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={active}
-                    data-cmd-index={index}
-                    onClick={() => onNavigate(item.href)}
-                    onMouseEnter={() => setSelectedIndex(index)}
-                    className={`w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors ${
-                      active
-                        ? 'bg-accent/15 ring-1 ring-inset ring-accent/35'
-                        : 'hover:bg-ink/[0.06]'
-                    }`}
-                  >
-                    <Icon size={16} className="text-accent shrink-0 mt-0.5" aria-hidden />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-medium text-ink">{item.title}</span>
-                      <span className="block text-[11px] text-ink-mute truncate">{item.hint}</span>
-                    </span>
-                  </button>
+                // role="option" lives on the <li> itself so the listbox owns its
+                // options directly; keyboard selection is surfaced through the
+                // listbox's aria-activedescendant (focus stays on the input).
+                <li
+                  key={item.id}
+                  id={`cmd-option-${index}`}
+                  role="option"
+                  aria-selected={active}
+                  data-cmd-index={index}
+                  onClick={() => onNavigate(item.href)}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                  className={`flex w-full cursor-pointer items-start gap-3 px-3 py-2.5 text-left transition-colors ${
+                    active
+                      ? 'bg-accent/15 ring-1 ring-inset ring-accent/35'
+                      : 'hover:bg-ink/[0.06]'
+                  }`}
+                >
+                  <Icon size={16} className="text-accent shrink-0 mt-0.5" aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-ink">{item.title}</span>
+                    <span className="block text-[11px] text-ink-mute truncate">{item.hint}</span>
+                  </span>
                 </li>
               );
             })
           )}
         </ul>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

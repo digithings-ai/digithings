@@ -4,11 +4,13 @@ import { SectionCard } from '@/components/observability/shared';
 import { groupRunEpisodes, type RunEpisode, type RunOutcome } from '@/lib/run-episodes';
 import type { AtlasRunDiagnostics } from '@/lib/types';
 
+// Status chrome, not P&L (F5) — ok/recovered ride the calm accent (matches the
+// freshness banner dot); degraded/failed use --warn, never --up/--down.
 const DOT: Record<RunOutcome, string> = {
-  ok: 'bg-up',
-  recovered: 'bg-up',
-  degraded: 'bg-warn',
-  failed: 'bg-down',
+  ok: 'bg-accent',
+  recovered: 'bg-accent',
+  degraded: 'bg-warn/60',
+  failed: 'bg-warn',
 };
 
 function summary(ep: RunEpisode): string {

@@ -88,6 +88,60 @@ describe("parseEmbedTenants", () => {
     ).toThrow(/https/);
   });
 
+  it("parses a foundry backend", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://dg-agentic-ai.ai.azure.com/api/projects/dg-agentic-search",
+            agentName: "digichat",
+          },
+          gateMode: "turn_limited",
+          token: "shh",
+        },
+      })
+    );
+    expect(reg.get("example.com")?.backend).toEqual({
+      type: "foundry",
+      projectEndpoint: "https://dg-agentic-ai.ai.azure.com/api/projects/dg-agentic-search",
+      agentName: "digichat",
+    });
+  });
+
+  it("throws on a non-https foundry projectEndpoint", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: {
+              type: "foundry",
+              projectEndpoint: "http://insecure.example.com/api/projects/x",
+              agentName: "digichat",
+            },
+            gateMode: "ungated",
+          },
+        })
+      )
+    ).toThrow(/https/);
+  });
+
+  it("throws on a foundry backend missing agentName", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: { type: "foundry", projectEndpoint: "https://dg-agentic-ai.ai.azure.com/api/projects/x" },
+            gateMode: "ungated",
+          },
+        })
+      )
+    ).toThrow(/agentName/);
+  });
+
   it("throws on invalid accent hex", () => {
     expect(() =>
       parseEmbedTenants(

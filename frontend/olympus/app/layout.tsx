@@ -43,11 +43,18 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={fraunces.variable} suppressHydrationWarning>
+    <html
+      lang="en"
+      // Font variables must live on <html>: globals.css re-declares --font-sans/--font-mono
+      // on :root via var(--font-geist-*), which resolves at the declaring element — variables
+      // scoped to <body> are invisible there and the tokens go invalid app-wide (#1538).
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
-      <body className={`qn-blueprint-bg min-h-screen bg-bg text-ink antialiased ${geistSans.variable} ${geistMono.variable} ${fraunces.variable}`}>
+      <body className="qn-blueprint-bg min-h-screen bg-bg text-ink antialiased">
         <ThemeProvider>
           <MotionLayer />
           <DashboardProvider>

@@ -34,12 +34,14 @@ export interface TodaySummariesProps {
   asOfDate: string | null;
 }
 
+// Thesis status is chrome, not P&L (F5): confirmed/active ride the calm accent.
 function statusDot(s: string): string {
   const sl = (s || '').toLowerCase();
-  if (sl.includes('confirmed')) return 'bg-up';
+  if (sl.includes('confirmed') || sl.includes('active')) return 'bg-accent';
   if (sl.includes('monitor') || sl.includes('watch')) return 'bg-warn';
+  // invalidated keeps --down as a negative-outcome signal — recorded F5 ruling, #1538
   if (sl.includes('invalid') || sl.includes('broken')) return 'bg-down';
-  return 'bg-ink-mute';
+  return 'bg-ink-mute/50';
 }
 
 function Doorway({
