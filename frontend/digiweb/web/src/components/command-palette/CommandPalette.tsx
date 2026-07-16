@@ -35,6 +35,13 @@ import { createPortal } from "react-dom";
  *   @source "<path-to>/digiweb/web/src/components/command-palette";
  * Overlay stacking: the overlay's z-index reads var(--cp-z, 40) — set --cp-z
  * at the call site when the app's chrome stacks higher than the reference's.
+ *
+ * Two dresses (styles/command-palette.css):
+ * - dress="reference" (default): the design-reference dress — mono rows,
+ *   surface-mix panel, token scrim.
+ * - dress="glass": the olympus dashboard's shipped ⌘K look, translated
+ *   exactly — black/75 blurred scrim, term-bg panel (32rem, 12px radius),
+ *   sans rows with accent-ring active state.
  */
 export type CommandPaletteItem = {
   /** Stable identity — React key; option DOM ids are index-derived. */
@@ -84,6 +91,13 @@ export type CommandPaletteProps = {
   footer?: ReactNode | boolean;
   /** Trailing input-row slot — defaults to an `esc` keycap. */
   inputTrailing?: ReactNode;
+  /** Leading input-row slot — defaults to the built-in magnifier glyph. */
+  inputLeading?: ReactNode;
+  /**
+   * Input `type` attribute (default "text"). Olympus ships type="search"
+   * (native search-cancel affordance in WebKit/Chromium).
+   */
+  inputType?: string;
   /** Empty-results content; the function form receives the current query. */
   emptyMessage?: ReactNode | ((query: string) => ReactNode);
   /** Dialog aria-label (default "Command palette"). */
@@ -96,6 +110,8 @@ export type CommandPaletteProps = {
   className?: string;
   /** Render into a document.body portal (default) or in place. */
   portal?: boolean;
+  /** Visual dress — "reference" (default) or olympus's "glass". */
+  dress?: "reference" | "glass";
 };
 
 const defaultEmpty = (query: string): ReactNode =>
@@ -110,12 +126,15 @@ export function CommandPalette({
   placeholder = "Type a command or search…",
   footer,
   inputTrailing,
+  inputLeading,
+  inputType = "text",
   emptyMessage,
   ariaLabel = "Command palette",
   listLabel = "Commands",
   inputAriaLabel = "Search commands",
   className,
   portal = true,
+  dress = "reference",
 }: CommandPaletteProps) {
   const baseId = useId();
   const [query, setQuery] = useState("");
@@ -209,25 +228,35 @@ export function CommandPalette({
 
   let flatIndex = -1;
   const palette = (
-    <div className="cp-overlay" role="dialog" aria-modal="true" aria-label={ariaLabel}>
+    <div
+      className={`cp-overlay${dress === "glass" ? " cp-overlay--glass" : ""}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={ariaLabel}
+    >
       <div className="cp-scrim" onClick={onClose} aria-hidden="true" />
       <div className={`cp-panel${className ? ` ${className}` : ""}`}>
         <div className="cp-input-row">
-          <span className="cp-search-glyph" aria-hidden="true">
-            <svg
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-            </svg>
-          </span>
+          {inputLeading !== undefined ? (
+            inputLeading
+          ) : (
+            <span className="cp-search-glyph" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+              </svg>
+            </span>
+          )}
           <input
             className="cp-input"
+            type={inputType}
             placeholder={placeholder}
             value={query}
             autoFocus

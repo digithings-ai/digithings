@@ -4,7 +4,10 @@
    plus the promoted controls patterns (#1548): Skeleton (sk-*), EmptyState
    (ctl-empty*), SegmentedControl/Pager/IconButton (nb-*), TagsInput (tg-*),
    SearchBar (ctl-search / sb-*). The #1548 families carry the reference
-   dress only (their olympus-side dress deltas await a product ruling); they
+   dress, plus olympus's shipped dresses where the two differ (nb-pager
+   "capsule", nb-seg "accent" — see the NavButtons dresses section;
+   tg-chip-quant accent chip and ctl-search-row dropdown filter row — see
+   the TagsInput / SearchBar sections); they
    follow the same layering split as the chat dress — single-class defaults
    in @layer components, state/structural rules unlayered.
 
@@ -1188,12 +1191,85 @@
     line-height: 1.5;
     color: var(--ink-mute);
   }
+
+  /* note — the italic "why it's empty" secondary line (olympus observability) */
+  .ctl-empty-note {
+    margin: 0;
+    max-width: 24ch;
+    font-size: 0.75rem;
+    font-style: italic;
+    line-height: calc(1 / 0.75);
+    color: color-mix(in oklab, var(--ink-mute) 60%, transparent);
+  }
 }
 
 /* the error state is the only one that spends the down color */
 .ctl-empty--error .ctl-empty-glyph {
   background: color-mix(in oklab, var(--down) 12%, transparent);
   color: var(--down);
+}
+
+/* ── EmptyState glass dresses (#1548 olympus adoption) — the app's shipped
+      looks, value-for-value from components/observability/shared.tsx and
+      components/db-unavailable.tsx. Type/spacing only: the surface stays the
+      call-site class (olympus `.glass-card`, unlayered app CSS, so it wins
+      the card chrome AND keeps the app's motion-reveal hook). No state rules
+      here, so everything sits in @layer components — call-site utilities may
+      still adjust geometry (e.g. db-unavailable's `max-w-md mx-auto`). ────── */
+
+@layer components {
+  /* dress="glass" — the observability quiet card (glass-card p-8 gap-2) */
+  .ctl-empty--glass {
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 2rem;
+  }
+
+  .ctl-empty--glass .ctl-empty-title {
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: calc(1.25 / 0.875);
+    font-weight: 500;
+    color: var(--ink-soft);
+  }
+
+  .ctl-empty--glass .ctl-empty-body {
+    margin: 0;
+    max-width: 28rem; /* max-w-md */
+    font-size: 0.75rem;
+    line-height: calc(1 / 0.75);
+    color: var(--ink-mute);
+  }
+
+  .ctl-empty--glass .ctl-empty-note {
+    margin-top: 0.25rem;
+    max-width: 28rem;
+  }
+
+  /* dress="glass-display" — the full-page gate card (db-unavailable):
+     font-display 2xl title, relaxed text-sm body, margin-driven rhythm */
+  .ctl-empty--glass-display {
+    justify-content: center;
+    gap: 0;
+    padding: 2rem 1.5rem;
+  }
+
+  .ctl-empty--glass-display .ctl-empty-title {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    line-height: calc(2 / 1.5);
+    letter-spacing: -0.025em; /* tracking-tight */
+    font-weight: 400;
+    color: var(--ink);
+  }
+
+  .ctl-empty--glass-display .ctl-empty-body {
+    margin: 0.5rem 0 0;
+    max-width: none;
+    font-size: 0.875rem;
+    line-height: 1.625; /* leading-relaxed */
+    color: var(--ink-mute);
+  }
 }
 
 /* ── NavButtons — segmented switch, pager, icon buttons (#1548, from
@@ -1292,6 +1368,77 @@
 .nb-icon:hover {
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+/* ── NavButtons dresses (#1548) — olympus's shipped looks, translated
+      exactly from its Tailwind utilities. Defaults in @layer components;
+      state overrides unlayered AFTER the reference state rules so they win
+      the tie at higher specificity. color-mix(in oklab, …) matches Tailwind
+      v4's opacity-modifier compilation (bg-accent/20, hover:bg-ink/[0.04]).
+
+      - .nb-pager--capsule (Pager dress="capsule"): one bordered term-bg
+        capsule (9px radius, mono 12.5px tabular) with borderless chevron
+        edges — olympus PipelineDaySelector.
+      - .nb-seg-group--accent (SegmentedControl dress="accent"): sans
+        font-medium cells on a transparent track, accent/20 wash + accent
+        text on the selection — olympus PerformanceDateRange. ─────────── */
+
+@layer components {
+  .nb-pager--capsule {
+    /* shipped capsule: gap-2 px-2.5 py-1.5 border-hair rounded-[9px]
+       bg-term-bg font-mono text-[12.5px] tabular-nums */
+    gap: 0.5rem;
+    padding: 0.375rem 0.625rem;
+    border: 1px solid var(--hair);
+    border-radius: 9px;
+    background: var(--term-bg);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .nb-pager--capsule .nb-page-edge {
+    /* shipped chevrons: borderless, transparent, content-sized */
+    min-width: 0;
+    height: auto;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink-mute);
+    transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .nb-seg-group--accent .nb-seg {
+    /* shipped cells: px-3 py-1.5 sans text-xs font-medium, no fill */
+    padding: 0.375rem 0.75rem;
+    background: transparent;
+    color: var(--ink-mute);
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition:
+      color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+.nb-pager--capsule .nb-page-edge:disabled {
+  /* shipped: disabled:opacity-30, default cursor (no not-allowed) */
+  opacity: 0.3;
+  cursor: default;
+}
+
+.nb-seg-group--accent .nb-seg:hover:not([aria-pressed="true"]) {
+  /* shipped: hover:bg-ink/[0.04] hover:text-ink (unselected only) */
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+}
+
+.nb-seg-group--accent .nb-seg[aria-pressed="true"] {
+  /* shipped selection: bg-accent/20 text-accent (hover leaves it alone) */
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 20%, transparent);
 }
 
 /* ── TagsInput — chips multi-select (#1548, from
@@ -1408,6 +1555,38 @@
   border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
 }
 
+/* quant dress (#1548 olympus adoption — the NAV-comparables picker in
+   components/portfolio/performance-chart-workspace.tsx): a rounded-md 11px
+   accent chip, NOT the reference pill. Translated utility-for-utility from
+   the shipped chip (gap-0.5 pl-2 pr-1 py-0.5 rounded-md text-[11px]
+   font-medium border-accent/35 bg-accent/10 text-accent; × wears p-0.5
+   rounded text-ink-soft hover:text-ink hover:bg-ink/10). Same layering
+   split: single-class default in @layer components, descendant/state rules
+   unlayered. */
+@layer components {
+  .tg-chip.tg-chip-quant {
+    gap: 0.125rem;
+    padding: 0.125rem 0.25rem 0.125rem 0.5rem;
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 0.375rem;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+}
+
+.tg-chip-quant .tg-x {
+  padding: 0.125rem;
+  border-radius: 0.25rem;
+  color: var(--ink-soft);
+}
+
+.tg-chip-quant .tg-x:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
 /* ── SearchBar — glyph · input · clear/hint (#1548, from
       reference/app/controls/controls.css + the specimen's input/clear
       utilities; the baked-in margin-top moved to the consumer). Defaults
@@ -1471,6 +1650,42 @@
 
 .sb-clear:hover {
   color: var(--ink);
+}
+
+/* row dress (#1548 olympus adoption — the ticker filter row inside the
+   NAV-comparables dropdown pane, performance-chart-workspace.tsx): a
+   full-width radius-less hairline-bottom row with an inset accent focus
+   ring and no leading glyph. Translated utility-for-utility from the
+   shipped input (w-full px-2.5 py-2 text-sm border-b border-hair
+   focus:ring-1 focus:ring-inset focus:ring-accent/30). Same layering
+   split: single-class default in @layer components, structural/state
+   rules unlayered. */
+@layer components {
+  .ctl-search.ctl-search-row {
+    width: 100%;
+    gap: 0;
+    padding: 0 0.625rem 0 0;
+    border: none;
+    border-bottom: 1px solid var(--hair);
+    border-radius: 0;
+    background: transparent;
+  }
+}
+
+.ctl-search-row .sb-glyph {
+  display: none;
+}
+
+.ctl-search-row .sb-input {
+  padding: 0.5rem 0.625rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.ctl-search.ctl-search-row:focus-within {
+  border-color: var(--hair);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 /* ── reduced motion ─────────────────────────────────────────────────────── */

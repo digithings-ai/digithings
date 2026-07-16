@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Skeleton, SkeletonGroup } from '@digithings/web';
 import { Badge, SectionTitle } from '@/components/ui';
 import { fetchLatestSnapshot } from '@/lib/snapshot-fetch';
 import type {
@@ -114,21 +115,27 @@ function RenderResult({
   return <SnapshotContent envelope={result.envelope} now={now} />;
 }
 
+/**
+ * Loading-grammar ruling (#1548): olympus wears ONE loading grammar — the
+ * @digithings/web sk-* shimmer sweep. The previous animate-pulse opacity bars
+ * here adopt the shimmer as a deliberate upgrade (no `pulse` dress was added
+ * to the Skeleton primitive); reduced-motion still degrades to a static tint.
+ * Bar layout (kicker line, headline bar, two section blocks) is unchanged.
+ */
 export function SnapshotSkeleton() {
   return (
-    <section
+    <SkeletonGroup
       data-testid="snapshot-loading"
-      aria-busy="true"
       aria-label="Loading daily snapshot"
-      className="glass-card p-6 space-y-4 animate-pulse"
+      className="glass-card p-6 flex flex-col gap-4"
     >
-      <div className="h-3 w-40 rounded bg-ink/10" />
-      <div className="h-6 w-3/4 rounded bg-ink/10" />
+      <Skeleton className="h-3 w-40" />
+      <Skeleton className="h-6 w-3/4" />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="h-20 rounded bg-ink/5" />
-        <div className="h-20 rounded bg-ink/5" />
+        <Skeleton variant="block" className="h-20 w-full" />
+        <Skeleton variant="block" className="h-20 w-full" />
       </div>
-    </section>
+    </SkeletonGroup>
   );
 }
 

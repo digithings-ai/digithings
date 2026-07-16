@@ -119,6 +119,7 @@ export {
   EmptyState,
   type EmptyStateProps,
   type EmptyStateVariant,
+  type EmptyStateDress,
 } from "./components/controls/EmptyState";
 export {
   SegmentedControl,

@@ -17,6 +17,11 @@
  * loading state, and the AtlasLoader Suspense fallbacks (the full-screen
  * brand loader itself stays app-local — it is a logo animation, not a
  * content-shaped placeholder).
+ *
+ * Loading-grammar ruling (#1548): the sk shimmer sweep is the ONE loading
+ * grammar, app-wide. Olympus's legacy `animate-pulse` opacity bars adopt the
+ * shimmer as a deliberate upgrade rather than this primitive growing a
+ * `pulse` dress — two loading animations on one screen read as two apps.
  */
 import type { CSSProperties, HTMLAttributes } from "react";
 

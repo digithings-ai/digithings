@@ -7,11 +7,16 @@
  *   buttons wearing aria-pressed inside a role="group" — deliberately NOT
  *   tablist (the semantics the reference specimen and olympus
  *   performance-date-range.tsx previously misused): the segments switch a
- *   data range on the same view, they don't own tab panels.
+ *   data range on the same view, they don't own tab panels. Two dresses:
+ *   "reference" (default, mono cells on surface / accent-weak selection)
+ *   and "accent" (olympus's shipped look — sans font-medium cells,
+ *   transparent track, accent/20 wash + accent text on the selection).
  * - Pager: prev/next with disabled edge states (nb-page-edge) around a
  *   middle slot — numbered PagerPage cells (aria-current="page") or any
  *   label (olympus PipelineDaySelector keeps its date label between the
- *   chevrons).
+ *   chevrons). Two dresses: "reference" (default, per-cell bordered) and
+ *   "capsule" (olympus's shipped look — one bordered term-bg capsule with
+ *   borderless chevrons, mono tabular label, disabled edges at 30%).
  * - IconButton: the borderless 2rem glyph button (nb-icon); aria-label is
  *   required — the child is a bare svg.
  *
@@ -39,6 +44,8 @@ export type SegmentedControlProps<T extends string = string> = Omit<
   options: ReadonlyArray<T | SegmentedOption<T>>;
   value: T;
   onChange?: (value: T) => void;
+  /** Visual dress — "reference" (default) or olympus's "accent". */
+  dress?: "reference" | "accent";
 };
 
 export function SegmentedControl<T extends string = string>({
@@ -46,10 +53,16 @@ export function SegmentedControl<T extends string = string>({
   value,
   onChange,
   className,
+  dress = "reference",
   ...props
 }: SegmentedControlProps<T>) {
   return (
-    <div data-slot="segmented" role="group" className={cx("nb-seg-group", className)} {...props}>
+    <div
+      data-slot="segmented"
+      role="group"
+      className={cx("nb-seg-group", dress === "accent" && "nb-seg-group--accent", className)}
+      {...props}
+    >
       {options.map((option) => {
         const opt = typeof option === "string" ? { value: option } : option;
         return (
@@ -81,6 +94,8 @@ export type PagerProps = HTMLAttributes<HTMLDivElement> & {
   nextAriaLabel?: string;
   /** Middle slot — PagerPage cells, or any label (a date, "3 / 12", …). */
   children?: ReactNode;
+  /** Visual dress — "reference" (default) or olympus's "capsule". */
+  dress?: "reference" | "capsule";
 };
 
 export function Pager({
@@ -94,10 +109,15 @@ export function Pager({
   nextAriaLabel,
   children,
   className,
+  dress = "reference",
   ...props
 }: PagerProps) {
   return (
-    <div data-slot="pager" className={cx("nb-pager", className)} {...props}>
+    <div
+      data-slot="pager"
+      className={cx("nb-pager", dress === "capsule" && "nb-pager--capsule", className)}
+      {...props}
+    >
       <button
         type="button"
         className="nb-page-edge"

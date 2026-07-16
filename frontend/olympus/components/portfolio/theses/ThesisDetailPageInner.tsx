@@ -6,7 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import { useDashboard } from '@/lib/dashboard-context';
 import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
-import AtlasLoader from '@/components/AtlasLoader';
+import PageSkeleton from '@/components/page-skeleton';
 import { ConvictionMeter } from '@/components/shared/conviction-meter';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { ThesisCriteriaColumns } from '@/components/portfolio/theses/ThesisCriteriaColumns';
@@ -46,7 +46,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
     return joinPositionsToThesis(positions, thesisId);
   }, [positions, thesisId]);
 
-  if (loading) return <AtlasLoader />;
+  if (loading) return <PageSkeleton />;
   if (error || !data)
     return (
       <div className="flex items-center justify-center min-h-[40vh] text-down">

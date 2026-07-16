@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 import { SubpageStickyTabBar, SUBPAGE_MAX, subpageTabButtonClass } from '@/components/subpage-tab-bar';
-import AtlasLoader from '@/components/AtlasLoader';
+import PageSkeleton from '@/components/page-skeleton';
 import {
   computeConsensusDeltaSet,
   getConsensusTimeSeries,
@@ -308,7 +308,7 @@ export default function TwelveXClient() {
     [canonicalRunDate, crossLink, openBrief, watchlist]
   );
 
-  if (loading) return <AtlasLoader />;
+  if (loading) return <PageSkeleton />;
 
   if (error === 'unconfigured') {
     return (

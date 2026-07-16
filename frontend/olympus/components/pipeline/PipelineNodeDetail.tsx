@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Skeleton, SkeletonGroup } from '@digithings/web';
 import { X, FileSearch } from 'lucide-react';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
 import LibraryDocumentBody from '@/components/library/LibraryDocumentBody';
@@ -91,9 +92,15 @@ export default function PipelineNodeDetail({ documentKey, date, onClose }: Pipel
           </div>
         )}
 
-        {/* Loading */}
+        {/* Loading — content-shaped sk shimmer stack (title line + body lines),
+            not placeholder text (#1548; one loading grammar app-wide). */}
         {documentKey && loading && (
-          <div className="text-ink-mute text-sm py-4">Loading document…</div>
+          <SkeletonGroup aria-label="Loading document" className="py-4 flex flex-col gap-3">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="w-full" />
+            <Skeleton className="w-11/12" />
+            <Skeleton className="w-4/5" />
+          </SkeletonGroup>
         )}
 
         {/* Error */}

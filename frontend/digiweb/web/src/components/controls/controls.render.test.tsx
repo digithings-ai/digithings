@@ -161,6 +161,34 @@ describe("EmptyState", () => {
     const html = renderToStaticMarkup(<EmptyState variant="error" title="Couldn't load" />);
     expect(html).toContain("ctl-empty ctl-empty--error");
   });
+
+  it("glass dresses drop the default glyph and render the note slot", () => {
+    const html = renderToStaticMarkup(
+      <EmptyState
+        dress="glass"
+        title="No runs recorded yet"
+        body="Diagnostics land after each run."
+        note="Populates after the daily job."
+      />
+    );
+    expect(html).toContain("ctl-empty--glass");
+    expect(html).not.toContain("ctl-empty-glyph");
+    expect(html).toContain("ctl-empty-note");
+    expect(html).toContain("Populates after the daily job.");
+
+    const gate = renderToStaticMarkup(
+      <EmptyState dress="glass-display" variant="error" title="Live data is temporarily unavailable" />
+    );
+    expect(gate).toContain("ctl-empty--glass-display");
+    expect(gate).toContain("ctl-empty--error");
+    expect(gate).not.toContain("ctl-empty-glyph");
+
+    // an explicit icon still earns the disc under a glass dress
+    const withIcon = renderToStaticMarkup(
+      <EmptyState dress="glass" title="No document" icon={<svg aria-hidden="true" />} />
+    );
+    expect(withIcon).toContain("ctl-empty-glyph");
+  });
 });
 
 describe("NavButtons", () => {

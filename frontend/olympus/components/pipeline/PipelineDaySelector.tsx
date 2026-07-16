@@ -1,6 +1,7 @@
 'use client';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Pager } from '@digithings/web';
 
 export interface PipelineDaySelectorProps {
   /** Available run dates, newest first (PipelineClient sorts descending). */
@@ -27,35 +28,29 @@ export function adjacentDates(
   };
 }
 
+/**
+ * Rides the promoted @digithings/web Pager (dress="capsule" — olympus's
+ * shipped one-capsule look) since #1548; the temporal direction semantics
+ * stay in `adjacentDates` above.
+ */
 export default function PipelineDaySelector({ dates, value, onChange }: PipelineDaySelectorProps) {
   const { prev, next } = adjacentDates(dates, value);
 
-  const label = formatDate(value);
-
   return (
-    <div className="ml-auto flex items-center gap-2 bg-term-bg border border-hair rounded-[9px] px-2.5 py-1.5 font-mono text-[12.5px] tabular-nums">
-      <button
-        type="button"
-        aria-label="Previous day"
-        disabled={!prev}
-        onClick={() => prev && onChange(prev)}
-        className="text-ink-mute hover:text-ink disabled:opacity-30 transition-colors"
-      >
-        <ChevronLeft size={14} />
-      </button>
-
-      <span className="text-ink whitespace-nowrap">{label}</span>
-
-      <button
-        type="button"
-        aria-label="Next day"
-        disabled={!next}
-        onClick={() => next && onChange(next)}
-        className="text-ink-mute hover:text-ink disabled:opacity-30 transition-colors"
-      >
-        <ChevronRight size={14} />
-      </button>
-    </div>
+    <Pager
+      dress="capsule"
+      className="ml-auto"
+      prevLabel={<ChevronLeft size={14} />}
+      nextLabel={<ChevronRight size={14} />}
+      prevAriaLabel="Previous day"
+      nextAriaLabel="Next day"
+      prevDisabled={!prev}
+      nextDisabled={!next}
+      onPrev={() => prev && onChange(prev)}
+      onNext={() => next && onChange(next)}
+    >
+      <span className="text-ink whitespace-nowrap">{formatDate(value)}</span>
+    </Pager>
   );
 }
 

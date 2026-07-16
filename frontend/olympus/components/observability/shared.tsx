@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { EmptyState as WebEmptyState } from '@digithings/web';
 
 /** Percent points → "+3.20%" / "-1.50%" / "—" for null. */
 export function fmtPct(v: number | null | undefined, digits = 2): string {
@@ -64,6 +65,13 @@ export function SectionCard({
   );
 }
 
+/**
+ * Thin shim over the promoted @digithings/web EmptyState (#1548): dress="glass"
+ * reproduces the shipped observability card (sans title/body/italic note, no
+ * glyph) exactly; the `.glass-card` surface stays a call-site class so the
+ * app's motion-reveal hook keeps firing. The local title/message/note API is
+ * preserved for consumers (AttributionTab, DecisionScorecardTab, SystemStatus).
+ */
 export function EmptyState({
   title,
   message,
@@ -75,12 +83,12 @@ export function EmptyState({
   note?: string;
 }) {
   return (
-    <div className="glass-card p-8 flex flex-col items-center justify-center gap-2 text-center">
-      <p className="text-sm font-medium text-ink-soft">{title}</p>
-      <p className="text-xs text-ink-mute max-w-md">{message}</p>
-      {note ? (
-        <p className="text-xs text-ink-mute/60 max-w-md mt-1 italic">{note}</p>
-      ) : null}
-    </div>
+    <WebEmptyState
+      dress="glass"
+      className="glass-card"
+      title={title}
+      body={message}
+      note={note}
+    />
   );
 }
