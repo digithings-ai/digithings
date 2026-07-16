@@ -428,13 +428,3 @@ export interface PerformanceMetrics {
   trackingError: number | null;
   infoRatio: number | null;
 }
-
-// ---------------------------------------------------------------------------
-// Component-level prop interfaces
-// ---------------------------------------------------------------------------
-
-export interface MiniCalendarProps {
-  dates: string[];
-  selected: string | null;
-  onSelect: (date: string) => void;
-}

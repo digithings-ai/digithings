@@ -180,10 +180,11 @@ export function impactClass(impact: TimelineImpact): string {
   return 'impact-low';
 }
 
-/** Tailwind classes for a card's accent (left border) + tint, by impact. */
+/** Tailwind classes for a card's accent (left border) + tint, by impact.
+ *  Severity is chrome, not P&L (F5): high uses --warn, never --down. */
 function impactStyle(impact: TimelineImpact): string {
-  if (impact === 'high') return 'border-l-down bg-down/[0.13]';
-  if (impact === 'medium') return 'border-l-warn bg-warn/[0.13]';
+  if (impact === 'high') return 'border-l-warn bg-warn/[0.13]';
+  if (impact === 'medium') return 'border-l-warn/60 bg-warn/[0.08]';
   return 'border-l-ink-mute bg-ink/[0.045]';
 }
 
@@ -275,10 +276,10 @@ export default function EventsTimeline({ events, mode, day, onSelect }: EventsTi
           </div>
           <span className="ml-auto inline-flex flex-wrap gap-3 text-[11px] text-ink-mute" aria-hidden>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-down" /> High
+              <span className="h-2 w-2 rounded-full bg-warn" /> High
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-warn" /> Medium
+              <span className="h-2 w-2 rounded-full bg-warn/60" /> Medium
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-ink-mute" /> Low

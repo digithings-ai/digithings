@@ -98,6 +98,15 @@ export function renderDocumentMarkdownFromPayload(payload: unknown, documentKey?
 
   const dateStr = s(p.date);
 
+  // Beliefs distillation (#1383): BeliefsBlob = { doc_type: 'beliefs', date, body } —
+  // body is already markdown, capped at 12k chars by the publisher.
+  if (docType === 'beliefs') {
+    const body = s(p.body).trim();
+    if (body) {
+      return `# Beliefs${dateStr ? ` — ${dateStr}` : ''}\n\n${body}\n`;
+    }
+  }
+
   if (docType === 'research_changelog') {
     const items = Array.isArray(p.items) ? p.items : [];
     const out: string[] = [`# Research changelog${dateStr ? ` — ${dateStr}` : ''}`, ''];

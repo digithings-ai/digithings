@@ -35,7 +35,7 @@ export function RunEconomicsRow({ latest }: { latest: AtlasRunDiagnostics }) {
         value={formatTokens(latest.total_tokens)}
         sub={
           cache != null ? (
-            <span className="text-[var(--accent)]">{cache}% cached → cheaper</span>
+            <span className="text-accent">{cache}% cached → cheaper</span>
           ) : undefined
         }
       />
