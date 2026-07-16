@@ -401,7 +401,8 @@ anonymous request before any read/write — so no Postgres row can be created fo
 ### Embed tenant registry & external backends
 
 `DIGICHAT_EMBED_TENANTS` (JSON, keyed by hostname) declares embed tenants:
-per-host `slug`, `backend` (`digigraph` | `external-relay` + https URL),
+per-host `slug`, `backend` (`digigraph` | `external-relay` + https URL |
+`foundry` + https `projectEndpoint` + `agentName`),
 `gateMode` (`turn_limited` | `ungated`), `theme` (`dark` | `light`),
 optional `accent` hex pair, `attribution` flag, `aliases`, and a required
 `token`. Parsed fail-fast in `src/lib/embed-tenants.ts`; the same registry
@@ -438,6 +439,22 @@ shared BFF bucket, now keyed by the tenant's real slug) run before the
 backend branch. Relay URLs come from config, never the request, so there
 is no open-proxy/SSRF surface. First consumer: DataTapStream (datatap-web)
 via its Azure Function relay.
+
+`foundry` tenants call Azure AI Foundry directly via `src/lib/foundry-stream.ts`
+(`@azure/ai-projects` + `DefaultAzureCredential` — the container's own managed
+identity, no relay hop, no stored key). Conversation state lives in Foundry;
+the client echoes the conversation id the same way as `external-relay`
+(`X-External-Conversation` / `data-externalConversation` — the wire contract
+is generic, not relay-specific). This backend supersedes the standalone
+`datatap-digichat-relay` Azure Function (digithings#1396): that Function's
+source was never committed to any repo, so `mapFoundryEvent` fixes its two
+known bugs from the start rather than porting them — `response.output_text.done`
+(the complete answer re-sent after already streaming it via `.delta`) and
+`response.file_search_call.searching` (fired alongside `.in_progress` for the
+same search step) are both intentionally unmapped, so neither the answer nor
+the "Searching…" trace is duplicated. `external-relay` stays available as the
+generic option for tenants whose backend isn't reachable via this container's
+own managed identity.
 
 **`X-Embed-Host` alone is not sufficient authorization (#1339).** A tenant's
 host string is its own public domain, so `resolveEmbedTenantByHost` never
