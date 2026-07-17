@@ -64,8 +64,16 @@ function mockIntelligenceItem(currency: string): IntelligenceWhyItem {
         classification: 'active',
         relevance: 0.85,
         conviction: 'medium',
-        direction: 'bullish',
+        direction: 'bearish',
         reason: 'Technical breakout',
+      },
+      {
+        broker: 'Superseded Broker',
+        classification: 'superseded',
+        relevance: 0.4,
+        conviction: 'low',
+        direction: 'bearish',
+        reason: 'Superseded by a newer opinion.',
       },
     ],
   };
@@ -179,6 +187,12 @@ describe('CurrencyDrilldownPanelBody', () => {
     expect(html).toContain('Technical breakout');
     expect(html).toContain('overflow-y-auto overscroll-contain pr-1 pb-1');
     expect(html).toContain('rounded-lg border border-hair');
+    expect(html).toContain('border-up/30 bg-up/[0.05]');
+    expect(html).toContain('capitalize text-up');
+    expect(html).toContain('border-down/30 bg-down/[0.05]');
+    expect(html).toContain('capitalize text-down');
+    expect(html).not.toContain('Superseded Broker');
+    expect(html).not.toContain('Superseded by a newer opinion.');
     expect(html).not.toContain('class="rounded border border-hair');
   });
 

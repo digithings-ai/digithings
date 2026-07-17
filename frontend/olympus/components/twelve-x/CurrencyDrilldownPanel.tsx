@@ -6,6 +6,17 @@ import { Sheet, SheetClose, SheetContent, SheetTitle } from '@digithings/web';
 import type { ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
 import type { FxBriefRow, IntelligenceWhyItem } from '@/lib/twelve-x/types';
 
+function deskDirectionClasses(direction: string): { card: string; label: string } {
+  const normalized = direction.trim().toLowerCase();
+  if (normalized === 'bullish' || normalized === 'long' || normalized === 'buy') {
+    return { card: 'border-up/30 bg-up/[0.05]', label: 'text-up' };
+  }
+  if (normalized === 'bearish' || normalized === 'short' || normalized === 'sell') {
+    return { card: 'border-down/30 bg-down/[0.05]', label: 'text-down' };
+  }
+  return { card: 'border-hair bg-surface', label: 'text-ink-soft' };
+}
+
 /**
  * The loaded currency drilldown content (consensus metrics, confluence, desk
  * opinions, relevant briefs). Split from the panel chrome — the chrome is the
@@ -31,7 +42,9 @@ export function CurrencyDrilldownPanelBody({
   const confluenceScore = intelligenceItem?.score ?? null;
   const components = intelligenceItem?.components;
   const consensus = intelligenceItem?.consensus;
-  const desks = intelligenceItem?.desks ?? [];
+  const activeDesks = (intelligenceItem?.desks ?? []).filter(
+    (desk) => desk.classification.trim().toLowerCase() === 'active',
+  );
 
   const formatScore = (v: number | null) => (v !== null && Number.isFinite(v) ? v.toFixed(2) : '—');
   const formatPct = (v: number | null) =>
@@ -139,24 +152,29 @@ export function CurrencyDrilldownPanelBody({
       </div>
 
       {/* Scrollable desk opinions */}
-      {desks.length > 0 && (
+      {activeDesks.length > 0 && (
         <div className="space-y-3">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
             Desk Opinions
           </h4>
           <div className="max-h-48 space-y-2 overflow-y-auto overscroll-contain pr-1 pb-1">
-            {desks.map((desk, i) => (
-              <div
-                key={i}
-                className="rounded-lg border border-hair bg-surface p-3 text-sm"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-ink">{desk.broker}</span>
-                  <span className="text-xs capitalize text-ink-soft">{desk.direction}</span>
+            {activeDesks.map((desk, i) => {
+              const directionClasses = deskDirectionClasses(desk.direction);
+              return (
+                <div
+                  key={i}
+                  className={`rounded-lg border p-3 text-sm ${directionClasses.card}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-ink">{desk.broker}</span>
+                    <span className={`text-xs capitalize ${directionClasses.label}`}>
+                      {desk.direction}
+                    </span>
+                  </div>
+                  {desk.reason && <p className="mt-1 text-xs text-ink-mute">{desk.reason}</p>}
                 </div>
-                {desk.reason && <p className="mt-1 text-xs text-ink-mute">{desk.reason}</p>}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
