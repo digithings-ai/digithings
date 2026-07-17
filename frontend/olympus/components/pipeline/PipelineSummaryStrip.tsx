@@ -27,7 +27,7 @@ export default function PipelineSummaryStrip({
   loading = false,
 }: PipelineSummaryStripProps) {
   return (
-    <div className="flex gap-3 items-start flex-wrap mt-2.5">
+    <div className="flex min-w-0 flex-wrap items-center gap-3">
       {/* Digest headline — absorbs "The Read" */}
       <div className="flex-1 min-w-[230px] font-display" aria-busy={loading || undefined}>
         <span className="block text-[10px] font-bold tracking-[0.14em] uppercase text-accent mb-0.5 font-sans">

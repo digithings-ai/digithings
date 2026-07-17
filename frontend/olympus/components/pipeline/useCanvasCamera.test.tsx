@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { computeFit, computeCenter, computeZoomToward, clampScale, exceedsDragSlop } from './useCanvasCamera';
+import {
+  clampScale,
+  computeCenter,
+  computeFit,
+  computeFocus,
+  computeZoomToward,
+  exceedsDragSlop,
+} from './useCanvasCamera';
 
 describe('computeFit', () => {
   it('returns scale < 1 when bbox is larger than viewport, fitting both axes', () => {
@@ -40,6 +47,49 @@ describe('computeCenter', () => {
     const result = computeCenter({ x: 100, y: 0, width: 100, height: 48 }, { width: 800, height: 400 }, 0.5);
     // nodeMidX = 150, at scale 0.5: 150 * 0.5 = 75; tx = 400 - 75 = 325
     expect(result.x).toBeCloseTo(325);
+  });
+});
+
+describe('computeFocus', () => {
+  it('zooms a selected node to a readable scale and centers it', () => {
+    const result = computeFocus(
+      { x: 900, y: 120, width: 160, height: 48 },
+      { width: 900, height: 560 },
+      { maxScale: 1.2 },
+    );
+
+    expect(result.scale).toBe(1.2);
+    expect(980 * result.scale + result.x).toBeCloseTo(450);
+    expect(144 * result.scale + result.y).toBeCloseTo(280);
+  });
+
+  it('fits an expanded group when its bounds exceed the viewport', () => {
+    const result = computeFocus(
+      { x: 180, y: 0, width: 1288, height: 528 },
+      { width: 900, height: 560 },
+      { padding: 48, maxScale: 1.1 },
+    );
+
+    expect(1288 * result.scale).toBeLessThanOrEqual(900 - 96 + 1);
+    expect(528 * result.scale).toBeLessThanOrEqual(560 - 96 + 1);
+  });
+
+  it('keeps the clicked card readable and visible when a wide section expands', () => {
+    const anchor = { x: 184, y: 0, width: 160, height: 48 };
+    const result = computeFocus(
+      { x: 184, y: 0, width: 1288, height: 528 },
+      { width: 808, height: 722 },
+      {
+        minScale: 0.68,
+        maxScale: 1.05,
+        anchor,
+        safeArea: { top: 128, right: 48, bottom: 48, left: 48 },
+      },
+    );
+
+    expect(result.scale).toBe(0.68);
+    expect(anchor.x * result.scale + result.x).toBeGreaterThanOrEqual(48);
+    expect(anchor.y * result.scale + result.y).toBeGreaterThanOrEqual(128);
   });
 });
 

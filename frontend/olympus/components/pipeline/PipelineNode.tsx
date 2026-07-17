@@ -1,7 +1,6 @@
 'use client';
 
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
+import { ChevronDown, ChevronRight, FileText, Info } from 'lucide-react';
 import type { LaidOutNode } from '@/lib/pipeline-layout';
 
 export interface PipelineNodeProps {
@@ -23,39 +22,26 @@ export default function PipelineNode({
 }: PipelineNodeProps) {
   const isBranch = node.kind === 'fanout-branch';
 
-  // A leaf substep/branch with no documentKey and nothing to expand can never
-  // open anything (PipelineCanvas.handleNodeClick no-ops on a missing
-  // documentKey) — render it visibly inert instead of looking identical to a
-  // real, clickable node (#1259 follow-up: a PM couldn't tell "no data today"
-  // from "broken"). State-only steps (thesis, screener, consolidate, preflight)
-  // are inert EVERY day by design — say so instead of the misleading
-  // "no output today" (#1538).
-  const isInert = !expandable && !node.documentKey;
-  const inertTitle = node.stateOnly
-    ? 'Runs in pipeline state only — never publishes a document'
-    : 'No output for this step on this day';
-
-  // Branches read as nested cards: recessed inset + tighter 6px radius. Standard
-  // nodes use the shared .glass-card primitive (flat panel, 8px radius, hover
-  // border-glow). Decision is NOT special-cased (F5 — no green chrome).
+  // Graph nodes use explicit flat-surface tokens instead of `.glass-card`:
+  // MotionLayer mutates that class for page-level scroll reveals, which races
+  // hydration and conflicts with transforms inside this custom camera.
   const cardClass = [
     'absolute',
     'transition-[border-color,box-shadow,transform] duration-150',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
-    isBranch ? 'rounded-md border border-hair bg-term-bg' : 'glass-card',
-    isInert
-      ? 'cursor-default'
-      : `cursor-pointer hover:-translate-y-px${isBranch ? ' hover:border-hair-2' : ''}`,
+    isBranch
+      ? 'rounded-md border border-hair bg-term-bg'
+      : 'rounded-lg border border-hair bg-surface',
+    'cursor-pointer hover:-translate-y-px hover:border-hair-2',
     selected ? 'border-accent/60 shadow-[0_0_0_1px_var(--accent)]' : '',
   ]
     .filter(Boolean)
     .join(' ');
 
-  const card = (
+  return (
     <div
       role="button"
-      tabIndex={isInert ? -1 : 0}
-      aria-disabled={isInert || undefined}
+      tabIndex={0}
       aria-expanded={expandable ? expanded : undefined}
       aria-label={node.label}
       className={cardClass}
@@ -64,23 +50,14 @@ export default function PipelineNode({
         top: node.y,
         width: node.width,
         height: node.height,
-        // Inline, not a Tailwind class — `.glass-card.reveal-in` (the mount
-        // reveal-animation rule, app/globals.css) sets `opacity: 1` with
-        // higher specificity than a plain utility class, so `opacity-50`
-        // would get silently overridden once the reveal transition settles.
-        opacity: isInert ? 0.5 : undefined,
       }}
-      onClick={isInert ? undefined : onActivate}
-      onKeyDown={
-        isInert
-          ? undefined
-          : (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onActivate();
-              }
-            }
-      }
+      onClick={onActivate}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onActivate();
+        }
+      }}
     >
       <div className="flex items-center gap-1.5 px-3 h-full">
         {/* status pip — calm cyan recipe (F5): active when expanded, else
@@ -119,20 +96,12 @@ export default function PipelineNode({
             )}
           </span>
         )}
+        {!expandable && (
+          <span className="flex-shrink-0 text-ink-mute" aria-hidden>
+            {node.documentKey ? <FileText size={12} /> : <Info size={12} />}
+          </span>
+        )}
       </div>
     </div>
-  );
-
-  if (!isInert) return card;
-
-  // Inert nodes explain themselves via the promoted @digithings/web Tooltip
-  // (hover + focus + touch, token-themed) instead of a native title= bubble.
-  return (
-    <TooltipProvider delay={200}>
-      <Tooltip>
-        <TooltipTrigger render={card} />
-        <TooltipContent side="bottom">{inertTitle}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
   );
 }

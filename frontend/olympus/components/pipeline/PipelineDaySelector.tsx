@@ -37,20 +37,24 @@ export default function PipelineDaySelector({ dates, value, onChange }: Pipeline
   const { prev, next } = adjacentDates(dates, value);
 
   return (
-    <Pager
-      dress="capsule"
-      className="ml-auto"
-      prevLabel={<ChevronLeft size={14} />}
-      nextLabel={<ChevronRight size={14} />}
-      prevAriaLabel="Previous day"
-      nextAriaLabel="Next day"
-      prevDisabled={!prev}
-      nextDisabled={!next}
-      onPrev={() => prev && onChange(prev)}
-      onNext={() => next && onChange(next)}
-    >
-      <span className="text-ink whitespace-nowrap">{formatDate(value)}</span>
-    </Pager>
+    <div className="flex items-center justify-between gap-3 lg:justify-end">
+      <span className="font-mono text-[0.6rem] font-medium uppercase tracking-[0.1em] text-ink-mute">
+        Run date
+      </span>
+      <Pager
+        dress="capsule"
+        prevLabel={<ChevronLeft size={14} aria-hidden />}
+        nextLabel={<ChevronRight size={14} aria-hidden />}
+        prevAriaLabel="Previous day"
+        nextAriaLabel="Next day"
+        prevDisabled={!prev}
+        nextDisabled={!next}
+        onPrev={() => prev && onChange(prev)}
+        onNext={() => next && onChange(next)}
+      >
+        <span className="whitespace-nowrap text-ink">{formatDate(value)}</span>
+      </Pager>
+    </div>
   );
 }
 
