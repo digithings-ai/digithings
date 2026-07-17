@@ -167,17 +167,6 @@ export async function getConsensusTimeSeries(
 }
 
 /**
- * The newest complete weighted G10 consensus run. During an incremental
- * publish, the newest partial run is skipped; when no complete run exists yet,
- * that newest partial run is returned.
- */
-export async function getLatestConsensus(
-  timeframe: Timeframe = 'medium'
-): Promise<FxConsensusSnapshotRow[]> {
-  return selectLatestCompleteConsensus(await getConsensusTimeSeries(timeframe));
-}
-
-/**
  * PURE — no fetch. Compute the run-over-run consensus delta picture from a
  * timeframe-pinned series (sorted oldest→newest, one row per currency per run).
  * Takes the two newest distinct run_dates; per currency in the newest run it
