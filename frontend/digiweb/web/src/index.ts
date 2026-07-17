@@ -107,6 +107,34 @@ export {
   type TooltipContentProps,
 } from "./components/controls";
 
+// controls family — promoted controls patterns (#1548)
+export {
+  Skeleton,
+  SkeletonGroup,
+  type SkeletonProps,
+  type SkeletonGroupProps,
+  type SkeletonVariant,
+} from "./components/controls/Skeleton";
+export {
+  EmptyState,
+  type EmptyStateProps,
+  type EmptyStateVariant,
+  type EmptyStateDress,
+} from "./components/controls/EmptyState";
+export {
+  SegmentedControl,
+  Pager,
+  PagerPage,
+  IconButton,
+  type SegmentedControlProps,
+  type SegmentedOption,
+  type PagerProps,
+  type PagerPageProps,
+  type IconButtonProps,
+} from "./components/controls/NavButtons";
+export { TagsInput, TagChip, type TagsInputProps, type TagChipProps } from "./components/controls/TagsInput";
+export { SearchBar, type SearchBarProps } from "./components/controls/SearchBar";
+
 // finance-charts family (#1450)
 export {
   PriceChart,
@@ -270,3 +298,12 @@ export {
 
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
 export { subsystems, subsystemById, type Subsystem } from "./data/subsystems";
+
+// chrome (command palette) + symbols (brand marks) promotions (#1548)
+export {
+  CommandPalette,
+  type CommandPaletteProps,
+  type CommandPaletteGroup,
+  type CommandPaletteItem,
+} from "./components/command-palette";
+export { OlympusMark, Wordmark, type OlympusMarkProps, type WordmarkProps } from "./components/symbols/marks";

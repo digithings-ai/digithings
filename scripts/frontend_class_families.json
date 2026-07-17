@@ -3,7 +3,7 @@
   "_frozen": "2026-07-08 — post component-consolidation epic (#1414)",
   "digithings-web": ["brand", "dc", "doc", "docs", "dqhero", "glow"],
   "digiquant-web": ["dq", "dqhero", "dqp", "dqpipe", "dqss", "footer", "glow", "hero", "olympus", "sub", "ts"],
-  "olympus": ["animate", "atlas", "cal", "dbar", "glass", "prose", "qn", "recharts", "tl", "ts"],
+  "olympus": ["atlas", "dbar", "glass", "prose", "qn", "recharts", "tl", "ts"],
   "digichat": ["app", "dc"],
   "digichat-ui": ["dark", "dc", "dt", "dtc", "light"]
 }

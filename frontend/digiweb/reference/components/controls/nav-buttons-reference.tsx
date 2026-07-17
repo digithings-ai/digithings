@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 
+import { IconButton, Pager, PagerPage, SegmentedControl } from "@digithings/web";
+
 /**
  * Navigation buttons — the wayfinding controls: a segmented range switch (the
  * selected cell wears an accent-weak wash), a prev/next pager with a disabled
  * edge state and a current-page marker, and borderless icon buttons. Pills for
  * chrome, hairline for structure — one loud state per group. Static interactive
- * display template.
+ * display template. Consumes the shared <SegmentedControl/>, <Pager/> and
+ * <IconButton/> primitives from @digithings/web (selection rides aria-pressed /
+ * aria-current — not the tablist this specimen once misused).
  */
 const SEGMENTS = ["1D", "1W", "1M", "1Y", "All"];
 const PAGES = 5;
@@ -30,59 +34,25 @@ export function NavButtonsReference() {
         <p className="mb-[0.5rem] font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
           segmented
         </p>
-        <div
-          className="inline-flex overflow-hidden rounded-[8px] border border-hair"
-          role="tablist"
-          aria-label="Range"
-        >
-          {SEGMENTS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              role="tab"
-              aria-selected={s === seg}
-              className={`nb-seg${s === seg ? " on" : ""}`}
-              onClick={() => setSeg(s)}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl options={SEGMENTS} value={seg} onChange={setSeg} aria-label="Range" />
       </div>
 
       <div className="mt-[1.4rem]">
         <p className="mb-[0.5rem] font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
           pager
         </p>
-        <div className="inline-flex items-center gap-[0.3rem]">
-          <button
-            type="button"
-            className="nb-page-edge"
-            disabled={page === 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            ‹ prev
-          </button>
+        <Pager
+          prevDisabled={page === 1}
+          nextDisabled={page === PAGES}
+          onPrev={() => setPage((p) => Math.max(1, p - 1))}
+          onNext={() => setPage((p) => Math.min(PAGES, p + 1))}
+        >
           {Array.from({ length: PAGES }, (_, i) => i + 1).map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={`nb-page${n === page ? " on" : ""}`}
-              aria-current={n === page ? "page" : undefined}
-              onClick={() => setPage(n)}
-            >
+            <PagerPage key={n} current={n === page} onClick={() => setPage(n)}>
               {n}
-            </button>
+            </PagerPage>
           ))}
-          <button
-            type="button"
-            className="nb-page-edge"
-            disabled={page === PAGES}
-            onClick={() => setPage((p) => Math.min(PAGES, p + 1))}
-          >
-            next ›
-          </button>
-        </div>
+        </Pager>
       </div>
 
       <div className="mt-[1.4rem]">
@@ -96,11 +66,11 @@ export function NavButtonsReference() {
             { k: "refresh", d: "M4 12a8 8 0 1 1 2.3 5.6M4 20v-3.4h3.4" },
             { k: "more", d: "M12 6h.01M12 12h.01M12 18h.01" },
           ].map((b) => (
-            <button key={b.k} type="button" className="nb-icon" aria-label={b.k}>
+            <IconButton key={b.k} aria-label={b.k}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                 <path d={b.d} />
               </svg>
-            </button>
+            </IconButton>
           ))}
         </div>
       </div>

@@ -32,7 +32,7 @@ import AllocationsTab from './tabs/AllocationsTab';
 import PerformanceTab from './tabs/PerformanceTab';
 import ThesesTab from './tabs/ThesesTab';
 import DecisionQuality from './DecisionQuality';
-import AtlasLoader from '@/components/AtlasLoader';
+import PageSkeleton from '@/components/page-skeleton';
 
 export default function PortfolioShellInner() {
   const { data, loading, error } = useDashboard();
@@ -181,7 +181,7 @@ export default function PortfolioShellInner() {
 
   const sectionActive: PortfolioSectionId = tab;
 
-  if (loading) return <AtlasLoader />;
+  if (loading) return <PageSkeleton />;
   if (error || !data || !metrics)
     return (
       <div className="flex items-center justify-center h-screen text-down">

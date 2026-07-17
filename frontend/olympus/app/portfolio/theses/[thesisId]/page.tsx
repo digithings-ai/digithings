@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import ThesisDetailClient from './thesis-detail-client';
-import AtlasLoader from '@/components/AtlasLoader';
+import PageSkeleton from '@/components/page-skeleton';
 import { fetchThesisStaticParams } from '@/lib/thesis-static-params';
 
 /** Required for `output: 'export'` — resolves real thesis ids from Supabase at build time. */
@@ -10,7 +10,7 @@ export async function generateStaticParams() {
 
 export default function PortfolioThesisDetailPage() {
   return (
-    <Suspense fallback={<AtlasLoader />}>
+    <Suspense fallback={<PageSkeleton />}>
       <ThesisDetailClient />
     </Suspense>
   );

@@ -47,6 +47,8 @@ export default function TodayTab({
 
   return (
     <div className="flex flex-col gap-4">
+      <h2 className="px-1 font-display text-2xl tracking-tight text-ink">Today&rsquo;s read</h2>
+
       {/* Above the fold: trade ideas + digest brief co-lead */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
         <TradeIdeasPanel ideas={tradeIdeas} confluence={confluence} />

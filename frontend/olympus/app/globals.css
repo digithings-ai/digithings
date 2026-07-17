@@ -40,6 +40,16 @@
    PLAINLY on purpose: the sheet manages its own @layer components /
    unlayered split (MIGRATION.md rule 2 exception). */
 @import "@digithings/web/styles/controls-overlay.css";
+/* CommandPalette shell (#1548) — the ⌘K bar rides the promoted
+   @digithings/web CommandPalette (dress="glass"). Imported PLAINLY on
+   purpose: the sheet manages its own layering (see its header). Overlay
+   z-index comes from --cp-z, set on html below. */
+@import "@digithings/web/styles/command-palette.css";
+/* Finance composites (#1548) — Portfolio→Performance's Diagnostics card rides
+   the promoted PerformanceDashboard, and the drawdown view rides
+   SyncedTearsheet. Imported PLAINLY on purpose: the sheet manages its own
+   layering (see its header). */
+@import "@digithings/web/styles/finance-composites.css";
 
 /* Tailwind never scans package sources (MIGRATION.md rule 3) — generate the
    utilities the shared ChatMarkdown shell carries (min-w-0, text-[0.88rem],
@@ -55,6 +65,11 @@
    shared controls carry (MIGRATION.md rule 3). */
 @source "../../digiweb/web/src/components/controls";
 
+/* Tailwind never scans package sources — the ⌘K palette shell and the brand
+   marks/wordmark render here (MIGRATION.md rule 3, #1548). */
+@source "../../digiweb/web/src/components/command-palette";
+@source "../../digiweb/web/src/components/symbols";
+
 /* Tailwind never scans package sources (MIGRATION.md rule 3) — the shared
    finance-charts scaffold's ChartTipShell renders here via lib/lw-chart. */
 @source "../../digiweb/web/src/components/finance-charts";
@@ -62,6 +77,10 @@
 /* Tailwind never scans package sources — the performance tear sheet renders
    the shared finance-tearsheet family (MIGRATION.md rule 3). */
 @source "../../digiweb/web/src/components/finance-tearsheet";
+
+/* Tailwind never scans package sources — PerformanceDashboard and
+   SyncedTearsheet render here (MIGRATION.md rule 3, #1548). */
+@source "../../digiweb/web/src/components/finance-composites";
 
 /* ── Fonts (next/font routing) ───────────────────────────────────────────
    tokens.css names the families literally ("Geist", "Geist Mono",
@@ -88,6 +107,10 @@
    shadow, not a themed color); consumers use var(--shadow-glass) directly. */
 html {
   --shadow-glass: 0 18px 40px -28px rgba(0, 0, 0, 0.6);
+  /* Command palette overlay stacking — the shared shell's .cp-overlay reads
+     var(--cp-z, 40); olympus's shipped palette stacks at 2000, above the
+     sticky nav / sidebar drawer chrome. */
+  --cp-z: 2000;
 }
 html.light {
   --shadow-glass: 0 18px 40px -30px rgba(0, 0, 0, 0.18);
@@ -99,24 +122,6 @@ html.light {
    source) rather than editing the shared design package. */
 .qn-up   { color: var(--up); }
 .qn-down { color: var(--down); }
-
-/* ── Overview stat strip (subtle entrance) ─────────────────────────────── */
-@keyframes atlas-stat-enter {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.animate-atlas-stat-enter {
-  animation: atlas-stat-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-.animate-atlas-stat-enter[data-enter-delay-ms] {
-  animation-delay: calc(attr(data-enter-delay-ms number) * 1ms);
-}
 
 /* ── Scroll reveals (MotionLayer adds html.motion-on only when motion is OK) ── */
 html.motion-on .glass-card,
@@ -133,7 +138,6 @@ html.motion-on [data-reveal].reveal-in {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-atlas-stat-enter { animation: none !important; }
   html.motion-on .glass-card,
   html.motion-on [data-reveal] { opacity: 1 !important; transform: none !important; transition: none !important; }
 }
@@ -219,60 +223,6 @@ html.light .qn-blueprint-bg {
   --tw-prose-pre-bg: var(--term-bg);
   --tw-prose-th-borders: var(--hair);
   --tw-prose-td-borders: var(--hair);
-}
-
-/* ── Starfield canvas ──────────────────────────────────────────────────── */
-#network-canvas {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100vh;
-  z-index: -1;
-  pointer-events: none;
-}
-
-/* ── Mini Calendar ─────────────────────────────────────────────────────── */
-.cal-day {
-  aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.7rem;
-  background: none;
-  border: 1px solid transparent;
-  color: var(--ink-mute);
-  border-radius: 4px;
-  cursor: default;
-  transition: all 0.15s;
-  position: relative;
-  line-height: 1;
-}
-.cal-day.has-data {
-  color: var(--ink-soft);
-  cursor: pointer;
-  font-weight: 500;
-}
-.cal-day.has-data::after {
-  content: '';
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-.cal-day.has-data:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink);
-}
-.cal-day.selected {
-  background: var(--accent-weak);
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  font-weight: 700;
 }
 
 /* ── Atlas loader (logo-based) ─────────────────────────────────────────── */

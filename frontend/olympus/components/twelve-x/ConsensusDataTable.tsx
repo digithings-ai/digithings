@@ -9,7 +9,7 @@ import {
   scoreColorClass,
   scoreLabel,
 } from '@/lib/twelve-x/consensus-bar';
-import { G10_CURRENCIES } from '@/lib/twelve-x/types';
+import { orderCurrencies } from '@/lib/twelve-x/consensus-view';
 import type { ConsensusDeltaSet, FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
 import { ConsensusScoreBar } from './ConsensusScoreBars';
 import DeltaChip from './DeltaChip';
@@ -245,18 +245,18 @@ export function ConsensusDataTable({
 }: ConsensusDataTableProps) {
   const [window, setWindow] = useState<AvgWindow>(5);
   const [filter, setFilter] = useState<RowFilter>(initialFilter);
-  const [sortKey, setSortKey] = useState<SortKey>('score');
+  // `null` sort = the canonical G10 order below — the SAME order the Today tab
+  // lists currencies in, so the two consensus surfaces agree by default. A
+  // header click switches to an explicit column sort.
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  // Latest score per currency, in canonical G10 order (extras sorted after).
+  // Latest score per currency, in the shared canonical G10 order (the single
+  // source of truth the Today chart and Consensus tab both read).
   const ordered = useMemo<FxConsensusSnapshotRow[]>(() => {
     const byCcy = new Map<string, FxConsensusSnapshotRow>();
     for (const r of latest) byCcy.set(r.currency, r);
-    const present = [...byCcy.keys()];
-    const head = G10_CURRENCIES.filter((c) => byCcy.has(c));
-    const headSet = new Set<string>(head);
-    const extras = present.filter((c) => !headSet.has(c)).sort();
-    return [...head, ...extras].map((c) => byCcy.get(c) as FxConsensusSnapshotRow);
+    return orderCurrencies(byCcy.keys()).map((c) => byCcy.get(c) as FxConsensusSnapshotRow);
   }, [latest]);
 
   // Assemble + filter + sort the view-model. Recomputes when the window changes.
@@ -277,7 +277,8 @@ export function ConsensusDataTable({
       } satisfies ConsensusTableRow;
     });
     const filtered = built.filter((row) => passesFilter(row, filter));
-    return sortRows(filtered, sortKey, sortDir);
+    // No active sort → keep the canonical G10 order (matches the Today tab).
+    return sortKey === null ? filtered : sortRows(filtered, sortKey, sortDir);
   }, [ordered, series, deltas, window, filter, sortKey, sortDir]);
 
   const hasData = ordered.length > 0;

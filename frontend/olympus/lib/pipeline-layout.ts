@@ -13,6 +13,8 @@ export interface LaidOutNode {
   width: number;
   height: number;
   documentKey?: string;
+  /** Backend runs this step in-state only — it never publishes a document (see SubStep.stateOnly). */
+  stateOnly?: boolean;
 }
 
 export interface Connector { fromId: string; toId: string; active?: boolean; }
@@ -38,14 +40,24 @@ const BASE_Y = 0;
 /**
  * Resolve a leaf sub-step's document_key, honouring the golden rule: only
  * return a key that is actually present in this day's documents. `commit` is
- * special-cased — there can be several `commit-run/{run_id}` keys per day, so
- * we pick the present ones and default to the lexicographically-last. `digest`
- * is special-cased too — it's published as `digest` on baseline days and
- * `digest-delta` on delta days (see `resolvePresentDigestKey`).
+ * special-cased — there can be several `commit-run/{run_id}` keys per day
+ * (CI outer retries mint a new GITHUB_RUN_ID each attempt), so we pick the
+ * newest by numeric run_id — lexicographic order is wrong across digit-length
+ * boundaries ('9999999999' > '10000000000'). `digest` is special-cased too —
+ * it's published as `digest` on baseline days and `digest-delta` on delta
+ * days (see `resolvePresentDigestKey`).
  */
 function resolveLeafDocumentKey(subStepId: string, day: PipelineDayData): string | undefined {
   if (subStepId === 'commit') {
-    const runs = [...day.presentKeys].filter((k) => k.startsWith('commit-run/')).sort();
+    const runId = (k: string) => Number.parseInt(k.slice('commit-run/'.length), 10);
+    const runs = [...day.presentKeys]
+      .filter((k) => k.startsWith('commit-run/'))
+      .sort((a, b) => {
+        const na = runId(a);
+        const nb = runId(b);
+        if (Number.isNaN(na) || Number.isNaN(nb)) return a.localeCompare(b);
+        return na - nb;
+      });
     return runs.length > 0 ? runs[runs.length - 1] : undefined;
   }
   if (subStepId === 'digest') {
@@ -121,8 +133,11 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
         const fanoutExpanded = expansion.expandedFanouts.has(fanoutKey);
         const subX = cursorX;
 
-        // Leaf sub-steps (no fan-out) carry a document_key when it's present today.
-        const leafKey = sub.fanout ? undefined : resolveLeafDocumentKey(sub.id, day);
+        // Leaf sub-steps (no fan-out) carry a document_key when it's present
+        // today. State-only steps never resolve one — the backend runs them
+        // but publishes nothing (thesis framing, screener, consolidate, preflight).
+        const leafKey =
+          sub.fanout || sub.stateOnly ? undefined : resolveLeafDocumentKey(sub.id, day);
 
         nodes.push({
           id: subId,
@@ -134,6 +149,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
           width: NODE_W,
           height: NODE_H,
           documentKey: leafKey,
+          stateOnly: sub.stateOnly,
         });
         // Sequential connectors inside an expanded stage are "active" (the
         // expanded stage's own internal flow), so they read in cyan on top.

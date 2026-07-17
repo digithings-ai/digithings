@@ -40,22 +40,17 @@ function thesisNames(ids: string[], thesisById: Map<string, Thesis>): string {
   return ids.map((id) => thesisById.get(normalizeThesisId(id))?.name ?? id).join(', ');
 }
 
-// Fixed marker hues from the sanctioned allowlist (lib/chart-colors.ts) —
-// ADD unifies with the sibling price/contribution charts' sky blue.
+// Fixed marker/label hues from the sanctioned allowlist (lib/chart-colors.ts) —
+// ADD unifies with the sibling price/contribution charts' sky blue. Labels ride
+// the SAME map as the markers (inline style, like performance-chart-workspace's
+// tooltips): token-driven classes collapsed OPEN and ADD in dark mode, where
+// --up === --accent, and disagreed with the marker hues on the same chart.
 function eventMarkerColor(ev: DashboardPositionEvent['event']): string {
   if (ev === 'OPEN') return EVENT_COLORS.OPEN;
   if (ev === 'EXIT') return EVENT_COLORS.EXIT;
   if (ev === 'ADD') return EVENT_COLORS.ADD;
   if (ev === 'TRIM') return EVENT_COLORS.TRIM;
   return EVENT_COLORS.DEFAULT;
-}
-
-function eventLabelClass(ev: DashboardPositionEvent['event']): string {
-  if (ev === 'OPEN') return 'text-up';
-  if (ev === 'EXIT') return 'text-down';
-  if (ev === 'ADD') return 'text-[var(--accent)]';
-  if (ev === 'TRIM') return 'text-warn';
-  return 'text-ink-mute';
 }
 
 function isoToday(): string {
@@ -146,7 +141,7 @@ function DrilldownWeightPricePane({
           {row.dayEvents.length > 0 ? (
             <ul className="mt-2 space-y-1 text-xs">
               {row.dayEvents.map((ev, i) => (
-                <li key={i} className={eventLabelClass(ev.event)}>
+                <li key={i} style={{ color: eventMarkerColor(ev.event) }}>
                   {ev.event}
                   {ev.weight_change_pct != null
                     ? ` · Δ ${ev.weight_change_pct >= 0 ? '+' : ''}${ev.weight_change_pct.toFixed(2)}pp`
@@ -345,7 +340,7 @@ export default function PositionDrilldown({
       onClick={() => setUserWindow(k)}
       className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
         windowPreset === k
-          ? 'bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/40'
+          ? 'bg-accent/15 text-accent border border-accent/40'
           : 'border border-hair text-ink-mute hover:bg-ink/[0.04]'
       }`}
     >
@@ -416,7 +411,7 @@ export default function PositionDrilldown({
       {loading ? (
         <p className="text-sm text-ink-mute py-6 text-center">Loading chart data…</p>
       ) : err ? (
-        <p className="text-sm text-down py-4">{err}</p>
+        <p className="text-sm text-warn py-4">{err}</p>
       ) : chartRows.length >= 2 ? (
         <div className="space-y-2">
           <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Weight &amp; price</p>
@@ -467,7 +462,9 @@ export default function PositionDrilldown({
                   <tr key={`${e.date}-${e.event}-${i}`} className="hover:bg-ink/[0.02]">
                     <td className="px-3 py-2 font-mono text-xs text-ink-soft whitespace-nowrap">{e.date}</td>
                     <td className="px-3 py-2">
-                      <span className={`font-semibold text-xs ${eventLabelClass(e.event)}`}>{e.event}</span>
+                      <span className="font-semibold text-xs" style={{ color: eventMarkerColor(e.event) }}>
+                        {e.event}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums text-xs">
                       {e.weight_change_pct != null

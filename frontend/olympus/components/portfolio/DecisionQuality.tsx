@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Skeleton, SkeletonGroup } from '@digithings/web';
 import DecisionScorecardTab from '@/components/observability/DecisionScorecardTab';
 import { fetchObservabilityData } from '@/lib/observability-queries';
 import type { TableRow } from '@/lib/database.types';
-import AtlasLoader from '@/components/AtlasLoader';
 
 /**
  * "Decision quality" — the conviction calibration scorecard, surfaced where the
@@ -49,7 +49,16 @@ export default function DecisionQuality({
         </p>
       </div>
       {loading ? (
-        <AtlasLoader fullScreen={false} />
+        // Scorecard-shaped skeleton (stat-tile row + chart block), not the
+        // brand loader — the section heading above is already visible (#1548).
+        <SkeletonGroup aria-label="Loading decision quality" className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {Array.from({ length: 6 }, (_, i) => (
+              <Skeleton key={i} variant="block" className="h-20 w-full" />
+            ))}
+          </div>
+          <Skeleton variant="block" className="h-64 w-full" />
+        </SkeletonGroup>
       ) : error ? (
         <p className="text-sm text-down">{error}</p>
       ) : (

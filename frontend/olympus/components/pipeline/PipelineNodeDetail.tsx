@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Skeleton, SkeletonGroup } from '@digithings/web';
 import { X, FileSearch } from 'lucide-react';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
 import LibraryDocumentBody from '@/components/library/LibraryDocumentBody';
@@ -91,9 +92,15 @@ export default function PipelineNodeDetail({ documentKey, date, onClose }: Pipel
           </div>
         )}
 
-        {/* Loading */}
+        {/* Loading — content-shaped sk shimmer stack (title line + body lines),
+            not placeholder text (#1548; one loading grammar app-wide). */}
         {documentKey && loading && (
-          <div className="text-ink-mute text-sm py-4">Loading document…</div>
+          <SkeletonGroup aria-label="Loading document" className="py-4 flex flex-col gap-3">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="w-full" />
+            <Skeleton className="w-11/12" />
+            <Skeleton className="w-4/5" />
+          </SkeletonGroup>
         )}
 
         {/* Error */}
@@ -144,13 +151,20 @@ async function fetchByDocumentKey(
   if (!url || !key) return null;
 
   const supabase = createClient(url, key);
+  // Defensive limit(1) rather than .maybeSingle(): maybeSingle ERRORS on >1
+  // row, which rendered as "No output found" — the same failure class as the
+  // #1538 digest headline (a retried/backfilled publish can duplicate a
+  // (document_key, date) pair even though none exist today).
   const { data, error } = await supabase
     .from('documents')
     .select('id')
     .eq('document_key', documentKey)
     .eq('date', date)
-    .maybeSingle();
+    // Deterministic tiebreaker only — documents has no created_at column.
+    .order('id', { ascending: false })
+    .limit(1);
 
-  if (error || !data?.id) return null;
-  return await getLibraryDocumentById(data.id as string);
+  const id = data?.[0]?.id;
+  if (error || !id) return null;
+  return await getLibraryDocumentById(id as string);
 }

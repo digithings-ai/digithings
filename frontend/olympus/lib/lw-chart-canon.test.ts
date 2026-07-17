@@ -5,21 +5,18 @@ import { join } from 'node:path';
 const root = join(__dirname, '..');
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
-/** Time-series charts — must ride lightweight-charts (lib/CHARTS.md, #1420). */
+/** Time-series charts — must ride lightweight-charts (lib/CHARTS.md, #1420).
+ * The standalone drawdown chart is gone (#1548): the workspace's drawdown
+ * view rides the shared <SyncedTearsheet/> from @digithings/web. */
 const MIGRATED = [
   'components/portfolio/performance-chart-workspace.tsx',
-  'components/portfolio/performance-drawdown-chart.tsx',
   'components/portfolio/performance-rolling-chart.tsx',
-  'components/portfolio/PositionPriceChart.tsx',
-  'components/portfolio/PositionContributionChart.tsx',
   'components/portfolio/PositionDrilldown.tsx',
 ];
 
 /** Categorical/composition surfaces — sanctioned to stay on recharts. */
 const RECHARTS_SANCTIONED = [
   'components/portfolio/sleeve-stacked-chart.tsx',
-  'components/portfolio/PositionContributionEventBars.tsx',
-  'components/portfolio/nav-sparkline.tsx',
   'components/observability/AttributionTab.tsx',
   'components/observability/DecisionScorecardTab.tsx',
   'components/twelve-x/ConsensusTab.tsx',

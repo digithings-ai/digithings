@@ -4,17 +4,17 @@ import type { ExpansionState } from './pipeline-layout';
 import type { PipelineDayData } from './pipeline-graph-data';
 
 const emptyDay: PipelineDayData = {
-  fanoutCounts: { sectors: 12 },
+  fanoutCounts: { sectors: 11 },
   fanoutKeys: {},
   presentKeys: new Set<string>(),
 };
 const collapsed: ExpansionState = { expandedStages: new Set(), expandedFanouts: new Set() };
 
 describe('layoutPipeline', () => {
-  it('collapsed: five stage nodes left to right, same row', () => {
+  it('collapsed: six stage nodes left to right, same row', () => {
     const l = layoutPipeline(emptyDay, collapsed);
     const stages = l.nodes.filter((n) => n.kind === 'stage');
-    expect(stages).toHaveLength(5);
+    expect(stages).toHaveLength(6);
     const xs = stages.map((n) => n.x);
     expect([...xs]).toEqual([...xs].sort((a, b) => a - b)); // strictly increasing order preserved
     expect(new Set(stages.map((n) => n.y)).size).toBe(1);   // one row
@@ -27,7 +27,7 @@ describe('layoutPipeline', () => {
     };
     const l = layoutPipeline(emptyDay, exp);
     const branches = l.nodes.filter((n) => n.kind === 'fanout-branch' && n.id.startsWith('research:sectors:'));
-    expect(branches).toHaveLength(12);
+    expect(branches).toHaveLength(11);
     const ys = branches.map((n) => n.y);
     expect(new Set(branches.map((n) => n.x)).size).toBe(1); // same column
     expect([...ys]).toEqual([...ys].sort((a, b) => a - b)); // stacked downward
@@ -67,10 +67,10 @@ describe('layoutPipeline', () => {
     const day: PipelineDayData = {
       fanoutCounts: {},
       fanoutKeys: {},
-      presentKeys: new Set(['macro', 'pm-direction-memo', 'commit-run/123', 'commit-run/999']),
+      presentKeys: new Set(['macro', 'pm-direction-memo', 'sector-scorecard', 'beliefs', 'commit-run/123', 'commit-run/999']),
     };
     const exp: ExpansionState = {
-      expandedStages: new Set(['research', 'synthesis', 'selection', 'decision']),
+      expandedStages: new Set(['research', 'synthesis', 'selection', 'decision', 'learning']),
       expandedFanouts: new Set(),
     };
     const l = layoutPipeline(day, exp);
@@ -80,13 +80,49 @@ describe('layoutPipeline', () => {
     expect(byId('selection:pm-direction')?.documentKey).toBe('pm-direction-memo');
     // digest absent that day -> no documentKey (golden rule)
     expect(byId('synthesis:digest')?.documentKey).toBeUndefined();
-    // consolidate maps to sector-scorecard, absent -> undefined
+    // sector-scorecard is a research leaf (Phase-5 equities output, #1538)
+    expect(byId('research:scorecard')?.documentKey).toBe('sector-scorecard');
+    // consolidate is state-only: never keyed, even when scorecard is present
     expect(byId('synthesis:consolidate')?.documentKey).toBeUndefined();
-    // commit resolves via a present commit-run/* (lexicographically-last default)
+    expect(byId('synthesis:consolidate')?.stateOnly).toBe(true);
+    // beliefs fold resolves when the on-demand doc is present (#1383)
+    expect(byId('learning:beliefs')?.documentKey).toBe('beliefs');
+    // commit resolves via a present commit-run/* (numerically-newest run_id)
     expect(byId('decision:commit')?.documentKey).toBe('commit-run/999');
-    // thesis/screener never get a key
+    // thesis/screener are state-only: never keyed
     expect(byId('selection:thesis')?.documentKey).toBeUndefined();
+    expect(byId('selection:thesis')?.stateOnly).toBe(true);
     expect(byId('selection:screener')?.documentKey).toBeUndefined();
+  });
+
+  it('commit picks the numerically-newest run_id across digit-length boundaries (#1538)', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: {},
+      fanoutKeys: {},
+      // Lexicographically '9999999999' > '10000000000' — numerically the reverse.
+      presentKeys: new Set(['commit-run/9999999999', 'commit-run/10000000000']),
+    };
+    const exp: ExpansionState = {
+      expandedStages: new Set(['decision']),
+      expandedFanouts: new Set(),
+    };
+    const l = layoutPipeline(day, exp);
+    const commit = l.nodes.find((n) => n.id === 'decision:commit');
+    expect(commit?.documentKey).toBe('commit-run/10000000000');
+  });
+
+  it('beliefs node is inert (no documentKey) on non-trigger days', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: {},
+      fanoutKeys: {},
+      presentKeys: new Set(['macro']),
+    };
+    const exp: ExpansionState = {
+      expandedStages: new Set(['learning']),
+      expandedFanouts: new Set(),
+    };
+    const l = layoutPipeline(day, exp);
+    expect(l.nodes.find((n) => n.id === 'learning:beliefs')?.documentKey).toBeUndefined();
   });
 
   it('#1259: digest node resolves via digest-delta on a delta day (no plain `digest` key)', () => {

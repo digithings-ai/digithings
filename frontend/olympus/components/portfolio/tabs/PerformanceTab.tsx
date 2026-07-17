@@ -6,12 +6,18 @@ import { useDashboard } from '@/lib/dashboard-context';
 import { StatCard, formatPct, pnlColor } from '@/components/ui';
 import { TrendingUp, BarChart3, Activity, Target, ChevronDown, ChevronUp } from 'lucide-react';
 import type { BenchmarkHistoryMap, NavChartPoint, PerfChartPoint, Thesis } from '@/lib/types';
+import {
+  PerformanceDashboard,
+  type DashboardAllocation,
+  type DashboardHeadline,
+  type DashboardRatio,
+} from '@digithings/web';
 import { PositionPnlTable } from '@/components/portfolio/position-pnl-table';
 import { AdvancedStatsPanel } from '@/components/portfolio/advanced-stats-panel';
 import { PerformanceDateRange } from '@/components/portfolio/performance-date-range';
-import { ServerMetricsStrip } from '@/components/portfolio/server-metrics-strip';
 import { PerformanceChartWorkspace } from '@/components/portfolio/performance-chart-workspace';
-import AtlasLoader from '@/components/AtlasLoader';
+import { buildSleeveStackSeries, categoryStackLabel } from '@/lib/portfolio-aggregates';
+import PageSkeleton from '@/components/page-skeleton';
 import { fetchComparablePriceHistory } from '@/lib/queries';
 import {
   filterByDateRange,
@@ -235,6 +241,69 @@ export default function PerformanceTab() {
     [serverMetrics, snaps]
   );
 
+  /** Server-metrics reads on the canonical <PerformanceDashboard/> grammar
+   * (#1548, replaces the inline strip). Tone only on signed money reads:
+   * P&L headline and a negative max drawdown; ratios stay ink. The strip's
+   * "Server metrics · date · generated" caption folds into the headline
+   * label + note. (Wiring: the dashboard's pdash-* hairlines + utilities
+   * need globals.css to `@import "@digithings/web/styles/finance-composites.css"`
+   * and `@source "../../digiweb/web/src/components/finance-composites";`.) */
+  const serverDashboard = useMemo<{
+    headlines: DashboardHeadline[];
+    ratios: DashboardRatio[];
+  } | null>(() => {
+    if (!serverMetrics) return null;
+    const m = serverMetrics;
+    const r = effectiveRiskMetrics;
+    const noteParts: string[] = [];
+    const asOf = m.as_of_date ?? m.date ?? null;
+    if (asOf) noteParts.push(`as of ${asOf}`);
+    if (m.generated_at) noteParts.push(`generated ${m.generated_at.slice(0, 19)}`);
+    const headlines: DashboardHeadline[] = [
+      {
+        label: 'server p&l',
+        value:
+          m.pnl_pct != null ? `${m.pnl_pct >= 0 ? '+' : ''}${m.pnl_pct.toFixed(2)}%` : '—',
+        tone: m.pnl_pct != null ? (m.pnl_pct >= 0 ? 'up' : 'down') : undefined,
+        note: noteParts.length ? noteParts.join(' · ') : undefined,
+      },
+    ];
+    const ratios: DashboardRatio[] = [
+      { label: 'sharpe', value: r.sharpe != null ? r.sharpe.toFixed(2) : '—' },
+      { label: 'ann. vol', value: r.annVolPct != null ? `${r.annVolPct.toFixed(2)}%` : '—' },
+      {
+        label: 'max drawdown',
+        value: r.maxDrawdownPct != null ? `${r.maxDrawdownPct.toFixed(2)}%` : '—',
+        tone: r.maxDrawdownPct != null && r.maxDrawdownPct < 0 ? 'down' : undefined,
+      },
+      { label: 'cash', value: m.cash_pct != null ? `${m.cash_pct.toFixed(1)}%` : '—' },
+      {
+        label: 'invested',
+        value: m.invested_pct != null ? `${m.invested_pct.toFixed(1)}%` : '—',
+      },
+    ];
+    return { headlines, ratios };
+  }, [serverMetrics, effectiveRiskMetrics]);
+
+  /** Current sleeve mix for the dashboard's allocation bars — the same
+   * category aggregation AllocationsTab stacks, sliced at the latest date
+   * (position_history is already on the dashboard payload; no new fetch). */
+  const sleeveAllocations = useMemo<DashboardAllocation[]>(() => {
+    const { data: series, keys } = buildSleeveStackSeries(positionHistory, 'category');
+    const latest = series[series.length - 1];
+    if (!latest) return [];
+    return keys
+      .map((k) => {
+        const w = latest[k];
+        return {
+          name: categoryStackLabel(k),
+          pct: typeof w === 'number' ? Math.round(w * 10) / 10 : 0,
+        };
+      })
+      .filter((a) => a.pct > 0)
+      .sort((a, b) => b.pct - a.pct);
+  }, [positionHistory]);
+
   const onAddComparable = useCallback(
     (t: string) => {
       const u = String(t).toUpperCase().trim();
@@ -258,7 +327,8 @@ export default function PerformanceTab() {
     [defaultComparableSelection]
   );
 
-  if (loading) return <AtlasLoader fullScreen={false} />;
+  // bare: rendered inside the portfolio shell's container (#1548)
+  if (loading) return <PageSkeleton bare />;
   if (error || !data || !metrics)
     return (
       <div className="flex items-center justify-center min-h-[40vh] text-down">
@@ -313,7 +383,7 @@ export default function PerformanceTab() {
             value={totalReturnValue}
             valueClass={pnlColor(range === 'itd' ? metrics.portfolio_pnl : rangeReturn)}
             icon={BarChart3}
-            iconColor="text-up"
+            iconColor="text-accent"
             subtitle={totalReturnLabel}
           />
           <StatCard
@@ -386,8 +456,15 @@ export default function PerformanceTab() {
               <ChevronDown size={18} className="text-ink-mute" />
             )}
           </button>
-          {showAdvanced && serverMetrics && (
-            <ServerMetricsStrip m={serverMetrics} effectiveRisk={effectiveRiskMetrics} />
+          {showAdvanced && serverDashboard && (
+            <PerformanceDashboard
+              className="mx-6 mb-6"
+              headlines={serverDashboard.headlines}
+              ratios={serverDashboard.ratios}
+              ratioColumns={5}
+              allocations={sleeveAllocations.length > 0 ? sleeveAllocations : undefined}
+              allocationsLabel="allocation by sleeve"
+            />
           )}
           {showAdvanced && (
             <AdvancedStatsPanel

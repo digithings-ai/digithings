@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { pnlColor } from '@/components/ui';
 import type { DashboardPositionEvent, PositionHistoryRow, Thesis } from '@/lib/types';
@@ -123,7 +124,7 @@ export default function AllocationsPositionsTable(props: {
         <label className="flex items-center gap-2 text-[11px] text-ink-mute select-none">
           <input
             type="checkbox"
-            className="accent-[var(--accent)]"
+            className="accent-accent"
             checked={showInactive}
             onChange={(e) => setShowInactive(e.target.checked)}
           />
@@ -196,7 +197,7 @@ export default function AllocationsPositionsTable(props: {
                               aria-hidden
                             >
                               <span
-                                className="block h-full rounded-full bg-[var(--accent)]/40"
+                                className="block h-full rounded-full bg-accent/40"
                                 style={{ width: `${pctOfMax}%` }}
                               />
                             </span>
@@ -263,19 +264,19 @@ export default function AllocationsPositionsTable(props: {
                         </td>
                         <td className="px-2 py-3 text-center md:px-3">
                           {dec && dec.conviction != null ? (
-                            <a
+                            <Link
                               href={buildPipelineHref({
                                 date: dec.run_date,
                                 stage: 'selection',
                                 node: `analyst/${p.ticker.toUpperCase()}`,
                               })}
                               onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 text-[var(--accent)] hover:underline"
+                              className="inline-flex items-center gap-1 text-accent hover:underline"
                               title={`Open ${p.ticker} decision in Pipeline`}
                             >
                               <SignedConvictionBadge value={dec.conviction} />
                               <ExternalLink size={12} aria-hidden />
-                            </a>
+                            </Link>
                           ) : (
                             <span className="text-ink-mute">—</span>
                           )}
