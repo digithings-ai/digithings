@@ -31,6 +31,7 @@
  * env): the section renders a plain "connects on deploy" card — never a crash
  * or blank, and all routes prerender.
  */
+import { useEffect, useRef, useState } from "react";
 import { LiveBadge, PerformanceDashboard, Reveal, fmtNum, fmtPct } from "@digithings/web";
 import type {
   DashboardAllocation,
@@ -38,6 +39,42 @@ import type {
   DashboardRatio,
 } from "@digithings/web";
 import { useLivePortfolio, type LivePosition } from "@/lib/live";
+
+/** Direction of the last change to a live value ("up"/"down"), held briefly so
+ *  the cell can flash, then cleared — so a ticking price is *perceptibly* live,
+ *  not just silently different. Null when nothing has changed. */
+function useTickFlash(value: number | null): "up" | "down" | null {
+  const prev = useRef<number | null>(value);
+  const [dir, setDir] = useState<"up" | "down" | null>(null);
+  useEffect(() => {
+    const before = prev.current;
+    prev.current = value;
+    if (before == null || value == null || value === before) return;
+    setDir(value > before ? "up" : "down");
+    const t = setTimeout(() => setDir(null), 900);
+    return () => clearTimeout(t);
+  }, [value]);
+  return dir;
+}
+
+/** Wraps a live read so it washes --up/--down on change (reduced-motion-safe:
+ *  the wash is CSS-animation-gated, so it degrades to the final value). */
+function FlashNum({
+  value,
+  className = "",
+  children,
+}: {
+  value: number | null;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const dir = useTickFlash(value);
+  return (
+    <span className={`dq-tick${dir ? ` dq-tick-${dir}` : ""}${className ? ` ${className}` : ""}`}>
+      {children}
+    </span>
+  );
+}
 
 /** Signed percent read with an explicit "+" on gains; em dash for missing. */
 function signedPct(v: number | null): string {
@@ -122,13 +159,15 @@ function PositionsTable({ positions }: { positions: LivePosition[] }) {
               <td
                 className={`px-4 py-[0.6rem] text-right ${p.isLive ? "text-ink" : "text-ink-soft"}`}
               >
-                {fmtPrice(p.livePrice)}
+                <FlashNum value={p.livePrice}>{fmtPrice(p.livePrice)}</FlashNum>
               </td>
               <td className={`px-4 py-[0.6rem] text-right ${toneText(p.dayChangePct)}`}>
-                {signedPct(p.dayChangePct)}
+                <FlashNum value={p.dayChangePct}>{signedPct(p.dayChangePct)}</FlashNum>
               </td>
               <td className={`px-4 py-[0.6rem] text-right ${toneText(p.sinceEntryReturnPct)}`}>
-                {signedPct(p.sinceEntryReturnPct)}
+                <FlashNum value={p.sinceEntryReturnPct}>
+                  {signedPct(p.sinceEntryReturnPct)}
+                </FlashNum>
               </td>
             </tr>
           ))}

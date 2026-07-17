@@ -292,6 +292,20 @@ export function OlympusScene() {
         </div>
         </div>
       </div>
+      {/* Section outro: the scrolly explains the pipeline, this launches the
+          real thing. `/olympus/` is the separate dashboard export (dist/olympus/)
+          — a full cross-app navigation, so a plain <a>, not a Next <Link>. */}
+      <div className="wrap dqp-outro">
+        <a
+          className="btn btn-primary dqp-outro-cta"
+          href="/olympus/"
+          aria-label="Open the Olympus dashboard"
+        >
+          <OlympusMark size={18} />
+          <span>Open the Olympus dashboard</span>
+          <span aria-hidden="true">→</span>
+        </a>
+      </div>
     </section>
   );
 }

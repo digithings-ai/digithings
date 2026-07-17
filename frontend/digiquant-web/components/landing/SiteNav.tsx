@@ -8,19 +8,16 @@
  * (settle after 8px, yield past 180px), hamburger, portal sheet, Escape/scrim
  * dismissal, and body-scroll lock all live in the primitive; only the dress
  * arrives from here.
+ *
+ * The Olympus CTA opens the dashboard app at `/olympus/` (a full cross-app
+ * navigation — Olympus is a separate export assembled into `dist/olympus/`, so
+ * it's a plain <a>, not a Next <Link>, and matches the subsystems page's
+ * "Open Olympus" button). The in-nav "Olympus" text link still scrolls to the
+ * `/#olympus` explainer section — text link explains, button launches.
  */
-import Link from "next/link";
 import { NavShell, GitHubGlyph } from "@digithings/web";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
 import { OlympusMark } from "./OlympusMark";
-
-/** NavShell wires close-on-navigate into its own links, but the cta slot is
- *  opaque to it. A hash navigation (→ /#olympus) never remounts the page, so
- *  the sheet would stay open over the scrolled content — synthesize the
- *  Escape the open menu already listens for. */
-function closeSheet() {
-  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-}
 
 export function SiteNav() {
   return (
@@ -45,22 +42,21 @@ export function SiteNav() {
               the sheet button as the only Olympus entry. hidden! (important):
               .olympus-cta's `display: inline-flex` is unlayered on purpose in
               globals.css (sheet-slot rule) and outranks the layered utility. */}
-          <Link
+          <a
             className="btn btn-primary btn-sm olympus-cta max-[880px]:hidden!"
-            href="/#olympus"
-            onClick={closeSheet}
-            aria-label="Open Olympus"
+            href="/olympus/"
+            aria-label="Open the Olympus dashboard"
           >
             <OlympusMark size={16} />
             <span>Olympus</span>
-          </Link>
+          </a>
         </>
       }
       cta={
-        <Link className="btn btn-primary olympus-cta" href="/#olympus" onClick={closeSheet}>
+        <a className="btn btn-primary olympus-cta" href="/olympus/" aria-label="Open the Olympus dashboard">
           <OlympusMark size={18} />
           <span>Olympus</span>
-        </Link>
+        </a>
       }
     />
   );

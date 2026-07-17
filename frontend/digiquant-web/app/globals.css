@@ -299,6 +299,28 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 
 /* ---- OLYMPUS: scroll-pinned hedge-fund-in-a-box track ---- */
 .dq-olympus { background: var(--bg); }
+/* Section outro CTA — sits below the pinned scrolly, launches the dashboard. */
+.dqp-outro { display: flex; justify-content: center; padding: clamp(2rem, 6vw, 3.6rem) 0 clamp(2.6rem, 7vw, 4.4rem); border-top: 1px solid var(--hair); }
+.dqp-outro-cta { gap: 0.6rem; }
+.dqp-outro-cta svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+
+/* Live-book flash-on-tick (#1461 payoff) — a ticking cell washes its P&L colour
+   for a beat so a live change is perceptible, not silent. Money colours only
+   (--up/--down), never a livery. Reduced-motion neutralises the wash below. */
+.dq-tick { border-radius: 4px; padding-inline: 0.18em; }
+.dq-tick-up { animation: dq-tick-up 0.9s var(--ease); }
+.dq-tick-down { animation: dq-tick-down 0.9s var(--ease); }
+@keyframes dq-tick-up {
+  0% { background: color-mix(in srgb, var(--up) 30%, transparent); }
+  100% { background: transparent; }
+}
+@keyframes dq-tick-down {
+  0% { background: color-mix(in srgb, var(--down) 30%, transparent); }
+  100% { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dq-tick-up, .dq-tick-down { animation: none; }
+}
 .dqp-scrolly { position: relative; height: 480vh; background: var(--bg); }
 .dqp-pin { position: sticky; top: 0; height: 100svh; display: flex; align-items: center; overflow: hidden; border-top: 1px solid var(--hair); }
 .dqp-pin .wrap { width: 100%; position: relative; z-index: 1; }
