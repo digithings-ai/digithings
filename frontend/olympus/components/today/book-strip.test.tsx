@@ -35,6 +35,13 @@ describe('BookStrip', () => {
     // CASH is a header figure, not a list row
     expect(html.indexOf('EWT')).toBeLessThan(html.indexOf('UUP'));
   });
+  it("renders the book's own as-of via the shared badge (#1555 honesty)", () => {
+    const html = renderToStaticMarkup(
+      createElement(BookStrip, { positions, investedPct: 75, asOfDate: '2026-06-26' })
+    );
+    expect(html).toContain('Jun 26');
+  });
+
   it('renders an empty-state line when there are no held positions', () => {
     const html = renderToStaticMarkup(
       createElement(BookStrip, { positions: [pos({ ticker: 'CASH', weight_actual: 100 })], investedPct: 0, asOfDate: null })

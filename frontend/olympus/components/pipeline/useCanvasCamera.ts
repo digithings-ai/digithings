@@ -10,6 +10,13 @@ export interface CameraTransform { x: number; y: number; scale: number; }
 const MIN_SCALE = 0.4;
 const MAX_SCALE = 2.5;
 const PADDING = 30;
+// Pointer movement below this is a click, not a pan (see onPointerDown).
+export const DRAG_SLOP_PX = 4;
+
+/** Pure helper: has the pointer moved far enough from its down-point to count as a pan? */
+export function exceedsDragSlop(startX: number, startY: number, x: number, y: number): boolean {
+  return Math.hypot(x - startX, y - startY) >= DRAG_SLOP_PX;
+}
 // Idle window after the last wheel event before we treat the gesture as ended.
 const WHEEL_IDLE_MS = 120;
 
@@ -100,7 +107,14 @@ export function useCanvasCamera(initialTransform?: Partial<CameraTransform>): Ca
   const layerRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
-  const drag = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
+  const drag = useRef<{
+    startX: number;
+    startY: number;
+    startPanX: number;
+    startPanY: number;
+    pointerId: number;
+    captured: boolean;
+  } | null>(null);
   const rafId = useRef<number | null>(null);
   const isInteracting = useRef<boolean>(false);
   const wheelIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -199,22 +213,35 @@ export function useCanvasCamera(initialTransform?: Partial<CameraTransform>): Ca
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if ((e.target as HTMLElement).closest('[data-no-pan]')) return;
+      // Record the candidate pan but do NOT capture the pointer yet: capturing
+      // on pointerdown retargets the subsequent `click` to the viewport, which
+      // silently swallowed every node click on the canvas (#1553 — documents
+      // could only be opened via keyboard). Capture happens in onPointerMove
+      // once the gesture exceeds the drag slop, so stationary clicks reach
+      // the nodes and real drags still pan.
       drag.current = {
         startX: e.clientX,
         startY: e.clientY,
         startPanX: transformRef.current.x,
         startPanY: transformRef.current.y,
+        pointerId: e.pointerId,
+        captured: false,
       };
-      (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
-      beginInteraction();
     },
-    [beginInteraction],
+    [],
   );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       const d = drag.current;
       if (!d) return;
+      if (!d.captured) {
+        // Drag slop: treat sub-slop movement as a click-in-progress, not a pan.
+        if (!exceedsDragSlop(d.startX, d.startY, e.clientX, e.clientY)) return;
+        d.captured = true;
+        (e.currentTarget as HTMLDivElement).setPointerCapture(d.pointerId);
+        beginInteraction();
+      }
       // Set transform absolutely from start + delta — no accumulation, no
       // stale-closure wobble.
       transformRef.current = {
@@ -224,7 +251,7 @@ export function useCanvasCamera(initialTransform?: Partial<CameraTransform>): Ca
       };
       scheduleWrite();
     },
-    [scheduleWrite],
+    [beginInteraction, scheduleWrite],
   );
 
   const onPointerUp = useCallback(() => {
