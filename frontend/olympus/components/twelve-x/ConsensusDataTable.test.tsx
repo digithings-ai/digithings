@@ -141,6 +141,14 @@ describe('ConsensusDataTable component', () => {
     expect(html).toContain('data-filter="strong"');
   });
 
+  it('labels the trailing five-run score as Average', () => {
+    const series = tenCurrencySeries();
+    const html = render(series, latestFrom(series));
+    expect(html).toContain('title="Trailing 5-run average"');
+    expect(html).toContain('>Average</button>');
+    expect(html).not.toContain('>Trailing-5</button>');
+  });
+
   it('respects the initialFilter prop', () => {
     const series = tenCurrencySeries();
     const latest = latestFrom(series);

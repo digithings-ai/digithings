@@ -42,13 +42,13 @@ function valueColor(v: number | null): string {
 }
 
 /** Momentum → arrow glyph + color class (▲ up / ▼ down / · flat). */
-function momentumPresentation(m: number | null): { arrow: string; cls: string } {
+function rateChangePresentation(m: number | null): { arrow: string; label: string } {
   if (m === null || !Number.isFinite(m) || m === 0) {
-    return { arrow: '·', cls: 'text-ink-soft' };
+    return { arrow: '—', label: 'No change from prior run' };
   }
   return m > 0
-    ? { arrow: '▲', cls: 'text-up' }
-    : { arrow: '▼', cls: 'text-down' };
+    ? { arrow: '↑', label: 'Up from prior run' }
+    : { arrow: '↓', label: 'Down from prior run' };
 }
 
 export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
@@ -72,6 +72,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
         <>
           <div className="tc-rows grid gap-2.5 mt-1">
             {rows.map((r) => {
+              const rateChange = rateChangePresentation(r.priorChange);
               return (
                 <div key={r.currency} className="tc-row flex items-center gap-2.5">
                   <span
@@ -97,12 +98,13 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
                     {fmtSigned(r.avgNow)}
                   </span>
                   <span
-                    className={`font-mono tabular-nums text-right text-[11.5px] w-[72px] ${valueColor(
+                    className={`inline-flex w-[72px] items-center justify-end gap-1 font-mono tabular-nums text-right text-[11.5px] ${valueColor(
                       r.priorChange
                     )}`}
-                    title="Change from prior run"
+                    title={rateChange.label}
                   >
-                    {fmtSigned(r.priorChange)}
+                    <span aria-hidden="true">{rateChange.arrow}</span>
+                    <span>{fmtSigned(r.priorChange)}</span>
                   </span>
                 </div>
               );

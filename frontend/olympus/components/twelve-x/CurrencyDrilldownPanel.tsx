@@ -144,11 +144,11 @@ export function CurrencyDrilldownPanelBody({
           <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
             Desk Opinions
           </h4>
-          <div className="max-h-48 space-y-2 overflow-y-auto">
+          <div className="max-h-48 space-y-2 overflow-y-auto overscroll-contain pr-1 pb-1">
             {desks.map((desk, i) => (
               <div
                 key={i}
-                className="rounded border border-hair bg-surface p-3 text-sm"
+                className="rounded-lg border border-hair bg-surface p-3 text-sm"
               >
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-ink">{desk.broker}</span>
@@ -167,13 +167,13 @@ export function CurrencyDrilldownPanelBody({
           <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
             Relevant Briefs
           </h4>
-          <div className="max-h-48 space-y-2 overflow-y-auto">
+          <div className="max-h-48 space-y-2 overflow-y-auto overscroll-contain pr-1 pb-1">
             {relevantBriefs.map((brief) => (
               <button
                 key={`${brief.source_file}-${brief.run_date}`}
                 type="button"
                 onClick={() => onOpenBrief(brief.source_file, brief.run_date)}
-                className="w-full rounded border border-hair bg-surface p-3 text-left text-sm transition-colors hover:border-accent hover:bg-surface/80"
+                className="w-full rounded-lg border border-hair bg-surface p-3 text-left text-sm transition-colors hover:border-accent hover:bg-surface/80"
               >
                 <div className="font-medium text-ink">{brief.broker_name}</div>
                 <div className="mt-1 text-xs text-ink-mute">{brief.central_thesis}</div>
@@ -217,30 +217,32 @@ export default function CurrencyDrilldownPanel({
       <SheetContent
         side="right"
         showCloseButton={false}
-        className="flex w-full! max-w-lg! flex-col overflow-y-auto"
+        className="flex w-full! max-w-lg! flex-col gap-0 bg-term-bg p-0 shadow-2xl"
       >
-        <div className="mb-4 flex items-center justify-between border-b border-hair pb-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-hair px-5 py-4">
           <SheetTitle className="font-display text-lg tracking-tight text-ink">
             {currency} Details
           </SheetTitle>
           <SheetClose
-            className="rounded p-1 text-ink-mute transition-colors hover:bg-ink/5 hover:text-ink"
+            className="-mr-1.5 flex h-9 w-9 items-center justify-center rounded-lg text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink"
             aria-label="Close"
           >
             <X size={18} />
           </SheetClose>
         </div>
 
-        <CurrencyDrilldownPanelBody
-          currency={currency}
-          consensusRow={consensusRow}
-          intelligenceItem={intelligenceItem}
-          relevantBriefs={relevantBriefs}
-          onOpenBrief={(sourceFile, runDate) => {
-            onClose();
-            onOpenBrief(sourceFile, runDate);
-          }}
-        />
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <CurrencyDrilldownPanelBody
+            currency={currency}
+            consensusRow={consensusRow}
+            intelligenceItem={intelligenceItem}
+            relevantBriefs={relevantBriefs}
+            onOpenBrief={(sourceFile, runDate) => {
+              onClose();
+              onOpenBrief(sourceFile, runDate);
+            }}
+          />
+        </div>
       </SheetContent>
     </Sheet>
   );

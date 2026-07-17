@@ -131,12 +131,12 @@ describe('TodayConsensusChart', () => {
     expect(html).not.toContain('vs prior');
   });
 
-  it('does NOT render momentum-vs-average arrows or the "rate of change" legend', () => {
+  it('renders up and down arrows for prior-run rate of change', () => {
     const html = render(tenCurrencySeries());
-    expect(html).not.toContain('▲');
-    expect(html).not.toContain('▼');
-    expect(html).not.toContain('rate of change');
-    expect(html).not.toContain('actual vs average');
+    expect(html).toContain('↑');
+    expect(html).toContain('↓');
+    expect(html).toContain('Up from prior run');
+    expect(html).toContain('Down from prior run');
   });
 
   it('does NOT render yesterday or 5-days-ago legend keys', () => {

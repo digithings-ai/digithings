@@ -61,36 +61,37 @@ export default function TodayTab({
       </div>
 
       {/* Mid row: consensus-average chart (wider) + broker briefs, height-matched. */}
-      <div className="today-mid grid grid-cols-1 items-start gap-4 lg:h-[36.5rem] lg:grid-cols-[1.5fr_1fr] lg:items-stretch">
-        <div className="flex min-w-0 flex-col flex-1">
+      <div className="today-mid grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
+        <div className="flex min-w-0 flex-col">
           <TodayConsensusChart series={series} />
         </div>
 
-        <section className="glass-card flex min-w-0 flex-col overflow-hidden p-4 lg:h-full">
-          <header className="mb-3 flex shrink-0 items-baseline gap-2">
-            <TwelveXSectionHeading>Broker briefs</TwelveXSectionHeading>
-            <span className="ml-auto font-mono text-[10px] text-ink-mute">
-              {briefs.length} {briefs.length === 1 ? 'brief' : 'briefs'}
-            </span>
-            {briefs.length > 0 ? (
-              <button
-                type="button"
-                className="text-[11px] text-accent hover:underline"
-                onClick={onSeeAllBriefs}
-              >
-                see all →
-              </button>
-            ) : null}
-          </header>
+        <div className="min-w-0 lg:relative lg:self-stretch">
+          <section className="glass-card flex min-w-0 flex-col overflow-hidden p-4 lg:absolute lg:inset-0">
+            <header className="mb-3 flex shrink-0 items-baseline gap-2">
+              <TwelveXSectionHeading>Broker briefs</TwelveXSectionHeading>
+              <span className="ml-auto font-mono text-[10px] text-ink-mute">
+                {briefs.length} {briefs.length === 1 ? 'brief' : 'briefs'}
+              </span>
+              {briefs.length > 0 ? (
+                <button
+                  type="button"
+                  className="text-[11px] text-accent hover:underline"
+                  onClick={onSeeAllBriefs}
+                >
+                  see all →
+                </button>
+              ) : null}
+            </header>
 
-          {briefs.length === 0 ? (
-            <p className="text-sm text-ink-mute">No research briefs for today yet.</p>
-          ) : (
-            <div
-              className="flex max-h-[32rem] min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain pr-1 lg:max-h-none lg:flex-1"
-              aria-label="Broker brief cards"
-              tabIndex={0}
-            >
+            {briefs.length === 0 ? (
+              <p className="text-sm text-ink-mute">No research briefs for today yet.</p>
+            ) : (
+              <div
+                className="flex max-h-[32rem] min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain pr-1 lg:max-h-none lg:flex-1"
+                aria-label="Broker brief cards"
+                tabIndex={0}
+              >
               {(() => {
                 // Group briefs by effective date (report_date ?? run_date), newest first.
                 const grouped = new Map<string, typeof briefs>();
@@ -140,9 +141,10 @@ export default function TodayTab({
                   );
                 });
               })()}
-            </div>
-          )}
-        </section>
+              </div>
+            )}
+          </section>
+        </div>
       </div>
 
       {/* Full-width single-day timeline (replaces the old compact events tile). */}

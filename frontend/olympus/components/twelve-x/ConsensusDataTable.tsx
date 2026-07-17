@@ -159,8 +159,9 @@ export function ConsensusDataTable({
                     type="button"
                     onClick={() => onHeaderClick('avgNow')}
                     className="hover:text-ink transition-colors"
+                    title="Trailing 5-run average"
                   >
-                    Trailing-5
+                    Average
                   </button>
                 </th>
                 <th className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-ink-mute">

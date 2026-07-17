@@ -177,6 +177,9 @@ describe('CurrencyDrilldownPanelBody', () => {
     expect(html).toContain('Broker B');
     expect(html).toContain('Strong fundamentals');
     expect(html).toContain('Technical breakout');
+    expect(html).toContain('overflow-y-auto overscroll-contain pr-1 pb-1');
+    expect(html).toContain('rounded-lg border border-hair');
+    expect(html).not.toContain('class="rounded border border-hair');
   });
 
   it('lists relevant briefs with open action', () => {
@@ -198,6 +201,7 @@ describe('CurrencyDrilldownPanelBody', () => {
     expect(html).toContain('brief1.md');
     expect(html).toContain('brief2.md');
     expect(html).toContain('Broker A');
+    expect(html).toContain('w-full rounded-lg border border-hair');
   });
 
   it('shows em dash when no confluence data available', () => {

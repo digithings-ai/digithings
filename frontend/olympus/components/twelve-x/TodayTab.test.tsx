@@ -203,8 +203,9 @@ describe('TodayTab layout (Task 2.2)', () => {
   it('height-matches the desktop consensus and broker-brief panels', () => {
     const html = render();
     expect(html).toContain('items-start');
-    expect(html).toContain('lg:h-[36.5rem]');
-    expect(html).toContain('lg:items-stretch');
+    expect(html).not.toContain('lg:h-[36.5rem]');
+    expect(html).toContain('lg:relative lg:self-stretch');
+    expect(html).toContain('lg:absolute lg:inset-0');
   });
 
   it('groups broker briefs by effective date (report_date ?? run_date) newest-first', () => {
