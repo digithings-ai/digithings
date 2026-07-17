@@ -428,3 +428,56 @@ export interface PerformanceMetrics {
   trackingError: number | null;
   infoRatio: number | null;
 }
+
+// ---------------------------------------------------------------------------
+// Ticker dossier (#1562 PR2) — the unified per-ticker analyst payload
+// ---------------------------------------------------------------------------
+
+/**
+ * The H5 unified analyst output (`documents.payload` where
+ * `document_key = 'analyst/{TICKER}'`), mirrored from the backend Pydantic model
+ * `digiquant/.../hermes/models/analyst.py:AnalystPayload`. `conviction_score` is
+ * SIGNED (ge=-5 le=5) — render with `SignedConvictionBadge`, never clamp or feed
+ * it into the unsigned `ConvictionMeter`. `price_targets` is a free-form
+ * label→number dict (keys vary call to call — "primary/support/secondary",
+ * "lower/upper", "bull_case/base_case/bear_case", …) so it must be rendered
+ * generically, never destructured by fixed key.
+ */
+export interface AnalystPayload {
+  ticker: string;
+  conviction_score: number;
+  stance: string;
+  thesis: string;
+  risks: string;
+  sources: string[];
+  fundamentals: string;
+  technicals: string;
+  headwinds: string[];
+  tailwinds: string[];
+  bull_case: string;
+  bear_case: string;
+  price_targets: Record<string, number | string> | null;
+  expectations: string;
+  fingerprint_news_hash: string;
+}
+
+/** The `analyst_coverage` pointer row for one ticker — index only, never a freshness source. */
+export interface TickerCoverage {
+  date: string | null;
+  thesis_ids: string[];
+  current_recommendation_key: string | null;
+  /** Pointer refresh timestamp — NOT the underlying doc's content age (#1562 §0). */
+  last_updated: string | null;
+}
+
+/** Everything the ticker dossier route (`/portfolio/tickers?ticker=`) needs, one ticker at a time. */
+export interface TickerDossier {
+  ticker: string;
+  /** Latest `analyst/{TICKER}` payload, or null when no analyst doc exists for this ticker. */
+  analyst: AnalystPayload | null;
+  /** The analyst doc's `date` column — the real content-freshness source (never `coverage.last_updated`). */
+  analystDate: string | null;
+  coverage: TickerCoverage | null;
+  /** All `decision_log` rows for this ticker, newest `run_date` first. */
+  decisions: TableRow<'decision_log'>[];
+}

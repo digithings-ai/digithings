@@ -220,6 +220,27 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['decision_log']['Row'], 'id' | 'created_at'> & { id?: string; created_at?: string };
         Update: Partial<Database['public']['Tables']['decision_log']['Insert']>;
       };
+      thesis_vehicles: {
+        // Analyst vehicle-selection map: ticker → MARKET thesis_id, with rationale +
+        // candidate_rank (many-to-many). Written reliably by Hermes H3
+        // (persist_thesis_vehicle_map). This is the RELIABLE ticker→market-thesis join
+        // used by the Theses story spine (#1562) — `theses.linked_market_thesis_id` is
+        // self-referential/dead. NB: `thesis_id` is co-generated per `date` with the
+        // `theses` table (the slug churns daily), so the join is reliable within a date.
+        Row: {
+          date: string;
+          thesis_id: string;          // MARKET thesis id (matches theses.thesis_id on the same date)
+          ticker: string;
+          rationale: string | null;
+          exclusion_reasons: Json | null;
+          candidate_rank: number | null;
+          user_mandate_notes: Json | null;
+          source_exploration_key: string | null;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['thesis_vehicles']['Row'], 'created_at'> & { created_at?: string };
+        Update: Partial<Database['public']['Tables']['thesis_vehicles']['Insert']>;
+      };
       position_attribution: {
         // Single-benchmark active-return decomposition per (date, ticker) (migration 040).
         Row: {
@@ -269,6 +290,24 @@ export interface Database {
         };
         Insert: Database['public']['Tables']['atlas_run_diagnostics']['Row'];
         Update: Partial<Database['public']['Tables']['atlas_run_diagnostics']['Row']>;
+      };
+      analyst_coverage: {
+        // Pointer/index row per (date, ticker): which market thesis_ids the coverage
+        // touches and the live doc key to render (`current_recommendation_key`, e.g.
+        // 'analyst/XLE'). `last_updated` tracks the POINTER refresh, NOT the underlying
+        // analyst doc content — the frozen 06-26 analyst docs still get a fresh
+        // `last_updated` on every run (#1562). Never derive "last analyzed" from this
+        // column; use the `documents`/`decision_log` row dates instead.
+        Row: {
+          date: string;
+          ticker: string;
+          thesis_ids: Json | null;    // jsonb string[] of MARKET thesis ids; often []
+          analyst_role: string | null;
+          current_recommendation_key: string | null; // e.g. 'analyst/XLE'
+          last_updated: string;
+        };
+        Insert: Database['public']['Tables']['analyst_coverage']['Row'];
+        Update: Partial<Database['public']['Tables']['analyst_coverage']['Row']>;
       };
     };
     Views: {
