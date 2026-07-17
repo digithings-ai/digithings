@@ -948,8 +948,20 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     proposedPositions.map((p) => [p.ticker, Number(p.weight_pct ?? 0)])
   );
 
-  // Treat proposed_positions as executed immediately (post-trade = current).
-  const effectiveCurrentPositions: TableRow<'positions'>[] = proposedPositions.length
+  // Whether the committed book already covers the snapshot's date. When it
+  // does, the positions table is the truth: it carries the POST-TURNOVER
+  // booked weights (H8 sizing + no-trade band + carry), which legitimately
+  // differ from the PM's proposal (e.g. a 20% target booked at 11.4%).
+  const bookedCoversSnapshot =
+    latestPosDate != null && snapshot.date != null && latestPosDate >= snapshot.date;
+
+  // Treat proposed_positions as executed immediately ONLY while the booked
+  // positions LAG the snapshot — the coping path for a frozen/failed commit
+  // (the #1555 era, when this fallback was the whole dashboard's data source).
+  // Preferring the proposal once the book is committed showed PM INTENT as
+  // if it were the actual book across Holdings/Brief/dossier (#1572).
+  const effectiveCurrentPositions: TableRow<'positions'>[] = !bookedCoversSnapshot &&
+  proposedPositions.length
     ? proposedPositions
         .filter((p) => Number(p.weight_pct ?? 0) > 0)
         .map((p) => {
