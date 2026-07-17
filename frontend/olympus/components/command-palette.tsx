@@ -64,7 +64,7 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
       id: 'go-perf',
       title: 'Portfolio — Performance',
       hint: 'NAV, comparables & decision quality',
-      href: '/portfolio?tab=performance',
+      href: '/portfolio/performance',
       icon: LineChart,
     },
     {

@@ -5,6 +5,7 @@ import { Wallet } from 'lucide-react';
 import type { Position } from '@/lib/types';
 import { reconcileBook } from '@/lib/book-reconciliation';
 import { ConvictionMeter } from '@/components/shared/conviction-meter';
+import { AsOfBadge } from '@/components/shared/as-of-badge';
 
 /**
  * "The book today" — a compact holdings strip on the F3 reconciled weight basis
@@ -20,7 +21,7 @@ export interface BookStripProps {
   asOfDate: string | null;
 }
 
-export function BookStrip({ positions, investedPct }: BookStripProps) {
+export function BookStrip({ positions, investedPct, asOfDate }: BookStripProps) {
   const { rows, investedPct: invested, cashPct } = reconcileBook(positions, { investedPct });
   const held = rows
     .filter((r) => r.ticker.toUpperCase() !== 'CASH')
@@ -34,6 +35,10 @@ export function BookStrip({ positions, investedPct }: BookStripProps) {
           <h2 className="text-xs font-bold uppercase tracking-widest text-ink-mute">
             The book today
           </h2>
+          {/* The book's OWN date (nav_history), not the digest date — research can
+              stay fresh while the book freezes (#1555); the badge carries the
+              stale styling so a lagging book is visibly dated, not silently wrong. */}
+          <AsOfBadge date={asOfDate} />
         </div>
         <Link href="/portfolio" className="text-[10px] font-medium text-accent hover:underline">
           All holdings →
