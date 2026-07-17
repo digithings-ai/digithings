@@ -125,11 +125,10 @@ describe('TodayConsensusChart', () => {
     expect(html).not.toContain('t-ago');
   });
 
-  it('renders the compact prior-run change inline (e.g. "+0.20 vs prior")', () => {
+  it('renders the compact prior-run change without a visible label', () => {
     const html = render(tenCurrencySeries());
-    // The compact design shows change from prior run inline, not momentum vs average.
-    expect(html).toContain('vs prior');
-    expect(html).toMatch(/[+−-]\d\.\d{2} vs prior/);
+    expect(html).toMatch(/[+−-]\d\.\d{2}/);
+    expect(html).not.toContain('vs prior');
   });
 
   it('does NOT render momentum-vs-average arrows or the "rate of change" legend', () => {

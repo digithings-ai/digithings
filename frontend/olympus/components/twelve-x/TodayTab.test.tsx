@@ -96,6 +96,22 @@ function briefsFixture(): FxBriefRow[] {
       macro_themes: [],
       positioning_signals: [],
     },
+    {
+      run_date: '2026-06-22',
+      source_file: 'desk-c.md',
+      source_url: null,
+      document_title: 'Yen sensitivity rises into BOJ',
+      broker_name: 'Gamma Markets',
+      analyst_names: null,
+      report_date: '2026-06-21',
+      trader_relevance: 'high',
+      central_thesis: 'JPY remains sensitive to policy normalization signals.',
+      brief_markdown: null,
+      currency_views: [{ currency: 'JPY', direction: 'bearish', conviction: 'medium' }],
+      risk_events: [],
+      macro_themes: [],
+      positioning_signals: [],
+    },
   ];
 }
 
@@ -153,11 +169,14 @@ describe('TodayTab layout (Task 2.2)', () => {
     expect(render()).toContain('Consensus');
   });
 
-  it('renders a scrollable broker-briefs list with the brief content', () => {
+  it('renders at least three brief cards in an internally scrollable region', () => {
     const html = render();
     expect(html).toContain('Broker briefs');
     expect(html).toContain('Dollar smile intact into Q3');
     expect(html).toContain('Euro range to hold');
+    expect(html).toContain('Yen sensitivity rises into BOJ');
+    expect(html).toContain('aria-label="Broker brief cards"');
+    expect(html).toContain('overflow-y-auto');
   });
 
   it('renders the full-width EventsTimeline (single-day) below', () => {
@@ -181,11 +200,11 @@ describe('TodayTab layout (Task 2.2)', () => {
   });
 
 
-  it('uses content-sized layout (items-start) not stretched empty panels', () => {
+  it('height-matches the desktop consensus and broker-brief panels', () => {
     const html = render();
-    // Requirement 2: no equal-height stretched empty panel — use items-start.
     expect(html).toContain('items-start');
-    expect(html).not.toContain('items-stretch');
+    expect(html).toContain('lg:h-[36.5rem]');
+    expect(html).toContain('lg:items-stretch');
   });
 
   it('groups broker briefs by effective date (report_date ?? run_date) newest-first', () => {

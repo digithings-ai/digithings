@@ -102,7 +102,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
                     )}`}
                     title="Change from prior run"
                   >
-                    {fmtSigned(r.priorChange)} vs prior
+                    {fmtSigned(r.priorChange)}
                   </span>
                 </div>
               );
