@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, type ElementType } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ElementType } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Activity,
@@ -14,6 +14,7 @@ import {
   PieChart,
   Search,
   Settings,
+  Tag,
   X,
 } from 'lucide-react';
 import {
@@ -24,6 +25,7 @@ import { useDashboard } from '@/lib/dashboard-context';
 import { useAppShell } from '@/components/app-shell-context';
 import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
 import { buildDocumentSearchItems } from '@/lib/document-search';
+import { fetchAllTickers } from '@/lib/queries';
 import type { Doc } from '@/lib/types';
 
 export type CmdItem = {
@@ -138,6 +140,22 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
 }
 
 /**
+ * "Tickers" group (#1562 PR2) — one row per known ticker → the ticker dossier
+ * (`/portfolio/tickers?ticker=`). `tickers` is the live `fetchAllTickers()`
+ * union (positions + decision_log + analyst docs + analyst_coverage); pure so
+ * it is testable without the React tree, matching `buildCommandItems`.
+ */
+export function buildTickerCommandItems(tickers: string[]): CmdItem[] {
+  return tickers.map((t) => ({
+    id: `ticker-${t}`,
+    title: t,
+    hint: 'Ticker dossier',
+    href: `/portfolio/tickers?ticker=${encodeURIComponent(t)}`,
+    icon: Tag,
+  }));
+}
+
+/**
  * Filter the static command list by query, then append live document hits (Surface 6).
  * Document hits are query-dependent and keyed off `document_key` (`buildDocumentSearchItems`),
  * so a blank query returns the static list verbatim — no doc dump in the empty-query view.
@@ -185,6 +203,25 @@ export default function CommandPalette() {
   const items = useMemo<CmdItem[]>(() => buildCommandItems(data), [data]);
   const docs = useMemo<Doc[]>(() => data?.docs ?? [], [data]);
 
+  // Live ticker union (#1562 PR2) — fetched once on mount, independent of the
+  // dashboard context (positions alone would miss decision_log/analyst-only
+  // tickers). Fail-soft: an empty list just omits the Tickers group.
+  const [tickers, setTickers] = useState<string[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchAllTickers()
+      .then((t) => {
+        if (alive) setTickers(t);
+      })
+      .catch(() => {
+        if (alive) setTickers([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const tickerItems = useMemo<CmdItem[]>(() => buildTickerCommandItems(tickers), [tickers]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -200,25 +237,37 @@ export default function CommandPalette() {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, openCommandPalette, closeCommandPalette]);
 
-  // One unlabeled group; the shell re-invokes this per keystroke with its
-  // internal query (filtering policy stays app-side, in filterCommandItems).
+  const toOption = useCallback(
+    (item: CmdItem) => {
+      const Icon = item.icon;
+      return {
+        id: item.id,
+        label: item.title,
+        description: item.hint,
+        icon: <Icon size={16} aria-hidden />,
+        onSelect: () => router.push(item.href),
+      };
+    },
+    [router]
+  );
+
+  // The base group stays unlabeled (the shell re-invokes this per keystroke with
+  // its internal query; filtering policy stays app-side, in filterCommandItems).
+  // The Tickers group (#1562 PR2) is labeled and appended only when it has
+  // matches — `filterCommandItems(tickerItems, [], query)` reuses the same
+  // substring/starts-with ranking with no document hits mixed in (docs=[]).
   const groups = useMemo(
     () =>
-      (query: string): CommandPaletteGroup[] => [
-        {
-          items: filterCommandItems(items, docs, query).map((item) => {
-            const Icon = item.icon;
-            return {
-              id: item.id,
-              label: item.title,
-              description: item.hint,
-              icon: <Icon size={16} aria-hidden />,
-              onSelect: () => router.push(item.href),
-            };
-          }),
-        },
-      ],
-    [items, docs, router]
+      (query: string): CommandPaletteGroup[] => {
+        const tickerMatches = filterCommandItems(tickerItems, [], query);
+        return [
+          { items: filterCommandItems(items, docs, query).map(toOption) },
+          ...(tickerMatches.length > 0
+            ? [{ id: 'tickers', label: 'Tickers', items: tickerMatches.map(toOption) }]
+            : []),
+        ];
+      },
+    [items, docs, tickerItems, toOption]
   );
 
   return (

@@ -13,27 +13,31 @@ import {
 } from './subpage-tab-bar';
 
 describe('subpageTabsContainerClass', () => {
-  it('is visible (flex, not hidden) when open', () => {
-    const cls = subpageTabsContainerClass(true);
+  it('is always a visible flex row — the mobile dropdown is gone (#1570)', () => {
+    const cls = subpageTabsContainerClass();
     expect(cls.split(' ')).toContain('flex');
     expect(cls).not.toContain('hidden');
   });
 
-  it('is hidden when closed', () => {
-    expect(subpageTabsContainerClass(false)).toContain('hidden');
+  it('mobile is a nowrap scroll row; desktop wraps in place', () => {
+    const cls = subpageTabsContainerClass();
+    expect(cls).toContain('max-md:flex-nowrap');
+    expect(cls).toContain('max-md:overflow-x-auto');
+    expect(cls).toContain('subnav-scroll');
+    expect(cls).toContain('md:flex-wrap');
   });
 
-  it('always shows tabs at >= md regardless of open', () => {
-    expect(subpageTabsContainerClass(true)).toContain('md:flex');
-    expect(subpageTabsContainerClass(false)).toContain('md:flex');
+  it('carries no dropdown-panel chrome (no absolute positioning at any width)', () => {
+    const cls = subpageTabsContainerClass();
+    expect(cls).not.toContain('absolute');
+    expect(cls).not.toContain('max-md:flex-col');
   });
+});
 
-  it('gates the dropdown-panel chrome behind max-md so it stops at md', () => {
-    const cls = subpageTabsContainerClass(false);
-    expect(cls).toContain('max-md:absolute');
-    expect(cls).toContain('max-md:flex-col');
-    // panel chrome must not leak to desktop (no unprefixed absolute/border/shadow)
-    expect(cls).not.toMatch(/(^| )absolute( |$)/);
+describe('subpageTabButtonClass', () => {
+  it('chips never shrink — required for the mobile scroll row', () => {
+    expect(subpageTabButtonClass(true)).toContain('shrink-0');
+    expect(subpageTabButtonClass(false)).toContain('shrink-0');
   });
 });
 
@@ -55,13 +59,10 @@ describe('SubpageStickyTabBar', () => {
     expect(html).toContain('Bravo');
   });
 
-  it('renders a collapsed mobile menu trigger', () => {
+  it('renders NO mobile menu trigger — sections are a scroll row, not a dropdown (#1570)', () => {
     const html = renderBar();
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain('aria-controls="subpage-tabs"');
-    expect(html).toContain('Sections');
-    // Trigger must be hidden on desktop so the desktop layout is not broken.
-    expect(html).toContain('md:hidden');
+    expect(html).not.toContain('aria-expanded');
+    expect(html).not.toContain('Sections');
   });
 
   it('outer wrapper is full-bleed: has the border, sticky, but no width cap', () => {
@@ -76,17 +77,10 @@ describe('SubpageStickyTabBar', () => {
     expect(renderBar()).toContain('max-w-[1600px]');
   });
 
-  it('respects a custom menuLabel', () => {
-    const html = renderToStaticMarkup(
-      createElement(SubpageStickyTabBar, { menuLabel: 'Views' }, createElement('a', { href: '/a' }, 'A')),
-    );
-    expect(html).toContain('Views');
-  });
-
-  it('tabs container has hidden and md:flex classes in default (closed) state', () => {
-    const html = renderBar();
-    expect(html).toContain('hidden');
-    expect(html).toContain('md:flex');
+  it('tabs are always rendered (no hidden state)', () => {
+    const container = renderBar().match(/id="subpage-tabs"[^>]*class="([^"]*)"/)?.[1] ?? '';
+    expect(container.split(' ')).toContain('flex');
+    expect(container.split(' ')).not.toContain('hidden');
   });
 
   it('link tabs keep the plain desktop row — no ARIA tablist', () => {
@@ -131,21 +125,21 @@ describe('SubpageStickyTabBar — TabStrip-backed desktop row (button tabs)', ()
   });
 
   it('omits aria-controls — the legacy children own no panel ids', () => {
-    // The mobile trigger's aria-controls="subpage-tabs" is the only one.
     expect(renderButtonBar()).not.toContain('-panel-');
   });
 
-  it('desktop strip hides below md; the children container becomes mobile-only', () => {
+  it('desktop strip hides below md; the children container becomes the mobile scroll row', () => {
     const html = renderButtonBar();
     expect(html).toContain('hidden md:block');
     const container = html.match(/id="subpage-tabs"[^>]*class="([^"]*)"/)?.[1] ?? '';
     expect(container.split(' ')).toContain('md:hidden');
+    expect(container.split(' ')).toContain('max-md:overflow-x-auto');
     expect(container.split(' ')).not.toContain('md:flex');
   });
 
-  it('still renders the raw children for the mobile dropdown', () => {
+  it('still renders the raw children for the mobile row', () => {
     const html = renderButtonBar();
-    // once in the TabStrip label, once in the dropdown child
+    // once in the TabStrip label, once in the mobile-row child
     expect(html.match(/Alpha/g)).toHaveLength(2);
     expect(html.match(/Bravo/g)).toHaveLength(2);
   });
@@ -163,6 +157,5 @@ describe('SubpageStickyTabBar — TabStrip-backed desktop row (button tabs)', ()
       ),
     );
     expect(html).not.toContain('role="tablist"');
-    expect(html).toContain('md:flex');
   });
 });

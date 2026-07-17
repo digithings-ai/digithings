@@ -116,6 +116,17 @@ html.light {
   --shadow-glass: 0 18px 40px -30px rgba(0, 0, 0, 0.18);
 }
 
+/* Mobile subpage-tab scroll row (#1570) — hides the scrollbar on the
+   horizontally-scrollable chip row; the clipped trailing chip is the scroll
+   affordance, and a visible scrollbar under sticky chrome reads as clutter. */
+.subnav-scroll {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.subnav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* P&L semantics: quant-native still points .qn-up/.qn-down at module accents
    (digiquant green / digiclaw brown). On this dashboard money colors are the
    canon --up/--down tokens ONLY — re-point them here (same specificity, later

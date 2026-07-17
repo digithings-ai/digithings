@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronUp, ExternalLink, FileText } from 'lucide-react';
 import { pnlColor } from '@/components/ui';
 import type { DashboardPositionEvent, PositionHistoryRow, Thesis } from '@/lib/types';
 import type { BookReconciliation, ReconciledPosition } from '@/lib/book-reconciliation';
@@ -263,23 +263,33 @@ export default function AllocationsPositionsTable(props: {
                           {thesisNames(p.thesis_ids, thesisById)}
                         </td>
                         <td className="px-2 py-3 text-center md:px-3">
-                          {dec && dec.conviction != null ? (
+                          <div className="flex flex-col items-center gap-1">
+                            {dec && dec.conviction != null ? (
+                              <Link
+                                href={buildPipelineHref({
+                                  date: dec.run_date,
+                                  stage: 'selection',
+                                  node: `analyst/${p.ticker.toUpperCase()}`,
+                                })}
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 text-accent hover:underline"
+                                title={`Open ${p.ticker} decision in Pipeline`}
+                              >
+                                <SignedConvictionBadge value={dec.conviction} />
+                                <ExternalLink size={12} aria-hidden />
+                              </Link>
+                            ) : (
+                              <span className="text-ink-mute">—</span>
+                            )}
                             <Link
-                              href={buildPipelineHref({
-                                date: dec.run_date,
-                                stage: 'selection',
-                                node: `analyst/${p.ticker.toUpperCase()}`,
-                              })}
+                              href={`/portfolio/tickers?ticker=${encodeURIComponent(p.ticker.toUpperCase())}`}
                               onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 text-accent hover:underline"
-                              title={`Open ${p.ticker} decision in Pipeline`}
+                              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-ink-mute hover:text-accent hover:underline"
+                              title={`Open ${p.ticker} dossier`}
                             >
-                              <SignedConvictionBadge value={dec.conviction} />
-                              <ExternalLink size={12} aria-hidden />
+                              <FileText size={11} aria-hidden /> Dossier
                             </Link>
-                          ) : (
-                            <span className="text-ink-mute">—</span>
-                          )}
+                          </div>
                         </td>
                         <td className="px-2 py-3 text-ink-mute md:px-3">
                           {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
