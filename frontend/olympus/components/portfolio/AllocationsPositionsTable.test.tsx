@@ -58,6 +58,15 @@ describe('AllocationsPositionsTable', () => {
     expect(html).toContain('/pipeline?'); // contextual deep-link
   });
 
+  it('links every row to its ticker dossier, alongside the pipeline link (#1562 PR2)', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
+      ...baseProps, reconciliation: recon([pos({ ticker: 'NVDA' })]),
+      decisionByTicker: new Map([['NVDA', decision()]]),
+    }));
+    expect(html).toContain('/portfolio/tickers?ticker=NVDA');
+    expect(html).toContain('/pipeline?'); // both links present, not a replacement
+  });
+
   it('uses no off-palette blue/purple literals', () => {
     const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
       ...baseProps, reconciliation: recon([pos({})]),
