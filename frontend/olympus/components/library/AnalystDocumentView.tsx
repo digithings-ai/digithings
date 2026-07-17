@@ -1,28 +1,28 @@
 'use client';
 
 import { SafeMarkdown } from '@/components/SafeMarkdown';
-import { cleanMemoProse } from '@/lib/render-pipeline-payloads';
+import { parseAnalystPayload } from '@/lib/queries';
+import { Badge } from '@/components/ui';
+import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
+import AnalystDossierCard from '@/components/portfolio/tickers/AnalystDossierCard';
 
 /**
  * Structured view for Hermes per-ticker analyst specialist reports (`analyst/{ticker}`).
- * Real DB shape (documents.payload, 2026-06-17):
- *   { ticker, thesis, stance, conviction_score (integer), sources }
- * Only these 5 keys are rendered — deprecated fields (bull_case, bear_case,
- * entry_criteria, exit_criteria, risks) are never present in live data.
+ * Converges on `AnalystDossierCard` (#1562 PR4) so the library path and the
+ * Ticker Dossier route (`components/portfolio/tickers`) render the SAME analyst
+ * payload identically — thesis, bull/bear case, tailwinds/headwinds, risks,
+ * technicals/expectations/fundamentals, price targets, and sources. All of
+ * these fields are present in the live `documents.payload` shape
+ * (`digiquant/.../hermes/models/analyst.py:AnalystPayload`) — all 80 frozen
+ * analyst docs carry bull_case/bear_case/headwinds/tailwinds (#1562 blueprint
+ * §3), so they are no longer discarded here.
+ *
+ * The ticker/stance/conviction identity row is kept local (rather than folded
+ * into `AnalystDossierCard`, which omits it — the dossier route's page header
+ * already carries that identity) and mirrors `TickerDossierView`'s neutral
+ * `Badge` + `SignedConvictionBadge` treatment: CANON reserves `--up`/`--down`
+ * for realized P&L / signed-conviction values, never a qualitative stance label.
  */
-
-function s(v: unknown): string {
-  return v == null ? '' : String(v);
-}
-
-function stanceColor(stance: string): string {
-  const l = stance.toLowerCase();
-  if (l.includes('bull')) return 'text-up';
-  if (l.includes('bear')) return 'text-down/90';
-  if (l.includes('buy') || l.includes('strong')) return 'text-up';
-  if (l.includes('sell') || l.includes('avoid')) return 'text-down';
-  return 'text-ink-soft';
-}
 
 export default function AnalystDocumentView({
   payload,
@@ -31,85 +31,30 @@ export default function AnalystDocumentView({
   payload: Record<string, unknown> | null;
   fallbackMarkdown: string;
 }) {
-  if (!payload) {
-    return (
-      <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
-    );
-  }
+  const analyst = parseAnalystPayload(payload);
 
-  const ticker = s(payload.ticker).trim();
-  const thesis = s(payload.thesis).trim();
-  const stance = s(payload.stance).trim();
-  // conviction_score is an integer in the real DB payload — convert explicitly.
-  const convictionScore =
-    payload.conviction_score != null && typeof payload.conviction_score === 'number'
-      ? String(payload.conviction_score)
-      : '';
-  const sources = Array.isArray(payload.sources)
-    ? (payload.sources as unknown[]).map((src) => {
-        if (src && typeof src === 'object' && !Array.isArray(src)) {
-          const o = src as Record<string, unknown>;
-          return { title: s(o.title || o.id || 'source').trim(), url: s(o.url).trim() };
-        }
-        return { title: s(src).trim(), url: '' };
-      }).filter((src) => src.title)
-    : [];
-
-  // If the payload has no recognizable fields, fall back to markdown render.
-  if (!thesis && !stance) {
-    return (
-      <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
-    );
+  // No recognizable analyst fields (or no payload at all) — fall back to markdown.
+  if (!analyst || (!analyst.thesis.trim() && !analyst.stance.trim())) {
+    return <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>;
   }
 
   return (
-    <div className="space-y-6 text-sm">
-      {/* Header: ticker + stance + conviction_score badge */}
-      {(ticker || stance) && (
-        <div className="flex items-center gap-4 flex-wrap">
-          {ticker && (
-            <span className="font-mono text-base text-accent font-semibold">{ticker}</span>
-          )}
-          {stance && (
-            <span className={`font-semibold capitalize ${stanceColor(stance)}`}>
-              {stance}
-              {convictionScore && (
-                <span className="ml-2 font-normal text-ink-mute text-xs">
-                  conviction: {convictionScore}
-                </span>
-              )}
-            </span>
-          )}
-        </div>
-      )}
+    <div className="space-y-4 text-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        {analyst.ticker && (
+          <span className="font-mono text-base font-semibold text-accent">{analyst.ticker}</span>
+        )}
+        {analyst.stance && (
+          <Badge variant="default">
+            <span className="capitalize">{analyst.stance}</span>
+          </Badge>
+        )}
+        {analyst.conviction_score != null && (
+          <SignedConvictionBadge value={analyst.conviction_score} />
+        )}
+      </div>
 
-      {/* Body: thesis */}
-      {thesis && (
-        <div>
-          <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Thesis</h3>
-          <SafeMarkdown>{cleanMemoProse(thesis)}</SafeMarkdown>
-        </div>
-      )}
-
-      {/* Footer: sources list */}
-      {sources.length > 0 && (
-        <div>
-          <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Sources</h3>
-          <ul className="list-disc pl-5 text-ink-soft space-y-1">
-            {sources.map((src, i) =>
-              src.url ? (
-                <li key={i}>
-                  <a href={src.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">
-                    {src.title}
-                  </a>
-                </li>
-              ) : (
-                <li key={i}>{src.title}</li>
-              )
-            )}
-          </ul>
-        </div>
-      )}
+      <AnalystDossierCard payload={analyst} asOf={null} />
     </div>
   );
 }
