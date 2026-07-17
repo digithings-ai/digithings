@@ -82,14 +82,28 @@ def test_retry_worthy_when_degraded_and_no_book() -> None:
     assert _retry_worthy(state, degraded_pct=50.0) is True
 
 
-def test_not_retry_worthy_when_book_materialized() -> None:
-    # #809: a degraded run that still materialized a valid sized book must NOT retry —
-    # re-running just burns the CI outer-loop's backoff sleeps on a good book.
+def test_not_retry_worthy_when_book_committed() -> None:
+    # #809 (generalized by #1555): a degraded run that COMMITTED a valid sized book must
+    # NOT retry — re-running just burns the CI outer-loop's backoff sleeps on a good book.
+    # The guard now keys on the commit manifest, not mere materialization.
     state = _state()
     state.phase_hermes = PhaseHermesState(
-        sized_book={"recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}]}
+        sized_book={"recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}]},
+        commit_manifest={"status": "committed", "source_run_id": str(state.run_id)},
     )
     assert _retry_worthy(state, degraded_pct=50.0) is False
+
+
+def test_retry_worthy_when_book_materialized_but_uncommitted() -> None:
+    # #1555: a book H8 materialized but H9 never committed (coherence fail-closed / silent
+    # skip) is NOT durable work — it must retry. This is the exact shape of the 2026-06-26
+    # freeze, which the old materialization-only guard wrongly treated as a good book.
+    state = _state()
+    state.phase_hermes = PhaseHermesState(
+        sized_book={"recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}]},
+        commit_manifest=None,
+    )
+    assert _retry_worthy(state, degraded_pct=50.0) is True
 
 
 def test_not_retry_worthy_when_not_degraded() -> None:

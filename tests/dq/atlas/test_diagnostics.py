@@ -153,6 +153,40 @@ def test_node_level_error_does_not_gate_via_chain_marker() -> None:
     assert diagnostics.summarize_run(state).status == "ok"
 
 
+def test_master_digest_failure_marks_degraded_and_leads_summary() -> None:
+    # A master-digest synthesis failure (#1559) must escalate an otherwise-ok run
+    # to degraded and LEAD the error summary so it is never buried/truncated —
+    # even though it is a node-level (phase != "chain") error.
+    state = _state(
+        phase1={"macro": _today("macro"), "rates": _today("rates")},
+        errors=[
+            PhaseError(phase="phase5", node="sector-utilities", message="bad json"),
+            PhaseError(
+                phase="phase7_synthesis",
+                node="master-digest",
+                message="BadRequestError 400: maximum context length is 64000 tokens",
+            ),
+        ],
+    )
+    s = diagnostics.summarize_run(state)
+    assert s.status == "degraded"
+    assert s.error_summary.startswith("MASTER-DIGEST SYNTHESIS FAILED")
+    assert "64000 tokens" in s.error_summary
+    # First-class breakdown key, distinct from the per-segment error list.
+    assert "master_digest_failed" in s.breakdown
+    assert diagnostics.is_degraded(state) is True
+
+
+def test_master_digest_failure_does_not_override_failed_status() -> None:
+    # If nothing fresh was produced, the run is still 'failed' — the digest
+    # escalation only lifts an ok run to degraded (it sits in the elif branch).
+    state = _state(
+        phase1={"macro": _carried(NODE_FAILED_REASON)},
+        errors=[PhaseError(phase="phase7_synthesis", node="master-digest", message="overflow")],
+    )
+    assert diagnostics.summarize_run(state).status == "failed"
+
+
 def test_empty_state_is_failed() -> None:
     assert diagnostics.summarize_run(_state()).status == "failed"
 

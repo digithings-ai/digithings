@@ -211,6 +211,12 @@ def _carry_incomplete_snapshot(
     carried: dict[str, Any] = dict(prior_snap)
     carried["continuity"] = "carried_incomplete"
     carried["date"] = state.run_date.isoformat()
+    # Machine-readable provenance (#1559): the source date this content was carried
+    # from, uniform with the synthesis-carry path (_carry_prior_digest). JSONB column,
+    # no migration. ``prior_row`` carries the source snapshot's own date.
+    prior_date = prior_row.get("date") if isinstance(prior_row, dict) else None
+    if prior_date:
+        carried["carried_from"] = str(prior_date)
     return carried  # type: ignore[return-value]
 
 

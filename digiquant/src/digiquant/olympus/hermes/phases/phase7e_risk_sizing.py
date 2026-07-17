@@ -236,6 +236,45 @@ def _rebuild_actions(
     return out
 
 
+def _gated_held_carry_weights(state: AtlasResearchState) -> dict[str, float]:
+    """Prior (drifted) weights for deliberately gated-out held names (#1030, #1555).
+
+    The H4 staleness gate moves a quiet held name into ``focus_roster_excluded``
+    (no fresh analyst, absent from the H7 PM memo). The position is still owned, so
+    H8 must carry it at its current drifted weight — otherwise sizing drops it from
+    the book (it is neither a PM long nor within the min-hold window) and H9 fails
+    closed with "held ticker missing from book and not flat", the fail-closed that
+    silently froze **every** delta-day commit from 2026-06-26 (#1555).
+
+    Scoped to :func:`~digiquant.olympus.hermes.writers.commit_io.gated_out_tickers`
+    (held ∩ excluded ledger) — reusing the exact set H9's coherence check exempts so
+    the carry set and the exemption set can never diverge into a new silent mismatch.
+    A PM-exited name (addressed in the roster, marked ``flat``) is not in the excluded
+    ledger, so it is never resurrected here.
+    """
+    # Lazy import: keeps the phase7e ↔ commit_io edge one-directional at import time.
+    from digiquant.olympus.hermes.writers.commit_io import gated_out_tickers
+
+    gated = gated_out_tickers(state)
+    if not gated:
+        return {}
+    current = {
+        str(k).strip().upper(): _opt_float(v)
+        for k, v in (state.config.preferences.get("current_weights") or {}).items()
+    }
+    prior = {
+        str(row.get("ticker")).strip().upper(): _opt_float(row.get("weight_pct"))
+        for row in state.prior_context.prior_book
+        if row.get("ticker")
+    }
+    carry: dict[str, float] = {}
+    for ticker in gated:
+        weight = current.get(ticker) or prior.get(ticker)
+        if weight is not None and weight > 0:
+            carry[ticker] = float(weight)
+    return carry
+
+
 def _build_sized_book(
     *,
     pm_tickers: list[str],
@@ -296,6 +335,12 @@ def _build_sized_book(
         return None
 
     sized = {p.ticker: p.target_pct for p in result.positions}
+    # Carry deliberately gated-out held names at their current drifted weight (#1030,
+    # #1555) BEFORE the cadence band, so they flow through as continuing positions
+    # (held, not traded). ``setdefault`` never overrides a weight the PM/sizer already
+    # set — it only re-instates a quiet held name that sizing would otherwise drop.
+    for ticker, weight in _gated_held_carry_weights(state).items():
+        sized.setdefault(ticker, weight)
     # current_weights is already mark-to-market drifted in preflight (#955). The cadence
     # dispatcher rebalances through the no-trade band on a permitted day, else holds the
     # drifted book (only PM direction changes trade).
