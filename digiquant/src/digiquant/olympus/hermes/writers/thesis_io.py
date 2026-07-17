@@ -116,9 +116,54 @@ def upsert_thesis_row(
         row["horizon"] = horizon
     if thesis_kind is not None:
         row["thesis_kind"] = thesis_kind
-    if linked_market_thesis_id is not None:
+    # Never persist a self-referential link (a vehicle/market thesis linked to
+    # itself is meaningless and was the shape of ~140 legacy rows, #1563). This
+    # single write chokepoint neutralizes every source — the H5 resolver below,
+    # and H1's carry-forward of a prior row's stale link (persist_thesis_review).
+    if linked_market_thesis_id is not None and linked_market_thesis_id != thesis_id:
         row["linked_market_thesis_id"] = linked_market_thesis_id
     client.table("theses").upsert(row, on_conflict="date,thesis_id").execute()
+
+
+def resolve_primary_market_thesis(
+    client: SupabaseClient,
+    *,
+    ticker: str,
+    run_date: date,
+) -> str | None:
+    """The market thesis a vehicle ticker primarily expresses, from ``thesis_vehicles``.
+
+    ``thesis_vehicles`` (written by H3) is the reliable ticker → market-thesis map —
+    unlike ``theses.linked_market_thesis_id``, which H5 left null and a same-date H3
+    back-fill could never populate (the vehicle row doesn't exist at H3 time). Prefer
+    the current run's mapping; fall back to the most recent prior mapping so a
+    carried held name still links. When a ticker maps to several market theses the
+    PRIMARY is the lowest ``candidate_rank`` (ties → lexical ``thesis_id``), matching
+    the frontend's primary-attribution rule (#1562). Returns None when unmapped.
+    """
+    try:
+        resp = (
+            client.table("thesis_vehicles")
+            .select("thesis_id,candidate_rank,date")
+            .eq("ticker", ticker)
+            .lte("date", run_date.isoformat())
+            .order("date", desc=True)
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001 — linkage is enrichment; never block the graph
+        logger.warning("thesis_vehicles lookup failed for %s (%s)", ticker, exc)
+        return None
+    rows = list(getattr(resp, "data", None) or [])
+    if not rows:
+        return None
+    # All rows share the newest date available at/under run_date (desc order);
+    # keep only that date's mappings, then pick the primary by rank then id.
+    newest = rows[0].get("date")
+    candidates = [r for r in rows if r.get("date") == newest and r.get("thesis_id")]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda r: (r.get("candidate_rank") or 1_000_000, str(r.get("thesis_id"))))
+    return str(candidates[0]["thesis_id"])
 
 
 def upsert_thesis_vehicles(
@@ -156,8 +201,10 @@ def upsert_thesis_vehicles(
         except Exception as exc:  # noqa: BLE001 — enrichment must not block graph
             logger.warning("thesis_vehicles upsert failed for %s/%s (%s)", thesis_id, ticker, exc)
             continue
-        # Link the vehicle thesis row to this market thesis (partial update — no-op if
-        # the vehicle-{ticker} row doesn't exist yet; H5 will write it later).
+        # Best-effort re-link of any vehicle-{ticker} row that ALREADY exists for
+        # this date (e.g. a prior same-day run). On a fresh date this no-ops (the
+        # row is created later by H5) — H5 is now the authoritative linker and
+        # resolves from this same ``thesis_vehicles`` map at creation time (#1563).
         try:
             client.table("theses").update({"linked_market_thesis_id": thesis_id}).eq(
                 "date", date_str
@@ -284,8 +331,19 @@ def upsert_vehicle_thesis_from_analyst(
     analyst_payload: dict[str, Any],
     linked_market_thesis_id: str | None = None,
 ) -> None:
-    """Create/update a vehicle-local thesis row when H5 covers an unlinked ticker."""
+    """Create/update a vehicle-local thesis row when H5 covers an unlinked ticker.
+
+    The vehicle row is linked to the market thesis it expresses at CREATION time
+    (#1563): the caller rarely supplies a valid link, and the legacy same-date H3
+    back-fill could never populate it (the row doesn't exist yet at H3), which
+    left every vehicle thesis null-linked in prod. Resolve the link from the
+    reliable ``thesis_vehicles`` map instead — self-healing, since H5 rewrites a
+    fresh vehicle row each run.
+    """
     thesis_id = f"vehicle-{ticker.lower()}"
+    link = linked_market_thesis_id
+    if link is None or link == thesis_id:
+        link = resolve_primary_market_thesis(client, ticker=ticker, run_date=run_date)
     invalidation = str(analyst_payload.get("risks") or analyst_payload.get("bear_case") or "")
     upsert_thesis_row(
         client,
@@ -297,5 +355,5 @@ def upsert_vehicle_thesis_from_analyst(
         invalidation=invalidation[:500] if invalidation else None,
         notes=str(analyst_payload.get("thesis") or "")[:2000] or None,
         thesis_kind="vehicle",
-        linked_market_thesis_id=linked_market_thesis_id,
+        linked_market_thesis_id=link,
     )
