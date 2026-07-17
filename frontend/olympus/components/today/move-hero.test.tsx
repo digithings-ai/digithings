@@ -73,4 +73,21 @@ describe('MoveHero', () => {
     // ("No rebalance today" move-status copy is a separate string and may appear.)
     expect(html).not.toContain(' today<'); // daily-delta clause renders "<pct> today" in its own span
   });
+
+  it('labels the daily NAV delta with its own date when the book lags the digest (#1555)', () => {
+    const html = renderToStaticMarkup(
+      createElement(MoveHero, {
+        regime: 'Risk-Off Consolidation',
+        regimeLabel: 'caution',
+        headline: 'Quiet tape.',
+        confidence: null,
+        asOf: '2026-07-16',
+        runType: null,
+        actions: [],
+        nav: { index: 98.7, sincePct: -0.6, sinceDate: '2026-06-23', dailyPct: -0.2, benchTicker: null, excessPct: null, asOfDate: '2026-06-26' },
+      })
+    );
+    expect(html).toContain('on Jun 26');
+    expect(html).not.toContain(' today<');
+  });
 });

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
 import { buildPipelineHref } from '@/lib/pipeline-links';
@@ -27,13 +28,13 @@ export default function ProposedByPipelineShelf({ proposed }: { proposed: Propos
               {d.conviction != null && <SignedConvictionBadge value={d.conviction} />}
               {d.stance && <span className="text-xs capitalize text-ink-mute">{d.stance}</span>}
             </div>
-            <a
+            <Link
               href={buildPipelineHref({ date: d.runDate, stage: 'selection', node: d.node })}
               className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
             >
               Open in Pipeline
               <ExternalLink size={12} aria-hidden />
-            </a>
+            </Link>
           </li>
         ))}
       </ul>

@@ -51,7 +51,7 @@ export default function TodayTab({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="font-display text-2xl tracking-tight text-ink">Today&rsquo;s briefing</h2>
+      <h2 className="font-display text-2xl tracking-tight text-ink">Today&rsquo;s read</h2>
       </div>
 
       {/* Above the fold: trade ideas + digest brief co-lead */}

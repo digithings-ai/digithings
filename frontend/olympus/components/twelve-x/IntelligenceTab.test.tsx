@@ -155,11 +155,11 @@ describe('IntelligenceTab — why panels', () => {
     expect(html.match(/Tier 1/g)?.length).toBe(2);
   });
 
-  it('still renders the card header + score + ComponentBar alongside the panel', () => {
+  it('still renders the card header + score alongside the panel', () => {
     const html = render([confluence()], { runDate: '2026-06-24', items: [whyItem()] });
     expect(html).toContain('USD');
     expect(html).toContain('Confluence score');
-    // the why panel's synthesized label is present
+    // the why panel's illustrative-summary label is present
     expect(html).toContain('Illustrative summary');
   });
 

@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { pnlColor } from '@/components/ui';
 import type { DashboardPositionEvent, PositionHistoryRow, Thesis } from '@/lib/types';
@@ -283,7 +284,7 @@ export default function AllocationsPositionsTable(props: {
                         </td>
                         <td className="px-2 py-3 text-center md:px-3">
                           {dec && dec.conviction != null ? (
-                            <a
+                            <Link
                               href={buildPipelineHref({
                                 date: dec.run_date,
                                 stage: 'selection',
@@ -295,7 +296,7 @@ export default function AllocationsPositionsTable(props: {
                             >
                               <SignedConvictionBadge value={dec.conviction} />
                               <ExternalLink size={12} aria-hidden />
-                            </a>
+                            </Link>
                           ) : (
                             <span className="text-ink-mute">—</span>
                           )}

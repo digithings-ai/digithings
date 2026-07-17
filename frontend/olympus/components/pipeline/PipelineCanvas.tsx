@@ -133,7 +133,9 @@ export default function PipelineCanvas({
   }, [fitToViewport]);
 
   const handleExpandAll = useCallback(() => {
-    const allStages = new Set<PipelineStageId>(['inputs', 'research', 'synthesis', 'selection', 'decision']);
+    // Derive from the topology — a hardcoded list silently dropped the
+    // `learning` stage when #1538 added it (#1553).
+    const allStages = new Set<PipelineStageId>(PIPELINE_TOPOLOGY.map((s) => s.id));
     const allFanouts = new Set<string>();
     for (const stage of PIPELINE_TOPOLOGY) {
       for (const sub of stage.subSteps) {

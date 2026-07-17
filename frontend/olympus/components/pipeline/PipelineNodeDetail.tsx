@@ -151,13 +151,20 @@ async function fetchByDocumentKey(
   if (!url || !key) return null;
 
   const supabase = createClient(url, key);
+  // Defensive limit(1) rather than .maybeSingle(): maybeSingle ERRORS on >1
+  // row, which rendered as "No output found" — the same failure class as the
+  // #1538 digest headline (a retried/backfilled publish can duplicate a
+  // (document_key, date) pair even though none exist today).
   const { data, error } = await supabase
     .from('documents')
     .select('id')
     .eq('document_key', documentKey)
     .eq('date', date)
-    .maybeSingle();
+    // Deterministic tiebreaker only — documents has no created_at column.
+    .order('id', { ascending: false })
+    .limit(1);
 
-  if (error || !data?.id) return null;
-  return await getLibraryDocumentById(data.id as string);
+  const id = data?.[0]?.id;
+  if (error || !id) return null;
+  return await getLibraryDocumentById(id as string);
 }

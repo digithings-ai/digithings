@@ -9,7 +9,6 @@ import type {
   IntelligenceWhyItem,
 } from '@/lib/twelve-x/types';
 import { resolveCatalyst } from '@/lib/twelve-x/fetch';
-import { SIGNAL_SERIES } from '@/lib/chart-colors';
 import { useTwelveX } from './context';
 import IntelligenceWhyPanel from './IntelligenceWhyPanel';
 
@@ -27,17 +26,6 @@ function directionLabel(direction: string): string {
   if (!d) return '—';
   return d.charAt(0).toUpperCase() + d.slice(1).toLowerCase();
 }
-
-/**
- * The three [0,1] score-contributing components from `build_confluence`, in
- * legend order. `recency`, `n_brokers`, `days_to_catalyst` are metadata,
- * surfaced as labels rather than score legs.
- */
-const COMPONENT_SEGMENTS = [
-  { key: 'consensus_strength', label: 'Consensus', color: SIGNAL_SERIES.consensus },
-  { key: 'event_alignment', label: 'Event', color: SIGNAL_SERIES.event },
-  { key: 'breadth', label: 'Breadth', color: SIGNAL_SERIES.breadth },
-] as const;
 
 function asNumber(v: unknown): number | null {
   const n = typeof v === 'number' ? v : Number(v);
@@ -57,52 +45,6 @@ function asComponents(raw: unknown): Record<string, number> {
 function asStringList(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw.map((x) => String(x)).filter((s) => s.trim().length > 0);
   return [];
-}
-
-function clamp01(v: number): number {
-  return Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0));
-}
-
-/**
- * The three [0,1] score legs, each shown as its OWN magnitude fill against full
- * weight (1.0) — NOT normalized to their sum. So a leg of 0.8 reads as a track
- * that is 80% full regardless of the other legs, making each contribution's
- * absolute strength legible. Legs at ≈0 still
- * render their (empty) track so a weak leg reads as weak, not missing.
- */
-function ComponentBar({ components }: { components: Record<string, number> }) {
-  const segments = COMPONENT_SEGMENTS.map((s) => ({
-    ...s,
-    value: clamp01(components[s.key] ?? 0),
-  }));
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex h-2 w-full gap-1">
-        {segments.map((s) => (
-          <div
-            key={s.key}
-            className="relative h-full flex-1 overflow-hidden rounded-full bg-ink/[0.06]"
-            title={`${s.label}: ${s.value.toFixed(2)}`}
-          >
-            <div
-              className="absolute inset-y-0 left-0 rounded-full"
-              style={{ width: `${s.value * 100}%`, backgroundColor: s.color }}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-        {segments.map((s) => (
-          <span key={s.key} className="flex items-center gap-1 text-[10px] text-ink-mute">
-            <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: s.color }} />
-            {s.label}
-            <span className="tabular-nums text-ink-soft">{s.value.toFixed(2)}</span>
-          </span>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function IntelligenceCard({
@@ -167,7 +109,9 @@ function IntelligenceCard({
         </span>
       </div>
 
-      {Object.keys(components).length > 0 ? <ComponentBar components={components} /> : null}
+      {/* The [0,1] score legs (consensus / event / breadth) are NOT shown on the
+          card face — a first-time reader can't parse three bars in 5s. They live
+          in the "Why" panel's Tier-1 waterfall (progressive disclosure). */}
 
       {(nBrokers != null || daysToCatalyst != null || catalyst.eventName != null || supportingDesks.length > 0) ? (
         <div className="mt-auto flex flex-col gap-1.5 border-t border-hair/60 pt-2 text-[11px] text-ink-mute">
@@ -274,8 +218,9 @@ export default function IntelligenceTab({
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
         <p className="max-w-2xl text-xs text-ink-mute">
-          A directional cross-desk read meeting a near-term catalyst. Each idea&apos;s score blends
-          consensus strength, event alignment and broker breadth — each shown as its own [0,1] leg.
+          Ranked directional reads where a cross-desk consensus meets a near-term catalyst. Each
+          card leads with the call; open <span className="font-medium text-ink-soft">Why</span> for
+          the score breakdown, the consensus behind it and the supporting desks.
         </p>
         <span className="font-mono text-[10px] text-ink-mute">score 0–1 · higher = stronger</span>
       </div>

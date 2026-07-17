@@ -304,8 +304,9 @@ export interface IntelligenceWhyPanelProps {
  *   Tier 3 — the supporting desks (classification badge + relevance + verbatim reason).
  *
  * The lead one-liner is explicitly LABELLED "Illustrative summary": it is
- * synthesized from the idea's own fields, not a stored aggregated prose. Per
- * the global caveat, `w_time`/`w_event` are never surfaced.
+ * composed from the row's own figures, not generated prose (no stored
+ * aggregated narrative exists). Per the global caveat, `w_time`/`w_event` are
+ * never surfaced.
  */
 export default function IntelligenceWhyPanel({ item, initialExpanded }: IntelligenceWhyPanelProps) {
   const [open, setOpen] = useState(Boolean(initialExpanded));

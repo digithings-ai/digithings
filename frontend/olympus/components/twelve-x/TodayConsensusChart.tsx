@@ -1,9 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
-import { latestConsensusAverages } from '@/lib/twelve-x/consensus-derive';
+import { deriveConsensusRows } from '@/lib/twelve-x/consensus-view';
 import { currencyColor, scoreColorClass } from '@/lib/twelve-x/consensus-bar';
-import { G10_CURRENCIES } from '@/lib/twelve-x/types';
 import type { FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
 import { ConsensusScoreBar } from './ConsensusScoreBars';
 import { TwelveXSectionHeading } from './TwelveXSectionHeading';
@@ -30,15 +29,6 @@ export interface TodayConsensusChartProps {
   series: FxConsensusSnapshotRow[];
 }
 
-interface CurrencyRow {
-  currency: string;
-  avgNow: number | null;
-  actualNow: number | null;
-  avgYesterday: number | null;
-  avgAgo: number | null;
-  momentum: number | null;
-}
-
 /** Format a score as a signed 2-dp string, or an em dash for null. */
 function fmtSigned(v: number | null): string {
   if (v === null || !Number.isFinite(v)) return '—';
@@ -62,27 +52,9 @@ function momentumPresentation(m: number | null): { arrow: string; cls: string } 
 }
 
 export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
-  // Currencies present, in canonical G10 order, with any extras sorted after.
-  const currencies = useMemo<string[]>(() => {
-    const present = new Set(series.map((r) => r.currency));
-    const ordered = G10_CURRENCIES.filter((c) => present.has(c));
-    const orderedSet = new Set<string>(ordered);
-    const extras = [...present].filter((c) => !orderedSet.has(c)).sort();
-    return [...ordered, ...extras];
-  }, [series]);
-
-  // Per-currency: ascending-by-run-date score points → latest averages + prior.
-  const rows = useMemo<CurrencyRow[]>(() => {
-    return currencies.map((currency) => {
-      const points = series
-        .filter((r) => r.currency === currency)
-        .sort((a, b) => a.run_date.localeCompare(b.run_date))
-        .map((r) => ({ score: r.score }));
-      const { avgNow, actualNow, avgYesterday, avgAgo, momentum } =
-        latestConsensusAverages(points);
-      return { currency, avgNow, actualNow, avgYesterday, avgAgo, momentum };
-    });
-  }, [series, currencies]);
+  // One row per currency, canonical G10 order — from the shared derivation the
+  // Consensus tab reads too, so the two surfaces can never disagree.
+  const rows = useMemo(() => deriveConsensusRows(series), [series]);
 
   const hasData = rows.length > 0;
 
