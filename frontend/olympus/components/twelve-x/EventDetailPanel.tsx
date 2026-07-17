@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarClock, Globe, Users, X } from 'lucide-react';
+import { CalendarClock, ExternalLink, Globe, Users, X } from 'lucide-react';
 
 import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 import type { MatchedOpinions } from './EventsTab';
@@ -39,10 +39,15 @@ export default function EventDetailPanel({
   event,
   opinions,
   onClose,
+  onOpenBrief,
 }: {
   event: FxEconomicCalendarRow | null;
   opinions: MatchedOpinions | null;
   onClose: () => void;
+  /** Optional callback to open a brief. When provided, each citation renders an
+   *  "Open brief" button that calls this with the citation's source_file and the
+   *  opinions' run_date (from EventsTab's runDate prop). */
+  onOpenBrief?: ((sourceFile: string, runDate: string) => void) | undefined;
 }) {
   const open = event != null;
   const handleClose = useCallback(() => onClose(), [onClose]);
@@ -179,10 +184,22 @@ export default function EventDetailPanel({
                   opinions!.citations.map((c, i) => (
                     <div
                       key={`${c.broker}-${c.source_file}-${i}`}
-                      className="rounded-lg bg-ink/[0.02] p-3"
+                      className="rounded-lg border border-hair bg-ink/[0.02] p-3"
                     >
-                      <div className="mb-1 font-mono text-xs font-semibold text-ink">
-                        {c.broker || 'Unknown desk'}
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs font-semibold text-ink">
+                          {c.broker || 'Unknown desk'}
+                        </span>
+                        {onOpenBrief && c.source_file && opinions?.runDate ? (
+                          <button
+                            type="button"
+                            onClick={() => onOpenBrief(c.source_file, opinions.runDate!)}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
+                            title={`Open ${c.broker} brief (${c.source_file})`}
+                          >
+                            Open brief <ExternalLink size={10} aria-hidden />
+                          </button>
+                        ) : null}
                       </div>
                       {c.expected_outcome ? (
                         <p className="text-xs leading-snug text-ink-soft">

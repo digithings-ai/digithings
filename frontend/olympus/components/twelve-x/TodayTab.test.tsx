@@ -149,8 +149,8 @@ function render(): string {
 }
 
 describe('TodayTab layout (Task 2.2)', () => {
-  it('renders the TodayConsensusChart ("Consensus average")', () => {
-    expect(render()).toContain('Consensus average');
+  it('renders the TodayConsensusChart ("Consensus")', () => {
+    expect(render()).toContain('Consensus');
   });
 
   it('renders a scrollable broker-briefs list with the brief content', () => {
@@ -180,23 +180,24 @@ describe('TodayTab layout (Task 2.2)', () => {
     expect(html).not.toContain('Today’s events');
   });
 
-  it('height-matches the consensus + briefs columns (stretch grid)', () => {
+
+  it('uses content-sized layout (items-start) not stretched empty panels', () => {
     const html = render();
-    // The mid row is a stretch grid; the chart column drives the row height.
-    expect(html).toContain('today-mid');
-    expect(html).toContain('items-stretch');
-    expect(html).toMatch(/<div class="flex min-w-0 flex-col flex-1">/);
+    // Requirement 2: no equal-height stretched empty panel — use items-start.
+    expect(html).toContain('items-start');
+    expect(html).not.toContain('items-stretch');
   });
 
-  it('caps the briefs to the chart height and scrolls them within it (no row inflation)', () => {
+  it('groups broker briefs by effective date (report_date ?? run_date) newest-first', () => {
     const html = render();
-    // Regression guard for the "briefs run to the bottom" bug: a tall briefs
-    // column must NOT inflate the stretch-grid row. The list scroller is
-    // absolutely positioned at lg (so it contributes ~0 intrinsic height — the
-    // row is sized by the chart), and the section clips overflow. At lg the
-    // list scrolls within that chart-matched height.
-    expect(html).toContain('lg:overflow-hidden'); // briefs <section> clips at lg
-    expect(html).toMatch(/min-h-0 lg:relative lg:flex-1/); // scroll box fills the cell
-    expect(html).toMatch(/lg:absolute lg:inset-0 lg:overflow-y-auto/); // list scrolls within
+    // Requirement 5: briefs must expose dates and group by report_date ?? run_date.
+    // Fixture has desk-a (report_date 2026-06-22) and desk-b (report_date 2026-06-21).
+    expect(html).toContain('2026-06-22');
+    expect(html).toContain('2026-06-21');
+    // Groups appear newest-first, so 06-22 precedes 06-21 in markup order.
+    const idx22 = html.indexOf('2026-06-22');
+    const idx21 = html.indexOf('2026-06-21');
+    expect(idx22).toBeGreaterThan(0);
+    expect(idx21).toBeGreaterThan(idx22);
   });
 });

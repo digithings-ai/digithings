@@ -5,7 +5,6 @@ import {
   CalendarClock,
   CalendarDays,
   Grid3x3,
-  Layers,
   LineChart as LineChartIcon,
 } from 'lucide-react';
 import { EmptyState } from '@digithings/web';
@@ -24,6 +23,7 @@ import {
   getTodayBriefs,
   getTodayEvents,
   getUpcomingEvents,
+  getBriefs,
 } from '@/lib/twelve-x/fetch';
 import { selectLatestCompleteConsensus } from '@/lib/twelve-x/consensus-derive';
 import { isTwelveXConfigured } from '@/lib/twelve-x/supabase';
@@ -40,7 +40,6 @@ import type {
 import TodayTab from './TodayTab';
 import BriefsIndex from './BriefsIndex';
 import ConsensusTab from './ConsensusTab';
-import IntelligenceTab from './IntelligenceTab';
 import EventsTab from './EventsTab';
 import MatrixTab from './MatrixTab';
 import BriefPanel from './BriefPanel';
@@ -53,7 +52,6 @@ type DigestData = Awaited<ReturnType<typeof getLatestDigest>>;
 export const TWELVE_X_TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof CalendarClock; label: string }> = [
   { id: 'today', Icon: CalendarClock, label: 'Today' },
   { id: 'consensus', Icon: LineChartIcon, label: 'Consensus' },
-  { id: 'intelligence', Icon: Layers, label: 'Intelligence' },
   { id: 'matrix', Icon: Grid3x3, label: 'Matrix' },
   { id: 'events', Icon: CalendarDays, label: 'Events' },
 ];
@@ -130,11 +128,12 @@ interface TwelveXData {
   tradeIdeas: FxTradeIdeaRow[];
   todayBriefs: FxBriefRow[];
   todayEvents: FxEconomicCalendarRow[];
+  researchBriefs: FxBriefRow[];
 }
 
 export function resolveTab(urlTab: string | null): TwelveXTab {
   if (urlTab === 'consensus') return 'consensus';
-  if (urlTab === 'intelligence') return 'intelligence';
+  if (urlTab === 'intelligence') return 'consensus'; // Legacy redirect
   if (urlTab === 'events') return 'events';
   if (urlTab === 'matrix') return 'matrix';
   return 'today';
@@ -191,9 +190,6 @@ export default function TwelveXClient() {
 
   // Cross-link focus targets handed to the destination tabs.
   const [consensusFocusCcy, setConsensusFocusCcy] = useState<string | null>(null);
-  // "Why this weight?" from Consensus → Intelligence, focused on a currency
-  // (provenance now lives in Intelligence Tier 3).
-  const [intelligenceFocusCcy, setIntelligenceFocusCcy] = useState<string | null>(null);
   const [eventFocus, setEventFocus] = useState<{ externalId?: string | null; name: string | null } | null>(
     null
   );
@@ -231,17 +227,7 @@ export default function TwelveXClient() {
     syncUrl(tab, brief, null);
   }, [tab, brief]);
 
-  // "Why this weight?" from a consensus cell → jump to Intelligence, focused on
-  // that currency (its desk provenance lives in Intelligence Tier 3).
-  const drillToProvenance = useCallback(
-    (currency: string) => {
-      setTabState('intelligence');
-      setIntelligenceFocusCcy(currency);
-      setView(null);
-      syncUrl('intelligence', brief, null);
-    },
-    [brief]
-  );
+  // Cross-surface navigation (removed: drillToProvenance — Intelligence merged into Consensus drilldown)
 
   useEffect(() => {
     if (!configured) return;
@@ -254,22 +240,17 @@ export default function TwelveXClient() {
           intelligence,
           upcomingEvents,
           matrix,
+          researchBriefs,
         ] = await Promise.all([
           getLatestDigest(),
           getConsensusTimeSeries(),
-          // Intelligence: full ranked confluence set for the latest run_date.
           getIntelligence(),
-          // Events: the upcoming 14-day macro calendar window.
           getUpcomingEvents(),
-          // Matrix (P3): latest desk view per (broker, currency) over a window.
           getMatrix(),
+          getBriefs(14),
         ]);
-        // Event opinions key off the intelligence run_date (latest confluence run)
-        // so the catalysts tab shows desk views for the freshest session.
         const opinionsDate = intelligence[0]?.run_date ?? digest?.run_date ?? null;
         const intelRunDate = intelligence[0]?.run_date ?? undefined;
-        // The Intelligence "why" drill-down (confluence × consensus × ledger),
-        // pinned to the SAME run as the confluence ideas so the tiers line up.
         const [eventOpinions, intelligenceWhy] = await Promise.all([
           opinionsDate ? getEventOpinions(opinionsDate) : Promise.resolve([]),
           getIntelligenceWhy(intelRunDate),
@@ -292,6 +273,7 @@ export default function TwelveXClient() {
           tradeIdeas,
           todayBriefs,
           todayEvents,
+          researchBriefs,
         });
       } catch (err) {
         if (cancelled) return;
@@ -383,19 +365,10 @@ export default function TwelveXClient() {
             series={data?.consensusSeries ?? []}
             latest={data?.latestConsensus ?? []}
             latestDate={latestConsensusDate}
-            onDrillToProvenance={drillToProvenance}
             deltas={consensusDeltas}
             focusCcy={consensusFocusCcy}
-          />
-        );
-      case 'intelligence':
-        return (
-          <IntelligenceTab
-            confluence={data?.intelligence ?? []}
-            runDate={intelligenceDate}
-            events={data?.eventOpinions ?? []}
-            why={data?.intelligenceWhy ?? { runDate: null, items: [] }}
-            focusCcy={intelligenceFocusCcy}
+            intelligenceWhy={data?.intelligenceWhy ?? { runDate: null, items: [] }}
+            researchBriefs={data?.researchBriefs ?? []}
           />
         );
       case 'events':
@@ -405,6 +378,7 @@ export default function TwelveXClient() {
             opinions={data?.eventOpinions ?? []}
             runDate={eventOpinionsDate}
             focus={eventFocus}
+            onOpenBrief={openBrief}
           />
         );
       case 'matrix':

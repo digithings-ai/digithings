@@ -61,12 +61,12 @@ export default function TodayTab({
       </div>
 
       {/* Mid row: consensus-average chart (wider) + broker briefs, height-matched. */}
-      <div className="today-mid grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[1.5fr_1fr]">
+      <div className="today-mid grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
         <div className="flex min-w-0 flex-col flex-1">
           <TodayConsensusChart series={series} />
         </div>
 
-        <section className="glass-card flex min-w-0 flex-col p-4 lg:overflow-hidden">
+        <section className="glass-card flex min-w-0 flex-col p-4">
           <header className="mb-3 flex shrink-0 items-baseline gap-2">
             <TwelveXSectionHeading>Broker briefs</TwelveXSectionHeading>
             <span className="ml-auto font-mono text-[10px] text-ink-mute">
@@ -86,39 +86,56 @@ export default function TodayTab({
           {briefs.length === 0 ? (
             <p className="text-sm text-ink-mute">No research briefs for today yet.</p>
           ) : (
-            // The scroller is absolutely positioned at `lg` so the brief list never
-            // inflates the grid row — the row height is driven by the consensus chart
-            // column, and the briefs scroll within that matched height. On mobile
-            // (stacked, single column) the list flows naturally and the page scrolls.
-            <div className="min-h-0 lg:relative lg:flex-1">
-              <ul className="-mx-1 flex flex-col gap-2.5 px-1 lg:absolute lg:inset-0 lg:overflow-y-auto">
-                {briefs.map((b, n) => (
-                  <li key={`${b.source_file}-${b.run_date}-${n}`}>
-                    <button
-                      type="button"
-                      className="w-full rounded-lg border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
-                      onClick={() => openBrief(b.source_file, b.run_date)}
-                    >
-                      <div className="flex items-center gap-2 text-[11px] text-ink-mute">
-                        <span className="font-semibold text-ink-soft">
-                          {b.broker_name ?? 'Unknown desk'}
-                        </span>
-                        {b.trader_relevance ? (
-                          <span className="uppercase">· {b.trader_relevance}</span>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 truncate text-sm font-medium text-ink">
-                        {b.document_title ?? b.source_file}
-                      </p>
-                      {b.central_thesis ? (
-                        <p className="mt-1 line-clamp-2 text-xs text-ink-soft">
-                          {b.central_thesis}
-                        </p>
-                      ) : null}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+            <div className="flex flex-col gap-3">
+              {(() => {
+                // Group briefs by effective date (report_date ?? run_date), newest first.
+                const grouped = new Map<string, typeof briefs>();
+                briefs.forEach((b) => {
+                  const effDate = b.report_date ?? b.run_date;
+                  if (!grouped.has(effDate)) grouped.set(effDate, []);
+                  grouped.get(effDate)!.push(b);
+                });
+                const sortedDates = Array.from(grouped.keys()).sort().reverse();
+
+                return sortedDates.map((dateKey) => {
+                  const dateBriefs = grouped.get(dateKey)!;
+                  return (
+                    <div key={dateKey} className="flex flex-col gap-2">
+                      <h3 className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-soft">
+                        {dateKey}
+                      </h3>
+                      <ul className="flex flex-col gap-2">
+                        {dateBriefs.map((b, n) => (
+                          <li key={`${b.source_file}-${b.run_date}-${n}`}>
+                            <button
+                              type="button"
+                              className="w-full rounded-lg border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
+                              onClick={() => openBrief(b.source_file, b.run_date)}
+                            >
+                              <div className="flex items-center gap-2 text-[11px] text-ink-mute">
+                                <span className="font-semibold text-ink-soft">
+                                  {b.broker_name ?? 'Unknown desk'}
+                                </span>
+                                {b.trader_relevance ? (
+                                  <span className="uppercase">· {b.trader_relevance}</span>
+                                ) : null}
+                              </div>
+                              <p className="mt-1 truncate text-sm font-medium text-ink">
+                                {b.document_title ?? b.source_file}
+                              </p>
+                              {b.central_thesis ? (
+                                <p className="mt-1 line-clamp-2 text-xs text-ink-soft">
+                                  {b.central_thesis}
+                                </p>
+                              ) : null}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           )}
         </section>

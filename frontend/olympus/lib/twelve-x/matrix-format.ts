@@ -10,15 +10,45 @@ export function directionStyle(direction: string): {
   bg: string;
   border: string;
   glyph: string;
+  hoverBg: string;
+  hoverBorder: string;
 } {
   const d = direction.trim().toLowerCase();
   if (d === 'bullish' || d === 'long' || d === 'buy')
-    return { text: 'text-up', bg: 'bg-up/10', border: 'border-up/30', glyph: '▲' };
+    return {
+      text: 'text-up',
+      bg: 'bg-up/10',
+      border: 'border-up/30',
+      glyph: '▲',
+      hoverBg: 'hover:bg-up/[0.15]',
+      hoverBorder: 'hover:border-up/50',
+    };
   if (d === 'bearish' || d === 'short' || d === 'sell')
-    return { text: 'text-down', bg: 'bg-down/10', border: 'border-down/30', glyph: '▼' };
+    return {
+      text: 'text-down',
+      bg: 'bg-down/10',
+      border: 'border-down/30',
+      glyph: '▼',
+      hoverBg: 'hover:bg-down/[0.15]',
+      hoverBorder: 'hover:border-down/50',
+    };
   if (d === 'watch')
-    return { text: 'text-warn', bg: 'bg-warn/10', border: 'border-warn/30', glyph: '◆' };
-  return { text: 'text-ink-soft', bg: 'bg-white/[0.03]', border: 'border-hair', glyph: '•' };
+    return {
+      text: 'text-warn',
+      bg: 'bg-warn/10',
+      border: 'border-warn/30',
+      glyph: '◆',
+      hoverBg: 'hover:bg-warn/[0.15]',
+      hoverBorder: 'hover:border-warn/50',
+    };
+  return {
+    text: 'text-ink-soft',
+    bg: 'bg-white/[0.03]',
+    border: 'border-hair',
+    glyph: '•',
+    hoverBg: 'hover:bg-ink/[0.06]',
+    hoverBorder: 'hover:border-ink-mute/40',
+  };
 }
 
 /** Coarse direction bucket for tallying a desk's net tilt. */

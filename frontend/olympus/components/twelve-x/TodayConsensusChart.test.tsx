@@ -53,18 +53,18 @@ function render(series: FxConsensusSnapshotRow[]): string {
 }
 
 describe('TodayConsensusChart', () => {
-  it('renders the "Consensus average" title', () => {
+  it('renders the "Consensus" title', () => {
     const html = render(tenCurrencySeries());
-    expect(html).toContain('Consensus average');
+    expect(html).toContain('Consensus');
   });
 
   it('renders the title as an uppercase eyebrow matching the sibling panels', () => {
     const html = render(tenCurrencySeries());
     // The frozen spec's `.section-eyebrow` is `text-transform: uppercase`; the
     // sibling Today headings ("Broker briefs", "Today's timeline") render the
-    // eyebrow inline with `uppercase`. The "Consensus average" heading MUST
+    // eyebrow inline with `uppercase`. The "Consensus" heading MUST
     // match (sentence-case would diverge from the spec + neighbours).
-    const heading = html.match(/<h2[^>]*>Consensus average<\/h2>/);
+    const heading = html.match(/<h2[^>]*>Consensus<\/h2>/);
     expect(heading).not.toBeNull();
     expect(heading?.[0]).toContain('uppercase');
     // The `.section-eyebrow`/`.soft` tokens are NOT defined in globals.css
@@ -83,18 +83,7 @@ describe('TodayConsensusChart', () => {
     expect(rowCount).toBe(G10_CURRENCIES.length);
   });
 
-  it('shows all five legend keys', () => {
-    const html = render(tenCurrencySeries());
-    // renderToStaticMarkup escapes apostrophes to &#x27;, so match on the
-    // unambiguous, apostrophe-free portions of each legend label.
-    expect(html).toContain('Consensus average (bar');
-    expect(html).toContain('actual'); // Today's actual
-    expect(html).toContain('Yesterday'); // Yesterday's avg
-    expect(html).toContain('5 days ago avg');
-    expect(html).toContain('actual vs average');
-  });
-
-  it('renders the bars (divergent track + legend-coded marker ticks)', () => {
+  it('renders the bars (divergent track with markers)', () => {
     const html = render(tenCurrencySeries());
     expect(html).toContain('dbar-track');
     expect(html).toContain('dbar-tick');
@@ -114,44 +103,52 @@ describe('TodayConsensusChart', () => {
     expect(html).not.toContain('overflow-x-auto');
   });
 
-  it('labels the chart as the trailing 5-run average (subtitle + per-row "avg" cue)', () => {
+  it('renders "Consensus" heading (not "Consensus average")', () => {
     const html = render(tenCurrencySeries());
-    // Subtitle disambiguates Today (5-run average) from the Consensus tab (raw
-    // latest score) — the two intentionally differ, so this must be explicit.
-    expect(html).toContain('Trailing 5-run average');
-    expect(html).toContain('Consensus tab');
-    // The headline value column carries a small "avg" unit cue so the number
-    // reads as e.g. "+0.90 avg" — the cue is a nested span right after the
-    // signed 2-dp value.
-    expect(html).toContain('avg');
-    expect(html).toMatch(/[+−-]?\d\.\d{2}<span[^>]*>avg<\/span>/);
+    expect(html).toContain('Consensus');
+    expect(html).not.toContain('Consensus average');
   });
 
-  it('renders momentum direction (▲ green for a bull ccy, ▼ red for a bear ccy)', () => {
+  it('does NOT render the verbose subtitle explaining raw vs average', () => {
     const html = render(tenCurrencySeries());
-    // The fixture's even-indexed currencies (USD, ci=0) ascend to a positive
-    // actual above their trailing average → momentum +0.40 (▲, up).
-    // Odd-indexed (EUR, ci=1) descend → momentum -0.40 (▼, down). This pins
-    // the actual-vs-average rate-of-change semantics + arrow direction + sign.
-    // The momentum cell is the only span carrying the "rate of change" title.
-    expect(html).toMatch(
-      /class="[^"]*text-up"[^>]*rate of change[^>]*>▲ \+0\.40<\/span>/,
-    );
-    expect(html).toMatch(
-      /class="[^"]*text-down"[^>]*rate of change[^>]*>▼ -0\.40<\/span>/,
-    );
+    expect(html).not.toContain('raw latest scores');
+    expect(html).not.toContain('Consensus tab');
   });
 
-  it('renders markers (actual / yesterday / ago ticks) in the markup', () => {
+  it('passes exactly two markers (actual and prior) to ConsensusScoreBar', () => {
     const html = render(tenCurrencySeries());
+    // The compact spec removes yesterday-average and 5-days-ago markers. Only
+    // today's actual (white) and prior-run actual (for change) remain.
+    // Note: 'prior' kind renders as 't-yday' class in ConsensusScoreBar.
     expect(html).toContain('t-actual');
     expect(html).toContain('t-yday');
-    expect(html).toContain('t-ago');
+    expect(html).not.toContain('t-ago');
+  });
+
+  it('renders the compact prior-run change inline (e.g. "+0.20 vs prior")', () => {
+    const html = render(tenCurrencySeries());
+    // The compact design shows change from prior run inline, not momentum vs average.
+    expect(html).toContain('vs prior');
+    expect(html).toMatch(/[+−-]\d\.\d{2} vs prior/);
+  });
+
+  it('does NOT render momentum-vs-average arrows or the "rate of change" legend', () => {
+    const html = render(tenCurrencySeries());
+    expect(html).not.toContain('▲');
+    expect(html).not.toContain('▼');
+    expect(html).not.toContain('rate of change');
+    expect(html).not.toContain('actual vs average');
+  });
+
+  it('does NOT render yesterday or 5-days-ago legend keys', () => {
+    const html = render(tenCurrencySeries());
+    expect(html).not.toContain('Yesterday');
+    expect(html).not.toContain('5 days ago');
   });
 
   it('renders a friendly empty state with no series (no crash)', () => {
     const html = render([]);
-    expect(html).toContain('Consensus average');
+    expect(html).toContain('Consensus');
     expect(html.toLowerCase()).toContain('no consensus');
     expect(html).not.toContain('tc-row');
   });

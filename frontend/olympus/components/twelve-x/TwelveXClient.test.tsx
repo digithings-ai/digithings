@@ -5,27 +5,26 @@ import { TWELVE_X_TABS, TwelveXUnavailable, resolveTab } from './TwelveXClient';
 import type { TwelveXTab } from './context';
 
 /* ----------------------------------------------------------------------- */
-/* The workspace tab set (final 5-tab redesign — NO Ledger)                */
+/* The workspace tab set (4 visible tabs — Intelligence merged into Consensus) */
 /* ----------------------------------------------------------------------- */
 
 describe('TwelveXClient tab set', () => {
-  it('exposes exactly five tabs', () => {
-    expect(TWELVE_X_TABS).toHaveLength(5);
+  it('exposes exactly four tabs', () => {
+    expect(TWELVE_X_TABS).toHaveLength(4);
   });
 
-  it('is the canonical Today / Consensus / Intelligence / Matrix / Events set', () => {
+  it('is the canonical Today / Consensus / Matrix / Events set', () => {
     expect(TWELVE_X_TABS.map((t) => t.id)).toEqual([
       'today',
       'consensus',
-      'intelligence',
       'matrix',
       'events',
     ]);
   });
 
-  it('has NO ledger tab', () => {
+  it('has NO intelligence or ledger tab in the visible set', () => {
+    expect(TWELVE_X_TABS.some((t) => t.id === ('intelligence' as TwelveXTab))).toBe(false);
     expect(TWELVE_X_TABS.some((t) => t.id === ('ledger' as TwelveXTab))).toBe(false);
-    expect(TWELVE_X_TABS.some((t) => t.label.toLowerCase() === 'ledger')).toBe(false);
   });
 
   it('labels each tab', () => {
@@ -33,7 +32,6 @@ describe('TwelveXClient tab set', () => {
     expect(labels).toMatchObject({
       today: 'Today',
       consensus: 'Consensus',
-      intelligence: 'Intelligence',
       matrix: 'Matrix',
       events: 'Events',
     });
@@ -45,12 +43,15 @@ describe('TwelveXClient tab set', () => {
 /* ----------------------------------------------------------------------- */
 
 describe('resolveTab', () => {
-  it('routes each of the five tab params to its tab', () => {
+  it('routes each of the four tab params to its tab', () => {
     expect(resolveTab('today')).toBe('today');
     expect(resolveTab('consensus')).toBe('consensus');
-    expect(resolveTab('intelligence')).toBe('intelligence');
     expect(resolveTab('matrix')).toBe('matrix');
     expect(resolveTab('events')).toBe('events');
+  });
+
+  it('redirects legacy intelligence param to consensus', () => {
+    expect(resolveTab('intelligence')).toBe('consensus');
   });
 
   it('defaults to Today for null / unknown params', () => {

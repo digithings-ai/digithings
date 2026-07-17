@@ -54,7 +54,7 @@ export default function TradeIdeasPanel({
         <button
           type="button"
           className="ml-auto text-[11px] text-accent hover:underline"
-          onClick={() => crossLink({ kind: 'tab', tab: 'intelligence' })}
+          onClick={() => crossLink({ kind: 'tab', tab: 'consensus' })}
         >
           see more →
         </button>
