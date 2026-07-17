@@ -6,6 +6,7 @@ thesis lifecycle, and trade recommendations are Hermes's domain (phases 7C–7E)
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import date
@@ -230,14 +231,59 @@ class _DigestPriorLoader:
         )
 
 
-# Master-digest receives every fresh segment body on baseline runs — without
-# compression the prompt can exceed the 64k context window of the reasoning-tier
-# model (Jun-2026 incident: 68k–77k tokens → BadRequestError, Atlas crash, no
-# Hermes book, dashboard stale for 3 days).
-_DIGEST_TEXT_MAX = 400
-_DIGEST_FINDING_SUMMARY_MAX = 200
-_DIGEST_MAX_FINDINGS = 8
-_DIGEST_MAX_SOURCES = 10
+# --- Master-digest context budget (#1559) -------------------------------------
+#
+# Phase 7 synthesis aggregates every fresh phase-1..5 segment body plus prior
+# context. Two inputs scale with the segment roster and blew past the smallest
+# routed reasoning-tier model's 64k context on full ~27-segment baseline days
+# (BadRequestError 400 "endpoint maximum context length is 64000 tokens,
+# requested ~90690"; every daily run from 2026-07-08 onward). Graceful
+# degradation then carried the prior digest forward, so the dashboard silently
+# showed a stale headline while telemetry reported "ok".
+#
+# The prior #1164 "context diet" slimmed each segment body with FIXED per-field
+# caps, but those do not bound the TOTAL — as the roster grew the aggregate crept
+# back over 64k. We now bound BOTH movers:
+#   * PHASE_INPUTS — a run-wide char budget split across the actual segment count,
+#     so N segments always fit (the per-segment allowance shrinks as N grows).
+#   * SHARED_CONTEXT — filter ``latest_segments`` to the digest keys and trim the
+#     retained prior-digest payloads (see ``_digest_shared_context``). The full
+#     prior per-segment carry was the dominant driver (~145k tokens on a verbose
+#     27-segment baseline) and is redundant — the fresh bodies are already in
+#     PHASE_INPUTS.
+#
+# Smallest routed reasoning-tier model context (the #1559 incident endpoint).
+_DIGEST_MODEL_CONTEXT_TOKENS = 64_000
+# Reserve under that ceiling for everything that is NOT the fresh segment bodies:
+# the model's own completion, the system prompt, the digest skill (~2.1k tok),
+# the output schema (~1.5k tok), and the filtered shared_context block.
+_DIGEST_NON_SEGMENT_RESERVE_TOKENS = 24_000
+# Pessimistic JSON chars-per-token: keys/punctuation inflate token counts, so a
+# low ratio keeps the char budget conservative and we stay under the token cap
+# even when the real ratio is higher.
+_DIGEST_CHARS_PER_TOKEN = 3
+# Total serialized-char budget shared across ALL fresh segment bodies in
+# PHASE_INPUTS: (64_000 - 24_000) * 3 = 120_000 chars (~40k tokens pessimistic).
+_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS = (
+    _DIGEST_MODEL_CONTEXT_TOKENS - _DIGEST_NON_SEGMENT_RESERVE_TOKENS
+) * _DIGEST_CHARS_PER_TOKEN
+# Per-segment floor so a huge roster never starves a segment below a usable
+# minimum (headline + a couple of findings). At the 120k budget this binds only
+# past ~100 segments — far beyond the ~27-segment baseline.
+_DIGEST_SEGMENT_MIN_CHARS = 1_200
+
+# Per-field caps applied within a segment's char budget (decision-relevant fields
+# first; verbose per-segment extension prose is dropped — Phase 7 synthesizes
+# from headlines/findings/bias, not from segment-specific fields).
+_DIGEST_HEADLINE_MAX = 400
+_DIGEST_FINDING_LABEL_MAX = 120
+_DIGEST_FINDING_SUMMARY_MAX = 240
+_DIGEST_NOTES_MAX = 300
+_DIGEST_MAX_SOURCE_IDS = 3
+
+# Max length of each string field kept on a retained prior-digest payload in
+# shared_context (continuity tone only — not a diff of last week's detail).
+_DIGEST_PRIOR_TEXT_MAX = 300
 
 
 def _truncate_str(value: str, max_len: int) -> str:
@@ -246,78 +292,175 @@ def _truncate_str(value: str, max_len: int) -> str:
     return value[:max_len] + "..."
 
 
-def _slim_segment_body(body: dict[str, Any]) -> dict[str, Any]:
-    """Compress one segment body for master-digest synthesis inputs.
+def _slim_segment_body(body: dict[str, Any], char_budget: int) -> dict[str, Any]:
+    """Compress one segment body for master-digest inputs under ``char_budget`` (#1559).
 
-    Keeps the fields Phase 7 actually synthesizes from (stance, headline,
-    findings, sources) and drops/truncates verbose prose so a baseline Sunday
-    run with every segment fresh stays inside the model context window.
+    Fills the most decision-relevant fields first — identity + stance, then
+    material findings, then sources, then notes — and stops before the serialized
+    body would exceed ``char_budget``. Verbose per-segment extension prose (e.g.
+    ``detailed_analysis``, ``outlook``) is dropped: Phase 7 reads headlines,
+    findings, and bias, not segment-specific fields. Fully deterministic (no LLM);
+    truncation appends an ellipsis marker.
+
+    ``char_budget`` is derived from a run-wide total split across the segment
+    count (see ``_per_segment_char_budget``), so a full baseline roster fits.
     """
     out: dict[str, Any] = {}
-    for key in ("segment", "date", "bias", "headline", "data_quality", "regime_label"):
+    # 1. Identity + stance — always kept; cheap and the core of the synthesis read.
+    for key in ("segment", "date", "bias", "data_quality", "confidence", "regime_label"):
         if key in body:
-            out[key] = body[key]
+            val = body[key]
+            if isinstance(val, (str, int, float, bool)) or val is None:
+                out[key] = val
+    headline = body.get("headline")
+    if isinstance(headline, str) and headline:
+        out["headline"] = _truncate_str(headline, _DIGEST_HEADLINE_MAX)
 
+    def _fits(candidate: dict[str, Any]) -> bool:
+        return len(json.dumps(candidate, default=str, sort_keys=True)) <= char_budget
+
+    # 2. Material findings — the primary research signal; add until the budget bites.
     findings = body.get("material_findings")
     if isinstance(findings, list):
-        out["material_findings"] = [
-            {
-                "label": item.get("label", ""),
-                "summary": _truncate_str(
-                    str(item.get("summary", "")),
-                    _DIGEST_FINDING_SUMMARY_MAX,
-                ),
-                "source_ids": item.get("source_ids", [])[:3]
-                if isinstance(item.get("source_ids"), list)
+        kept: list[dict[str, Any]] = []
+        for item in findings:
+            if not isinstance(item, dict):
+                continue
+            source_ids = item.get("source_ids")
+            trimmed = {
+                "label": _truncate_str(str(item.get("label", "")), _DIGEST_FINDING_LABEL_MAX),
+                "summary": _truncate_str(str(item.get("summary", "")), _DIGEST_FINDING_SUMMARY_MAX),
+                "source_ids": source_ids[:_DIGEST_MAX_SOURCE_IDS]
+                if isinstance(source_ids, list)
                 else [],
             }
-            for item in findings[:_DIGEST_MAX_FINDINGS]
-            if isinstance(item, dict)
-        ]
+            if not _fits({**out, "material_findings": [*kept, trimmed]}):
+                break
+            kept.append(trimmed)
+        if kept:
+            out["material_findings"] = kept
 
+    # 3. Sources — citation provenance; add until the budget bites.
     sources = body.get("sources")
     if isinstance(sources, list):
-        out["sources"] = [
-            {k: src[k] for k in ("id", "title", "url") if k in src}
-            for src in sources[:_DIGEST_MAX_SOURCES]
-            if isinstance(src, dict)
-        ]
+        kept_sources: list[dict[str, Any]] = []
+        for src in sources:
+            if not isinstance(src, dict):
+                continue
+            trimmed_src = {k: src[k] for k in ("id", "title", "url") if k in src}
+            if not _fits({**out, "sources": [*kept_sources, trimmed_src]}):
+                break
+            kept_sources.append(trimmed_src)
+        if kept_sources:
+            out["sources"] = kept_sources
 
+    # 4. Notes — lowest priority; only if room remains.
     notes = body.get("notes")
     if isinstance(notes, str) and notes:
-        out["notes"] = _truncate_str(notes, _DIGEST_TEXT_MAX)
-
-    for key, val in body.items():
-        if key in out or key in ("material_findings", "sources", "notes"):
-            continue
-        if isinstance(val, str) and val:
-            out[key] = _truncate_str(val, _DIGEST_TEXT_MAX)
-        elif isinstance(val, (int, float, bool)) or val is None:
-            out[key] = val
+        candidate_notes = _truncate_str(notes, _DIGEST_NOTES_MAX)
+        if _fits({**out, "notes": candidate_notes}):
+            out["notes"] = candidate_notes
 
     return out
 
 
-def _digest_shared_context(state: AtlasResearchState) -> dict[str, Any]:
-    """Shared context for master-digest — slim by design.
+def _count_today_segments(state: AtlasResearchState) -> int:
+    """Count freshly-generated (``source == "today"``) phase-1..5 segments."""
+    total = 0
+    for bag in (
+        state.phase1_outputs,
+        state.phase2_outputs,
+        state.phase4_outputs,
+        state.phase5_outputs,
+    ):
+        total += sum(1 for slot in bag.values() if slot.payload.source == "today")
+    if state.phase3_output is not None and state.phase3_output.payload.source == "today":
+        total += 1
+    return total
 
-    Phase inputs already carry the upstream segment bodies; the full
-    ``data_layer`` ETF/macro dump and the multi-snapshot history are redundant
-    here and were the main driver of the Jun-2026 context-overflow failures.
+
+def _per_segment_char_budget(segment_count: int) -> int:
+    """Serialized-char budget for one segment body, adapting to the roster size.
+
+    Splits the run-wide ``_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS`` across the fresh
+    segment count so the aggregate stays bounded regardless of how many segments
+    a baseline day produces (floored at ``_DIGEST_SEGMENT_MIN_CHARS``)."""
+    if segment_count <= 0:
+        return _DIGEST_SEGMENT_INPUTS_BUDGET_CHARS
+    return max(_DIGEST_SEGMENT_MIN_CHARS, _DIGEST_SEGMENT_INPUTS_BUDGET_CHARS // segment_count)
+
+
+def _slim_prior_digest_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Trim a retained prior-digest payload in shared_context to continuity tone (#1559).
+
+    Keeps the headline/bias/regime the LLM uses for continuity; drops the fat
+    ``segment_freshness`` map and long findings/sources — the digest is a full
+    rewrite over today's segments, not a diff of last week's detail. This bounds
+    the ``latest_segments`` residual left after filtering to the digest keys."""
+    out: dict[str, Any] = {}
+    for key in ("segment", "date", "bias", "regime_label"):
+        val = payload.get(key)
+        if val is None:
+            continue
+        out[key] = _truncate_str(val, _DIGEST_PRIOR_TEXT_MAX) if isinstance(val, str) else val
+    for key in (
+        "headline",
+        "market_regime_snapshot",
+        "us_equities_summary",
+        "asset_classes_summary",
+    ):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            out[key] = _truncate_str(val, _DIGEST_PRIOR_TEXT_MAX)
+    return out
+
+
+# Prior documents the master-digest keeps in shared_context (#1559). The digest
+# synthesizes TODAY's fresh segment bodies (already in PHASE_INPUTS); the prior
+# per-segment payloads in the unfiltered ``latest_segments`` dump were redundant
+# and the dominant context-overflow driver. Carry/edit read the prior digest via
+# ``_DigestPriorLoader`` directly (not from shared_context), so filtering here does
+# not affect continuity. Both the baseline (``digest``) and delta (``digest-delta``)
+# keys are kept so a run never loses the freshest prior digest (mirrors #1270).
+_DIGEST_CONTEXT_KEYS: tuple[str, ...] = ("digest", "digest-delta")
+
+
+def _digest_shared_context(state: AtlasResearchState) -> dict[str, Any]:
+    """Shared context for master-digest — slim by design (#935, #1559).
+
+    Drops the ``data_layer`` ETF/macro dump (``scope="none"``), collapses the
+    snapshot history, filters ``latest_segments`` to the digest keys, and trims
+    the retained prior-digest payloads. Together these bound the SHARED_CONTEXT
+    block, which — via the unfiltered prior per-segment carry — was the dominant
+    driver of the Jul-2026 context-overflow failures (#1559).
     """
-    return _shared_context(state, data_layer_scope="none", slim_snapshots=True)
+    shared = _shared_context(
+        state,
+        context_keys=_DIGEST_CONTEXT_KEYS,
+        data_layer_scope="none",
+        slim_snapshots=True,
+    )
+    latest = shared.get("prior_context", {}).get("latest_segments")
+    if isinstance(latest, dict):
+        for row in latest.values():
+            if isinstance(row, dict) and isinstance(row.get("payload"), dict):
+                row["payload"] = _slim_prior_digest_payload(row["payload"])
+    return shared
 
 
 def _digest_phase_inputs(state: AtlasResearchState) -> dict[str, Any]:
+    # Adaptive budget: split the run-wide segment-input allowance across the
+    # actual fresh-segment count so a full baseline roster fits under context.
+    per_segment = _per_segment_char_budget(_count_today_segments(state))
     phase_inputs: dict[str, Any] = {
         "segment": "master-digest",
         "document_key": _digest_document_key(state),
         "bias_row": state.phase6_bias_row or {},
-        "phase1": _bodies(state.phase1_outputs),
-        "phase2": _bodies(state.phase2_outputs),
-        "phase3": _body(state.phase3_output),
-        "phase4": _bodies(state.phase4_outputs),
-        "phase5": _bodies(state.phase5_outputs),
+        "phase1": _bodies(state.phase1_outputs, per_segment),
+        "phase2": _bodies(state.phase2_outputs, per_segment),
+        "phase3": _body(state.phase3_output, per_segment),
+        "phase4": _bodies(state.phase4_outputs, per_segment),
+        "phase5": _bodies(state.phase5_outputs, per_segment),
     }
     if state.custom_prompt:
         phase_inputs["custom_prompt"] = state.custom_prompt
@@ -336,6 +479,10 @@ def _finalize_digest(state: AtlasResearchState, body: dict[str, Any]) -> dict[st
 
 
 def _carry_prior_digest(state: AtlasResearchState, prior: PriorPublished) -> dict[str, Any]:
+    """Materialize the prior digest for the run date (used by both the quiet-day
+    ``skip`` carry and the synthesis-failure carry). Provenance stamping is applied
+    only on the FAILURE path (see ``_carry_prior_digest_or_raise``), so a legitimate
+    quiet-day carry is not surfaced as stale."""
     body = dict(prior.payload)
     return _finalize_digest(state, body)
 
@@ -360,8 +507,20 @@ def _carry_prior_digest_or_raise(
             exc,
             prior.date.isoformat(),
         )
+        # Provenance (#1559): stamp the carried payload so telemetry / the dashboard
+        # can tell a synthesis-FAILURE carry from a fresh digest — the failure mode
+        # was a byte-identical row republished daily under a fresh date, invisibly
+        # stale while status read "ok". ``daily_snapshots.snapshot`` and
+        # ``documents.payload`` are JSONB, so these extra keys need no migration;
+        # ``DigestSnapshot.model_validate`` ignores them when the row is later
+        # reloaded as prior context, and ``render_digest_markdown`` surfaces
+        # ``continuity`` as a human note. Applied only here (not on the quiet-day
+        # ``skip`` carry) so a legitimate carry is not mislabeled as broken.
+        carried = _carry_prior_digest(state, prior)
+        carried["carried_from"] = prior.date.isoformat()
+        carried["continuity"] = f"carried_forward from {prior.date.isoformat()} (synthesis failed)"
         return {
-            "phase7_digest": _carry_prior_digest(state, prior),
+            "phase7_digest": carried,
             "errors": [
                 PhaseError(
                     phase="phase7_synthesis",
@@ -452,13 +611,13 @@ def _regime_label_from_phase3(state: AtlasResearchState) -> str:
     return str(state.phase3_output.payload.body.get("regime_label") or "")  # type: ignore[union-attr]
 
 
-def _body(slot: Any) -> dict[str, Any]:
+def _body(slot: Any, char_budget: int) -> dict[str, Any]:
     if slot is None or slot.payload.source != "today":
         return {}
-    return _slim_segment_body(dict(slot.payload.body))
+    return _slim_segment_body(dict(slot.payload.body), char_budget)
 
 
-def _bodies(bag: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _bodies(bag: dict[str, Any], char_budget: int) -> dict[str, dict[str, Any]]:
     """Return only today-source segment bodies (parity with ``_body``).
 
     On delta runs, carried (``source != "today"``) slots are baseline
@@ -467,13 +626,14 @@ def _bodies(bag: dict[str, Any]) -> dict[str, dict[str, Any]]:
     (ADR-0015). Carried provenance is still surfaced via ``segment_freshness``,
     which is derived from full state — not from this digest-input map.
 
-    Bodies are slimmed before serialization so baseline runs with every segment
-    fresh stay inside the reasoning-tier model context window.
+    Bodies are slimmed to ``char_budget`` before serialization so baseline runs
+    with every segment fresh stay inside the reasoning-tier model context window
+    (#1559).
     """
     return {
         slug: {
             **{k: v for k, v in slot.payload.model_dump(mode="json").items() if k != "body"},
-            "body": _slim_segment_body(slot.payload.body),
+            "body": _slim_segment_body(slot.payload.body, char_budget),
         }
         for slug, slot in bag.items()
         if slot.payload.source == "today"

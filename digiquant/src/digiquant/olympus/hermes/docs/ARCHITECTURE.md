@@ -92,6 +92,39 @@ fresh `deliberation_transcript` row only when the loop runs.
 
 ---
 
+## H9 commit-run: coherence, held-carry, and observability (#932 / #1030 / #1555)
+
+H9 is the sole terminal writer. Before it books, `commit_io.coherence_errors` runs two
+fail-closed checks over the H8 `sized_book` weights:
+
+1. every prior holding is either in the book with positive weight **or** explicitly `flat`
+   in the H7 memo (no silent drop of an owned name);
+2. every open position has an H5 analyst doc **or** is `flat` **or** is a deliberately
+   gated-out held carry (`focus_roster_excluded ∩ held`, `commit_io.gated_out_tickers`).
+
+**Held-carry (the delta-day path).** On a quiet delta day the H4 staleness gate moves a
+held name with a sub-threshold move into `focus_roster_excluded` and dispatches no analyst,
+so it never reaches the H7 memo. H8 therefore **carries** such names into the sized book at
+their current drifted weight (`phase7e_risk_sizing._gated_held_carry_weights`, scoped to the
+same `gated_out_tickers` set H9 exempts) *before* the rebalancing-cadence band — so a quiet
+held position stays owned instead of being dropped. **Regression #1555:** before this carry,
+gated-out held names were dropped from the book, check (1) failed closed, and H9 returned a
+`PhaseError` (`phase="hermes_h9_commit_run"`) that never reached the degraded gate — every
+delta-day commit was silently frozen from 2026-06-26 while runs still reported `ok:true`.
+
+**Commit is observable.** A book H8 materializes but H9 does not persist (coherence
+fail-closed, idempotency conflict, or a no-manifest skip) is now a **degraded** run:
+`diagnostics.summarize_run` computes `(book_materialized, book_committed)` from
+`phase_hermes.sized_book` / `commit_manifest` (a manifest with status `committed`/`noop`
+counts as committed) and forces `degraded` when materialized-but-not-committed — a state an
+H9 `PhaseError` can't trigger on its own. Both flags are emitted structurally in the
+`atlas_run_diagnostics.breakdown` (truncation-proof) and in the chain CLI summary alongside
+`book_materialized`; a commit-failure marker is prepended to `error_summary` so it survives
+the 2000-char cap. `chain._retry_worthy` keys the #809 good-book guard on `book_committed`
+(not mere materialization), so an uncommitted book retries while a committed one does not.
+
+---
+
 ## Boundary diagram
 
 ```mermaid

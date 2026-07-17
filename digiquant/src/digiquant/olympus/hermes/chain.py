@@ -143,16 +143,19 @@ def _degraded_run_pct() -> float:
 def _retry_worthy(state: AtlasResearchState, *, degraded_pct: float) -> bool:
     """Whether the CI outer-retry should fire for this run.
 
-    True only when the run is degraded AND produced no materialized sized book. A run that
-    already materialized a valid book did real, useful work — re-running it just burns the
-    outer loop's backoff sleeps on a good book (the inception baseline sat ~20 min in
-    retry sleeps after a successful materialization; #809). Since #944 gates Hermes on Atlas
-    sufficiency, a book also implies the research layer was sufficient. A book-less degraded
-    run (Atlas failed / Hermes skipped) still retries.
+    True only when the run is degraded AND its book did not actually **commit**. A run that
+    committed a valid book (or idempotent-noop of an already-booked day) did real, durable
+    work — re-running it just burns the outer loop's backoff sleeps on a good book (the
+    inception baseline sat ~20 min in retry sleeps after a successful materialization; #809).
+
+    #1555 generalizes the #809 guard from *materialized* to *committed*: a book that H8
+    materialized but H9 never persisted (coherence fail-closed / idempotency conflict / silent
+    skip) is NOT durable work — it must retry. A book-less degraded run (Atlas failed / Hermes
+    skipped) still retries as before.
     """
     if not _diagnostics.is_degraded(state, degraded_pct=degraded_pct):
         return False
-    return state.phase_hermes.sized_book is None
+    return not _diagnostics.book_committed(state)
 
 
 def _record_chain_error(state: AtlasResearchState, label: str, exc: Exception) -> None:
@@ -512,6 +515,11 @@ def cli_main(argv: list[str] | None = None) -> int:
     retry_worthy = _retry_worthy(final_state, degraded_pct=_degraded_run_pct())
     summary["degraded"] = degraded
     summary["book_materialized"] = final_state.phase_hermes.sized_book is not None
+    # #1555: a green run must be *provably* a committed run. ``book_committed`` sits beside
+    # ``book_materialized`` so an operator never again reads ``ok:true, book_materialized:true``
+    # and assumes the book persisted — the silent H4→H9 freeze (2026-06-26) presented exactly
+    # that shape while nothing committed for weeks.
+    summary["book_committed"] = _diagnostics.book_committed(final_state)
     json.dump({"ok": not retry_worthy, "summary": summary}, sys.stdout, default=str)
     sys.stdout.write("\n")
     return 1 if retry_worthy else 0
