@@ -1,9 +1,47 @@
 {
   "_note": "Baseline of app-local CSS component-class families (first hyphen segment of classes DEFINED in each app's own css). The frontend canon guard (#1421) fails when an app grows a NEW family: new UI belongs in the reference + @digithings/web first (frontend/digiweb/MIGRATION.md). To extend deliberately, add the prefix here in the same PR with a justifying comment in that PR's body.",
-  "_frozen": "2026-07-08 — post component-consolidation epic (#1414)",
-  "digithings-web": ["brand", "dc", "doc", "docs", "dqhero", "glow"],
-  "digiquant-web": ["dq", "dqhero", "dqp", "dqpipe", "dqss", "footer", "glow", "hero", "olympus", "sub", "ts"],
-  "olympus": ["atlas", "dbar", "glass", "prose", "qn", "recharts", "tl", "ts"],
-  "digichat": ["app", "dc"],
-  "digichat-ui": ["dark", "dc", "dt", "dtc", "light"]
+  "_frozen": "2026-07-08 \u2014 post component-consolidation epic (#1414)",
+  "digithings-web": [
+    "brand",
+    "dc",
+    "doc",
+    "docs",
+    "dqhero",
+    "glow"
+  ],
+  "digiquant-web": [
+    "dq",
+    "dqhero",
+    "dqp",
+    "dqpipe",
+    "dqss",
+    "footer",
+    "glow",
+    "hero",
+    "olympus",
+    "sub",
+    "ts"
+  ],
+  "olympus": [
+    "atlas",
+    "dbar",
+    "glass",
+    "prose",
+    "qn",
+    "recharts",
+    "subnav",
+    "tl",
+    "ts"
+  ],
+  "digichat": [
+    "app",
+    "dc"
+  ],
+  "digichat-ui": [
+    "dark",
+    "dc",
+    "dt",
+    "dtc",
+    "light"
+  ]
 }

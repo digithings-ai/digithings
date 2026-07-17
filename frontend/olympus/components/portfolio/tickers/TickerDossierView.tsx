@@ -142,7 +142,18 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
 
         {held ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <StatCard label="Weight" value={formatPct(position!.weight_actual)} />
+            {/* Booked weight is a share, not a signed P&L read — no '+' prefix.
+                The PM's target (when it differs post-turnover) reads as context. */}
+            <StatCard
+              label="Weight"
+              value={`${position!.weight_actual.toFixed(2)}%`}
+              subtitle={
+                position!.weight_target != null &&
+                Math.abs(position!.weight_target - position!.weight_actual) >= 0.05
+                  ? `target ${position!.weight_target.toFixed(1)}%`
+                  : undefined
+              }
+            />
             <StatCard
               label="Since entry"
               value={sinceEntry != null ? formatPct(sinceEntry) : '—'}
