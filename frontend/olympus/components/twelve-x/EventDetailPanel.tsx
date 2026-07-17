@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CalendarClock, Globe, Users, X } from 'lucide-react';
 
 import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
@@ -30,9 +30,10 @@ function hasValue(v: string | null | undefined): v is string {
 /**
  * Right-side slide-over for a single calendar event, opened from both the Events
  * list and the timeline. Mirrors BriefPanel's slide-over (scrim + right panel,
- * Esc-to-close, body scroll-lock). Prop-driven: the parent owns the open state
- * (`event != null` ⇒ open) and passes the already-matched broker opinions so this
- * panel renders the same desk-commentary shape the list/timeline derive.
+ * Esc-to-close, body scroll-lock, reduced-motion-aware entrance slide).
+ * Prop-driven: the parent owns the open state (`event != null` ⇒ open) and
+ * passes the already-matched broker opinions so this panel renders the same
+ * desk-commentary shape the list/timeline derive.
  */
 export default function EventDetailPanel({
   event,
@@ -45,6 +46,16 @@ export default function EventDetailPanel({
 }) {
   const open = event != null;
   const handleClose = useCallback(() => onClose(), [onClose]);
+
+  // Mount flag driving the entrance slide (mirrors BriefPanel's Sheet, whose
+  // entrance is a reduced-motion-aware translate; this hand-rolled overlay has
+  // no Base UI transition primitive, so we fake the same one-motion-moment by
+  // flipping this a frame after open so the transition has a starting state.
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setEntered(open));
+    return () => cancelAnimationFrame(id);
+  }, [open]);
 
   // Close on Escape while open.
   useEffect(() => {
@@ -83,7 +94,9 @@ export default function EventDetailPanel({
       />
 
       {/* Panel */}
-      <div className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-hair bg-term-bg shadow-2xl">
+      <div
+        className={`absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-hair bg-term-bg shadow-2xl transition-transform duration-200 ease-in-out motion-reduce:transition-none motion-reduce:translate-x-0 ${entered ? 'translate-x-0' : 'translate-x-10'}`}
+      >
         {/* Grab bar — phone-only affordance hinting the sheet is dismissable. */}
         <div className="flex shrink-0 justify-center pt-2 sm:hidden" aria-hidden>
           <span className="h-1 w-9 rounded-full bg-ink/20" />

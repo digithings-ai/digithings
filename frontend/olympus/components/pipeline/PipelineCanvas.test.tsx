@@ -24,7 +24,7 @@ vi.mock('@/components/pipeline/useCanvasCamera', async (importOriginal) => {
   };
 });
 
-import PipelineCanvas from './PipelineCanvas';
+import PipelineCanvas, { movePipelineStage } from './PipelineCanvas';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import type { PipelineStageId } from '@/lib/pipeline-topology';
 
@@ -70,5 +70,23 @@ describe('PipelineCanvas', () => {
       createElement(PipelineCanvas, { day: emptyDay, onNodeActivate: () => {} }),
     );
     expect(html).toContain('overflow-hidden');
+  });
+
+  it('renders a touch-first section navigator with the first stage expanded', () => {
+    const html = renderToStaticMarkup(
+      createElement(PipelineCanvas, { day: emptyDay, onNodeActivate: () => {} }),
+    );
+
+    expect(html).toContain('Previous pipeline section');
+    expect(html).toContain('Next pipeline section');
+    expect(html).toContain('Stage 1 of 6');
+    expect(html).toContain('Preflight / market data');
+    expect(html).toContain('md:hidden');
+  });
+
+  it('clamps mobile section navigation at both ends', () => {
+    expect(movePipelineStage(0, -1)).toBe(0);
+    expect(movePipelineStage(0, 1)).toBe(1);
+    expect(movePipelineStage(5, 1)).toBe(5);
   });
 });

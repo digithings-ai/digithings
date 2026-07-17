@@ -3,8 +3,8 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useDashboard } from '@/lib/dashboard-context';
-import { StatCard, formatPct, pnlColor } from '@/components/ui';
-import { TrendingUp, BarChart3, Activity, Target, ChevronDown, ChevronUp } from 'lucide-react';
+import { formatPct } from '@/components/ui';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { BenchmarkHistoryMap, NavChartPoint, PerfChartPoint, Thesis } from '@/lib/types';
 import {
   PerformanceDashboard,
@@ -340,8 +340,38 @@ export default function PerformanceTab() {
     snaps.length > 0 ? snaps[snaps.length - 1].date : (data.portfolio.meta.last_updated ?? null);
 
   const totalReturnLabel = range === 'itd' ? 'Since inception' : 'Selected range';
-  const totalReturnValue =
-    range === 'itd' ? formatPct(metrics.portfolio_pnl) : formatPct(rangeReturn);
+  const displayedReturn = range === 'itd' ? metrics.portfolio_pnl : rangeReturn;
+  const totalReturnValue = formatPct(displayedReturn);
+  const overviewHeadlines: DashboardHeadline[] = [
+    {
+      label: 'portfolio NAV',
+      value: fmtNav(latestNav),
+      note: 'end of range · level',
+    },
+    {
+      label: 'total return',
+      value: totalReturnValue,
+      tone: displayedReturn == null ? undefined : displayedReturn >= 0 ? 'up' : 'down',
+      note: totalReturnLabel.toLowerCase(),
+    },
+  ];
+  const overviewRatios: DashboardRatio[] = [
+    {
+      label: 'daily P&L',
+      value: dailyRet != null ? formatPct(dailyRet) : '—',
+      tone: dailyRet == null ? undefined : dailyRet >= 0 ? 'up' : 'down',
+    },
+    { label: 'active positions', value: String(positions.length) },
+    {
+      label: 'invested',
+      value:
+        serverMetrics?.invested_pct != null ? `${serverMetrics.invested_pct.toFixed(1)}%` : '—',
+    },
+    {
+      label: 'cash',
+      value: serverMetrics?.cash_pct != null ? `${serverMetrics.cash_pct.toFixed(1)}%` : '—',
+    },
+  ];
 
   return (
     <div className="space-y-10">
@@ -356,10 +386,10 @@ export default function PerformanceTab() {
             {snaps.length >= 2 && (
               <p className="text-sm text-ink-soft">
                 Portfolio{' '}
-                <span className={rangeReturn != null ? (rangeReturn >= 0 ? 'text-up font-semibold' : 'text-down font-semibold') : ''}>
-                  {rangeReturn != null ? (rangeReturn >= 0 ? `+${rangeReturn.toFixed(2)}%` : `${rangeReturn.toFixed(2)}%`) : formatPct(metrics.portfolio_pnl)}
+                <span className={displayedReturn != null ? (displayedReturn >= 0 ? 'text-up font-semibold' : 'text-down font-semibold') : ''}>
+                  {displayedReturn != null ? (displayedReturn >= 0 ? `+${displayedReturn.toFixed(2)}%` : `${displayedReturn.toFixed(2)}%`) : '—'}
                 </span>
-                {' '}since inception{dailyRet != null && (
+                {' '}{range === 'itd' ? 'since inception' : 'over the selected range'}{dailyRet != null && (
                   <>, <span className={dailyRet >= 0 ? 'text-up font-semibold' : 'text-down font-semibold'}>{dailyRet >= 0 ? '+' : ''}{dailyRet.toFixed(2)}%</span> today</>)
                 }.
               </p>
@@ -370,62 +400,30 @@ export default function PerformanceTab() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            label="Portfolio NAV"
-            value={fmtNav(latestNav)}
-            icon={TrendingUp}
-            iconColor="text-accent"
-            subtitle="End of range (level)"
+        <PerformanceDashboard
+          headlines={overviewHeadlines}
+          ratios={overviewRatios}
+          ratioColumns={4}
+        >
+          <PerformanceChartWorkspace
+            embedded
+            view={view}
+            onViewChange={setView}
+            chartData={chartData}
+            selectedComparables={selectedComparables}
+            onAddComparable={onAddComparable}
+            onRemoveComparable={onRemoveComparable}
+            tickerUniverse={tickerUniverse}
+            comparableLoading={comparableLoading}
+            comparableError={comparableError}
+            snaps={snaps}
+            drawdownData={drawdownData}
+            rollingData={rollingData}
+            rollingWindow={rollingWindow}
+            activityMarkerDates={activityMarkerDates}
+            activityEventsByDate={activityEventsByDate}
           />
-          <StatCard
-            label="Total Return"
-            value={totalReturnValue}
-            valueClass={pnlColor(range === 'itd' ? metrics.portfolio_pnl : rangeReturn)}
-            icon={BarChart3}
-            iconColor="text-accent"
-            subtitle={totalReturnLabel}
-          />
-          <StatCard
-            label="Daily P&L"
-            value={dailyRet != null ? formatPct(dailyRet) : '—'}
-            valueClass={pnlColor(dailyRet)}
-            icon={Activity}
-            iconColor="text-warn"
-            subtitle={
-              dailyRet == null
-                ? 'Not enough data in range'
-                : 'Last day in range'
-            }
-          />
-          <StatCard
-            label="Active Positions"
-            value={positions.length}
-            icon={Target}
-            iconColor="text-accent"
-          />
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Return &amp; risk</p>
-        <PerformanceChartWorkspace
-          view={view}
-          onViewChange={setView}
-          chartData={chartData}
-          selectedComparables={selectedComparables}
-          onAddComparable={onAddComparable}
-          onRemoveComparable={onRemoveComparable}
-          tickerUniverse={tickerUniverse}
-          comparableLoading={comparableLoading}
-          comparableError={comparableError}
-          snaps={snaps}
-          drawdownData={drawdownData}
-          rollingData={rollingData}
-          rollingWindow={rollingWindow}
-          activityMarkerDates={activityMarkerDates}
-          activityEventsByDate={activityEventsByDate}
-        />
+        </PerformanceDashboard>
       </section>
 
       <section className="space-y-3">

@@ -1,5 +1,7 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { TWELVE_X_TABS, resolveTab } from './TwelveXClient';
+import { TWELVE_X_TABS, TwelveXUnavailable, resolveTab } from './TwelveXClient';
 import type { TwelveXTab } from './context';
 
 /* ----------------------------------------------------------------------- */
@@ -59,5 +61,20 @@ describe('resolveTab', () => {
 
   it('no longer resolves the retired ledger param to a ledger tab', () => {
     expect(resolveTab('ledger')).toBe('today');
+  });
+});
+
+describe('TwelveXUnavailable', () => {
+  it('keeps the five-tab workspace visible when the feed fails', () => {
+    const html = renderToStaticMarkup(createElement(TwelveXUnavailable, { configured: true }));
+    expect(html).toContain('FX research is temporarily unavailable');
+    expect(html).toContain('Retry');
+    for (const { label } of TWELVE_X_TABS) expect(html).toContain(label);
+  });
+
+  it('uses presentation-safe copy when the feed is not configured', () => {
+    const html = renderToStaticMarkup(createElement(TwelveXUnavailable, { configured: false }));
+    expect(html).toContain('FX research is not connected');
+    expect(html).not.toContain('NEXT_PUBLIC_');
   });
 });

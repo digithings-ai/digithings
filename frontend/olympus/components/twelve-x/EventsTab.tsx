@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarClock, ChevronRight, Globe, Users } from 'lucide-react';
+import { CalendarDays, ChevronRight, Globe, Users } from 'lucide-react';
 import { eventLocalDateKey, hasResolvedTime } from '@/lib/twelve-x/fetch';
 import type {
   FxEconomicCalendarRow,
@@ -351,8 +351,8 @@ export default function EventsTab({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
-        <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="text-base font-semibold text-ink md:text-lg">Upcoming catalysts</h2>
+        <CalendarDays size={18} className="shrink-0 text-accent" aria-hidden />
+        <h2 className="font-display text-2xl tracking-tight text-ink">Upcoming catalysts</h2>
         {/* List | Timeline segmented control (demo's #evtSubnav). */}
         <div
           className="ml-auto inline-flex overflow-hidden rounded-md border border-hair text-[11px]"

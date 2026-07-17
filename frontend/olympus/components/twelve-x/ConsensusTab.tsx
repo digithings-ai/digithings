@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { LineChart as LineChartIcon } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -186,6 +187,11 @@ export default function ConsensusTab({
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-3 px-1">
+        <LineChartIcon size={18} className="shrink-0 text-accent" aria-hidden />
+        <h2 className="font-display text-2xl tracking-tight text-ink">G10 consensus</h2>
+      </div>
+
       <p className="text-xs text-ink-mute max-w-2xl">
         Relevance-weighted G10 consensus over time. Score ranges {SCORE_MIN} (max bearish) to {SCORE_MAX}{' '}
         (max bullish); bands mark a directional lean (±{LEAN_BAND}) and strong conviction (±{STRONG_BAND}).
@@ -220,12 +226,12 @@ export default function ConsensusTab({
         })}
       </div>
 
-      {/* Biggest shift since the prior run — one-line banner (shared by both views). */}
+      {/* Biggest shift since the prior run — shared by both views. */}
       {topMover ? (
         <button
           type="button"
           onClick={() => (onDrillToProvenance ? onDrillToProvenance(topMover.currency) : setSelectedCcy(topMover.currency))}
-          className="w-full glass-card px-4 py-2.5 flex items-center gap-2 text-left hover:bg-ink/[0.03] transition-colors"
+          className="glass-card flex w-full flex-wrap items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-ink/[0.03]"
           title={
             onDrillToProvenance
               ? `Why this weight? See desk provenance for ${topMover.currency} in Intelligence`
@@ -242,7 +248,7 @@ export default function ConsensusTab({
             {topMover.scoreNow.toFixed(2)}
           </span>
           <DeltaChip delta={topMover.scoreDelta} />
-          <span className="text-[11px] text-ink-mute ml-auto shrink-0">
+          <span className="ml-auto text-[11px] text-ink-mute max-sm:basis-full max-sm:ml-0">
             {topMover.direction === 'up' ? 'turned more bullish' : 'turned more bearish'} since last run
           </span>
         </button>

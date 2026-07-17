@@ -6,6 +6,7 @@ import { currencyColor, scoreColorClass } from '@/lib/twelve-x/consensus-bar';
 import { G10_CURRENCIES } from '@/lib/twelve-x/types';
 import type { FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
 import { ConsensusScoreBar } from './ConsensusScoreBars';
+import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
 /**
  * The Today page's "Consensus average" chart (frozen visual-spec redesign #1).
@@ -88,9 +89,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
   return (
     <section className="glass-card p-4 flex flex-col flex-1">
       <div className="mb-3.5">
-        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-soft">
-          Consensus average
-        </h2>
+        <TwelveXSectionHeading>Consensus average</TwelveXSectionHeading>
         <p className="mt-1 text-[11px] text-ink-mute">
           Trailing 5-run average — raw latest scores are on the Consensus tab.
         </p>

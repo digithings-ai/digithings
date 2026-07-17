@@ -264,7 +264,7 @@ export default function IntelligenceTab({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <Layers size={18} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="text-base font-semibold text-ink md:text-lg">
+        <h2 className="font-display text-2xl tracking-tight text-ink">
           Confluence trade ideas
         </h2>
         {runDate ? (

@@ -142,20 +142,17 @@ export function MoveHero({
         </div>
 
         {/* THE READ — the marquee */}
-        <p className="mt-4 text-[11px] font-bold uppercase tracking-widest text-ink-mute">
-          Brief · {asOf ?? '—'}
-        </p>
+        <p className="mt-4 text-[11px] font-bold uppercase tracking-widest text-ink-mute">Brief</p>
         <h1 className="font-display text-3xl sm:text-4xl leading-tight tracking-tight mt-1 text-ink">
           {headline ?? regime}
         </h1>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {confidence != null ? (
+        {confidence != null ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="rounded-md border border-hair px-2 py-0.5 font-mono text-[11px] tabular-nums text-ink-soft">
               {confidence.toFixed(1)} confidence
             </span>
-          ) : null}
-          <span className="text-xs text-ink-soft">{regime}</span>
-        </div>
+          </div>
+        ) : null}
 
         {/* The move — demoted to a one-line status */}
         {changeCount === 0 ? (
@@ -178,17 +175,22 @@ export function MoveHero({
             {nav.index == null ? '—' : nav.index.toFixed(1)}
           </span>
           {nav.sincePct != null ? (
-            <span className={sinceColor}>
-              {signedPct(nav.sincePct)} since inception
+            <span>
+              <span className={sinceColor}>{signedPct(nav.sincePct)}</span>
+              <span className="text-ink-soft"> since inception</span>
               {nav.sinceDate ? <span className="text-ink-mute"> ({nav.sinceDate})</span> : null}
             </span>
           ) : null}
           {nav.dailyPct != null ? (
-            <span className={dailyColor}>{signedPct(nav.dailyPct, ' today')}</span>
+            <span>
+              <span className={dailyColor}>{signedPct(nav.dailyPct)}</span>
+              <span className="text-ink-soft"> today</span>
+            </span>
           ) : null}
           {nav.benchTicker && nav.excessPct != null ? (
-            <span className={excessColor}>
-              {signedPct(nav.excessPct)} vs {nav.benchTicker}
+            <span>
+              <span className={excessColor}>{signedPct(nav.excessPct)}</span>
+              <span className="text-ink-soft"> vs {nav.benchTicker}</span>
             </span>
           ) : null}
         </div>

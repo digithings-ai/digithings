@@ -303,8 +303,8 @@ export interface IntelligenceWhyPanelProps {
  *   Tier 2 — the consensus decomposition (divergent bar + figures + position split);
  *   Tier 3 — the supporting desks (classification badge + relevance + verbatim reason).
  *
- * The lead one-liner is explicitly LABELLED "synthesized — would require
- * generation": we do NOT generate it (no stored aggregated prose exists). Per
+ * The lead one-liner is explicitly LABELLED "Illustrative summary": it is
+ * synthesized from the idea's own fields, not a stored aggregated prose. Per
  * the global caveat, `w_time`/`w_event` are never surfaced.
  */
 export default function IntelligenceWhyPanel({ item, initialExpanded }: IntelligenceWhyPanelProps) {
@@ -331,8 +331,8 @@ export default function IntelligenceWhyPanel({ item, initialExpanded }: Intellig
       {open ? (
         <div id={bodyId} className="mt-2">
           <div className="rounded-md border border-dashed border-hair bg-term-bg px-3 py-2.5">
-            <span className="mb-1 block text-[9.5px] font-medium uppercase tracking-wider text-warn">
-              synthesized — would require generation
+            <span className="mb-1 block text-[9.5px] font-medium uppercase tracking-wider text-ink-mute">
+              Illustrative summary
             </span>
             <p className="text-[12.5px] italic text-ink-soft">
               {item.currency} screens{' '}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { CalendarClock } from 'lucide-react';
 import type {
   FxConfluenceSnapshotRow,
   FxConsensusSnapshotRow,
@@ -14,6 +15,7 @@ import DigestBrief from './DigestBrief';
 import TodayConsensusChart from './TodayConsensusChart';
 import EventsTimeline, { eventsToTimeline } from './EventsTimeline';
 import { useTwelveX } from './context';
+import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
 type DigestData = { run_date: string; summary: string; key_themes: string[]; doc_count: number; broker_count: number } | null;
 
@@ -47,6 +49,11 @@ export default function TodayTab({
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3 px-1">
+        <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
+        <h2 className="font-display text-2xl tracking-tight text-ink">Today&rsquo;s briefing</h2>
+      </div>
+
       {/* Above the fold: trade ideas + digest brief co-lead */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
         <TradeIdeasPanel ideas={tradeIdeas} confluence={confluence} />
@@ -61,9 +68,7 @@ export default function TodayTab({
 
         <section className="glass-card flex min-w-0 flex-col p-4 lg:overflow-hidden">
           <header className="mb-3 flex shrink-0 items-baseline gap-2">
-            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-soft">
-              Broker briefs
-            </h2>
+            <TwelveXSectionHeading>Broker briefs</TwelveXSectionHeading>
             <span className="ml-auto font-mono text-[10px] text-ink-mute">
               {briefs.length} {briefs.length === 1 ? 'brief' : 'briefs'}
             </span>
@@ -122,9 +127,7 @@ export default function TodayTab({
       {/* Full-width single-day timeline (replaces the old compact events tile). */}
       <section className="glass-card p-4">
         <header className="mb-3 flex items-baseline gap-2">
-          <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-soft">
-            Today&rsquo;s timeline
-          </h2>
+          <TwelveXSectionHeading>Today&rsquo;s timeline</TwelveXSectionHeading>
           <span className="ml-auto font-mono text-[10px] text-ink-mute">00:00 – 24:00</span>
         </header>
         {timelineEvents.length === 0 ? (

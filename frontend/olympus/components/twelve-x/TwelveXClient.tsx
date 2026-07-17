@@ -8,6 +8,7 @@ import {
   Layers,
   LineChart as LineChartIcon,
 } from 'lucide-react';
+import { EmptyState } from '@digithings/web';
 
 import { SubpageStickyTabBar, SUBPAGE_MAX, subpageTabButtonClass } from '@/components/subpage-tab-bar';
 import PageSkeleton from '@/components/page-skeleton';
@@ -17,7 +18,6 @@ import {
   getEventOpinions,
   getIntelligence,
   getIntelligenceWhy,
-  getLatestConsensus,
   getLatestDigest,
   getMatrix,
   getTradeIdeas,
@@ -25,6 +25,7 @@ import {
   getTodayEvents,
   getUpcomingEvents,
 } from '@/lib/twelve-x/fetch';
+import { selectLatestCompleteConsensus } from '@/lib/twelve-x/consensus-derive';
 import { isTwelveXConfigured } from '@/lib/twelve-x/supabase';
 import type {
   FxBriefRow,
@@ -56,6 +57,63 @@ export const TWELVE_X_TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof Calenda
   { id: 'matrix', Icon: Grid3x3, label: 'Matrix' },
   { id: 'events', Icon: CalendarDays, label: 'Events' },
 ];
+
+function TwelveXTabBar({
+  active,
+  onSelect,
+  disabled = false,
+}: {
+  active: TwelveXTab;
+  onSelect?: (tab: TwelveXTab) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <SubpageStickyTabBar aria-label="FX research workspace" topOffset="none">
+      {TWELVE_X_TABS.map(({ id, Icon, label }) => (
+        <button
+          key={id}
+          type="button"
+          disabled={disabled}
+          onClick={() => onSelect?.(id)}
+          className={`${subpageTabButtonClass(active === id)} disabled:cursor-not-allowed disabled:opacity-50`}
+        >
+          <Icon size={16} aria-hidden />
+          {label}
+        </button>
+      ))}
+    </SubpageStickyTabBar>
+  );
+}
+
+export function TwelveXUnavailable({ configured }: { configured: boolean }) {
+  return (
+    <div className="flex min-h-full flex-col">
+      <TwelveXTabBar active="today" disabled />
+      <div className={`${SUBPAGE_MAX} flex-1 py-12`}>
+        <EmptyState
+          variant="error"
+          dress="glass-display"
+          className="glass-card mx-auto max-w-md"
+          title={configured ? 'FX research is temporarily unavailable' : 'FX research is not connected'}
+          body={
+            configured
+              ? 'The research feed could not be reached. Try again to reconnect.'
+              : 'This environment is not connected to the FX research feed.'
+          }
+          action={
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-5 inline-flex items-center rounded-lg border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
+            >
+              Retry
+            </button>
+          }
+        />
+      </div>
+    </div>
+  );
+}
 
 /** A brief drill-down target: the source_file key plus the run that owns it. */
 export type BriefTarget = { sourceFile: string; runDate: string | null };
@@ -193,14 +251,12 @@ export default function TwelveXClient() {
         const [
           digest,
           consensusSeries,
-          latestConsensus,
           intelligence,
           upcomingEvents,
           matrix,
         ] = await Promise.all([
           getLatestDigest(),
           getConsensusTimeSeries(),
-          getLatestConsensus(),
           // Intelligence: full ranked confluence set for the latest run_date.
           getIntelligence(),
           // Events: the upcoming 14-day macro calendar window.
@@ -223,6 +279,7 @@ export default function TwelveXClient() {
           ? await Promise.all([getTradeIdeas(canonical), getTodayBriefs(canonical), getTodayEvents()])
           : [[], [], await getTodayEvents()];
         if (cancelled) return;
+        const latestConsensus = selectLatestCompleteConsensus(consensusSeries);
         setData({
           digest,
           consensusSeries,
@@ -311,24 +368,11 @@ export default function TwelveXClient() {
   if (loading) return <PageSkeleton />;
 
   if (error === 'unconfigured') {
-    return (
-      <div className={`${SUBPAGE_MAX} py-10`}>
-        <div className="glass-card p-10 text-center text-ink-mute text-sm">
-          FX research is not configured. Set{' '}
-          <code className="font-mono text-ink-soft">NEXT_PUBLIC_TWELVEX_SUPABASE_URL</code> and{' '}
-          <code className="font-mono text-ink-soft">NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY</code>{' '}
-          (or the shared Supabase env vars).
-        </div>
-      </div>
-    );
+    return <TwelveXUnavailable configured={false} />;
   }
 
   if (error) {
-    return (
-      <div className={`${SUBPAGE_MAX} py-10`}>
-        <div className="glass-card p-10 text-center text-warn text-sm">{error}</div>
-      </div>
-    );
+    return <TwelveXUnavailable configured />;
   }
 
   const renderActiveTab = () => {
@@ -384,19 +428,7 @@ export default function TwelveXClient() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <SubpageStickyTabBar aria-label="FX research workspace" topOffset="none">
-        {TWELVE_X_TABS.map(({ id, Icon, label }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={subpageTabButtonClass(tab === id)}
-          >
-            <Icon size={16} aria-hidden />
-            {label}
-          </button>
-        ))}
-      </SubpageStickyTabBar>
+      <TwelveXTabBar active={tab} onSelect={setTab} />
 
       <TwelveXProvider value={ctx}>
         <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>{renderActiveTab()}</div>

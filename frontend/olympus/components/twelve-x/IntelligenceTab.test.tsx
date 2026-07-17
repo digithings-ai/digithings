@@ -160,7 +160,7 @@ describe('IntelligenceTab — why panels', () => {
     expect(html).toContain('USD');
     expect(html).toContain('Confluence score');
     // the why panel's synthesized label is present
-    expect(html).toContain('synthesized — would require generation');
+    expect(html).toContain('Illustrative summary');
   });
 
   it('renders a card without a panel when no matching why-item exists', () => {

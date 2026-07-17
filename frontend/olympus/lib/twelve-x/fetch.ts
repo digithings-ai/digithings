@@ -14,6 +14,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { isTwelveXConfigured, twelveXSupabase } from './supabase';
 import { isSupabaseConfigured, supabase } from '../supabase';
 import { MATRIX_COLUMNS } from './types';
+import { selectLatestCompleteConsensus } from './consensus-derive';
 import type {
   ConfluenceCatalyst,
   ConsensusDelta,
@@ -165,41 +166,14 @@ export async function getConsensusTimeSeries(
 }
 
 /**
- * The weighted consensus rows for the latest run_date present in the table
- * (one row per G10 currency). Returns `[]` when twelve-x is unconfigured or the
- * table is empty.
+ * The newest complete weighted G10 consensus run. During an incremental
+ * publish, the newest partial run is skipped; when no complete run exists yet,
+ * that newest partial run is returned.
  */
 export async function getLatestConsensus(
   timeframe: Timeframe = 'medium'
 ): Promise<FxConsensusSnapshotRow[]> {
-  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
-
-  // Resolve the latest run_date first (cheap), then pull that day's full set.
-  const latest = await querySupabase<{ run_date: string }[]>((sb) =>
-    sb
-      .from('fx_consensus_snapshot')
-      .select('run_date')
-      .eq('weighted', true)
-      .eq('timeframe', timeframe)
-      .order('run_date', { ascending: false })
-      .limit(1)
-  );
-
-  const latestDate = latest?.[0]?.run_date;
-  if (!latestDate) return [];
-
-  const rows = await querySupabase<FxConsensusSnapshotRow[]>((sb) =>
-    sb
-      .from('fx_consensus_snapshot')
-      .select(
-        'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks'
-      )
-      .eq('weighted', true)
-      .eq('timeframe', timeframe)
-      .eq('run_date', latestDate)
-      .order('currency', { ascending: true })
-  );
-  return rows ?? [];
+  return selectLatestCompleteConsensus(await getConsensusTimeSeries(timeframe));
 }
 
 /**
