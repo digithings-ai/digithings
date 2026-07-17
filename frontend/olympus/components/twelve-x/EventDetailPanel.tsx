@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
-import { CalendarClock, Globe, Users, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { CalendarClock, ExternalLink, Globe, Users, X } from 'lucide-react';
 
 import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 import type { MatchedOpinions } from './EventsTab';
@@ -30,21 +30,37 @@ function hasValue(v: string | null | undefined): v is string {
 /**
  * Right-side slide-over for a single calendar event, opened from both the Events
  * list and the timeline. Mirrors BriefPanel's slide-over (scrim + right panel,
- * Esc-to-close, body scroll-lock). Prop-driven: the parent owns the open state
- * (`event != null` ⇒ open) and passes the already-matched broker opinions so this
- * panel renders the same desk-commentary shape the list/timeline derive.
+ * Esc-to-close, body scroll-lock, reduced-motion-aware entrance slide).
+ * Prop-driven: the parent owns the open state (`event != null` ⇒ open) and
+ * passes the already-matched broker opinions so this panel renders the same
+ * desk-commentary shape the list/timeline derive.
  */
 export default function EventDetailPanel({
   event,
   opinions,
   onClose,
+  onOpenBrief,
 }: {
   event: FxEconomicCalendarRow | null;
   opinions: MatchedOpinions | null;
   onClose: () => void;
+  /** Optional callback to open a brief. When provided, each citation renders an
+   *  "Open brief" button that calls this with the citation's source_file and the
+   *  opinions' run_date (from EventsTab's runDate prop). */
+  onOpenBrief?: ((sourceFile: string, runDate: string) => void) | undefined;
 }) {
   const open = event != null;
   const handleClose = useCallback(() => onClose(), [onClose]);
+
+  // Mount flag driving the entrance slide (mirrors BriefPanel's Sheet, whose
+  // entrance is a reduced-motion-aware translate; this hand-rolled overlay has
+  // no Base UI transition primitive, so we fake the same one-motion-moment by
+  // flipping this a frame after open so the transition has a starting state.
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setEntered(open));
+    return () => cancelAnimationFrame(id);
+  }, [open]);
 
   // Close on Escape while open.
   useEffect(() => {
@@ -83,7 +99,9 @@ export default function EventDetailPanel({
       />
 
       {/* Panel */}
-      <div className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-hair bg-term-bg shadow-2xl">
+      <div
+        className={`absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-hair bg-term-bg shadow-2xl transition-transform duration-200 ease-in-out motion-reduce:transition-none motion-reduce:translate-x-0 ${entered ? 'translate-x-0' : 'translate-x-10'}`}
+      >
         {/* Grab bar — phone-only affordance hinting the sheet is dismissable. */}
         <div className="flex shrink-0 justify-center pt-2 sm:hidden" aria-hidden>
           <span className="h-1 w-9 rounded-full bg-ink/20" />
@@ -166,10 +184,22 @@ export default function EventDetailPanel({
                   opinions!.citations.map((c, i) => (
                     <div
                       key={`${c.broker}-${c.source_file}-${i}`}
-                      className="rounded-lg bg-ink/[0.02] p-3"
+                      className="rounded-lg border border-hair bg-ink/[0.02] p-3"
                     >
-                      <div className="mb-1 font-mono text-xs font-semibold text-ink">
-                        {c.broker || 'Unknown desk'}
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs font-semibold text-ink">
+                          {c.broker || 'Unknown desk'}
+                        </span>
+                        {onOpenBrief && c.source_file && opinions?.runDate ? (
+                          <button
+                            type="button"
+                            onClick={() => onOpenBrief(c.source_file, opinions.runDate!)}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
+                            title={`Open ${c.broker} brief (${c.source_file})`}
+                          >
+                            Open brief <ExternalLink size={10} aria-hidden />
+                          </button>
+                        ) : null}
                       </div>
                       {c.expected_outcome ? (
                         <p className="text-xs leading-snug text-ink-soft">

@@ -23,6 +23,30 @@ describe('matrix-format', () => {
       expect(directionStyle('watch')).toMatchObject({ text: 'text-warn', glyph: '◆' });
       expect(directionStyle('mixed')).toMatchObject({ text: 'text-ink-soft', glyph: '•' });
     });
+
+    it('includes semantic-preserving hover classes for each direction', () => {
+      // Bullish: hover should brighten the same up-themed background/border, never switch to accent.
+      const bull = directionStyle('bullish');
+      expect(bull.hoverBg).toContain('hover:bg-up');
+      expect(bull.hoverBorder).toContain('hover:border-up');
+      expect(bull.hoverBg).not.toContain('accent');
+      expect(bull.hoverBorder).not.toContain('accent');
+
+      // Bearish: hover should brighten the same down-themed background/border.
+      const bear = directionStyle('bearish');
+      expect(bear.hoverBg).toContain('hover:bg-down');
+      expect(bear.hoverBorder).toContain('hover:border-down');
+
+      // Watch: hover should brighten the same warn-themed background/border.
+      const watch = directionStyle('watch');
+      expect(watch.hoverBg).toContain('hover:bg-warn');
+      expect(watch.hoverBorder).toContain('hover:border-warn');
+
+      // Neutral: hover should brighten the same ink-themed background/border.
+      const neutral = directionStyle('neutral');
+      expect(neutral.hoverBg).toContain('hover:bg-ink');
+      expect(neutral.hoverBorder).toContain('hover:border-');
+    });
   });
 
   describe('convictionOpacity', () => {

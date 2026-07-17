@@ -1,6 +1,12 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+
+let search = '';
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(search),
+}));
+
 import AllocationsPositionsTable from './AllocationsPositionsTable';
 import type { BookReconciliation, ReconciledPosition } from '@/lib/book-reconciliation';
 import type { Thesis } from '@/lib/types';
@@ -26,6 +32,10 @@ const baseProps = {
 };
 
 describe('AllocationsPositionsTable', () => {
+  beforeEach(() => {
+    search = '';
+  });
+
   it('renders normalized weights (not raw 150%-summing weight_actual)', () => {
     const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
       ...baseProps, reconciliation: recon([pos({ normalizedWeight: 22.5 })]),
@@ -73,5 +83,13 @@ describe('AllocationsPositionsTable', () => {
     }));
     expect(html).not.toContain('59,130,246');
     expect(html).not.toContain('a78bfa');
+  });
+
+  it('expands a mixed-case ticker targeted by a deep link', () => {
+    search = 'ticker=nvda';
+    const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
+      ...baseProps, reconciliation: recon([pos({ ticker: 'Nvda' })]),
+    }));
+    expect(html).toContain('Avg entry');
   });
 });

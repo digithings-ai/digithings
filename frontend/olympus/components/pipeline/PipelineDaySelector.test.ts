@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import PipelineDaySelector from './PipelineDaySelector';
 import { adjacentDates } from './PipelineDaySelector';
 
 /**
@@ -32,5 +35,22 @@ describe('adjacentDates (newest-first list)', () => {
 
   it('value not in the list (e.g. UTC-today before the run): both disabled', () => {
     expect(adjacentDates(dates, '2026-07-17')).toEqual({ prev: null, next: null });
+  });
+});
+
+describe('PipelineDaySelector', () => {
+  it('presents the current run date as a labelled pager', () => {
+    const html = renderToStaticMarkup(
+      createElement(PipelineDaySelector, {
+        dates: ['2026-07-17', '2026-07-16'],
+        value: '2026-07-17',
+        onChange: () => {},
+      }),
+    );
+
+    expect(html).toContain('Run date');
+    expect(html).toContain('Fri, Jul 17, 2026');
+    expect(html).toContain('Previous day');
+    expect(html).toContain('Next day');
   });
 });

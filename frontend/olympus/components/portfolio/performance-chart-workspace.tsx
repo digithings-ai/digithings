@@ -464,6 +464,7 @@ function DailyReturnsComboChart({ snaps }: { snaps: NavChartPoint[] }) {
 const MAX_COMPARABLES = 8;
 
 export function PerformanceChartWorkspace({
+  embedded = false,
   view,
   onViewChange,
   chartData,
@@ -480,6 +481,8 @@ export function PerformanceChartWorkspace({
   activityMarkerDates,
   activityEventsByDate,
 }: {
+  /** Render inside the shared PerformanceDashboard composite slot. */
+  embedded?: boolean;
   view: PerformanceChartView;
   onViewChange: (v: PerformanceChartView) => void;
   chartData: PerfChartPoint[];
@@ -510,7 +513,7 @@ export function PerformanceChartWorkspace({
   );
 
   return (
-    <div className="glass-card p-0 overflow-hidden">
+    <div className={embedded ? 'overflow-hidden' : 'glass-card overflow-hidden p-0'}>
       <div className="p-4 border-b border-hair bg-term-bg/60 space-y-3">
         <div className="flex flex-col gap-2">
           <span className="text-[10px] text-ink-mute uppercase tracking-wider">Chart</span>

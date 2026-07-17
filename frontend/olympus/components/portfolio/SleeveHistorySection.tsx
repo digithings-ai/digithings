@@ -63,8 +63,8 @@ export default function SleeveHistorySection(props: {
         {showHistoryDateBanner ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs">
             <span className="text-ink-soft">
+              <span className="text-ink-mute">Sleeve mix pinned to </span>
               <span className="font-mono text-ink">{dateParam}</span>
-              <span className="text-ink-mute"> — chart or calendar</span>
             </span>
             <button
               type="button"

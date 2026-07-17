@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { CalendarClock } from 'lucide-react';
 import type {
   FxConfluenceSnapshotRow,
   FxConsensusSnapshotRow,
@@ -14,6 +15,7 @@ import DigestBrief from './DigestBrief';
 import TodayConsensusChart from './TodayConsensusChart';
 import EventsTimeline, { eventsToTimeline } from './EventsTimeline';
 import { useTwelveX } from './context';
+import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
 type DigestData = { run_date: string; summary: string; key_themes: string[]; doc_count: number; broker_count: number } | null;
 
@@ -47,7 +49,10 @@ export default function TodayTab({
 
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="px-1 font-display text-2xl tracking-tight text-ink">Today&rsquo;s read</h2>
+      <div className="flex flex-wrap items-center gap-3 px-1">
+        <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
+      <h2 className="font-display text-2xl tracking-tight text-ink">Today&rsquo;s read</h2>
+      </div>
 
       {/* Above the fold: trade ideas + digest brief co-lead */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
@@ -56,77 +61,96 @@ export default function TodayTab({
       </div>
 
       {/* Mid row: consensus-average chart (wider) + broker briefs, height-matched. */}
-      <div className="today-mid grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[1.5fr_1fr]">
-        <div className="flex min-w-0 flex-col flex-1">
+      <div className="today-mid grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
+        <div className="flex min-w-0 flex-col">
           <TodayConsensusChart series={series} />
         </div>
 
-        <section className="glass-card flex min-w-0 flex-col p-4 lg:overflow-hidden">
-          <header className="mb-3 flex shrink-0 items-baseline gap-2">
-            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-soft">
-              Broker briefs
-            </h2>
-            <span className="ml-auto font-mono text-[10px] text-ink-mute">
-              {briefs.length} {briefs.length === 1 ? 'brief' : 'briefs'}
-            </span>
-            {briefs.length > 0 ? (
-              <button
-                type="button"
-                className="text-[11px] text-accent hover:underline"
-                onClick={onSeeAllBriefs}
-              >
-                see all →
-              </button>
-            ) : null}
-          </header>
+        <div className="min-w-0 lg:relative lg:self-stretch">
+          <section className="glass-card flex min-w-0 flex-col overflow-hidden p-4 lg:absolute lg:inset-0">
+            <header className="mb-3 flex shrink-0 items-baseline gap-2">
+              <TwelveXSectionHeading>Broker briefs</TwelveXSectionHeading>
+              <span className="ml-auto font-mono text-[10px] text-ink-mute">
+                {briefs.length} {briefs.length === 1 ? 'brief' : 'briefs'}
+              </span>
+              {briefs.length > 0 ? (
+                <button
+                  type="button"
+                  className="text-[11px] text-accent hover:underline"
+                  onClick={onSeeAllBriefs}
+                >
+                  see all →
+                </button>
+              ) : null}
+            </header>
 
-          {briefs.length === 0 ? (
-            <p className="text-sm text-ink-mute">No research briefs for today yet.</p>
-          ) : (
-            // The scroller is absolutely positioned at `lg` so the brief list never
-            // inflates the grid row — the row height is driven by the consensus chart
-            // column, and the briefs scroll within that matched height. On mobile
-            // (stacked, single column) the list flows naturally and the page scrolls.
-            <div className="min-h-0 lg:relative lg:flex-1">
-              <ul className="-mx-1 flex flex-col gap-2.5 px-1 lg:absolute lg:inset-0 lg:overflow-y-auto">
-                {briefs.map((b, n) => (
-                  <li key={`${b.source_file}-${b.run_date}-${n}`}>
-                    <button
-                      type="button"
-                      className="w-full rounded-lg border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
-                      onClick={() => openBrief(b.source_file, b.run_date)}
-                    >
-                      <div className="flex items-center gap-2 text-[11px] text-ink-mute">
-                        <span className="font-semibold text-ink-soft">
-                          {b.broker_name ?? 'Unknown desk'}
-                        </span>
-                        {b.trader_relevance ? (
-                          <span className="uppercase">· {b.trader_relevance}</span>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 truncate text-sm font-medium text-ink">
-                        {b.document_title ?? b.source_file}
-                      </p>
-                      {b.central_thesis ? (
-                        <p className="mt-1 line-clamp-2 text-xs text-ink-soft">
-                          {b.central_thesis}
-                        </p>
-                      ) : null}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </section>
+            {briefs.length === 0 ? (
+              <p className="text-sm text-ink-mute">No research briefs for today yet.</p>
+            ) : (
+              <div
+                className="flex max-h-[32rem] min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain pr-1 lg:max-h-none lg:flex-1"
+                aria-label="Broker brief cards"
+                tabIndex={0}
+              >
+              {(() => {
+                // Group briefs by effective date (report_date ?? run_date), newest first.
+                const grouped = new Map<string, typeof briefs>();
+                briefs.forEach((b) => {
+                  const effDate = b.report_date ?? b.run_date;
+                  if (!grouped.has(effDate)) grouped.set(effDate, []);
+                  grouped.get(effDate)!.push(b);
+                });
+                const sortedDates = Array.from(grouped.keys()).sort().reverse();
+
+                return sortedDates.map((dateKey) => {
+                  const dateBriefs = grouped.get(dateKey)!;
+                  return (
+                    <div key={dateKey} className="flex flex-col gap-2">
+                      <h3 className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-soft">
+                        {dateKey}
+                      </h3>
+                      <ul className="flex flex-col gap-2">
+                        {dateBriefs.map((b, n) => (
+                          <li key={`${b.source_file}-${b.run_date}-${n}`}>
+                            <button
+                              type="button"
+                              className="w-full rounded-lg border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
+                              onClick={() => openBrief(b.source_file, b.run_date)}
+                            >
+                              <div className="flex items-center gap-2 text-[11px] text-ink-mute">
+                                <span className="font-semibold text-ink-soft">
+                                  {b.broker_name ?? 'Unknown desk'}
+                                </span>
+                                {b.trader_relevance ? (
+                                  <span className="uppercase">· {b.trader_relevance}</span>
+                                ) : null}
+                              </div>
+                              <p className="mt-1 truncate text-sm font-medium text-ink">
+                                {b.document_title ?? b.source_file}
+                              </p>
+                              {b.central_thesis ? (
+                                <p className="mt-1 line-clamp-2 text-xs text-ink-soft">
+                                  {b.central_thesis}
+                                </p>
+                              ) : null}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                });
+              })()}
+              </div>
+            )}
+          </section>
+        </div>
       </div>
 
       {/* Full-width single-day timeline (replaces the old compact events tile). */}
       <section className="glass-card p-4">
         <header className="mb-3 flex items-baseline gap-2">
-          <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-soft">
-            Today&rsquo;s timeline
-          </h2>
+          <TwelveXSectionHeading>Today&rsquo;s timeline</TwelveXSectionHeading>
           <span className="ml-auto font-mono text-[10px] text-ink-mute">00:00 – 24:00</span>
         </header>
         {timelineEvents.length === 0 ? (

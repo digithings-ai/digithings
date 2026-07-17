@@ -7,6 +7,7 @@ import { MATRIX_COLUMNS } from '@/lib/twelve-x/types';
 import type { MatrixCell } from '@/lib/twelve-x/types';
 import { directionStyle, formatTargets, convictionOpacity } from '@/lib/twelve-x/matrix-format';
 import BrokerProfilePanel from './BrokerProfilePanel';
+import MatrixCellHistoryPanel from './MatrixCellHistoryPanel';
 
 export default function MatrixTab({
   cells,
@@ -20,6 +21,8 @@ export default function MatrixTab({
 }) {
   // The broker whose profile slide-over is open (the "focus on one broker" drill-in).
   const [selectedBroker, setSelectedBroker] = useState<string | null>(initialSelectedBroker);
+  // The cell whose history panel is open (multi-view drill-in).
+  const [selectedCell, setSelectedCell] = useState<MatrixCell | null>(null);
   // Brokers present (rows), alphabetical.
   const brokers = useMemo(
     () => [...new Set(cells.map((c) => c.broker))].sort((a, b) => a.localeCompare(b)),
@@ -121,6 +124,8 @@ export default function MatrixTab({
                         );
                       }
                       const s = directionStyle(cell.direction);
+                      const hasHistory = cell.history && cell.history.length > 0;
+                      const totalViews = 1 + (cell.history?.length ?? 0);
                       // A pair (e.g. EUR/USD filed under EUR) shows the instrument so it's
                       // never misread as an outright single-currency call.
                       const isPair = cell.currency.includes('/');
@@ -130,13 +135,19 @@ export default function MatrixTab({
                         cell.conviction ? ` (${cell.conviction})` : ''
                       }${cell.signal ? ` — ${cell.signal}` : ''} · ${cell.report_date ?? cell.run_date}${
                         levels ? `\nLevels: ${levels}` : ''
-                      }${cell.rationale ? `\n${cell.rationale}` : ''} — open brief`;
+                      }${cell.rationale ? `\n${cell.rationale}` : ''}${
+                        hasHistory ? `\n${totalViews} views — click to see history` : ' — open brief'
+                      }`;
                       return (
                         <div key={ccy} role="cell" className="p-1">
                           <button
                             type="button"
-                            onClick={() => onOpenBrief(cell.source_file, cell.run_date)}
-                            className={`flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-md border ${s.bg} ${s.border} px-1 py-1.5 text-center transition-colors hover:border-accent/50 hover:bg-ink/[0.05]`}
+                            onClick={() =>
+                              hasHistory
+                                ? setSelectedCell(cell)
+                                : onOpenBrief(cell.source_file, cell.run_date)
+                            }
+                            className={`flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-md border ${s.bg} ${s.border} ${s.hoverBg} ${s.hoverBorder} px-1 py-1.5 text-center transition-colors`}
                             style={{ opacity: convictionOpacity(cell.conviction) }}
                             title={title}
                           >
@@ -151,6 +162,11 @@ export default function MatrixTab({
                             <span className="font-mono text-[9px] leading-none text-ink-mute/70">
                               {(cell.report_date ?? cell.run_date).slice(5)}
                             </span>
+                            {hasHistory ? (
+                              <span className="rounded bg-accent/15 px-1 py-0.5 text-[8px] font-semibold tabular-nums text-accent">
+                                {totalViews}
+                              </span>
+                            ) : null}
                           </button>
                         </div>
                       );
@@ -189,6 +205,13 @@ export default function MatrixTab({
         broker={selectedBroker}
         cells={cells}
         onClose={() => setSelectedBroker(null)}
+        onOpenBrief={onOpenBrief}
+      />
+
+      {/* Multi-view cell drill-in: click a cell with history → see all dated views. */}
+      <MatrixCellHistoryPanel
+        cell={selectedCell}
+        onClose={() => setSelectedCell(null)}
         onOpenBrief={onOpenBrief}
       />
     </div>
