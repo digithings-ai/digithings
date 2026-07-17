@@ -14,7 +14,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { isTwelveXConfigured, twelveXSupabase } from './supabase';
 import { isSupabaseConfigured, supabase } from '../supabase';
 import { MATRIX_COLUMNS } from './types';
-import { selectLatestCompleteConsensus } from './consensus-derive';
 import type {
   ConfluenceCatalyst,
   ConsensusDelta,
