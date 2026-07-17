@@ -42,6 +42,22 @@ on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 | **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
 | **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
 
+### Vehicle → market thesis linkage (#1563)
+
+`theses.linked_market_thesis_id` ties a `vehicle-{ticker}` thesis to the market
+thesis it expresses. It is resolved at **creation time by H5**
+(`upsert_vehicle_thesis_from_analyst` → `resolve_primary_market_thesis`) from the
+reliable `thesis_vehicles` map (H3's ticker → market-thesis mapping): primary =
+lowest `candidate_rank`, falling back to the most recent prior mapping for a
+carried held name. This replaced a same-date H3 back-fill that structurally
+never fired (the `vehicle-{ticker}` row does not exist when H3 runs), which left
+every vehicle thesis null-linked in prod. The link is **self-healing** — H5
+rewrites the vehicle row each run and re-resolves — so it repairs going forward;
+historical rows stay as-was and the frontend derives the hierarchy from
+`thesis_vehicles` directly (#1562). `upsert_thesis_row` refuses to persist a
+self-referential link (`linked == thesis_id`), neutralizing the ~140 legacy
+self-refs at the single write chokepoint.
+
 Graph builder: `graph.build_hermes_phases_thesis()` → `build_hermes_graph()`.
 Legacy `build_hermes_phases` aliases the thesis path. **Removed from graph:** 4-axis 7C,
 `phase7cd_debate`, risk debaters, `portfolio_materialize`, phase9 evolution on daily path.
