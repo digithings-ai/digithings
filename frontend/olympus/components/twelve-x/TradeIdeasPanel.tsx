@@ -59,10 +59,12 @@ export default function TradeIdeasPanel({
         </button>
       </header>
 
-      {/* Focal #1 */}
+      {/* Focal #1 — accent chrome marks it as the top-ranked idea, NOT a P&L
+          direction. --up/--down are reserved for P&L sign (F5), so a SHORT #1
+          must not read as green. Direction lives in its own colored label. */}
       <button
         type="button"
-        className="rounded-lg border border-up/30 bg-up/[0.06] p-4 text-left transition-colors hover:border-accent/50"
+        className="rounded-lg border border-accent/30 bg-accent/[0.06] p-4 text-left transition-colors hover:border-accent/50"
         onClick={() => topSource && openBrief(topSource, top.run_date)}
       >
         <div className="flex items-center gap-2">

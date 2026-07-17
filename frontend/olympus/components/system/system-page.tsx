@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AtlasLoader from '@/components/AtlasLoader';
+import { Skeleton, SkeletonGroup } from '@digithings/web';
 import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import { EmptyState } from '@/components/observability/shared';
 import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
@@ -71,7 +71,17 @@ export default function SystemPage() {
       </header>
 
       {loading ? (
-        <AtlasLoader fullScreen={false} />
+        // Status-zone-shaped skeleton (banner + economics tiles + timeline),
+        // not the brand loader — the page header above is already visible (#1548).
+        <SkeletonGroup aria-label="Loading run diagnostics" className="flex flex-col gap-6">
+          <Skeleton variant="block" className="h-14 w-full" />
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {Array.from({ length: 4 }, (_, i) => (
+              <Skeleton key={i} variant="block" className="h-20 w-full" />
+            ))}
+          </div>
+          <Skeleton variant="block" className="h-40 w-full" />
+        </SkeletonGroup>
       ) : (
         <SystemStatus diagnostics={diagnostics ?? []} />
       )}

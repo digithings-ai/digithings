@@ -103,6 +103,11 @@ export default function OverviewPage() {
   }
 
   const navSnaps = portfolio.snapshots ?? [];
+  // The book's own as-of (latest nav_history point) — deliberately NOT
+  // latestDate (the digest date): research publishes daily even when the
+  // book-persistence half is frozen (#1555), and book surfaces must carry
+  // their own date rather than borrow the digest's freshness.
+  const bookAsOf = navSnaps.length ? navSnaps[navSnaps.length - 1].date : null;
   const navIndex = navSnaps.length ? navSnaps[navSnaps.length - 1].nav : null;
   const navFirst = navSnaps.length ? navSnaps[0].nav : null;
   const sincePct =
@@ -136,6 +141,7 @@ export default function OverviewPage() {
           dailyPct: dailyRet,
           benchTicker: benchmarkBlurb?.ticker ?? null,
           excessPct: benchmarkBlurb?.excessPct ?? null,
+          asOfDate: bookAsOf,
         }}
       />
 
@@ -148,11 +154,12 @@ export default function OverviewPage() {
       <BookStrip
         positions={positions}
         investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
-        asOfDate={latestDate}
+        asOfDate={bookAsOf}
       />
 
       <TodaySummaries
         positions={positions}
+        investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
         theses={strategy.theses ?? []}
         readSummary={strategy.summary ?? null}
         asOfDate={latestDate}

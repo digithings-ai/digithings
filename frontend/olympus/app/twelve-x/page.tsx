@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import AtlasLoader from '@/components/AtlasLoader';
+import PageSkeleton from '@/components/page-skeleton';
 import TwelveXClient from '@/components/twelve-x/TwelveXClient';
 
 /**
@@ -9,7 +9,7 @@ import TwelveXClient from '@/components/twelve-x/TwelveXClient';
  */
 export default function TwelveXPage() {
   return (
-    <Suspense fallback={<AtlasLoader />}>
+    <Suspense fallback={<PageSkeleton />}>
       <TwelveXClient />
     </Suspense>
   );

@@ -2,11 +2,15 @@
 
 import { useMemo, useState } from "react";
 
+import { SearchBar } from "@digithings/web";
+
 /**
  * Search bar — a search field with a leading glyph, a clear affordance that
  * appears once there's input, and results that resolve live as you type against
  * a small corpus. Focus lights the accent ring; an empty query shows nothing
- * rather than everything. Static interactive display template.
+ * rather than everything. Static interactive display template. Consumes the
+ * shared <SearchBar/> primitive from @digithings/web — the `/` keycap rides
+ * its hint slot; the results pane stays specimen-side.
  */
 const CORPUS = [
   "trend_xsec — cross-sectional momentum",
@@ -37,34 +41,13 @@ export function SearchBarReference() {
         shows nothing rather than everything.
       </p>
 
-      <div className="ctl-search">
-        <span className="inline-flex text-ink-mute" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-          </svg>
-        </span>
-        <input
-          className="sb-input flex-1 border-none bg-transparent font-mono text-[0.82rem] text-ink outline-none placeholder:text-ink-mute"
-          type="search"
-          placeholder="Search strategies, metrics, modules…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          aria-label="Search"
-        />
-        {q ? (
-          <button
-            type="button"
-            className="cursor-pointer border-none bg-transparent px-[0.2rem] py-[0.1rem] text-[0.7rem] text-ink-mute hover:text-ink"
-            aria-label="Clear search"
-            onClick={() => setQ("")}
-          >
-            ✕
-          </button>
-        ) : (
-          <kbd className="kbd sb-hint">/</kbd>
-        )}
-      </div>
+      <SearchBar
+        className="mt-[1.2rem]"
+        value={q}
+        onChange={setQ}
+        placeholder="Search strategies, metrics, modules…"
+        hint={<kbd className="kbd sb-hint">/</kbd>}
+      />
 
       {q.trim() ? (
         <div

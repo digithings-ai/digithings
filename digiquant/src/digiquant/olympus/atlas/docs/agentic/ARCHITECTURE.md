@@ -283,6 +283,13 @@ SECTOR SCORECARD — {{DATE}}
 - `thesis_tracker` — Hermes PM + reflection own thesis lifecycle
 - `portfolio_recommendations` — Hermes phases 7D–7E own allocation
 
+**Context budget ([#1559](https://github.com/digithings-ai/digithings/issues/1559)).** Phase 7 aggregates every fresh phase-1..5 segment body plus prior context, and two inputs scale with the segment roster. On full ~27-segment baseline days they blew past the smallest routed reasoning-tier model's **64k** context (`BadRequestError 400 … requested ~90690`), after which graceful degradation carried the prior digest forward — publishing a byte-identical `daily_snapshots` row daily while telemetry read "ok". The fix (`phases/phase7_synthesis.py`) bounds **both** movers:
+
+- **PHASE_INPUTS** — a run-wide char budget (`_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS = (64000 − 24000 reserve) × 3 chars/tok = 120 000 chars`) split across the *actual* fresh-segment count (`_per_segment_char_budget`), so the aggregate stays bounded as the roster grows. Within each segment `_slim_segment_body` greedily fills the decision-relevant fields (identity + stance → findings → sources → notes) up to that allowance and drops verbose extension prose; a full 34-segment day assembles to ~30k tokens.
+- **SHARED_CONTEXT** — `latest_segments` is filtered to the digest keys (`digest`, `digest-delta`) and the retained prior-digest payloads are trimmed (`_slim_prior_digest_payload`). The unfiltered prior per-segment carry was the dominant driver (~145k → ~0.4k tokens on a verbose baseline); it was redundant since carry/edit read the prior digest via `_DigestPriorLoader` directly.
+
+**Failure visibility.** When master-digest synthesis fails and carries the prior forward, the carried payload is stamped with `carried_from` (ISO source date) + a human `continuity` note (JSONB, no migration), and `diagnostics.summarize_run` escalates the run to **degraded** with the failure leading `error_summary` and a first-class `breakdown["master_digest_failed"]` key — so a stale carry is never reported as `ok`. (With the budget fix the overflow won't recur; the escalation is a safety net for any future digest failure.)
+
 ---
 
 ### Phase 7C — Asset Analyst Pass

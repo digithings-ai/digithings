@@ -22,7 +22,7 @@ import {
   STRONG_BAND,
   currencyColor,
 } from '@/lib/twelve-x/consensus-bar';
-import { G10_CURRENCIES } from '@/lib/twelve-x/types';
+import { orderCurrencies } from '@/lib/twelve-x/consensus-view';
 import { useChartColors, withAlpha } from '@/lib/chart-colors';
 import type { ConsensusDeltaSet, FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
 import { ConsensusDataTable } from './ConsensusDataTable';
@@ -120,14 +120,12 @@ export default function ConsensusTab({
   const [view, setView] = useState<ConsensusView>(initialView);
   const [smoothMode, setSmoothMode] = useState<SmoothMode>(initialSmooth);
 
-  // Currencies actually present, in canonical G10 order (fall back to any extras).
-  const currencies = useMemo<string[]>(() => {
-    const present = new Set(series.map((r) => r.currency));
-    const ordered: string[] = G10_CURRENCIES.filter((c) => present.has(c));
-    const orderedSet = new Set(ordered);
-    const extras = [...present].filter((c) => !orderedSet.has(c)).sort();
-    return [...ordered, ...extras];
-  }, [series]);
+  // Currencies present, in canonical G10 order — the SAME shared ordering the
+  // Today chart uses, so the two consensus surfaces list currencies alike.
+  const currencies = useMemo<string[]>(
+    () => orderCurrencies(series.map((r) => r.currency)),
+    [series],
+  );
 
   const [selectedCcy, setSelectedCcy] = useState<string | null>(null);
 
@@ -186,10 +184,16 @@ export default function ConsensusTab({
 
   return (
     <div className="space-y-5">
-      <p className="text-xs text-ink-mute max-w-2xl">
-        Relevance-weighted G10 consensus over time. Score ranges {SCORE_MIN} (max bearish) to {SCORE_MAX}{' '}
-        (max bullish); bands mark a directional lean (±{LEAN_BAND}) and strong conviction (±{STRONG_BAND}).
-      </p>
+      {/* Page title + one-line, plain-language explainer (matches the Today tab
+          voice; no codebase knowledge required to read the table). */}
+      <div>
+        <h2 className="font-display text-2xl tracking-tight text-ink">G10 consensus</h2>
+        <p className="mt-1 max-w-2xl text-xs text-ink-mute">
+          Where each G10 currency leans across the desks we track, relevance-weighted and
+          followed over time. Scores run {SCORE_MIN} (most bearish) to {SCORE_MAX} (most
+          bullish): ±{LEAN_BAND} is a directional lean, ±{STRONG_BAND} strong conviction.
+        </p>
+      </div>
 
       {/* Sub-nav: Table | Charts (Table default) */}
       <div
@@ -250,12 +254,38 @@ export default function ConsensusTab({
 
       {/* ===== TABLE VIEW (default, leads the page) ===== */}
       {view === 'table' ? (
-        <ConsensusDataTable
-          series={series}
-          latest={latest}
-          deltas={deltas}
-          onDrillToProvenance={onDrillToProvenance}
-        />
+        <>
+          {/* Plain-language key: decode every column so a first-time reader never
+              needs the codebase. "Avg" is called out as the SAME number the Today
+              tab headlines, resolving the two tabs' apparent disagreement. */}
+          <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-[11px] leading-tight text-ink-mute">
+            {(
+              [
+                ['Consensus', "today's raw weighted score"],
+                ['Avg', 'trailing 5-run average — the number the Today tab shows'],
+                ['vs Avg', "today's score against its own recent trend"],
+                ['Δ prior', 'change since the previous run'],
+                ['Conf', 'confidence in the read'],
+                ['Agree', 'how strongly the desks agree'],
+                ['Signal', 'conviction, from a lean to strong'],
+              ] as const
+            ).map(([term, meaning]) => (
+              <div key={term} className="flex items-baseline gap-1.5">
+                <dt className="font-mono text-[10px] uppercase tracking-wider text-ink-soft">
+                  {term}
+                </dt>
+                <dd>{meaning}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <ConsensusDataTable
+            series={series}
+            latest={latest}
+            deltas={deltas}
+            onDrillToProvenance={onDrillToProvenance}
+          />
+        </>
       ) : null}
 
       {/* ===== CHARTS VIEW ===== */}

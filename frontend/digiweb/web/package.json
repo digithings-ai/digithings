@@ -24,6 +24,7 @@
     "./styles/data-layout.css": "./src/styles/data-layout.css",
     "./styles/deck.css": "./src/styles/deck.css",
     "./styles/effects-chrome.css": "./src/styles/effects-chrome.css",
+    "./styles/command-palette.css": "./src/styles/command-palette.css",
     "./data/modules": "./src/data/modules.ts",
     "./data/subsystems": "./src/data/subsystems.ts"
   },

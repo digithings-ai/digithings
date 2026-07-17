@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import type { ElementType } from 'react';
 import { BookOpen, Wallet, Shield } from 'lucide-react';
+import type { Position } from '@/lib/types';
+import { reconcileBook, heldByWeight } from '@/lib/book-reconciliation';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 
 /**
@@ -10,14 +12,12 @@ import { buildPipelineHref } from '@/lib/pipeline-links';
  * that links into a deep surface — never full visual weight, so the read stays
  * the focal element on the page. The performance doorway is retired until a
  * meaningful time-series exists.
+ *
+ * The Holdings doorway shares the book's single reconciliation basis (F3 /
+ * #1553): weights are % of NAV via `reconcileBook`, so a ticker reads the same
+ * here, on the book strip, and on the portfolio Holdings table. It used to
+ * render raw `weight_actual`, which disagreed (UUP 40% here vs 36% elsewhere).
  */
-
-export interface TodayHolding {
-  ticker: string;
-  name?: string | null;
-  weight_actual?: number | null;
-  weight_delta?: number | null;
-}
 
 export interface TodayThesis {
   id: string;
@@ -26,7 +26,10 @@ export interface TodayThesis {
 }
 
 export interface TodaySummariesProps {
-  positions: TodayHolding[];
+  positions: Position[];
+  /** Authoritative invested split (server_portfolio_metrics.invested_pct) — the
+   *  same input the book strip and portfolio table pass to `reconcileBook`. */
+  investedPct: number | null;
   theses: TodayThesis[];
   /** The digest headline (`strategy.summary`) — the read doorway's teaser. */
   readSummary: string | null;
@@ -76,10 +79,14 @@ function Doorway({
 
 export function TodaySummaries({
   positions,
+  investedPct,
   theses,
   readSummary,
   asOfDate,
 }: TodaySummariesProps) {
+  // One reconciliation basis with the book strip / portfolio table (% of NAV,
+  // CASH excluded — it lives in the invested/cash split, not a holdings row).
+  const held = heldByWeight(reconcileBook(positions, { investedPct }).rows).slice(0, 6);
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {/* The read */}
@@ -96,19 +103,19 @@ export function TodaySummaries({
 
       {/* Holdings */}
       <Doorway title="Holdings" cta="All holdings" href="/portfolio" icon={Wallet}>
-        {positions.length === 0 ? (
+        {held.length === 0 ? (
           <p className="text-sm text-ink-mute">No positions yet.</p>
         ) : (
           <ul className="space-y-1">
-            {positions.slice(0, 6).map((p, i) => (
+            {held.map((p, i) => (
               <li key={`${p.ticker}-${i}`} className="flex items-center justify-between gap-2 text-xs">
                 <span className="font-mono font-semibold text-ink">{p.ticker}</span>
                 <span className="flex items-center gap-2 font-mono tabular-nums">
-                  <span className="text-ink-soft">{(p.weight_actual ?? 0).toFixed(1)}%</span>
-                  {typeof p.weight_delta === 'number' && p.weight_delta !== 0 ? (
-                    <span className={p.weight_delta > 0 ? 'text-up' : 'text-down'}>
-                      {p.weight_delta > 0 ? '+' : ''}
-                      {p.weight_delta.toFixed(1)}pp
+                  <span className="text-ink-soft">{p.normalizedWeight.toFixed(1)}%</span>
+                  {typeof p.normalizedDelta === 'number' && p.normalizedDelta !== 0 ? (
+                    <span className={p.normalizedDelta > 0 ? 'text-up' : 'text-down'}>
+                      {p.normalizedDelta > 0 ? '+' : ''}
+                      {p.normalizedDelta.toFixed(1)}pp
                     </span>
                   ) : null}
                 </span>

@@ -2,7 +2,7 @@
 
 import type { RebalanceAction } from '@/lib/types';
 import { Badge } from '@/components/ui';
-import { AsOfBadge } from '@/components/shared/as-of-badge';
+import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
 
 /**
@@ -73,6 +73,13 @@ export interface MoveHeroNav {
   dailyPct: number | null;
   benchTicker: string | null;
   excessPct: number | null;
+  /**
+   * Date of the latest nav_history point. When it lags the digest date the
+   * daily delta must NOT read "today" — the book can freeze while research
+   * stays fresh (#1555: Hermes committed nothing for 3 weeks and the hero
+   * kept presenting a June NAV move as today's).
+   */
+  asOfDate?: string | null;
 }
 
 export interface MoveHeroProps {
@@ -141,9 +148,10 @@ export function MoveHero({
           </div>
         </div>
 
-        {/* THE READ — the marquee */}
+        {/* THE READ — the marquee. Date wears the shared as-of format so the
+            kicker, the ribbon badge, and the NAV line all read alike (#1553). */}
         <p className="mt-4 text-[11px] font-bold uppercase tracking-widest text-ink-mute">
-          Brief · {asOf ?? '—'}
+          Brief · {asOf ? formatAsOf(asOf) : '—'}
         </p>
         <h1 className="font-display text-3xl sm:text-4xl leading-tight tracking-tight mt-1 text-ink">
           {headline ?? regime}
@@ -180,11 +188,20 @@ export function MoveHero({
           {nav.sincePct != null ? (
             <span className={sinceColor}>
               {signedPct(nav.sincePct)} since inception
-              {nav.sinceDate ? <span className="text-ink-mute"> ({nav.sinceDate})</span> : null}
+              {nav.sinceDate ? (
+                <span className="text-ink-mute"> ({formatAsOf(nav.sinceDate)})</span>
+              ) : null}
             </span>
           ) : null}
           {nav.dailyPct != null ? (
-            <span className={dailyColor}>{signedPct(nav.dailyPct, ' today')}</span>
+            <span className={dailyColor}>
+              {signedPct(
+                nav.dailyPct,
+                nav.asOfDate && asOf && nav.asOfDate !== asOf
+                  ? ` on ${formatAsOf(nav.asOfDate)}`
+                  : ' today',
+              )}
+            </span>
           ) : null}
           {nav.benchTicker && nav.excessPct != null ? (
             <span className={excessColor}>
