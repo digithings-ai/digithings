@@ -1,3 +1,4 @@
+import { Skeleton } from '@digithings/web';
 import type { RegimeChip, RegimeChipColor } from '@/lib/render-pipeline-payloads';
 
 export type { RegimeChip, RegimeChipColor };
@@ -26,18 +27,18 @@ export default function PipelineSummaryStrip({
   loading = false,
 }: PipelineSummaryStripProps) {
   return (
-    <div className="flex gap-3 items-start flex-wrap mt-2.5">
+    <div className="flex min-w-0 flex-wrap items-center gap-3">
       {/* Digest headline — absorbs "The Read" */}
       <div className="flex-1 min-w-[230px] font-display" aria-busy={loading || undefined}>
-        <span className="block text-[9px] font-bold tracking-[0.14em] uppercase text-accent mb-0.5 font-sans">
+        <span className="block text-[10px] font-bold tracking-[0.14em] uppercase text-accent mb-0.5 font-sans">
           The read
         </span>
         {headline ? (
           <span className="text-[14.5px] leading-snug text-ink">{headline}</span>
         ) : loading ? (
-          // Skeleton pulse — a placeholder must not wear the exact type style
-          // of a real headline (SnapshotSkeleton bar recipe).
-          <span className="block h-4 max-w-[420px] rounded bg-ink/10 animate-pulse" />
+          // Skeleton bar — a placeholder must not wear the exact type style
+          // of a real headline. sk shimmer per the #1548 one-grammar ruling.
+          <Skeleton className="block h-4 max-w-[420px]" />
         ) : (
           <span className="text-[14.5px] leading-snug text-ink-mute">
             No digest for this day

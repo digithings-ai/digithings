@@ -50,6 +50,7 @@ const opinions: MatchedOpinions = {
     },
   ],
   eventKey: 'core-pce',
+  runDate: '2026-06-22',
 };
 
 function render(props: Parameters<typeof EventDetailPanel>[0]): string {

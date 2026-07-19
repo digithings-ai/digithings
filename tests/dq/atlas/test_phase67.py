@@ -13,12 +13,20 @@ import pytest
 
 from digigraph.graph.pipeline_builder import build_pipeline
 
+from digiquant.olympus.atlas import diagnostics
+from digiquant.olympus.atlas.skills import load_skill
 from digiquant.olympus.edit_mode import DocumentPatch, PatchOp, merge_document_patch
 from digiquant.olympus.atlas.phases.phase6_consolidate import build_phase6
 from digiquant.olympus.atlas.phases.phase7_synthesis import (
+    _DIGEST_MODEL_CONTEXT_TOKENS,
+    _DIGEST_SEGMENT_MIN_CHARS,
     DigestSnapshot,
     _bodies,
+    _count_today_segments,
+    _digest_phase_inputs,
+    _digest_shared_context,
     _enforce_research_only_boundary,
+    _per_segment_char_budget,
     _slim_segment_body,
     build_phase7,
 )
@@ -383,14 +391,20 @@ def _carried_slot(slug: str, baseline: date = date(2026, 4, 19)) -> SegmentSlot:
 
 @pytest.mark.unit
 class TestSlimSegmentBodyForDigest:
-    def test_truncates_verbose_fields(self) -> None:
+    def test_truncates_and_prioritizes_under_budget(self) -> None:
+        """Slimming keeps decision-relevant fields (identity, findings, sources,
+        notes), truncates verbose text with a marker, drops arbitrary extension
+        prose + nested blobs, and never exceeds the char budget (#1559)."""
         long_text = "x" * 500
         body = {
             "segment": "macro",
             "bias": "bullish",
             "headline": "Rates easing",
+            "regime_label": "Risk-on / Policy easing",
+            "data_quality": "high",
+            "confidence": 0.7,
             "notes": long_text,
-            "macro_summary": long_text,
+            "macro_summary": long_text,  # arbitrary extension prose — dropped
             "material_findings": [
                 {"label": "Fed", "summary": long_text, "source_ids": ["s1", "s2", "s3", "s4"]},
                 {"label": "CPI", "summary": "stable"},
@@ -400,15 +414,43 @@ class TestSlimSegmentBodyForDigest:
             ],
             "nested_blob": {"should": "drop"},
         }
-        slim = _slim_segment_body(body)
+        budget = 5000
+        slim = _slim_segment_body(body, budget)
+        # Hard budget adherence — the serialized body never exceeds the allowance.
+        assert len(json.dumps(slim, default=str, sort_keys=True)) <= budget
+        # Identity + stance always kept.
+        assert slim["segment"] == "macro"
+        assert slim["bias"] == "bullish"
+        assert slim["regime_label"] == "Risk-on / Policy easing"
+        assert slim["data_quality"] == "high"
+        # Verbose text truncated with a marker.
         assert slim["notes"].endswith("...")
-        assert len(slim["notes"]) <= 403
-        assert slim["macro_summary"].endswith("...")
-        assert len(slim["material_findings"]) == 2
-        assert len(slim["material_findings"][0]["summary"]) <= 203
+        assert len(slim["notes"]) <= 303
+        # Findings summaries capped; source_ids capped at 3.
+        assert len(slim["material_findings"][0]["summary"]) <= 243
         assert slim["material_findings"][0]["source_ids"] == ["s1", "s2", "s3"]
-        assert len(slim["sources"]) == 10
+        # Arbitrary extension prose + nested blobs are dropped.
+        assert "macro_summary" not in slim
         assert "nested_blob" not in slim
+
+    def test_tight_budget_keeps_headline_over_verbose_fields(self) -> None:
+        """Under a tight budget, identity + headline survive; lower-priority
+        notes/sources are dropped rather than the budget being blown."""
+        body = {
+            "segment": "bonds",
+            "bias": "bearish",
+            "headline": "Curve steepening as the long end sells off",
+            "notes": "y" * 400,
+            "material_findings": [
+                {"label": f"F{i}", "summary": "z" * 200, "source_ids": []} for i in range(8)
+            ],
+            "sources": [{"id": f"s{i}", "title": "t" * 80, "url": "u" * 80} for i in range(10)],
+        }
+        budget = _DIGEST_SEGMENT_MIN_CHARS  # the floor
+        slim = _slim_segment_body(body, budget)
+        assert len(json.dumps(slim, default=str, sort_keys=True)) <= budget
+        assert slim["segment"] == "bonds"
+        assert slim["headline"].startswith("Curve steepening")
 
 
 @pytest.mark.unit
@@ -424,7 +466,7 @@ class TestPhase7TodayOnlyInputs:
             "commodities": _carried_slot("commodities"),
             "forex": _carried_slot("forex"),
         }
-        out = _bodies(bag)
+        out = _bodies(bag, 5000)
         assert set(out) == {"bonds"}, "carried segments must not appear in digest inputs"
 
     def test_delta_inputs_smaller_than_unfiltered(self) -> None:
@@ -697,3 +739,251 @@ class TestPhase7dPm:
         assert debate["aggressive_case"] == "Aggressive case for the rebalance."
         assert "late-cycle" in debate["conservative_case"]
         assert debate["key_tension"] == "Growth vs. drawdown."
+
+
+# ─── Phase 7 master-digest context budget (#1559) ───────────────────────────
+
+
+_BUDGET_LONG = (
+    "The regime is late-cycle with slowing growth and sticky core inflation; "
+    "cross-asset signals conflict as rates volatility stays elevated. "
+) * 6
+
+
+def _verbose_segment_body(slug: str) -> dict[str, Any]:
+    """An oversized, realistic segment body — 12 findings, 18 sources, long
+    summaries + extension prose — so the budget slimmer must actually truncate."""
+    return {
+        "segment": slug,
+        "date": "2026-07-12",
+        "bias": "neutral",
+        "headline": f"{slug}: mixed signals into the close " + _BUDGET_LONG[:120],
+        "material_findings": [
+            {
+                "label": f"Finding {i} for {slug} with a fairly long descriptive label",
+                "summary": _BUDGET_LONG,
+                "source_ids": [f"{slug}-s{i}", f"{slug}-s{i}b", f"{slug}-s{i}c", f"{slug}-s{i}d"],
+            }
+            for i in range(12)
+        ],
+        "sources": [
+            {
+                "id": f"{slug}-s{i}",
+                "title": f"Source {i} title for {slug} — a moderately long headline",
+                "url": f"https://example.com/{slug}/article-number-{i}",
+            }
+            for i in range(18)
+        ],
+        "notes": _BUDGET_LONG,
+        "data_quality": "medium",
+        "confidence": 0.55,
+        # Extension prose the digest does not synthesize from — must be dropped.
+        "detailed_analysis": _BUDGET_LONG,
+        "outlook": _BUDGET_LONG,
+        "key_levels": _BUDGET_LONG,
+        "catalysts": _BUDGET_LONG,
+    }
+
+
+def _verbose_slot(slug: str) -> SegmentSlot:
+    return SegmentSlot(
+        payload=SegmentPayload(
+            segment=slug, body=_verbose_segment_body(slug), as_of=date(2026, 7, 12)
+        )
+    )
+
+
+def _full_baseline_state(sector_count: int) -> AtlasResearchState:
+    """A full baseline day: every phase-1..5 segment fresh and verbose, plus a
+    fat prior context (a full prior digest + every prior segment carried)."""
+    phase1 = [
+        "alt-sentiment-news",
+        "alt-cta-positioning",
+        "alt-options-derivatives",
+        "alt-politician-signals",
+        "alt-onchain-positioning",
+        "alt-ai-portfolios",
+    ]
+    phase2 = ["inst-institutional-flows", "inst-hedge-fund-intel"]
+    phase4 = ["bonds", "commodities", "forex", "crypto", "international"]
+    phase5 = ["equity", *[f"sector-{i}" for i in range(sector_count)]]
+    all_slugs = phase1 + phase2 + ["macro"] + phase4 + phase5
+
+    latest_segments: dict[str, Any] = {
+        slug: {
+            "date": "2026-07-05",
+            "document_key": slug,
+            "doc_type": None,
+            "payload": _verbose_segment_body(slug),
+        }
+        for slug in all_slugs
+    }
+    # A full prior digest under both digest keys (the residual after filtering).
+    prior_digest = dict(_verbose_segment_body("master-digest"))
+    prior_digest["segment_freshness"] = {
+        s: {"source": "today", "as_of": "2026-07-05"} for s in all_slugs
+    }
+    prior_digest["market_regime_snapshot"] = _BUDGET_LONG
+    prior_digest["us_equities_summary"] = _BUDGET_LONG
+    for key in ("digest", "digest-delta"):
+        latest_segments[key] = {
+            "date": "2026-07-05",
+            "document_key": key,
+            "doc_type": "Daily Digest",
+            "payload": prior_digest,
+        }
+
+    state = AtlasResearchState(
+        run_type="baseline",
+        run_date=date(2026, 7, 12),
+        baseline_date=date(2026, 7, 5),
+        config=AtlasConfigBundle(watchlist=["AAPL", "MSFT", "NVDA"]),
+        prior_context=PriorContext(latest_segments=latest_segments),
+        phase1_outputs={s: _verbose_slot(s) for s in phase1},
+        phase2_outputs={s: _verbose_slot(s) for s in phase2},
+        phase3_output=_verbose_slot("macro"),
+        phase4_outputs={s: _verbose_slot(s) for s in phase4},
+        phase5_outputs={s: _verbose_slot(s) for s in phase5},
+    )
+    return state
+
+
+@pytest.mark.unit
+class TestDigestInputBudget:
+    def _assembled_tokens(self, state: AtlasResearchState) -> float:
+        """Serialized prompt size in tokens, mirroring research_agent's assembly:
+        SHARED_CONTEXT + skill + PHASE_INPUTS + OUTPUT_SCHEMA."""
+        phase_inputs = _digest_phase_inputs(state)
+        shared = _digest_shared_context(state)
+        total_chars = (
+            len(json.dumps(shared, default=str, sort_keys=True))
+            + len(load_skill("digest"))
+            + len(json.dumps(phase_inputs, default=str, sort_keys=True))
+            + len(json.dumps(DigestSnapshot.model_json_schema(), sort_keys=True))
+        )
+        # Pessimistic chars-per-token (matches the module's conservative ratio) so
+        # the assertion holds even when the real tokenizer packs fewer chars/token.
+        return total_chars / 3.0
+
+    def test_full_baseline_roster_fits_under_model_context(self) -> None:
+        """A verbose full-roster baseline (~27 segments) assembles well under the
+        64k model context, leaving completion headroom (#1559)."""
+        state = _full_baseline_state(sector_count=20)  # 6+2+1+5+1+20 = 35 segments
+        assert _count_today_segments(state) >= 27
+        est_tokens = self._assembled_tokens(state)
+        # Under the 64k ceiling with an ~8k completion reserve.
+        assert est_tokens < _DIGEST_MODEL_CONTEXT_TOKENS - 8_000, (
+            f"assembled digest prompt ~{est_tokens:.0f} tok exceeds budget"
+        )
+
+    def test_budget_adapts_to_larger_roster(self) -> None:
+        """Doubling the sector roster must NOT double the prompt — the per-segment
+        allowance shrinks so the aggregate stays bounded (#1559)."""
+        small = self._assembled_tokens(_full_baseline_state(sector_count=20))
+        large = self._assembled_tokens(_full_baseline_state(sector_count=60))
+        assert large < _DIGEST_MODEL_CONTEXT_TOKENS - 8_000
+        # Not proportional to segment count: 3x the sectors is far from 3x the prompt.
+        assert large < small * 1.5
+
+    def test_slimming_actually_truncates_oversized_bodies(self) -> None:
+        """Guard against a vacuous budget pass: verbose bodies are genuinely
+        truncated and extension prose is dropped in the assembled inputs."""
+        state = _full_baseline_state(sector_count=20)
+        phase_inputs = _digest_phase_inputs(state)
+        body = phase_inputs["phase5"]["sector-0"]["body"]
+        # Verbose finding summaries are truncated with a marker (findings are the
+        # highest-priority variable content, so at least one always survives).
+        assert body["material_findings"], "findings must survive the budget"
+        assert body["material_findings"][0]["summary"].endswith("...")
+        assert len(body["material_findings"][0]["summary"]) <= 243
+        # Arbitrary extension prose is dropped, not synthesized from.
+        assert "detailed_analysis" not in body
+        assert "outlook" not in body
+        # Each segment body stays within its adaptive per-segment allowance.
+        budget = _per_segment_char_budget(_count_today_segments(state))
+        assert len(json.dumps(body, default=str, sort_keys=True)) <= budget
+
+    def test_shared_context_prior_carry_is_bounded(self) -> None:
+        """The prior per-segment dump (the dominant overflow driver) is filtered to
+        the digest keys and the retained digests are trimmed (#1559)."""
+        state = _full_baseline_state(sector_count=20)
+        shared = _digest_shared_context(state)
+        latest = shared["prior_context"]["latest_segments"]
+        # Only the digest keys survive — not the 20+ prior per-segment payloads.
+        assert set(latest) <= {"digest", "digest-delta"}
+        # Retained prior-digest payloads are trimmed (no fat segment_freshness map).
+        for row in latest.values():
+            assert "segment_freshness" not in row["payload"]
+
+
+# ─── Phase 7 master-digest failure visibility (#1559) ────────────────────────
+
+
+def _valid_prior_digest(day: str) -> dict[str, Any]:
+    payload = json.loads(_digest_payload())
+    payload["date"] = day
+    payload["headline"] = "Prior-day headline"
+    return payload
+
+
+@pytest.mark.unit
+class TestDigestFailureVisibility:
+    def test_synthesis_failure_carries_prior_and_marks_degraded(self) -> None:
+        """A master-digest synthesis exception carries the prior digest forward
+        STAMPED with provenance, and the run is degraded with the failure leading
+        the error summary — not a silent 'ok' with a stale headline (#1559)."""
+        state = _seed_state_through_phase5()  # baseline, fresh phases 1-5
+        state.baseline_date = date(2026, 4, 25)
+        # Force the full-rewrite path so the (patched, failing) LLM call is reached.
+        state.refresh_scope = "digest"
+        state.prior_context = PriorContext(
+            latest_segments={
+                "digest": {
+                    "date": "2026-04-25",
+                    "document_key": "digest",
+                    "doc_type": "Daily Digest",
+                    "payload": _valid_prior_digest("2026-04-25"),
+                }
+            }
+        )
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+
+        overflow = RuntimeError(
+            "BadRequestError 400: endpoint maximum context length is 64000 tokens, requested ~90690"
+        )
+        with patch(
+            "digiquant.olympus.atlas.phases.phase7_synthesis.run_research_agent",
+            side_effect=overflow,
+        ):
+            final = AtlasResearchState.model_validate(compiled.invoke(state))
+
+        digest = final.phase7_digest
+        assert digest is not None, "must carry the prior digest forward, not crash"
+        # Carried-forward provenance stamped on the payload.
+        assert digest["carried_from"] == "2026-04-25"
+        assert "carried_forward" in digest["continuity"]
+        assert digest["headline"] == "Prior-day headline"  # content is the prior's
+
+        # The run is degraded (not 'ok'), and the failure LEADS the error summary.
+        summary = diagnostics.summarize_run(final)
+        assert summary.status == "degraded"
+        assert summary.error_summary.startswith("MASTER-DIGEST SYNTHESIS FAILED")
+        assert "master_digest_failed" in summary.breakdown
+        assert diagnostics.is_degraded(final) is True
+
+    def test_successful_synthesis_has_no_carried_marker(self) -> None:
+        """A fresh synthesis must NOT carry a provenance marker — the marker is the
+        signal that distinguishes carried-forward from fresh (#1559)."""
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        state = _seed_state_through_phase5()
+
+        with patch(
+            "digigraph.graph.research_agent.completion_text",
+            side_effect=lambda _m, _msgs, **_: _digest_payload(),
+        ):
+            final = AtlasResearchState.model_validate(compiled.invoke(state))
+
+        digest = final.phase7_digest
+        assert digest is not None
+        assert not digest.get("carried_from"), "fresh synthesis must not be marked carried"
+        assert diagnostics.summarize_run(final).status == "ok"

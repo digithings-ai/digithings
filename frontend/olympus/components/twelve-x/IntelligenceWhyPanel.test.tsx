@@ -164,9 +164,11 @@ describe('IntelligenceWhyPanel', () => {
     expect(html).toContain('relevance');
   });
 
-  it('shows the synthesized one-liner with the exact "synthesized — would require generation" label', () => {
+  it('shows the illustrative one-liner labelled "Illustrative summary"', () => {
     const html = render(item());
-    expect(html).toContain('synthesized — would require generation');
+    expect(html).toContain('Illustrative summary');
+    // The old dev-facing caption must be gone.
+    expect(html).not.toContain('would require generation');
   });
 
   it('NEVER surfaces w_time or w_event', () => {

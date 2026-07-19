@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarClock, ChevronRight, Globe, Users } from 'lucide-react';
 import { eventLocalDateKey, hasResolvedTime } from '@/lib/twelve-x/fetch';
 import type {
@@ -108,6 +108,8 @@ export interface MatchedOpinions {
   brokers: string[];
   citations: FxEventCitation[];
   eventKey: string;
+  /** The run_date of the opinion snapshot these citations came from. */
+  runDate: string | null;
 }
 
 function EventRow({
@@ -127,7 +129,14 @@ function EventRow({
   // falsy fallback to `event_time` is a raw venue/wall-clock string we mark with ≈.
   const resolvedTime = hasResolvedTime(event);
   const time = formatLocalTime(event.event_datetime_utc) ?? event.event_time ?? null;
-  const hasOpinions = Boolean(opinions && opinions.mentions > 0);
+  // Evidence exists when mentions >0 OR brokers nonempty OR citations nonempty
+  const hasEvidence = Boolean(
+    opinions &&
+      (opinions.mentions > 0 ||
+        opinions.brokers.length > 0 ||
+        opinions.citations.length > 0)
+  );
+  const hasOpinions = hasEvidence;
 
   // When this row is the cross-link target (catalyst → Events), scroll it into
   // view so the trader lands on the right catalyst.
@@ -144,75 +153,129 @@ function EventRow({
         highlight ? 'bg-accent/10 ring-1 ring-inset ring-accent/40' : ''
       }`}
     >
-      <button
-        type="button"
-        // Every row opens the event-detail slide-over so the list and the timeline
-        // behave identically — one click, same popup, opinions or not.
-        onClick={() => onSelect(event)}
-        className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-ink/[0.02]"
-      >
-        {/* Time column */}
-        <div className="w-14 shrink-0 text-right">
-          <span className="qn-metric block tabular-nums text-sm text-ink">
-            {!resolvedTime && time ? (
-              <span
-                className="mr-0.5 text-ink-mute/70"
-                title="Venue-local time — could not convert to your timezone"
-              >
-                ≈
-              </span>
-            ) : null}
-            {time ?? '—'}
-          </span>
-        </div>
-
-        {/* Impact dot */}
-        <span className={`h-2 w-2 shrink-0 rounded-full ${impactDot}`} aria-hidden />
-
-        {/* Event detail */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1 font-mono text-[11px] uppercase text-ink-mute">
-              <Globe size={11} aria-hidden />
-              {event.country}
-            </span>
-            <span className={`text-[11px] font-medium ${impactText}`}>
-              {impactLabel(event.impact)}
+      {hasOpinions ? (
+        <button
+          type="button"
+          onClick={() => onSelect(event)}
+          className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-ink/[0.02]"
+        >
+          {/* Time column */}
+          <div className="w-14 shrink-0 text-right">
+            <span className="qn-metric block tabular-nums text-sm text-ink">
+              {!resolvedTime && time ? (
+                <span
+                  className="mr-0.5 text-ink-mute/70"
+                  title="Venue-local time — could not convert to your timezone"
+                >
+                  ≈
+                </span>
+              ) : null}
+              {time ?? '—'}
             </span>
           </div>
-          <p className="truncate text-sm text-ink">{event.event_name}</p>
-        </div>
 
-        {/* Prior / forecast / actual */}
-        <div className="hidden w-52 shrink-0 items-center justify-end gap-3 text-right sm:flex">
-          {event.prior != null && event.prior !== '' ? (
-            <span className="text-[11px] text-ink-mute">
-              Prior <span className="tabular-nums text-ink-soft">{event.prior}</span>
-            </span>
-          ) : null}
-          {event.forecast != null && event.forecast !== '' ? (
-            <span className="text-[11px] text-ink-mute">
-              Fcst <span className="tabular-nums text-ink-soft">{event.forecast}</span>
-            </span>
-          ) : null}
-          {event.actual != null && event.actual !== '' ? (
-            <span className="text-[11px] text-ink-mute">
-              Act <span className="tabular-nums text-ink">{event.actual}</span>
-            </span>
-          ) : null}
-        </div>
+          {/* Impact dot */}
+          <span className={`h-2 w-2 shrink-0 rounded-full ${impactDot}`} aria-hidden />
 
-        {/* Opinions count + open-detail affordance */}
-        <div className="flex w-24 shrink-0 items-center justify-end gap-1.5">
-          {hasOpinions ? (
+          {/* Event detail */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1 font-mono text-[11px] uppercase text-ink-mute">
+                <Globe size={11} aria-hidden />
+                {event.country}
+              </span>
+              <span className={`text-[11px] font-medium ${impactText}`}>
+                {impactLabel(event.impact)}
+              </span>
+            </div>
+            <p className="truncate text-sm text-ink">{event.event_name}</p>
+          </div>
+
+          {/* Prior / forecast / actual */}
+          <div className="hidden w-52 shrink-0 items-center justify-end gap-3 text-right sm:flex">
+            {event.prior != null && event.prior !== '' ? (
+              <span className="text-[11px] text-ink-mute">
+                Prior <span className="tabular-nums text-ink-soft">{event.prior}</span>
+              </span>
+            ) : null}
+            {event.forecast != null && event.forecast !== '' ? (
+              <span className="text-[11px] text-ink-mute">
+                Fcst <span className="tabular-nums text-ink-soft">{event.forecast}</span>
+              </span>
+            ) : null}
+            {event.actual != null && event.actual !== '' ? (
+              <span className="text-[11px] text-ink-mute">
+                Act <span className="tabular-nums text-ink">{event.actual}</span>
+              </span>
+            ) : null}
+          </div>
+
+          {/* Opinions count + open-detail affordance (only when evidence exists) */}
+          <div className="flex w-24 shrink-0 items-center justify-end gap-1.5">
             <span className="flex items-center gap-1 text-[11px] text-ink-mute">
               <Users size={12} aria-hidden />
               <span className="tabular-nums text-ink-soft">{opinions!.mentions}</span>
             </span>
-          ) : null}
-          <ChevronRight size={14} aria-hidden className="text-ink-mute" />
+            <ChevronRight size={14} aria-hidden className="text-ink-mute" />
+          </div>
+        </button>
+      ) : (
+        <div className="flex w-full items-center gap-3 px-4 py-3">
+          {/* Time column */}
+          <div className="w-14 shrink-0 text-right">
+            <span className="qn-metric block tabular-nums text-sm text-ink">
+              {!resolvedTime && time ? (
+                <span
+                  className="mr-0.5 text-ink-mute/70"
+                  title="Venue-local time — could not convert to your timezone"
+                >
+                  ≈
+                </span>
+              ) : null}
+              {time ?? '—'}
+            </span>
+          </div>
+
+          {/* Impact dot */}
+          <span className={`h-2 w-2 shrink-0 rounded-full ${impactDot}`} aria-hidden />
+
+          {/* Event detail */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1 font-mono text-[11px] uppercase text-ink-mute">
+                <Globe size={11} aria-hidden />
+                {event.country}
+              </span>
+              <span className={`text-[11px] font-medium ${impactText}`}>
+                {impactLabel(event.impact)}
+              </span>
+            </div>
+            <p className="truncate text-sm text-ink">{event.event_name}</p>
+          </div>
+
+          {/* Prior / forecast / actual */}
+          <div className="hidden w-52 shrink-0 items-center justify-end gap-3 text-right sm:flex">
+            {event.prior != null && event.prior !== '' ? (
+              <span className="text-[11px] text-ink-mute">
+                Prior <span className="tabular-nums text-ink-soft">{event.prior}</span>
+              </span>
+            ) : null}
+            {event.forecast != null && event.forecast !== '' ? (
+              <span className="text-[11px] text-ink-mute">
+                Fcst <span className="tabular-nums text-ink-soft">{event.forecast}</span>
+              </span>
+            ) : null}
+            {event.actual != null && event.actual !== '' ? (
+              <span className="text-[11px] text-ink-mute">
+                Act <span className="tabular-nums text-ink">{event.actual}</span>
+              </span>
+            ) : null}
+          </div>
+
+          {/* No affordance when no evidence — just empty space */}
+          <div className="w-24 shrink-0" />
         </div>
-      </button>
+      )}
     </div>
   );
 }
@@ -224,6 +287,7 @@ export default function EventsTab({
   focus,
   initialView = 'list',
   initialSelectedId = null,
+  onOpenBrief,
 }: {
   events: FxEconomicCalendarRow[];
   opinions: FxEventSnapshotRow[];
@@ -236,6 +300,9 @@ export default function EventsTab({
   /** Seed the open detail slide-over by event id — used so the open-panel state
    *  is renderable under renderToStaticMarkup in tests. */
   initialSelectedId?: string | null;
+  /** Optional callback to open a brief by source_file and run_date. Threaded to
+   *  EventDetailPanel so citations can open their source brief. */
+  onOpenBrief?: ((sourceFile: string, runDate: string) => void) | null;
 }) {
   // Index broker opinions so each upcoming calendar row can pick up the aggregated
   // desk views. Two lookups, mirroring how twelve-x groups risk events:
@@ -259,6 +326,7 @@ export default function EventsTab({
         brokers: asStringList(o.brokers),
         citations: asCitations(o.citations),
         eventKey: o.event_key,
+        runDate,
       };
       const externalId = (o.calendar_external_id ?? '').trim();
       if (externalId) {
@@ -278,9 +346,9 @@ export default function EventsTab({
       if (country && rest) put(`${rest}|${date}|${country}`, matched);
     }
     return { byExternalId: externalIdMap, byNameAndDate: nameDateMap };
-  }, [opinions]);
+  }, [opinions, runDate]);
 
-  const matchOpinions = (event: FxEconomicCalendarRow): MatchedOpinions | null => {
+  const matchOpinions = useCallback((event: FxEconomicCalendarRow): MatchedOpinions | null => {
     // 1) Prefer the exact calendar_external_id -> external_id key match.
     const externalId = (event.external_id ?? '').trim();
     if (externalId) {
@@ -300,7 +368,7 @@ export default function EventsTab({
       if (qualified) return qualified;
     }
     return null;
-  };
+  }, [byExternalId, byNameAndDate]);
 
   // Group the upcoming window by day. Bucket by the LOCAL date of each event's
   // release instant (when known) so the day header agrees with the locale-
@@ -348,11 +416,27 @@ export default function EventsTab({
   // with the Today single-day timeline (same local-day/clock/impact rules).
   const timelineEvents = useMemo(() => eventsToTimeline(events), [events]);
 
+  // Build a set of selectable event IDs (only events with evidence).
+  const selectableIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const event of events) {
+      const ops = matchOpinions(event);
+      const hasEvidence = Boolean(
+        ops &&
+          (ops.mentions > 0 || ops.brokers.length > 0 || ops.citations.length > 0)
+      );
+      if (hasEvidence) {
+        ids.add(String(event.id));
+      }
+    }
+    return ids;
+  }, [events, matchOpinions]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="text-base font-semibold text-ink md:text-lg">Upcoming catalysts</h2>
+        <h2 className="font-display text-2xl tracking-tight text-ink">Upcoming catalysts</h2>
         {/* List | Timeline segmented control (demo's #evtSubnav). */}
         <div
           className="ml-auto inline-flex overflow-hidden rounded-md border border-hair text-[11px]"
@@ -427,6 +511,7 @@ export default function EventsTab({
             <EventsTimeline
               events={timelineEvents}
               mode="multi"
+              selectableIds={selectableIds}
               onSelect={(id) => setSelected(events.find((e) => String(e.id) === id) ?? null)}
             />
           ) : (
@@ -439,6 +524,18 @@ export default function EventsTab({
         event={selected}
         opinions={selected ? matchOpinions(selected) : null}
         onClose={() => setSelected(null)}
+        onOpenBrief={
+          onOpenBrief
+            ? (sourceFile: string) => {
+                const ops = selected ? matchOpinions(selected) : null;
+                const rd = ops?.runDate ?? runDate ?? '';
+                if (rd) {
+                  setSelected(null); // Close detail before opening brief
+                  onOpenBrief(sourceFile, rd);
+                }
+              }
+            : undefined
+        }
       />
     </div>
   );

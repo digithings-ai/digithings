@@ -1,14 +1,10 @@
 import { Suspense } from 'react';
 import PortfolioShellInner from '@/components/portfolio/PortfolioShellInner';
-import AtlasLoader from '@/components/AtlasLoader';
+import PageSkeleton from '@/components/page-skeleton';
 
 export default function PortfolioPage() {
   return (
-    <Suspense
-      fallback={
-        <AtlasLoader />
-      }
-    >
+    <Suspense fallback={<PageSkeleton />}>
       <PortfolioShellInner />
     </Suspense>
   );

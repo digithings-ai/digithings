@@ -299,6 +299,24 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 
 /* ---- OLYMPUS: scroll-pinned hedge-fund-in-a-box track ---- */
 .dq-olympus { background: var(--bg); }
+
+/* Live-book flash-on-tick (#1461 payoff) — a ticking cell washes its P&L colour
+   for a beat so a live change is perceptible, not silent. Money colours only
+   (--up/--down), never a livery. Reduced-motion neutralises the wash below. */
+.dq-tick { border-radius: 4px; padding-inline: 0.18em; }
+.dq-tick-up { animation: dq-tick-up 0.9s var(--ease); }
+.dq-tick-down { animation: dq-tick-down 0.9s var(--ease); }
+@keyframes dq-tick-up {
+  0% { background: color-mix(in srgb, var(--up) 30%, transparent); }
+  100% { background: transparent; }
+}
+@keyframes dq-tick-down {
+  0% { background: color-mix(in srgb, var(--down) 30%, transparent); }
+  100% { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dq-tick-up, .dq-tick-down { animation: none; }
+}
 .dqp-scrolly { position: relative; height: 480vh; background: var(--bg); }
 .dqp-pin { position: sticky; top: 0; height: 100svh; display: flex; align-items: center; overflow: hidden; border-top: 1px solid var(--hair); }
 .dqp-pin .wrap { width: 100%; position: relative; z-index: 1; }
@@ -339,6 +357,21 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqp-sooncard { width: 230px; border-style: dashed; border-color: var(--hair-2); opacity: 1; display: flex; flex-direction: column; justify-content: center; }
 .dqp-badge { display: inline-block; align-self: flex-start; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius: 999px; padding: 0.18rem 0.5rem; margin-bottom: 0.5rem; }
 .dqp-sooncard p { font-size: 0.8rem; color: var(--ink-soft); line-height: 1.5; }
+/* Final track beat: a quiet text+arrow that launches the dashboard. Strips the
+   step card chrome (no border/fill/shadow) so it reads as a closing line, not
+   another phase. Rides the same opacity reveal as the phases (dim → lit) and
+   centres last (Kend); the arrow nudges on hover and when it lands (.cur). */
+/* .dqp-step.dqp-golink (specificity 0,2,0) so `width:auto` also beats the
+   mobile `.dqp-step { width: 150px }` rule — the label must never be clipped. */
+.dqp-step.dqp-golink { width: auto; border: none; background: none; box-shadow: none; padding: 0.85rem 0.5rem; display: inline-flex; align-items: center; gap: 0.55rem; white-space: nowrap; text-decoration: none; }
+.dqp-golink.lit { border: none; background: none; }
+.dqp-golink.cur { transform: none; box-shadow: none; }
+.dqp-golink-label { font-size: 0.95rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); transition: color 0.3s var(--ease); }
+.dqp-golink-arrow { font-size: 1.05rem; color: var(--accent); transition: transform 0.3s var(--ease); }
+.dqp-golink.cur .dqp-golink-arrow { transform: translateX(3px); }
+.dqp-golink:hover .dqp-golink-label { color: var(--accent); }
+.dqp-golink:hover .dqp-golink-arrow { transform: translateX(5px); }
+@media (prefers-reduced-motion: reduce) { .dqp-golink-arrow, .dqp-golink:hover .dqp-golink-arrow { transition: none; transform: none; } }
 .dqp-spacer { border: none; background: transparent; opacity: 0; padding: 0; pointer-events: none; }
 @media (max-width: 820px) { .dqp-step { width: 150px; } .dqp-heads { min-height: 180px; } .dqp-scrolly { height: 360vh; } .dqp-node { width: 90px; } }
 

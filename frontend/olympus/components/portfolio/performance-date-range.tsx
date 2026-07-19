@@ -1,14 +1,21 @@
 'use client';
 
+import { SegmentedControl } from '@digithings/web';
 import type { DateRangeKey } from '@/lib/performance-series';
 
-const OPTIONS: { key: DateRangeKey; label: string }[] = [
-  { key: 'itd', label: 'ITD' },
-  { key: 'ytd', label: 'YTD' },
-  { key: '3m', label: '3M' },
-  { key: '1m', label: '1M' },
+const OPTIONS: { value: DateRangeKey; label: string }[] = [
+  { value: 'itd', label: 'ITD' },
+  { value: 'ytd', label: 'YTD' },
+  { value: '3m', label: '3M' },
+  { value: '1m', label: '1M' },
 ];
 
+/**
+ * Rides the promoted @digithings/web SegmentedControl (dress="accent" —
+ * olympus's shipped look) since #1548. The primitive also lands the a11y
+ * fix: role="group" + aria-pressed replaces the previous role="tablist"
+ * misuse (these segments switch a data range, they don't own tab panels).
+ */
 export function PerformanceDateRange({
   value,
   onChange,
@@ -17,25 +24,13 @@ export function PerformanceDateRange({
   onChange: (k: DateRangeKey) => void;
 }) {
   return (
-    <div
-      className="flex flex-wrap rounded-lg border border-hair overflow-hidden text-xs"
-      role="tablist"
+    <SegmentedControl<DateRangeKey>
+      dress="accent"
+      className="flex flex-wrap"
       aria-label="Performance date range"
-    >
-      {OPTIONS.map(({ key, label }, i) => (
-        <button
-          key={key}
-          type="button"
-          role="tab"
-          aria-selected={value === key}
-          onClick={() => onChange(key)}
-          className={`px-3 py-1.5 font-medium transition-colors ${
-            i > 0 ? 'border-l border-hair' : ''
-          } ${value === key ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:bg-ink/[0.04] hover:text-ink'}`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+      options={OPTIONS}
+      value={value}
+      onChange={onChange}
+    />
   );
 }

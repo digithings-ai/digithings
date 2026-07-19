@@ -1,20 +1,30 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, FileSearch } from 'lucide-react';
+import { Skeleton, SkeletonGroup } from '@digithings/web';
+import { BookOpen, FileSearch, X } from 'lucide-react';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
+import type { LaidOutNode } from '@/lib/pipeline-layout';
+import { PIPELINE_TOPOLOGY, pipelineNodeExplanation } from '@/lib/pipeline-topology';
 import LibraryDocumentBody from '@/components/library/LibraryDocumentBody';
 
 export interface PipelineNodeDetailProps {
+  node?: LaidOutNode | null;
   documentKey: string | null;
   date: string;
   onClose: () => void;
 }
 
-export default function PipelineNodeDetail({ documentKey, date, onClose }: PipelineNodeDetailProps) {
+export default function PipelineNodeDetail({
+  node = null,
+  documentKey,
+  date,
+  onClose,
+}: PipelineNodeDetailProps) {
   const [doc, setDoc] = useState<LibraryDocumentResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const explanation = node ? pipelineNodeExplanation(node.stageId, node.id) : null;
 
   useEffect(() => {
     // No selection: the render derives the empty state from `documentKey`, so
@@ -45,28 +55,31 @@ export default function PipelineNodeDetail({ documentKey, date, onClose }: Pipel
     return () => { cancelled = true; };
   }, [documentKey, date]);
 
-  // Responsive container: desktop = fixed side panel, mobile = bottom sheet
+  // Responsive container: mobile = docked lower pane, desktop = right side panel.
+  // Keeping mobile detail in flow leaves the stage navigator visible above it.
   return (
     <aside
       aria-label="Node detail"
       aria-live="polite"
       className={[
-        // Mobile: bottom sheet
-        'fixed inset-x-0 bottom-0 z-30 bg-term-bg border-t border-hair rounded-t-2xl',
-        'h-[60vh] flex flex-col',
-        // Desktop: right side panel (overrides the bottom sheet positioning)
-        'md:inset-auto md:relative md:h-full md:w-[372px] md:border-t-0 md:border-l md:rounded-none',
+        'relative z-20 flex h-[46%] min-h-40 shrink-0 flex-col border-t border-hair bg-term-bg',
+        'md:h-full md:w-[372px] md:min-h-0 md:border-l md:border-t-0',
       ].join(' ')}
     >
       {/* Header */}
-      <div className="flex items-start justify-between px-5 py-4 border-b border-hair flex-shrink-0">
+      <div className="flex flex-shrink-0 items-start justify-between border-b border-hair px-4 py-3 md:px-5 md:py-4">
         <div className="min-w-0 flex-1">
           <div className="text-[10px] font-bold tracking-[0.14em] uppercase text-accent mb-1">
-            {documentKey ? 'Document' : 'No selection'}
+            {documentKey ? 'Run artifact' : explanation ? 'Pipeline guide' : 'No selection'}
           </div>
           <div className="font-mono text-sm truncate text-ink">
-            {documentKey ?? '—'}
+            {node?.label ?? documentKey ?? '—'}
           </div>
+          {explanation && (
+            <div className="mt-1 font-mono text-[0.65rem] text-ink-mute">
+              Stage {explanation.stageNumber} of {PIPELINE_TOPOLOGY.length} · {explanation.stageLabel}
+            </div>
+          )}
         </div>
         <button
           type="button"
@@ -79,9 +92,9 @@ export default function PipelineNodeDetail({ documentKey, date, onClose }: Pipel
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 text-sm text-ink-mute leading-relaxed">
+      <div className="flex-1 overflow-y-auto px-4 py-3 text-sm leading-relaxed text-ink-mute md:px-5 md:py-4">
         {/* Empty state */}
-        {!documentKey && (
+        {!documentKey && !explanation && (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
             <FileSearch size={32} className="text-ink-mute opacity-40" />
             <p className="text-ink-mute text-sm">No document selected.</p>
@@ -91,9 +104,55 @@ export default function PipelineNodeDetail({ documentKey, date, onClose }: Pipel
           </div>
         )}
 
-        {/* Loading */}
+        {!documentKey && explanation && (
+          <div className="space-y-5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-hair bg-surface text-accent">
+              <BookOpen size={17} aria-hidden />
+            </div>
+            <div>
+              <p className="font-display text-lg leading-snug text-ink">{explanation.title}</p>
+              <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+                {explanation.description}
+              </p>
+            </div>
+            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-hair bg-hair">
+              <div className="bg-term-bg px-3 py-2.5">
+                <dt className="font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+                  Stage
+                </dt>
+                <dd className="mt-1 text-xs text-ink">{explanation.stageLabel}</dd>
+              </div>
+              <div className="bg-term-bg px-3 py-2.5">
+                <dt className="font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+                  Execution
+                </dt>
+                <dd className="mt-1 text-xs text-ink">{explanation.behavior}</dd>
+              </div>
+            </dl>
+            <div className="border-t border-hair pt-4">
+              <p className="font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+                This run
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-ink-mute">
+                {node?.kind === 'stage'
+                  ? 'The stage is a navigational overview. Expand it to inspect each operation and any artifacts published for the selected run.'
+                  : node?.stateOnly
+                    ? 'This operation updates pipeline state and does not publish a standalone document.'
+                    : 'No standalone artifact is attached to this node for the selected run. Its role in the process remains the same.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Loading — content-shaped sk shimmer stack (title line + body lines),
+            not placeholder text (#1548; one loading grammar app-wide). */}
         {documentKey && loading && (
-          <div className="text-ink-mute text-sm py-4">Loading document…</div>
+          <SkeletonGroup aria-label="Loading document" className="py-4 flex flex-col gap-3">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="w-full" />
+            <Skeleton className="w-11/12" />
+            <Skeleton className="w-4/5" />
+          </SkeletonGroup>
         )}
 
         {/* Error */}
@@ -108,13 +167,20 @@ export default function PipelineNodeDetail({ documentKey, date, onClose }: Pipel
 
         {/* Document content — reused LibraryDocumentBody dispatch */}
         {documentKey && !loading && !error && doc && (
-          <LibraryDocumentBody
-            view={doc.view}
-            markdown={doc.markdown}
-            payload={doc.payload}
-            documentKey={doc.document_key}
-            docDate={doc.date}
-          />
+          <div className="space-y-4">
+            {explanation && (
+              <p className="border-b border-hair pb-3 text-xs leading-relaxed text-ink-mute">
+                {explanation.description}
+              </p>
+            )}
+            <LibraryDocumentBody
+              view={doc.view}
+              markdown={doc.markdown}
+              payload={doc.payload}
+              documentKey={doc.document_key}
+              docDate={doc.date}
+            />
+          </div>
         )}
 
         {/* Not found */}
@@ -144,13 +210,20 @@ async function fetchByDocumentKey(
   if (!url || !key) return null;
 
   const supabase = createClient(url, key);
+  // Defensive limit(1) rather than .maybeSingle(): maybeSingle ERRORS on >1
+  // row, which rendered as "No output found" — the same failure class as the
+  // #1538 digest headline (a retried/backfilled publish can duplicate a
+  // (document_key, date) pair even though none exist today).
   const { data, error } = await supabase
     .from('documents')
     .select('id')
     .eq('document_key', documentKey)
     .eq('date', date)
-    .maybeSingle();
+    // Deterministic tiebreaker only — documents has no created_at column.
+    .order('id', { ascending: false })
+    .limit(1);
 
-  if (error || !data?.id) return null;
-  return await getLibraryDocumentById(data.id as string);
+  const id = data?.[0]?.id;
+  if (error || !id) return null;
+  return await getLibraryDocumentById(id as string);
 }

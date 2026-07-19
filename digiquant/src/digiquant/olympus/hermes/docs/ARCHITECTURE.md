@@ -42,6 +42,22 @@ on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 | **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
 | **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
 
+### Vehicle → market thesis linkage (#1563)
+
+`theses.linked_market_thesis_id` ties a `vehicle-{ticker}` thesis to the market
+thesis it expresses. It is resolved at **creation time by H5**
+(`upsert_vehicle_thesis_from_analyst` → `resolve_primary_market_thesis`) from the
+reliable `thesis_vehicles` map (H3's ticker → market-thesis mapping): primary =
+lowest `candidate_rank`, falling back to the most recent prior mapping for a
+carried held name. This replaced a same-date H3 back-fill that structurally
+never fired (the `vehicle-{ticker}` row does not exist when H3 runs), which left
+every vehicle thesis null-linked in prod. The link is **self-healing** — H5
+rewrites the vehicle row each run and re-resolves — so it repairs going forward;
+historical rows stay as-was and the frontend derives the hierarchy from
+`thesis_vehicles` directly (#1562). `upsert_thesis_row` refuses to persist a
+self-referential link (`linked == thesis_id`), neutralizing the ~140 legacy
+self-refs at the single write chokepoint.
+
 Graph builder: `graph.build_hermes_phases_thesis()` → `build_hermes_graph()`.
 Legacy `build_hermes_phases` aliases the thesis path. **Removed from graph:** 4-axis 7C,
 `phase7cd_debate`, risk debaters, `portfolio_materialize`, phase9 evolution on daily path.
@@ -89,6 +105,39 @@ Per-ticker cyclic sub-graph (not a single LLM call):
 Termination when either side sets `converged=true` (no product round cap; infra timeouts
 only). On fingerprint quiet (#925): `skip` — carry prior deliberation summary into H7;
 fresh `deliberation_transcript` row only when the loop runs.
+
+---
+
+## H9 commit-run: coherence, held-carry, and observability (#932 / #1030 / #1555)
+
+H9 is the sole terminal writer. Before it books, `commit_io.coherence_errors` runs two
+fail-closed checks over the H8 `sized_book` weights:
+
+1. every prior holding is either in the book with positive weight **or** explicitly `flat`
+   in the H7 memo (no silent drop of an owned name);
+2. every open position has an H5 analyst doc **or** is `flat` **or** is a deliberately
+   gated-out held carry (`focus_roster_excluded ∩ held`, `commit_io.gated_out_tickers`).
+
+**Held-carry (the delta-day path).** On a quiet delta day the H4 staleness gate moves a
+held name with a sub-threshold move into `focus_roster_excluded` and dispatches no analyst,
+so it never reaches the H7 memo. H8 therefore **carries** such names into the sized book at
+their current drifted weight (`phase7e_risk_sizing._gated_held_carry_weights`, scoped to the
+same `gated_out_tickers` set H9 exempts) *before* the rebalancing-cadence band — so a quiet
+held position stays owned instead of being dropped. **Regression #1555:** before this carry,
+gated-out held names were dropped from the book, check (1) failed closed, and H9 returned a
+`PhaseError` (`phase="hermes_h9_commit_run"`) that never reached the degraded gate — every
+delta-day commit was silently frozen from 2026-06-26 while runs still reported `ok:true`.
+
+**Commit is observable.** A book H8 materializes but H9 does not persist (coherence
+fail-closed, idempotency conflict, or a no-manifest skip) is now a **degraded** run:
+`diagnostics.summarize_run` computes `(book_materialized, book_committed)` from
+`phase_hermes.sized_book` / `commit_manifest` (a manifest with status `committed`/`noop`
+counts as committed) and forces `degraded` when materialized-but-not-committed — a state an
+H9 `PhaseError` can't trigger on its own. Both flags are emitted structurally in the
+`atlas_run_diagnostics.breakdown` (truncation-proof) and in the chain CLI summary alongside
+`book_materialized`; a commit-failure marker is prepended to `error_summary` so it survives
+the 2000-char cap. `chain._retry_worthy` keys the #809 good-book guard on `book_committed`
+(not mere materialization), so an uncommitted book retries while a committed one does not.
 
 ---
 

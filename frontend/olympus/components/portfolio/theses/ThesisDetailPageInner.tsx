@@ -1,19 +1,25 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { useDashboard } from '@/lib/dashboard-context';
 import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
-import AtlasLoader from '@/components/AtlasLoader';
+import PageSkeleton from '@/components/page-skeleton';
 import { ConvictionMeter } from '@/components/shared/conviction-meter';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { ThesisCriteriaColumns } from '@/components/portfolio/theses/ThesisCriteriaColumns';
 import { ThesisHoldingsExpressing } from '@/components/portfolio/theses/ThesisHoldingsExpressing';
 import { ThesisProvenanceStrip } from '@/components/portfolio/theses/ThesisProvenanceStrip';
-import { findThesisById } from '@/lib/theses-ledger';
-import { joinPositionsToThesis } from '@/lib/thesis-id';
+import { VehicleExpressionRow } from '@/components/portfolio/theses/VehicleExpressionRow';
+import { findThesisById, splitTheses } from '@/lib/theses-ledger';
+import { fetchThesisVehicleMap } from '@/lib/queries';
+import { fetchObservabilityData } from '@/lib/observability-queries';
+import { buildThesisStory, type ThesisVehicleRow } from '@/lib/thesis-story';
+import { latestDecisionByTicker, decisionNodeFor } from '@/lib/holdings-decisions';
+import { buildPipelineHref } from '@/lib/pipeline-links';
+import type { TableRow } from '@/lib/database.types';
 
 const CONFIDENCE_PIPS = 4;
 
@@ -25,6 +31,14 @@ function confidenceToPips(confidence: number | null): number {
 function isNonActive(status: string | null): boolean {
   const s = (status ?? '').toLowerCase();
   return Boolean(s) && !s.includes('active');
+}
+
+function dossierHref(ticker: string): string {
+  return `/portfolio/tickers?ticker=${encodeURIComponent(ticker.toUpperCase())}`;
+}
+
+function deliberationHref(ticker: string): string {
+  return buildPipelineHref({ node: decisionNodeFor(ticker), stage: 'selection' });
 }
 
 export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }) {
@@ -40,13 +54,57 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
   );
 
   const expressingPositions = useMemo(() => {
-    if (thesisId === '_unlinked') {
-      return positions.filter((p) => !p.thesis_ids || p.thesis_ids.length === 0);
-    }
-    return joinPositionsToThesis(positions, thesisId);
+    if (thesisId !== '_unlinked') return [];
+    return positions.filter((p) => !p.thesis_ids || p.thesis_ids.length === 0);
   }, [positions, thesisId]);
 
-  if (loading) return <AtlasLoader />;
+  const { vehicle: vehicleTheses } = useMemo(() => splitTheses(theses), [theses]);
+
+  // Vehicle-selection map (thesis_vehicles) — the reliable ticker→market-thesis
+  // join this page's Level-2/3 story renders from (#1562 PR4), replacing the
+  // `joinPositionsToThesis` holdings list this page used to show exclusively.
+  const [thesisVehicleRows, setThesisVehicleRows] = useState<ThesisVehicleRow[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchThesisVehicleMap()
+      .then((rows) => {
+        if (alive) setThesisVehicleRows(rows);
+      })
+      .catch(() => {
+        if (alive) setThesisVehicleRows([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const [decisions, setDecisions] = useState<TableRow<'decision_log'>[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchObservabilityData()
+      .then((d) => {
+        if (alive) setDecisions(d.decisions);
+      })
+      .catch(() => {
+        if (alive) setDecisions([]);
+      }); // fail-soft: latest-call badges simply absent
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const decisionsByTicker = useMemo(() => latestDecisionByTicker(decisions), [decisions]);
+
+  const story = useMemo(() => {
+    if (!thesis) return null;
+    return (
+      buildThesisStory([thesis], thesisVehicleRows, positions, decisionsByTicker, {
+        anchorDate: lastUpdated,
+        vehicleTheses,
+      }).stories[0] ?? null
+    );
+  }, [thesis, thesisVehicleRows, positions, decisionsByTicker, lastUpdated, vehicleTheses]);
+
+  if (loading) return <PageSkeleton />;
   if (error || !data)
     return (
       <div className="flex items-center justify-center min-h-[40vh] text-down">
@@ -152,8 +210,37 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
           invalidation={t.invalidation_criteria}
         />
 
-        {/* Holdings expressing this thesis (F4 join) */}
-        <ThesisHoldingsExpressing positions={expressingPositions} />
+        {/* Vehicles expressing this view (thesis_vehicles join, #1562 PR4) —
+            Level-2/3: selection rationale + rank, held metrics, entry/exit
+            envelope, latest signed call, dossier/deliberation links. */}
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-mute">
+              Vehicles expressing this view
+            </h2>
+            {story?.asOf ? <AsOfBadge date={story.asOf} /> : null}
+          </div>
+          {!story || story.vehicles.length === 0 ? (
+            <p className="text-sm text-ink-mute">
+              No vehicle was mapped to this view on the shown date.
+            </p>
+          ) : (
+            <div className="glass-card overflow-hidden p-0">
+              {story.vehicles.map((v) => (
+                <VehicleExpressionRow
+                  key={v.ticker}
+                  ticker={v.ticker}
+                  rationale={v.rationale}
+                  candidateRank={v.candidateRank}
+                  position={v.position}
+                  latestDecision={v.latestDecision}
+                  dossierHref={dossierHref(v.ticker)}
+                  deliberationHref={deliberationHref(v.ticker)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* Slim provenance strip → Pipeline day (never re-renders markdown) */}
         <ThesisProvenanceStrip date={lastUpdated} documentKey="digest" />

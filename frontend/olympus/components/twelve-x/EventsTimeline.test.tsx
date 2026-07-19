@@ -5,6 +5,7 @@ import EventsTimeline, {
   packLanes,
   layoutDay,
   TL_LABEL_MIN,
+  TL_LANE_H,
   type TimelineEvent,
 } from './EventsTimeline';
 
@@ -21,6 +22,12 @@ function ev(partial: Partial<TimelineEvent> & { time: string; durationMin: numbe
 describe('TL_LABEL_MIN', () => {
   it('is widened to 130px so short-duration cards show more of the title', () => {
     expect(TL_LABEL_MIN).toBe(130);
+  });
+});
+
+describe('TL_LANE_H', () => {
+  it('is increased to 52px for bottom breathing room', () => {
+    expect(TL_LANE_H).toBe(52);
   });
 });
 
@@ -153,5 +160,16 @@ describe('EventsTimeline component', () => {
     const html = render({ events: withIds, mode: 'single', day: '2026-06-22', onSelect: () => {} });
     // Each card is a <button> wired to onSelect (instead of a plain div).
     expect(html).toMatch(/<button[^>]*tl-card/);
+  });
+
+  it('only makes cards with IDs in selectableIds clickable when provided', () => {
+    const withIds: TimelineEvent[] = events.map((e, i) => ({ ...e, id: String(i + 1) }));
+    const selectableIds = new Set(['1', '3']); // Only first and third events are selectable
+    const html = render({ events: withIds, mode: 'single', day: '2026-06-22', onSelect: () => {}, selectableIds });
+    // Should have some buttons (selectable events) and some divs (non-selectable events)
+    const buttonCount = (html.match(/<button[^>]*tl-card/g) || []).length;
+    const divCount = (html.match(/<div[^>]*tl-card/g) || []).length;
+    expect(buttonCount).toBeGreaterThan(0); // At least one button
+    expect(divCount).toBeGreaterThan(0); // At least one div (non-selectable)
   });
 });

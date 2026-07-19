@@ -1,15 +1,6 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ElementType,
-} from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useMemo, useState, type ElementType } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Activity,
@@ -23,12 +14,18 @@ import {
   PieChart,
   Search,
   Settings,
+  Tag,
   X,
 } from 'lucide-react';
+import {
+  CommandPalette as CommandPaletteShell,
+  type CommandPaletteGroup,
+} from '@digithings/web';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useAppShell } from '@/components/app-shell-context';
 import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
 import { buildDocumentSearchItems } from '@/lib/document-search';
+import { fetchAllTickers } from '@/lib/queries';
 import type { Doc } from '@/lib/types';
 
 export type CmdItem = {
@@ -69,7 +66,7 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
       id: 'go-perf',
       title: 'Portfolio — Performance',
       hint: 'NAV, comparables & decision quality',
-      href: '/portfolio?tab=performance',
+      href: '/portfolio/performance',
       icon: LineChart,
     },
     {
@@ -143,6 +140,22 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
 }
 
 /**
+ * "Tickers" group (#1562 PR2) — one row per known ticker → the ticker dossier
+ * (`/portfolio/tickers?ticker=`). `tickers` is the live `fetchAllTickers()`
+ * union (positions + decision_log + analyst docs + analyst_coverage); pure so
+ * it is testable without the React tree, matching `buildCommandItems`.
+ */
+export function buildTickerCommandItems(tickers: string[]): CmdItem[] {
+  return tickers.map((t) => ({
+    id: `ticker-${t}`,
+    title: t,
+    hint: 'Ticker dossier',
+    href: `/portfolio/tickers?ticker=${encodeURIComponent(t)}`,
+    icon: Tag,
+  }));
+}
+
+/**
  * Filter the static command list by query, then append live document hits (Surface 6).
  * Document hits are query-dependent and keyed off `document_key` (`buildDocumentSearchItems`),
  * so a blank query returns the static list verbatim — no doc dump in the empty-query view.
@@ -174,31 +187,40 @@ export function filterCommandItems(items: CmdItem[], docs: Doc[], query: string)
   return [...staticMatches, ...docItems];
 }
 
+/**
+ * App-wide ⌘K palette, riding the promoted @digithings/web CommandPalette
+ * shell (dress="glass" — olympus's shipped look) since #1548. The shell owns
+ * the overlay/portal, keyboard loop and listbox ARIA; this component keeps
+ * everything data- and router-shaped: the ⌘K binding (the shell binds no
+ * shortcut), the open flag in app-shell context, the item pipeline
+ * (buildCommandItems → filterCommandItems per keystroke) and router.push.
+ */
 export default function CommandPalette() {
   const router = useRouter();
   const { data } = useDashboard();
   const { commandPaletteOpen: open, openCommandPalette, closeCommandPalette } = useAppShell();
-  const [q, setQ] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const listRef = useRef<HTMLUListElement>(null);
-  const selectedIndexRef = useRef(0);
 
   const items = useMemo<CmdItem[]>(() => buildCommandItems(data), [data]);
   const docs = useMemo<Doc[]>(() => data?.docs ?? [], [data]);
 
-  const filtered = useMemo(() => filterCommandItems(items, docs, q), [items, docs, q]);
-
-  const filteredRef = useRef(filtered);
-
-  const onNavigate = useCallback(
-    (href: string) => {
-      router.push(href);
-      closeCommandPalette();
-      setQ('');
-      setSelectedIndex(0);
-    },
-    [router, closeCommandPalette]
-  );
+  // Live ticker union (#1562 PR2) — fetched once on mount, independent of the
+  // dashboard context (positions alone would miss decision_log/analyst-only
+  // tickers). Fail-soft: an empty list just omits the Tickers group.
+  const [tickers, setTickers] = useState<string[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchAllTickers()
+      .then((t) => {
+        if (alive) setTickers(t);
+      })
+      .catch(() => {
+        if (alive) setTickers([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const tickerItems = useMemo<CmdItem[]>(() => buildTickerCommandItems(tickers), [tickers]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -207,140 +229,67 @@ export default function CommandPalette() {
         if (open) {
           closeCommandPalette();
         } else {
-          // Reset BEFORE opening so a reopen never flashes the previous query.
-          setQ('');
-          setSelectedIndex(0);
           openCommandPalette();
         }
-      }
-      if (e.key === 'Escape') {
-        closeCommandPalette();
-        setQ('');
-        setSelectedIndex(0);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, openCommandPalette, closeCommandPalette]);
 
-  useLayoutEffect(() => {
-    selectedIndexRef.current = selectedIndex;
-  }, [selectedIndex]);
+  const toOption = useCallback(
+    (item: CmdItem) => {
+      const Icon = item.icon;
+      return {
+        id: item.id,
+        label: item.title,
+        description: item.hint,
+        icon: <Icon size={16} aria-hidden />,
+        onSelect: () => router.push(item.href),
+      };
+    },
+    [router]
+  );
 
-  useLayoutEffect(() => {
-    filteredRef.current = filtered;
-  }, [filtered]);
+  // The base group stays unlabeled (the shell re-invokes this per keystroke with
+  // its internal query; filtering policy stays app-side, in filterCommandItems).
+  // The Tickers group (#1562 PR2) is labeled and appended only when it has
+  // matches — `filterCommandItems(tickerItems, [], query)` reuses the same
+  // substring/starts-with ranking with no document hits mixed in (docs=[]).
+  const groups = useMemo(
+    () =>
+      (query: string): CommandPaletteGroup[] => {
+        const tickerMatches = filterCommandItems(tickerItems, [], query);
+        return [
+          { items: filterCommandItems(items, docs, query).map(toOption) },
+          ...(tickerMatches.length > 0
+            ? [{ id: 'tickers', label: 'Tickers', items: tickerMatches.map(toOption) }]
+            : []),
+        ];
+      },
+    [items, docs, tickerItems, toOption]
+  );
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      const len = filteredRef.current.length;
-      if (len === 0) return;
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex((i) => Math.min(i + 1, len - 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex((i) => Math.max(i - 1, 0));
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        const list = filteredRef.current;
-        const idx = Math.min(Math.max(0, selectedIndexRef.current), list.length - 1);
-        const item = list[idx];
-        if (item) onNavigate(item.href);
-      } else if (e.key === 'Home') {
-        e.preventDefault();
-        setSelectedIndex(0);
-      } else if (e.key === 'End') {
-        e.preventDefault();
-        setSelectedIndex(len - 1);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onNavigate]);
-
-  useLayoutEffect(() => {
-    if (!open || !listRef.current) return;
-    const el = listRef.current.querySelector(`[data-cmd-index="${selectedIndex}"]`);
-    el?.scrollIntoView({ block: 'nearest' });
-  }, [selectedIndex, open, filtered]);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[2000] flex items-start justify-center pt-[12vh] px-3 sm:px-4" role="dialog" aria-modal="true" aria-label="Command palette">
-      <button type="button" className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" onClick={() => closeCommandPalette()} aria-label="Close" />
-      <div className="relative w-full max-w-lg rounded-xl border border-hair bg-term-bg shadow-2xl shadow-black/50 overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-hair px-3 py-2.5">
-          <Search size={16} className="text-ink-mute shrink-0" aria-hidden />
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setSelectedIndex(0);
-            }}
-            placeholder="Jump to a page, thesis, or document (ticker / segment)…"
-            className="flex-1 min-w-0 bg-transparent text-sm text-ink placeholder:text-ink-mute focus:outline-none py-1.5"
-            autoComplete="off"
-            autoFocus
-            aria-label="Search commands"
-          />
-          <button
-            type="button"
-            onClick={() => closeCommandPalette()}
-            className="rounded-md p-1.5 text-ink-mute hover:text-ink hover:bg-ink/[0.07]"
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <ul
-          ref={listRef}
-          className="max-h-[min(52vh,420px)] overflow-y-auto py-1"
-          role="listbox"
-          aria-label="Commands"
-          aria-activedescendant={filtered.length > 0 ? `cmd-option-${selectedIndex}` : undefined}
+  return (
+    <CommandPaletteShell
+      open={open}
+      onClose={closeCommandPalette}
+      groups={groups}
+      dress="glass"
+      inputType="search"
+      placeholder="Jump to a page, thesis, or document (ticker / segment)…"
+      emptyMessage="No matches"
+      inputLeading={<Search size={16} className="text-ink-mute shrink-0" aria-hidden />}
+      inputTrailing={
+        <button
+          type="button"
+          onClick={closeCommandPalette}
+          className="rounded-md p-1.5 text-ink-mute hover:text-ink hover:bg-ink/[0.07]"
+          aria-label="Close"
         >
-          {filtered.length === 0 ? (
-            <li role="presentation" className="px-4 py-8 text-center text-sm text-ink-mute">
-              No matches
-            </li>
-          ) : (
-            filtered.map((item, index) => {
-              const Icon = item.icon;
-              const active = index === selectedIndex;
-              return (
-                // role="option" lives on the <li> itself so the listbox owns its
-                // options directly; keyboard selection is surfaced through the
-                // listbox's aria-activedescendant (focus stays on the input).
-                <li
-                  key={item.id}
-                  id={`cmd-option-${index}`}
-                  role="option"
-                  aria-selected={active}
-                  data-cmd-index={index}
-                  onClick={() => onNavigate(item.href)}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                  className={`flex w-full cursor-pointer items-start gap-3 px-3 py-2.5 text-left transition-colors ${
-                    active
-                      ? 'bg-accent/15 ring-1 ring-inset ring-accent/35'
-                      : 'hover:bg-ink/[0.06]'
-                  }`}
-                >
-                  <Icon size={16} className="text-accent shrink-0 mt-0.5" aria-hidden />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium text-ink">{item.title}</span>
-                    <span className="block text-[11px] text-ink-mute truncate">{item.hint}</span>
-                  </span>
-                </li>
-              );
-            })
-          )}
-        </ul>
-      </div>
-    </div>,
-    document.body
+          <X size={16} />
+        </button>
+      }
+    />
   );
 }

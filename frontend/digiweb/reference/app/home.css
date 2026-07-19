@@ -237,7 +237,10 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tg) 45%, transparent);
 }
 
-.tg-chip {
+/* renamed from .tg-chip (#1548): the tags-input family's .tg-chip was
+   promoted into @digithings/web's controls-core.css, which loads on every
+   reference page — the swatch chip needs its own name to stay collision-free */
+.tg-swatch-chip {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
@@ -247,8 +250,8 @@
 }
 
 /* monochrome + default chips read against ink, no glow */
-.tg-swatch:first-child .tg-chip,
-.tg-swatch:nth-child(2) .tg-chip {
+.tg-swatch:first-child .tg-swatch-chip,
+.tg-swatch:nth-child(2) .tg-swatch-chip {
   box-shadow: none;
   border: 1px solid var(--hair);
 }

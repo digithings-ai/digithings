@@ -35,6 +35,7 @@ describe('MoveHero', () => {
     expect(html).toContain('0.7'); // confidence chip
     expect(html).toContain('98.6'); // NAV index
     expect(html).toContain('since inception'); // honest since-inception clause
+    expect(html).toContain('text-down">-0.7%</span><span class="text-ink-soft"> since inception');
     expect(html).toContain('1 change today'); // demoted move status (1 non-HOLD action)
   });
 
@@ -71,5 +72,22 @@ describe('MoveHero', () => {
     // No daily-delta NAV clause (the " today" suffix on a signed pct) with one NAV point.
     // ("No rebalance today" move-status copy is a separate string and may appear.)
     expect(html).not.toContain(' today<'); // daily-delta clause renders "<pct> today" in its own span
+  });
+
+  it('labels the daily NAV delta with its own date when the book lags the digest (#1555)', () => {
+    const html = renderToStaticMarkup(
+      createElement(MoveHero, {
+        regime: 'Risk-Off Consolidation',
+        regimeLabel: 'caution',
+        headline: 'Quiet tape.',
+        confidence: null,
+        asOf: '2026-07-16',
+        runType: null,
+        actions: [],
+        nav: { index: 98.7, sincePct: -0.6, sinceDate: '2026-06-23', dailyPct: -0.2, benchTicker: null, excessPct: null, asOfDate: '2026-06-26' },
+      })
+    );
+    expect(html).toContain('on Jun 26');
+    expect(html).not.toContain(' today<');
   });
 });

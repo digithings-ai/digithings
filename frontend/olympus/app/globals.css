@@ -40,6 +40,16 @@
    PLAINLY on purpose: the sheet manages its own @layer components /
    unlayered split (MIGRATION.md rule 2 exception). */
 @import "@digithings/web/styles/controls-overlay.css";
+/* CommandPalette shell (#1548) — the ⌘K bar rides the promoted
+   @digithings/web CommandPalette (dress="glass"). Imported PLAINLY on
+   purpose: the sheet manages its own layering (see its header). Overlay
+   z-index comes from --cp-z, set on html below. */
+@import "@digithings/web/styles/command-palette.css";
+/* Finance composites (#1548) — Portfolio→Performance's Diagnostics card rides
+   the promoted PerformanceDashboard, and the drawdown view rides
+   SyncedTearsheet. Imported PLAINLY on purpose: the sheet manages its own
+   layering (see its header). */
+@import "@digithings/web/styles/finance-composites.css";
 
 /* Tailwind never scans package sources (MIGRATION.md rule 3) — generate the
    utilities the shared ChatMarkdown shell carries (min-w-0, text-[0.88rem],
@@ -55,6 +65,11 @@
    shared controls carry (MIGRATION.md rule 3). */
 @source "../../digiweb/web/src/components/controls";
 
+/* Tailwind never scans package sources — the ⌘K palette shell and the brand
+   marks/wordmark render here (MIGRATION.md rule 3, #1548). */
+@source "../../digiweb/web/src/components/command-palette";
+@source "../../digiweb/web/src/components/symbols";
+
 /* Tailwind never scans package sources (MIGRATION.md rule 3) — the shared
    finance-charts scaffold's ChartTipShell renders here via lib/lw-chart. */
 @source "../../digiweb/web/src/components/finance-charts";
@@ -62,6 +77,10 @@
 /* Tailwind never scans package sources — the performance tear sheet renders
    the shared finance-tearsheet family (MIGRATION.md rule 3). */
 @source "../../digiweb/web/src/components/finance-tearsheet";
+
+/* Tailwind never scans package sources — PerformanceDashboard and
+   SyncedTearsheet render here (MIGRATION.md rule 3, #1548). */
+@source "../../digiweb/web/src/components/finance-composites";
 
 /* ── Fonts (next/font routing) ───────────────────────────────────────────
    tokens.css names the families literally ("Geist", "Geist Mono",
@@ -88,9 +107,24 @@
    shadow, not a themed color); consumers use var(--shadow-glass) directly. */
 html {
   --shadow-glass: 0 18px 40px -28px rgba(0, 0, 0, 0.6);
+  /* Command palette overlay stacking — the shared shell's .cp-overlay reads
+     var(--cp-z, 40); olympus's shipped palette stacks at 2000, above the
+     sticky nav / sidebar drawer chrome. */
+  --cp-z: 2000;
 }
 html.light {
   --shadow-glass: 0 18px 40px -30px rgba(0, 0, 0, 0.18);
+}
+
+/* Mobile subpage-tab scroll row (#1570) — hides the scrollbar on the
+   horizontally-scrollable chip row; the clipped trailing chip is the scroll
+   affordance, and a visible scrollbar under sticky chrome reads as clutter. */
+.subnav-scroll {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.subnav-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 /* P&L semantics: quant-native still points .qn-up/.qn-down at module accents
@@ -120,18 +154,17 @@ html.motion-on [data-reveal].reveal-in {
 }
 
 /* ── Surface system (x.ai-style flat — EVOLUTION.md §3 Olympus / §10 · #1216) ──
-   Olympus is FLAT: no glass morphism on content (anti-pattern #8). Panels use
-   `--surface` + a 1px `--hair` border, hover to `--hair-2`. `--shadow-glass`
-   is a deliberately subtle depth cue for the terminal/TradingView feel, not a
-   decorative drop shadow. `backdrop-blur` is used ONLY on sticky/overlay
+  Olympus is FLAT: no glass morphism on content (anti-pattern #8). Panels use
+  `--surface` + a 1px `--hair` border, hover to `--hair-2`. Depth is reserved
+  for floating overlays; content panels remain shadowless like the Digiweb
+  reference. `backdrop-blur` is used ONLY on sticky/overlay
    chrome (nav, mobile app bar, command palette, sidebar) — never on content
    cards. `.glass-card` is a legacy *name* for this flat panel; new components
    should read as flat surfaces. */
 .glass-card {
   background: var(--surface);
   border: 1px solid var(--hair);
-  border-radius: 8px;
-  box-shadow: var(--shadow-glass);
+  border-radius: 12px;
   transition: border-color 0.2s ease, transform 0.2s ease;
 }
 .glass-card:hover {

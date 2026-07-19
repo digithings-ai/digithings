@@ -28,10 +28,21 @@ ticker/bucket/leg, stacked composition, trivial sparklines) stays on recharts.
 
 | File | Chart(s) | Why it is time-series |
 |---|---|---|
-| `components/portfolio/performance-chart-workspace.tsx` | `NavComparableChart` (indexed NAV area + dashed comparable overlays), `DailyReturnsComboChart` (daily-% histogram + NAV-index line) | The canonical equity-curve surface: daily NAV vs benchmark tickers; daily returns are per-trading-day values on the same axis. |
-| `components/portfolio/performance-drawdown-chart.tsx` | Underwater drawdown area | Peak-to-trough % over trading days — direct mirror of `drawdown-plot-reference.tsx` (BaselineSeries). |
+| `components/portfolio/performance-chart-workspace.tsx` | `NavComparableChart` (indexed NAV area + dashed comparable overlays), `DailyReturnsComboChart` (daily-% histogram + NAV-index line), drawdown view = shared `<SyncedTearsheet/>` (`@digithings/web`, #1548: one instance, NAV pane over underwater pane, shared axis/crosshair/zoom) | The canonical equity-curve surface: daily NAV vs benchmark tickers; daily returns are per-trading-day values on the same axis. |
 | `components/portfolio/performance-rolling-chart.tsx` | Rolling Sharpe + rolling ann. vol (dual price scale) | Rolling risk metrics over a trading-day window. |
 | `components/portfolio/PositionDrilldown.tsx` | Weight-% area + close-$ line (dual scale) with event dots; cumulative-ppt mini pane | Both panes are daily series over the drilldown window. |
+
+The standalone `components/portfolio/performance-drawdown-chart.tsx`
+(underwater BaselineSeries mirroring `drawdown-plot-reference.tsx`) was
+**deleted in #1548**: the workspace's Drawdown view now renders the shared
+`<SyncedTearsheet/>` — same underwater grammar (BaselineSeries under 0, --down
+fills), plus the NAV pane above it on the same time axis. The shipped
+drawdown numbers are preserved by passing `buildDrawdownSeries` output
+explicitly (the primitive's own peak-derived series rounds to one decimal).
+Deltas accepted with the adoption: the primitive uses the native
+lightweight-charts crosshair (axis labels) instead of the app's
+`ChartTipShell` HTML tooltip, and its drawdown pane has no `%`-suffixed
+priceFormat.
 
 ### Stays on recharts (sanctioned)
 
@@ -48,6 +59,59 @@ finance-tearsheet family's print-oriented SVG charts (`TimeSeries`,
 engines here — print-grade surfaces are pure SVG by hard constraint (the PDF
 pipeline re-renders them via `runTearsheetPrint`); the canvas-vs-SVG split
 ruling lives in `frontend/digiweb/CHARTS.md`.
+
+## Promotion gap ledger (#1548 adoptions)
+
+Where a shared primitive could not express shipped behavior, the rich path
+stayed local and the gap is recorded here as the promotion spec (MIGRATION.md
+"Promotion playbook v2": never force a primitive; ledger the gap).
+
+- **`<SyncedTearsheet/>` vs the NAV-comparables view** (SCOPED adoption).
+  The primitive hosts the workspace's Drawdown view only. The NAV view
+  (`NavComparableChart`) and Daily-returns view stay local because the
+  primitive cannot express, in order of weight:
+  1. **Overlay series** — N dashed comparable `LineSeries` on the equity
+     pane, colored per ticker from `lib/chart-colors.ts` (app vocabulary),
+     with a legend whose entries *remove* an overlay. Promotion spec: an
+     optional `series?: { id: string; points: TearsheetPoint[]; color?:
+     string; dashed?: boolean }[]` prop rendered into pane 0, plus a legend
+     slot or `onSeriesRemove` callback.
+  2. **Custom crosshair tooltip** — the app's `useChartTip`/`ChartTipShell`
+     HTML tooltip (per-date rows for portfolio + every overlay + activity
+     events). Promotion spec: expose the chart/crosshair via a render-prop
+     or `onCrosshairMove` surface instead of the baked `aria` host.
+  3. **Series markers** — activity-event dots (`createSeriesMarkers`) on the
+     NAV series.
+  4. **Visible-range / range-switch control** — today range switching swaps
+     the data arrays (the primitive rebuilds + `fitContent()`, which is
+     enough), but a controlled `visibleRange` prop would be needed the day
+     the workspace zooms without re-fetching.
+  5. **Per-pane priceFormat** — the drawdown pane wants a `%` suffix, NAV a
+     2-dp custom formatter.
+- **`<TagsInput/>` (full field) vs the NAV-comparables picker** (composed
+  parts instead). The picker's chips live *outside* the dropdown pane while
+  the filter input lives *inside* it; selection is constrained to the
+  ticker-universe listbox (no free-text commit — TagsInput's Enter/comma
+  commit and Backspace-removes-last-chip semantics are wrong here); the cap
+  (`MAX_COMPARABLES`) gates adds at the listbox. So the adoption composes
+  the promoted `<TagChip/>` (dress `tg-chip-quant`) and `<SearchBar/>`
+  (dress `ctl-search-row`) from `@digithings/web` and keeps the trigger,
+  pane, outside-click dismissal and capped listbox caller-side. Accepted
+  micro-delta: TagChip's × is an 11px stroke SVG (was a text `×`);
+  SearchBar's clear affordance replaces the native WebKit search-cancel.
+- **`<PerformanceDashboard/>` ← server-metrics strip** (FULL adoption,
+  sanctioned look change). The inline `qn-metric` strip on the Performance
+  tab's Diagnostics card moved onto the canonical dashboard grammar
+  (headline = server P&L, toned; ratio strip = sharpe / ann. vol / max
+  drawdown / cash / invested; allocation bars = latest-date category slice
+  of `buildSleeveStackSeries(position_history)` — no new fetch). The
+  strip's "Server metrics · date · generated" caption folds into the
+  headline label + note; nothing else was dropped. Long sleeve labels
+  ("Intermediate Duration") wrap inside the primitive's fixed 6rem name
+  column — cosmetic only. **Wiring dependency**: `app/globals.css` must
+  `@import "@digithings/web/styles/finance-composites.css"` and
+  `@source "../../digiweb/web/src/components/finance-composites";`
+  (pdash-* hairlines + the component's token utilities).
 
 ## Grammar for new charts
 

@@ -8,6 +8,8 @@ import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import type { PortfolioSectionId } from '@/components/portfolio/PortfolioSectionNav';
 import { getDocLibraryTier } from '@/lib/library-doc-tier';
 import { fetchObservabilityData } from '@/lib/observability-queries';
+import { fetchThesisVehicleMap } from '@/lib/queries';
+import type { ThesisVehicleRow } from '@/lib/thesis-story';
 import type { TableRow } from '@/lib/database.types';
 import {
   buildSleeveStackSeries,
@@ -32,7 +34,7 @@ import AllocationsTab from './tabs/AllocationsTab';
 import PerformanceTab from './tabs/PerformanceTab';
 import ThesesTab from './tabs/ThesesTab';
 import DecisionQuality from './DecisionQuality';
-import AtlasLoader from '@/components/AtlasLoader';
+import PageSkeleton from '@/components/page-skeleton';
 
 export default function PortfolioShellInner() {
   const { data, loading, error } = useDashboard();
@@ -52,6 +54,16 @@ export default function PortfolioShellInner() {
     fetchObservabilityData()
       .then((d) => { if (alive) setDecisions(d.decisions); })
       .catch(() => { if (alive) setDecisions([]); }); // fail-soft: shelf + badges simply absent
+    return () => { alive = false; };
+  }, []);
+  // Vehicle-selection map (thesis_vehicles) — the reliable ticker→market-thesis
+  // join the Theses story spine renders from (#1562). Fail-soft to an empty spine.
+  const [thesisVehicleRows, setThesisVehicleRows] = useState<ThesisVehicleRow[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchThesisVehicleMap()
+      .then((rows) => { if (alive) setThesisVehicleRows(rows); })
+      .catch(() => { if (alive) setThesisVehicleRows([]); });
     return () => { alive = false; };
   }, []);
   const metrics = data?.calculated;
@@ -181,7 +193,7 @@ export default function PortfolioShellInner() {
 
   const sectionActive: PortfolioSectionId = tab;
 
-  if (loading) return <AtlasLoader />;
+  if (loading) return <PageSkeleton />;
   if (error || !data || !metrics)
     return (
       <div className="flex items-center justify-center h-screen text-down">
@@ -216,7 +228,15 @@ export default function PortfolioShellInner() {
           />
         )}
 
-        {tab === 'theses' && <ThesesTab />}
+        {tab === 'theses' && (
+          <ThesesTab
+            lastUpdated={lastUpdated}
+            positions={positions}
+            theses={theses}
+            decisions={decisions}
+            thesisVehicleRows={thesisVehicleRows}
+          />
+        )}
 
         {tab === 'performance' && (
           <div className="space-y-10">

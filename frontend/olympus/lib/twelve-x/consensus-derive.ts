@@ -5,6 +5,46 @@
  * moving average over a window of scored runs. Extends the demo by skipping
  * non-finite scores so a single bad point never poisons the average.
  */
+import { G10_CURRENCIES } from './types';
+
+interface ConsensusSnapshotIdentity {
+  run_date: string;
+  currency: string;
+}
+
+/**
+ * Select the newest run containing the full canonical G10 universe. During an
+ * incremental publish, this skips the newest partial run; if no complete run
+ * exists yet, it returns that newest partial run rather than hiding real data.
+ */
+export function selectLatestCompleteConsensus<T extends ConsensusSnapshotIdentity>(
+  series: T[],
+): T[] {
+  const byDate = new Map<string, Map<string, T>>();
+  for (const row of series) {
+    const currency = row.currency.toUpperCase();
+    if (!G10_CURRENCIES.includes(currency as (typeof G10_CURRENCIES)[number])) continue;
+    const rows = byDate.get(row.run_date) ?? new Map<string, T>();
+    rows.set(currency, row);
+    byDate.set(row.run_date, rows);
+  }
+
+  const dates = [...byDate.keys()].sort((a, b) => b.localeCompare(a));
+  const latestRows = dates[0] ? byDate.get(dates[0]) : undefined;
+  for (const date of dates) {
+    const rows = byDate.get(date);
+    if (rows && G10_CURRENCIES.every((currency) => rows.has(currency))) {
+      return G10_CURRENCIES.map((currency) => rows.get(currency) as T);
+    }
+  }
+
+  return latestRows
+    ? G10_CURRENCIES.flatMap((currency) => {
+        const row = latestRows.get(currency);
+        return row ? [row] : [];
+      })
+    : [];
+}
 
 export interface ScorePoint {
   score: number;

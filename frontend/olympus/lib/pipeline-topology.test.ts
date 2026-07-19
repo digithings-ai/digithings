@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PIPELINE_TOPOLOGY, stageById } from './pipeline-topology';
+import { PIPELINE_TOPOLOGY, pipelineNodeExplanation, stageById } from './pipeline-topology';
 
 describe('pipeline topology', () => {
   it('has the six stages in pipeline order (learning = post-decision beliefs fold)', () => {
@@ -33,5 +33,21 @@ describe('pipeline topology', () => {
   });
   it('learning stage holds the on-demand beliefs fold (#1383)', () => {
     expect(stageById('learning')!.subSteps.map((s) => s.id)).toEqual(['beliefs']);
+  });
+
+  it('explains every stage and sub-step for the guided pipeline view', () => {
+    for (const stage of PIPELINE_TOPOLOGY) {
+      expect(stage.description.length).toBeGreaterThan(20);
+      for (const subStep of stage.subSteps) {
+        expect(subStep.description.length).toBeGreaterThan(20);
+      }
+    }
+  });
+
+  it('resolves stage and granular step explanations from layout node ids', () => {
+    expect(pipelineNodeExplanation('selection', 'selection')?.title).toBe('Selection');
+    expect(
+      pipelineNodeExplanation('selection', 'selection:deliberation')?.description,
+    ).toMatch(/challenge|debate|deliberat/i);
   });
 });

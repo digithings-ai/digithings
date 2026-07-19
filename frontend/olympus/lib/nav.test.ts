@@ -1,10 +1,22 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { NAV, isDbExempt } from './nav';
 
 describe('NAV', () => {
-  it('is the 4-destination owner spine, in order', () => {
+  it('is the 4-destination owner spine, in order (twelve-x gate off)', () => {
     expect(NAV.map((n) => n.href)).toEqual(['/', '/portfolio', '/pipeline', '/system']);
     expect(NAV.map((n) => n.label)).toEqual(['Brief', 'Portfolio', 'Pipeline', 'System']);
+  });
+
+  it('surfaces FX Research before the demoted System when NEXT_PUBLIC_TWELVEX_ENABLED=1 (#1551, #1553)', async () => {
+    vi.stubEnv('NEXT_PUBLIC_TWELVEX_ENABLED', '1');
+    vi.resetModules();
+    const { NAV: gated } = await import('./nav');
+    expect(gated.map((n) => n.href)).toEqual([
+      '/', '/portfolio', '/pipeline', '/twelve-x', '/system',
+    ]);
+    expect(gated.find((n) => n.href === '/twelve-x')?.demoted).toBeUndefined();
+    vi.unstubAllEnvs();
+    vi.resetModules();
   });
 
   it('demotes only System', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCommandItems, filterCommandItems } from './command-palette';
+import { buildCommandItems, buildTickerCommandItems, filterCommandItems } from './command-palette';
 import type { Doc } from '@/lib/types';
 
 const data = {
@@ -47,6 +47,21 @@ const baseItems = [
 ] as Parameters<typeof filterCommandItems>[0];
 
 const docs: Doc[] = [doc({ id: '1', path: 'analyst/EWT', title: 'EWT analyst', segment: 'analyst' })];
+
+describe('buildTickerCommandItems (#1562 PR2 — Tickers palette group)', () => {
+  it('maps each ticker to its dossier route', () => {
+    const items = buildTickerCommandItems(['XLE', 'QQQ']);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ id: 'ticker-XLE', title: 'XLE', href: '/portfolio/tickers?ticker=XLE' });
+    expect(items[1].href).toBe('/portfolio/tickers?ticker=QQQ');
+  });
+
+  it('is query-filterable through filterCommandItems like any other group', () => {
+    const items = buildTickerCommandItems(['XLE', 'QQQ', 'IWM']);
+    const out = filterCommandItems(items, [], 'xle');
+    expect(out.map((i) => i.title)).toEqual(['XLE']);
+  });
+});
 
 describe('filterCommandItems', () => {
   it('returns the static list unchanged for a blank query (no doc dump)', () => {

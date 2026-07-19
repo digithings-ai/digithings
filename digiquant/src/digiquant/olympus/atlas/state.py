@@ -377,6 +377,14 @@ class Phase7DigestPayload(TypedDict, total=False):
     risk_radar: list[dict[str, Any]]
     segment_freshness: dict[str, dict[str, Any]]
     regime_label: str
+    # Carry-forward provenance (#1559). Set only when master-digest synthesis FAILED
+    # and the prior digest was carried forward (or, for ``continuity``, on the
+    # publish-phase carried-incomplete path) — absent on a fresh synthesis and on a
+    # deliberate quiet-day carry. ``carried_from`` is the ISO source date; the
+    # human-readable ``continuity`` note is surfaced by ``render_digest_markdown``.
+    # Stamped post-``model_dump`` (not LLM-emitted); JSONB columns, no migration.
+    carried_from: str
+    continuity: str
     # MonthlyDigest-only.
     month_over_month_regime_delta: str
 

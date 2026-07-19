@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assembleIntelligenceWhy,
+  assembleMatrix,
   boardColumn,
   normalizeKeyThemes,
   sortTodayBriefs,
@@ -12,6 +13,7 @@ import type {
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
   FxLedgerRow,
+  MatrixCell,
 } from './types';
 
 /**
@@ -249,7 +251,134 @@ describe('assembleIntelligenceWhy', () => {
     expect(out.items[0].desks).toHaveLength(1);
     expect(out.items[0].desks[0].broker).toBe('Harbour');
   });
+});
 
+/**
+ * `assembleMatrix` is the PURE matrix assembly behind `getMatrix`: per
+ * (broker, column), deduplicate exact (source_file, run_date), sort newest-first,
+ * and split into primary + history. Tests must assert actual returned history
+ * order and no duplicates.
+ */
+describe('assembleMatrix', () => {
+  it('returns empty array when given no briefs', () => {
+    const cells = assembleMatrix([]);
+    expect(cells).toEqual([]);
+  });
+
+  it('creates one cell per (broker, column) with the newest view as primary', () => {
+    const briefs = [
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-24',
+        source_file: 'atlas-latest.pdf',
+        currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high' }],
+      }),
+      brief({
+        broker_name: 'Meridian',
+        run_date: '2026-06-24',
+        source_file: 'meridian-latest.pdf',
+        currency_views: [{ currency: 'EUR', direction: 'bearish', conviction: 'medium' }],
+      }),
+    ];
+    const cells = assembleMatrix(briefs);
+    expect(cells).toHaveLength(2);
+    const atlas = cells.find((c) => c.broker === 'Atlas' && c.column === 'USD');
+    expect(atlas).toBeDefined();
+    expect(atlas!.direction).toBe('bullish');
+    expect(atlas!.run_date).toBe('2026-06-24');
+    const meridian = cells.find((c) => c.broker === 'Meridian' && c.column === 'EUR');
+    expect(meridian).toBeDefined();
+    expect(meridian!.direction).toBe('bearish');
+  });
+
+  it('deduplicates exact (source_file, run_date) pairs keeping only first occurrence', () => {
+    const briefs = [
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-24',
+        source_file: 'atlas-duplicate.pdf',
+        currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high' }],
+      }),
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-24',
+        source_file: 'atlas-duplicate.pdf', // exact duplicate
+        currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high' }],
+      }),
+    ];
+    const cells = assembleMatrix(briefs);
+    expect(cells).toHaveLength(1);
+    expect(cells[0].history).toBeUndefined();
+  });
+
+  it('preserves distinct views as history sorted newest-first', () => {
+    const briefs = [
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-24',
+        source_file: 'atlas-2026-06-24.pdf',
+        currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high', rationale: 'Latest view' }],
+      }),
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-23',
+        source_file: 'atlas-2026-06-23.pdf',
+        currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'medium', rationale: 'Previous view' }],
+      }),
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-22',
+        source_file: 'atlas-2026-06-22.pdf',
+        currency_views: [{ currency: 'USD', direction: 'neutral', conviction: 'low', rationale: 'Oldest view' }],
+      }),
+    ];
+    const cells = assembleMatrix(briefs);
+    expect(cells).toHaveLength(1);
+    const cell = cells[0];
+    expect(cell.run_date).toBe('2026-06-24');
+    expect(cell.rationale).toBe('Latest view');
+    expect(cell.history).toHaveLength(2);
+    expect(cell.history![0].run_date).toBe('2026-06-23');
+    expect(cell.history![0].rationale).toBe('Previous view');
+    expect(cell.history![1].run_date).toBe('2026-06-22');
+    expect(cell.history![1].rationale).toBe('Oldest view');
+  });
+
+  it('files pairs under their base currency only (EUR/USD → EUR column)', () => {
+    const briefs = [
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-24',
+        source_file: 'atlas.pdf',
+        currency_views: [{ currency: 'EUR/USD', direction: 'bullish', conviction: 'high' }],
+      }),
+    ];
+    const cells = assembleMatrix(briefs);
+    expect(cells).toHaveLength(1);
+    expect(cells[0].column).toBe('EUR');
+    expect(cells[0].currency).toBe('EUR/USD'); // verbatim for display
+  });
+
+  it('drops views outside the extended G10 set', () => {
+    const briefs = [
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-24',
+        source_file: 'atlas.pdf',
+        currency_views: [
+          { currency: 'USD', direction: 'bullish', conviction: 'high' },
+          { currency: 'USD/TRY', direction: 'bearish', conviction: 'high' }, // exotic
+          { currency: 'DXY', direction: 'bullish', conviction: 'high' }, // not a currency
+        ],
+      }),
+    ];
+    const cells = assembleMatrix(briefs);
+    expect(cells).toHaveLength(1);
+    expect(cells[0].currency).toBe('USD'); // only the USD view survived
+  });
+});
+
+describe('assembleIntelligenceWhy continued', () => {
   it('orders desks by relevance descending', () => {
     const out = assembleIntelligenceWhy(
       [confluence({ currency: 'USD' })],

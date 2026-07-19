@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import PipelineClient from '@/components/pipeline/PipelineClient';
-import AtlasLoader from '@/components/AtlasLoader';
+import PageSkeleton from '@/components/page-skeleton';
 
 /**
  * Pipeline hub (Surface 1) — zoomable/pannable graph of the daily decision
@@ -21,7 +21,7 @@ export default function PipelinePage() {
           Pipeline
         </div>
         <div className="flex items-baseline gap-3 flex-wrap">
-          <h1 className="font-display text-[28px] font-normal leading-none m-0 text-ink">
+          <h1 className="font-display text-3xl tracking-tight m-0 text-ink">
             How today&apos;s decision was made
           </h1>
           <span className="text-[12.5px] text-ink-mute">
@@ -30,8 +30,15 @@ export default function PipelinePage() {
         </div>
       </header>
 
-      {/* Client shell */}
-      <Suspense fallback={<AtlasLoader fullScreen={false} />}>
+      {/* Client shell — content-shaped skeleton fallback (#1548), padded to
+          the header's gutter since this region is full-bleed */}
+      <Suspense
+        fallback={
+          <div className="px-6 py-5">
+            <PageSkeleton bare />
+          </div>
+        }
+      >
         <PipelineClient />
       </Suspense>
     </div>

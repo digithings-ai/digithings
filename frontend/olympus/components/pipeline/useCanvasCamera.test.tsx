@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { computeFit, computeCenter, computeZoomToward, clampScale } from './useCanvasCamera';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  clampScale,
+  computeCenter,
+  computeFit,
+  computeFocus,
+  computeZoomToward,
+  exceedsDragSlop,
+} from './useCanvasCamera';
 
 describe('computeFit', () => {
   it('returns scale < 1 when bbox is larger than viewport, fitting both axes', () => {
@@ -41,6 +50,49 @@ describe('computeCenter', () => {
   });
 });
 
+describe('computeFocus', () => {
+  it('zooms a selected node to a readable scale and centers it', () => {
+    const result = computeFocus(
+      { x: 900, y: 120, width: 160, height: 48 },
+      { width: 900, height: 560 },
+      { maxScale: 1.2 },
+    );
+
+    expect(result.scale).toBe(1.2);
+    expect(980 * result.scale + result.x).toBeCloseTo(450);
+    expect(144 * result.scale + result.y).toBeCloseTo(280);
+  });
+
+  it('fits an expanded group when its bounds exceed the viewport', () => {
+    const result = computeFocus(
+      { x: 180, y: 0, width: 1288, height: 528 },
+      { width: 900, height: 560 },
+      { padding: 48, maxScale: 1.1 },
+    );
+
+    expect(1288 * result.scale).toBeLessThanOrEqual(900 - 96 + 1);
+    expect(528 * result.scale).toBeLessThanOrEqual(560 - 96 + 1);
+  });
+
+  it('keeps the clicked card readable and visible when a wide section expands', () => {
+    const anchor = { x: 184, y: 0, width: 160, height: 48 };
+    const result = computeFocus(
+      { x: 184, y: 0, width: 1288, height: 528 },
+      { width: 808, height: 722 },
+      {
+        minScale: 0.68,
+        maxScale: 1.05,
+        anchor,
+        safeArea: { top: 128, right: 48, bottom: 48, left: 48 },
+      },
+    );
+
+    expect(result.scale).toBe(0.68);
+    expect(anchor.x * result.scale + result.x).toBeGreaterThanOrEqual(48);
+    expect(anchor.y * result.scale + result.y).toBeGreaterThanOrEqual(128);
+  });
+});
+
 describe('clampScale', () => {
   it('clamps below the minimum', () => {
     expect(clampScale(0.1)).toBeCloseTo(0.4);
@@ -79,5 +131,27 @@ describe('computeZoomToward', () => {
   it('clamps the resulting scale', () => {
     const next = computeZoomToward({ x: 0, y: 0, scale: 2.4 }, 99, 0, 0);
     expect(next.scale).toBeCloseTo(2.5);
+  });
+});
+
+describe('drag slop — clicks must reach canvas nodes (#1553)', () => {
+  it('sub-slop movement is a click-in-progress, not a pan', () => {
+    expect(exceedsDragSlop(100, 100, 100, 100)).toBe(false);
+    expect(exceedsDragSlop(100, 100, 102, 102)).toBe(false); // ~2.8px
+    expect(exceedsDragSlop(100, 100, 104, 100)).toBe(true);  // 4px
+    expect(exceedsDragSlop(100, 100, 90, 110)).toBe(true);
+  });
+
+  it('never captures the pointer on pointerdown (capture retargets click to the viewport)', () => {
+    // Regression pin, canon-test style (precedent: lw-chart-canon.test.ts).
+    // Capturing in onPointerDown swallowed every node click on the canvas —
+    // documents could only be opened via keyboard. Capture is only legal
+    // inside onPointerMove, after the slop check.
+    const src = readFileSync(join(__dirname, 'useCanvasCamera.ts'), 'utf8');
+    const downBody = src.slice(src.indexOf('const onPointerDown'), src.indexOf('const onPointerMove'));
+    expect(downBody).not.toContain('setPointerCapture');
+    const moveBody = src.slice(src.indexOf('const onPointerMove'), src.indexOf('const onPointerUp'));
+    expect(moveBody).toContain('exceedsDragSlop');
+    expect(moveBody).toContain('setPointerCapture');
   });
 });
