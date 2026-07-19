@@ -4,14 +4,17 @@
  * scrolly: the research book, valued live off the same feed. A client island
  * on useLivePortfolio.
  *
- * Reuse over reinvention (digiweb canon): the at-a-glance headline / ratios /
- * weight bars are the shared @digithings/web <PerformanceDashboard/>, and the
- * "live research portfolio" mark is the shared <LiveBadge/>. Only the
- * per-position blotter is a local table — SortableTable tones a whole column,
- * but each leg carries its own sign, so per-row money colors need per-cell
- * tone (the same call olympus's AllocationsPositionsTable documents in
- * lib/TABLES.md). Money colors (--up/--down via text-up/text-down) mark P&L
- * direction only; weight bars wear the module accent (a share, not a return).
+ * Reuse over reinvention (digiweb canon): the at-a-glance headline / ratios are
+ * the shared @digithings/web <PerformanceDashboard/>, and the "live research
+ * portfolio" mark is the shared <LiveBadge/>. The per-position blotter is one
+ * local table that also carries the book weights (an inline share bar in the
+ * weight column) — so the weights and the positions read as a single table, not
+ * a separate allocation panel above it. A local table because SortableTable
+ * tones a whole column, but each leg carries its own sign, so per-row money
+ * colors need per-cell tone (the same call olympus's AllocationsPositionsTable
+ * documents in lib/TABLES.md). Money colors (--up/--down via text-up/text-down)
+ * mark P&L direction only; the weight bar wears the module accent (a share, not
+ * a return).
  *
  * Data facts this markup is built on (verified against the live views + the
  * writer, digiquant/src/digiquant/olympus/hermes/portfolio_materialize.py):
@@ -33,11 +36,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { LiveBadge, PerformanceDashboard, Reveal, fmtNum, fmtPct } from "@digithings/web";
-import type {
-  DashboardAllocation,
-  DashboardHeadline,
-  DashboardRatio,
-} from "@digithings/web";
+import type { DashboardHeadline, DashboardRatio } from "@digithings/web";
 import { useLivePortfolio, type LivePosition } from "@/lib/live";
 
 /** Direction of the last change to a live value ("up"/"down"), held briefly so
@@ -153,8 +152,19 @@ function PositionsTable({ positions }: { positions: LivePosition[] }) {
                 </span>
               </td>
               <td className="px-4 py-[0.6rem] text-left text-ink-mute">{p.sectorBucket ?? "—"}</td>
-              <td className="px-4 py-[0.6rem] text-right text-ink-soft">
-                {fmtNum(p.weightPct, 1)}%
+              {/* weight = the book's "book weights" allocation, folded into the
+                  blotter: value + an accent share bar (accent = a share, never a
+                  P&L direction — money colours stay on day/since-entry only). */}
+              <td className="px-4 py-[0.6rem]">
+                <div className="flex items-center justify-end gap-2.5">
+                  <span className="text-ink-soft">{fmtNum(p.weightPct, 1)}%</span>
+                  <span className="h-[6px] w-[56px] shrink-0 overflow-hidden rounded-full bg-ink/[0.08]">
+                    <span
+                      className="block h-full rounded-full bg-accent"
+                      style={{ width: `${Math.min(100, Math.max(0, p.weightPct))}%` }}
+                    />
+                  </span>
+                </div>
               </td>
               <td
                 className={`px-4 py-[0.6rem] text-right ${p.isLive ? "text-ink" : "text-ink-soft"}`}
@@ -256,10 +266,6 @@ export function OlympusPortfolioPanel() {
     },
   ];
 
-  const allocations: DashboardAllocation[] = [...positions]
-    .sort((a, b) => b.weightPct - a.weightPct)
-    .map((p) => ({ name: p.ticker, pct: Math.round(p.weightPct) }));
-
   const asOf = positions.find((p) => p.metricsAsOf)?.metricsAsOf ?? book.metricsAsOf;
 
   return (
@@ -273,13 +279,7 @@ export function OlympusPortfolioPanel() {
         ) : null}
       </div>
 
-      <PerformanceDashboard
-        headlines={headlines}
-        ratios={ratios}
-        ratioColumns={4}
-        allocations={allocations}
-        allocationsLabel="book weights"
-      />
+      <PerformanceDashboard headlines={headlines} ratios={ratios} ratioColumns={4} />
 
       <PositionsTable positions={positions} />
 
