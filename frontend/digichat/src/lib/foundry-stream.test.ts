@@ -90,6 +90,30 @@ describe("mapFoundryEvent", () => {
     ).toEqual({ type: "trace", label: "Sources: auth.md", status: "completed" });
   });
 
+  it("maps url_citation annotations (azure_ai_search tool) to a sources trace, title over url", () => {
+    expect(
+      mapFoundryEvent({
+        type: "response.output_item.done",
+        item: {
+          type: "message",
+          content: [
+            {
+              annotations: [
+                { type: "url_citation", url: "https://datatap.stream/docs/auth", title: "Authentication" },
+                { type: "url_citation", url: "https://datatap.stream/docs/auth", title: "Authentication" },
+                { type: "url_citation", url: "https://datatap.stream/docs/no-title" },
+              ],
+            },
+          ],
+        },
+      })
+    ).toEqual({
+      type: "trace",
+      label: "Sources: Authentication, https://datatap.stream/docs/no-title",
+      status: "completed",
+    });
+  });
+
   it("returns null for unrecognized event types", () => {
     expect(mapFoundryEvent({ type: "response.output_item.added" })).toBeNull();
   });
