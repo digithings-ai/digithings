@@ -2,6 +2,7 @@
 
 import { SectionTitle } from '@/components/ui';
 import { SleeveStackedChart } from '@/components/portfolio/sleeve-stacked-chart';
+import { SegmentedControl } from '@digithings/web';
 import type { SleeveStackMode } from '@/lib/portfolio-aggregates';
 
 export default function SleeveHistorySection(props: {
@@ -36,29 +37,13 @@ export default function SleeveHistorySection(props: {
       <div className="glass-card p-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SectionTitle className="mb-0">Sleeves</SectionTitle>
-          <div className="flex rounded-lg border border-hair overflow-hidden text-xs">
-            <button
-              type="button"
-              onClick={() => setHistoryMode('ticker')}
-              className={`px-3 py-1.5 font-medium ${historyMode === 'ticker' ? 'bg-accent/15 text-accent' : 'text-ink-mute hover:bg-ink/[0.04]'}`}
-            >
-              Ticker
-            </button>
-            <button
-              type="button"
-              onClick={() => setHistoryMode('category')}
-              className={`px-3 py-1.5 font-medium border-l border-hair ${historyMode === 'category' ? 'bg-accent/15 text-accent' : 'text-ink-mute hover:bg-ink/[0.04]'}`}
-            >
-              Category
-            </button>
-            <button
-              type="button"
-              onClick={() => setHistoryMode('thesis')}
-              className={`px-3 py-1.5 font-medium border-l border-hair ${historyMode === 'thesis' ? 'bg-accent/15 text-accent' : 'text-ink-mute hover:bg-ink/[0.04]'}`}
-            >
-              Thesis
-            </button>
-          </div>
+          <SegmentedControl<SleeveStackMode>
+            options={['ticker', 'category', 'thesis']}
+            value={historyMode}
+            onChange={setHistoryMode}
+            dress="accent"
+            aria-label="Sleeve grouping mode"
+          />
         </div>
         {showHistoryDateBanner ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs">

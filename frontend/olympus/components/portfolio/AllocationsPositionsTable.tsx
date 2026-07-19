@@ -173,7 +173,7 @@ export default function AllocationsPositionsTable(props: {
                 <tr className="bg-term-bg/60">
                   <td
                     colSpan={colCount}
-                    className="px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink-soft md:px-4"
+                    className="px-2 py-2 text-xs font-semibold uppercase tracking-wider text-ink-soft md:px-4"
                   >
                     {sector}
                     <span className="ml-2 font-mono text-ink-mute">
@@ -304,7 +304,7 @@ export default function AllocationsPositionsTable(props: {
                             <Link
                               href={`/portfolio/tickers?ticker=${encodeURIComponent(p.ticker.toUpperCase())}`}
                               onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-ink-mute hover:text-accent hover:underline"
+                              className="inline-flex items-center gap-1 text-xs uppercase tracking-wider text-ink-mute hover:text-accent hover:underline"
                               title={`Open ${p.ticker} dossier`}
                             >
                               <FileText size={11} aria-hidden /> Dossier
@@ -317,7 +317,7 @@ export default function AllocationsPositionsTable(props: {
                       </tr>
                       {isExpanded && (
                         <tr className="bg-ink/[0.02]">
-                          <td colSpan={colCount} className="px-4 py-5 md:px-6 md:py-6">
+                          <td colSpan={colCount} className="max-w-0 overflow-hidden px-4 py-5 md:px-6 md:py-6">
                             <PositionDrilldown
                               key={p.ticker}
                               position={p}

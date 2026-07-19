@@ -15,6 +15,7 @@
 import type React from 'react';
 import { useState } from 'react';
 import {
+  Button,
   Kpi,
   KpiStrip,
   SignedBars,
@@ -35,6 +36,7 @@ function Toned({ v, children }: { v: number | null | undefined; children: React.
 }
 
 const BUCKET_LABEL: Record<number, string> = { 5: 'high', 3: 'medium', 1: 'low' };
+const DEFAULT_ROW_LIMIT = 12;
 
 export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
   const { live, decision } = data;
@@ -45,11 +47,21 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
   // runTearsheetPrint drives through this setter makes the recharts Attribution
   // section re-read the pinned light data-theme (useChartColors reads it at
   // render) before the print dialog opens — so paper output stays coherent.
-  const [, setPrinting] = useState(false);
+  const [printing, setPrinting] = useState(false);
+
+  // Decision table pagination: default to 12 most-recent rows on screen;
+  // "Show N older" reveals all. When printing, render all rows so PDF stays complete.
+  const [showAllDecisions, setShowAllDecisions] = useState(false);
 
   const resolvedAlphasPct = data.decisionRows
     .filter((r) => r.status === 'resolved' && r.alpha != null)
     .map((r) => (r.alpha as number) * 100);
+
+  // Slice decision rows: show all during print or when user expanded, else 12 most recent
+  const totalRows = data.decisionRows.length;
+  const shouldShowAll = printing || showAllDecisions || totalRows <= DEFAULT_ROW_LIMIT;
+  const visibleRows = shouldShowAll ? data.decisionRows : data.decisionRows.slice(-DEFAULT_ROW_LIMIT);
+  const hiddenCount = totalRows - DEFAULT_ROW_LIMIT;
 
   return (
     <div className="ts-page">
@@ -179,7 +191,7 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.decisionRows.map((r, i) => (
+                  {visibleRows.map((r, i) => (
                     <tr key={`${r.ticker}-${r.run_date}-${i}`}>
                       <td>{r.run_date}</td>
                       <td>{r.ticker}</td>
@@ -194,6 +206,18 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
                 </tbody>
               </table>
             </div>
+
+            {totalRows > DEFAULT_ROW_LIMIT && !printing && (
+              <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+                <Button
+                  variant="quiet"
+                  onClick={() => setShowAllDecisions(!showAllDecisions)}
+                  type="button"
+                >
+                  {showAllDecisions ? 'Show fewer' : `Show ${hiddenCount} older`}
+                </Button>
+              </div>
+            )}
           </>
         ) : (
           <p className="ts-panel-body">
