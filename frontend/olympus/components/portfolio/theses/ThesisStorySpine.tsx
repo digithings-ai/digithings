@@ -8,7 +8,8 @@ import { UnassignedShelf } from '@/components/portfolio/theses/UnassignedShelf';
 /**
  * The Theses tab body: market theses as a conviction-ordered story spine (each
  * expands to the vehicles that express it, each vehicle to its stock-level story),
- * with a trailing shelf for what the spine cannot place.
+ * with a trailing shelf for what the spine cannot place. Only the first (highest-
+ * conviction) thesis opens by default (#1607) to keep the spine scannable.
  */
 export function ThesisStorySpine({
   stories,
@@ -37,11 +38,12 @@ export function ThesisStorySpine({
           <div className="glass-card p-6 text-sm text-ink-mute">No market views recorded yet.</div>
         ) : (
           <div className="space-y-4">
-            {stories.map((story) => (
+            {stories.map((story, index) => (
               <ThesisStoryCard
                 key={story.thesis.id}
                 story={story}
                 bookWeightPct={weightByThesis.get(normalizeThesisId(story.thesis.id)) ?? 0}
+                defaultOpen={index === 0}
               />
             ))}
           </div>

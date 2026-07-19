@@ -92,4 +92,14 @@ describe('AllocationsPositionsTable', () => {
     }));
     expect(html).toContain('Avg entry');
   });
+
+  it('uses canonical text-xs on sector header and dossier link', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
+      ...baseProps, reconciliation: recon([pos({})]),
+    }));
+    // Sector header uses text-xs
+    expect(html).toContain('text-xs font-semibold uppercase tracking-wider');
+    // Dossier link uses text-xs
+    expect(html).toContain('text-xs uppercase tracking-wider text-ink-mute hover:text-accent');
+  });
 });

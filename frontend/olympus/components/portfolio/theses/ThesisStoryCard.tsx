@@ -33,15 +33,18 @@ function deliberationHref(ticker: string): string {
 /**
  * One market thesis as the spine of the story: header (name · confidence meter ·
  * horizon · status · drives X% of book), the thesis statement, the confirm/break
- * criteria, and the vehicles expressing the view. Defaults open — the tab reads
- * as a narrative, not a dense index.
+ * criteria, and the vehicles expressing the view. Closed by default — callers
+ * control which thesis opens via the `defaultOpen` prop to keep the disclosure
+ * spine scannable (#1607).
  */
 export function ThesisStoryCard({
   story,
   bookWeightPct,
+  defaultOpen = false,
 }: {
   story: ThesisStory;
   bookWeightPct: number;
+  defaultOpen?: boolean;
 }) {
   const { thesis, vehicles, asOf } = story;
   const pips = confidenceToPips(thesis.confidence);
@@ -51,7 +54,7 @@ export function ThesisStoryCard({
       : 'Confidence not set';
 
   return (
-    <details className="group glass-card overflow-hidden p-0" open>
+    <details className="group glass-card overflow-hidden p-0" open={defaultOpen}>
       <summary className="flex cursor-pointer list-none flex-col gap-3 p-5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 [&::-webkit-details-marker]:hidden">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-2">
@@ -63,7 +66,7 @@ export function ThesisStoryCard({
             <h3 className="font-display text-xl leading-snug text-ink">{thesis.name}</h3>
           </div>
           {isNonActive(thesis.status) ? (
-            <span className="shrink-0 rounded-full border border-warn/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-warn">
+            <span className="shrink-0 rounded-full border border-warn/40 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-warn">
               {thesis.status}
             </span>
           ) : null}
@@ -75,7 +78,7 @@ export function ThesisStoryCard({
             <span className="text-xs tabular-nums text-ink-mute">{confidenceLabel}</span>
           </div>
           {thesis.horizon ? (
-            <span className="rounded-md border border-hair px-2 py-0.5 text-[11px] text-ink-soft">
+            <span className="rounded-md border border-hair px-2 py-0.5 text-xs text-ink-soft">
               {thesis.horizon}
             </span>
           ) : null}
@@ -103,7 +106,7 @@ export function ThesisStoryCard({
 
         <section className="space-y-2">
           <div className="flex items-center justify-between gap-3 pl-1">
-            <h4 className="font-mono text-[10px] uppercase tracking-wider text-ink-mute">
+            <h4 className="text-xs uppercase tracking-wider text-ink-mute">
               Vehicles expressing this view
             </h4>
             {asOf ? <AsOfBadge date={asOf} /> : null}
@@ -113,7 +116,7 @@ export function ThesisStoryCard({
               No vehicle was mapped to this view on the shown date.
             </p>
           ) : (
-            <div className="glass-card overflow-hidden p-0">
+            <div className="overflow-hidden border-y border-hair">
               {vehicles.map((v) => (
                 <VehicleExpressionRow
                   key={v.ticker}

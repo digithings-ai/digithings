@@ -101,4 +101,72 @@ describe('OlympusTearsheetView', () => {
     expect(out).toMatch(/Conviction calibration/);
     expect(out).toContain('ts-bar'); // SignedBars rendered
   });
+
+  it('≤12 resolved decisions → renders all rows without expand control', () => {
+    const decisions = Array.from({ length: 10 }, (_, i) => ({
+      id: `d${i}`,
+      run_id: 'r',
+      run_date: `2026-06-${String(i + 1).padStart(2, '0')}`,
+      ticker: `T${i}`,
+      stance: 'buy',
+      conviction: 3,
+      thesis: null,
+      benchmark: 'SPY',
+      holding_days: 10,
+      status: 'resolved' as const,
+      actual_return: 0.01,
+      alpha: 0.005,
+      reflection: null,
+      resolved_at: null,
+      created_at: null,
+    }));
+    const data = buildOlympusTearsheet({
+      nav: [navRow('2026-06-23', 100), navRow('2026-06-24', 102)],
+      decisions,
+      metrics: null,
+      attribution: [],
+    });
+    const out = html(data);
+    // All 10 tickers should be visible
+    expect(out).toContain('T0');
+    expect(out).toContain('T9');
+    // No expand button when ≤12 rows
+    expect(out).not.toMatch(/Show.*older/i);
+    expect(out).not.toMatch(/Show.*fewer/i);
+  });
+
+  it('>12 resolved decisions → renders 12 most-recent rows + "Show N older" button by default', () => {
+    const decisions = Array.from({ length: 20 }, (_, i) => ({
+      id: `d${i}`,
+      run_id: 'r',
+      run_date: `2026-${String(Math.floor(i / 30) + 1).padStart(2, '0')}-${String((i % 30) + 1).padStart(2, '0')}`,
+      ticker: `T${i}`,
+      stance: 'buy',
+      conviction: 3,
+      thesis: null,
+      benchmark: 'SPY',
+      holding_days: 10,
+      status: 'resolved' as const,
+      actual_return: 0.01,
+      alpha: 0.005,
+      reflection: null,
+      resolved_at: null,
+      created_at: null,
+    }));
+    const data = buildOlympusTearsheet({
+      nav: [navRow('2026-06-23', 100), navRow('2026-06-24', 102)],
+      decisions,
+      metrics: null,
+      attribution: [],
+    });
+    const out = html(data);
+    // Newest 12 tickers should be visible (T8 through T19)
+    expect(out).toContain('T19');
+    expect(out).toContain('T8');
+    // Older tickers should NOT be visible by default
+    expect(out).not.toContain('T0');
+    expect(out).not.toContain('T7');
+    // "Show N older" button should be present
+    expect(out).toMatch(/Show 8 older/i);
+  });
 });
