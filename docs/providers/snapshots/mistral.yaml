@@ -1,5 +1,5 @@
 provider: mistral
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
@@ -25,9 +25,9 @@ free_tier:
       max_input_tokens: 32768
       max_output_tokens: 32768
       status: active
-      verified: null
-      last_verified: null
-      last_verified_latency_ms: null
+      verified: true
+      last_verified: 2026-07-19
+      last_verified_latency_ms: 435
       verification_error: null
     - name: codestral-latest
       context_window: 262144
@@ -130,4 +130,4 @@ verification:
   probe_model_alias: mistral-small
   github_secret_key: MISTRAL_API_KEY
 
-notes: "Experimental tier requires phone verification. 2 RPM is the binding free-tier constraint. Monthly token budget ~1B tokens. Add aggressive retry logic — 429s common at 2 RPM. Privacy: free tier trains on data; paid is zero-retention. Added: mistral-medium-3.5 ($1.50/$7.50, 262K ctx, released April 30 2026); mistral-small-latest → Mistral Small 4 (price unchanged). Large and Codestral pricing unchanged."
+notes: "PROBE 2026-07-19: mistral-small-latest verified ok (435ms). RATE LIMIT CONFIDENCE DOWNGRADE: Mistral's public docs (docs.mistral.ai/admin/user-management-finops/tier) no longer publish exact RPM/RPD/token numbers — limits are now gated behind the logged-in Admin Console 'Limits' page. This is itself a process change from when this snapshot could previously cite '2 RPM' from public docs. Could not independently re-confirm the 2 RPM figure or the phone-verification requirement this cycle — retained as-is but flagged LOW CONFIDENCE pending a manual Admin Console check. ~1B tokens/month ceiling still referenced by secondary sources only. Add aggressive retry logic — 429s common at low RPM. Privacy: free tier trains on data; paid is zero-retention. mistral-medium-3.5 ($1.50/$7.50, 262K ctx, released April 30 2026) pricing reconfirmed unchanged. Large and Codestral pricing unchanged."

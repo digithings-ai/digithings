@@ -10,7 +10,7 @@ free_tier_type: credit-based
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-05-03
+verified_at: 2026-07-19
 source_urls:
   - https://huggingface.co/docs/api-inference/en/rate-limits
   - https://huggingface.co/docs/api-inference/en/index
@@ -106,3 +106,4 @@ PRO plan at $9/month includes $2 inference credits. Inference Endpoints: dedicat
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-07-19 | Automated snapshot sync | provider-review scan |

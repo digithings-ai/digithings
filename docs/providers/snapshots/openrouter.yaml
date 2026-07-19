@@ -1,5 +1,5 @@
 provider: openrouter
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
@@ -42,11 +42,11 @@ free_tier:
       context_window: 131072
       max_input_tokens: 131072
       max_output_tokens: 8192
-      status: active
-      verified: null
-      last_verified: null
-      last_verified_latency_ms: null
-      verification_error: null
+      status: deprecated        # model page banner: "Going away July 19, 2026" — sunsetting today
+      verified: false
+      last_verified: 2026-07-19
+      last_verified_latency_ms: 33408
+      verification_error: "Error code: 429 - {'error': {'message': 'Provider returned error', 'code': 429, 'metadata': {'raw': 'meta-llama/llama-3.3-70b-instruct:free is temporarily rate-limited upstream...', 'provider_name': 'Venice'}}}"
     - name: google/gemini-2.0-flash-exp:free
       context_window: 1048576
       max_input_tokens: 1048576
@@ -69,7 +69,16 @@ free_tier:
       context_window: 131072
       max_input_tokens: 131072
       max_output_tokens: 8192
-      status: active
+      status: active            # recommended replacement for llama-3.3-70b-instruct:free; consistently reliable in July 2026 rankings
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: qwen/qwen3-coder:free
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 8192
+      status: active            # added 2026-07-19: 480B MoE, strong agentic/tool-calling, recommended alongside gpt-oss-20b:free
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -126,4 +135,4 @@ verification:
   probe_model_alias: openrouter-llama-70b-free
   github_secret_key: OPENROUTER_API_KEY
 
-notes: "Free model catalog grew from ~4 to ~25-29 models since May 2026. Added: deepseek-chat-v3-0324:free (V3 March update), qwen3-235b-a22b:free, openai/gpt-oss-20b:free. openrouter/free meta-router added (Feb 2026): auto-selects from free pool by required features, 200K ctx, same rate limits. :free roster rotates — verify at https://openrouter.ai/models?q=free. Adding $10 balance raises RPD 50 → 1000 for all :free models."
+notes: "MATERIAL CHANGE 2026-07-19: meta-llama/llama-3.3-70b-instruct:free is sunsetting TODAY per its OpenRouter model-page banner ('Going away July 19, 2026') — this explains the probe's 429 'temporarily rate-limited upstream (Venice)' error; it is upstream capacity being wound down ahead of removal, not generic :free-tier flakiness. Do not keep recommending this model — replacements added this cycle: openai/gpt-oss-20b:free (Apache 2.0, near o3-mini on coding benchmarks, consistently reliable in July 2026 rankings) and qwen/qwen3-coder:free (480B MoE, 1M ctx, strong agentic/tool-calling). NEEDS CONFIRMATION: a secondary aggregator (July 2026 snapshot) did not list deepseek-chat-v3:free, deepseek-r1:free, gemini-2.0-flash-exp:free, or qwen3-235b-a22b:free among currently-active free models — could not independently confirm via OpenRouter's own model index this cycle (JS-rendered, did not return via fetch); retained in this snapshot pending direct API confirmation (GET /api/v1/models filtered for :free) rather than removed on secondary-source evidence alone. Free model catalog grew from ~4 to ~25-29 models since May 2026. openrouter/free meta-router added (Feb 2026): auto-selects from free pool by required features, 200K ctx, same rate limits. :free roster rotates — verify at https://openrouter.ai/models?q=free. Rate limits reconfirmed exactly: 20 RPM, 50 RPD (<$10 balance) / 1000 RPD ($10+ balance)."
