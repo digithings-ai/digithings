@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { FxBriefRow } from '@/lib/twelve-x/types';
 import { useTwelveX } from './context';
+import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
 export default function BriefsSlideshow({
   briefs,
@@ -18,7 +19,7 @@ export default function BriefsSlideshow({
   if (briefs.length === 0) {
     return (
       <section className="glass-card p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">Today&rsquo;s briefs</h2>
+        <TwelveXSectionHeading>Today&rsquo;s briefs</TwelveXSectionHeading>
         <p className="mt-2 text-sm text-ink-mute">No research briefs for today yet.</p>
       </section>
     );
@@ -31,7 +32,7 @@ export default function BriefsSlideshow({
   return (
     <section className="glass-card flex flex-col gap-3 p-5">
       <header className="flex items-baseline gap-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">Today&rsquo;s briefs</h2>
+        <TwelveXSectionHeading>Today&rsquo;s briefs</TwelveXSectionHeading>
         <span className="font-mono text-[10px] text-ink-mute">{idx + 1}/{briefs.length}</span>
         <button type="button" className="ml-auto text-[11px] text-accent hover:underline" onClick={onSeeMore}>
           see all →

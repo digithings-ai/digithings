@@ -12,6 +12,18 @@ vi.mock('@/components/library/LibraryDocumentBody', () => ({
 }));
 
 import PipelineNodeDetail from './PipelineNodeDetail';
+import type { LaidOutNode } from '@/lib/pipeline-layout';
+
+const deliberationNode: LaidOutNode = {
+  id: 'selection:deliberation',
+  kind: 'substep',
+  stageId: 'selection',
+  label: 'Deliberation',
+  x: 0,
+  y: 0,
+  width: 160,
+  height: 48,
+};
 
 describe('PipelineNodeDetail', () => {
   it('renders empty state copy when documentKey is null', () => {
@@ -39,11 +51,28 @@ describe('PipelineNodeDetail', () => {
     expect(html).toMatch(/close|✕|×/i);
   });
 
-  it('uses bottom-sheet classes for mobile layout', () => {
+  it('uses an in-flow lower pane on mobile and a side panel on desktop', () => {
     const html = renderToStaticMarkup(
       createElement(PipelineNodeDetail, { documentKey: 'digest', date: '2026-06-23', onClose: () => {} }),
     );
-    // md: prefix separates desktop panel from mobile bottom sheet
+    expect(html).toContain('h-[46%]');
+    expect(html).not.toContain('fixed inset-x-0 bottom-0');
     expect(html).toContain('md:');
+  });
+
+  it('renders pipeline guidance when a selected step has no run document', () => {
+    const html = renderToStaticMarkup(
+      createElement(PipelineNodeDetail, {
+        node: deliberationNode,
+        documentKey: null,
+        date: '2026-06-23',
+        onClose: () => {},
+      }),
+    );
+
+    expect(html).toContain('Pipeline guide');
+    expect(html).toContain('Deliberation');
+    expect(html).toMatch(/challenge|debate|deliberat/i);
+    expect(html).not.toContain('No document selected');
   });
 });

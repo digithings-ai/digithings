@@ -203,6 +203,22 @@ export interface FxLedgerRow {
 }
 
 /**
+ * A historical brief view for a broker/column cell — an older distinct view that
+ * is no longer the primary. Sorted newest-first in MatrixCell.history.
+ */
+export interface MatrixCellHistoryEntry {
+  run_date: string;
+  report_date: string | null;
+  source_file: string;
+  direction: string;
+  conviction: string;
+  signal?: string;
+  rationale?: string;
+  key_facts?: string[];
+  targets?: unknown[];
+}
+
+/**
  * One cell of the broker×G10 matrix — the LATEST currency_view a desk holds on a
  * currency over a recent window. Derived in TS from brief `currency_views`
  * (display grouping, not consensus math).
@@ -220,6 +236,8 @@ export interface MatrixCell {
   rationale?: string;
   key_facts?: string[];
   targets?: unknown[];
+  /** Older distinct brief views for this broker/column, sorted newest-first. */
+  history?: MatrixCellHistoryEntry[];
 }
 
 /**

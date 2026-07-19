@@ -33,6 +33,7 @@ import type {
   IntelligenceWhyDesk,
   IntelligenceWhyItem,
   MatrixCell,
+  MatrixCellHistoryEntry,
   MatrixColumn,
   Mover,
   Timeframe,
@@ -159,44 +160,6 @@ export async function getConsensusTimeSeries(
       .eq('weighted', true)
       .eq('timeframe', timeframe)
       .order('run_date', { ascending: true })
-      .order('currency', { ascending: true })
-  );
-  return rows ?? [];
-}
-
-/**
- * The weighted consensus rows for the latest run_date present in the table
- * (one row per G10 currency). Returns `[]` when twelve-x is unconfigured or the
- * table is empty.
- */
-export async function getLatestConsensus(
-  timeframe: Timeframe = 'medium'
-): Promise<FxConsensusSnapshotRow[]> {
-  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
-
-  // Resolve the latest run_date first (cheap), then pull that day's full set.
-  const latest = await querySupabase<{ run_date: string }[]>((sb) =>
-    sb
-      .from('fx_consensus_snapshot')
-      .select('run_date')
-      .eq('weighted', true)
-      .eq('timeframe', timeframe)
-      .order('run_date', { ascending: false })
-      .limit(1)
-  );
-
-  const latestDate = latest?.[0]?.run_date;
-  if (!latestDate) return [];
-
-  const rows = await querySupabase<FxConsensusSnapshotRow[]>((sb) =>
-    sb
-      .from('fx_consensus_snapshot')
-      .select(
-        'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks'
-      )
-      .eq('weighted', true)
-      .eq('timeframe', timeframe)
-      .eq('run_date', latestDate)
       .order('currency', { ascending: true })
   );
   return rows ?? [];
@@ -565,25 +528,22 @@ export function boardColumn(currency: string): MatrixColumn | null {
 }
 
 /**
- * The broker x G10-currency matrix — the SAME consolidation the twelve-x Notion
- * "Research Matrix" uses, so the two surfaces agree. The LATEST currency_view per
- * (broker, board-column) over a recent window (default 14 days), filed under its
- * base G10 currency via boardColumn (pairs land under the numerator; non-G10 /
- * non-currency instruments are dropped). Newest brief (run_date, then report_date)
- * wins per cell. Returns `[]` when unconfigured.
+ * PURE — assemble the broker×G10 matrix from a set of briefs. For each (broker,
+ * board-column) cell, deduplicate exact (source_file, run_date) pairs, sort
+ * newest-first, and split into primary + history. Exported for direct testing.
  */
-export async function getMatrix(windowDays = 14): Promise<MatrixCell[]> {
-  const briefs = await getBriefs(windowDays);
+export function assembleMatrix(briefs: FxBriefRow[]): MatrixCell[] {
   if (briefs.length === 0) return [];
 
   // ISO `YYYY-MM-DD` strings compare lexicographically == chronologically, so a
   // plain `>` is an explicit "is newer" test (run_date first, report_date tiebreak).
-  const isNewer = (a: MatrixCell, b: MatrixCell): boolean => {
+  const isNewer = (a: MatrixCell | MatrixCellHistoryEntry, b: MatrixCell | MatrixCellHistoryEntry): boolean => {
     if (a.run_date !== b.run_date) return a.run_date > b.run_date;
     return (a.report_date ?? '') > (b.report_date ?? '');
   };
 
-  const byCell = new Map<string, MatrixCell>();
+  // Collect ALL candidate cells per (broker, column) — not just the newest.
+  const byCell = new Map<string, MatrixCell[]>();
   for (const b of briefs) {
     const broker = (b.broker_name ?? '').trim();
     if (!broker) continue;
@@ -606,13 +566,61 @@ export async function getMatrix(windowDays = 14): Promise<MatrixCell[]> {
         key_facts: v.key_facts,
         targets: v.targets,
       };
-      const existing = byCell.get(key);
-      if (!existing || isNewer(candidate, existing)) {
-        byCell.set(key, candidate);
-      }
+      const list = byCell.get(key) ?? [];
+      list.push(candidate);
+      byCell.set(key, list);
     }
   }
-  return [...byCell.values()];
+
+  // For each (broker, column), deduplicate by (source_file, run_date), sort
+  // newest-first, and split into primary + history.
+  const result: MatrixCell[] = [];
+  for (const [_key, candidates] of byCell.entries()) {
+    // Deduplicate: keep first occurrence of each (source_file, run_date) pair.
+    const seen = new Set<string>();
+    const distinct = candidates.filter((c) => {
+      const briefKey = `${c.source_file}|${c.run_date}`;
+      if (seen.has(briefKey)) return false;
+      seen.add(briefKey);
+      return true;
+    });
+
+    // Sort newest-first.
+    distinct.sort((a, b) => (isNewer(a, b) ? -1 : isNewer(b, a) ? 1 : 0));
+
+    if (distinct.length === 0) continue;
+
+    // Primary = newest; history = rest (already newest-first).
+    const primary = distinct[0];
+    if (distinct.length > 1) {
+      primary.history = distinct.slice(1).map((c) => ({
+        run_date: c.run_date,
+        report_date: c.report_date,
+        source_file: c.source_file,
+        direction: c.direction,
+        conviction: c.conviction,
+        signal: c.signal,
+        rationale: c.rationale,
+        key_facts: c.key_facts,
+        targets: c.targets,
+      }));
+    }
+    result.push(primary);
+  }
+  return result;
+}
+
+/**
+ * The broker x G10-currency matrix — the SAME consolidation the twelve-x Notion
+ * "Research Matrix" uses, so the two surfaces agree. The LATEST currency_view per
+ * (broker, board-column) over a recent window (default 14 days), filed under its
+ * base G10 currency via boardColumn (pairs land under the numerator; non-G10 /
+ * non-currency instruments are dropped). Newest brief (run_date, then report_date)
+ * wins per cell. Returns `[]` when unconfigured.
+ */
+export async function getMatrix(windowDays = 14): Promise<MatrixCell[]> {
+  const briefs = await getBriefs(windowDays);
+  return assembleMatrix(briefs);
 }
 
 /* ------------------------------------------------------------------ *

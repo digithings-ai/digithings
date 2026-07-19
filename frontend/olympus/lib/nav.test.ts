@@ -7,7 +7,7 @@ describe('NAV', () => {
     expect(NAV.map((n) => n.label)).toEqual(['Brief', 'Portfolio', 'Pipeline', 'System']);
   });
 
-  it('surfaces FX Research before the demoted System when NEXT_PUBLIC_TWELVEX_ENABLED=1 (#1553)', async () => {
+  it('surfaces FX Research before the demoted System when NEXT_PUBLIC_TWELVEX_ENABLED=1 (#1551, #1553)', async () => {
     vi.stubEnv('NEXT_PUBLIC_TWELVEX_ENABLED', '1');
     vi.resetModules();
     const { NAV: gated } = await import('./nav');

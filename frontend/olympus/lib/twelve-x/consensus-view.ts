@@ -53,6 +53,10 @@ export interface ConsensusCurrencyRow {
   momentum: number | null;
   /** Conviction word from the latest raw score, via the shared `scoreLabel`. */
   label: string;
+  /** Previous finite raw score (one run back) for prior-run comparison. */
+  priorActual: number | null;
+  /** Change from prior run: actualNow − priorActual. */
+  priorChange: number | null;
 }
 
 /**
@@ -72,6 +76,23 @@ export function deriveConsensusRows(series: FxConsensusSnapshotRow[]): Consensus
       .map((r) => ({ score: r.score }));
     const { avgNow, actualNow, avgYesterday, avgAgo, momentum } = latestConsensusAverages(points);
     const labelScore = Number.isFinite(actualNow) ? (actualNow as number) : 0;
+
+    // Derive priorActual and priorChange: prior is the previous finite raw score.
+    let priorActual: number | null = null;
+    let priorChange: number | null = null;
+    if (points.length >= 2) {
+      // Walk backward from the second-to-last point to find the most recent finite score.
+      for (let i = points.length - 2; i >= 0; i--) {
+        if (Number.isFinite(points[i].score)) {
+          priorActual = points[i].score;
+          break;
+        }
+      }
+      if (priorActual !== null && Number.isFinite(actualNow)) {
+        priorChange = (actualNow as number) - priorActual;
+      }
+    }
+
     return {
       currency,
       avgNow,
@@ -80,6 +101,8 @@ export function deriveConsensusRows(series: FxConsensusSnapshotRow[]): Consensus
       avgAgo,
       momentum,
       label: scoreLabel(labelScore),
+      priorActual,
+      priorChange,
     };
   });
 }

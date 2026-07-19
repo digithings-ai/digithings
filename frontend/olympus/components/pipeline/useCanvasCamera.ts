@@ -6,6 +6,14 @@ export interface Bbox { width: number; height: number; }
 export interface Viewport { width: number; height: number; }
 export interface NodeRect { x: number; y: number; width: number; height: number; }
 export interface CameraTransform { x: number; y: number; scale: number; }
+export interface SafeArea { top: number; right: number; bottom: number; left: number; }
+export interface FocusOptions {
+  padding?: number;
+  minScale?: number;
+  maxScale?: number;
+  anchor?: NodeRect;
+  safeArea?: SafeArea;
+}
 
 const MIN_SCALE = 0.4;
 const MAX_SCALE = 2.5;
@@ -38,6 +46,51 @@ export function computeCenter(rect: NodeRect, viewport: Viewport, scale: number)
   const nodeMidY = rect.y + rect.height / 2;
   const x = viewport.width / 2 - nodeMidX * scale;
   const y = viewport.height / 2 - nodeMidY * scale;
+  return { x, y, scale };
+}
+
+/** Fit and center a selected node or revealed group, capped at a readable zoom. */
+export function computeFocus(
+  rect: NodeRect,
+  viewport: Viewport,
+  options: FocusOptions = {},
+): CameraTransform {
+  const padding = options.padding ?? 64;
+  const minScale = options.minScale ?? 0.05;
+  const maxScale = options.maxScale ?? 1.15;
+  const availableWidth = Math.max(1, viewport.width - padding * 2);
+  const availableHeight = Math.max(1, viewport.height - padding * 2);
+  const fittedScale = Math.min(
+    maxScale,
+    availableWidth / rect.width,
+    availableHeight / rect.height,
+  );
+  const scale = Math.min(maxScale, Math.max(minScale, fittedScale));
+  const centered = computeCenter(rect, viewport, scale);
+  if (!options.anchor) return centered;
+
+  const safeArea = options.safeArea ?? {
+    top: padding,
+    right: padding,
+    bottom: padding,
+    left: padding,
+  };
+  const anchorLeft = options.anchor.x * scale + centered.x;
+  const anchorRight = (options.anchor.x + options.anchor.width) * scale + centered.x;
+  const anchorTop = options.anchor.y * scale + centered.y;
+  const anchorBottom = (options.anchor.y + options.anchor.height) * scale + centered.y;
+  let x = centered.x;
+  let y = centered.y;
+
+  if (anchorLeft < safeArea.left) x += safeArea.left - anchorLeft;
+  else if (anchorRight > viewport.width - safeArea.right) {
+    x -= anchorRight - (viewport.width - safeArea.right);
+  }
+  if (anchorTop < safeArea.top) y += safeArea.top - anchorTop;
+  else if (anchorBottom > viewport.height - safeArea.bottom) {
+    y -= anchorBottom - (viewport.height - safeArea.bottom);
+  }
+
   return { x, y, scale };
 }
 
@@ -74,6 +127,7 @@ export interface CanvasCameraResult {
   zoomOut: () => void;
   fit: (bbox: Bbox, viewport: Viewport) => void;
   centerOn: (rect: NodeRect, viewport: Viewport) => void;
+  focusOn: (rect: NodeRect, viewport: Viewport, options?: FocusOptions) => void;
   /** Attach to the scrolling/transformed layer — its DOM transform is written every frame. */
   layerRef: React.RefObject<HTMLDivElement | null>;
   /** Attach to the viewport element — the native wheel + pointer surface. */
@@ -138,7 +192,9 @@ export function useCanvasCamera(initialTransform?: Partial<CameraTransform>): Ca
   const setTransitionEnabled = useCallback((enabled: boolean) => {
     const el = layerRef.current;
     if (!el) return;
-    el.style.transition = enabled && !prefersReducedMotion() ? 'transform 150ms ease-out' : 'none';
+    el.style.transition = enabled && !prefersReducedMotion()
+      ? 'transform 240ms cubic-bezier(0.22, 1, 0.36, 1)'
+      : 'none';
   }, []);
 
   // Begin a direct-manipulation gesture: kill the CSS transition so the layer
@@ -180,6 +236,13 @@ export function useCanvasCamera(initialTransform?: Partial<CameraTransform>): Ca
   const centerOn = useCallback(
     (rect: NodeRect, viewport: Viewport) => {
       applyProgrammatic(computeCenter(rect, viewport, transformRef.current.scale));
+    },
+    [applyProgrammatic],
+  );
+
+  const focusOn = useCallback(
+    (rect: NodeRect, viewport: Viewport, options?: FocusOptions) => {
+      applyProgrammatic(computeFocus(rect, viewport, options));
     },
     [applyProgrammatic],
   );
@@ -348,6 +411,7 @@ export function useCanvasCamera(initialTransform?: Partial<CameraTransform>): Ca
     zoomOut,
     fit,
     centerOn,
+    focusOn,
     layerRef,
     viewportRef,
     bind,

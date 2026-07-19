@@ -4,6 +4,7 @@ import { CalendarClock } from 'lucide-react';
 import type { FxEconomicCalendarRow } from '@/lib/twelve-x/types';
 import { hasResolvedTime, eventInstant } from '@/lib/twelve-x/fetch';
 import { useTwelveX } from './context';
+import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
 // Severity is chrome, not P&L (F5): high impact uses --warn, never --down.
 function impactClass(impact: string): string {
@@ -25,7 +26,7 @@ export default function EventsMiniTimeline({ events }: { events: FxEconomicCalen
     <section className="glass-card flex flex-col gap-3 p-5">
       <header className="flex items-baseline gap-2">
         <CalendarClock size={15} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">Today&rsquo;s events</h2>
+        <TwelveXSectionHeading>Today&rsquo;s events</TwelveXSectionHeading>
         <button type="button" className="ml-auto text-[11px] text-accent hover:underline" onClick={() => crossLink({ kind: 'tab', tab: 'events' })}>
           see more →
         </button>

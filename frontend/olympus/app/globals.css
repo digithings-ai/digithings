@@ -154,18 +154,17 @@ html.motion-on [data-reveal].reveal-in {
 }
 
 /* ── Surface system (x.ai-style flat — EVOLUTION.md §3 Olympus / §10 · #1216) ──
-   Olympus is FLAT: no glass morphism on content (anti-pattern #8). Panels use
-   `--surface` + a 1px `--hair` border, hover to `--hair-2`. `--shadow-glass`
-   is a deliberately subtle depth cue for the terminal/TradingView feel, not a
-   decorative drop shadow. `backdrop-blur` is used ONLY on sticky/overlay
+  Olympus is FLAT: no glass morphism on content (anti-pattern #8). Panels use
+  `--surface` + a 1px `--hair` border, hover to `--hair-2`. Depth is reserved
+  for floating overlays; content panels remain shadowless like the Digiweb
+  reference. `backdrop-blur` is used ONLY on sticky/overlay
    chrome (nav, mobile app bar, command palette, sidebar) — never on content
    cards. `.glass-card` is a legacy *name* for this flat panel; new components
    should read as flat surfaces. */
 .glass-card {
   background: var(--surface);
   border: 1px solid var(--hair);
-  border-radius: 8px;
-  box-shadow: var(--shadow-glass);
+  border-radius: 12px;
   transition: border-color 0.2s ease, transform 0.2s ease;
 }
 .glass-card:hover {
