@@ -47,6 +47,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main   # scheduled triggers fire from default branch; code pinned to main (#1626)
 
       - uses: actions/setup-python@v5
         with:

@@ -53,6 +53,8 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main   # scheduled triggers fire from default branch; code pinned to main (#1626)
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -144,6 +146,8 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main   # scheduled triggers fire from default branch; code pinned to main (#1626)
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -169,6 +173,8 @@ jobs:
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main   # scheduled triggers fire from default branch; code pinned to main (#1626)
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
