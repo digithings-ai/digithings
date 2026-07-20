@@ -161,11 +161,11 @@ describe('OlympusTearsheetView', () => {
     });
     const out = html(data);
     // Newest 12 tickers should be visible (T8 through T19)
-    expect(out).toContain('T19');
-    expect(out).toContain('T8');
+    expect(out).toContain('<td>T19</td>');
+    expect(out).toContain('<td>T8</td>');
     // Older tickers should NOT be visible by default
-    expect(out).not.toContain('T0');
-    expect(out).not.toContain('T7');
+    expect(out).not.toContain('<td>T0</td>');
+    expect(out).not.toContain('<td>T7</td>');
     // "Show N older" button should be present
     expect(out).toMatch(/Show 8 older/i);
   });
