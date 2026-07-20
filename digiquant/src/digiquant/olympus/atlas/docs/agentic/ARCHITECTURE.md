@@ -604,7 +604,7 @@ Each phase slug maps to a **capability** (`phase_capabilities` / `phase_capabili
 | **reasoning** | `deepseek/deepseek-chat`, `deepseek/deepseek-r1`, `meta-llama/llama-4-maverick` | `master-digest` (Phase 7), `pm-rebalance`, `monthly-digest` |
 | **web search** (grounding pre-pass only) | `perplexity/sonar`, `deepseek-chat:online`, `llama-4-maverick:online` | live-search grounding; never phase/tool calls |
 
-> **Synthesis context reality (#1559).** With the current pool, `master-digest` stable-hashes onto `openrouter/deepseek/deepseek-r1`. No cheap-tier reasoning model offers a large context here: the structured-output-capable endpoints OpenRouter routes these slugs to cap at **64,000 tokens** (observed as daily `BadRequestError`s in `atlas_run_diagnostics`, 2026-07-08 → 07-17, with delta-run digest inputs at ~70–91k tokens; the pipeline then carries the prior digest forward). Synthesis inputs must be budgeted to fit **≤64k with headroom** — do **not** assume a 1M-context synthesis model. (The run-level `model` column in `atlas_run_diagnostics` is the first *served* model of the whole run, not the digest model — a failed digest call records no usage, so its model never appears there.)
+> **Synthesis context reality (#1559).** `master-digest` is pinned to `openrouter/deepseek/deepseek-chat` via `phase_models` (unpinned, it stable-hashes onto `deepseek-r1`, whose chain-of-thought output is not reliably strict JSON — the 2026-07-18 digest failed `json.loads` mid-document and carried the prior digest forward). No cheap-tier reasoning model offers a large context here: the structured-output-capable endpoints OpenRouter routes these slugs to cap at **64,000 tokens** (observed as daily `BadRequestError`s in `atlas_run_diagnostics`, 2026-07-08 → 07-17, with delta-run digest inputs at ~70–91k tokens; the pipeline then carries the prior digest forward). Synthesis inputs must be budgeted to fit **≤64k with headroom** — do **not** assume a 1M-context synthesis model. (The run-level `model` column in `atlas_run_diagnostics` is the first *served* model of the whole run, not the digest model — a failed digest call records no usage, so its model never appears there.)
 
 ### Observed token volume
 
@@ -624,13 +624,16 @@ Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `master-diges
    non-OpenRouter fallback is redirected to the active tier's reasoning pool
 ```
 
-`config/olympus_models.yaml` owns routing; `config/model_modes.yaml` `phase_models` is empty except for deliberate pins. The one live pin (#1006):
+`config/olympus_models.yaml` owns routing; `config/model_modes.yaml` `phase_models` is empty except for deliberate pins. The live pins (#1006, #1559):
 
 ```yaml
 phase_models:
   # H6 deliberation emits strict JSON; llama-4-maverick returned empty completions under
   # STRICT json_schema, so the per-ticker slugs are pinned to the json/tool-reliable model.
   hermes/portfolio/deliberation-: openrouter/deepseek/deepseek-chat   # trailing '-' = prefix match
+  # master-digest otherwise hashes onto deepseek-r1, whose CoT output is not reliably
+  # strict JSON (2026-07-18 digest JSONDecodeError → prior digest carried forward).
+  master-digest: openrouter/deepseek/deepseek-chat
 ```
 
 Model strings with a registered `provider/` prefix (`openrouter/`, `gemini/`, `xai/`) route to the corresponding OpenAI-compatible client via digillm's provider registry (`digillm/src/digillm/client.py`); all other strings go through the legacy Ollama path.
