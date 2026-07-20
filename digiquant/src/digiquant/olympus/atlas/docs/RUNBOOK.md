@@ -220,6 +220,14 @@ Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier 
 rejected** (`openai/*`, `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series); see
 `digigraph.model_config.is_flagship_openrouter_model`.
 
+**Pool changes are endpoint-verified in CI (#1622):** any PR touching
+`config/olympus_models.yaml` / `config/model_modes.yaml` triggers
+`validate-olympus-pools.yml`, which runs `scripts/validate_olympus_pools.py` against live
+OpenRouter — per pooled slug: endpoint metadata (tools + structured_outputs supported,
+context ≥ 64k), one real function-tool call, one strict `json_schema` call. Model-page
+claims are not trusted (#987 mistral-small: page said tools, every endpoint 404'd). Run
+manually anytime: `OPENROUTER_API_KEY=… python3 scripts/validate_olympus_pools.py`.
+
 
 When the scheduled Atlas pipeline fails (`atlas baseline`, `atlas delta`, or `atlas monthly`), the workflow opens or appends to a deduped tracking issue titled `atlas-{baseline,delta,monthly}-failure` with `ci:failure` label. Each comment lists the failing step, the last successful run timestamp, the run URL, and the last 200 log lines.
 

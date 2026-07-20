@@ -31,13 +31,17 @@ _REPO_CONFIG = str(Path(__file__).parents[2] / "config")
 _CHEAP_PHASE_MODELS = frozenset(
     {
         "openrouter/deepseek/deepseek-chat",
-        "openrouter/deepseek/deepseek-r1",
+        "openrouter/deepseek/deepseek-v4-flash",  # #1622: 1M ctx, tools + strict json_schema
+        # deepseek-r1 removed from every phase pool (#1622): CoT output is not reliably
+        # strict JSON (#1617 master-digest JSONDecodeError). Re-adding it here must be a
+        # deliberate decision, not a drive-by.
         "openrouter/meta-llama/llama-4-maverick",
     }
 )
 
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
+        "openrouter/z-ai/glm-5",  # #1622
         "openrouter/google/gemini-2.0-flash-001",
         "openrouter/openai/gpt-4o-mini",
         "openrouter/x-ai/grok-3-mini",
@@ -46,6 +50,7 @@ _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
 
 _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
     {
+        "openrouter/deepseek/deepseek-v4-pro",  # #1622
         "openrouter/openai/gpt-4o",
         "openrouter/anthropic/claude-sonnet-4",
         "openrouter/google/gemini-2.5-flash",
@@ -59,6 +64,7 @@ _WEB_SEARCH_MODELS = frozenset(
     {
         "openrouter/perplexity/sonar",
         "openrouter/deepseek/deepseek-chat:online",
+        "openrouter/deepseek/deepseek-v4-flash:online",  # #1622
         "openrouter/deepseek/deepseek-r1:online",
         "openrouter/meta-llama/llama-4-maverick:online",
         "openrouter/google/gemini-2.0-flash-001:online",
@@ -138,6 +144,21 @@ def test_deliberation_pinned_to_json_reliable_deepseek_chat(
         assert "maverick" not in model, f"deliberation-{ticker} routes to empty-prone maverick"
         assert "deepseek-r1" not in model, f"deliberation-{ticker} routes to prose-only r1"
         assert is_tool_use_capable_model(model)
+
+
+@pytest.mark.unit
+def test_master_digest_pinned_to_v4_flash(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#1559/#1622: master-digest is pinned (model_modes.yaml) to deepseek-v4-flash.
+
+    Unpinned, the reasoning-pool hash landed on deepseek-r1, whose chain-of-thought
+    output broke strict json_schema (2026-07-18 digest JSONDecodeError → prior digest
+    carried forward). v4-flash's 1M context also removes the 64k synthesis ceiling
+    (#1559); the input budget remains as a cost bound. Never r1, never maverick.
+    """
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    model = get_model_for_phase("master-digest")
+    assert model == "openrouter/deepseek/deepseek-v4-flash"
+    assert is_tool_use_capable_model(model)
 
 
 @pytest.mark.unit
