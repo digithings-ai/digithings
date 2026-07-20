@@ -1,10 +1,24 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { consensusAverageSeries } from '@/lib/twelve-x/consensus-derive';
 import { G10_CURRENCIES } from '@/lib/twelve-x/types';
 import type { ConsensusDeltaSet, FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
 import ConsensusTab, { pivotScoreSeries } from './ConsensusTab';
+import { TwelveXProvider, type TwelveXContextValue } from './context';
+
+const mockContext: TwelveXContextValue = {
+  runDate: '2026-06-22',
+  crossLink: () => {},
+  openBrief: () => {},
+  watchlist: {
+    items: [],
+    has: () => false,
+    toggle: () => {},
+    clear: () => {},
+    filterOn: false,
+    setFilterOn: () => {},
+  },
+};
 
 /** Minimal snapshot-row factory; only the fields the tab reads are varied. */
 function snap(
@@ -78,15 +92,16 @@ function render(
 ): string {
   const series = props.series ?? tenCurrencySeries();
   const latest = props.latest ?? latestFrom(series);
-  return renderToStaticMarkup(
-    createElement(ConsensusTab, {
-      series,
-      latest,
-      latestDate: '2026-06-22',
-      deltas: EMPTY_DELTAS,
-      ...props,
-    }),
-  );
+  const tab = createElement(ConsensusTab, {
+    series,
+    latest,
+    latestDate: '2026-06-22',
+    deltas: EMPTY_DELTAS,
+    intelligenceWhy: { runDate: null, items: [] },
+    researchBriefs: [],
+    ...props,
+  });
+  return renderToStaticMarkup(<TwelveXProvider value={mockContext}>{tab}</TwelveXProvider>);
 }
 
 /* ----------------------------------------------------------------------- */
@@ -97,39 +112,17 @@ describe('pivotScoreSeries', () => {
   const series = tenCurrencySeries();
 
   it('pivots raw scores to one row per run_date keyed by currency', () => {
-    const rows = pivotScoreSeries(series, ['USD', 'EUR'], 'raw');
+    const rows = pivotScoreSeries(series, ['USD', 'EUR']);
     expect(rows).toHaveLength(DATES.length);
-    // Sorted ascending by run_date.
     expect(rows.map((r) => r.run_date)).toEqual(DATES);
-    // First run: USD = +0.30, EUR = -0.30 (raw).
     expect(rows[0].USD).toBeCloseTo(0.3, 10);
     expect(rows[0].EUR).toBeCloseTo(-0.3, 10);
-    // Last run: USD = +1.30 raw.
     expect(rows[rows.length - 1].USD).toBeCloseTo(1.3, 10);
-  });
-
-  it('in average mode plots the trailing consensus-average series, NOT the raw scores', () => {
-    const raw = pivotScoreSeries(series, ['USD'], 'raw');
-    const avg = pivotScoreSeries(series, ['USD'], 'average');
-    expect(avg).toHaveLength(DATES.length);
-    // The last run's averaged value must match consensusAverageSeries (window 5).
-    const points = series
-      .filter((r) => r.currency === 'USD')
-      .sort((a, b) => a.run_date.localeCompare(b.run_date))
-      .map((r) => ({ score: r.score }));
-    const expected = consensusAverageSeries(points, 5);
-    const last = avg.length - 1;
-    expect(avg[last].USD).toBeCloseTo(expected[last] as number, 10);
-    // The averaged last value differs from the raw last value (proving the swap).
-    expect(avg[last].USD).not.toBeCloseTo(raw[last].USD as number, 6);
-    // USD raw last = 1.30; trailing-5 avg last = 0.90.
-    expect(raw[last].USD).toBeCloseTo(1.3, 10);
-    expect(avg[last].USD).toBeCloseTo(0.9, 10);
   });
 
   it('emits null for a run_date a currency has no score on (no fabricated 0)', () => {
     const sparse = [snap('USD', '2026-06-17', 1), snap('EUR', '2026-06-18', -1)];
-    const rows = pivotScoreSeries(sparse, ['USD', 'EUR'], 'raw');
+    const rows = pivotScoreSeries(sparse, ['USD', 'EUR']);
     const usdRow = rows.find((r) => r.run_date === '2026-06-18');
     expect(usdRow?.USD ?? null).toBeNull();
   });
@@ -158,13 +151,9 @@ describe('ConsensusTab sub-nav', () => {
 /* ----------------------------------------------------------------------- */
 
 describe('ConsensusTab Table view', () => {
-  it('renders the ConsensusDataTable (window control + filter chips)', () => {
+  it('renders the ConsensusDataTable with filter shortcuts', () => {
     const html = render();
-    // Distinctive ConsensusDataTable markers: the avg-window control + chips.
-    expect(html.toLowerCase()).toContain('window');
-    for (const n of ['3', '5', '10', '20']) {
-      expect(html).toContain(`data-n="${n}"`);
-    }
+    // Filter shortcuts (no variable window controls).
     for (const f of ['all', 'bullish', 'bearish', 'strong']) {
       expect(html).toContain(`data-filter="${f}"`);
     }
@@ -186,18 +175,16 @@ describe('ConsensusTab Table view', () => {
     const html = render();
     // The line/area chart containers are only mounted in the Charts view.
     expect(html).not.toContain('data-chart="line"');
-    expect(html).not.toContain('data-chart="split"');
   });
 
-  it('renders the biggest-shift banner when a top mover is present', () => {
+  it('does NOT render the removed Biggest shift banner', () => {
     const movers: ConsensusDeltaSet['movers'] = [
       { currency: 'USD', scoreNow: 1.3, scoreDelta: 0.4, absDelta: 0.4, direction: 'up' },
     ];
     const html = render({
       deltas: { ...EMPTY_DELTAS, movers },
     });
-    expect(html).toContain('Biggest shift');
-    expect(html).toContain('USD');
+    expect(html).not.toContain('Biggest shift');
   });
 });
 
@@ -206,48 +193,43 @@ describe('ConsensusTab Table view', () => {
 /* ----------------------------------------------------------------------- */
 
 describe('ConsensusTab Charts view', () => {
-  it('shows the score-over-time line chart container', () => {
+  it('shows the single full-width score-over-time chart', () => {
     const html = render({ initialView: 'charts' });
     expect(html).toContain('data-chart="line"');
     expect(html).toContain('Consensus score over time');
   });
 
-  it('shows the position-split container side-by-side at lg', () => {
+  it('does NOT render the removed position-split chart', () => {
     const html = render({ initialView: 'charts' });
-    expect(html).toContain('data-chart="split"');
-    expect(html).toContain('Position split over time');
-    // The two-up grid uses the lg:grid-cols-2 breakpoint.
-    expect(html).toMatch(/lg:grid-cols-2/);
+    expect(html).not.toContain('data-chart="split"');
+    expect(html).not.toContain('Position split over time');
   });
 
-  it('renders the Raw | Average toggle on the line chart (Raw default)', () => {
+  it('does NOT render the removed Raw | Average toggle', () => {
     const html = render({ initialView: 'charts' });
-    expect(html).toContain('data-smooth="raw"');
-    expect(html).toContain('data-smooth="ma"');
-    expect(html).toMatch(/data-smooth="raw"[^>]*aria-pressed="true"/);
+    expect(html).not.toContain('data-smooth="raw"');
+    expect(html).not.toContain('data-smooth="ma"');
   });
 
-  it('keeps the currency filter chips that drive the line + split', () => {
+  it('does NOT render currency filter chips', () => {
     const html = render({ initialView: 'charts' });
-    // Per-currency chips (All + each G10).
-    for (const ccy of G10_CURRENCIES) {
-      expect(html).toContain(`>${ccy}<`);
+    // No separate currency selector chips; legend is interactive instead.
+    expect(html).not.toContain('data-ccy-chip=');
+  });
+
+  it('renders an interactive custom legend with aria-pressed', () => {
+    const html = render({ initialView: 'charts' });
+    // The legend should have buttons for each currency.
+    for (const ccy of G10_CURRENCIES.slice(0, 3)) {
+      expect(html).toMatch(new RegExp(`aria-pressed="(true|false)"[^>]*>${ccy}`));
     }
   });
 
-  it('renders the top-mover "Why this weight?" card in the Charts view too', () => {
+  it('does NOT render the removed Biggest shift card in Charts view', () => {
     const movers: ConsensusDeltaSet['movers'] = [
       { currency: 'JPY', scoreNow: -1.1, scoreDelta: -0.6, absDelta: 0.6, direction: 'down' },
     ];
     const html = render({ initialView: 'charts', deltas: { ...EMPTY_DELTAS, movers } });
-    expect(html).toContain('Biggest shift');
-  });
-
-  it('plots the averaged series when smoothing = average', () => {
-    const html = render({ initialView: 'charts', initialSmooth: 'ma' });
-    expect(html).toMatch(/data-smooth="ma"[^>]*aria-pressed="true"/);
-    // The smoothing note flips to the trailing-mean copy (never "moving average").
-    expect(html.toLowerCase()).toContain('average');
-    expect(html.toLowerCase()).not.toContain('moving average');
+    expect(html).not.toContain('Biggest shift');
   });
 });

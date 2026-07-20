@@ -3,6 +3,7 @@
 import { FileText } from 'lucide-react';
 
 import { SafeMarkdown } from '@/components/SafeMarkdown';
+import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
 export default function DigestBrief({
   digest,
@@ -12,7 +13,7 @@ export default function DigestBrief({
   if (!digest) {
     return (
       <section className="glass-card p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">Digest brief</h2>
+        <TwelveXSectionHeading>Digest brief</TwelveXSectionHeading>
         <p className="mt-2 text-sm text-ink-mute">No digest for today yet.</p>
       </section>
     );
@@ -21,7 +22,7 @@ export default function DigestBrief({
     <section className="glass-card flex flex-col gap-2 p-5">
       <header className="flex items-baseline gap-2">
         <FileText size={15} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">Digest brief</h2>
+        <TwelveXSectionHeading>Digest brief</TwelveXSectionHeading>
         <span className="ml-auto font-mono text-[10px] text-ink-mute">
           {digest.doc_count} docs · {digest.broker_count} brokers
         </span>

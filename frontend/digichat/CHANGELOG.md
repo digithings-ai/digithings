@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/digithings-ai/digithings/compare/digichat-v0.4.0...digichat-v0.4.1) (2026-07-19)
+
+
+### Bug Fixes
+
+* **digichat:** parse azure_ai_search's url_citation annotation shape ([bf5bbe7](https://github.com/digithings-ai/digithings/commit/bf5bbe7fe25634e537d48ad4b4c06c774bd18cea))
+* **digichat:** parse azure_ai_search's url_citation annotation shape ([91caa0e](https://github.com/digithings-ai/digithings/commit/91caa0e01c20f457ff37e6a120cfd321c1b62253)), closes [#1601](https://github.com/digithings-ai/digithings/issues/1601)
+
 ## [0.4.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.3.0...digichat-v0.4.0) (2026-07-16)
 
 

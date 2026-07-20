@@ -66,6 +66,26 @@ const events: FxEconomicCalendarRow[] = [
 
 const noOpinions: FxEventSnapshotRow[] = [];
 
+/** Create a minimal opinion snapshot for testing evidence-based interactivity. */
+function opinion(
+  partial: Partial<FxEventSnapshotRow> & { event_key: string },
+): FxEventSnapshotRow {
+  return {
+    run_date: '2026-06-22',
+    event_name: 'Some Event',
+    event_date: null,
+    calendar_external_id: '',
+    release_at: null,
+    category: 'macro',
+    currencies: [],
+    mentions: 1,
+    brokers: ['Atlas Macro'],
+    citations: [],
+    as_of: '2026-06-22T00:00:00Z',
+    ...partial,
+  };
+}
+
 function render(props: Partial<Parameters<typeof EventsTab>[0]> = {}): string {
   return renderToStaticMarkup(
     createElement(EventsTab, {
@@ -157,10 +177,36 @@ describe('EventsTab event-detail slide-over', () => {
 });
 
 describe('EventsTab timeline wiring', () => {
-  it('renders the timeline cards as clickable buttons in timeline view', () => {
-    const html = render({ initialView: 'timeline' });
-    // The tl-card is now a button element wired to onSelect.
+  it('renders timeline cards as clickable buttons when they have evidence', () => {
+    // Provide an opinion for the first event so it becomes selectable.
+    const withOpinions = [
+      opinion({
+        event_key: 'core-pce',
+        event_name: 'Core PCE Price Index',
+        event_date: '2026-06-22',
+        mentions: 2,
+        brokers: ['Goldman', 'JPM'],
+        citations: [
+          {
+            broker: 'Goldman',
+            expected_outcome: 'In line',
+            fx_impact: 'USD bid',
+            source_file: 'gs.pdf',
+            brief_key: 'gs',
+          },
+        ],
+      }),
+    ];
+    const html = render({ initialView: 'timeline', opinions: withOpinions });
+    // At least one tl-card should be a button (the one with evidence).
     expect(html).toMatch(/<button[^>]*tl-card/);
+  });
+
+  it('renders timeline cards as static divs when they have no evidence', () => {
+    const html = render({ initialView: 'timeline', opinions: noOpinions });
+    // All cards should be divs (no evidence = no interactivity).
+    expect(html).toMatch(/<div[^>]*tl-card/);
+    expect(html).not.toMatch(/<button[^>]*tl-card/);
   });
 });
 

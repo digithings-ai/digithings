@@ -83,6 +83,7 @@ export default function PipelineClient() {
   const [decision, setDecision] = useState<string | null>(null);
 
   // Node detail
+  const [activeNode, setActiveNode] = useState<LaidOutNode | null>(null);
   const [activeDocumentKey, setActiveDocumentKey] = useState<string | null>(params.node ?? null);
 
   const initialExpansion = useMemo(
@@ -208,7 +209,13 @@ export default function PipelineClient() {
   }, [activeDocumentKey, dayData]);
 
   const handleNodeActivate = useCallback((node: LaidOutNode) => {
+    setActiveNode(node);
     setActiveDocumentKey(node.documentKey ?? null);
+  }, []);
+
+  const handleDetailClose = useCallback(() => {
+    setActiveNode(null);
+    setActiveDocumentKey(null);
   }, []);
 
   const handleDateChange = useCallback((date: string) => {
@@ -220,9 +227,9 @@ export default function PipelineClient() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 min-w-0">
-      {/* Summary strip row */}
-      <div className="px-6 pb-3 flex flex-col gap-1">
-        <div className="flex items-center gap-3 flex-wrap">
+      {/* Run context: the day's read and state paired with temporal navigation. */}
+      <div className="border-y border-hair bg-surface/70 px-4 py-3 md:px-6">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <PipelineSummaryStrip
             headline={headline}
             regimeChips={regimeChips}
@@ -236,7 +243,7 @@ export default function PipelineClient() {
           />
         </div>
         {noRunForDate && (
-          <p className="font-mono text-[12px] text-ink-mute" role="status">
+          <p className="mt-2 border-t border-hair pt-2 font-mono text-xs text-ink-mute" role="status">
             No pipeline run recorded for this date — the graph below shows the
             expected shape, not real output.
           </p>
@@ -244,19 +251,20 @@ export default function PipelineClient() {
       </div>
 
       {/* Canvas + NodeDetail */}
-      <div className="flex flex-1 min-h-0 min-w-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
         <PipelineCanvas
           day={dayData}
           initialExpansion={initialExpansion}
-          selectedNodeId={resolvedActiveDocumentKey ?? undefined}
+          selectedNodeId={activeNode?.id ?? resolvedActiveDocumentKey ?? undefined}
           onNodeActivate={handleNodeActivate}
         />
 
-        {resolvedActiveDocumentKey !== null && (
+        {(activeNode !== null || resolvedActiveDocumentKey !== null) && (
           <PipelineNodeDetail
+            node={activeNode}
             documentKey={resolvedActiveDocumentKey}
             date={selectedDate}
-            onClose={() => setActiveDocumentKey(null)}
+            onClose={handleDetailClose}
           />
         )}
       </div>

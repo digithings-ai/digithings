@@ -5,6 +5,7 @@ import { deriveConsensusRows } from '@/lib/twelve-x/consensus-view';
 import { currencyColor, scoreColorClass } from '@/lib/twelve-x/consensus-bar';
 import type { FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
 import { ConsensusScoreBar } from './ConsensusScoreBars';
+import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
 /**
  * The Today page's "Consensus average" chart (frozen visual-spec redesign #1).
@@ -41,13 +42,13 @@ function valueColor(v: number | null): string {
 }
 
 /** Momentum → arrow glyph + color class (▲ up / ▼ down / · flat). */
-function momentumPresentation(m: number | null): { arrow: string; cls: string } {
+function rateChangePresentation(m: number | null): { arrow: string; label: string } {
   if (m === null || !Number.isFinite(m) || m === 0) {
-    return { arrow: '·', cls: 'text-ink-soft' };
+    return { arrow: '—', label: 'No change from prior run' };
   }
   return m > 0
-    ? { arrow: '▲', cls: 'text-up' }
-    : { arrow: '▼', cls: 'text-down' };
+    ? { arrow: '↑', label: 'Up from prior run' }
+    : { arrow: '↓', label: 'Down from prior run' };
 }
 
 export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
@@ -60,12 +61,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
   return (
     <section className="glass-card p-4 flex flex-col flex-1">
       <div className="mb-3.5">
-        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-soft">
-          Consensus average
-        </h2>
-        <p className="mt-1 text-[11px] text-ink-mute">
-          Trailing 5-run average — raw latest scores are on the Consensus tab.
-        </p>
+        <TwelveXSectionHeading>Consensus</TwelveXSectionHeading>
       </div>
 
       {!hasData ? (
@@ -76,7 +72,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
         <>
           <div className="tc-rows grid gap-2.5 mt-1">
             {rows.map((r) => {
-              const mom = momentumPresentation(r.momentum);
+              const rateChange = rateChangePresentation(r.priorChange);
               return (
                 <div key={r.currency} className="tc-row flex items-center gap-2.5">
                   <span
@@ -90,8 +86,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
                       value={r.avgNow ?? 0}
                       markers={[
                         { value: r.actualNow, kind: 'actual', label: "Today's actual" },
-                        { value: r.avgYesterday, kind: 'prior', label: "Yesterday's avg" },
-                        { value: r.avgAgo, kind: 'ago', label: '5 days ago avg' },
+                        { value: r.priorActual, kind: 'prior', label: "Prior run" },
                       ]}
                     />
                   </div>
@@ -101,13 +96,15 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
                     )}`}
                   >
                     {fmtSigned(r.avgNow)}
-                    <span className="ml-1 text-[9.5px] font-normal text-ink-mute">avg</span>
                   </span>
                   <span
-                    className={`font-mono tabular-nums text-right text-[11.5px] w-[52px] ${mom.cls}`}
-                    title="Today's actual vs consensus average (rate of change)"
+                    className={`inline-flex w-[72px] items-center justify-end gap-1 font-mono tabular-nums text-right text-[11.5px] ${valueColor(
+                      r.priorChange
+                    )}`}
+                    title={rateChange.label}
                   >
-                    {mom.arrow} {fmtSigned(r.momentum)}
+                    <span aria-hidden="true">{rateChange.arrow}</span>
+                    <span>{fmtSigned(r.priorChange)}</span>
                   </span>
                 </div>
               );
@@ -120,7 +117,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
                 className="inline-block w-4 h-2 rounded-sm bg-up"
                 aria-hidden="true"
               />
-              Consensus average (bar · green bull / red bear, from zero center)
+              Trailing 5-run average (bar)
             </span>
             <span className="flex items-center gap-1.5">
               <span
@@ -128,24 +125,6 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
                 aria-hidden="true"
               />
               Today&apos;s actual
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span
-                className="inline-block w-0.5 h-3 rounded-sm bg-accent"
-                aria-hidden="true"
-              />
-              Yesterday&apos;s avg
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span
-                className="inline-block w-0.5 h-3 rounded-sm bg-ink-mute"
-                aria-hidden="true"
-              />
-              5 days ago avg
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="text-up">▲</span>/<span className="text-down">▼</span> =
-              actual vs average (rate of change)
             </span>
           </div>
         </>

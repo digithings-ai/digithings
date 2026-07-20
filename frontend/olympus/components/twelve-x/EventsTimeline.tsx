@@ -37,8 +37,13 @@ export interface EventsTimelineProps {
   /** Single mode: the day to render (defaults to the first event's date). */
   day?: string;
   /** When provided, each card becomes a clickable button that fires this with
-   *  the event's `id` — used by the Events tab to open the detail slide-over. */
+   *  the event's `id`. Only events whose `id` is in `selectableIds` (or all
+   *  events if `selectableIds` is undefined) will be clickable. */
   onSelect?: (id: string) => void;
+  /** Optional set of event IDs that should be clickable. When undefined, all
+   *  events with an `id` are clickable. When provided, only IDs in this set
+   *  become clickable buttons. */
+  selectableIds?: Set<string>;
 }
 
 // ── calendar → timeline mapper (shared by Today + Events) ─────────────────
@@ -94,7 +99,7 @@ export function eventsToTimeline(rows: FxEconomicCalendarRow[]): TimelineEvent[]
 export const TL_SCALES = { hour: 64, day: 22 } as const; // px per hour
 export const TL_WIN_START = 0;
 export const TL_WIN_END = 24; // daily window 00:00 → 24:00
-export const TL_LANE_H = 46;
+export const TL_LANE_H = 52; // Increased from 46 for bottom breathing room
 export const TL_LANE_GAP = 9;
 export const TL_BODY_PAD = 10;
 /** Minimum rendered card width so the label/time always fit. Widened from 88 so
@@ -203,7 +208,7 @@ function distinctDays(events: TimelineEvent[], fallback?: string): string[] {
 
 // ── component ─────────────────────────────────────────────────────────────
 
-export default function EventsTimeline({ events, mode, day, onSelect }: EventsTimelineProps) {
+export default function EventsTimeline({ events, mode, day, onSelect, selectableIds }: EventsTimelineProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [measuredW, setMeasuredW] = useState(0);
   const [scale, setScale] = useState<'hour' | 'day'>('hour');
@@ -353,8 +358,9 @@ export default function EventsTimeline({ events, mode, day, onSelect }: EventsTi
               return cards.map((c, ci) => {
                 const top = TL_BODY_PAD + c.lane * (TL_LANE_H + TL_LANE_GAP);
                 const e = c.event;
-                const clickable = Boolean(onSelect && e.id != null);
-                const className = `tl-card absolute box-border overflow-hidden rounded-md border-l-[3px] px-[7px] py-[5px] text-left ${
+                const isSelectable = selectableIds ? selectableIds.has(e.id ?? '') : true;
+                const clickable = Boolean(onSelect && e.id != null && isSelectable);
+                const className = `tl-card absolute box-border overflow-hidden rounded-md border-l-[3px] px-[7px] py-[6px] text-left ${
                   clickable ? 'cursor-pointer transition-shadow hover:ring-1 hover:ring-inset hover:ring-ink/20' : ''
                 } ${impactClass(e.impact)} ${impactStyle(e.impact)}`;
                 const style = { left: dayLeft + c.x, top, width: c.width, height: TL_LANE_H };

@@ -81,4 +81,19 @@ describe('deriveConsensusRows', () => {
   it('returns an empty array for an empty series', () => {
     expect(deriveConsensusRows([])).toEqual([]);
   });
+
+  it('derives priorActual and priorChange for the trailing-run comparison', () => {
+    const rows = deriveConsensusRows(series());
+    const usd = rows.find((r) => r.currency === 'USD')!;
+    // USD series: 0.3, 0.5, 0.7, 0.9, 1.1, 1.3. Latest is 1.3, prior is 1.1.
+    expect(usd.priorActual).toBeCloseTo(1.1, 10);
+    expect(usd.priorChange).toBeCloseTo(0.2, 10); // 1.3 - 1.1
+  });
+
+  it('sets priorActual and priorChange to null when fewer than 2 points exist', () => {
+    const single = [snap('USD', '2026-06-22', 1.0)];
+    const rows = deriveConsensusRows(single);
+    expect(rows[0].priorActual).toBeNull();
+    expect(rows[0].priorChange).toBeNull();
+  });
 });

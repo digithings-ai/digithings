@@ -23,4 +23,14 @@ describe('ProposedByPipelineShelf', () => {
     const html = renderToStaticMarkup(createElement(ProposedByPipelineShelf, { proposed: [] }));
     expect(html).toBe('');
   });
+
+  it('bounds a long proposal list to 6 rows by default with a Show N more control', () => {
+    const many = Array.from({ length: 29 }, (_, i) => p({ ticker: `T${i}`, node: `analyst/T${i}` }));
+    const html = renderToStaticMarkup(createElement(ProposedByPipelineShelf, { proposed: many }));
+    expect(html).toContain('Show 23 more');
+    expect(html).toContain('T0');
+    expect(html).toContain('T5');
+    expect(html).not.toContain('T6');
+    expect(html).not.toContain('T28');
+  });
 });

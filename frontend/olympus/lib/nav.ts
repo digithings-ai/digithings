@@ -13,6 +13,11 @@ export interface NavItem {
  * The portfolio-owner spine: glance → why → full, four destinations.
  * Single source of truth consumed by both the desktop sidebar and the mobile
  * app bar so they can never drift.
+ *
+ * The FX Research suite (/twelve-x) is gated: its entry appears only when
+ * NEXT_PUBLIC_TWELVEX_ENABLED=1 is inlined at build time (.env.local.example
+ * documented this gate but nothing implemented it until #1551 — the route
+ * existed with no way to reach it from the chrome).
  */
 const TWELVEX_ENABLED = process.env.NEXT_PUBLIC_TWELVEX_ENABLED === '1';
 

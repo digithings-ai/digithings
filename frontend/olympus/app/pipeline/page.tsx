@@ -21,7 +21,7 @@ export default function PipelinePage() {
           Pipeline
         </div>
         <div className="flex items-baseline gap-3 flex-wrap">
-          <h1 className="font-display text-[28px] font-normal leading-none m-0 text-ink">
+          <h1 className="font-display text-3xl tracking-tight m-0 text-ink">
             How today&apos;s decision was made
           </h1>
           <span className="text-[12.5px] text-ink-mute">

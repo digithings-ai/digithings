@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { FxTradeIdeaRow, FxConfluenceSnapshotRow } from '@/lib/twelve-x/types';
 import { useTwelveX } from './context';
+import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
 function dirClass(direction: string): string {
   const d = direction.toLowerCase();
@@ -35,7 +36,7 @@ export default function TradeIdeasPanel({
     return (
       <section className="glass-card p-5">
         <header className="mb-2 flex items-baseline gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">Today&rsquo;s trade ideas</h2>
+          <TwelveXSectionHeading>Today&rsquo;s trade ideas</TwelveXSectionHeading>
         </header>
         <p className="text-sm text-ink-mute">No curated trade idea for today yet.</p>
       </section>
@@ -48,12 +49,12 @@ export default function TradeIdeasPanel({
   return (
     <section className="glass-card flex flex-col gap-3 p-5">
       <header className="flex items-baseline gap-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">Today&rsquo;s trade ideas</h2>
+        <TwelveXSectionHeading>Today&rsquo;s trade ideas</TwelveXSectionHeading>
         <span className="font-mono text-[10px] text-ink-mute">· {ideas.length}</span>
         <button
           type="button"
           className="ml-auto text-[11px] text-accent hover:underline"
-          onClick={() => crossLink({ kind: 'tab', tab: 'intelligence' })}
+          onClick={() => crossLink({ kind: 'tab', tab: 'consensus' })}
         >
           see more →
         </button>

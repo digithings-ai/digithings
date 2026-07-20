@@ -31,9 +31,7 @@ import {
 } from '@/lib/portfolio-url-state';
 import { normalizeThesisId } from '@/lib/thesis-id';
 import AllocationsTab from './tabs/AllocationsTab';
-import PerformanceTab from './tabs/PerformanceTab';
 import ThesesTab from './tabs/ThesesTab';
-import DecisionQuality from './DecisionQuality';
 import PageSkeleton from '@/components/page-skeleton';
 
 export default function PortfolioShellInner() {
@@ -236,13 +234,6 @@ export default function PortfolioShellInner() {
             decisions={decisions}
             thesisVehicleRows={thesisVehicleRows}
           />
-        )}
-
-        {tab === 'performance' && (
-          <div className="space-y-10">
-            <PerformanceTab />
-            <DecisionQuality />
-          </div>
         )}
       </div>
     </div>

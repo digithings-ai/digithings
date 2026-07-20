@@ -1,6 +1,7 @@
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronDown, ChevronUp, ExternalLink, FileText } from 'lucide-react';
 import { pnlColor } from '@/components/ui';
@@ -35,8 +36,22 @@ export default function AllocationsPositionsTable(props: {
 }) {
   const { reconciliation, positionHistory, positionEvents, thesisById, lastUpdated, decisionByTicker } =
     props;
-  const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  // Seed the expanded row from a `?ticker=` deep link (e.g. the "Holdings
+  // expressing this thesis" list) — lazy-initialized so it only applies once,
+  // on mount, and never fights a later manual expand/collapse.
+  const [expandedTicker, setExpandedTicker] = useState<string | null>(
+    () => searchParams?.get('ticker')?.toUpperCase() ?? null
+  );
   const [showInactive, setShowInactive] = useState(false);
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+
+  // Scroll the deep-linked row into view once its ref is mounted.
+  useEffect(() => {
+    if (!expandedTicker) return;
+    rowRefs.current.get(expandedTicker)?.scrollIntoView({ block: 'center' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once for the initial deep link only
+  }, []);
 
   // Conviction-first within each sector; ties broken by normalized weight.
   const sorted = useMemo(
@@ -120,8 +135,8 @@ export default function AllocationsPositionsTable(props: {
   return (
     <div className="glass-card p-0 overflow-hidden">
       <div className="border-b border-hair bg-term-bg px-4 py-4 md:px-6 md:py-5 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-lg font-semibold">Positions</h3>
-        <label className="flex items-center gap-2 text-[11px] text-ink-mute select-none">
+        <h3 className="font-display text-xl font-normal tracking-tight text-ink">Positions</h3>
+        <label className="flex select-none items-center gap-2 font-mono text-[0.66rem] text-ink-mute">
           <input
             type="checkbox"
             className="accent-accent"
@@ -132,24 +147,24 @@ export default function AllocationsPositionsTable(props: {
         </label>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-0 text-sm md:min-w-[920px]">
+        <table className="w-full min-w-0 border-collapse font-mono text-[0.82rem] [font-variant-numeric:tabular-nums] md:min-w-[920px]">
           <thead>
-            <tr className="text-ink-mute text-xs uppercase tracking-wider">
-              <th className="pl-2 pr-2 py-3 text-left md:pl-4">Ticker</th>
-              <th className="px-2 py-3 text-right md:px-3">Weight</th>
-              <th className="px-2 py-3 text-center md:px-3">Conviction</th>
-              <th className="hidden px-3 py-3 text-right md:table-cell">Day</th>
-              <th className="hidden px-3 py-3 text-right md:table-cell">Unrealized</th>
-              <th className="hidden px-3 py-3 text-right lg:table-cell">Risk (stop ↔ target)</th>
+            <tr className="border-b border-hair text-[0.58rem] font-normal uppercase tracking-[0.1em] text-ink-mute">
+              <th className="py-[0.7rem] pl-2 pr-2 text-left font-normal md:pl-4">Ticker</th>
+              <th className="px-2 py-[0.7rem] text-right font-normal md:px-3">Weight</th>
+              <th className="px-2 py-[0.7rem] text-center font-normal md:px-3">Conviction</th>
+              <th className="hidden px-3 py-[0.7rem] text-right font-normal md:table-cell">Day</th>
+              <th className="hidden px-3 py-[0.7rem] text-right font-normal md:table-cell">Unrealized</th>
+              <th className="hidden px-3 py-[0.7rem] text-right font-normal lg:table-cell">Risk (stop ↔ target)</th>
               {hasTargets && (
                 <>
-                  <th className="hidden px-3 py-3 text-right md:table-cell">Target</th>
-                  <th className="hidden px-3 py-3 text-right md:table-cell">Δ vs target</th>
+                  <th className="hidden px-3 py-[0.7rem] text-right font-normal md:table-cell">Target</th>
+                  <th className="hidden px-3 py-[0.7rem] text-right font-normal md:table-cell">Δ vs target</th>
                 </>
               )}
-              <th className="hidden max-w-[200px] px-3 py-3 text-left xl:table-cell">Thesis</th>
-              <th className="px-2 py-3 text-center md:px-3">Decision</th>
-              <th className="w-8 px-2 py-3 md:px-3" />
+              <th className="hidden max-w-[200px] px-3 py-[0.7rem] text-left font-normal xl:table-cell">Thesis</th>
+              <th className="px-2 py-[0.7rem] text-center font-normal md:px-3">Decision</th>
+              <th className="w-8 px-2 py-[0.7rem] md:px-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-hair">
@@ -158,7 +173,7 @@ export default function AllocationsPositionsTable(props: {
                 <tr className="bg-term-bg/60">
                   <td
                     colSpan={colCount}
-                    className="px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink-soft md:px-4"
+                    className="px-2 py-2 text-xs font-semibold uppercase tracking-wider text-ink-soft md:px-4"
                   >
                     {sector}
                     <span className="ml-2 font-mono text-ink-mute">
@@ -167,17 +182,22 @@ export default function AllocationsPositionsTable(props: {
                   </td>
                 </tr>
                 {rows.map((p) => {
-                  const isExpanded = expandedTicker === p.ticker;
+                  const tickerKey = p.ticker.toUpperCase();
+                  const isExpanded = expandedTicker === tickerKey;
                   const pctOfMax = maxWeight > 0 ? (p.normalizedWeight / maxWeight) * 100 : 0;
                   const vsTarget =
                     hasTargets && p.weight_target != null
                       ? p.normalizedWeight - p.weight_target
                       : null;
-                  const dec = decisionByTicker.get(p.ticker.toUpperCase());
+                  const dec = decisionByTicker.get(tickerKey);
                   return (
                     <Fragment key={p.ticker}>
                       <tr
-                        onClick={() => setExpandedTicker(isExpanded ? null : p.ticker)}
+                        ref={(el) => {
+                          if (el) rowRefs.current.set(tickerKey, el);
+                          else rowRefs.current.delete(tickerKey);
+                        }}
+                        onClick={() => setExpandedTicker(isExpanded ? null : tickerKey)}
                         className={`cursor-pointer transition-colors hover:bg-ink/[0.03] ${
                           isExpanded ? 'bg-ink/[0.02]' : ''
                         }`}
@@ -284,7 +304,7 @@ export default function AllocationsPositionsTable(props: {
                             <Link
                               href={`/portfolio/tickers?ticker=${encodeURIComponent(p.ticker.toUpperCase())}`}
                               onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-ink-mute hover:text-accent hover:underline"
+                              className="inline-flex items-center gap-1 text-xs uppercase tracking-wider text-ink-mute hover:text-accent hover:underline"
                               title={`Open ${p.ticker} dossier`}
                             >
                               <FileText size={11} aria-hidden /> Dossier
@@ -297,7 +317,7 @@ export default function AllocationsPositionsTable(props: {
                       </tr>
                       {isExpanded && (
                         <tr className="bg-ink/[0.02]">
-                          <td colSpan={colCount} className="px-4 py-5 md:px-6 md:py-6">
+                          <td colSpan={colCount} className="max-w-0 overflow-hidden px-4 py-5 md:px-6 md:py-6">
                             <PositionDrilldown
                               key={p.ticker}
                               position={p}

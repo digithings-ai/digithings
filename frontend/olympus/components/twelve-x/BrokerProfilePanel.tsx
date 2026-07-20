@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2, ExternalLink, X } from 'lucide-react';
 
 import { MATRIX_COLUMNS } from '@/lib/twelve-x/types';
@@ -11,8 +11,9 @@ import { directionStyle, directionBucket, formatTargets } from '@/lib/twelve-x/m
  * Right-side slide-over profiling a SINGLE broker/desk — the "focus on one
  * broker, drill into what they're thinking" view. Opened by clicking a broker's
  * row label in the Matrix. Mirrors EventDetailPanel/BriefPanel (scrim + right
- * panel, Esc-to-close, body scroll-lock). Fully derived from the MatrixCell set
- * already in the Matrix (filtered to this broker) — no extra fetch.
+ * panel, Esc-to-close, body scroll-lock, reduced-motion-aware entrance slide).
+ * Fully derived from the MatrixCell set already in the Matrix (filtered to
+ * this broker) — no extra fetch.
  */
 export default function BrokerProfilePanel({
   broker,
@@ -27,6 +28,16 @@ export default function BrokerProfilePanel({
 }) {
   const open = broker != null;
   const handleClose = useCallback(() => onClose(), [onClose]);
+
+  // Mount flag driving the entrance slide (mirrors BriefPanel's Sheet, whose
+  // entrance is a reduced-motion-aware translate; this hand-rolled overlay has
+  // no Base UI transition primitive, so we fake the same one-motion-moment by
+  // flipping this a frame after open so the transition has a starting state.
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setEntered(open));
+    return () => cancelAnimationFrame(id);
+  }, [open]);
 
   // Close on Escape while open.
   useEffect(() => {
@@ -88,7 +99,9 @@ export default function BrokerProfilePanel({
       />
 
       {/* Panel */}
-      <div className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-hair bg-term-bg shadow-2xl">
+      <div
+        className={`absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-hair bg-term-bg shadow-2xl transition-transform duration-200 ease-in-out motion-reduce:transition-none motion-reduce:translate-x-0 ${entered ? 'translate-x-0' : 'translate-x-10'}`}
+      >
         <div className="flex shrink-0 justify-center pt-2 sm:hidden" aria-hidden>
           <span className="h-1 w-9 rounded-full bg-ink/20" />
         </div>

@@ -25,4 +25,11 @@ describe('BookReconciliationStrip', () => {
     expect(html).not.toContain('Gross');
     expect(html).not.toContain('Net');
   });
+
+  it('uses canonical text-xs for uppercase labels', () => {
+    const html = renderToStaticMarkup(
+      createElement(BookReconciliationStrip, { reconciliation: recon, asOfDate: '2026-06-23' })
+    );
+    expect(html).toContain('text-xs uppercase tracking-wider');
+  });
 });

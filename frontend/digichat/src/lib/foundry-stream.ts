@@ -50,7 +50,9 @@ interface OutputItemDoneEvent extends FoundryStreamEvent {
   item?: {
     type?: string;
     queries?: string[];
-    content?: Array<{ annotations?: Array<{ filename?: string }> }>;
+    content?: Array<{
+      annotations?: Array<{ type?: string; filename?: string; url?: string; title?: string }>;
+    }>;
   };
 }
 
@@ -82,15 +84,22 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
     return { type: "trace", label, status: "completed" };
   }
   if (item?.type === "message") {
-    const filenames = [
+    // Two citation shapes share this event: Foundry's native file_search tool annotates
+    // with `filename`, while the azure_ai_search tool (Microsoft docs, "Connect an Azure
+    // AI Search index to Foundry agents") emits `{type: "url_citation", url, title}`
+    // instead — no filename at all. Handle both so sources show up regardless of which
+    // grounding tool an agent uses.
+    const sources = [
       ...new Set(
         (item.content ?? []).flatMap((c) =>
-          (c.annotations ?? []).map((a) => a.filename).filter((f): f is string => Boolean(f))
+          (c.annotations ?? [])
+            .map((a) => (a.type === "url_citation" ? a.title || a.url : a.filename))
+            .filter((s): s is string => Boolean(s))
         )
       ),
     ];
-    if (filenames.length > 0) {
-      return { type: "trace", label: `Sources: ${filenames.join(", ")}`, status: "completed" };
+    if (sources.length > 0) {
+      return { type: "trace", label: `Sources: ${sources.join(", ")}`, status: "completed" };
     }
   }
   return null;

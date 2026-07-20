@@ -410,3 +410,109 @@
    (components/finance-composites/SortableTable.tsx) carries the utilities;
    the .srt-* grammar (header states, hairline rows, td money colors) lives in
    @digithings/web/styles/finance-composites.css, imported from globals.css. */
+
+/* ── conviction vocabulary ───────────────────────────────────────────────────────── */
+/* RECORDED-FROM-OLYMPUS, pending a promotion ruling (#1577) — no
+   @digithings/web export exists yet, so conviction-reference.tsx owns static
+   markup class-for-class from frontend/olympus/components/shared/
+   conviction-meter.tsx + signed-conviction-badge.tsx. The pip/badge dress
+   itself stays inline utilities (bg-accent / bg-hair / text-up / text-down)
+   to mirror the olympus source exactly; the cvx-* classes below are
+   specimen-local LAYOUT only (scale cards, row grid, the three-encodings
+   legend), tokens throughout. */
+
+.cvx-block {
+  margin-top: 1.2rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.cvx-scale {
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 1rem 1.2rem;
+}
+
+.cvx-scale-label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.cvx-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--hair);
+}
+
+.cvx-row:first-of-type {
+  border-top: none;
+}
+
+.cvx-row-label {
+  width: 3.4rem;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.cvx-row-caption {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+}
+
+.cvx-badge-row {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.cvx-legend {
+  margin-top: 1rem;
+  display: grid;
+  gap: 1rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 1.1rem 1.2rem;
+}
+
+.cvx-legend-item {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr;
+  gap: 0.7rem;
+}
+
+.cvx-legend-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--hair));
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.cvx-legend-title {
+  font-size: 0.86rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.cvx-legend-copy {
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
