@@ -41,6 +41,10 @@ import yaml
 API_BASE = "https://openrouter.ai/api/v1"
 _RETRYABLE_STATUS = (429, 500, 502, 503)
 _RETRY_DELAY_S = 5.0
+# One retry on an empty 200-body, mirroring digillm's empty-completion self-heal —
+# the production path tolerates a single transient empty, so the gate must too;
+# a slug that returns empty twice still fails (z-ai/glm-5 flaked this way on run 2).
+_EMPTY_RETRIES = 1
 
 _TOOL = {
     "type": "function",
@@ -125,45 +129,55 @@ def check_endpoints(client: httpx.Client, slug: str, min_context: int) -> str | 
 
 def check_tools_call(client: httpx.Client, slug: str) -> str | None:
     """Return an error string, or None when a minimal function-tool call is accepted."""
-    resp = _request(
-        client,
-        "POST",
-        f"{API_BASE}/chat/completions",
-        json={
-            "model": slug,
-            "messages": [{"role": "user", "content": "Call record_answer with answer='ok'."}],
-            "tools": [_TOOL],
-            "max_tokens": 64,
-            "provider": {"require_parameters": True},
-        },
-    )
-    if resp.status_code != 200:
-        return f"tools call HTTP {resp.status_code}: {resp.text[:160]}"
-    message = (resp.json().get("choices") or [{}])[0].get("message") or {}
-    if not message.get("tool_calls") and not (message.get("content") or "").strip():
-        return "tools call returned an empty body (no tool_calls, no content)"
-    return None
+    for attempt in range(_EMPTY_RETRIES + 1):
+        if attempt:
+            time.sleep(_RETRY_DELAY_S)
+        resp = _request(
+            client,
+            "POST",
+            f"{API_BASE}/chat/completions",
+            json={
+                "model": slug,
+                "messages": [{"role": "user", "content": "Call record_answer with answer='ok'."}],
+                "tools": [_TOOL],
+                "max_tokens": 64,
+                "provider": {"require_parameters": True},
+            },
+        )
+        if resp.status_code != 200:
+            return f"tools call HTTP {resp.status_code}: {resp.text[:160]}"
+        message = (resp.json().get("choices") or [{}])[0].get("message") or {}
+        if message.get("tool_calls") or (message.get("content") or "").strip():
+            return None
+    return "tools call returned an empty body twice (no tool_calls, no content)"
 
 
 def check_strict_json_call(client: httpx.Client, slug: str) -> str | None:
     """Return an error string, or None when strict json_schema output parses."""
-    resp = _request(
-        client,
-        "POST",
-        f"{API_BASE}/chat/completions",
-        json={
-            "model": slug,
-            "messages": [{"role": "user", "content": "Answer with the single word ok."}],
-            "response_format": _JSON_SCHEMA,
-            "max_tokens": 64,
-            "provider": {"require_parameters": True},
-        },
-    )
-    if resp.status_code != 200:
-        return f"json_schema call HTTP {resp.status_code}: {resp.text[:160]}"
-    content = ((resp.json().get("choices") or [{}])[0].get("message") or {}).get("content") or ""
-    if not content.strip():
-        return "json_schema call returned an empty body"
+    for attempt in range(_EMPTY_RETRIES + 1):
+        if attempt:
+            time.sleep(_RETRY_DELAY_S)
+        resp = _request(
+            client,
+            "POST",
+            f"{API_BASE}/chat/completions",
+            json={
+                "model": slug,
+                "messages": [{"role": "user", "content": "Answer with the single word ok."}],
+                "response_format": _JSON_SCHEMA,
+                "max_tokens": 64,
+                "provider": {"require_parameters": True},
+            },
+        )
+        if resp.status_code != 200:
+            return f"json_schema call HTTP {resp.status_code}: {resp.text[:160]}"
+        content = ((resp.json().get("choices") or [{}])[0].get("message") or {}).get(
+            "content"
+        ) or ""
+        if content.strip():
+            break
+    else:
+        return "json_schema call returned an empty body twice"
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError as exc:
