@@ -1,0 +1,39 @@
+# Endpoint capability smoke check for the Olympus OpenRouter model pools (#1622).
+#
+# Runs on every PR touching the routing configs so a pool/pin change cannot merge with a
+# slug whose serving endpoints reject function tools or strict json_schema (#987, #1006),
+# or whose capable endpoints cap below the #1559 synthesis context floor (64k).
+# Live calls use max_tokens<=64 — a full sweep costs well under a cent.
+name: "Validate: Olympus model pools"
+
+on:
+  pull_request:
+    paths:
+      - 'config/olympus_models.yaml'
+      - 'config/model_modes.yaml'
+      - 'scripts/validate_olympus_pools.py'
+      - '.github/workflows/validate-olympus-pools.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Pool endpoint capabilities (tools + strict json_schema)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: pip install pyyaml httpx
+
+      - name: Validate pooled slugs against live OpenRouter endpoints
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: python3 scripts/validate_olympus_pools.py
