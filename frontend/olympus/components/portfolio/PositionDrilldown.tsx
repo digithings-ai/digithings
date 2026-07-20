@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SegmentedControl } from '@digithings/web';
 import { useAsyncData } from '@/lib/hooks/use-async-data';
 import {
   AreaSeries,
@@ -333,23 +334,13 @@ export default function PositionDrilldown({
     [priceSorted]
   );
 
-  const windowButtons = (['1m', '3m', 'ytd', '1y', 'itd'] as const).map((k) => (
-    <button
-      key={k}
-      type="button"
-      onClick={() => setUserWindow(k)}
-      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-        windowPreset === k
-          ? 'bg-accent/15 text-accent border border-accent/40'
-          : 'border border-hair text-ink-mute hover:bg-ink/[0.04]'
-      }`}
-    >
-      {DRILLDOWN_WINDOW_LABELS[k]}
-    </button>
-  ));
+  const windowOptions = (['1m', '3m', 'ytd', '1y', 'itd'] as const).map((value) => ({
+    value,
+    label: DRILLDOWN_WINDOW_LABELS[value],
+  }));
 
   return (
-    <div className="rounded-lg border border-hair bg-term-bg/40 p-4 md:p-5 space-y-4">
+    <div className="max-w-full min-w-0 space-y-5 border-l border-hair pl-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-semibold truncate">
@@ -361,36 +352,42 @@ export default function PositionDrilldown({
             {mode === 'performance' && performanceRange ? ` · Range ${performanceRange.start} → ${rangeEnd}` : null}
           </p>
         </div>
-        <div className="flex flex-wrap gap-1.5">{windowButtons}</div>
+        <SegmentedControl<DrilldownWindow>
+          options={windowOptions}
+          value={windowPreset}
+          onChange={setUserWindow}
+          dress="accent"
+          aria-label="Position history range"
+        />
       </div>
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
-        <div className="rounded-md border border-hair bg-bg/40 p-3">
-          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Weight</p>
+      <div className="grid grid-cols-2 border-y border-hair md:grid-cols-4 lg:grid-cols-6">
+        <div className="min-w-0 border-l border-hair px-3 py-3">
+          <p className="text-xs font-semibold tracking-wide text-ink-mute">Weight</p>
           <p className="text-sm mt-1 font-mono tabular-nums">
             {position.weight_actual != null ? `${position.weight_actual.toFixed(1)}%` : '—'}
           </p>
         </div>
-        <div className="rounded-md border border-hair bg-bg/40 p-3">
-          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Avg entry</p>
+        <div className="min-w-0 border-l border-hair px-3 py-3">
+          <p className="text-xs font-semibold tracking-wide text-ink-mute">Avg entry</p>
           <p className="text-sm mt-1 font-mono tabular-nums">
             {avgEntry != null ? `$${avgEntry.toFixed(2)}` : '—'}
           </p>
         </div>
-        <div className="rounded-md border border-hair bg-bg/40 p-3">
-          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Unrealized</p>
+        <div className="min-w-0 border-l border-hair px-3 py-3">
+          <p className="text-xs font-semibold tracking-wide text-ink-mute">Unrealized</p>
           <p className={`text-sm mt-1 font-mono tabular-nums font-semibold ${pnlColor(pnlVsAvg)}`}>
             {pnlVsAvg != null ? `${pnlVsAvg >= 0 ? '+' : ''}${pnlVsAvg.toFixed(2)}%` : '—'}
           </p>
         </div>
-        <div className="rounded-md border border-hair bg-bg/40 p-3">
-          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Δ weight (window)</p>
+        <div className="min-w-0 border-l border-hair px-3 py-3">
+          <p className="text-xs font-semibold tracking-wide text-ink-mute">Δ weight (window)</p>
           <p className={`text-sm mt-1 font-mono tabular-nums ${pnlColor(netW)}`}>
             {netW != null ? `${netW >= 0 ? '+' : ''}${netW.toFixed(2)}pp` : '—'}
           </p>
         </div>
-        <div className="rounded-md border border-hair bg-bg/40 p-3 col-span-2 lg:col-span-2">
-          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Category / thesis</p>
+        <div className="col-span-2 min-w-0 border-l border-hair px-3 py-3 lg:col-span-2">
+          <p className="text-xs font-semibold tracking-wide text-ink-mute">Category / thesis</p>
           <p className="text-sm mt-1 truncate">
             {formatAllocationCategory(position.category)} · {thesisNames(position.thesis_ids, thesisById)}
           </p>
@@ -414,7 +411,7 @@ export default function PositionDrilldown({
         <p className="text-sm text-warn py-4">{err}</p>
       ) : chartRows.length >= 2 ? (
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Weight &amp; price</p>
+          <p className="text-xs font-semibold tracking-wide text-ink-mute">Weight &amp; price</p>
           <div className="h-[280px] w-full min-w-0">
             <DrilldownWeightPricePane chartRows={chartRows} markerPoints={markerPoints} />
           </div>
@@ -427,7 +424,7 @@ export default function PositionDrilldown({
 
       {mode === 'performance' && contributionSeries.length >= 2 ? (
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Cumulative contribution (ppt)</p>
+          <p className="text-xs font-semibold tracking-wide text-ink-mute">Cumulative contribution (ppt)</p>
           <div className="h-[160px] w-full min-w-0">
             <DrilldownContributionPane series={contributionSeries} />
           </div>
@@ -435,7 +432,7 @@ export default function PositionDrilldown({
       ) : null}
 
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Activity</p>
+        <p className="text-xs font-semibold tracking-wide text-ink-mute">Activity</p>
         <div className="overflow-x-auto rounded-md border border-hair">
           <table className="w-full min-w-[640px] text-sm">
             <thead>

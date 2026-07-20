@@ -19,7 +19,7 @@ import { AsOfBadge } from '@/components/shared/as-of-badge';
 
 function Kicker({ children }: { children: string }) {
   return (
-    <h3 className="font-mono text-[11px] font-semibold uppercase tracking-wider text-ink-mute">
+    <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
       {children}
     </h3>
   );
@@ -74,7 +74,7 @@ function PriceTargets({ targets }: { targets: Record<string, number | string> | 
       <div className="flex flex-wrap gap-x-6 gap-y-2">
         {entries.map(([label, value]) => (
           <div key={label} className="flex flex-col gap-0.5">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-ink-mute">
+            <span className="text-xs uppercase tracking-wider text-ink-mute">
               {label.replace(/_/g, ' ')}
             </span>
             <span className="font-mono text-sm tabular-nums text-ink">

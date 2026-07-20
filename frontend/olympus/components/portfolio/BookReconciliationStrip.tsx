@@ -21,13 +21,13 @@ export default function BookReconciliationStrip({
     <div className="glass-card flex flex-wrap items-center justify-between gap-x-8 gap-y-3 px-4 py-4 md:px-6">
       <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
         <div>
-          <p className="text-[11px] uppercase tracking-wider text-ink-mute">Invested</p>
+          <p className="text-xs uppercase tracking-wider text-ink-mute">Invested</p>
           <p className="mt-0.5 font-mono text-2xl tabular-nums text-ink">
             {investedPct.toFixed(1)}%
           </p>
         </div>
         <div>
-          <p className="text-[11px] uppercase tracking-wider text-ink-mute">Cash</p>
+          <p className="text-xs uppercase tracking-wider text-ink-mute">Cash</p>
           <p className="mt-0.5 font-mono text-2xl tabular-nums text-ink-soft">
             {cashPct.toFixed(1)}%
           </p>
@@ -35,13 +35,13 @@ export default function BookReconciliationStrip({
         {levered && (
           <>
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-ink-mute">Gross</p>
+              <p className="text-xs uppercase tracking-wider text-ink-mute">Gross</p>
               <p className="mt-0.5 font-mono text-2xl tabular-nums text-ink">
                 {grossPct.toFixed(1)}%
               </p>
             </div>
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-ink-mute">Net</p>
+              <p className="text-xs uppercase tracking-wider text-ink-mute">Net</p>
               <p className="mt-0.5 font-mono text-2xl tabular-nums text-ink">
                 {netPct.toFixed(1)}%
               </p>

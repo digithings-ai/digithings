@@ -185,7 +185,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
               <span className="text-xs text-ink-mute tabular-nums">{confidenceLabel}</span>
             </div>
             {t.horizon ? (
-              <span className="rounded-md border border-hair px-2 py-0.5 text-[11px] text-ink-soft">
+              <span className="rounded-md border border-hair px-2 py-0.5 text-xs text-ink-soft">
                 {t.horizon}
               </span>
             ) : null}
@@ -193,7 +193,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
               <span className="font-mono text-xs text-ink-soft">{t.vehicle}</span>
             ) : null}
             {isNonActive(t.status) ? (
-              <span className="rounded-full border border-warn/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-warn">
+              <span className="rounded-full border border-warn/40 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-warn">
                 {t.status}
               </span>
             ) : null}
