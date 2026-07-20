@@ -42,9 +42,9 @@ _CHEAP_PHASE_MODELS = frozenset(
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
         "openrouter/z-ai/glm-5",  # #1622
-        "openrouter/google/gemini-2.0-flash-001",
+        "openrouter/google/gemini-2.5-flash",
         "openrouter/openai/gpt-4o-mini",
-        "openrouter/x-ai/grok-3-mini",
+        "openrouter/x-ai/grok-4.3",
     }
 )
 
@@ -52,10 +52,10 @@ _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
     {
         "openrouter/deepseek/deepseek-v4-pro",  # #1622
         "openrouter/openai/gpt-4o",
-        "openrouter/anthropic/claude-sonnet-4",
+        "openrouter/anthropic/claude-sonnet-4.6",
         "openrouter/google/gemini-2.5-flash",
-        "openrouter/google/gemini-2.5-pro",
-        "openrouter/x-ai/grok-3",
+        "openrouter/google/gemini-3-pro-preview",
+        "openrouter/x-ai/grok-4.3",
     }
 )
 
@@ -67,10 +67,10 @@ _WEB_SEARCH_MODELS = frozenset(
         "openrouter/deepseek/deepseek-v4-flash:online",  # #1622
         "openrouter/deepseek/deepseek-r1:online",
         "openrouter/meta-llama/llama-4-maverick:online",
-        "openrouter/google/gemini-2.0-flash-001:online",
+        "openrouter/google/gemini-2.5-flash:online",
         "openrouter/openai/gpt-4o-mini:online",
         "openrouter/openai/gpt-4o:online",
-        "openrouter/anthropic/claude-sonnet-4:online",
+        "openrouter/anthropic/claude-sonnet-4.6:online",
     }
 )
 
@@ -373,7 +373,7 @@ def test_phase_models_online_override_rejected(
     ("model", "flagship"),
     [
         ("openrouter/openai/gpt-5.5", True),
-        ("openrouter/anthropic/claude-sonnet-4", True),
+        ("openrouter/anthropic/claude-sonnet-4.6", True),
         ("openrouter/deepseek/deepseek-chat:online", False),
         ("openrouter/meta-llama/llama-4-maverick:online", False),
     ],

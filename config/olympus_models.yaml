@@ -78,7 +78,7 @@ tiers:
       extraction:
         - "openrouter/deepseek/deepseek-chat"
         - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/google/gemini-2.0-flash-001"
+        - "openrouter/google/gemini-2.5-flash"
         - "openrouter/openai/gpt-4o-mini"
         - "openrouter/meta-llama/llama-4-maverick"
       research:
@@ -86,18 +86,18 @@ tiers:
         - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/z-ai/glm-5"
         - "openrouter/meta-llama/llama-4-maverick"
-        - "openrouter/google/gemini-2.0-flash-001"
-        - "openrouter/x-ai/grok-3-mini"
+        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/x-ai/grok-4.3"
         - "openrouter/openai/gpt-4o-mini"
       reasoning:
         - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/z-ai/glm-5"
-        - "openrouter/x-ai/grok-3-mini"
-        - "openrouter/google/gemini-2.0-flash-001"
+        - "openrouter/x-ai/grok-4.3"
+        - "openrouter/google/gemini-2.5-flash"
     web_search_models:
       - "openrouter/perplexity/sonar"
       - "openrouter/deepseek/deepseek-chat:online"
-      - "openrouter/google/gemini-2.0-flash-001:online"
+      - "openrouter/google/gemini-2.5-flash:online"
       - "openrouter/openai/gpt-4o-mini:online"
 
   quality:
@@ -110,25 +110,25 @@ tiers:
         - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/openai/gpt-4o-mini"
         - "openrouter/google/gemini-2.5-flash"
-        - "openrouter/anthropic/claude-sonnet-4"
+        - "openrouter/anthropic/claude-sonnet-4.6"
       research:
         - "openrouter/deepseek/deepseek-v4-pro"
         - "openrouter/z-ai/glm-5"
         - "openrouter/openai/gpt-4o"
-        - "openrouter/anthropic/claude-sonnet-4"
-        - "openrouter/google/gemini-2.5-pro"
-        - "openrouter/x-ai/grok-3"
+        - "openrouter/anthropic/claude-sonnet-4.6"
+        - "openrouter/google/gemini-3-pro-preview"
+        - "openrouter/x-ai/grok-4.3"
       reasoning:
         - "openrouter/deepseek/deepseek-v4-pro"
         - "openrouter/z-ai/glm-5"
-        - "openrouter/anthropic/claude-sonnet-4"
+        - "openrouter/anthropic/claude-sonnet-4.6"
         - "openrouter/openai/gpt-4o"
-        - "openrouter/x-ai/grok-3"
+        - "openrouter/x-ai/grok-4.3"
     web_search_models:
       - "openrouter/perplexity/sonar"
       - "openrouter/openai/gpt-4o:online"
       - "openrouter/deepseek/deepseek-r1:online"
-      - "openrouter/anthropic/claude-sonnet-4:online"
+      - "openrouter/anthropic/claude-sonnet-4.6:online"
 
 phase_capabilities:
   macro: research
