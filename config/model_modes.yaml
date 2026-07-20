@@ -27,3 +27,9 @@ phase_models:
   # open-weight model already in the pool; the trailing '-' makes this a prefix match for
   # every per-ticker slug (hermes/portfolio/deliberation-{ticker}) emitted by h6_deliberation.
   hermes/portfolio/deliberation-: openrouter/deepseek/deepseek-chat
+  # #1559: pin Phase-7 master-digest to deepseek-chat. The cheap ``reasoning`` pool
+  # stable-hashes master-digest onto deepseek-r1, whose chain-of-thought output is not
+  # reliably strict JSON — the 2026-07-18 delta digest failed json.loads mid-document
+  # (JSONDecodeError at char 10417) and carried the prior digest forward. Same rationale
+  # as the H6 pin above; the #1559 input budget already targets these 64k-context endpoints.
+  master-digest: openrouter/deepseek/deepseek-chat
