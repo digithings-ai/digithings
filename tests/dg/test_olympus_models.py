@@ -41,7 +41,6 @@ _CHEAP_PHASE_MODELS = frozenset(
 
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
-        "openrouter/z-ai/glm-5",  # #1622
         "openrouter/google/gemini-2.5-flash",
         "openrouter/openai/gpt-4o-mini",
         "openrouter/x-ai/grok-4.3",

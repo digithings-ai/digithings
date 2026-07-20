@@ -84,14 +84,16 @@ tiers:
       research:
         - "openrouter/deepseek/deepseek-chat"
         - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/z-ai/glm-5"
+        # z-ai/glm-5 removed 2026-07-20: endpoint gate record over 4 runs was
+        # pass/fail/pass/fail — empty bodies under strict json_schema even with a
+        # retry (the #1006 empty-completion class). Re-add a GLM only after
+        # glm-5.2/glm-5-turbo passes the gate consistently.
         - "openrouter/meta-llama/llama-4-maverick"
         - "openrouter/google/gemini-2.5-flash"
         - "openrouter/x-ai/grok-4.3"
         - "openrouter/openai/gpt-4o-mini"
       reasoning:
         - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/z-ai/glm-5"
         - "openrouter/x-ai/grok-4.3"
         - "openrouter/google/gemini-2.5-flash"
     web_search_models:
@@ -113,7 +115,6 @@ tiers:
         - "openrouter/anthropic/claude-sonnet-4.6"
       research:
         - "openrouter/deepseek/deepseek-v4-pro"
-        - "openrouter/z-ai/glm-5"
         - "openrouter/openai/gpt-4o"
         - "openrouter/anthropic/claude-sonnet-4.6"
         # No Gemini Pro entry: the endpoint gate failed three Pro variants in a row
@@ -124,7 +125,6 @@ tiers:
         - "openrouter/x-ai/grok-4.3"
       reasoning:
         - "openrouter/deepseek/deepseek-v4-pro"
-        - "openrouter/z-ai/glm-5"
         - "openrouter/anthropic/claude-sonnet-4.6"
         - "openrouter/openai/gpt-4o"
         - "openrouter/x-ai/grok-4.3"
