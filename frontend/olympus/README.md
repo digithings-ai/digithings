@@ -166,31 +166,29 @@ present at build time the real ids are fetched from the `theses` table; without 
 only the `_unlinked` fallback is exported. Theses created after a deploy 404 on
 direct load until the next deploy.
 
-## Morning Read (Overview)
+## Brief workspace
 
-`app/page.tsx` is the daily decision document — top to bottom it reads
-regime → KPIs → what to do → why → where to read more. The panels under
-`components/overview/` wire data that the dashboard query already loads:
+`app/page.tsx` is the daily decision workspace. It owns benchmark alignment,
+NAV-window calculations, book freshness, and rebalance rationale joins, then
+passes those truth contracts into the presentational modules under
+`components/today/`:
 
-- **Today's Actions** (`today-actions-panel.tsx`) — `portfolio_management.rebalance_actions`
-  (computed in `queries.ts`, surfaced from #702). EXIT→OPEN→TRIM→ADD→HOLD sort;
-  HOLDs collapse; explicit "no changes proposed" state. Per-ticker rationale is
-  joined from the `pm-rebalance` doc's actions when present (#704).
-- **Morning Brief** (`morning-brief-panel.tsx`) — the digest, tabbed
-  (Market / Equities / Risk / Actions). Shares the snapshot fetch via the
-  exported `useLatestSnapshot()` hook and reuses the snapshot panel's section
-  renderers; it replaces the single long scroll on the Overview.
-- **Deliberations** (`deliberations-strip.tsx`) — bull/bear `DebateSummary`
-  cards from `pipeline_observability.deliberation_transcripts` (the
-  pipeline `deliberation/{ticker}` docs, #699) plus a portfolio-level
-  **risk-debate** card (`risk-debate` doc, via `renderRiskDebateMarkdown`).
-  `fetchPipelineObservabilityForDate` loads both the flat pipeline keys
-  (`deliberation/%`, `risk-debate`, `pm-rebalance`) and the operator-flow
-  keys (#704). Expand-in-place, no extra fetch; renders null when neither ran.
-- **Decision Trail** (`decision-trail-panel.tsx`) — navigable rows into the
-  day's artifacts (deliberations, PM memo, digest); honest empty state.
-- **AsOfBadge** (`as-of-badge.tsx`) — freshness pill in the hero; amber when the
-  run date is older than yesterday (UTC).
+- **Command band** (`move-hero.tsx`) — regime and run provenance, digest
+  headline, rebalance status, and compact NAV context. `--up` / `--down` are
+  reserved for signed returns; regime chrome uses accent, warning, or neutral.
+- **Watch ledger** (`what-to-watch.tsx`) — ranked actionables and tail risks,
+  with a date-keyed deep link to the Pipeline digest.
+- **Book ledger** (`book-strip.tsx`) — reconciled invested/cash state and held
+  positions ordered by absolute daily move. Its as-of badge uses the latest
+  NAV date rather than borrowing the research digest date.
+- **Destination ledger** (`today-summaries.tsx`) — divided Read, Holdings, and
+  Theses columns with no independent card surfaces.
+
+The four modules are enclosed by one page-level hairline frame, adapting the
+DigiWeb `DashboardWorkspaceReference` command-band and ledger composition.
+Loading uses `PageSkeleton`; failures use the shared `EmptyState`; missing book
+or research values render local quiet copy; stale research and book dates use
+the shared `AsOfBadge` treatment.
 
 > **Sharing:** the static export embeds the Supabase anon key and every table
 > has `anon` RLS `USING (true)`, so the dashboard URL is world-readable. Gate it

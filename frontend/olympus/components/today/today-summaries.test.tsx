@@ -31,6 +31,8 @@ describe('TodaySummaries', () => {
     expect(html).toContain('AI capex supercycle');
     expect(html).toContain('Risk-off consolidation');
     expect(html).not.toContain("How I'"); // performance doorway retired
+    expect(html).toContain('data-brief-section="doorways"');
+    expect(html).not.toContain('glass-card');
   });
 
   it('shows holdings on the % of NAV basis (matches the book strip / portfolio table)', () => {
