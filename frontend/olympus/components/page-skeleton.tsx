@@ -8,9 +8,9 @@ import { SUBPAGE_MAX } from '@/components/layout-constants';
  * of card blocks, and a body block.
  *
  * Ruling (#1548 LOADING adoption): the AtlasLoader brand moment appears ONLY
- * at the app-boot/root level — app/loading.tsx, the root route's first data
- * paint (app/page.tsx), and the legacy-SPA redirect shim. Every per-page
- * fallback renders this skeleton instead, so in-app navigation reads as
+ * at the app-boot/root level — app/loading.tsx and the legacy-SPA redirect
+ * shim. Every page-level data fallback renders this skeleton instead, so
+ * in-app navigation reads as
  * "content arriving", not the app rebooting. One loading grammar app-wide:
  * the sk-* shimmer sweep (no animate-pulse).
  */
