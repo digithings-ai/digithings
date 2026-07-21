@@ -1,7 +1,7 @@
 import { thesisIdEquals } from './thesis-id';
 import type { Thesis } from './types';
 
-/** Two-tier split: explicit 'vehicle' kind → vehicle; everything else → market (never hide a thesis). */
+/** Two-tier split: explicit 'vehicle' kind → vehicle; everything else → market. */
 export function splitTheses(theses: Thesis[]): { market: Thesis[]; vehicle: Thesis[] } {
   const market: Thesis[] = [];
   const vehicle: Thesis[] = [];

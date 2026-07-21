@@ -10,9 +10,11 @@ const DEFAULT_VISIBLE_ROWS = 6;
 
 /**
  * Signed-conviction timeline + resolved-calls table over `decision_log`, scoped
- * to one ticker (#1562 PR2). Reuses the decision-scorecard grammar
- * (`components/observability/DecisionScorecardTab.tsx`: same columns, same
- * `fmtPct`/`signColorClass` helpers) rather than re-deriving it.
+ * to one ticker (#1562 PR2, #1615 flat decision ledger). Reuses the decision-
+ * scorecard grammar (`components/observability/DecisionScorecardTab.tsx`: same
+ * columns, same `fmtPct`/`signColorClass` helpers) rather than re-deriving it.
+ *
+ * Flat full-width decision ledger (#1615): hairline structure, NOT glass-card.
  *
  * `status='pending'` rows carry `actual_return: null, alpha: null` — these
  * render as "open", never as a 0%/blank resolved call (#1562 §2 staleness
@@ -72,8 +74,8 @@ export default function ConvictionHistory({ decisions }: { decisions: DecisionLo
 
   if (sorted.length === 0) {
     return (
-      <div className="glass-card space-y-2 p-5 md:p-6">
-        <h2 className="font-display text-lg text-ink">Conviction history</h2>
+      <div className="decision-ledger space-y-4 border-y border-hair bg-surface/[0.82] px-5 py-6 md:px-6">
+        <h2 className="font-display text-lg text-ink">Decision ledger</h2>
         <p className="text-sm text-ink-mute">No analyst decisions on record for this ticker yet.</p>
       </div>
     );
@@ -84,11 +86,11 @@ export default function ConvictionHistory({ decisions }: { decisions: DecisionLo
   const hiddenCount = sorted.length - DEFAULT_VISIBLE_ROWS;
 
   return (
-    <div className="glass-card space-y-6 p-5 md:p-6">
-      <h2 className="font-display text-lg text-ink">Conviction history</h2>
+    <div className="decision-ledger space-y-6 border-y border-hair bg-surface/[0.82] px-5 py-6 md:px-6">
+      <h2 className="font-display text-lg text-ink">Decision ledger</h2>
 
       {/* Timeline — oldest to newest, left to right. */}
-      <div className="flex flex-wrap items-end gap-4 overflow-x-auto pb-1">
+      <div className="flex flex-wrap items-end gap-4 overflow-x-auto border-b border-hair pb-4">
         {oldestFirst.map((d) => (
           <div key={d.id} className="flex shrink-0 flex-col items-center gap-1">
             {d.conviction != null ? (
@@ -147,7 +149,7 @@ export default function ConvictionHistory({ decisions }: { decisions: DecisionLo
       </div>
 
       {hiddenCount > 0 && (
-        <div className="flex justify-center">
+        <div className="flex justify-center border-t border-hair pt-4">
           <Button
             dress="reference"
             variant="quiet"

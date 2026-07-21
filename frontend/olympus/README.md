@@ -80,6 +80,23 @@ rulings — and what adoption would take — live in
 [`lib/TABLES.md`](lib/TABLES.md). New *flat* leaderboards should adopt the
 primitive instead of hand-rolling sort state.
 
+### Portfolio workspace grammar
+
+The Portfolio routes follow DigiWeb's canonical `PortfolioWorkspaceReference`:
+one flat command band establishes book or dossier state, then hairline-divided
+ledgers carry positions, activity, research, and decision history. Holdings owns
+an exposure command band plus switchable position/activity ledgers; Theses uses
+a conviction-ranked research spine; thesis and ticker detail routes use editorial
+main/context compositions rather than nested card stacks.
+
+`/portfolio/performance` applies the same flat grammar to the shared
+finance-tearsheet primitives. Its command band, asymmetric NAV workspace, bounded
+decision ledger, attribution section, and PDF action remain presentation over the
+existing `nav_history` + `decision_log` contract. Portfolio presentation changes
+must not introduce a second query path or replace that persisted truth model.
+Embedded attribution uses flat divided sections, and narrow finance chart panes
+reduce date axes to endpoint labels while preserving the complete print view.
+
 ## Supabase / RLS
 
 Olympus reads portfolio and research data from the shared Atlas Supabase project

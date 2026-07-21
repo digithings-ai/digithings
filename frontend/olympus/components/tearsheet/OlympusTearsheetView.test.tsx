@@ -102,6 +102,40 @@ describe('OlympusTearsheetView', () => {
     expect(out).toContain('ts-bar'); // SignedBars rendered
   });
 
+  it('uses a flat command band, asymmetric chart workspace, and bounded decision ledger', () => {
+    const data = buildOlympusTearsheet({
+      nav: [navRow('2026-06-23', 100), navRow('2026-06-24', 102)],
+      decisions: [
+        {
+          id: 'a',
+          run_id: 'r',
+          run_date: '2026-06-23',
+          ticker: 'IJR',
+          stance: 'buy',
+          conviction: 5,
+          thesis: null,
+          benchmark: 'SPY',
+          holding_days: 10,
+          status: 'resolved',
+          actual_return: 0.05,
+          alpha: 0.04,
+          reflection: null,
+          resolved_at: null,
+          created_at: null,
+        },
+      ],
+      metrics: null,
+      attribution: [],
+    });
+    const out = html(data);
+
+    expect(out).toContain('data-testid="performance-command-band"');
+    expect(out).toContain('data-region="performance-chart-grid"');
+    expect(out).toContain('data-layout="asymmetric"');
+    expect(out).toContain('data-region="decision-ledger"');
+    expect(out).not.toContain('glass-card');
+  });
+
   it('≤12 resolved decisions → renders all rows without expand control', () => {
     const decisions = Array.from({ length: 10 }, (_, i) => ({
       id: `d${i}`,
