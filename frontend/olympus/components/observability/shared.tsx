@@ -26,14 +26,20 @@ export function StatTile({
   value,
   sub,
   color,
+  flat = false,
 }: {
   label: string;
   value: ReactNode;
   sub?: ReactNode;
   color?: string;
+  flat?: boolean;
 }) {
   return (
-    <div className="glass-card p-4 flex flex-col gap-1">
+    <div
+      className={flat
+        ? 'flex flex-col gap-1 border-b border-r border-hair p-4'
+        : 'glass-card flex flex-col gap-1 p-4'}
+    >
       <span className="text-xs text-ink-mute">{label}</span>
       <span className={`text-xl font-semibold tabular-nums ${color ?? 'text-ink'}`}>
         {value}
@@ -48,14 +54,18 @@ export function SectionCard({
   subtitle,
   children,
   className,
+  flat = false,
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   className?: string;
+  flat?: boolean;
 }) {
   return (
-    <div className={`glass-card p-5 flex flex-col gap-4 ${className ?? ''}`}>
+    <div
+      className={`${flat ? 'border-b border-hair py-5' : 'glass-card p-5'} flex flex-col gap-4 ${className ?? ''}`}
+    >
       <div className="flex flex-col gap-0.5">
         <h2 className="text-sm font-semibold text-ink">{title}</h2>
         {subtitle ? <p className="text-xs text-ink-mute">{subtitle}</p> : null}
@@ -76,16 +86,18 @@ export function EmptyState({
   title,
   message,
   note,
+  flat = false,
 }: {
   title: string;
   message: string;
   /** Short secondary line for PMs — explains why the tab is empty without reading as "broken". */
   note?: string;
+  flat?: boolean;
 }) {
   return (
     <WebEmptyState
       dress="glass"
-      className="glass-card"
+      className={flat ? 'border-y border-hair' : 'glass-card'}
       title={title}
       body={message}
       note={note}

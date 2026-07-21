@@ -54,9 +54,11 @@ beforeEach(() => {
 });
 
 describe('/portfolio/performance route', () => {
-  it('renders the OlympusTearsheetView (serif H1) once data loads', () => {
+  it('renders the Olympus performance command band once data loads', () => {
     const html = renderToStaticMarkup(createElement(PerformancePage));
-    expect(html).toContain('Olympus — AI-intelligence strategy');
+    expect(html).toContain('data-testid="performance-command-band"');
+    expect(html).toContain('>Olympus</h1>');
+    expect(html).toContain('AI-intelligence strategy');
     expect(html).toMatch(/Download PDF/);
   });
 });

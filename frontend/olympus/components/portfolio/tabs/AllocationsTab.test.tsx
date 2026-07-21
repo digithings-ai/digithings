@@ -24,16 +24,30 @@ const base = {
 };
 
 describe('AllocationsTab', () => {
-  it('renders the reconciliation strip with normalized invested/cash', () => {
+  it('renders one normalized exposure metric', () => {
     const html = renderToStaticMarkup(createElement(AllocationsTab, base));
-    expect(html).toContain('Invested');
+    expect(html).toContain('invested');
     expect(html).toContain('75.0%');
-    expect(html).toContain('Cash');
+    expect(html).not.toContain('cash');
   });
 
-  it('renders the proposed-by-pipeline shelf for not-held decision tickers', () => {
+  it('keeps proposed unheld tickers in Pipeline rather than Holdings', () => {
     const html = renderToStaticMarkup(createElement(AllocationsTab, base));
-    expect(html).toContain('Proposed by the pipeline');
-    expect(html).toContain('IWM');
+    expect(html).not.toContain('Proposed by the pipeline');
+    expect(html).not.toContain('IWM');
+  });
+
+  it('uses a full-width ledger with positions and activity views', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsTab, base));
+    expect(html).toContain('data-region="workspace"');
+    expect(html).toContain('data-region="ledger"');
+    expect(html).not.toContain('data-region="context-rail"');
+    expect(html).toContain('Holdings view');
+  });
+
+  it('passes position count to the command band', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsTab, base));
+    expect(html).toContain('positions');
+    expect(html).toContain('>2<'); // two positions in base fixture
   });
 });

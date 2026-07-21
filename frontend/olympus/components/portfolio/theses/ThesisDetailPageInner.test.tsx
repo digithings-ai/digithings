@@ -39,24 +39,40 @@ vi.mock('@/lib/dashboard-context', () => ({
 
 import ThesisDetailPageInner from './ThesisDetailPageInner';
 
-describe('ThesisDetailPageInner (#1562 PR4 — thesis_vehicles join)', () => {
-  it('renders the market thesis header, confidence, and criteria', () => {
+describe('ThesisDetailPageInner (#1615 — bordered command + two-column dossier)', () => {
+  it('renders a bordered command/identity band with thesis name, conviction, horizon, status, as-of', () => {
     const html = renderToStaticMarkup(createElement(ThesisDetailPageInner, { thesisId: 'MT1' }));
     expect(html).toContain('Advanced Materials Growth');
     expect(html).toContain('80% confidence');
+    expect(html).toContain('long_term');
+    expect(html).toContain('as of');
+    expect(html).toContain('data-testid="thesis-command-band"');
+  });
+
+  it('uses a two-column dossier layout: narrative/criteria as main, vehicles/provenance as context', () => {
+    const html = renderToStaticMarkup(createElement(ThesisDetailPageInner, { thesisId: 'MT1' }));
+    expect(html).toContain('data-region="thesis-dossier"');
+    expect(html).toContain('lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]');
+    expect(html).toContain('Materials demand is rising'); // narrative
+    expect(html).toContain('What confirms this'); // criteria
+  });
+
+  it('renders the thesis statement (notes) in the main column', () => {
+    const html = renderToStaticMarkup(createElement(ThesisDetailPageInner, { thesisId: 'MT1' }));
+    expect(html).toContain('Materials demand is rising');
+  });
+
+  it('renders criteria columns in the main argument column', () => {
+    const html = renderToStaticMarkup(createElement(ThesisDetailPageInner, { thesisId: 'MT1' }));
     expect(html).toContain('What confirms this');
     expect(html).toContain('Prices firm');
+    expect(html).toContain('What breaks this');
+    expect(html).toContain('Demand rolls over');
   });
 
-  it('renders vehicles via the thesis_vehicles join, not the old joinPositionsToThesis holdings list', () => {
+  it('renders vehicle expressions in the context column', () => {
     const html = renderToStaticMarkup(createElement(ThesisDetailPageInner, { thesisId: 'MT1' }));
     expect(html).toContain('Vehicles expressing this view');
-    expect(html).not.toContain('Holdings expressing this thesis');
-  });
-
-  it('shows the honest empty state before the thesis_vehicles fetch resolves', () => {
-    const html = renderToStaticMarkup(createElement(ThesisDetailPageInner, { thesisId: 'MT1' }));
-    expect(html).toContain('No vehicle was mapped to this view on the shown date.');
   });
 
   it('still renders the _unlinked branch via the honest holdings list', () => {
@@ -64,6 +80,7 @@ describe('ThesisDetailPageInner (#1562 PR4 — thesis_vehicles join)', () => {
       createElement(ThesisDetailPageInner, { thesisId: '_unlinked' })
     );
     expect(html).toContain('Unlinked expressions');
+    expect(html).not.toContain('glass-card');
     expect(html).toContain('Holdings expressing this thesis');
     expect(html).toContain('AAA');
   });

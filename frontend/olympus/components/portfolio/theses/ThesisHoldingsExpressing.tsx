@@ -13,7 +13,7 @@ export function ThesisHoldingsExpressing({ positions }: { positions: Position[] 
       {positions.length === 0 ? (
         <p className="text-sm text-ink-mute">No current holdings are tagged to this thesis.</p>
       ) : (
-        <div className="glass-card divide-y divide-hair overflow-hidden p-0">
+        <div className="divide-y divide-hair overflow-hidden border-y border-hair bg-surface">
           {positions.map((p) => (
             <Link
               key={p.ticker}

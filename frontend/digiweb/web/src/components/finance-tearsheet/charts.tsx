@@ -1152,7 +1152,7 @@ function TimeSeriesBody({
   const baseY = yAt(baseReal);
   const area = line + `L${xAt(n - 1).toFixed(1)} ${baseY.toFixed(1)} L${xAt(0).toFixed(1)} ${baseY.toFixed(1)} Z`;
 
-  const idxs = [0, Math.floor((n - 1) / 2), n - 1];
+  const idxs = [...new Set(vbW < 480 ? [0, n - 1] : [0, Math.floor((n - 1) / 2), n - 1])];
 
   const onChartMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
