@@ -1,4 +1,5 @@
 import "./finance.css";
+import { DashboardWorkspaceReference } from "@/components/dashboard-workspace-reference";
 import { DrawdownPlotReference } from "@/components/drawdown-plot-reference";
 import { EquityCurveReference } from "@/components/equity-curve-reference";
 import { MonthlyReturnsReference } from "@/components/monthly-returns-reference";
@@ -99,6 +100,7 @@ export default function FinancePage() {
 
       <PerformanceDashboardReference />
       <PortfolioWorkspaceReference />
+      <DashboardWorkspaceReference />
       <PortfolioReference />
 
       <section className="section-block" id="charting-rules">

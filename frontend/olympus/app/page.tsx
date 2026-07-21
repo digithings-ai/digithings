@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useDashboard } from '@/lib/dashboard-context';
 import type { BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
 import { DASHBOARD_BENCHMARK_TICKERS } from '@/lib/benchmark-tickers';
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 import AtlasLoader from '@/components/AtlasLoader';
 import { MoveHero } from '@/components/today/move-hero';
 import { WhatToWatch } from '@/components/today/what-to-watch';

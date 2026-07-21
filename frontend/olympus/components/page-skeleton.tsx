@@ -1,5 +1,5 @@
 import { Skeleton, SkeletonGroup } from '@digithings/web';
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 
 /**
  * PageSkeleton — the shared content-shaped fallback for page-level loads

@@ -53,6 +53,12 @@ at the top of `<main>` with route crumbs on the left and an `Open digiquant.io`
 link plus version/env label on the right. The version label reads
 `process.env.NEXT_PUBLIC_OLYMPUS_VERSION` and falls back to `v0.1 · dev`.
 
+Shared workspace gutters use `SUBPAGE_MAX` from
+`components/layout-constants.ts`. The constant intentionally lives outside
+client components so server-rendered pages and Suspense fallbacks receive a
+plain class string during static export. Interactive section navigation remains
+in `components/subpage-tab-bar.tsx` and imports the constant from that module.
+
 ### Chart theming
 
 Time-series charts (NAV/equity curves, drawdown, rolling risk, price + position
@@ -133,6 +139,7 @@ Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment)
 npm install                                # links workspace packages
 npm --workspace frontend/olympus run dev     # http://localhost:3000/olympus/
 npm --workspace frontend/olympus run build   # static export (output: 'export')
+npm --workspace frontend/olympus run check:static-export # verify server/client class boundaries
 npm --workspace frontend/olympus run lint
 npm --workspace frontend/olympus run test    # Vitest (lib/**/*.test.ts + components/**/*.test.tsx)
 ```

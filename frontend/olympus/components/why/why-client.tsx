@@ -2,7 +2,8 @@
 
 import { useCallback } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { SubpageStickyTabBar, subpageTabButtonClass, SUBPAGE_MAX } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { SubpageStickyTabBar, subpageTabButtonClass } from '@/components/subpage-tab-bar';
 import { WHY_TABS, resolveWhyTab, type WhyTabId } from '@/lib/why-tabs';
 import { TheRead } from '@/components/why/the-read';
 import { DeliberationsTab } from '@/components/why/deliberations-tab';
