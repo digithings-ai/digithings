@@ -163,6 +163,13 @@ jobs:
           SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # #1622: empty-completion self-heal target. The phase-1/2 fan-out bursts all
+          # slugs that hash onto one model at the same provider simultaneously; when that
+          # provider load-sheds (empty 200s — 28 on 2026-07-20, ~57 on 2026-07-21), the
+          # empty-retry re-asks the SAME provider and the segment dies. With this set,
+          # digillm's first empty-retry adds models+route=fallback so OpenRouter swaps
+          # provider/model instead. Cheap→capable, all endpoint-gate-verified.
+          OPENROUTER_FALLBACK_MODELS: "deepseek/deepseek-v4-flash,meta-llama/llama-4-maverick,deepseek/deepseek-chat"
           DRY_RUN: ${{ inputs.dry_run }}
           DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
