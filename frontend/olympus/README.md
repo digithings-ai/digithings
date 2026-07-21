@@ -190,6 +190,30 @@ Loading uses `PageSkeleton`; failures use the shared `EmptyState`; missing book
 or research values render local quiet copy; stale research and book dates use
 the shared `AsOfBadge` treatment.
 
+## Pipeline and Why workspaces
+
+Pipeline and Why extend the same DigiWeb workspace grammar across the
+reasoning workflow without replacing their domain interactions:
+
+- **Pipeline** owns one command band for the run headline, stage/document
+  counts, run date, and temporal pager. The existing custom topology remains
+  the interaction engine: desktop pan/zoom and fit controls, expandable
+  stages, mobile stage walkthrough, URL document selection, and the artifact
+  dossier keep their original contracts. Graph nodes and camera overlays use
+  explicit hairline surfaces rather than page-level card primitives.
+- **Why** owns one reasoning command band above the shared responsive tab bar.
+  `?why=read` presents the latest synthesis as a divided reading workspace;
+  `?why=deliberations` presents rebalance actions, risk and ticker debates,
+  and PM memo history as flat ledgers. The tab remains URL-driven and does not
+  reset page scroll.
+- Snapshot loading, error, empty, actionable, and risk components expose an
+  opt-in flat presentation for Why. Their default card presentation remains
+  unchanged for Overview and other consumers.
+
+Across both routes, accent and warning tokens describe workflow state and
+argument stance. `--up` and `--down` remain reserved for signed P&L or return
+values.
+
 > **Sharing:** the static export embeds the Supabase anon key and every table
 > has `anon` RLS `USING (true)`, so the dashboard URL is world-readable. Gate it
 > with **Cloudflare Access** before sharing — see [`AUTH.md`](AUTH.md) for the

@@ -13,8 +13,8 @@ export interface PipelineSummaryStripProps {
 }
 
 const DOT_COLOR: Record<RegimeChipColor, string> = {
-  green: 'bg-up',
-  red: 'bg-down',
+  green: 'bg-accent',
+  red: 'bg-warn',
   amber: 'bg-warn',
   blue: 'bg-accent',
   muted: 'bg-hair',
@@ -30,17 +30,17 @@ export default function PipelineSummaryStrip({
     <div className="flex min-w-0 flex-wrap items-center gap-3">
       {/* Digest headline — absorbs "The Read" */}
       <div className="flex-1 min-w-[230px] font-display" aria-busy={loading || undefined}>
-        <span className="block text-[10px] font-bold tracking-[0.14em] uppercase text-accent mb-0.5 font-sans">
+        <span className="mb-0.5 block font-sans text-xs font-bold uppercase text-accent">
           The read
         </span>
         {headline ? (
-          <span className="text-[14.5px] leading-snug text-ink">{headline}</span>
+          <span className="text-sm leading-snug text-ink">{headline}</span>
         ) : loading ? (
           // Skeleton bar — a placeholder must not wear the exact type style
           // of a real headline. sk shimmer per the #1548 one-grammar ruling.
           <Skeleton className="block h-4 max-w-[420px]" />
         ) : (
-          <span className="text-[14.5px] leading-snug text-ink-mute">
+          <span className="text-sm leading-snug text-ink-mute">
             No digest for this day
           </span>
         )}
@@ -51,7 +51,7 @@ export default function PipelineSummaryStrip({
         {regimeChips.map((chip) => (
           <span
             key={`${chip.label}-${chip.value}`}
-            className="inline-flex items-center gap-1.5 text-[11px] bg-term-bg border border-hair rounded-[7px] px-2 py-1 text-ink-mute whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-hair bg-term-bg px-2 py-1 text-xs text-ink-mute"
           >
             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${DOT_COLOR[chip.color]}`} />
             {chip.label}{' '}
@@ -60,7 +60,7 @@ export default function PipelineSummaryStrip({
         ))}
 
         {decision && (
-          <span className="inline-flex items-center gap-1.5 text-[11px] bg-term-bg border border-hair rounded-[7px] px-2 py-1 text-ink-mute whitespace-nowrap">
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-hair bg-term-bg px-2 py-1 text-xs text-ink-mute">
             {/* Status pip — calm cyan chrome (F5), not up */}
             <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-accent" />
             Decision{' '}

@@ -32,7 +32,14 @@ export function sortDocsByDateDesc<T extends { date?: string | null }>(docs: T[]
   return [...docs].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
-function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
+export function isPmMemoHistoryDoc(doc: Pick<Doc, 'path'>): boolean {
+  const path = (doc.path || '').toLowerCase();
+  if (path.startsWith('pm-allocation-memo/')) return true;
+  const stem = (path.split('/').pop() || '').replace(/\.(json|md)$/i, '');
+  return stem === 'pm-rebalance' || stem === 'rebalance-decision';
+}
+
+export function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
   const md = renderRebalanceMarkdown(payload);
   const summary = summarizeRecommendedPortfolio(payload);
   const actions: Array<Record<string, unknown>> = Array.isArray(payload.actions)
@@ -41,43 +48,43 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
   const notes = typeof payload.notes === 'string' && payload.notes.trim() ? payload.notes.trim() : '';
 
   return (
-    <div className="glass-card p-0 overflow-hidden">
+    <section data-testid="rebalance-ledger" className="border-y border-hair">
       <div className="px-5 py-3 border-b border-hair bg-term-bg flex items-center gap-2">
         <GitBranch size={14} className="text-accent shrink-0" aria-hidden />
-        <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">Rebalance memo</h3>
-        <span className="ml-auto text-[10px] text-ink-mute font-mono">automated</span>
+        <h3 className="text-xs font-semibold uppercase text-ink-mute">Rebalance memo</h3>
+        <span className="ml-auto font-mono text-xs text-ink-mute">automated</span>
       </div>
       <div className="px-5 py-4 space-y-4 text-sm">
         {summary ? (
-          <div className="rounded-lg border border-accent/15 bg-accent/[0.04] p-4">
-            <p className="text-[11px] font-semibold text-ink-mute uppercase tracking-wider mb-3">
+          <div>
+            <p className="mb-3 text-xs font-semibold uppercase text-ink-mute">
               Post-risk-sizing book summary
             </p>
-            <div className="grid grid-cols-3 gap-3 text-xs">
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-ink-mute">Invested</p>
-                <p className="text-base font-semibold tabular-nums text-ink">
+            <dl className="grid grid-cols-3 gap-px border-y border-hair bg-hair text-xs">
+              <div className="bg-surface px-3 py-3">
+                <dt className="uppercase text-ink-mute">Invested</dt>
+                <dd className="text-base font-semibold tabular-nums text-ink">
                   {summary.investedPct.toFixed(2)}%
-                </p>
+                </dd>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-ink-mute">Cash</p>
-                <p className="text-base font-semibold tabular-nums text-ink">
+              <div className="bg-surface px-3 py-3">
+                <dt className="uppercase text-ink-mute">Cash</dt>
+                <dd className="text-base font-semibold tabular-nums text-ink">
                   {summary.cashPct.toFixed(2)}%
-                </p>
+                </dd>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-ink-mute">Holdings</p>
-                <p className="text-base font-semibold tabular-nums text-ink">
+              <div className="bg-surface px-3 py-3">
+                <dt className="uppercase text-ink-mute">Holdings</dt>
+                <dd className="text-base font-semibold tabular-nums text-ink">
                   {summary.holdingsCount}
-                </p>
+                </dd>
               </div>
-            </div>
+            </dl>
           </div>
         ) : null}
         {notes ? (
           <div>
-            <p className="text-[11px] font-semibold text-ink-mute uppercase tracking-wider mb-2">
+            <p className="mb-2 text-xs font-semibold uppercase text-ink-mute">
               Narrative / memo notes
             </p>
             <SafeMarkdown>{cleanMemoProse(notes)}</SafeMarkdown>
@@ -85,7 +92,7 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
         ) : null}
         {actions.length > 0 ? (
           <div className="overflow-x-auto">
-            <p className="text-[11px] font-semibold text-ink-mute uppercase tracking-wider mb-2">Actions</p>
+            <p className="mb-2 text-xs font-semibold uppercase text-ink-mute">Actions</p>
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-hair text-ink-mute">
@@ -101,9 +108,9 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
                   const act = String(a.action ?? '').toLowerCase();
                   const acColor =
                     act === 'add' || act === 'new'
-                      ? 'text-up'
+                      ? 'text-accent'
                       : act === 'trim' || act === 'exit'
-                        ? 'text-down/90'
+                        ? 'text-warn'
                         : 'text-ink-soft';
                   const fmtPct = (v: unknown) =>
                     v == null || Number.isNaN(Number(v)) ? '—' : `${Number(v).toFixed(2)}%`;
@@ -128,43 +135,43 @@ function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {
           <SafeMarkdown>{md}</SafeMarkdown>
         ) : null}
       </div>
-    </div>
+    </section>
   );
 }
 
-function RiskDebatePanel({ payload }: { payload: Record<string, unknown> }) {
+export function RiskDebatePanel({ payload }: { payload: Record<string, unknown> }) {
   const agg = s(payload.aggressive_case).trim();
   const con = s(payload.conservative_case).trim();
   const tension = s(payload.key_tension).trim();
 
   return (
-    <div className="glass-card p-0 overflow-hidden">
+    <section data-testid="risk-debate-ledger" className="border-y border-hair">
       <div className="px-5 py-3 border-b border-hair bg-term-bg flex items-center gap-2">
         <Scale size={14} className="text-warn shrink-0" aria-hidden />
-        <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">Risk debate</h3>
-        <span className="ml-auto text-[10px] text-ink-mute font-mono">automated</span>
+        <h3 className="text-xs font-semibold uppercase text-ink-mute">Risk debate</h3>
+        <span className="ml-auto font-mono text-xs text-ink-mute">automated</span>
       </div>
       <div className="px-5 py-4 grid md:grid-cols-2 gap-4 text-sm">
         {agg ? (
           <div>
-            <p className="text-[11px] font-semibold text-up uppercase tracking-wider mb-1">Aggressive</p>
+            <p className="mb-1 text-xs font-semibold uppercase text-accent">Aggressive</p>
             <p className="text-ink-soft text-xs leading-relaxed">{cleanMemoProse(agg)}</p>
           </div>
         ) : null}
         {con ? (
           <div>
-            <p className="text-[11px] font-semibold text-warn uppercase tracking-wider mb-1">Conservative</p>
+            <p className="mb-1 text-xs font-semibold uppercase text-warn">Conservative</p>
             <p className="text-ink-soft text-xs leading-relaxed">{cleanMemoProse(con)}</p>
           </div>
         ) : null}
         {tension ? (
           <div className="md:col-span-2 border-t border-hair pt-3">
-            <p className="text-[11px] font-semibold text-ink-mute uppercase tracking-wider mb-1">Key tension</p>
+            <p className="mb-1 text-xs font-semibold uppercase text-ink-mute">Key tension</p>
             <p className="text-ink-soft text-xs leading-relaxed">{cleanMemoProse(tension)}</p>
           </div>
         ) : null}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -174,11 +181,11 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
   if (!bulletins.length) return null;
 
   return (
-    <div className="glass-card p-0 overflow-hidden">
+    <section data-testid="ticker-debate-ledger" className="border-y border-hair">
       <div className="px-5 py-3 border-b border-hair bg-term-bg flex items-center gap-2">
         <TrendingUp size={14} className="text-accent shrink-0" aria-hidden />
-        <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">Ticker debates</h3>
-        <span className="ml-auto text-[10px] text-ink-mute font-mono">
+        <h3 className="text-xs font-semibold uppercase text-ink-mute">Ticker debates</h3>
+        <span className="ml-auto font-mono text-xs text-ink-mute">
           automated · {bulletins.length} ticker{bulletins.length !== 1 ? 's' : ''}
         </span>
       </div>
@@ -188,10 +195,10 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
           const stance = s(p.net_stance).trim().toLowerCase();
           const stanceColor =
             stance === 'bullish'
-              ? 'text-up'
+              ? 'text-accent'
               : stance === 'bearish'
-                ? 'text-down'
-                : 'text-warn';
+                ? 'text-warn'
+                : 'text-ink-mute';
           const bull = s(p.bull_thesis).trim();
           const bear = s(p.bear_thesis).trim();
           const delta = s(p.conviction_delta).trim();
@@ -202,18 +209,18 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
               <div className="flex items-baseline gap-3">
                 <span className="font-mono text-sm font-semibold text-accent">{d.ticker}</span>
                 {stance ? <span className={`text-xs font-medium capitalize ${stanceColor}`}>{stance}</span> : null}
-                {delta ? <span className="text-[11px] text-ink-mute">conviction Δ {sign}</span> : null}
+                {delta ? <span className="text-xs text-ink-mute">conviction Δ {sign}</span> : null}
               </div>
               <div className="grid md:grid-cols-2 gap-3 text-xs text-ink-soft leading-relaxed">
                 {bull ? (
                   <div>
-                    <p className="text-[10px] font-semibold text-up/80 uppercase tracking-wider mb-1">Bull</p>
+                    <p className="mb-1 text-xs font-semibold uppercase text-accent">Bull</p>
                     <p>{cleanMemoProse(bull)}</p>
                   </div>
                 ) : null}
                 {bear ? (
                   <div>
-                    <p className="text-[10px] font-semibold text-down/80 uppercase tracking-wider mb-1">Bear</p>
+                    <p className="mb-1 text-xs font-semibold uppercase text-warn">Bear</p>
                     <p>{cleanMemoProse(bear)}</p>
                   </div>
                 ) : null}
@@ -222,7 +229,7 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -238,7 +245,11 @@ function hasPipelineArtifacts(pipe: PipelineObservabilityBundle | null): boolean
 export function DeliberationsTab() {
   const { data } = useDashboard();
   const pipe = data?.pipeline_observability ?? null;
-  const pmDocs = sortDocsByDateDesc((data?.docs ?? []).filter((d) => docMatchesLibraryScope(d, 'portfolio')));
+  const pmDocs = sortDocsByDateDesc(
+    (data?.docs ?? [])
+      .filter((d) => docMatchesLibraryScope(d, 'portfolio'))
+      .filter(isPmMemoHistoryDoc),
+  );
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeFile: Doc | null = pmDocs.find((d) => d.id === activeId) ?? null;
@@ -248,20 +259,20 @@ export function DeliberationsTab() {
 
   if (!showArtifacts && pmDocs.length === 0) {
     return (
-      <div className="glass-card px-5 py-12 text-center text-sm text-ink-mute">
+      <div className="border-y border-hair px-5 py-12 text-center text-sm text-ink-mute">
         No deliberations yet — bull/bear debates, the risk debate, and the rebalance memo appear here after a run.
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div data-testid="why-deliberations-workspace" className="space-y-8">
       {showArtifacts && pipe ? (
         <section className="space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-[11px] font-semibold text-ink-mute tracking-wide">Latest run</p>
+            <p className="text-xs font-semibold text-ink-mute">Latest run</p>
             {pipe.snapshot_date ? (
-              <span className="text-[11px] text-ink-mute font-mono">{pipe.snapshot_date}</span>
+              <span className="font-mono text-xs text-ink-mute">{pipe.snapshot_date}</span>
             ) : null}
           </div>
           {isRebalancePayload(pipe.pm_rebalance) && pipe.pm_rebalance ? (
@@ -280,10 +291,10 @@ export function DeliberationsTab() {
         <section className="space-y-3">
           <div className="flex items-center gap-2 px-0.5">
             <Calendar size={15} className="text-warn shrink-0" aria-hidden />
-            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">PM memo history</h3>
-            <span className="text-[11px] text-ink-mute">{pmDocs.length} document{pmDocs.length !== 1 ? 's' : ''}</span>
+            <h3 className="text-xs font-semibold uppercase text-ink-mute">PM memo history</h3>
+            <span className="text-xs text-ink-mute">{pmDocs.length} document{pmDocs.length !== 1 ? 's' : ''}</span>
           </div>
-          <div className="glass-card p-0 overflow-hidden">
+          <div className="border-y border-hair">
             <div className="divide-y divide-hair">
               {pmDocs.map((d) => {
                 const active = activeId === d.id;
@@ -299,7 +310,7 @@ export function DeliberationsTab() {
                     >
                       <FileText size={14} className="text-warn/70 shrink-0" />
                       <span className="font-mono text-sm">{canonicalPmTitle(d.path)}</span>
-                      <span className="ml-auto text-[11px] font-mono text-ink-mute">{d.date ?? ''}</span>
+                      <span className="ml-auto font-mono text-xs text-ink-mute">{d.date ?? ''}</span>
                     </button>
                     {active ? (
                       <DocumentExpandInline
