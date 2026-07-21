@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import PageSkeleton from '@/components/page-skeleton';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { OlympusTearsheetView } from '@/components/tearsheet/OlympusTearsheetView';
 import { fetchOlympusTearsheet } from '@/lib/observability-queries';
 import type { OlympusTearsheet } from '@/components/tearsheet/types';

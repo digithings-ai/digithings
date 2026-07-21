@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && npm run check:static-export",
+    "check:static-export": "node scripts/check-static-export.mjs",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run"

@@ -7,7 +7,7 @@ import { useDashboard } from '@/lib/dashboard-context';
 import { useAsyncData } from '@/lib/hooks/use-async-data';
 import { fetchTickerDossier } from '@/lib/queries';
 import type { TickerDossier } from '@/lib/types';
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import PageSkeleton from '@/components/page-skeleton';
 import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';

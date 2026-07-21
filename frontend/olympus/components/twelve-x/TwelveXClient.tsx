@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import { EmptyState } from '@digithings/web';
 
-import { SubpageStickyTabBar, SUBPAGE_MAX, subpageTabButtonClass } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { SubpageStickyTabBar, subpageTabButtonClass } from '@/components/subpage-tab-bar';
 import PageSkeleton from '@/components/page-skeleton';
 import {
   computeConsensusDeltaSet,

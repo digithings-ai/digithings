@@ -73,6 +73,14 @@ rows), takes `ReactNode` labels, and accepts `linkPanels={false}` to omit
 `aria-controls` when the consumer owns no panel ids (wrapper-adaption cases
 like olympus's subpage tab bar).
 
+Page-level dashboard composition is specified by
+`reference/components/dashboard-workspace-reference.tsx` on the Finance page.
+Its `dw-*` grammar is deliberately reference-only: a command band establishes
+one primary state, compact metrics add context, and a flat hairline ledger owns
+the working detail. Product apps adapt that composition around their own data
+and interactions rather than introducing generic cards or duplicating existing
+controls such as `TabStrip`, `SegmentedControl`, `Sheet`, and `EmptyState`.
+
 Since the canon migration (#1399, 2026-07): apps declare **no local `@theme`
 block** — `web-theme.css` is the one bridge (its `inline` semantics keep scoped
 liveries live inside utilities); shared sheets import with `layer(components)`;
