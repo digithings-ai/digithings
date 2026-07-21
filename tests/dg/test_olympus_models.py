@@ -53,6 +53,7 @@ _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
         "openrouter/openai/gpt-4o",
         "openrouter/anthropic/claude-sonnet-4.6",
         "openrouter/google/gemini-2.5-flash",
+        "openrouter/google/gemini-3.6-flash",  # #1622: quality research Google seat
         "openrouter/x-ai/grok-4.3",
     }
 )

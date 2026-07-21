@@ -119,9 +119,10 @@ tiers:
         - "openrouter/anthropic/claude-sonnet-4.6"
         # No Gemini Pro entry: the endpoint gate failed three Pro variants in a row
         # (2.5-pro: non-JSON under strict json_schema; 3-pro-preview: 404 rotated out;
-        # 3.1-pro-preview: empty body twice, 2026-07-20). gemini-2.5-flash is the one
-        # gate-proven Google slug — it carries Google coverage here.
-        - "openrouter/google/gemini-2.5-flash"
+        # 3.1-pro-preview: empty body twice, 2026-07-20). The Flash line is the
+        # gate-proven Gemini branch; 3.6-flash (stable slug, 1M ctx, $1.50/$7.50,
+        # agentic-optimized) takes the quality research seat — gate-verified on this PR.
+        - "openrouter/google/gemini-3.6-flash"
         - "openrouter/x-ai/grok-4.3"
       reasoning:
         - "openrouter/deepseek/deepseek-v4-pro"
