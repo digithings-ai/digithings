@@ -378,3 +378,47 @@ class TestEquityEditMode:
     def test_missing_edit_skill_raises(self) -> None:
         with pytest.raises(SkillNotFoundError):
             load_skill_edit("nonexistent-segment-slug")
+
+
+@pytest.mark.unit
+class TestEditMergeFallback:
+    """#1641 — a patch that cannot merge falls back to full regeneration."""
+
+    def test_merge_failure_falls_back_to_full_without_phase_error(self) -> None:
+        state = _macro_state_with_prior(triage_decision="regenerate")
+        spec = SegmentNodeSpec(
+            segment_slug="macro",
+            skill_slug="macro",
+            output_model=MacroRegimeReport,
+            phase_outputs_field="phase3_output",
+        )
+        node = build_segment_node(spec, write_adapter=scalar_slot_write_adapter)
+
+        bad_patch = DocumentPatch(
+            schema_version="1.0",
+            date=date(2026, 4, 27),
+            prior_date=date(2026, 4, 26),
+            target_document_key="macro",
+            status="updated",
+            ops=[
+                # Duplicate sets on one concrete path are a deterministic MergeError.
+                PatchOp(op="set", path="/regime_label", value="A", reason="dup 1"),
+                PatchOp(op="set", path="/regime_label", value="B", reason="dup 2"),
+            ],
+        )
+        full_report = MacroRegimeReport.model_validate(
+            {**_macro_prior_body(), "headline": "fresh full headline"}
+        )
+
+        with patch(
+            "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+            side_effect=[bad_patch, full_report],
+        ) as mock_run:
+            out = node(state)
+
+        assert mock_run.call_count == 2, "merge failure must trigger a full-mode retry"
+        assert mock_run.call_args_list[1].kwargs["output_model"] is MacroRegimeReport
+        assert not out.get("errors"), "successful fallback must not degrade the run"
+        slot = out["phase3_output"]
+        assert isinstance(slot.payload, SegmentPayload)
+        assert slot.payload.body["headline"] == "fresh full headline"

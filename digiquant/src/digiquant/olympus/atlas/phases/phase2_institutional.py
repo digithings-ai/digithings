@@ -16,7 +16,7 @@ import logging
 from typing import Any, Callable, Literal  # noqa: F401 — used for node-update dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from digiquant.olympus.atlas.phases._node_factory import (
     SegmentNodeSpec,
@@ -40,10 +40,40 @@ ABSENCE_BREAKER_THRESHOLD = 3
 INST_ABSENT_REASON = "institutional_data_absent_circuit_breaker"
 
 
+# LLM synonyms observed for flow_direction (run 29846393424 emitted 'positive', #1641).
+_FLOW_DIRECTION_SYNONYMS = {
+    "inflow": "inflow",
+    "inflows": "inflow",
+    "net inflow": "inflow",
+    "net inflows": "inflow",
+    "positive": "inflow",
+    "outflow": "outflow",
+    "outflows": "outflow",
+    "net outflow": "outflow",
+    "net outflows": "outflow",
+    "negative": "outflow",
+    "mixed": "mixed",
+    "neutral": "mixed",
+    "balanced": "mixed",
+    "flat": "mixed",
+}
+
+
 class InstitutionalFlowsReport(SegmentReport):
     """Phase 2A — ETF inflows / outflows, dark-pool prints, 13D/13G/Form 4."""
 
     flow_direction: Literal["inflow", "outflow", "mixed"] | None = None
+
+    @field_validator("flow_direction", mode="before")
+    @classmethod
+    def _normalize_flow_direction(cls, v: object) -> object:
+        """Map LLM synonyms onto the literal; unknown values degrade to None — this is
+        an informational field and must never fail a merge (#1641), matching the
+        fail-soft ``data_quality`` idiom in ``SegmentReport``."""
+        if isinstance(v, str):
+            return _FLOW_DIRECTION_SYNONYMS.get(v.strip().lower())
+        return v
+
     largest_sector_inflow: str | None = Field(default=None)
     largest_sector_outflow: str | None = Field(default=None)
     notable_filings: list[str] = Field(

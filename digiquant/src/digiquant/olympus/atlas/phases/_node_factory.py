@@ -682,7 +682,9 @@ def _run_edit_segment(
     tools: list[dict[str, Any]] | None,
     execute_tool: Callable[[str, dict[str, Any]], str] | None,
     model: str | None,
-) -> tuple[SegmentSlot, list[PhaseError], DocumentPatch | None]:
+) -> tuple[SegmentSlot | None, list[PhaseError], DocumentPatch | None]:
+    """Run one segment in edit mode. A ``None`` slot means the patch merge failed and
+    the caller must fall back to full-mode regeneration (#1641)."""
     skill_text = load_skill_edit(spec.skill_slug)
     edit_inputs = _edit_phase_inputs(
         base_inputs=inputs,
@@ -728,19 +730,18 @@ def _run_edit_segment(
             schema_validator=lambda body: spec.output_model.model_validate(body),
         )
     except (MergeError, Exception) as exc:
+        # Fall back to FULL regeneration instead of carrying + failing the segment
+        # (#1641): a merge failure is a patch-shape defect, not evidence the segment
+        # can't be researched today. Mirrors the digest edit path's fallback. No
+        # PhaseError here — a successful full run must not leave the run degraded;
+        # the full path's own fail-soft covers a second failure.
         logger.warning(
-            "edit-mode merge failed for segment %r (%s: %s); carrying prior",
+            "edit-mode merge failed for segment %r (%s: %s); falling back to full generation",
             spec.segment_slug,
             type(exc).__name__,
             exc,
         )
-        carried = Carried(baseline_date=prior.date, reason="edit_merge_failed")
-        err = PhaseError(
-            phase=spec.phase_outputs_field,
-            node=spec.segment_slug,
-            message=f"edit merge failed: {exc}",
-        )
-        return SegmentSlot(payload=carried), [err], None
+        return None, [], None
 
     merged_body = dict(merge_result.materialized)
     merged_body.setdefault("segment", spec.segment_slug)
@@ -825,12 +826,17 @@ def build_segment_node(
                     execute_tool=execute_tool,
                     model=model,
                 )
-                update = write_adapter(spec, slot)
-                if delta is not None:
-                    update["document_deltas"] = {spec.segment_slug: delta.model_dump(mode="json")}
-                if errors:
-                    update["errors"] = errors
-                return update
+                if slot is not None:
+                    update = write_adapter(spec, slot)
+                    if delta is not None:
+                        update["document_deltas"] = {
+                            spec.segment_slug: delta.model_dump(mode="json")
+                        }
+                    if errors:
+                        update["errors"] = errors
+                    return update
+                # slot is None ⇒ patch merge failed (#1641) — regenerate from scratch
+                # via the full path below rather than carrying + degrading the run.
 
         skill_text = load_skill(spec.skill_slug)
 
