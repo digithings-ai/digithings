@@ -14,6 +14,7 @@ import { regimeChipsFromMacroPayload, summarizeRecommendedPortfolio } from '@/li
 import PipelineSummaryStrip from './PipelineSummaryStrip';
 import PipelineDaySelector from './PipelineDaySelector';
 import PipelineCanvas from './PipelineCanvas';
+import PipelineHeading from './PipelineHeading';
 import PipelineNodeDetail from './PipelineNodeDetail';
 
 function today(): string {
@@ -236,19 +237,7 @@ export default function PipelineClient() {
         className="border-y border-hair bg-surface px-4 py-4 md:px-6"
       >
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-          <div className="min-w-0">
-            <p className="font-mono text-xs font-semibold uppercase text-ink-mute">
-              Pipeline
-            </p>
-            <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <h1 className="m-0 font-display text-3xl text-ink">
-                How today&apos;s decision was made
-              </h1>
-              <span className="text-sm text-ink-mute">
-                research → deliberation → selection
-              </span>
-            </div>
-          </div>
+          <PipelineHeading />
           <PipelineDaySelector
             dates={availableDates}
             value={selectedDate}
