@@ -122,12 +122,18 @@ function RenderResult({
  * to the Skeleton primitive); reduced-motion still degrades to a static tint.
  * Bar layout (kicker line, headline bar, two section blocks) is unchanged.
  */
-export function SnapshotSkeleton() {
+interface SnapshotPresentationProps {
+  flat?: boolean;
+}
+
+export function SnapshotSkeleton({ flat = false }: SnapshotPresentationProps) {
   return (
     <SkeletonGroup
       data-testid="snapshot-loading"
       aria-label="Loading daily snapshot"
-      className="glass-card p-6 flex flex-col gap-4"
+      className={flat
+        ? 'flex flex-col gap-4 border-y border-hair bg-surface px-5 py-6'
+        : 'glass-card p-6 flex flex-col gap-4'}
     >
       <Skeleton className="h-3 w-40" />
       <Skeleton className="h-6 w-3/4" />
@@ -139,22 +145,38 @@ export function SnapshotSkeleton() {
   );
 }
 
-export function SnapshotErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
+export function SnapshotErrorBanner({
+  message,
+  onRetry,
+  flat = false,
+}: {
+  message: string;
+  onRetry: () => void;
+  flat?: boolean;
+}) {
   return (
     <section
       data-testid="snapshot-error"
       role="alert"
-      className="glass-card p-5 border-down/30 bg-down/5"
+      className={flat
+        ? 'border-y border-warn/40 bg-warn/5 px-5 py-5'
+        : 'glass-card p-5 border-down/30 bg-down/5'}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <SectionTitle className="text-down">Snapshot unavailable</SectionTitle>
+          {flat ? (
+            <h3 className="mb-3 font-display text-xl text-warn">Snapshot unavailable</h3>
+          ) : (
+            <SectionTitle className="text-down">Snapshot unavailable</SectionTitle>
+          )}
           <p className="text-sm text-ink-soft break-words">{message}</p>
         </div>
         <button
           type="button"
           onClick={onRetry}
-          className="shrink-0 rounded-md border border-down/40 bg-down/10 px-3 py-1.5 text-xs font-semibold text-down hover:bg-down/20"
+          className={flat
+            ? 'shrink-0 rounded-md border border-warn/40 bg-warn/10 px-3 py-1.5 text-xs font-semibold text-warn hover:bg-warn/20'
+            : 'shrink-0 rounded-md border border-down/40 bg-down/10 px-3 py-1.5 text-xs font-semibold text-down hover:bg-down/20'}
         >
           Retry
         </button>
@@ -163,7 +185,13 @@ export function SnapshotErrorBanner({ message, onRetry }: { message: string; onR
   );
 }
 
-export function SnapshotEmptyBanner({ reason }: { reason: 'no_recent_row' | 'unconfigured' }) {
+export function SnapshotEmptyBanner({
+  reason,
+  flat = false,
+}: {
+  reason: 'no_recent_row' | 'unconfigured';
+  flat?: boolean;
+}) {
   const message =
     reason === 'unconfigured'
       ? 'Supabase credentials are not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
@@ -172,9 +200,15 @@ export function SnapshotEmptyBanner({ reason }: { reason: 'no_recent_row' | 'unc
     <section
       data-testid="snapshot-empty"
       role="status"
-      className="glass-card p-5 border-hair bg-term-bg/40"
+      className={flat
+        ? 'border-y border-hair bg-term-bg/40 px-5 py-5'
+        : 'glass-card p-5 border-hair bg-term-bg/40'}
     >
-      <SectionTitle>No snapshot available</SectionTitle>
+      {flat ? (
+        <h3 className="mb-3 font-display text-xl text-ink">No snapshot available</h3>
+      ) : (
+        <SectionTitle>No snapshot available</SectionTitle>
+      )}
       <p className="text-sm text-ink-soft">{message}</p>
     </section>
   );
@@ -283,19 +317,25 @@ export function NarrativeSection({ title, body, testId }: { title: string; body:
   );
 }
 
-export function ActionableList({ items }: { items: ActionableItem[] }) {
+export function ActionableList({ items, flat = false }: { items: ActionableItem[]; flat?: boolean }) {
   if (!items.length) return null;
   return (
-    <div data-testid="snapshot-actionable" className="space-y-2">
+    <div
+      data-testid="snapshot-actionable"
+      data-presentation={flat ? 'flat' : undefined}
+      className="space-y-2"
+    >
       <h3 className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
         Actionable summary
       </h3>
-      <ul className="space-y-2">
+      <ul className={flat ? 'divide-y divide-hair border-y border-hair' : 'space-y-2'}>
         {items.map((item, i) => (
           <li
             key={`${item.priority}-${i}`}
             data-testid="snapshot-actionable-item"
-            className="rounded-md border border-hair bg-term-bg/30 p-3 text-sm"
+            className={flat
+              ? 'py-3 text-sm'
+              : 'rounded-md border border-hair bg-term-bg/30 p-3 text-sm'}
           >
             <div className="flex items-center gap-2 text-xs text-ink-mute">
               <span className="font-mono">P{item.priority}</span>
@@ -310,19 +350,25 @@ export function ActionableList({ items }: { items: ActionableItem[] }) {
   );
 }
 
-export function RiskList({ items }: { items: RiskItem[] }) {
+export function RiskList({ items, flat = false }: { items: RiskItem[]; flat?: boolean }) {
   if (!items.length) return null;
   return (
-    <div data-testid="snapshot-risk-radar" className="space-y-2">
+    <div
+      data-testid="snapshot-risk-radar"
+      data-presentation={flat ? 'flat' : undefined}
+      className="space-y-2"
+    >
       <h3 className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
         Risk radar
       </h3>
-      <ul className="space-y-2">
+      <ul className={flat ? 'divide-y divide-hair border-y border-hair' : 'space-y-2'}>
         {items.map((item, i) => (
           <li
             key={`${item.label}-${i}`}
             data-testid="snapshot-risk-item"
-            className="rounded-md border border-hair bg-term-bg/30 p-3 text-sm"
+            className={flat
+              ? 'py-3 text-sm'
+              : 'rounded-md border border-hair bg-term-bg/30 p-3 text-sm'}
           >
             <div className="flex items-center gap-2 text-xs text-ink-mute">
               <span className="font-mono">{item.horizon_hours}h</span>

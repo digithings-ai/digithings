@@ -58,4 +58,19 @@ describe('PipelineSummaryStrip', () => {
     expect(html).toContain('warn');
     expect(html).not.toContain('fin-purple');
   });
+
+  it('does not use P&L colors for directional regime chips', () => {
+    const html = renderToStaticMarkup(
+      createElement(PipelineSummaryStrip, {
+        headline: 'Test',
+        regimeChips: [
+          { label: 'Inflation', value: 'cooling', color: 'green' },
+          { label: 'Growth', value: 'contracting', color: 'red' },
+        ],
+        decision: null,
+      }),
+    );
+    expect(html).not.toContain('bg-up');
+    expect(html).not.toContain('bg-down');
+  });
 });

@@ -226,20 +226,41 @@ export default function PipelineClient() {
   const noRunForDate = !dayLoading && dayData.presentKeys.size === 0;
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 min-w-0">
-      {/* Run context: the day's read and state paired with temporal navigation. */}
-      <div className="border-y border-hair bg-surface/70 px-4 py-3 md:px-6">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+    <section
+      data-testid="pipeline-workspace"
+      aria-label="Daily decision pipeline"
+      className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface"
+    >
+      <header
+        data-testid="pipeline-command-band"
+        className="border-y border-hair bg-surface px-4 py-4 md:px-6"
+      >
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          <div className="min-w-0">
+            <p className="font-mono text-xs font-semibold uppercase text-ink-mute">
+              Pipeline
+            </p>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h1 className="m-0 font-display text-3xl text-ink">
+                How today&apos;s decision was made
+              </h1>
+              <span className="text-sm text-ink-mute">
+                research → deliberation → selection
+              </span>
+            </div>
+          </div>
+          <PipelineDaySelector
+            dates={availableDates}
+            value={selectedDate}
+            onChange={handleDateChange}
+          />
+        </div>
+        <div className="mt-4 border-t border-hair pt-3">
           <PipelineSummaryStrip
             headline={headline}
             regimeChips={regimeChips}
             decision={decision}
             loading={dayLoading}
-          />
-          <PipelineDaySelector
-            dates={availableDates}
-            value={selectedDate}
-            onChange={handleDateChange}
           />
         </div>
         {noRunForDate && (
@@ -248,10 +269,12 @@ export default function PipelineClient() {
             expected shape, not real output.
           </p>
         )}
-      </div>
+      </header>
 
-      {/* Canvas + NodeDetail */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
+      <div
+        data-testid="pipeline-workflow"
+        className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row"
+      >
         <PipelineCanvas
           day={dayData}
           initialExpansion={initialExpansion}
@@ -268,6 +291,6 @@ export default function PipelineClient() {
           />
         )}
       </div>
-    </div>
+    </section>
   );
 }

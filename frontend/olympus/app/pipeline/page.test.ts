@@ -44,6 +44,16 @@ describe('app/pipeline/page', () => {
     expect(html).toContain('Pipeline');
   });
 
+  it('renders one command band above the workflow canvas', () => {
+    const html = renderToStaticMarkup(createElement(PipelinePage));
+    expect(html).toContain('data-testid="pipeline-workspace"');
+    expect(html).toContain('data-testid="pipeline-command-band"');
+    expect(html).toContain('data-testid="pipeline-workflow"');
+    expect(html.indexOf('pipeline-command-band')).toBeLessThan(html.indexOf('pipeline-workflow'));
+    expect(html).not.toContain('glass-card');
+    expect(html).not.toContain('<main'); // AppFrame owns the sole main landmark
+  });
+
   it('no horizontal scroll class on page wrapper — overflow-hidden on viewport only', () => {
     const html = renderToStaticMarkup(createElement(PipelinePage));
     // Page body wrapper must not have overflow-x-auto or overflow-x-scroll

@@ -72,8 +72,8 @@ export default function PipelineNode({
         <span
           className={`flex-1 truncate leading-tight ${
             node.kind === 'stage'
-              ? 'font-sans text-[13px] font-medium text-ink'
-              : 'font-mono text-[12px] text-ink-soft'
+              ? 'font-sans text-sm font-medium text-ink'
+              : 'font-mono text-xs text-ink-soft'
           }`}
         >
           {node.label}
@@ -81,7 +81,7 @@ export default function PipelineNode({
 
         {/* count badge — accent chrome only, softened (no font-bold) */}
         {count != null && (
-          <span className="font-mono text-[10px] tabular-nums text-accent bg-accent/15 rounded-full px-1.5 py-px flex-shrink-0">
+          <span className="flex-shrink-0 rounded-full bg-accent/15 px-1.5 py-px font-mono text-xs tabular-nums text-accent">
             {count}
           </span>
         )}
