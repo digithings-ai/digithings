@@ -234,6 +234,23 @@ function SeriesTipContent({ date, value }: { date: string; value: string }) {
   );
 }
 
+function ContributionReturnTipContent({ point }: { point: ContributionReturnPoint }) {
+  const contributions = Object.entries(point.contributions)
+    .filter(([, value]) => value !== 0)
+    .sort((left, right) => Math.abs(right[1]) - Math.abs(left[1]));
+  return (
+    <div className="ts-chart-tip-body">
+      <dl className="ts-chart-tip-dl">
+        <div><dt>Date</dt><dd>{point.t.slice(0, 10)}</dd></div>
+        <div><dt>Portfolio</dt><dd>{fmtPct(point.returnPct)}</dd></div>
+        {contributions.map(([label, value]) => (
+          <div key={label}><dt>{label}</dt><dd>{fmtPct(value)}</dd></div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 interface MarkerHit {
   x: number;
   y: number;
@@ -1152,7 +1169,7 @@ function TimeSeriesBody({
   const baseY = yAt(baseReal);
   const area = line + `L${xAt(n - 1).toFixed(1)} ${baseY.toFixed(1)} L${xAt(0).toFixed(1)} ${baseY.toFixed(1)} Z`;
 
-  const idxs = [...new Set(vbW < 480 ? [0, n - 1] : [0, Math.floor((n - 1) / 2), n - 1])];
+  const idxs = [0, Math.floor((n - 1) / 2), n - 1];
 
   const onChartMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
@@ -1267,6 +1284,172 @@ export function SignedBars({ values, height = 220, fmt = fmtCompact }: SignedBar
         );
       })}
     </Svg>
+  );
+}
+
+export interface ContributionReturnPoint {
+  t: string;
+  /** Exact cumulative portfolio return from the NAV series, in percent. */
+  returnPct: number;
+  /** Cumulative per-position contribution, in percentage points. */
+  contributions: Record<string, number>;
+}
+
+export interface ContributionReturnChartProps {
+  points: ContributionReturnPoint[];
+  /** Stable series identity colors supplied by the consuming product. */
+  colors: Record<string, string>;
+  height?: number;
+  interactive?: boolean;
+}
+
+/** Signed cumulative contribution stacks with the exact portfolio return overlaid. */
+export function ContributionReturnChart({
+  points,
+  colors,
+  height = 360,
+  interactive = true,
+}: ContributionReturnChartProps) {
+  if (points.length < 2) return <Empty height={height} msg="not enough history" />;
+  return (
+    <ContributionReturnChartBody
+      points={points}
+      colors={colors}
+      height={height}
+      interactive={interactive}
+    />
+  );
+}
+
+function ContributionReturnChartBody({
+  points,
+  colors,
+  height,
+  interactive,
+}: Required<ContributionReturnChartProps>) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<ChartHoverTip | null>(null);
+  const { vbW, pad } = useChartLayout(wrapRef, height, false);
+  const plotW = vbW - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const plotBottom = pad.top + plotH;
+  const keys = [...new Set(points.flatMap((point) => Object.keys(point.contributions)))];
+  const extents = points.map((point) => {
+    let positive = 0;
+    let negative = 0;
+    for (const value of Object.values(point.contributions)) {
+      if (value >= 0) positive += value;
+      else negative += value;
+    }
+    return { positive, negative };
+  });
+  const values = [
+    ...points.map((point) => point.returnPct),
+    ...extents.flatMap((extent) => [extent.positive, extent.negative]),
+    0,
+  ];
+  let lo = Math.min(...values);
+  let hi = Math.max(...values);
+  if (lo === hi) hi = lo + 1;
+  const domainPad = (hi - lo) * 0.08;
+  lo -= domainPad;
+  hi += domainPad;
+  const yAt = (value: number) => pad.top + plotH - ((value - lo) / (hi - lo)) * plotH;
+  const zeroY = yAt(0);
+  const slot = plotW / points.length;
+  const barWidth = Math.max(1, Math.min(slot * 0.72, 24));
+  const xCenter = (index: number) => pad.left + slot * index + slot / 2;
+  const line = points
+    .map((point, index) => `${index ? 'L' : 'M'}${xCenter(index).toFixed(1)} ${yAt(point.returnPct).toFixed(1)}`)
+    .join(' ');
+
+  const grid: ReactNode[] = [];
+  niceLinearTicks(lo, hi, 4).forEach((tick, index) => {
+    const y = yAt(tick);
+    grid.push(
+      <line key={`g${index}`} x1={pad.left} y1={y} x2={vbW - pad.right} y2={y} className={`ts-grid${tick === 0 ? ' ts-grid-zero' : ''}`} />,
+      <text key={`gt${index}`} x={pad.left - 8} y={axisLabelY(y, pad.top, plotBottom)} textAnchor="end" className="ts-axis">{fmtCompact(tick)}%</text>,
+    );
+  });
+
+  const onChartMouseMove = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
+    if (event.buttons !== 0) {
+      setHover(null);
+      return;
+    }
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const { x, y } = viewBoxPoint(event.clientX, event.clientY, event.currentTarget, vbW, height);
+    if (x < pad.left || x > vbW - pad.right || y < pad.top || y > plotBottom) {
+      setHover(null);
+      return;
+    }
+    const index = Math.max(0, Math.min(points.length - 1, Math.floor((x - pad.left) / slot)));
+    setHover({
+      ...positionHoverTip(event.clientX, event.clientY, wrap, 220, 128),
+      content: <ContributionReturnTipContent point={points[index]} />,
+    });
+  }, [height, pad.left, pad.right, pad.top, plotBottom, points, slot, vbW]);
+
+  return (
+    <ChartHoverShell hover={interactive ? hover : null} wrapRef={wrapRef}>
+      <Svg
+        height={height}
+        vbW={vbW}
+        onMouseMove={interactive ? onChartMouseMove : undefined}
+        onMouseLeave={interactive ? () => setHover(null) : undefined}
+      >
+        <defs>
+          <clipPath id="ts-contribution-return-clip">
+            <rect x={pad.left} y={pad.top} width={plotW} height={plotH} />
+          </clipPath>
+        </defs>
+        {grid}
+        <g clipPath="url(#ts-contribution-return-clip)" data-chart-layer="contributions">
+          {points.flatMap((point, index) => {
+            let positive = 0;
+            let negative = 0;
+            return keys.flatMap((key) => {
+              const value = point.contributions[key] ?? 0;
+              if (value === 0) return [];
+              const start = value >= 0 ? positive : negative;
+              const end = start + value;
+              if (value >= 0) positive = end;
+              else negative = end;
+              const top = Math.min(yAt(start), yAt(end));
+              return (
+                <rect
+                  key={`${point.t}:${key}`}
+                  x={(xCenter(index) - barWidth / 2).toFixed(1)}
+                  y={top.toFixed(1)}
+                  width={barWidth.toFixed(1)}
+                  height={Math.max(0.75, Math.abs(yAt(end) - yAt(start))).toFixed(1)}
+                  fill={colors[key] ?? 'var(--ink-mute)'}
+                  className="ts-contribution-segment"
+                  data-series={key}
+                />
+              );
+            });
+          })}
+          <line x1={pad.left} y1={zeroY} x2={vbW - pad.right} y2={zeroY} className="ts-grid ts-grid-zero" />
+          <path d={line} className="ts-line ts-tone-accent ts-portfolio-return-line" fill="none" data-chart-layer="portfolio-return" />
+          {points.map((point, index) => (
+            <circle key={point.t} cx={xCenter(index)} cy={yAt(point.returnPct)} r="2.5" className="ts-portfolio-return-dot" />
+          ))}
+        </g>
+        {[0, Math.floor((points.length - 1) / 2), points.length - 1].map((index) => (
+          <text
+            key={`${points[index].t}:${index}`}
+            x={xCenter(index)}
+            y={height - 10}
+            textAnchor={index === 0 ? 'start' : index === points.length - 1 ? 'end' : 'middle'}
+            className="ts-axis"
+          >
+            {points[index].t.slice(0, 10)}
+          </text>
+        ))}
+      </Svg>
+    </ChartHoverShell>
   );
 }
 

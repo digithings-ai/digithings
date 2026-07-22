@@ -7,11 +7,9 @@ import { fetchObservabilityData } from '@/lib/observability-queries';
 import type { TableRow } from '@/lib/database.types';
 
 /**
- * "Decision quality" — the conviction calibration scorecard, surfaced where the
- * owner asks "how am I doing" (Portfolio → Performance) rather than in the
- * operator System view. Reads resolved `decision_log` rows the same way the
- * System dashboard does. `decisions` may be injected (tests); otherwise it is
- * fetched on mount.
+ * "Decision quality" — the conviction calibration scorecard for Portfolio Attribution.
+ * Reads resolved `decision_log` rows the same way the System dashboard does.
+ * `decisions` may be injected (tests); otherwise it is fetched on mount.
  */
 export default function DecisionQuality({
   decisions: provided,

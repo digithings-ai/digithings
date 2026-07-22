@@ -1,11 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
-import { Pager } from '@digithings/web';
 import type { DashboardPositionEvent } from '@/lib/types';
-
-const PAGE_SIZE = 10;
 
 export default function HoldingsActivityTable({ events }: { events: DashboardPositionEvent[] }) {
   const activity = useMemo(
@@ -16,37 +13,36 @@ export default function HoldingsActivityTable({ events }: { events: DashboardPos
         .sort((a, b) => b.date.localeCompare(a.date) || a.ticker.localeCompare(b.ticker)),
     [events]
   );
-  const [page, setPage] = useState(0);
-  const pageCount = Math.max(1, Math.ceil(activity.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount - 1);
-  const visible = activity.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   return (
-    <section data-region="holdings-activity" className="border border-hair bg-surface">
+    <section
+      data-region="holdings-activity"
+      className="flex h-full min-h-0 flex-col border border-hair bg-surface"
+    >
       <div className="flex items-center justify-between gap-3 border-b border-hair bg-term-bg px-4 py-3 md:px-6">
-        <h3 className="font-display text-xl font-normal tracking-normal text-ink">Activity</h3>
-        <span className="font-mono text-xs uppercase tracking-normal text-ink-mute">
+        <h3 className="font-display text-xl font-normal tracking-tight text-ink">Activity</h3>
+        <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
           opens · adds · trims · exits
         </span>
       </div>
-      {visible.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[620px] border-collapse font-mono text-xs [font-variant-numeric:tabular-nums]">
-            <thead>
-              <tr className="border-b border-hair text-xs uppercase tracking-normal text-ink-mute">
-                <th className="px-4 py-2.5 text-left font-normal">Date</th>
-                <th className="px-3 py-2.5 text-left font-normal">Ticker</th>
-                <th className="px-3 py-2.5 text-left font-normal">Action</th>
-                <th className="px-3 py-2.5 text-right font-normal">Weight</th>
-                <th className="px-3 py-2.5 text-right font-normal">Change</th>
-                <th className="px-4 py-2.5 text-right font-normal">Price</th>
+      {activity.length ? (
+        <div data-region="holdings-activity-scroll" className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full table-fixed border-collapse font-mono text-[0.78rem] [font-variant-numeric:tabular-nums]">
+            <thead className="sticky top-0 z-10 bg-surface">
+              <tr className="border-b border-hair text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
+                <th className="w-[31%] px-2 py-2.5 text-left font-normal sm:px-4 md:w-auto">Date</th>
+                <th className="w-[20%] px-2 py-2.5 text-left font-normal sm:px-3 md:w-auto">Ticker</th>
+                <th className="w-[24%] px-2 py-2.5 text-left font-normal sm:px-3 md:w-auto">Action</th>
+                <th className="hidden px-3 py-2.5 text-right font-normal lg:table-cell">Weight</th>
+                <th className="w-[25%] px-2 py-2.5 text-right font-normal sm:px-3 md:w-auto">Change</th>
+                <th className="hidden px-4 py-2.5 text-right font-normal xl:table-cell">Price</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-hair">
-              {visible.map((event) => (
+              {activity.map((event) => (
                 <tr key={`${event.date}-${event.ticker}-${event.event}`}>
-                  <td className="px-4 py-2.5 text-ink-mute">{event.date}</td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-2 py-2.5 text-ink-mute sm:px-4">{event.date}</td>
+                  <td className="px-2 py-2.5 sm:px-3">
                     <Link
                       href={`/portfolio/tickers?ticker=${encodeURIComponent(event.ticker.toUpperCase())}`}
                       className="font-semibold text-ink hover:text-accent hover:underline"
@@ -54,16 +50,16 @@ export default function HoldingsActivityTable({ events }: { events: DashboardPos
                       {event.ticker}
                     </Link>
                   </td>
-                  <td className="px-3 py-2.5 text-ink-soft">{event.event}</td>
-                  <td className="px-3 py-2.5 text-right text-ink">
+                  <td className="px-2 py-2.5 text-ink-soft sm:px-3">{event.event}</td>
+                  <td className="hidden px-3 py-2.5 text-right text-ink lg:table-cell">
                     {event.weight_pct != null ? `${event.weight_pct.toFixed(1)}%` : '—'}
                   </td>
-                  <td className="px-3 py-2.5 text-right text-ink-soft">
+                  <td className="px-2 py-2.5 text-right text-ink-soft sm:px-3">
                     {event.weight_change_pct != null
                       ? `${event.weight_change_pct > 0 ? '+' : ''}${event.weight_change_pct.toFixed(1)}pp`
                       : '—'}
                   </td>
-                  <td className="px-4 py-2.5 text-right text-ink-soft">
+                  <td className="hidden px-4 py-2.5 text-right text-ink-soft xl:table-cell">
                     {event.price != null ? `$${event.price.toFixed(2)}` : '—'}
                   </td>
                 </tr>
@@ -74,23 +70,6 @@ export default function HoldingsActivityTable({ events }: { events: DashboardPos
       ) : (
         <p className="px-6 py-10 text-center text-sm text-ink-mute">No position changes recorded.</p>
       )}
-      {pageCount > 1 ? (
-        <div className="flex justify-center border-t border-hair px-4 py-3">
-          <Pager
-            dress="capsule"
-            onPrev={() => setPage(Math.max(0, safePage - 1))}
-            onNext={() => setPage(Math.min(pageCount - 1, safePage + 1))}
-            prevDisabled={safePage === 0}
-            nextDisabled={safePage === pageCount - 1}
-            prevAriaLabel="Newer activity"
-            nextAriaLabel="Older activity"
-          >
-            <span className="px-3 font-mono text-xs text-ink-mute">
-              {safePage + 1} / {pageCount}
-            </span>
-          </Pager>
-        </div>
-      ) : null}
     </section>
   );
 }
