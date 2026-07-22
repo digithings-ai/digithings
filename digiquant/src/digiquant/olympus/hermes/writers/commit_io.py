@@ -19,6 +19,7 @@ from digiquant.olympus.atlas.supabase_io import (
 )
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
+from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,6 @@ _SEED_NAV = 100.0
 _RISK_FIELDS_ENV = "OLYMPUS_POSITION_RISK_FIELDS"
 _ATR_STOP_MULT = 2.0
 _ATR_TARGET_MULT = 3.0
-_DEFAULT_HORIZON_DAYS = 21
 _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
 _MANIFEST_DOC_PREFIX = "commit-run/"
 
@@ -151,12 +151,7 @@ def _enrich_positions(
     prior = {str(r.get("ticker")): r for r in prior_book if r.get("ticker")}
     closes = _latest_values(client, "price_history", "close", tickers, run_date)
     atr_pct = _latest_values(client, "price_technicals", "atr_pct", tickers, run_date)
-    horizon = preferences.get("holding_days")
-    horizon_days = (
-        int(horizon)
-        if isinstance(horizon, (int, float)) and not isinstance(horizon, bool) and horizon > 0
-        else _DEFAULT_HORIZON_DAYS
-    )
+    horizon_days = risk_horizon_days(preferences)
 
     for row in pos_rows:
         ticker = row.get("ticker")

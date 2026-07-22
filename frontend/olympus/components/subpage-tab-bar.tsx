@@ -86,7 +86,8 @@ function mapStripItems(children: ReactNode): StripItem[] | null {
  * dress — sliding accent indicator, roving tabindex, aria-selected) whenever
  * the children map onto it (see mapStripItems); below md the SAME chips render
  * as a horizontally-scrollable row (no menu — #1570) with the active chip
- * auto-centered. Public API is unchanged — consumers keep passing
+ * kept fully visible using the smallest necessary scroll. Public API is
+ * unchanged — consumers keep passing
  * `subpageTabButtonClass`-styled buttons or links.
  */
 export function SubpageStickyTabBar({
@@ -113,7 +114,7 @@ export function SubpageStickyTabBar({
     if (typeof window === 'undefined') return;
     if (!window.matchMedia('(max-width: 767px)').matches) return;
     const active = containerRef.current?.querySelector<HTMLElement>('[class*="border-accent"]');
-    active?.scrollIntoView({ inline: 'center', block: 'nearest' });
+    active?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }, [pathname, activeIndex]);
 
   // TabStrip owns the desktop buttons, so re-dispatch activation to the

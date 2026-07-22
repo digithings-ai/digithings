@@ -16,6 +16,8 @@ from click.testing import CliRunner
 
 from digiquant.cli.prices import compute_technicals_cmd, fetch_quotes_cmd
 from digiquant.data.prices import TECHNICAL_COLUMNS
+from digiquant.data.prices.instrument_metadata import InstrumentMetadataFetchResult
+from digiquant.olympus.instrument_metadata import InstrumentMetadata
 
 pytestmark = pytest.mark.unit
 
@@ -73,6 +75,32 @@ def test_fetch_quotes_upsert_failure_exits_zero() -> None:
     assert result.exit_code == 0
     combined = (result.output or "") + (result.stderr or "")
     assert "warning" in combined.lower()
+
+
+def test_fetch_quotes_persists_resolved_instrument_metadata() -> None:
+    runner = CliRunner()
+    client = object()
+    metadata = InstrumentMetadata.fallback("SPY", provider="test")
+
+    with (
+        patch(f"{_WRITER}.build_supabase_client", return_value=client),
+        patch(f"{_WRITER}.upsert_price_history"),
+        patch(f"{_WRITER}.upsert_instruments") as upsert_instruments,
+        patch(f"{_CACHE}.incremental_update", return_value={"SPY": _fake_ohlcv(3)}),
+        patch(
+            "digiquant.data.prices.instrument_metadata.fetch_instrument_metadata",
+            return_value=InstrumentMetadataFetchResult(records={"SPY": metadata}, errors={}),
+        ),
+    ):
+        upsert_instruments.return_value.rows = 1
+        result = runner.invoke(
+            fetch_quotes_cmd,
+            ["--tickers", "SPY", "--supabase", "--instrument-metadata"],
+        )
+
+    assert result.exit_code == 0, result.output
+    upsert_instruments.assert_called_once_with(client, [metadata])
+    assert "upserted 1 rows into instruments" in result.output
 
 
 def test_sector_universe_dedupes_and_includes_single_names() -> None:

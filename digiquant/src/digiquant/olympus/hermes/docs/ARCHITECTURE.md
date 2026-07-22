@@ -42,6 +42,19 @@ on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 | **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
 | **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
 
+### H2 market-thesis identity
+
+Every market proposal has a stable lowercase `topic_key` plus an explicit
+`action=create|update`. H2 receives `prior_context.active_theses` with full names, notes,
+criteria, IDs, and topic keys. Revised evidence, wording, confidence, or catalyst detail
+updates the existing topic with its exact `thesis_id`; only a distinct market mechanism
+creates a new topic. `validate_market_thesis_proposals` drops unknown updates, active topic
+collisions, ambiguous legacy topic ownership, changed topic keys, duplicate IDs, and duplicate
+topics before persistence. New topics start `ACTIVE`; updates preserve H1's same-run status,
+or the prior nonterminal status when H1 did not review that topic. A `PAUSED` topic remains
+the same opinion and cannot be replaced with a new ID. Supabase migration 056 provides the
+final one-active-topic-per-date constraint.
+
 ### Vehicle → market thesis linkage (#1563)
 
 `theses.linked_market_thesis_id` ties a `vehicle-{ticker}` thesis to the market
@@ -117,6 +130,12 @@ fail-closed checks over the H8 `sized_book` weights:
    in the H7 memo (no silent drop of an owned name);
 2. every open position has an H5 analyst doc **or** is `flat` **or** is a deliberately
    gated-out held carry (`focus_roster_excluded ∩ held`, `commit_io.gated_out_tickers`).
+
+When advisory position risk fields are enabled, H9 resolves `positions.horizon_days` from
+the dedicated `preferences.risk_horizon_days` contract (default 21). It intentionally does
+not reuse `preferences.holding_days`: that separate value controls decision evaluation and
+turnover cadence (default 5). `risk_envelope.risk_horizon_days` owns this validation and is
+shared with the legacy `portfolio_materialize` path so both writers persist identical semantics.
 
 **Held-carry (the delta-day path).** On a quiet delta day the H4 staleness gate moves a
 held name with a sub-threshold move into `focus_roster_excluded` and dispatches no analyst,

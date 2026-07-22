@@ -1,7 +1,7 @@
 import { thesisIdEquals } from './thesis-id';
 import type { Thesis } from './types';
 
-/** Two-tier split: explicit 'vehicle' kind → vehicle; everything else → market (never hide a thesis). */
+/** Two-tier split: explicit 'vehicle' kind → vehicle; everything else → market. */
 export function splitTheses(theses: Thesis[]): { market: Thesis[]; vehicle: Thesis[] } {
   const market: Thesis[] = [];
   const vehicle: Thesis[] = [];
@@ -23,6 +23,16 @@ export function sortByConfidenceDesc(theses: Thesis[]): Thesis[] {
     if (cb !== ca) return cb - ca;
     return a.name.localeCompare(b.name);
   });
+}
+
+/** Keep one research view per durable topic, preferring the highest-conviction row. */
+export function consolidateThesesByTopic(theses: Thesis[]): Thesis[] {
+  const consolidated = new Map<string, Thesis>();
+  for (const thesis of sortByConfidenceDesc(theses)) {
+    const key = thesis.topic_key?.trim().toLowerCase() || `id:${thesis.id}`;
+    if (!consolidated.has(key)) consolidated.set(key, thesis);
+  }
+  return [...consolidated.values()];
 }
 
 export interface VehicleThesisGroup {

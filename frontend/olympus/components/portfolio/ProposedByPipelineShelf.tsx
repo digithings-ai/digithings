@@ -13,6 +13,7 @@ const DEFAULT_VISIBLE = 6;
 /**
  * Decision-log tickers the book does NOT hold — the pipeline's standing suggestions.
  * Each row deep-links to its analyst node in Pipeline. Absent (null) when empty.
+ * Flat divided section with hairlines (no glass-card).
  */
 export default function ProposedByPipelineShelf({ proposed }: { proposed: ProposedDecision[] }) {
   const [showAll, setShowAll] = useState(false);
@@ -23,7 +24,7 @@ export default function ProposedByPipelineShelf({ proposed }: { proposed: Propos
   const remaining = proposed.length - DEFAULT_VISIBLE;
 
   return (
-    <section className="glass-card p-0 overflow-hidden">
+    <section className="border border-hair bg-surface">
       <div className="border-b border-hair bg-term-bg px-4 py-3 md:px-6">
         <h3 className="text-sm font-semibold text-ink">Proposed by the pipeline</h3>
         <p className="mt-0.5 text-xs text-ink-mute">

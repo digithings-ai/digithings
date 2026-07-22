@@ -23,6 +23,7 @@ from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices._utils import call_with_retry as _call_with_retry
 from digiquant.data.prices._utils import safe_float as _safe_float
 from digiquant.data.prices._utils import safe_int as _safe_int
+from digiquant.olympus.instrument_metadata import InstrumentMetadata
 
 DEFAULT_CHUNK = 500
 
@@ -120,6 +121,26 @@ def upsert_price_history(
     return UpsertResult(table="price_history", rows=total)
 
 
+def upsert_instruments(
+    client: SupabaseLike,
+    instruments: list[InstrumentMetadata],
+    *,
+    chunk: int = DEFAULT_CHUNK,
+) -> UpsertResult:
+    """Upsert resolved canonical instrument rows by ticker."""
+    if not instruments:
+        return UpsertResult(table="instruments", rows=0)
+    rows = [instrument.to_row() for instrument in instruments]
+    total = 0
+    for batch in _chunks(rows, chunk):
+        _call_with_retry(
+            lambda b=batch: client.table("instruments").upsert(b, on_conflict="ticker").execute()
+        )
+        total += len(batch)
+    _emit_audit("instruments", total)
+    return UpsertResult(table="instruments", rows=total)
+
+
 def upsert_price_technicals(
     client: SupabaseLike,
     rows: list[dict[str, Any]],
@@ -147,9 +168,11 @@ def upsert_macro_observations(
     total = 0
     for batch in _chunks(rows, chunk):
         _call_with_retry(
-            lambda b=batch: client.table("macro_series_observations")
-            .upsert(b, on_conflict="source,series_id,obs_date")
-            .execute()
+            lambda b=batch: (
+                client.table("macro_series_observations")
+                .upsert(b, on_conflict="source,series_id,obs_date")
+                .execute()
+            )
         )
         total += len(batch)
     _emit_audit("macro_series_observations", total)
@@ -182,6 +205,7 @@ __all__ = [
     "build_supabase_client",
     "ohlcv_to_price_history_rows",
     "technicals_to_rows",
+    "upsert_instruments",
     "upsert_macro_observations",
     "upsert_price_history",
     "upsert_price_technicals",

@@ -73,6 +73,7 @@ jobs:
             --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
             --cache-dir data/price-history \
             --period 1y \
+            --instrument-metadata \
             --supabase
       - name: Compute technicals -> upsert price_technicals
         run: |

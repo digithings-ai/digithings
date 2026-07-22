@@ -9,11 +9,8 @@ import { fetchOlympusTearsheet } from '@/lib/observability-queries';
 import type { OlympusTearsheet } from '@/components/tearsheet/types';
 
 /**
- * Performance — the hybrid, exportable tear sheet for the single strategy
- * "Olympus": a live-NAV track + an Olympus-specific decision track-record track,
- * each degrading independently, plus the relocated Attribution diagnostics.
- * Empty-state-first; the family PDF export (runTearsheetPrint) is enabled in
- * all states.
+ * Performance — persisted cumulative returns and stored holding-attribution
+ * windows. The screen does not recalculate headline metrics from raw NAV.
  */
 export default function PerformancePage() {
   const [data, setData] = useState<OlympusTearsheet | null>(null);

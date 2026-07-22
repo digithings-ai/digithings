@@ -22,6 +22,11 @@ function isNonActive(status: string | null): boolean {
   return Boolean(s) && !s.includes('active');
 }
 
+function formatTimeframe(horizon: string): string {
+  const value = horizon.replaceAll('_', ' ').replaceAll('-', ' ').trim();
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : horizon;
+}
+
 function dossierHref(ticker: string): string {
   return `/portfolio/tickers?ticker=${encodeURIComponent(ticker.toUpperCase())}`;
 }
@@ -31,20 +36,20 @@ function deliberationHref(ticker: string): string {
 }
 
 /**
- * One market thesis as the spine of the story: header (name · confidence meter ·
- * horizon · status · drives X% of book), the thesis statement, the confirm/break
- * criteria, and the vehicles expressing the view. Closed by default — callers
- * control which thesis opens via the `defaultOpen` prop to keep the disclosure
- * spine scannable (#1607).
+ * One market thesis as a flat numbered disclosure row: header (rank · name ·
+ * confidence · horizon · status), the thesis statement,
+ * the confirm/break criteria, and the vehicles expressing the view. Closed by
+ * default — callers control which thesis opens via the `defaultOpen` prop to
+ * keep the disclosure spine scannable (#1607).
  */
 export function ThesisStoryCard({
   story,
-  bookWeightPct,
   defaultOpen = false,
+  rank,
 }: {
   story: ThesisStory;
-  bookWeightPct: number;
   defaultOpen?: boolean;
+  rank?: number;
 }) {
   const { thesis, vehicles, asOf } = story;
   const pips = confidenceToPips(thesis.confidence);
@@ -54,14 +59,22 @@ export function ThesisStoryCard({
       : 'Confidence not set';
 
   return (
-    <details className="group glass-card overflow-hidden p-0" open={defaultOpen}>
-      <summary className="flex cursor-pointer list-none flex-col gap-3 p-5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 [&::-webkit-details-marker]:hidden">
+    <details
+      className="group border-y border-hair first:border-t-0 last:border-b-0"
+      open={defaultOpen}
+    >
+      <summary className="cursor-pointer list-none px-4 py-4 transition-colors hover:bg-ink/[0.02] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 [&::-webkit-details-marker]:hidden">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-2">
+          <div className="flex min-w-0 items-start gap-3">
+            {rank != null && (
+              <span className="font-mono text-sm text-ink-mute">
+                {String(rank).padStart(2, '0')}
+              </span>
+            )}
             <ChevronRight
               size={18}
               aria-hidden
-              className="mt-1 shrink-0 text-ink-mute transition-transform group-open:rotate-90"
+              className="mt-0.5 shrink-0 text-ink-mute transition-transform group-open:rotate-90"
             />
             <h3 className="font-display text-xl leading-snug text-ink">{thesis.name}</h3>
           </div>
@@ -72,29 +85,22 @@ export function ThesisStoryCard({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pl-7">
+      </summary>
+
+      <div className="space-y-5 px-4 pb-5 pl-[3.25rem]">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-hair pb-3">
           <div className="flex items-center gap-2">
             <ConvictionMeter value={pips} max={CONFIDENCE_PIPS} srLabel={confidenceLabel} />
             <span className="text-xs tabular-nums text-ink-mute">{confidenceLabel}</span>
           </div>
           {thesis.horizon ? (
-            <span className="rounded-md border border-hair px-2 py-0.5 text-xs text-ink-soft">
-              {thesis.horizon}
+            <span className="text-xs text-ink-soft">
+              {formatTimeframe(thesis.horizon)}
             </span>
           ) : null}
-          <span className="ml-auto text-sm text-ink-soft">
-            <span className="text-ink-mute">drives </span>
-            <span className="font-mono font-semibold tabular-nums text-ink">
-              {bookWeightPct.toFixed(1)}%
-            </span>
-            <span className="text-ink-mute"> of the book</span>
-          </span>
         </div>
-      </summary>
-
-      <div className="space-y-5 px-5 pb-5">
         {thesis.notes ? (
-          <p className="whitespace-pre-line pl-7 text-sm leading-relaxed text-ink-soft">
+          <p className="whitespace-pre-line text-sm leading-relaxed text-ink-soft">
             {thesis.notes}
           </p>
         ) : null}
@@ -105,7 +111,7 @@ export function ThesisStoryCard({
         />
 
         <section className="space-y-2">
-          <div className="flex items-center justify-between gap-3 pl-1">
+          <div className="flex items-center justify-between gap-3">
             <h4 className="text-xs uppercase tracking-wider text-ink-mute">
               Vehicles expressing this view
             </h4>

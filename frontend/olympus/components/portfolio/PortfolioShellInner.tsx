@@ -203,7 +203,7 @@ export default function PortfolioShellInner() {
     <div className="flex min-h-full flex-col">
       <PortfolioSectionNav active={sectionActive} />
 
-      <div className={`${SUBPAGE_MAX} flex-1 space-y-6 py-4 md:py-5`}>
+      <div className={`${SUBPAGE_MAX} flex min-h-0 flex-1 flex-col space-y-6 py-4 md:py-5`}>
         {tab === 'holdings' && (
           <AllocationsTab
             lastUpdated={lastUpdated}

@@ -24,6 +24,22 @@ const decision = (id: string, date: string, over: Partial<DecisionLogRow> = {}):
     ...over,
   }) as DecisionLogRow;
 
+describe('ConvictionHistory — flat decision ledger', () => {
+  it('renders a flat full-width structure, not glass-card', () => {
+    const decisions = [decision('d1', '2026-01-01')];
+    const html = renderToStaticMarkup(createElement(ConvictionHistory, { decisions }));
+
+    // Should NOT have glass-card class in the decision ledger wrapper
+    expect(html).not.toMatch(/decision-ledger[^>]*glass-card/);
+    // Should have flat full-width structure
+    expect(html).toContain('decision-ledger');
+    // Should have hairline borders
+    expect(html).toContain('border-');
+    expect(html).toContain('>Evaluation<');
+    expect(html).not.toContain('>Holding<');
+  });
+});
+
 describe('ConvictionHistory — bounded display with reveal', () => {
   it('shows at most 6 recent rows by default when there are more than 6 decisions', () => {
     const decisions = [

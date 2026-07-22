@@ -93,6 +93,11 @@ def _fetch_trading_days(client: Any, venue: str, *, page_size: int = 1000) -> pl
 @click.option("--dry-run", is_flag=True, help="Synthesize fixture data; no network calls.")
 @click.option("--supabase", is_flag=True, help="Upsert OHLCV to price_history.")
 @click.option(
+    "--instrument-metadata",
+    is_flag=True,
+    help="Resolve official names and classifications, then upsert canonical instruments.",
+)
+@click.option(
     "--include-sectors",
     is_flag=True,
     help=(
@@ -108,6 +113,7 @@ def fetch_quotes_cmd(
     period: str,
     dry_run: bool,
     supabase: bool,
+    instrument_metadata: bool,
     include_sectors: bool,
 ) -> None:
     """Fetch latest OHLCV for watchlist tickers, update cache, optionally upsert."""
@@ -116,6 +122,7 @@ def fetch_quotes_cmd(
     from digiquant.data.prices.supabase_writer import (
         build_supabase_client,
         ohlcv_to_price_history_rows,
+        upsert_instruments,
         upsert_price_history,
     )
 
@@ -165,6 +172,20 @@ def fetch_quotes_cmd(
                 _logger.warning("price_history upsert failed (non-fatal): %s", exc, exc_info=True)
                 click.echo(f"  warning: upsert skipped — {exc}", err=True)
         click.echo(f"  upserted {total} rows into price_history")
+
+        if instrument_metadata:
+            from digiquant.data.prices.instrument_metadata import fetch_instrument_metadata
+
+            try:
+                metadata_result = fetch_instrument_metadata(universe)
+                if metadata_result.errors:
+                    failed = ", ".join(sorted(metadata_result.errors))
+                    click.echo(f"  warning: instrument metadata unresolved for {failed}", err=True)
+                result = upsert_instruments(client, list(metadata_result.records.values()))
+                click.echo(f"  upserted {result.rows} rows into instruments")
+            except Exception as exc:  # noqa: BLE001 — metadata enrichment never blocks prices
+                _logger.warning("instruments upsert failed (non-fatal): %s", exc, exc_info=True)
+                click.echo(f"  warning: instrument metadata skipped — {exc}", err=True)
 
 
 # ─── compute-technicals ──────────────────────────────────────────────────

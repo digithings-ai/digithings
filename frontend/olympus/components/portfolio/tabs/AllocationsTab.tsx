@@ -1,15 +1,14 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { SegmentedControl } from '@digithings/web';
 import type { DashboardPositionEvent, Position, PositionHistoryRow, Thesis } from '@/lib/types';
 import type { TableRow } from '@/lib/database.types';
 import type { SleeveStackMode } from '@/lib/portfolio-aggregates';
 import { reconcileBook } from '@/lib/book-reconciliation';
-import { latestDecisionByTicker, proposedNotHeld } from '@/lib/holdings-decisions';
 import AllocationsPositionsTable from '@/components/portfolio/AllocationsPositionsTable';
 import BookReconciliationStrip from '@/components/portfolio/BookReconciliationStrip';
-import ProposedByPipelineShelf from '@/components/portfolio/ProposedByPipelineShelf';
-import SleeveHistorySection from '@/components/portfolio/SleeveHistorySection';
+import HoldingsActivityTable from '@/components/portfolio/HoldingsActivityTable';
 
 export default function AllocationsTab(props: {
   lastUpdated: string | null;
@@ -31,44 +30,44 @@ export default function AllocationsTab(props: {
   formatSleeveKey: (k: string) => string;
 }) {
   const {
-    lastUpdated, positions, investedPct, decisions, positionHistory, positionEvents,
-    thesisById, effHistoryDate, onSelectHistoryDate, onClearHistoryDate,
-    showHistoryDateBanner, dateParam, historyMode, setHistoryMode,
-    sleeveData, sleeveKeys, formatSleeveKey,
+    lastUpdated, positions, investedPct, positionEvents,
   } = props;
+  const [view, setView] = useState<'positions' | 'activity'>('positions');
 
   const reconciliation = useMemo(() => reconcileBook(positions, { investedPct }), [positions, investedPct]);
-  const decisionByTicker = useMemo(() => latestDecisionByTicker(decisions), [decisions]);
-  const heldTickers = useMemo(
-    () => new Set(reconciliation.rows.map((p) => p.ticker.toUpperCase())),
-    [reconciliation.rows]
-  );
-  const proposed = useMemo(() => proposedNotHeld(decisions, heldTickers), [decisions, heldTickers]);
+  const positionCount = reconciliation.rows.length;
 
   return (
-    <div className="space-y-10">
-      <BookReconciliationStrip reconciliation={reconciliation} asOfDate={lastUpdated} />
-      <AllocationsPositionsTable
+    <div
+      data-region="holdings-frame"
+      className="flex min-h-[28rem] flex-1 flex-col overflow-hidden"
+    >
+      <BookReconciliationStrip
         reconciliation={reconciliation}
-        positionHistory={positionHistory}
-        positionEvents={positionEvents}
-        thesisById={thesisById}
-        lastUpdated={lastUpdated}
-        decisionByTicker={decisionByTicker}
+        asOfDate={lastUpdated}
+        positionCount={positionCount}
       />
-      <ProposedByPipelineShelf proposed={proposed} />
-      <SleeveHistorySection
-        historyMode={historyMode}
-        setHistoryMode={setHistoryMode}
-        sleeveData={sleeveData}
-        sleeveKeys={sleeveKeys}
-        formatSleeveKey={formatSleeveKey}
-        effHistoryDate={effHistoryDate}
-        onSelectHistoryDate={onSelectHistoryDate}
-        showHistoryDateBanner={showHistoryDateBanner}
-        dateParam={dateParam}
-        onClearHistoryDate={onClearHistoryDate}
-      />
+      <div className="flex items-center justify-between gap-3 border-x border-b border-hair px-4 py-2 md:px-6">
+        <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
+          book monitor
+        </span>
+        <SegmentedControl<'positions' | 'activity'>
+          options={['positions', 'activity']}
+          value={view}
+          onChange={setView}
+          dress="accent"
+          aria-label="Holdings view"
+        />
+      </div>
+      <div data-region="workspace" className="min-h-0 min-w-0 flex-1">
+        {view === 'positions' ? (
+          <section data-region="ledger" className="h-full min-h-0 min-w-0">
+          <AllocationsPositionsTable reconciliation={reconciliation} />
+          </section>
+        ) : (
+          <HoldingsActivityTable events={positionEvents} />
+        )}
+      </div>
     </div>
   );
 }

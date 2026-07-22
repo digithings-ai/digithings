@@ -164,19 +164,22 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
   return (
     <div className="flex min-h-full flex-col">
       <PortfolioSectionNav active="theses" />
-      <div className={`${SUBPAGE_MAX} flex-1 space-y-8 py-6 md:py-8`}>
-        {/* Header — claim / conviction / horizon / status */}
-        <div className="space-y-4">
-          <Link
-            href="/portfolio/theses"
-            className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
-          >
-            <ArrowLeft size={16} /> Back to Theses
-          </Link>
+      <div className={`${SUBPAGE_MAX} flex-1 space-y-6 py-6 md:py-8`}>
+        <Link
+          href="/portfolio/theses"
+          className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+        >
+          <ArrowLeft size={16} /> Back to Theses
+        </Link>
 
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        {/* Bordered command/identity band — thesis name, conviction, horizon, status, as-of */}
+        <div
+          data-testid="thesis-command-band"
+          className="border-y border-hair py-5"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4 pb-3">
             <h1 className="font-display text-3xl leading-tight text-ink">{t.name}</h1>
-            <AsOfBadge date={lastUpdated} />
+            {lastUpdated && <AsOfBadge date={lastUpdated} />}
           </div>
 
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
@@ -198,52 +201,71 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
               </span>
             ) : null}
           </div>
-
-          {t.notes ? (
-            <p className="max-w-3xl text-sm leading-relaxed text-ink-soft">{t.notes}</p>
-          ) : null}
         </div>
 
-        {/* Two criteria columns — the credibility win */}
-        <ThesisCriteriaColumns
-          validation={t.validation_criteria}
-          invalidation={t.invalidation_criteria}
-        />
+        {/* Two-column dossier: main (narrative + criteria) + context (vehicles + provenance) */}
+        <div
+          data-region="thesis-dossier"
+          className="grid gap-0 border-y border-hair lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]"
+        >
+          {/* Main argument column — narrative + criteria */}
+          <div className="min-w-0 space-y-6 px-5 py-6 lg:border-r lg:border-hair">
+            {t.notes ? (
+              <section>
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-ink-mute">
+                  Thesis statement
+                </h2>
+                <p className="max-w-3xl text-sm leading-relaxed text-ink-soft">{t.notes}</p>
+              </section>
+            ) : null}
 
-        {/* Vehicles expressing this view (thesis_vehicles join, #1562 PR4) —
-            Level-2/3: selection rationale + rank, held metrics, entry/exit
-            envelope, latest signed call, dossier/deliberation links. */}
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-mute">
-              Vehicles expressing this view
-            </h2>
-            {story?.asOf ? <AsOfBadge date={story.asOf} /> : null}
+            <ThesisCriteriaColumns
+              validation={t.validation_criteria}
+              invalidation={t.invalidation_criteria}
+            />
+
+            <section className="space-y-3 border-t border-hair pt-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-mute">
+                  Vehicles expressing this view
+                </h2>
+                {story?.asOf ? <AsOfBadge date={story.asOf} /> : null}
+              </div>
+              {!story || story.vehicles.length === 0 ? (
+                <p className="text-sm text-ink-mute">
+                  No vehicle was mapped to this view on the shown date.
+                </p>
+              ) : (
+                <div className="border-y border-hair">
+                  {story.vehicles.map((v) => (
+                    <VehicleExpressionRow
+                      key={v.ticker}
+                      ticker={v.ticker}
+                      rationale={v.rationale}
+                      candidateRank={v.candidateRank}
+                      position={v.position}
+                      latestDecision={v.latestDecision}
+                      dossierHref={dossierHref(v.ticker)}
+                      deliberationHref={deliberationHref(v.ticker)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
-          {!story || story.vehicles.length === 0 ? (
-            <p className="text-sm text-ink-mute">
-              No vehicle was mapped to this view on the shown date.
-            </p>
-          ) : (
-            <div className="glass-card overflow-hidden p-0">
-              {story.vehicles.map((v) => (
-                <VehicleExpressionRow
-                  key={v.ticker}
-                  ticker={v.ticker}
-                  rationale={v.rationale}
-                  candidateRank={v.candidateRank}
-                  position={v.position}
-                  latestDecision={v.latestDecision}
-                  dossierHref={dossierHref(v.ticker)}
-                  deliberationHref={deliberationHref(v.ticker)}
-                />
-              ))}
-            </div>
-          )}
-        </section>
 
-        {/* Slim provenance strip → Pipeline day (never re-renders markdown) */}
-        <ThesisProvenanceStrip date={lastUpdated} documentKey="digest" />
+          <aside className="space-y-6 border-t border-hair px-5 py-6 lg:border-t-0">
+            <div>
+              <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
+                Research frame
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+                Evidence, break conditions, and the vehicles carrying this market view.
+              </p>
+            </div>
+            <ThesisProvenanceStrip date={lastUpdated} documentKey="digest" />
+          </aside>
+        </div>
       </div>
     </div>
   );
