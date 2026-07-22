@@ -528,12 +528,52 @@ def gated_out_tickers(state: AtlasResearchState) -> set[str]:
     return excluded & held_tickers(state)
 
 
+def memo_addressed_tickers(state: AtlasResearchState) -> set[str]:
+    """Tickers the H7 PM memo's roster explicitly addressed (``long`` or ``flat``)."""
+    memo = state.phase_hermes.pm_direction_memo
+    if memo is None:
+        return set()
+    roster = memo.roster if hasattr(memo, "roster") else memo.get("roster", [])
+    addressed: set[str] = set()
+    for entry in roster:
+        ticker = entry.ticker if hasattr(entry, "ticker") else entry.get("ticker")
+        if isinstance(ticker, str) and ticker:
+            addressed.add(ticker.strip().upper())
+    return addressed
+
+
+def carried_held_tickers(state: AtlasResearchState) -> set[str]:
+    """HELD names carried at drifted weight instead of resized or dropped (#1030, #1649).
+
+    Two deliberate-carry classes share ONE set so H8's carry injection and H9's
+    coherence exemption can never diverge into a silent mismatch (the #1030
+    principle):
+
+    - **H4-gated** (:func:`gated_out_tickers`): quiet held names never dispatched
+      to H5 — "we own it and nothing material changed".
+    - **Memo-unaddressed** (#1649): held names the H7 PM memo's roster addresses
+      with neither ``long`` nor ``flat``. Memo coverage is LLM discipline — run
+      29936849103 (2026-07-22) omitted SEVEN held tickers and froze the commit.
+      Owning a position with no explicit PM instruction defaults to "hold at
+      drifted weight"; exiting requires an explicit ``flat``. Only applies when a
+      memo exists — with no memo at all the legacy sizing path owns the decision.
+
+    Intersected with :func:`held_tickers`: a non-held stray in the book still
+    fails closed downstream — this is a held-carry pass, never a blanket one.
+    """
+    held = held_tickers(state)
+    carried = gated_out_tickers(state)
+    if state.phase_hermes.pm_direction_memo is not None:
+        carried = carried | (held - memo_addressed_tickers(state))
+    return carried & held
+
+
 def coherence_errors(state: AtlasResearchState, weights: dict[str, float]) -> list[str]:
     """Fail-closed checks before terminal write."""
     errors: list[str] = []
     flats = flat_tickers_from_memo(state)
     analysts = set(analyst_payloads(state).keys())
-    gated = gated_out_tickers(state)
+    carried = carried_held_tickers(state)
 
     for ticker in held_tickers(state):
         if weights.get(ticker, 0.0) <= 0 and ticker not in flats:
@@ -542,11 +582,10 @@ def coherence_errors(state: AtlasResearchState, weights: dict[str, float]) -> li
     for ticker, weight in weights.items():
         if weight <= 0:
             continue
-        # A deliberately-gated held name (#1030) is a carry: no fresh analyst doc
-        # is expected. The exemption only suppresses errors for names H4 chose not
-        # to re-analyze; a genuine missing-doc gap (not in the excluded ledger)
-        # still fails closed.
-        if ticker not in analysts and ticker not in flats and ticker not in gated:
+        # A deliberately-carried held name (#1030 gated, #1649 memo-unaddressed) needs
+        # no fresh analyst doc. The exemption only covers held carries; a genuine
+        # missing-doc gap (a non-held stray with a positive weight) still fails closed.
+        if ticker not in analysts and ticker not in flats and ticker not in carried:
             errors.append(f"open position {ticker} lacks H5 analyst doc and is not flat in H7")
 
     return errors
@@ -559,6 +598,7 @@ def persist_decision_log(*, client: SupabaseClient, state: AtlasResearchState) -
 __all__ = [
     "BookedPortfolio",
     "book_portfolio",
+    "carried_held_tickers",
     "coherence_errors",
     "flat_tickers_from_memo",
     "held_tickers",

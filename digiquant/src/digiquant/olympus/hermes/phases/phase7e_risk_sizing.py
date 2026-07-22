@@ -236,26 +236,30 @@ def _rebuild_actions(
     return out
 
 
-def _gated_held_carry_weights(state: AtlasResearchState) -> dict[str, float]:
-    """Prior (drifted) weights for deliberately gated-out held names (#1030, #1555).
+def _held_carry_weights(state: AtlasResearchState) -> dict[str, float]:
+    """Prior (drifted) weights for deliberately carried held names (#1030, #1555, #1649).
 
-    The H4 staleness gate moves a quiet held name into ``focus_roster_excluded``
-    (no fresh analyst, absent from the H7 PM memo). The position is still owned, so
-    H8 must carry it at its current drifted weight — otherwise sizing drops it from
-    the book (it is neither a PM long nor within the min-hold window) and H9 fails
-    closed with "held ticker missing from book and not flat", the fail-closed that
-    silently froze **every** delta-day commit from 2026-06-26 (#1555).
+    Two classes of held name must be carried at their current drifted weight or H9
+    fails closed with "held ticker missing from book and not flat" — the fail-closed
+    that silently froze **every** delta-day commit from 2026-06-26 (#1555) and again
+    on 2026-07-21/22 (#1649):
 
-    Scoped to :func:`~digiquant.olympus.hermes.writers.commit_io.gated_out_tickers`
-    (held ∩ excluded ledger) — reusing the exact set H9's coherence check exempts so
-    the carry set and the exemption set can never diverge into a new silent mismatch.
-    A PM-exited name (addressed in the roster, marked ``flat``) is not in the excluded
-    ledger, so it is never resurrected here.
+    - H4-gated: the staleness gate moved a quiet held name into
+      ``focus_roster_excluded`` (no fresh analyst, absent from the H7 PM memo).
+    - Memo-unaddressed (#1649): the H7 PM memo's roster omitted a held name
+      entirely (neither ``long`` nor ``flat``) — memo coverage is LLM discipline,
+      and an owned position with no explicit instruction defaults to "hold".
+
+    Scoped to :func:`~digiquant.olympus.hermes.writers.commit_io.carried_held_tickers`
+    — reusing the exact set H9's coherence check exempts so the carry set and the
+    exemption set can never diverge into a new silent mismatch. A PM-exited name
+    (addressed in the roster, marked ``flat``) is memo-addressed, so it is never
+    resurrected here.
     """
     # Lazy import: keeps the phase7e ↔ commit_io edge one-directional at import time.
-    from digiquant.olympus.hermes.writers.commit_io import gated_out_tickers
+    from digiquant.olympus.hermes.writers.commit_io import carried_held_tickers
 
-    gated = gated_out_tickers(state)
+    gated = carried_held_tickers(state)
     if not gated:
         return {}
     current = {
@@ -335,11 +339,11 @@ def _build_sized_book(
         return None
 
     sized = {p.ticker: p.target_pct for p in result.positions}
-    # Carry deliberately gated-out held names at their current drifted weight (#1030,
-    # #1555) BEFORE the cadence band, so they flow through as continuing positions
+    # Carry deliberately gated-out or memo-unaddressed held names at their current
+    # drifted weight (#1030, #1555, #1649) BEFORE the cadence band, so they flow through as continuing positions
     # (held, not traded). ``setdefault`` never overrides a weight the PM/sizer already
     # set — it only re-instates a quiet held name that sizing would otherwise drop.
-    for ticker, weight in _gated_held_carry_weights(state).items():
+    for ticker, weight in _held_carry_weights(state).items():
         sized.setdefault(ticker, weight)
     # current_weights is already mark-to-market drifted in preflight (#955). The cadence
     # dispatcher rebalances through the no-trade band on a permitted day, else holds the
