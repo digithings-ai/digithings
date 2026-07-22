@@ -108,7 +108,7 @@ fresh `deliberation_transcript` row only when the loop runs.
 
 ---
 
-## H9 commit-run: coherence, held-carry, and observability (#932 / #1030 / #1555)
+## H9 commit-run: coherence, held-carry, and observability (#932 / #1030 / #1555 / #1649)
 
 H9 is the sole terminal writer. Before it books, `commit_io.coherence_errors` runs two
 fail-closed checks over the H8 `sized_book` weights:
@@ -116,17 +116,26 @@ fail-closed checks over the H8 `sized_book` weights:
 1. every prior holding is either in the book with positive weight **or** explicitly `flat`
    in the H7 memo (no silent drop of an owned name);
 2. every open position has an H5 analyst doc **or** is `flat` **or** is a deliberately
-   gated-out held carry (`focus_roster_excluded ∩ held`, `commit_io.gated_out_tickers`).
+   carried held name (`commit_io.carried_held_tickers`).
 
-**Held-carry (the delta-day path).** On a quiet delta day the H4 staleness gate moves a
-held name with a sub-threshold move into `focus_roster_excluded` and dispatches no analyst,
-so it never reaches the H7 memo. H8 therefore **carries** such names into the sized book at
-their current drifted weight (`phase7e_risk_sizing._gated_held_carry_weights`, scoped to the
-same `gated_out_tickers` set H9 exempts) *before* the rebalancing-cadence band — so a quiet
-held position stays owned instead of being dropped. **Regression #1555:** before this carry,
-gated-out held names were dropped from the book, check (1) failed closed, and H9 returned a
-`PhaseError` (`phase="hermes_h9_commit_run"`) that never reached the degraded gate — every
-delta-day commit was silently frozen from 2026-06-26 while runs still reported `ok:true`.
+**Held-carry (two classes, one set).** `commit_io.carried_held_tickers` — used by BOTH
+H8's carry injection (`phase7e_risk_sizing._held_carry_weights`) and H9's exemption, so
+the two can never diverge — covers:
+
+- **H4-gated** (#1030/#1555): the staleness gate moves a quiet held name into
+  `focus_roster_excluded` and dispatches no analyst, so it never reaches the H7 memo.
+- **Memo-unaddressed** (#1649): the H7 memo's roster omits a held name entirely (neither
+  `long` nor `flat`). Memo coverage is LLM discipline — the pm-direction skill demands
+  full roster coverage and the model still omitted SEVEN held tickers on 2026-07-21/22
+  (run 29936849103), freezing the commit. An owned position with no explicit PM
+  instruction defaults to **hold at drifted weight**; exiting requires an explicit
+  `flat` (a flatted name is memo-addressed and never resurrected).
+
+H8 carries both classes into the sized book at their current drifted weight *before* the
+rebalancing-cadence band — a held position stays owned unless the PM explicitly exits it.
+**Regression #1555:** before the gated carry, dropped held names made check (1) fail
+closed with a `PhaseError` that never reached the degraded gate — every delta-day commit
+was silently frozen from 2026-06-26 while runs still reported `ok:true`.
 
 **Commit is observable.** A book H8 materializes but H9 does not persist (coherence
 fail-closed, idempotency conflict, or a no-manifest skip) is now a **degraded** run:
