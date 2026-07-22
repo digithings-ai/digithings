@@ -526,7 +526,7 @@ def load_active_theses_rows(
         .select(
             "date, thesis_id, name, vehicle, invalidation, status, notes, "
             "confidence, validation_criteria, invalidation_criteria, horizon, "
-            "thesis_kind, linked_market_thesis_id"
+            "thesis_kind, linked_market_thesis_id, topic_key"
         )
         .lt("date", run_date.isoformat())
         .order("date", desc=True)

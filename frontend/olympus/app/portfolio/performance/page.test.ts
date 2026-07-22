@@ -12,7 +12,7 @@ import { buildOlympusTearsheet } from '@/lib/observability-queries';
 
 const sample = buildOlympusTearsheet({
   nav: [{ date: '2026-06-23', nav: 99.32, cash_pct: 25, invested_pct: 75 }],
-  decisions: [],
+  positions: [],
   metrics: null,
   attribution: [],
 });
@@ -54,11 +54,9 @@ beforeEach(() => {
 });
 
 describe('/portfolio/performance route', () => {
-  it('renders the Olympus performance command band once data loads', () => {
+  it('renders the persisted Performance view once data loads', () => {
     const html = renderToStaticMarkup(createElement(PerformancePage));
-    expect(html).toContain('data-testid="performance-command-band"');
-    expect(html).toContain('>Olympus</h1>');
-    expect(html).toContain('AI-intelligence strategy');
-    expect(html).toMatch(/Download PDF/);
+    expect(html).toContain('Performance');
+    expect(html).toContain('Download performance tear sheet as PDF');
   });
 });

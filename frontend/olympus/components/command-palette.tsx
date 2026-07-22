@@ -12,6 +12,7 @@ import {
   LineChart,
   Newspaper,
   PieChart,
+  Scale,
   Search,
   Settings,
   Tag,
@@ -65,9 +66,16 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     {
       id: 'go-perf',
       title: 'Portfolio — Performance',
-      hint: 'NAV, comparables & decision quality',
+      hint: 'NAV, returns & position performance',
       href: '/portfolio/performance',
       icon: LineChart,
+    },
+    {
+      id: 'go-attribution',
+      title: 'Portfolio — Attribution',
+      hint: 'Position decomposition & recommendation quality',
+      href: '/portfolio/attribution',
+      icon: Scale,
     },
     {
       id: 'go-pipeline',

@@ -6,11 +6,11 @@
  */
 
 const POSITIONS = [
-  { ticker: "XLE", category: "energy", weight: "17.2%", conviction: 2, day: "+0.8%", unrealized: "+4.8%", stop: "−8%", target: "+15%", tone: "up" },
-  { ticker: "XLF", category: "financials", weight: "17.2%", conviction: 2, day: "−0.2%", unrealized: "+1.2%", stop: "−6%", target: "+12%", tone: "up" },
-  { ticker: "UUP", category: "fx", weight: "15.2%", conviction: 3, day: "+0.3%", unrealized: "+2.7%", stop: "−5%", target: "+9%", tone: "up" },
-  { ticker: "XLRE", category: "real estate", weight: "12.9%", conviction: 2, day: "−0.5%", unrealized: "−0.9%", stop: "−7%", target: "+11%", tone: "down" },
-  { ticker: "XLV", category: "healthcare", weight: "12.9%", conviction: 2, day: "+0.1%", unrealized: "+0.4%", stop: "−6%", target: "+10%", tone: "up" },
+  { ticker: "XLE", category: "energy", weight: "17.2%", targetWeight: "18.0%", stop: "−8%", priceTarget: "+15%" },
+  { ticker: "XLF", category: "financials", weight: "17.2%", targetWeight: "16.0%", stop: "−6%", priceTarget: "+12%" },
+  { ticker: "UUP", category: "fx", weight: "15.2%", targetWeight: "15.0%", stop: "−5%", priceTarget: "+9%" },
+  { ticker: "XLRE", category: "real estate", weight: "12.9%", targetWeight: "11.0%", stop: "−7%", priceTarget: "+11%" },
+  { ticker: "XLV", category: "healthcare", weight: "12.9%", targetWeight: "14.0%", stop: "−6%", priceTarget: "+10%" },
 ];
 
 export function PortfolioWorkspaceReference() {
@@ -20,7 +20,7 @@ export function PortfolioWorkspaceReference() {
       <h2 className="title">The book reads like a decision surface.</h2>
       <p className="section-copy">
         The canonical page composition for an active portfolio: one exposure figure, the position
-        count, and a ledger that makes allocation, risk, performance, and provenance easy to scan.
+        count, and a ledger that keeps allocation, risk, and provenance easy to scan.
       </p>
 
       <div className="pw-frame">
@@ -47,7 +47,7 @@ export function PortfolioWorkspaceReference() {
               <span className="pw-label">active allocation</span>
               <h3 id="pw-ledger-title">Positions</h3>
             </div>
-            <span className="pw-section-meta">allocation · performance · risk · provenance</span>
+            <span className="pw-section-meta">allocation · risk · dossier</span>
           </div>
 
           <div className="pw-table-wrap">
@@ -56,10 +56,7 @@ export function PortfolioWorkspaceReference() {
                 <tr>
                   <th>ticker</th>
                   <th>category</th>
-                  <th>allocation</th>
-                  <th>conviction</th>
-                  <th>day</th>
-                  <th>unrealized</th>
+                  <th>current / target</th>
                   <th>stop / target</th>
                   <th>follow</th>
                 </tr>
@@ -69,18 +66,14 @@ export function PortfolioWorkspaceReference() {
                   <tr key={position.ticker}>
                     <td><strong>{position.ticker}</strong></td>
                     <td>{position.category}</td>
-                    <td>{position.weight}</td>
                     <td>
-                      <span className="pw-conviction" aria-label={`Conviction ${position.conviction} of 3`}>
-                        {[1, 2, 3].map((level) => <i key={level} data-filled={level <= position.conviction} />)}
+                      <span className="pw-allocation">
+                        <strong>{position.weight}</strong>
+                        <small>target {position.targetWeight}</small>
                       </span>
                     </td>
-                    <td>{position.day}</td>
-                    <td className={position.tone === "up" ? "text-up" : "text-down"}>
-                      {position.unrealized}
-                    </td>
-                    <td>{position.stop} / {position.target}</td>
-                    <td><span className="pw-follow">decision · dossier</span></td>
+                    <td>{position.stop} / {position.priceTarget}</td>
+                    <td><span className="pw-follow">dossier</span></td>
                   </tr>
                 ))}
               </tbody>

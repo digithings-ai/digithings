@@ -69,7 +69,8 @@
     "max_single_etf_pct": 100,
     "max_single_theme_pct": 100,
     "weight_increment_pct": 5,
-    "rebalance_threshold_pct": 3
+    "rebalance_threshold_pct": 3,
+    "risk_horizon_days": 21
   },
 
   "proposed_positions": [

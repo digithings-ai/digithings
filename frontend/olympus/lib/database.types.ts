@@ -131,6 +131,10 @@ export interface Database {
           volatility: number | null;
           max_drawdown: number | null;
           alpha: number | null;
+          net_return_pct: number | null;
+          benchmark_return_pct: number | null;
+          relative_return_pct: number | null;
+          benchmark_ticker: string;
           invested_pct: number | null;
           generated_at: string | null;
           computed_from?: string | null;

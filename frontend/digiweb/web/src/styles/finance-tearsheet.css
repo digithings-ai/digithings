@@ -163,6 +163,9 @@
   .ts-legend-label { fill: var(--ink-mute); font-family: var(--font-mono); font-size: 10px; }
   .ts-line { stroke-width: 2; }
   .ts-area { opacity: 0.14; stroke: none; }
+  .ts-contribution-segment { opacity: 0.78; }
+  .ts-portfolio-return-line { stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+  .ts-portfolio-return-dot { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 }
 
 .ts-tab-content .ts-chart { height: clamp(220px, 52vw, 440px); }

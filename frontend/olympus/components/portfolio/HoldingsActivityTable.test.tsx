@@ -1,52 +1,45 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
-import type { DashboardPositionEvent } from '@/lib/types';
+import { describe, expect, it } from 'vitest';
+
 import HoldingsActivityTable from './HoldingsActivityTable';
+import type { DashboardPositionEvent } from '@/lib/types';
 
-vi.mock('next/link', () => ({
-  default: ({ children, href, className }: React.ComponentProps<'a'>) =>
-    createElement('a', { href, className }, children),
-}));
-
-function activity(index: number, event: DashboardPositionEvent['event'] = 'ADD') {
+function event(index: number): DashboardPositionEvent {
   return {
-    date: `2026-07-${String(index).padStart(2, '0')}`,
+    date: `2026-07-${String(index + 1).padStart(2, '0')}`,
     ticker: `T${String(index).padStart(2, '0')}`,
-    event,
-    weight_pct: index,
-    prev_weight_pct: index - 1,
-    weight_change_pct: 1,
+    event: index % 2 === 0 ? 'OPEN' : 'TRIM',
+    weight_pct: 5,
+    prev_weight_pct: index % 2 === 0 ? null : 6,
+    weight_change_pct: index % 2 === 0 ? 5 : -1,
     price: 100 + index,
     thesis_id: null,
     reason: null,
-  } satisfies DashboardPositionEvent;
+  };
 }
 
 describe('HoldingsActivityTable', () => {
-  it('filters HOLD rows and bounds the newest-first activity ledger to ten rows', () => {
-    const events = [
-      ...Array.from({ length: 12 }, (_, index) => activity(index + 1)),
-      activity(13, 'HOLD'),
-    ];
-
-    const html = renderToStaticMarkup(createElement(HoldingsActivityTable, { events }));
-
-    expect(html).toContain('data-region="holdings-activity"');
-    expect(html).toContain('T12');
-    expect(html).toContain('T03');
-    expect(html).not.toContain('T02');
-    expect(html).not.toContain('T01');
-    expect(html).not.toContain('T13');
-    expect(html).toContain('1 / 2');
-  });
-
-  it('renders an explicit empty state when there are no position changes', () => {
+  it('renders the complete activity stream inside one scroll region', () => {
     const html = renderToStaticMarkup(
-      createElement(HoldingsActivityTable, { events: [activity(1, 'HOLD')] })
+      createElement(HoldingsActivityTable, { events: Array.from({ length: 14 }, (_, index) => event(index)) })
     );
 
-    expect(html).toContain('No position changes recorded.');
-    expect(html).not.toContain('<table');
+    expect(html).toContain('data-region="holdings-activity-scroll"');
+    expect(html).toContain('T00');
+    expect(html).toContain('T13');
+    expect(html).not.toContain('Newer activity');
+    expect(html).not.toContain('Older activity');
+  });
+
+  it('filters no-op HOLD events from the stream', () => {
+    const html = renderToStaticMarkup(
+      createElement(HoldingsActivityTable, {
+        events: [{ ...event(0), ticker: 'KEEP', event: 'HOLD' }, event(1)],
+      })
+    );
+
+    expect(html).not.toContain('KEEP');
+    expect(html).toContain('T01');
   });
 });
