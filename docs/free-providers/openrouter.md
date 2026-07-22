@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-05-03
+verified_at: 2026-07-19
 source_urls:
   - https://openrouter.ai/docs#rate-limits
   - https://openrouter.ai/models?q=%3Afree
@@ -31,13 +31,14 @@ OpenRouter is an aggregator that routes requests to underlying providers via a s
 
 | Model ID | Context Window | Max Output | Notes |
 |---|---|---|---|
-| `deepseek/deepseek-chat-v3-0324:free` | 163,840 | 8,192 | DeepSeek V3; strong reasoning |
-| `deepseek/deepseek-r1:free` | 163,840 | 8,192 | DeepSeek R1 thinking model |
-| `meta-llama/llama-3.3-70b-instruct:free` | 131,072 | 8,192 | Llama 3.3 70B |
-| `google/gemini-2.0-flash-exp:free` | 1,048,576 | 8,192 | Gemini 2.0 Flash — 1M context free |
-| `qwen/qwen-2.5-72b-instruct:free` | 131,072 | 8,192 | Qwen 2.5 72B |
-| `nvidia/llama-3.1-nemotron-70b-instruct:free` | 131,072 | 131,072 | Nemotron reasoning |
-| `mistralai/mistral-small-3.1:free` | 128,000 | 8,192 | Mistral Small 3.1 |
+| `deepseek/deepseek-chat-v3:free` | 163,840 | 8,192 | active |
+| `deepseek/deepseek-chat-v3-0324:free` | 163,840 | 8,192 | active |
+| `deepseek/deepseek-r1:free` | 163,840 | 8,192 | active |
+| `meta-llama/llama-3.3-70b-instruct:free` | 131,072 | 8,192 | ⚠️ Error code: 429 - {'error': {'message': 'Provider returned error', 'code': 429, 'metadata': {'raw': 'meta-llama/llama-3.3-70b-instruct:free is temporarily rate-limited upstream...', 'provider_name': 'Venice'}}} |
+| `google/gemini-2.0-flash-exp:free` | 1,048,576 | 8,192 | active |
+| `qwen/qwen3-235b-a22b:free` | 131,072 | 8,192 | active |
+| `openai/gpt-oss-20b:free` | 131,072 | 8,192 | active |
+| `qwen/qwen3-coder:free` | 1,048,576 | 8,192 | active |
 
 > **The `:free` roster changes weekly.** Check https://openrouter.ai/models?q=:free for the current list. Models listed above were active as of 2026-05-03.
 
@@ -114,3 +115,4 @@ Deposit credit ($10 minimum recommended to unlock 1,000 RPD). Routes to upstream
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-07-19 | Automated snapshot sync | provider-review scan |

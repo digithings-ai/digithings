@@ -1,5 +1,5 @@
 provider: fireworks
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
@@ -70,6 +70,16 @@ paid_tier:
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: 0.14   # cached input discount
       status: active
+    - name: deepseek-ai/deepseek-v4-flash
+      context_window: 1000000
+      max_input_tokens: 1000000
+      max_output_tokens: 8192
+      cost_per_1m_input: 0.14
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.28
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.028  # cached input discount
+      status: active            # newly confirmed on Fireworks 2026-07-19
   batching:
     available: false
     discount_pct: null
@@ -111,4 +121,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "$1 starter credits, no CC. DeepSeek-R1 paid clarified: Fast variant is $8.00/$8.00; Basic (slower) variant exists at lower price. Added deepseek-v4-pro ($1.74/$3.48, 1M ctx, cached input $0.14/1M). Llama 3.3 70B price unchanged at $0.90/$0.90. No key configured yet."
+notes: "$1 starter credits, no CC — confirmed still current 2026-07-19. DeepSeek-R1 paid clarified: Fast variant is $8.00/$8.00; Basic (slower) variant exists at lower price (exact figure not reconfirmed this cycle — pricing page structure obscured per-model detail). Added deepseek-v4-pro ($1.74/$3.48, 1M ctx, cached input $0.14/1M) and deepseek-v4-flash ($0.14/$0.28, cached input $0.028/1M) to paid tier. Llama 3.3 70B price unchanged at $0.90/$0.90 (not reconfirmed exact figure this cycle). No key configured yet; no probe run (method: skipped)."

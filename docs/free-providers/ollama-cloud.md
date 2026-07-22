@@ -11,7 +11,7 @@ access_requirements:
   - email
   - ollama_account
 data_privacy_on_free: unknown
-verified_at: 2026-05-03
+verified_at: 2026-07-19
 source_urls:
   - https://ollama.com/cloud
 ---
@@ -30,11 +30,13 @@ Ollama Cloud extends the popular local Ollama CLI into a cloud-hosted inference 
 
 | Model ID | Context Window | Max Output | Notes |
 |---|---|---|---|
-| `deepseek-v3.1:671b` | 163,840 | 32,768 | DeepSeek V3.1 full 671B — confirmed free Apr 2026 |
-| `cogito-2.1:671b` | 131,072 | 32,768 | Cogito 671B reasoning model |
-| `nemotron-3-super:cloud` | 1,048,576 | 32,768 | Nemotron 1M context |
-| `deepseek-v4-flash:cloud` | 163,840 | 32,768 | DeepSeek V4 Flash |
-| `rnj-1:cloud` | 32,768 | 8,192 | Smaller fast model |
+| `gpt-oss:20b` | 131,072 | 32,768 | active |
+| `deepseek-v3.1:671b` | 163,840 | 32,768 | active |
+| `cogito-2.1:671b` | 131,072 | 32,768 | active |
+| `nemotron-3-super:cloud` | 1,048,576 | 32,768 | active |
+| `deepseek-v4-flash` | 1,048,576 | 65,536 | active |
+| `deepseek-v4-pro:cloud` | 1,048,576 | 65,536 | active |
+| `kimi-k2-thinking` | 131,072 | 32,768 | **paid-only** |
 
 > Model availability and free status change frequently. Verify at https://ollama.com/search.
 
@@ -107,3 +109,4 @@ Ollama Cloud Pro: $20/month (50× free compute, 3 concurrent models). Max: $100/
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-07-19 | Automated snapshot sync | provider-review scan |

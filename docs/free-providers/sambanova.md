@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-05-03
+verified_at: 2026-07-19
 source_urls:
   - https://docs.sambanova.ai/sambanova-cloud/latest/get-started/rate-limits.html
   - https://docs.sambanova.ai
@@ -28,12 +28,18 @@ SambaNova runs a custom RDU (Reconfigurable Dataflow Unit) architecture that del
 
 ## Free-Tier Models
 
-| Model ID | Context Window | Max Output | RPM | Notes |
-|---|---|---|---|---|
-| `Meta-Llama-3.3-70B-Instruct` | 131,072 | 16,384 | 20 | Primary workhorse |
-| `Meta-Llama-4-Scout-17B-16E-Instruct` | 131,072 | 16,384 | 20 | Llama 4 Scout |
-| `DeepSeek-R1` | 32,768 | 16,384 | 20 | Reasoning model; limited context |
-| `Qwen2.5-72B-Instruct` | 131,072 | 16,384 | 20 | Qwen 2.5 72B |
+| Model ID | Context Window | Max Output | Notes |
+|---|---|---|---|
+| `Meta-Llama-3.3-70B-Instruct` | 131,072 | 16,384 | active |
+| `Meta-Llama-4-Scout-17B-16E-Instruct` | 131,072 | 16,384 | **deprecated** |
+| `Llama-4-Maverick-17B-128E-Instruct` | 65,536 | 16,384 | **deprecated** |
+| `DeepSeek-R1` | 32,768 | 16,384 | **deprecated** |
+| `gpt-oss-120b` | 131,072 | 16,384 | active |
+| `MiniMax-M2.7` | 131,072 | 16,384 | **deprecated** |
+| `Qwen3-32B` | 32,768 | 8,192 | **deprecated** |
+| `DeepSeek-V3.1` | 131,072 | 16,384 | active |
+| `DeepSeek-V3.2` | 131,072 | 16,384 | active |
+| `gemma-4-31B-it` | 131,072 | 16,384 | active |
 
 ---
 
@@ -101,3 +107,4 @@ Paid tier available; pricing not publicly documented as of 2026-05-03. Contact s
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-07-19 | Automated snapshot sync | provider-review scan |
