@@ -728,7 +728,11 @@ DigiQuant ships two sibling sub-graphs that compose end-to-end on **one daily to
 - **Atlas** (`digiquant/src/digiquant/olympus/atlas/`) — research only. **A0–A4:**
   preflight → triage → phases 1–5 segments → phase6 consolidate → phase7 digest.
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
-  `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`.
+  `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
+  merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
+  appends) and fail-soft list indices (past-end set → append; OOR remove → no-op),
+  and a segment whose patch cannot merge falls back to full-mode regeneration
+  instead of carrying + degrading the run (#1641).
 - **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — thesis-aware portfolio loop.
   **H1–H9:** market thesis review → exploration → vehicle map → opportunity screener →
   unified asset analyst (×N) → PM↔analyst deliberation (×N) → PM direction memo →
