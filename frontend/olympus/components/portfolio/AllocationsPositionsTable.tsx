@@ -1,19 +1,16 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronDown, ChevronUp, ExternalLink, FileText } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { pnlColor } from '@/components/ui';
-import type { DashboardPositionEvent, PositionHistoryRow, Thesis } from '@/lib/types';
-import type { BookReconciliation, ReconciledPosition } from '@/lib/book-reconciliation';
+import type { BookReconciliation } from '@/lib/book-reconciliation';
 import type { TableRow } from '@/lib/database.types';
-import PositionDrilldown from '@/components/portfolio/PositionDrilldown';
 import RiskEnvelopeCell from '@/components/portfolio/RiskEnvelopeCell';
 import { ConvictionMeter } from '@/components/shared/conviction-meter';
-import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
 import { buildPipelineHref } from '@/lib/pipeline-links';
-import { normalizeThesisId } from '@/lib/thesis-id';
+import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
 
 /*
  * Ruling (#1450 F4 batch D): stays a local table. Sector group rows, the
@@ -21,207 +18,106 @@ import { normalizeThesisId } from '@/lib/thesis-id';
  * envelope, signed decision badge) and responsive column hiding are outside
  * the promoted <SortableTable/> leaderboard grammar — see lib/TABLES.md.
  */
-function thesisNames(ids: string[], thesisById: Map<string, Thesis>): string {
-  if (!ids.length) return '—';
-  return ids.map((id) => thesisById.get(normalizeThesisId(id))?.name ?? id).join(', ');
-}
-
 export default function AllocationsPositionsTable(props: {
   reconciliation: BookReconciliation;
-  positionHistory: PositionHistoryRow[];
-  positionEvents: DashboardPositionEvent[];
-  thesisById: Map<string, Thesis>;
-  lastUpdated: string | null;
   decisionByTicker: Map<string, TableRow<'decision_log'>>;
 }) {
-  const { reconciliation, positionHistory, positionEvents, thesisById, lastUpdated, decisionByTicker } =
-    props;
+  const { reconciliation, decisionByTicker } = props;
   const searchParams = useSearchParams();
-  // Seed the expanded row from a `?ticker=` deep link (e.g. the "Holdings
-  // expressing this thesis" list) — lazy-initialized so it only applies once,
-  // on mount, and never fights a later manual expand/collapse.
-  const [expandedTicker, setExpandedTicker] = useState<string | null>(
-    () => searchParams?.get('ticker')?.toUpperCase() ?? null
-  );
-  const [showInactive, setShowInactive] = useState(false);
+  const selectedTicker = searchParams?.get('ticker')?.toUpperCase() ?? null;
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
-  // Scroll the deep-linked row into view once its ref is mounted.
   useEffect(() => {
-    if (!expandedTicker) return;
-    rowRefs.current.get(expandedTicker)?.scrollIntoView({ block: 'center' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once for the initial deep link only
-  }, []);
+    if (!selectedTicker) return;
+    rowRefs.current.get(selectedTicker)?.scrollIntoView({ block: 'center' });
+  }, [selectedTicker]);
 
-  // Conviction-first within each sector; ties broken by normalized weight.
   const sorted = useMemo(
-    () =>
-      [...reconciliation.rows].sort(
-        (a, b) => (b.conviction ?? 0) - (a.conviction ?? 0) || b.normalizedWeight - a.normalizedWeight
-      ),
+    () => [...reconciliation.rows].sort((a, b) => b.normalizedWeight - a.normalizedWeight),
     [reconciliation.rows]
   );
-
-  const inactive = useMemo<ReconciledPosition[]>(() => {
-    if (!showInactive) return [];
-    const active = new Set(sorted.map((p) => p.ticker));
-    const lastByTicker = new Map<string, PositionHistoryRow>();
-    for (const r of positionHistory) {
-      const t = String(r.ticker || '').toUpperCase();
-      if (!t || active.has(t)) continue;
-      const prev = lastByTicker.get(t);
-      if (!prev || r.date > prev.date) lastByTicker.set(t, r);
-    }
-    return [...lastByTicker.values()]
-      .map((r) => {
-        const t = String(r.ticker).toUpperCase();
-        const tid = r.thesis_id ? String(r.thesis_id) : null;
-        const p: ReconciledPosition = {
-          ticker: t,
-          name: 'Former position',
-          type: 'LONG',
-          weight_actual: 0,
-          weight_target: null,
-          weight_delta: null,
-          current_price: null,
-          entry_price: null,
-          entry_date: null,
-          rationale: '',
-          thesis_ids: tid ? [tid] : [],
-          category: r.category ?? 'uncategorized',
-          pm_notes: '',
-          stats: {},
-          normalizedWeight: 0,
-          conviction: null,
-          stop_loss_pct: null,
-          target_pct_gain: null,
-          horizon_days: null,
-          sector_bucket: null,
-        };
-        return p;
-      })
-      .sort((a, b) => a.ticker.localeCompare(b.ticker));
-  }, [positionHistory, showInactive, sorted]);
-
-  const allRows = useMemo<ReconciledPosition[]>(() => [...sorted, ...inactive], [sorted, inactive]);
-
-  const maxWeight = sorted.length ? Math.max(...sorted.map((p) => p.normalizedWeight)) : 0;
 
   // Show the Target column only when at least one position has a target weight set.
   // (WS1 populates weight_target from the pm-rebalance recommended book; it will be
   //  null for every row in portfolios that haven't run through the PM rebalance node.)
   const hasTargets = useMemo(() => sorted.some((p) => p.weight_target != null), [sorted]);
 
-  // Exact <th> count: Ticker, Weight, Conviction, Day, Unrealized, Risk, Thesis, Decision, chevron
-  // = 9; with targets add Target + Δ = 11.
-  const colCount = hasTargets ? 11 : 9;
-
-  // Group active+inactive rows by sector, heaviest sector first.
-  const grouped = useMemo(() => {
-    const m = new Map<string, ReconciledPosition[]>();
-    for (const p of allRows) {
-      const key = p.sector_bucket ?? 'Unclassified';
-      const arr = m.get(key) ?? [];
-      arr.push(p);
-      m.set(key, arr);
-    }
-    return [...m.entries()].sort(
-      (a, b) =>
-        b[1].reduce((s, p) => s + p.normalizedWeight, 0) -
-        a[1].reduce((s, p) => s + p.normalizedWeight, 0)
-    );
-  }, [allRows]);
+  const colCount = hasTargets ? 9 : 8;
 
   return (
-    <div className="glass-card p-0 overflow-hidden">
-      <div className="border-b border-hair bg-term-bg px-4 py-4 md:px-6 md:py-5 flex flex-wrap items-center justify-between gap-3">
+    <div data-region="positions-table" className="border border-hair bg-surface">
+      <div className="flex items-center justify-between gap-3 border-b border-hair bg-term-bg px-4 py-3 md:px-6">
         <h3 className="font-display text-xl font-normal tracking-tight text-ink">Positions</h3>
-        <label className="flex select-none items-center gap-2 font-mono text-[0.66rem] text-ink-mute">
-          <input
-            type="checkbox"
-            className="accent-accent"
-            checked={showInactive}
-            onChange={(e) => setShowInactive(e.target.checked)}
-          />
-          Former positions
-        </label>
+        <span className="font-mono text-xs uppercase tracking-normal text-ink-mute">
+          allocation · performance · risk
+        </span>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-0 border-collapse font-mono text-[0.82rem] [font-variant-numeric:tabular-nums] md:min-w-[920px]">
+        <table
+          className={`w-full table-fixed border-collapse font-mono text-xs [font-variant-numeric:tabular-nums] ${
+            hasTargets ? 'min-w-[1080px]' : 'min-w-[980px]'
+          }`}
+        >
+          <colgroup>
+            <col className="w-[170px]" />
+            <col className="w-[110px]" />
+            <col className="w-[90px]" />
+            <col className="w-[95px]" />
+            <col className="w-[80px]" />
+            <col className="w-[100px]" />
+            <col className="w-[175px]" />
+            {hasTargets && <col className="w-[100px]" />}
+            <col className="w-[160px]" />
+          </colgroup>
           <thead>
-            <tr className="border-b border-hair text-[0.58rem] font-normal uppercase tracking-[0.1em] text-ink-mute">
-              <th className="py-[0.7rem] pl-2 pr-2 text-left font-normal md:pl-4">Ticker</th>
-              <th className="px-2 py-[0.7rem] text-right font-normal md:px-3">Weight</th>
+            <tr className="border-b border-hair text-xs font-normal uppercase tracking-normal text-ink-mute">
+              <th className="py-[0.7rem] pl-2 pr-2 text-left font-normal md:pl-4">Holding</th>
+              <th className="px-3 py-[0.7rem] text-left font-normal">Category</th>
+              <th className="px-2 py-[0.7rem] text-right font-normal md:px-3">Allocation</th>
               <th className="px-2 py-[0.7rem] text-center font-normal md:px-3">Conviction</th>
-              <th className="hidden px-3 py-[0.7rem] text-right font-normal md:table-cell">Day</th>
-              <th className="hidden px-3 py-[0.7rem] text-right font-normal md:table-cell">Unrealized</th>
-              <th className="hidden px-3 py-[0.7rem] text-right font-normal lg:table-cell">Risk (stop ↔ target)</th>
+              <th className="px-3 py-[0.7rem] text-right font-normal">Day</th>
+              <th className="px-3 py-[0.7rem] text-right font-normal">Unrealized</th>
+              <th className="px-3 py-[0.7rem] text-right font-normal">Stop ↔ target</th>
               {hasTargets && (
-                <>
-                  <th className="hidden px-3 py-[0.7rem] text-right font-normal md:table-cell">Target</th>
-                  <th className="hidden px-3 py-[0.7rem] text-right font-normal md:table-cell">Δ vs target</th>
-                </>
+                <th className="px-3 py-[0.7rem] text-right font-normal">Target weight</th>
               )}
-              <th className="hidden max-w-[200px] px-3 py-[0.7rem] text-left font-normal xl:table-cell">Thesis</th>
-              <th className="px-2 py-[0.7rem] text-center font-normal md:px-3">Decision</th>
-              <th className="w-8 px-2 py-[0.7rem] md:px-3" />
+              <th className="px-3 py-[0.7rem] text-right font-normal">Follow</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-hair">
-            {grouped.map(([sector, rows]) => (
-              <Fragment key={sector}>
-                <tr className="bg-term-bg/60">
-                  <td
-                    colSpan={colCount}
-                    className="px-2 py-2 text-xs font-semibold uppercase tracking-wider text-ink-soft md:px-4"
-                  >
-                    {sector}
-                    <span className="ml-2 font-mono text-ink-mute">
-                      {rows.reduce((s, p) => s + p.normalizedWeight, 0).toFixed(1)}%
-                    </span>
-                  </td>
-                </tr>
-                {rows.map((p) => {
+            {sorted.map((p) => {
                   const tickerKey = p.ticker.toUpperCase();
-                  const isExpanded = expandedTicker === tickerKey;
-                  const pctOfMax = maxWeight > 0 ? (p.normalizedWeight / maxWeight) * 100 : 0;
-                  const vsTarget =
-                    hasTargets && p.weight_target != null
-                      ? p.normalizedWeight - p.weight_target
-                      : null;
+                  const isSelected = selectedTicker === tickerKey;
                   const dec = decisionByTicker.get(tickerKey);
                   return (
-                    <Fragment key={p.ticker}>
-                      <tr
+                      <tr key={p.ticker}
                         ref={(el) => {
                           if (el) rowRefs.current.set(tickerKey, el);
                           else rowRefs.current.delete(tickerKey);
                         }}
-                        onClick={() => setExpandedTicker(isExpanded ? null : tickerKey)}
-                        className={`cursor-pointer transition-colors hover:bg-ink/[0.03] ${
-                          isExpanded ? 'bg-ink/[0.02]' : ''
+                        data-selected={isSelected || undefined}
+                        className={`transition-colors hover:bg-ink/[0.03] ${
+                          isSelected ? 'bg-accent/[0.06] shadow-[inset_2px_0_0_var(--accent)]' : ''
                         }`}
                       >
-                        <td className="pl-2 pr-2 py-3 md:pl-4">
-                          <span className="font-mono font-semibold text-ink">
+                        <td className="max-w-[13rem] py-3 pl-2 pr-2 md:pl-4">
+                          <span className="block font-mono font-semibold text-ink">
                             {p.ticker}
                           </span>
+                          {p.name.trim().toUpperCase() !== p.ticker.trim().toUpperCase() ? (
+                            <span
+                              className="mt-0.5 block truncate text-xs text-ink-mute"
+                              title={p.name}
+                            >
+                              {p.name}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-3 text-left text-xs text-ink-soft">
+                          {formatAllocationCategory(p.category)}
                         </td>
                         <td className="px-2 py-3 text-right md:px-3">
-                          <div className="flex items-center justify-end gap-2">
-                            <span className="font-mono tabular-nums font-medium">
-                              {p.normalizedWeight.toFixed(1)}%
-                            </span>
-                            <span
-                              className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-term-bg md:inline-block"
-                              aria-hidden
-                            >
-                              <span
-                                className="block h-full rounded-full bg-accent/40"
-                                style={{ width: `${pctOfMax}%` }}
-                              />
-                            </span>
-                          </div>
+                          <span className="font-medium">{p.normalizedWeight.toFixed(1)}%</span>
                         </td>
                         <td className="px-2 py-3 text-center md:px-3">
                           {p.conviction != null ? (
@@ -237,7 +133,7 @@ export default function AllocationsPositionsTable(props: {
                           )}
                         </td>
                         <td
-                          className={`hidden px-3 py-3 text-right font-mono tabular-nums text-xs md:table-cell ${pnlColor(
+                          className={`px-3 py-3 text-right font-mono tabular-nums text-xs ${pnlColor(
                             p.day_change_pct
                           )}`}
                         >
@@ -246,7 +142,7 @@ export default function AllocationsPositionsTable(props: {
                             : '—'}
                         </td>
                         <td
-                          className={`hidden px-3 py-3 text-right font-mono tabular-nums text-xs md:table-cell ${pnlColor(
+                          className={`px-3 py-3 text-right font-mono tabular-nums text-xs ${pnlColor(
                             p.unrealized_pnl_pct
                           )}`}
                         >
@@ -254,7 +150,7 @@ export default function AllocationsPositionsTable(props: {
                             ? `${p.unrealized_pnl_pct >= 0 ? '+' : ''}${p.unrealized_pnl_pct.toFixed(1)}%`
                             : '—'}
                         </td>
-                        <td className="hidden px-3 py-3 lg:table-cell">
+                        <td className="px-3 py-3">
                           <RiskEnvelopeCell
                             stopLossPct={p.stop_loss_pct}
                             targetPctGain={p.target_pct_gain}
@@ -262,79 +158,37 @@ export default function AllocationsPositionsTable(props: {
                           />
                         </td>
                         {hasTargets && (
-                          <>
-                            <td className="hidden px-3 py-3 text-right font-mono tabular-nums text-xs text-ink-soft md:table-cell">
-                              {p.weight_target != null ? `${p.weight_target.toFixed(1)}%` : '—'}
-                            </td>
-                            <td
-                              className={`hidden px-3 py-3 text-right font-mono tabular-nums text-xs md:table-cell ${
-                                vsTarget != null && Math.abs(vsTarget) >= 0.05
-                                  ? pnlColor(-vsTarget)
-                                  : 'text-ink-mute'
-                              }`}
-                            >
-                              {vsTarget != null && Math.abs(vsTarget) >= 0.05
-                                ? `${vsTarget > 0 ? '+' : ''}${vsTarget.toFixed(1)}pp`
-                                : '—'}
-                            </td>
-                          </>
+                          <td className="px-3 py-3 text-right font-mono tabular-nums text-xs text-ink-soft">
+                            {p.weight_target != null ? `${p.weight_target.toFixed(1)}%` : '—'}
+                          </td>
                         )}
-                        <td className="hidden max-w-[200px] px-3 py-3 text-xs text-ink-soft xl:table-cell">
-                          {thesisNames(p.thesis_ids, thesisById)}
-                        </td>
-                        <td className="px-2 py-3 text-center md:px-3">
-                          <div className="flex flex-col items-center gap-1">
-                            {dec && dec.conviction != null ? (
+                        <td className="px-3 py-3 text-right">
+                          <div className="flex items-center justify-end gap-3 text-xs">
+                            {dec ? (
                               <Link
                                 href={buildPipelineHref({
                                   date: dec.run_date,
                                   stage: 'selection',
                                   node: `analyst/${p.ticker.toUpperCase()}`,
                                 })}
-                                onClick={(e) => e.stopPropagation()}
                                 className="inline-flex items-center gap-1 text-accent hover:underline"
                                 title={`Open ${p.ticker} decision in Pipeline`}
                               >
-                                <SignedConvictionBadge value={dec.conviction} />
-                                <ExternalLink size={12} aria-hidden />
+                                Decision <ArrowUpRight size={11} aria-hidden />
                               </Link>
-                            ) : (
-                              <span className="text-ink-mute">—</span>
-                            )}
+                            ) : null}
                             <Link
                               href={`/portfolio/tickers?ticker=${encodeURIComponent(p.ticker.toUpperCase())}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 text-xs uppercase tracking-wider text-ink-mute hover:text-accent hover:underline"
+                              className="inline-flex items-center gap-1 text-ink-mute hover:text-accent hover:underline"
                               title={`Open ${p.ticker} dossier`}
                             >
-                              <FileText size={11} aria-hidden /> Dossier
+                              Dossier <ArrowUpRight size={11} aria-hidden />
                             </Link>
                           </div>
                         </td>
-                        <td className="px-2 py-3 text-ink-mute md:px-3">
-                          {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                        </td>
                       </tr>
-                      {isExpanded && (
-                        <tr className="bg-ink/[0.02]">
-                          <td colSpan={colCount} className="max-w-0 overflow-hidden px-4 py-5 md:px-6 md:py-6">
-                            <PositionDrilldown
-                              key={p.ticker}
-                              position={p}
-                              positionHistory={positionHistory}
-                              positionEvents={positionEvents}
-                              thesisById={thesisById}
-                              asOfDate={lastUpdated}
-                              mode="allocations"
-                            />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
                   );
                 })}
-              </Fragment>
-            ))}
             {reconciliation.rows.length === 0 && (
               <tr>
                 <td colSpan={colCount} className="text-center py-10 text-ink-mute">
@@ -345,11 +199,6 @@ export default function AllocationsPositionsTable(props: {
           </tbody>
         </table>
       </div>
-      {!hasTargets && (
-        <p className="px-4 py-3 text-xs text-ink-mute md:px-6">
-          No target book yet — runs without a PM rebalance leave targets unset.
-        </p>
-      )}
     </div>
   );
 }

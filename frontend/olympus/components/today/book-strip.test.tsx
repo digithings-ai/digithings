@@ -34,6 +34,8 @@ describe('BookStrip', () => {
     expect(html).toContain('All holdings'); // CTA to /portfolio
     // CASH is a header figure, not a list row
     expect(html.indexOf('EWT')).toBeLessThan(html.indexOf('UUP'));
+    expect(html).toContain('data-brief-section="book"');
+    expect(html).not.toContain('glass-card');
   });
   it("renders the book's own as-of via the shared badge (#1555 honesty)", () => {
     const html = renderToStaticMarkup(

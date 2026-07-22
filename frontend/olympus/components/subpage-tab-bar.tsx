@@ -11,9 +11,7 @@ import {
 } from 'react';
 import { usePathname } from 'next/navigation';
 import { TabStrip } from '@digithings/web';
-
-/** Max width and horizontal padding for portfolio, research, overview, and related pages. */
-export const SUBPAGE_MAX = 'max-w-[1600px] mx-auto w-full px-4 md:px-6';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 
 export function subpageTabButtonClass(active: boolean): string {
   return `flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:py-2 sm:text-sm shrink-0 ${

@@ -7,12 +7,11 @@ import { useDashboard } from '@/lib/dashboard-context';
 import { useAsyncData } from '@/lib/hooks/use-async-data';
 import { fetchTickerDossier } from '@/lib/queries';
 import type { TickerDossier } from '@/lib/types';
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import PageSkeleton from '@/components/page-skeleton';
-import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
-import { Badge, StatCard, formatPct, pnlColor } from '@/components/ui';
+import { Badge, formatPct, pnlColor } from '@/components/ui';
 import { ThesisProvenanceStrip } from '@/components/portfolio/theses/ThesisProvenanceStrip';
 import { decisionNodeFor } from '@/lib/holdings-decisions';
 import AnalystDossierCard from './AnalystDossierCard';
@@ -98,93 +97,208 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
   const provenanceKey = dossier.coverage?.current_recommendation_key ?? decisionNodeFor(ticker);
   const hasAnything = dossier.analyst != null || dossier.decisions.length > 0 || held;
 
+  const stateLabel = held
+    ? 'held'
+    : dossier.analyst || dossier.decisions.length > 0
+      ? 'covered · unheld'
+      : null;
+  const coverageLabel = dossier.analyst
+    ? 'analyst'
+    : dossier.decisions.length > 0
+      ? 'decisions'
+      : 'none';
+
   return (
     <div className="flex min-h-full flex-col">
       <PortfolioSectionNav active="holdings" />
       <div className={`${SUBPAGE_MAX} flex-1 space-y-8 py-6 md:py-8`}>
-        <div className="space-y-4">
-          <Link
-            href="/portfolio"
-            className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
-          >
-            <ArrowLeft size={16} /> Back to Portfolio
-          </Link>
+        <Link
+          href="/portfolio"
+          className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+        >
+          <ArrowLeft size={16} /> Back to Portfolio
+        </Link>
 
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="font-mono text-3xl font-semibold leading-tight text-ink">{ticker}</h1>
-              {companyName ? <p className="text-sm text-ink-soft">{companyName}</p> : null}
+        <div
+          data-testid="dossier-command-band"
+          aria-label="Ticker dossier summary"
+          className="dossier-command grid grid-cols-1 border-y border-hair bg-surface/[0.82] lg:grid-cols-[minmax(14rem,1.25fr)_minmax(0,2fr)_auto]"
+        >
+            <div
+              data-region="identity"
+              className="flex flex-col justify-center gap-2 border-b border-hair p-5 lg:border-b-0 lg:border-r lg:p-6"
+            >
+              <div className="flex flex-wrap items-baseline gap-2">
+                <h1 className="font-mono text-4xl font-medium leading-none tracking-normal text-ink md:text-5xl">
+                  {ticker}
+                </h1>
+                {stateLabel && (
+                  <span className="font-mono text-xs uppercase tracking-normal text-ink-mute">
+                    {stateLabel}
+                  </span>
+                )}
+              </div>
+              {companyName && (
+                <p className="text-sm leading-tight text-ink-soft">{companyName}</p>
+              )}
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {dossier.analyst?.stance && (
+                  <Badge variant="default">
+                    <span className="capitalize">{dossier.analyst.stance}</span>
+                  </Badge>
+                )}
+                {dossier.analyst?.conviction_score != null && (
+                  <SignedConvictionBadge value={dossier.analyst.conviction_score} />
+                )}
+              </div>
             </div>
-            <AsOfBadge date={lastAnalyzed} />
-          </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {dossier.analyst?.stance ? (
-              <Badge variant="default">
-                <span className="capitalize">{dossier.analyst.stance}</span>
-              </Badge>
-            ) : null}
-            {dossier.analyst?.conviction_score != null ? (
-              <SignedConvictionBadge value={dossier.analyst.conviction_score} />
-            ) : null}
-          </div>
+            {held && position ? (
+              <dl data-region="metrics" className="m-0 grid grid-cols-3 border-b border-hair lg:border-b-0">
+                <div className="flex flex-col justify-center gap-2 border-r border-hair p-4">
+                  <dt className="font-mono text-xs font-medium uppercase tracking-normal text-ink-mute">
+                    weight
+                  </dt>
+                  <dd className="font-mono text-lg tabular-nums text-ink">
+                    {position.weight_actual.toFixed(2)}%
+                  </dd>
+                  {position.weight_target != null &&
+                    Math.abs(position.weight_target - position.weight_actual) >= 0.05 && (
+                      <p className="font-mono text-xs text-ink-mute">
+                        target {position.weight_target.toFixed(1)}%
+                      </p>
+                    )}
+                </div>
 
-          {error ? <p className="text-xs text-warn">{error}</p> : null}
+                <div className="flex flex-col justify-center gap-2 border-r border-hair p-4">
+                  <dt className="font-mono text-xs font-medium uppercase tracking-normal text-ink-mute">
+                    since entry
+                  </dt>
+                  <dd
+                    className={`font-mono text-lg tabular-nums ${pnlColor(sinceEntry)} ${sinceEntry == null ? 'text-ink-mute' : ''}`}
+                  >
+                    {sinceEntry != null ? formatPct(sinceEntry) : '—'}
+                  </dd>
+                </div>
 
-          {dossier.analyst && stale ? (
-            <p className="max-w-2xl text-xs leading-relaxed text-ink-mute">
-              Not re-analyzed since {lastAnalyzed} — delta runs only re-dispatch names whose
-              context changed materially; a held name is otherwise carried at its drifted
-              weight. This is the last full analysis.
-            </p>
-          ) : null}
+                <div className="flex flex-col justify-center gap-2 p-4">
+                  <dt className="font-mono text-xs font-medium uppercase tracking-normal text-ink-mute">
+                    entry
+                  </dt>
+                  <dd className="font-mono text-lg tabular-nums text-ink">
+                    {position.entry_price != null ? `$${position.entry_price.toFixed(2)}` : '—'}
+                  </dd>
+                  {position.entry_date && (
+                    <p className="font-mono text-xs text-ink-mute">{position.entry_date}</p>
+                  )}
+                </div>
+              </dl>
+            ) : (
+              <dl data-region="metrics" className="m-0 grid grid-cols-3 border-b border-hair lg:border-b-0">
+                <div className="flex min-w-0 flex-col justify-center gap-2 border-r border-hair p-4">
+                  <dt className="font-mono text-xs font-medium uppercase leading-tight tracking-normal text-ink-mute">
+                    position
+                  </dt>
+                  <dd className="m-0 font-mono text-sm text-ink">not held</dd>
+                </div>
+                <div className="flex min-w-0 flex-col justify-center gap-2 border-r border-hair p-4">
+                  <dt className="font-mono text-xs font-medium uppercase leading-tight tracking-normal text-ink-mute">
+                    coverage
+                  </dt>
+                  <dd className="m-0 font-mono text-sm text-ink">{coverageLabel}</dd>
+                </div>
+                <div className="flex min-w-0 flex-col justify-center gap-2 p-4">
+                  <dt className="font-mono text-xs font-medium uppercase leading-tight tracking-normal text-ink-mute">
+                    decisions
+                  </dt>
+                  <dd className="m-0 font-mono text-sm tabular-nums text-ink">
+                    {dossier.decisions.length}
+                  </dd>
+                </div>
+              </dl>
+            )}
+
+            <div
+              data-region="stamp"
+              className="flex min-w-0 flex-col items-start justify-center gap-1 border-t border-hair p-5 font-mono text-xs uppercase tracking-normal text-ink-mute lg:min-w-[9rem] lg:items-end lg:border-l lg:border-t-0 lg:p-6"
+            >
+              <span>as of</span>
+              <strong className="font-medium text-accent">
+                {lastAnalyzed?.toUpperCase() ?? 'UNKNOWN'}
+              </strong>
+            </div>
         </div>
 
-        {held ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {/* Booked weight is a share, not a signed P&L read — no '+' prefix.
-                The PM's target (when it differs post-turnover) reads as context. */}
-            <StatCard
-              label="Weight"
-              value={`${position!.weight_actual.toFixed(2)}%`}
-              subtitle={
-                position!.weight_target != null &&
-                Math.abs(position!.weight_target - position!.weight_actual) >= 0.05
-                  ? `target ${position!.weight_target.toFixed(1)}%`
-                  : undefined
-              }
-            />
-            <StatCard
-              label="Since entry"
-              value={sinceEntry != null ? formatPct(sinceEntry) : '—'}
-              valueClass={pnlColor(sinceEntry)}
-            />
-            <StatCard
-              label="Entry"
-              value={position!.entry_price != null ? `$${position!.entry_price.toFixed(2)}` : '—'}
-              subtitle={position!.entry_date ?? undefined}
-            />
-          </div>
+        {error ? (
+          <p className="text-xs text-warn">{error}</p>
         ) : null}
 
         {!hasAnything ? (
-          <p className="text-ink-mute">
+          <p className="border-y border-hair px-5 py-6 text-ink-mute">
             We don&apos;t have analyst coverage, decisions, or a position on record for{' '}
             <span className="font-mono">{ticker}</span>.
           </p>
         ) : (
           <>
-            {dossier.analyst ? (
-              <AnalystDossierCard payload={dossier.analyst} asOf={analystDate} />
-            ) : (
-              <div className="glass-card p-5 text-sm text-ink-mute md:p-6">
-                No analyst document on record for this ticker yet.
-              </div>
-            )}
+            <div
+              data-region="analyst-workspace"
+              className="grid grid-cols-1 border-y border-hair lg:grid-cols-[minmax(0,1fr)_280px]"
+            >
+              <main className="min-w-0">
+                {dossier.analyst ? (
+                  <AnalystDossierCard payload={dossier.analyst} asOf={analystDate} />
+                ) : (
+                  <div className="px-5 py-6 text-sm text-ink-mute md:px-6">
+                    No analyst document on record for this ticker yet.
+                  </div>
+                )}
+              </main>
+
+              <aside
+                data-region="dossier-context"
+                className="border-t border-hair lg:border-l lg:border-t-0"
+              >
+                <section className="px-5 py-5">
+                  <h2 className="font-mono text-xs font-medium uppercase tracking-normal text-ink-mute">
+                    Dossier state
+                  </h2>
+                  <dl className="mt-4 space-y-3 text-xs">
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-ink-mute">book state</dt>
+                      <dd className="m-0 font-mono text-ink">{stateLabel ?? 'uncovered'}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-ink-mute">coverage</dt>
+                      <dd className="m-0 font-mono text-ink">{coverageLabel}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-ink-mute">decision records</dt>
+                      <dd className="m-0 font-mono tabular-nums text-ink">
+                        {dossier.decisions.length}
+                      </dd>
+                    </div>
+                  </dl>
+                </section>
+
+                {dossier.analyst && stale ? (
+                  <section className="border-t border-hair px-5 py-5">
+                    <h2 className="font-mono text-xs font-medium uppercase tracking-normal text-ink-mute">
+                      Staleness
+                    </h2>
+                    <p className="mt-3 text-xs leading-relaxed text-ink-soft">
+                      Not re-analyzed since {lastAnalyzed}. Delta runs only re-dispatch names
+                      whose context changed materially; this is the last full analysis.
+                    </p>
+                  </section>
+                ) : null}
+
+                <div className="border-t border-hair px-5 py-5">
+                  <ThesisProvenanceStrip date={lastAnalyzed} documentKey={provenanceKey} />
+                </div>
+              </aside>
+            </div>
 
             <ConvictionHistory decisions={dossier.decisions} />
-
-            <ThesisProvenanceStrip date={lastAnalyzed} documentKey={provenanceKey} />
           </>
         )}
       </div>

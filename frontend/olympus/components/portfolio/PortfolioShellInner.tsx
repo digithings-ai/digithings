@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDashboard } from '@/lib/dashboard-context';
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import type { PortfolioSectionId } from '@/components/portfolio/PortfolioSectionNav';
 import { getDocLibraryTier } from '@/lib/library-doc-tier';

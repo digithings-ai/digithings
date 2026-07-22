@@ -321,7 +321,7 @@ export default function PipelineCanvas({
               <ChevronLeft size={20} aria-hidden />
             </button>
             <div className="min-w-0 flex-1 text-center">
-              <span className="block font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">
+              <span className="block font-mono text-xs uppercase text-ink-mute">
                 Stage {activeStageIndex + 1} of {PIPELINE_TOPOLOGY.length}
               </span>
               <span className="mt-0.5 block truncate font-display text-xl text-ink">
@@ -394,7 +394,7 @@ export default function PipelineCanvas({
                     <span className="block font-mono text-xs text-ink">
                       {node.label}
                     </span>
-                    <span className="mt-0.5 block text-[0.68rem] text-ink-mute">
+                    <span className="mt-0.5 block text-xs text-ink-mute">
                       {node.documentKey
                         ? 'Run artifact'
                         : expandable
@@ -403,18 +403,18 @@ export default function PipelineCanvas({
                     </span>
                   </span>
                   {count != null && count > 0 ? (
-                    <span className="rounded-full bg-accent/15 px-2 py-0.5 font-mono text-[0.65rem] tabular-nums text-accent">
+                    <span className="rounded-full bg-accent/15 px-2 py-0.5 font-mono text-xs tabular-nums text-accent">
                       {count}
                     </span>
                   ) : null}
                   {expandable ? (
                     expanded ? <ChevronDown size={16} aria-hidden /> : <ChevronRight size={16} aria-hidden />
                   ) : node.documentKey ? (
-                    <span className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-accent">
+                    <span className="font-mono text-xs uppercase text-accent">
                       Open
                     </span>
                   ) : (
-                    <span className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
+                    <span className="font-mono text-xs uppercase text-ink-mute">
                       About
                     </span>
                   )}
@@ -442,7 +442,7 @@ export default function PipelineCanvas({
                   data-no-pan=""
                   className="inline-flex items-center gap-1 rounded-lg border border-hair bg-term-bg/95 p-1 shadow-sm backdrop-blur-md"
                 >
-                <span className="px-2 font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
+                <span className="px-2 font-mono text-xs uppercase text-ink-mute">
                   View
                 </span>
                 <Tooltip>
@@ -523,7 +523,7 @@ export default function PipelineCanvas({
                     onClick={() => selectWalkthroughStage(activeStageIndex)}
                     className="flex h-full min-w-36 items-center justify-between gap-3 px-3 text-left transition-colors hover:bg-accent/[0.06]"
                   >
-                    <span className="font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+                    <span className="font-mono text-xs uppercase text-ink-mute">
                       {activeStageIndex + 1} of {PIPELINE_TOPOLOGY.length}
                     </span>
                     <span className="text-xs font-medium text-ink">{activeStage.label}</span>
@@ -541,7 +541,7 @@ export default function PipelineCanvas({
               </div>
             </TooltipProvider>
 
-            <div className="hidden items-center gap-3 rounded-lg border border-hair bg-term-bg/90 px-3 py-2 font-mono text-[0.62rem] text-ink-mute backdrop-blur-md xl:flex">
+            <div className="hidden items-center gap-3 rounded-lg border border-hair bg-term-bg/90 px-3 py-2 font-mono text-xs text-ink-mute backdrop-blur-md xl:flex">
               <span><span className="text-accent">→</span> sequential</span>
               <span><span className="text-accent">↓</span> parallel</span>
             </div>

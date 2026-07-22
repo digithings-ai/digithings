@@ -28,9 +28,9 @@ export function BookStrip({ positions, investedPct, asOfDate }: BookStripProps) 
     .sort((a, b) => Math.abs(b.day_change_pct ?? 0) - Math.abs(a.day_change_pct ?? 0));
 
   return (
-    <section className="glass-card px-5 py-4 sm:px-6">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+    <section data-brief-section="book" className="border-b border-hair px-5 py-5 sm:px-7">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Wallet size={14} className="text-ink-mute" />
           <h2 className="text-xs font-bold uppercase tracking-widest text-ink-mute">
             The book today
@@ -40,7 +40,10 @@ export function BookStrip({ positions, investedPct, asOfDate }: BookStripProps) 
               stale styling so a lagging book is visibly dated, not silently wrong. */}
           <AsOfBadge date={asOfDate} />
         </div>
-        <Link href="/portfolio" className="text-[10px] font-medium text-accent hover:underline">
+        <Link
+          href="/portfolio"
+          className="shrink-0 text-[10px] font-medium text-accent hover:underline"
+        >
           All holdings →
         </Link>
       </div>

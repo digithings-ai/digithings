@@ -63,11 +63,9 @@ describe('ThesesTab (story spine)', () => {
     expect(html).toContain('#1 pick');
   });
 
-  it('attributes book weight to the primary thesis (drives X% of book)', () => {
-    // "drives / 20.0% / of the book" is split across styled spans — compare de-tagged text.
-    const text = html.replace(/<[^>]+>/g, '');
-    expect(text).toContain('drives 20.0% of the book'); // AAA's 20% → primary MT1
-    expect(text).toContain('drives 0.0% of the book'); // MT2 has no held vehicle
+  it('does not present vehicle mapping as book-attribution coverage', () => {
+    expect(html).not.toContain('drives');
+    expect(html).not.toContain('mapped exposure');
   });
 
   it('renders the latest signed analyst call', () => {
@@ -79,17 +77,23 @@ describe('ThesesTab (story spine)', () => {
     expect(html).toContain('/portfolio/tickers?ticker=AAA');
   });
 
-  it('shows the honest unassigned shelf: held-unmapped and proposed-unheld', () => {
-    expect(html).toContain('Not tied to a market view');
-    expect(html).toContain('Held, not yet tied to a market view');
-    expect(html).toContain('TLT'); // held, not under a current view
-    expect(html).toContain('Proposed, not held');
-    expect(html).toContain('BBB'); // mapped vehicle the book does not hold
+  it('does not render unassigned holding or proposal buckets', () => {
+    expect(html).not.toContain('Not tied to a market view');
+    expect(html).not.toContain('Proposed, not held');
+    expect(html).not.toContain('>TLT<');
   });
 
-  it('does not surface CASH in the held-unmapped bucket', () => {
-    // The unassigned section exists, but CASH is filtered out of it.
-    const shelf = html.slice(html.indexOf('Not tied to a market view'));
-    expect(shelf).not.toContain('>CASH<');
+  it('shows only nonterminal opinions in Research views', () => {
+    const terminalHtml = renderToStaticMarkup(createElement(ThesesTab, {
+      ...base,
+      theses: [
+        thesis({ id: 'ACTIVE', name: 'Active opinion', status: 'ACTIVE' }),
+        thesis({ id: 'CLOSED', name: 'Closed opinion', status: 'CLOSED' }),
+        thesis({ id: 'INVALID', name: 'Invalidated opinion', status: 'INVALIDATED' }),
+      ],
+    }));
+    expect(terminalHtml).toContain('Active opinion');
+    expect(terminalHtml).not.toContain('Closed opinion');
+    expect(terminalHtml).not.toContain('Invalidated opinion');
   });
 });

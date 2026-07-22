@@ -53,6 +53,12 @@ at the top of `<main>` with route crumbs on the left and an `Open digiquant.io`
 link plus version/env label on the right. The version label reads
 `process.env.NEXT_PUBLIC_OLYMPUS_VERSION` and falls back to `v0.1 · dev`.
 
+Shared workspace gutters use `SUBPAGE_MAX` from
+`components/layout-constants.ts`. The constant intentionally lives outside
+client components so server-rendered pages and Suspense fallbacks receive a
+plain class string during static export. Interactive section navigation remains
+in `components/subpage-tab-bar.tsx` and imports the constant from that module.
+
 ### Chart theming
 
 Time-series charts (NAV/equity curves, drawdown, rolling risk, price + position
@@ -79,6 +85,23 @@ has no sortable tabular surface at all (#1450 F5 tables). The per-file
 rulings — and what adoption would take — live in
 [`lib/TABLES.md`](lib/TABLES.md). New *flat* leaderboards should adopt the
 primitive instead of hand-rolling sort state.
+
+### Portfolio workspace grammar
+
+The Portfolio routes follow DigiWeb's canonical `PortfolioWorkspaceReference`:
+one flat command band establishes book or dossier state, then hairline-divided
+ledgers carry positions, activity, research, and decision history. Holdings owns
+an exposure command band plus switchable position/activity ledgers; Theses uses
+a conviction-ranked research spine; thesis and ticker detail routes use editorial
+main/context compositions rather than nested card stacks.
+
+`/portfolio/performance` applies the same flat grammar to the shared
+finance-tearsheet primitives. Its command band, asymmetric NAV workspace, bounded
+decision ledger, attribution section, and PDF action remain presentation over the
+existing `nav_history` + `decision_log` contract. Portfolio presentation changes
+must not introduce a second query path or replace that persisted truth model.
+Embedded attribution uses flat divided sections, and narrow finance chart panes
+reduce date axes to endpoint labels while preserving the complete print view.
 
 ## Supabase / RLS
 
@@ -116,6 +139,7 @@ Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment)
 npm install                                # links workspace packages
 npm --workspace frontend/olympus run dev     # http://localhost:3000/olympus/
 npm --workspace frontend/olympus run build   # static export (output: 'export')
+npm --workspace frontend/olympus run check:static-export # verify server/client class boundaries
 npm --workspace frontend/olympus run lint
 npm --workspace frontend/olympus run test    # Vitest (lib/**/*.test.ts + components/**/*.test.tsx)
 ```
@@ -142,31 +166,53 @@ present at build time the real ids are fetched from the `theses` table; without 
 only the `_unlinked` fallback is exported. Theses created after a deploy 404 on
 direct load until the next deploy.
 
-## Morning Read (Overview)
+## Brief workspace
 
-`app/page.tsx` is the daily decision document — top to bottom it reads
-regime → KPIs → what to do → why → where to read more. The panels under
-`components/overview/` wire data that the dashboard query already loads:
+`app/page.tsx` is the daily decision workspace. It owns benchmark alignment,
+NAV-window calculations, book freshness, and rebalance rationale joins, then
+passes those truth contracts into the presentational modules under
+`components/today/`:
 
-- **Today's Actions** (`today-actions-panel.tsx`) — `portfolio_management.rebalance_actions`
-  (computed in `queries.ts`, surfaced from #702). EXIT→OPEN→TRIM→ADD→HOLD sort;
-  HOLDs collapse; explicit "no changes proposed" state. Per-ticker rationale is
-  joined from the `pm-rebalance` doc's actions when present (#704).
-- **Morning Brief** (`morning-brief-panel.tsx`) — the digest, tabbed
-  (Market / Equities / Risk / Actions). Shares the snapshot fetch via the
-  exported `useLatestSnapshot()` hook and reuses the snapshot panel's section
-  renderers; it replaces the single long scroll on the Overview.
-- **Deliberations** (`deliberations-strip.tsx`) — bull/bear `DebateSummary`
-  cards from `pipeline_observability.deliberation_transcripts` (the
-  pipeline `deliberation/{ticker}` docs, #699) plus a portfolio-level
-  **risk-debate** card (`risk-debate` doc, via `renderRiskDebateMarkdown`).
-  `fetchPipelineObservabilityForDate` loads both the flat pipeline keys
-  (`deliberation/%`, `risk-debate`, `pm-rebalance`) and the operator-flow
-  keys (#704). Expand-in-place, no extra fetch; renders null when neither ran.
-- **Decision Trail** (`decision-trail-panel.tsx`) — navigable rows into the
-  day's artifacts (deliberations, PM memo, digest); honest empty state.
-- **AsOfBadge** (`as-of-badge.tsx`) — freshness pill in the hero; amber when the
-  run date is older than yesterday (UTC).
+- **Command band** (`move-hero.tsx`) — regime and run provenance, digest
+  headline, rebalance status, and compact NAV context. `--up` / `--down` are
+  reserved for signed returns; regime chrome uses accent, warning, or neutral.
+- **Watch ledger** (`what-to-watch.tsx`) — ranked actionables and tail risks,
+  with a date-keyed deep link to the Pipeline digest.
+- **Book ledger** (`book-strip.tsx`) — reconciled invested/cash state and held
+  positions ordered by absolute daily move. Its as-of badge uses the latest
+  NAV date rather than borrowing the research digest date.
+- **Destination ledger** (`today-summaries.tsx`) — divided Read, Holdings, and
+  Theses columns with no independent card surfaces.
+
+The four modules are enclosed by one page-level hairline frame, adapting the
+DigiWeb `DashboardWorkspaceReference` command-band and ledger composition.
+Loading uses `PageSkeleton`; failures use the shared `EmptyState`; missing book
+or research values render local quiet copy; stale research and book dates use
+the shared `AsOfBadge` treatment.
+
+## Pipeline and Why workspaces
+
+Pipeline and Why extend the same DigiWeb workspace grammar across the
+reasoning workflow without replacing their domain interactions:
+
+- **Pipeline** owns one command band for the run headline, stage/document
+  counts, run date, and temporal pager. The existing custom topology remains
+  the interaction engine: desktop pan/zoom and fit controls, expandable
+  stages, mobile stage walkthrough, URL document selection, and the artifact
+  dossier keep their original contracts. Graph nodes and camera overlays use
+  explicit hairline surfaces rather than page-level card primitives.
+- **Why** owns one reasoning command band above the shared responsive tab bar.
+  `?why=read` presents the latest synthesis as a divided reading workspace;
+  `?why=deliberations` presents rebalance actions, risk and ticker debates,
+  and PM memo history as flat ledgers. The tab remains URL-driven and does not
+  reset page scroll.
+- Snapshot loading, error, empty, actionable, and risk components expose an
+  opt-in flat presentation for Why. Their default card presentation remains
+  unchanged for Overview and other consumers.
+
+Across both routes, accent and warning tokens describe workflow state and
+argument stance. `--up` and `--down` remain reserved for signed P&L or return
+values.
 
 > **Sharing:** the static export embeds the Supabase anon key and every table
 > has `anon` RLS `USING (true)`, so the dashboard URL is world-readable. Gate it

@@ -69,14 +69,14 @@ export default function PipelineNodeDetail({
       {/* Header */}
       <div className="flex flex-shrink-0 items-start justify-between border-b border-hair px-4 py-3 md:px-5 md:py-4">
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-bold tracking-[0.14em] uppercase text-accent mb-1">
+          <div className="mb-1 text-xs font-bold uppercase text-accent">
             {documentKey ? 'Run artifact' : explanation ? 'Pipeline guide' : 'No selection'}
           </div>
           <div className="font-mono text-sm truncate text-ink">
             {node?.label ?? documentKey ?? '—'}
           </div>
           {explanation && (
-            <div className="mt-1 font-mono text-[0.65rem] text-ink-mute">
+            <div className="mt-1 font-mono text-xs text-ink-mute">
               Stage {explanation.stageNumber} of {PIPELINE_TOPOLOGY.length} · {explanation.stageLabel}
             </div>
           )}
@@ -98,7 +98,7 @@ export default function PipelineNodeDetail({
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
             <FileSearch size={32} className="text-ink-mute opacity-40" />
             <p className="text-ink-mute text-sm">No document selected.</p>
-            <p className="text-[12px] text-ink-mute/60">
+            <p className="text-xs text-ink-mute/60">
               Select a node in the pipeline graph to view its output here.
             </p>
           </div>
@@ -117,20 +117,20 @@ export default function PipelineNodeDetail({
             </div>
             <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-hair bg-hair">
               <div className="bg-term-bg px-3 py-2.5">
-                <dt className="font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+                <dt className="font-mono text-xs uppercase text-ink-mute">
                   Stage
                 </dt>
                 <dd className="mt-1 text-xs text-ink">{explanation.stageLabel}</dd>
               </div>
               <div className="bg-term-bg px-3 py-2.5">
-                <dt className="font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+                <dt className="font-mono text-xs uppercase text-ink-mute">
                   Execution
                 </dt>
                 <dd className="mt-1 text-xs text-ink">{explanation.behavior}</dd>
               </div>
             </dl>
             <div className="border-t border-hair pt-4">
-              <p className="font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+              <p className="font-mono text-xs uppercase text-ink-mute">
                 This run
               </p>
               <p className="mt-2 text-xs leading-relaxed text-ink-mute">
@@ -159,7 +159,7 @@ export default function PipelineNodeDetail({
         {documentKey && !loading && error && (
           <div className="space-y-2">
             <p className="text-warn text-sm">{error}</p>
-            <p className="text-[12px] text-ink-mute">
+            <p className="text-xs text-ink-mute">
               This document may not be available for the selected date.
             </p>
           </div>
@@ -189,7 +189,7 @@ export default function PipelineNodeDetail({
             <p className="text-ink-mute text-sm">
               No output found for <span className="font-mono text-ink">{documentKey}</span> on {date}.
             </p>
-            <p className="text-[12px] text-ink-mute/70">
+            <p className="text-xs text-ink-mute/70">
               This stage may not have run yet, or the output was not persisted.
             </p>
           </div>
