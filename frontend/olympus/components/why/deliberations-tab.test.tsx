@@ -50,19 +50,32 @@ describe('sortDocsByDateDesc', () => {
     expect(sorted.map((d) => d.id)).toEqual(['b', 'c', 'a']);
   });
 
-  it('keeps PM/rebalance memos out of the ticker-level archive', () => {
+  it('keeps run-level portfolio docs and excludes only ticker-level artifacts', () => {
     const docs = [
       { path: 'pm-rebalance' },
       { path: 'pm-allocation-memo/2026-07-20.json' },
       { path: 'rebalance-decision.json' },
+      { path: 'market-thesis-exploration/2026-07-20.json' },
+      { path: 'thesis-vehicle-map/2026-07-20.json' },
+      { path: 'opportunity-screen/2026-07-20.json' },
+      { path: 'opportunity-screener.json' },
+      { path: 'deliberation.md' },
+      { path: 'deliberation.json' },
       { path: 'deliberation/NVDA' },
       { path: 'deliberation-transcript/2026-07-20/NVDA.json' },
+      { path: 'deliberation-transcript-index/2026-07-20.json' },
       { path: 'asset-recommendations/2026-07-20/NVDA.json' },
     ];
     expect(docs.filter(isPmMemoHistoryDoc).map((doc) => doc.path)).toEqual([
       'pm-rebalance',
       'pm-allocation-memo/2026-07-20.json',
       'rebalance-decision.json',
+      'market-thesis-exploration/2026-07-20.json',
+      'thesis-vehicle-map/2026-07-20.json',
+      'opportunity-screen/2026-07-20.json',
+      'opportunity-screener.json',
+      'deliberation.md',
+      'deliberation.json',
     ]);
   });
 });

@@ -31,6 +31,7 @@ vi.mock('@/components/pipeline/PipelineDaySelector', () => ({
 }));
 
 import PipelinePage from './page';
+import PipelineHeading from '@/components/pipeline/PipelineHeading';
 
 describe('app/pipeline/page', () => {
   it('mounts and does not redirect — renders pipeline-canvas marker', () => {
@@ -42,6 +43,13 @@ describe('app/pipeline/page', () => {
   it('renders the Pipeline heading', () => {
     const html = renderToStaticMarkup(createElement(PipelinePage));
     expect(html).toContain('Pipeline');
+  });
+
+  it('heading is hook-free so the Suspense fallback prerenders the h1', () => {
+    const html = renderToStaticMarkup(createElement(PipelineHeading));
+    expect(html).toContain('<h1');
+    expect(html).toContain('How today');
+    expect(html).not.toContain('<main');
   });
 
   it('renders one command band above the workflow canvas', () => {
