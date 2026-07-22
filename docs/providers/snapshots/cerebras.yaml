@@ -1,5 +1,5 @@
 provider: cerebras
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
@@ -15,11 +15,11 @@ free_tier:
       context_window: 128000
       max_input_tokens: 8192    # hard-capped on free tier
       max_output_tokens: 8192
-      status: active
-      verified: null
-      last_verified: null
-      last_verified_latency_ms: null
-      verification_error: null
+      status: deprecated        # absent from current official free-tier rate-limits page; probe returns 404 model_not_found
+      verified: false
+      last_verified: 2026-07-19
+      last_verified_latency_ms: 116
+      verification_error: "Error code: 404 - {'message': 'Model does not exist or you do not have access to it.', 'type': 'not_found_error', 'param': 'model', 'code': 'model_not_found'}"
     - name: llama-4-scout
       context_window: 131072
       max_input_tokens: 8192    # hard-capped on free tier
@@ -128,4 +128,4 @@ verification:
   probe_model_alias: cerebras-llama-70b
   github_secret_key: CEREBRAS_API_KEY
 
-notes: "Fastest inference on market (>2000 tok/s; gpt-oss-120b ~3000 tok/s). Free tier: 1M tokens/day, 30 RPM, 60k-100k TPM. Context hard-capped at 8,192 tokens on free tier for most models (qwen3-235b exception: 64K free). Paid tier unlocks full context. New subscription tiers: Code Pro $50/mo, Code Max $200/mo (up to 1.5M TPM). Added: gpt-oss-120b ($0.25/$0.69 paid), qwen3-235b (free)."
+notes: "Fastest inference on market (>2000 tok/s; gpt-oss-120b ~3000 tok/s). PROBE FAILURE 2026-07-19: llama-3.3-70b returns 404 model_not_found — cross-referenced against Cerebras's current rate-limits docs, which no longer list llama-3.3-70b, llama-4-scout, qwen-3-32b, or qwen3-235b on the free tier at all; the only free-tier models found this cycle are gpt-oss-120b, zai-glm-4.7, and gemma-4-31b at 5 RPM / 30K TPM / 1M TPD. CONFLICTING SOURCES: some trackers still describe the old no-CC 1M-tokens/day / 30 RPM / 8K-ctx-cap free tier; Cerebras's own docs now describe a 'Free Trial' requiring a verified payment method for $5 in credits (30-day expiry). Did not overwrite rate_limits with unconfirmed numbers — flagging for a direct signup-flow check next cycle. Paid per-token rate card also could not be reverified this pass (pricing page now emphasizes Code Pro $50/mo / Code Max $200/mo subscription tiers, both listed 'sold out')."

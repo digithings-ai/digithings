@@ -1,5 +1,5 @@
 provider: cohere
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
@@ -54,9 +54,9 @@ paid_tier:
       context_window: 128000
       max_input_tokens: 128000
       max_output_tokens: 8192
-      cost_per_1m_input: 2.50
+      cost_per_1m_input: null   # CORRECTED: not on Cohere's public rate card — hosted chat endpoint is "contact sales"
       cost_per_1m_input_long: null
-      cost_per_1m_output: 10.00
+      cost_per_1m_output: null  # real distribution is Apache 2.0 open-weight self-hosting; no confirmed per-token API price
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
       status: active
@@ -111,4 +111,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "Added command-a-plus-05-2026 (released May 20 2026): 218B sparse MoE (25B active), 128K ctx, Apache 2.0 open-weight license, same $2.50/$10 pricing as Command A. Added embed-v4.0: multimodal (text + image), 1,536-dim vectors, $0.12/1M text tokens, $0.47/1M image tokens — available on Bedrock, Azure AI, and direct API. Trial tier still 1,000 calls/month, 20 RPM. No key configured yet."
+notes: "Added command-a-plus-05-2026 (released May 20 2026): 218B sparse MoE (25B active), 128K ctx, Apache 2.0 open-weight license. CORRECTION 2026-07-19: Command A+ is NOT priced at $2.50/$10 on Cohere's hosted API as previously recorded — its hosted chat-endpoint pricing is 'contact sales'; the confirmed public price/token only applies to the original Command A (03-2025) at $2.50/$10. Command A+'s real distribution model is Apache 2.0 open-weight self-hosting (first fully Apache 2.0 frontier model from Cohere, incl. tokenizer/config/training recipe), runnable on 2×H100 or 1×B200. Newer Chat variants (e.g. Command A Reasoning) are capped at 1,000 calls/month even on production keys pending a sales contact. Added embed-v4.0: multimodal (text + image), 1,536-dim vectors, $0.12/1M text tokens, $0.47/1M image tokens — available on Bedrock, Azure AI, and direct API. Trial tier still 1,000 calls/month, 20 RPM (endpoint-specific limits also exist: Embed text 2,000/min, Rerank 10/min). No key configured yet; no probe run (method: skipped)."

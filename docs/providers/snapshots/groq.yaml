@@ -1,5 +1,5 @@
 provider: groq
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
@@ -16,15 +16,15 @@ free_tier:
       max_input_tokens: 128000
       max_output_tokens: 32768
       status: active
-      verified: null
-      last_verified: null
-      last_verified_latency_ms: null
+      verified: true
+      last_verified: 2026-07-19
+      last_verified_latency_ms: 307
       verification_error: null
     - name: llama-4-scout-17b-16e-instruct
       context_window: 131072
       max_input_tokens: 131072
       max_output_tokens: 8192
-      status: active
+      status: deprecated        # removed from free/developer tier June 17 2026; enterprise committed-spend unaffected
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -38,10 +38,19 @@ free_tier:
       last_verified: null
       last_verified_latency_ms: null
       verification_error: null
+    - name: qwen/qwen3.6-27b
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 8192
+      status: active            # added as recommended migration target for llama-4-scout
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
   rate_limits:
     rpm: 30              # default; varies by model
     rpd: 1000            # RPD is the binding constraint (dropped from 14,400 in 2026)
-    tpm: 6000            # llama-3.3-70b-versatile
+    tpm: 12000           # corrected 2026-07-19: llama-3.3-70b-versatile is 12,000 TPM (6,000 was llama-3.1-8b-instant, mixed up in prior snapshot)
     input_tpm: null
     concurrent_requests: null
     reset_window: rolling_24h
@@ -120,4 +129,4 @@ verification:
   probe_model_alias: groq-llama-70b
   github_secret_key: GROQ_API_KEY
 
-notes: "ACQUISITION: Groq acquired by Nvidia (announced May 2026, $20B valuation). Removed deprecated models: deepseek-r1-distill-llama-70b (deprecated Sep 2025), moonshotai/kimi-k2-instruct (deprecated Mar 2026). Added gpt-oss-120b at $0.15/$0.60 paid with prompt caching ($0.075/1M), ~500 tok/s. RPD 1,000 is binding free-tier constraint. TPM 6k on llama-3.3-70b-versatile still unsuitable for Atlas extraction phases (needs 41k/run)."
+notes: "PROBE 2026-07-19: llama-3.3-70b-versatile verified ok (307ms). MATERIAL CHANGE: llama-4-scout-17b-16e-instruct deprecated for free/developer tier 2026-06-17 (enterprise committed-spend contracts unaffected); Groq recommends migrating to openai/gpt-oss-120b or qwen/qwen3.6-27b (added to free roster this cycle). TPM CORRECTION: llama-3.3-70b-versatile free-tier TPM is 12,000, not 6,000 as previously recorded (6,000 actually belongs to llama-3.1-8b-instant — was mixed up). ACQUISITION CLARIFIED: the Nvidia deal (announced May 2026, ~$20B) is structured as a non-exclusive inference-tech licensing deal + acquihire (founder, president, much of engineering moved to Nvidia), not a straight acquisition — GroqCloud continues operating nominally independently under new CEO Simon Edwards; deal is under Senate/FTC antitrust scrutiny for allegedly evading merger review. No evidence this has changed free-tier limits or pricing beyond the llama-4-scout deprecation above. RPD 1,000 remains the binding free-tier constraint. TPM 12k on llama-3.3-70b-versatile still below Atlas extraction phase needs (41k/run)."

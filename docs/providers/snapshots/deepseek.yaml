@@ -1,12 +1,12 @@
 provider: deepseek
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
   available: true
   tier_type: credits
-  credit_amount_usd: null      # 5M tokens on signup (one-time, unconfirmed if still active)
-  credit_expiry_days: null
+  credit_amount_usd: 8.40       # one-time 5M-token signup grant at v4-flash rates, not open-ended credits
+  credit_expiry_days: 30        # grant expires 30 days after registration
   privacy_warning: null
   signup_required: true
   cc_required: false
@@ -34,10 +34,10 @@ free_tier:
       max_input_tokens: 65536
       max_output_tokens: 8192
       status: deprecated
-      verified: null
-      last_verified: null
-      last_verified_latency_ms: null
-      verification_error: null
+      verified: false
+      last_verified: 2026-07-19
+      last_verified_latency_ms: 679
+      verification_error: "Error code: 402 - {'error': {'message': 'Insufficient Balance', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}}"
     - name: deepseek-reasoner   # deprecated → deepseek-v4-pro (July 24 2026)
       context_window: 65536
       max_input_tokens: 65536
@@ -119,4 +119,4 @@ verification:
   probe_model_alias: deepseek-chat
   github_secret_key: DEEPSEEK_API_KEY
 
-notes: "V4 generation launched April 24, 2026. deepseek-v4-flash replaces deepseek-chat: $0.07/$0.28, 1M ctx, 384K out. deepseek-v4-pro replaces deepseek-reasoner: $0.435/$0.87 (permanent 75% cut), 1M ctx. Old deepseek-chat/deepseek-reasoner aliases deprecated July 24 2026 — update model param now. Cache discount 96% on v4-flash. Data jurisdiction: platform hosted in China; use Fireworks/Together/DeepInfra for Western-jurisdiction hosting."
+notes: "V4 generation launched April 24, 2026. deepseek-v4-flash replaces deepseek-chat: 1M ctx, 384K out (input price possibly $0.14 cache-miss vs the $0.07 recorded here — official pricing page and this snapshot's methodology disagree on cache-hit vs cache-miss framing; verify before relying on the exact figure). deepseek-v4-pro replaces deepseek-reasoner: $0.435/$0.87 (permanent 75% cut), 1M ctx. PROBE 2026-07-19: deepseek-chat probe returned 402 Insufficient Balance — confirmed this is an account balance issue (standard pay-as-you-go zero-balance error per DeepSeek's own error-code docs), NOT evidence the alias itself is dead; deepseek-chat/deepseek-reasoner remain live and route to v4-flash/v4-pro until the hard cutover at 2026-07-24 15:59 UTC (5 days after this check) — recommend checking the probe account's grant expiry/balance and re-running before treating this as a deprecation signal. Free tier corrected: it is a one-time 5M-token grant (~$8.40 value) expiring 30 days after signup, not open-ended credits. Cache discount 96% on v4-flash. Data jurisdiction: platform hosted in China; use Fireworks/Together/DeepInfra for Western-jurisdiction hosting."

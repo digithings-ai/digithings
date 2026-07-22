@@ -1,5 +1,5 @@
 provider: ollama_cloud
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
@@ -16,15 +16,6 @@ free_tier:
       max_input_tokens: 131072
       max_output_tokens: 32768
       status: active          # usage level 1 (lightest)
-      verified: null
-      last_verified: null
-      last_verified_latency_ms: null
-      verification_error: null
-    - name: rnj-1:cloud
-      context_window: 32768
-      max_input_tokens: 32768
-      max_output_tokens: 8192
-      status: active
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -135,4 +126,4 @@ verification:
   probe_model_alias: ollama-cloud/rnj-1
   github_secret_key: OLLAMA_API_KEY
 
-notes: "OpenAI-compatible passthrough at https://ollama.com/v1. Uses OLLAMA_API_KEY. Usage level system: level 1 (lightest, gpt-oss:20b) through level 4 (heaviest, deepseek-v4-pro). deepseek-v4-flash confirmed free — April 403 was temporary outage. deepseek-v4-pro:cloud available but is level 4 usage; may hit free-tier limits quickly. kimi-k2-thinking remains paid-only. deepseek-v3.1:671b remains recommended free reasoning-tier model."
+notes: "PROBE 2026-07-19: probe against rnj-1:cloud returned 404 model not found. Research confirms rnj-1:cloud never existed as a valid cloud-tier id — 'rnj-1' (Essential AI, 8B dense) is a local-only model on Ollama's library (tags: rnj-1:latest, rnj-1:8b, rnj-1:8b-instruct-*); it does not appear anywhere in Ollama's current cloud-tagged catalog. REMOVED from this snapshot's free_tier.models as a data-quality correction, not a deprecation — flag for whoever owns config/litellm.yaml's `ollama-cloud/rnj-1` probe alias mapping, since it points at a model id that was never valid. Current live cloud catalog (fetched directly) includes: gemma4, qwen3.5, glm-5.1/5.2, minimax-m2.5/m2.7/m3, nemotron-3-super/ultra/nano, kimi-k2.5/k2.6/k2.7-code, deepseek-v4-flash/pro, gpt-oss, gemini-3-flash-preview, mistral-large-3. Several remaining entries here (deepseek-v3.1:671b, cogito-2.1:671b, kimi-k2-thinking) were NOT found in that live listing — they may have been superseded by the deepseek-v4-flash/pro and kimi-k2.x lines, but no confirmed rename mapping was found; needs a follow-up check before removing. The 'deepseek-v4-pro:cloud usage level 4 = paid-tier-only' framing below could not be corroborated — official docs describe usage levels 1-4 applying across all plans including free (heavier models simply consume quota faster), not a hard paid-only gate; treat that framing as a likely mischaracterization pending a direct docs.ollama.com/cloud recheck. OpenAI-compatible passthrough at https://ollama.com/v1. Uses OLLAMA_API_KEY. deepseek-v4-flash confirmed free. kimi-k2-thinking remains paid-only. deepseek-v3.1:671b remains recommended free reasoning-tier model pending the rename-mapping check above."

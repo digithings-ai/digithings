@@ -1,5 +1,5 @@
 provider: github_models
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
@@ -7,7 +7,7 @@ free_tier:
   tier_type: standing
   credit_amount_usd: null
   credit_expiry_days: null
-  privacy_warning: "Free tier is evaluation-only; production use now requires pay-as-you-go (available since June 1 2026)."
+  privacy_warning: "RETIRING: GitHub Models is being fully retired 2026-07-30 — playground, model catalog, inference API, and BYOK endpoints all shut down for everyone, including existing customers. No longer available to new customers/orgs since 2026-06-16. Brownouts (intermittent errors) scheduled 2026-07-16 and 2026-07-23. Migration path: Microsoft Foundry or GitHub Copilot."
   signup_required: false
   cc_required: false
   models:
@@ -15,16 +15,16 @@ free_tier:
       context_window: 128000
       max_input_tokens: 128000
       max_output_tokens: 16384
-      status: active
-      verified: null
-      last_verified: null
-      last_verified_latency_ms: null
-      verification_error: null
+      status: deprecated        # full platform retirement 2026-07-30
+      verified: false
+      last_verified: 2026-07-19
+      last_verified_latency_ms: 317
+      verification_error: "Error code: 401 - {'error': {'code': 'unauthorized', 'message': 'The `models` permission is required to access this endpoint', 'details': 'The `models` permission is required to access this endpoint'}}"
     - name: gpt-4o
       context_window: 128000
       max_input_tokens: 128000
       max_output_tokens: 16384
-      status: active
+      status: deprecated        # full platform retirement 2026-07-30
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -33,7 +33,7 @@ free_tier:
       context_window: 131072
       max_input_tokens: 131072
       max_output_tokens: 4096
-      status: active
+      status: deprecated        # full platform retirement 2026-07-30
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -42,7 +42,7 @@ free_tier:
       context_window: 131072
       max_input_tokens: 131072
       max_output_tokens: 4096
-      status: active
+      status: deprecated        # full platform retirement 2026-07-30
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -99,4 +99,4 @@ verification:
   probe_model_alias: github-gpt4o-mini
   github_secret_key: GITHUB_TOKEN
 
-notes: "BILLING CHANGE June 1 2026: pay-as-you-go launched; production use now permitted (ToS updated). BYOK expanded to Bedrock, Google AI Studio, and any OpenAI-compatible provider. Catalog now 45+ models (DeepSeek, Phi-4, AI21 Jamba added). RPD corrected: GPT-4o is 50 RPD / 10 RPM (snapshot had ~8 RPD — incorrect). GITHUB_TOKEN always available in Actions — no extra secret needed."
+notes: "MATERIAL CHANGE 2026-07-19: GitHub confirmed (github.blog changelog) that GitHub Models is being FULLY RETIRED 2026-07-30 — this supersedes the June billing-change note below. Timeline: 2026-06-01 pay-as-you-go launched; 2026-06-16 blocked for new customers/orgs; 2026-07-01 full retirement announced for 2026-07-30 (11 days from this check); brownouts scheduled 2026-07-16 and 2026-07-23. PROBE 2026-07-19: gpt-4o-mini returned 401 'The `models` permission is required' — root cause confirmed via GitHub Docs: API access requires a token with `models:read` scope explicitly declared (fine-grained PAT, or `permissions: { models: read }` in an Actions workflow); the default Actions GITHUB_TOKEN does NOT carry this by default (contradicts this snapshot's prior claim that GITHUB_TOKEN 'always available — no extra secret needed'). Given the 11-day runway to full retirement, recommend NOT investing in an auth fix — instead plan removal of github_models from the DigiThings provider roster and migrate any dependent config to another provider before 2026-07-30. Catalog was expanded to 45+ models (DeepSeek, Phi-4, AI21 Jamba) prior to the retirement announcement — now moot."

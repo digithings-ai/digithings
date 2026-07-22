@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - email
 data_privacy_on_free: no_training
-verified_at: 2026-05-03
+verified_at: 2026-07-19
 source_urls:
   - https://console.groq.com/docs/rate-limits
   - https://console.groq.com/docs/models
@@ -28,15 +28,12 @@ The fastest inference provider on the market (500–1,500 tok/s on Llama/Qwen vi
 
 ## Free-Tier Models
 
-| Model ID | Context Window | Max Output | RPM | RPD | TPM | Notes |
-|---|---|---|---|---|---|---|
-| `llama-3.3-70b-versatile` | 128,000 | 32,768 | 30 | 14,400 | 6,000 | Primary workhorse |
-| `llama-4-scout-17b-16e-instruct` | 131,072 | 8,192 | 30 | 14,400 | 30,000 | Llama 4 Scout MoE |
-| `llama-4-maverick-17b-128e-instruct` | 131,072 | 8,192 | 30 | 14,400 | 6,000 | Llama 4 Maverick MoE |
-| `moonshotai/kimi-k2-instruct` | 131,072 | 16,384 | 30 | 14,400 | 6,000 | Kimi K2 (verify — was paywalled) |
-| `deepseek-r1-distill-llama-70b` | 131,072 | 16,384 | 30 | 14,400 | 6,000 | DeepSeek R1 distill |
-| `qwen-2.5-coder-32b` | 131,072 | 16,384 | 30 | 14,400 | 6,000 | Best free coding model |
-| `whisper-large-v3` | — | — | 20 | 2,000 | — | STT; audio minutes limit |
+| Model ID | Context Window | Max Output | Notes |
+|---|---|---|---|
+| `llama-3.3-70b-versatile` | 128,000 | 32,768 | active |
+| `llama-4-scout-17b-16e-instruct` | 131,072 | 8,192 | **deprecated** |
+| `openai/gpt-oss-120b` | 131,072 | 32,768 | active |
+| `qwen/qwen3.6-27b` | 131,072 | 8,192 | active |
 
 > Note: Kimi K2 (`moonshotai/kimi-k2-instruct`) moved to paid tier in early 2026 — verify current status at console.groq.com/docs/models before using.
 
@@ -112,3 +109,4 @@ Pay-as-you-go after free tier. Llama 3.3 70B ~$0.59/$0.79 per 1M in/out; Llama 4
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-07-19 | Automated snapshot sync | provider-review scan |
