@@ -65,3 +65,55 @@ def test_data_quality_unrecognized_degrades_to_none() -> None:
 def test_bias_synonym_still_normalizes() -> None:
     # The new fields don't disturb the existing bias-synonym normalization.
     assert _report(bias="positive").bias == "bullish"
+
+
+class TestFlowDirectionSynonyms:
+    """#1641 — flow_direction synonyms normalize instead of failing the merge.
+
+    Run 29846393424 emitted 'positive' and the edit-merge schema validation
+    hard-failed the segment (literal_error).
+    """
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("positive", "inflow"),
+            ("net inflows", "inflow"),
+            ("Negative", "outflow"),
+            ("net outflow", "outflow"),
+            ("neutral", "mixed"),
+            ("balanced", "mixed"),
+            ("mixed", "mixed"),
+        ],
+    )
+    def test_synonyms_map_onto_literal(self, raw: str, expected: str) -> None:
+        from digiquant.olympus.atlas.phases.phase2_institutional import (
+            InstitutionalFlowsReport,
+        )
+
+        report = InstitutionalFlowsReport.model_validate(
+            {
+                "segment": "inst-institutional-flows",
+                "date": date(2026, 7, 22),
+                "bias": "neutral",
+                "headline": "h",
+                "flow_direction": raw,
+            }
+        )
+        assert report.flow_direction == expected
+
+    def test_unknown_value_degrades_to_none(self) -> None:
+        from digiquant.olympus.atlas.phases.phase2_institutional import (
+            InstitutionalFlowsReport,
+        )
+
+        report = InstitutionalFlowsReport.model_validate(
+            {
+                "segment": "inst-institutional-flows",
+                "date": date(2026, 7, 22),
+                "bias": "neutral",
+                "headline": "h",
+                "flow_direction": "sideways",
+            }
+        )
+        assert report.flow_direction is None
