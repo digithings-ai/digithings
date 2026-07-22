@@ -14,7 +14,7 @@ import PageSkeleton from '@/components/page-skeleton';
  */
 export default function PipelinePage() {
   return (
-    <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <Suspense
         fallback={
           <div className="px-6 py-5">
@@ -24,6 +24,6 @@ export default function PipelinePage() {
       >
         <PipelineClient />
       </Suspense>
-    </main>
+    </div>
   );
 }

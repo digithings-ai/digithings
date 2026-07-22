@@ -80,9 +80,9 @@ export default function WhyClient() {
         ))}
       </SubpageStickyTabBar>
 
-      <main className={`${SUBPAGE_MAX} flex-1 pb-6 pt-4 md:pb-8 md:pt-6`}>
+      <div className={`${SUBPAGE_MAX} flex-1 pb-6 pt-4 md:pb-8 md:pt-6`}>
         {active === 'read' ? <TheRead /> : <DeliberationsTab />}
-      </main>
+      </div>
     </div>
   );
 }

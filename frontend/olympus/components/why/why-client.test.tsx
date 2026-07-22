@@ -28,5 +28,6 @@ describe('WhyClient', () => {
     expect(html).toContain('lg:grid-cols-[minmax(0,1fr)_auto]');
     expect(html).not.toContain('md:grid-cols-[minmax(0,1fr)_auto]');
     expect(html).not.toContain('glass-card');
+    expect(html).not.toContain('<main'); // AppFrame owns the sole main landmark
   });
 });
