@@ -125,11 +125,11 @@ export default function OverviewPage() {
       : null;
 
   return (
-    <div className={`${SUBPAGE_MAX} py-4 md:py-7`}>
+    <div className={`${SUBPAGE_MAX} py-4 md:py-6`}>
       <section
         data-testid="brief-workspace"
         aria-label="Daily investment brief"
-        className="overflow-hidden border border-hair bg-surface"
+        className="space-y-4"
       >
         <MoveHero
           regime={strategy.regime}
@@ -151,17 +151,22 @@ export default function OverviewPage() {
           }}
         />
 
-        <WhatToWatch
-          actionables={strategy.actionableItems ?? []}
-          risks={strategy.riskItems ?? []}
-          asOfDate={latestDate}
-        />
+        <div
+          data-region="brief-analysis-grid"
+          className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]"
+        >
+          <WhatToWatch
+            actionables={strategy.actionableItems ?? []}
+            risks={strategy.riskItems ?? []}
+            asOfDate={latestDate}
+          />
 
-        <BookStrip
-          positions={positions}
-          investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
-          asOfDate={bookAsOf}
-        />
+          <BookStrip
+            positions={positions}
+            investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
+            asOfDate={bookAsOf}
+          />
+        </div>
 
         <TodaySummaries
           positions={positions}

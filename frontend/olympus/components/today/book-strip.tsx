@@ -28,11 +28,11 @@ export function BookStrip({ positions, investedPct, asOfDate }: BookStripProps) 
     .sort((a, b) => Math.abs(b.day_change_pct ?? 0) - Math.abs(a.day_change_pct ?? 0));
 
   return (
-    <section data-brief-section="book" className="border-b border-hair px-5 py-5 sm:px-7">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+    <section data-brief-section="book" className="h-full border border-hair bg-surface">
+      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-hair px-5 py-4 sm:px-6">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Wallet size={14} className="text-ink-mute" />
-          <h2 className="text-xs font-bold uppercase tracking-widest text-ink-mute">
+          <h2 className="font-mono text-[10px] uppercase text-ink-mute">
             The book today
           </h2>
           {/* The book's OWN date (nav_history), not the digest date — research can
@@ -46,22 +46,25 @@ export function BookStrip({ positions, investedPct, asOfDate }: BookStripProps) 
         >
           All holdings →
         </Link>
-      </div>
+      </header>
 
       {/* Reconciled Invested / Cash header (F3) */}
-      <div className="mb-3 flex gap-6 font-mono text-xs tabular-nums">
-        <span className="text-ink-soft">
-          Invested <span className="text-ink">{invested.toFixed(0)}%</span>
-        </span>
-        <span className="text-ink-soft">
-          Cash <span className="text-ink">{cashPct.toFixed(0)}%</span>
-        </span>
+      <div className="grid grid-cols-2 border-b border-hair font-mono tabular-nums">
+        <div className="border-r border-hair px-5 py-3 sm:px-6">
+          <span className="text-[10px] uppercase text-ink-mute">Invested</span>
+          <span className="ml-2 text-sm font-semibold text-ink">{invested.toFixed(0)}%</span>
+        </div>
+        <div className="px-5 py-3 sm:px-6">
+          <span className="text-[10px] uppercase text-ink-mute">Cash</span>
+          <span className="ml-2 text-sm font-semibold text-ink">{cashPct.toFixed(0)}%</span>
+        </div>
       </div>
 
-      {held.length === 0 ? (
-        <p className="text-sm text-ink-mute">No positions held yet — the book is all cash.</p>
-      ) : (
-        <ul className="divide-y divide-hair/60">
+      <div className="px-5 py-3 sm:px-6">
+        {held.length === 0 ? (
+          <p className="py-2 text-sm text-ink-mute">No positions held yet — the book is all cash.</p>
+        ) : (
+          <ul className="divide-y divide-hair/60">
           {held.map((r, i) => {
             const dc = r.day_change_pct;
             const dcColor =
@@ -85,8 +88,9 @@ export function BookStrip({ positions, investedPct, asOfDate }: BookStripProps) 
               </li>
             );
           })}
-        </ul>
-      )}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

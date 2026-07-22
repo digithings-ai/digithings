@@ -23,9 +23,6 @@ vi.mock('@/components/pipeline/PipelineCanvas', () => ({
 vi.mock('@/components/pipeline/PipelineNodeDetail', () => ({
   default: () => null,
 }));
-vi.mock('@/components/pipeline/PipelineSummaryStrip', () => ({
-  default: () => createElement('div', null, 'summary-strip'),
-}));
 vi.mock('@/components/pipeline/PipelineDaySelector', () => ({
   default: () => createElement('div', null, 'day-selector'),
 }));
@@ -50,6 +47,12 @@ describe('app/pipeline/page', () => {
     expect(html).toContain('data-testid="pipeline-command-band"');
     expect(html).toContain('data-testid="pipeline-workflow"');
     expect(html.indexOf('pipeline-command-band')).toBeLessThan(html.indexOf('pipeline-workflow'));
+    expect(html).toContain('min-h-[calc(100dvh-125px)]');
+    expect(html).toContain('md:min-h-0');
+    expect(html).toContain('min-h-12');
+    expect(html).not.toContain('How today');
+    expect(html).not.toContain('research → deliberation → selection');
+    expect(html).not.toContain('summary-strip');
     expect(html).not.toContain('glass-card');
   });
 

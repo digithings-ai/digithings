@@ -109,6 +109,9 @@ describe('Today (Overview) page', () => {
     const html = renderToStaticMarkup(createElement(OverviewPage));
     expect(html).toContain('data-testid="brief-workspace"');
     expect(html).toContain('aria-label="Daily investment brief"');
+    expect(html).toContain('data-region="brief-analysis-grid"');
+    expect(html).toContain('lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]');
+    expect(html).toContain('// daily brief');
     expect(html).not.toContain('<main');
   });
 });

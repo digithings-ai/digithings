@@ -25,11 +25,14 @@ export function WhatToWatch({ actionables, risks, asOfDate }: WhatToWatchProps) 
   if (acts.length === 0 && tails.length === 0) return null;
 
   return (
-    <section data-brief-section="watch" className="border-b border-hair px-5 py-5 sm:px-7">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+    <section
+      data-brief-section="watch"
+      className="h-full border border-hair bg-surface"
+    >
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-hair px-5 py-4 sm:px-6">
         <div className="flex items-center gap-2">
           <Eye size={14} className="text-ink-mute" />
-          <h2 className="text-xs font-bold uppercase tracking-widest text-ink-mute">
+          <h2 className="font-mono text-[10px] uppercase text-ink-mute">
             What to watch
           </h2>
         </div>
@@ -39,10 +42,11 @@ export function WhatToWatch({ actionables, risks, asOfDate }: WhatToWatchProps) 
         >
           See the full read →
         </Link>
-      </div>
+      </header>
 
-      {acts.length > 0 ? (
-        <ol className="space-y-2.5">
+      <div className="px-5 py-4 sm:px-6">
+        {acts.length > 0 ? (
+          <ol className="space-y-3">
           {acts.map((a, i) => (
             <li key={`${a.label}-${i}`} className="flex gap-3">
               <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-hair font-mono text-[11px] tabular-nums text-ink-mute">
@@ -56,11 +60,11 @@ export function WhatToWatch({ actionables, risks, asOfDate }: WhatToWatchProps) 
               </div>
             </li>
           ))}
-        </ol>
-      ) : null}
+          </ol>
+        ) : null}
 
-      {tails.length > 0 ? (
-        <div className="mt-4 border-t border-hair pt-3">
+        {tails.length > 0 ? (
+          <div className="mt-4 border-t border-hair pt-3">
           <div className="mb-2 flex items-center gap-2">
             <AlertTriangle size={12} className="text-warn" />
             <h3 className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
@@ -84,8 +88,9 @@ export function WhatToWatch({ actionables, risks, asOfDate }: WhatToWatchProps) 
               </li>
             ))}
           </ul>
-        </div>
-      ) : null}
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }

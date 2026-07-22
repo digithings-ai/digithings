@@ -91,7 +91,7 @@ export function TodaySummaries({
     <section
       data-brief-section="doorways"
       aria-label="Brief destinations"
-      className="grid grid-cols-1 divide-y divide-hair sm:grid-cols-3 sm:divide-x sm:divide-y-0"
+      className="grid grid-cols-1 divide-y divide-hair border border-hair bg-surface sm:grid-cols-3 sm:divide-x sm:divide-y-0"
     >
       {/* The read */}
       <Doorway

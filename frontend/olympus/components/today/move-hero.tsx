@@ -111,88 +111,89 @@ export function MoveHero({
     nav.excessPct == null ? 'text-ink-mute' : nav.excessPct >= 0 ? 'text-up' : 'text-down';
 
   return (
-    <section data-brief-section="command" className="overflow-hidden border-b border-hair">
-      <div className="px-5 pt-5 pb-6 sm:px-7">
-        {/* Quiet regime ribbon */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className={`text-[10px] font-bold uppercase tracking-widest ${accent.label}`}>
-              Regime
-            </span>
-            <span className="text-xs text-ink-soft truncate">{regime}</span>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <AsOfBadge date={asOf} />
-            {runType ? (
-              // Reference badge dress is already uppercase mono micro-caps —
-              // the old `uppercase tracking-wider` utilities are redundant.
-              <Badge variant="default">{runType}</Badge>
-            ) : null}
-            <Badge variant={accent.badge}>{regimeLabel}</Badge>
-          </div>
+    <section
+      data-brief-section="command"
+      className="overflow-hidden border border-hair bg-surface"
+    >
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-hair px-5 py-4 sm:px-6">
+        <div className="min-w-0">
+          <p className="font-mono text-[10px] uppercase text-ink-mute">{'// daily brief'}</p>
+          <p className={`mt-1 truncate text-xs font-medium ${accent.label}`}>{regime}</p>
         </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <AsOfBadge date={asOf} />
+          {runType ? <Badge variant="default">{runType}</Badge> : null}
+          <Badge variant={accent.badge}>{regimeLabel}</Badge>
+        </div>
+      </header>
 
-        {/* THE READ — the marquee. Date wears the shared as-of format so the
-            kicker, the ribbon badge, and the NAV line all read alike (#1553). */}
-        <p className="mt-4 text-[11px] font-bold uppercase tracking-widest text-ink-mute">
-          Brief · {asOf ? formatAsOf(asOf) : '—'}
+      <div className="px-5 py-5 sm:px-6 sm:py-6">
+        <p className="font-mono text-[10px] uppercase text-ink-mute">
+          Investment command · {asOf ? formatAsOf(asOf) : '—'}
         </p>
-        <h1 className="font-display text-3xl sm:text-4xl leading-tight tracking-tight mt-1 text-ink">
+        <h1 className="mt-2 max-w-5xl font-display text-2xl leading-tight text-ink sm:text-3xl">
           {headline ?? regime}
         </h1>
-        {confidence != null ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-md border border-hair px-2 py-0.5 font-mono text-[11px] tabular-nums text-ink-soft">
+
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-ink-soft">
+          {changeCount === 0 ? (
+            <span>{moveStatus}</span>
+          ) : (
+            <details>
+              <summary className="cursor-pointer marker:text-ink-mute">{moveStatus}</summary>
+              <div className="mt-3">
+                <TodayActionsPanel actions={actions} rationaleByTicker={rationaleByTicker} bare />
+              </div>
+            </details>
+          )}
+          {confidence != null ? (
+            <span className="border-l border-hair pl-3 font-mono text-[11px] tabular-nums text-ink-mute">
               {confidence.toFixed(1)} confidence
             </span>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
+      </div>
 
-        {/* The move — demoted to a one-line status */}
-        {changeCount === 0 ? (
-          <p className="mt-4 text-sm text-ink-soft">{moveStatus}</p>
-        ) : (
-          <details className="mt-4">
-            <summary className="cursor-pointer text-sm text-ink-soft marker:text-ink-mute">
-              {moveStatus}
-            </summary>
-            <div className="mt-3">
-              <TodayActionsPanel actions={actions} rationaleByTicker={rationaleByTicker} bare />
-            </div>
-          </details>
-        )}
-
-        {/* NAV status line — honest for one point */}
-        <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-sm tabular-nums">
-          <span className="text-[11px] uppercase tracking-widest text-ink-mute">NAV</span>
-          <span className="text-base font-semibold text-ink">
+      <div className="grid grid-cols-2 border-t border-hair md:grid-cols-4">
+        <div className="border-b border-r border-hair px-5 py-4 md:border-b-0 sm:px-6">
+          <p className="font-mono text-[10px] uppercase text-ink-mute">NAV</p>
+          <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-ink">
             {nav.index == null ? '—' : nav.index.toFixed(1)}
-          </span>
-          {nav.sincePct != null ? (
-            <span>
-              <span className={sinceColor}>{signedPct(nav.sincePct)}</span>
-              <span className="text-ink-soft"> since inception</span>
-              {nav.sinceDate ? (
-                <span className="text-ink-mute"> ({formatAsOf(nav.sinceDate)})</span>
-              ) : null}
-            </span>
-          ) : null}
-          {nav.dailyPct != null ? (
-            <span>
-              <span className={dailyColor}>{signedPct(nav.dailyPct)}</span>
-              <span className="text-ink-soft">
-                {nav.asOfDate && asOf && nav.asOfDate !== asOf
-                  ? ` on ${formatAsOf(nav.asOfDate)}`
-                  : ' today'}
-              </span>
-            </span>
-          ) : null}
-          {nav.benchTicker && nav.excessPct != null ? (
-            <span>
-              <span className={excessColor}>{signedPct(nav.excessPct)}</span>
-              <span className="text-ink-soft"> vs {nav.benchTicker}</span>
-            </span>
-          ) : null}
+          </p>
+          <p className="mt-1 text-[11px] text-ink-mute">
+            {nav.asOfDate ? formatAsOf(nav.asOfDate) : 'No observation'}
+          </p>
+        </div>
+        <div className="border-b border-hair px-5 py-4 md:border-b-0 md:border-r sm:px-6">
+          <p className="font-mono text-[10px] uppercase text-ink-mute">Portfolio return</p>
+          <p className={`mt-1 font-mono text-xl font-semibold tabular-nums ${sinceColor}`}>
+            {signedPct(nav.sincePct)}
+          </p>
+          <p className="mt-1 text-[11px] text-ink-mute">
+            since inception{nav.sinceDate ? ` · ${formatAsOf(nav.sinceDate)}` : ''}
+          </p>
+        </div>
+        <div className="border-r border-hair px-5 py-4 sm:px-6">
+          <p className="font-mono text-[10px] uppercase text-ink-mute">Latest session</p>
+          <p className={`mt-1 font-mono text-xl font-semibold tabular-nums ${dailyColor}`}>
+            {signedPct(nav.dailyPct)}
+          </p>
+          <p className="mt-1 text-[11px] text-ink-mute">
+            {nav.dailyPct == null
+              ? 'No second observation'
+              : nav.asOfDate && asOf && nav.asOfDate !== asOf
+                ? `on ${formatAsOf(nav.asOfDate)}`
+                : 'today'}
+          </p>
+        </div>
+        <div className="px-5 py-4 sm:px-6">
+          <p className="font-mono text-[10px] uppercase text-ink-mute">Active return</p>
+          <p className={`mt-1 font-mono text-xl font-semibold tabular-nums ${excessColor}`}>
+            {signedPct(nav.excessPct)}
+          </p>
+          <p className="mt-1 text-[11px] text-ink-mute">
+            {nav.benchTicker ? `Versus ${nav.benchTicker}` : 'No benchmark'}
+          </p>
         </div>
       </div>
     </section>

@@ -35,7 +35,8 @@ describe('MoveHero', () => {
     expect(html).toContain('0.7'); // confidence chip
     expect(html).toContain('98.6'); // NAV index
     expect(html).toContain('since inception'); // honest since-inception clause
-    expect(html).toContain('text-down">-0.7%</span><span class="text-ink-soft"> since inception');
+    expect(html).toContain('Portfolio return');
+    expect(html).toContain('text-down">-0.7%</p>');
     expect(html).toContain('1 change today'); // demoted move status (1 non-HOLD action)
     expect(html).toContain('data-brief-section="command"');
     expect(html).not.toContain('glass-card');
