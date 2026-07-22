@@ -32,11 +32,21 @@ export function sortDocsByDateDesc<T extends { date?: string | null }>(docs: T[]
   return [...docs].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
+/**
+ * Run-level PM record for the memo history list. With the Documents tab
+ * retired, this list is the last archive surface for run-level portfolio
+ * docs (allocation memos, thesis exploration, vehicle maps, screeners,
+ * legacy deliberations) — only per-ticker artifacts are excluded, since
+ * those already surface in the Latest-run panels and Pipeline node detail.
+ */
 export function isPmMemoHistoryDoc(doc: Pick<Doc, 'path'>): boolean {
   const path = (doc.path || '').toLowerCase();
-  if (path.startsWith('pm-allocation-memo/')) return true;
-  const stem = (path.split('/').pop() || '').replace(/\.(json|md)$/i, '');
-  return stem === 'pm-rebalance' || stem === 'rebalance-decision';
+  return !(
+    path.startsWith('deliberation/') ||
+    path.startsWith('deliberation-transcript/') ||
+    path.startsWith('deliberation-transcript-index/') ||
+    path.startsWith('asset-recommendations/')
+  );
 }
 
 export function PmRebalancePanel({ payload }: { payload: Record<string, unknown> }) {

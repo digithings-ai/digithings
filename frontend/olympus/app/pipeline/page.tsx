@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import PipelineClient from '@/components/pipeline/PipelineClient';
+import PipelineHeading from '@/components/pipeline/PipelineHeading';
 import PageSkeleton from '@/components/page-skeleton';
 
 /**
@@ -17,9 +18,14 @@ export default function PipelinePage() {
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <Suspense
         fallback={
-          <div className="px-6 py-5">
-            <PageSkeleton bare />
-          </div>
+          <>
+            <header className="border-y border-hair bg-surface px-4 py-4 md:px-6">
+              <PipelineHeading />
+            </header>
+            <div className="px-6 py-5">
+              <PageSkeleton bare />
+            </div>
+          </>
         }
       >
         <PipelineClient />
