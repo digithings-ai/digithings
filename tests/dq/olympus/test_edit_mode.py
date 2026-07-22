@@ -220,3 +220,104 @@ class TestEditModeTools:
         assert fetcher.fetch_prior_document("macro", as_of_date=date(2026, 6, 19)) == {
             "headline": "as of prior"
         }
+
+
+def _patch(ops: list[dict[str, object]]) -> DocumentPatch:
+    return DocumentPatch.model_validate(
+        {
+            "date": "2026-07-22",
+            "prior_date": "2026-07-21",
+            "target_document_key": "inst-institutional-flows",
+            "status": "updated",
+            "ops": ops,
+        }
+    )
+
+
+@pytest.mark.unit
+class TestMergeAppendTokenAndClamps:
+    """#1641 regressions — RFC 6901 ``-`` append token + fail-soft list indices.
+
+    Exact defect signatures from runs 29846393424 / 29925232768:
+    ``invalid literal for int() with base 10: '-'``, ``list assignment index out of
+    range``, ``duplicate set on path '/material_findings/-' in one patch``.
+    """
+
+    def test_set_on_append_token_appends(self) -> None:
+        from digiquant.olympus.edit_mode import apply_ops
+
+        doc = apply_ops(
+            {"material_findings": [{"t": "old"}]},
+            [{"op": "set", "path": "/material_findings/-", "value": {"t": "new"}}],
+        )
+        assert [f["t"] for f in doc["material_findings"]] == ["old", "new"]
+
+    def test_two_sets_on_append_token_are_sequential_appends(self) -> None:
+        result = merge_document_patch(
+            {"material_findings": ["a"]},
+            _patch(
+                [
+                    {"op": "set", "path": "/material_findings/-", "value": "b"},
+                    {"op": "set", "path": "/material_findings/-", "value": "c"},
+                ]
+            ),
+        )
+        assert result.materialized["material_findings"] == ["a", "b", "c"]
+
+    def test_duplicate_set_on_concrete_path_still_rejected(self) -> None:
+        with pytest.raises(MergeError, match="duplicate set"):
+            merge_document_patch(
+                {"headline": "x"},
+                _patch(
+                    [
+                        {"op": "set", "path": "/headline", "value": "y"},
+                        {"op": "set", "path": "/headline", "value": "z"},
+                    ]
+                ),
+            )
+
+    def test_set_past_end_index_appends_instead_of_index_error(self) -> None:
+        from digiquant.olympus.edit_mode import apply_ops
+
+        doc = apply_ops(
+            {"notable_filings": ["a", "b"]},
+            [{"op": "set", "path": "/notable_filings/7", "value": "c"}],
+        )
+        assert doc["notable_filings"] == ["a", "b", "c"]
+
+    def test_append_via_append_token_targets_the_list_itself(self) -> None:
+        from digiquant.olympus.edit_mode import apply_ops
+
+        doc = apply_ops(
+            {"material_findings": ["a"]},
+            [{"op": "append", "path": "/material_findings/-", "value": "b"}],
+        )
+        assert doc["material_findings"] == ["a", "b"]
+
+    def test_remove_append_token_pops_last_and_oor_is_noop(self) -> None:
+        from digiquant.olympus.edit_mode import apply_ops
+
+        doc = apply_ops(
+            {"xs": ["a", "b", "c"]},
+            [
+                {"op": "remove", "path": "/xs/-"},
+                {"op": "remove", "path": "/xs/9"},
+            ],
+        )
+        assert doc["xs"] == ["a", "b"]
+
+    def test_mid_path_append_token_addresses_last_element(self) -> None:
+        from digiquant.olympus.edit_mode import apply_ops
+
+        doc = apply_ops(
+            {"material_findings": [{"note": "old1"}, {"note": "old2"}]},
+            [{"op": "set", "path": "/material_findings/-/note", "value": "patched"}],
+        )
+        assert doc["material_findings"][-1]["note"] == "patched"
+
+    def test_unresolvable_op_raises_merge_error_not_raw_crash(self) -> None:
+        with pytest.raises(MergeError):
+            merge_document_patch(
+                {"headline": "x"},
+                _patch([{"op": "set", "path": "/headline/3", "value": "y"}]),
+            )
