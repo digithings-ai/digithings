@@ -1,206 +1,126 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, it, expect, vi } from 'vitest';
-import { buildOlympusTearsheet } from '@/lib/observability-queries';
+import { describe, expect, it } from 'vitest';
 import { OlympusTearsheetView } from './OlympusTearsheetView';
-import type { TableRow } from '@/lib/database.types';
+import type { OlympusTearsheet } from './types';
 
-vi.mock('@/components/observability/AttributionTab', () => ({
-  default: () => createElement('div', { 'data-testid': 'attribution' }),
-}));
+const sample: OlympusTearsheet = {
+  currentNav: 112.5,
+  netReturnPct: 12.5,
+  benchmarkReturnPct: 8.25,
+  relativeReturnPct: 4.25,
+  benchmarkTicker: 'SPY',
+  returnsSource: 'persisted',
+  metricsAsOf: '2026-07-17',
+  inceptionDate: '2026-05-01',
+  holdingsAsOf: '2026-07-17',
+  generatedAt: '2026-07-17T22:00:00Z',
+  navSeries: [
+    { date: '2026-05-01', nav: 100, returnPct: 0 },
+    { date: '2026-07-17', nav: 112.5, returnPct: 12.5 },
+  ],
+  contributionSeries: [
+    { t: '2026-05-01', returnPct: 0, contributions: { AAA: 0 } },
+    { t: '2026-07-17', returnPct: 12.5, contributions: { AAA: 1 } },
+  ],
+  currentHoldings: [
+    {
+      ticker: 'AAA',
+      category: 'Technology',
+      weightPct: 20,
+      unrealizedReturnPct: 5,
+      realizedReturnPct: null,
+      attributionDate: '2026-07-17',
+    },
+  ],
+  historicalHoldings: [
+    {
+      ticker: 'OLD',
+      category: 'Industrials',
+      weightPct: 10,
+      unrealizedReturnPct: null,
+      realizedReturnPct: -2,
+      attributionDate: '2026-06-20',
+    },
+  ],
+};
 
-const navRow = (date: string, nav: number): TableRow<'nav_history'> => ({
-  date,
-  nav,
-  cash_pct: 25,
-  invested_pct: 75,
-});
-
-function html(data: Parameters<typeof OlympusTearsheetView>[0]['data']) {
+function html(data: OlympusTearsheet = sample) {
   return renderToStaticMarkup(createElement(OlympusTearsheetView, { data }));
 }
 
 describe('OlympusTearsheetView', () => {
-  it('single NAV point → inception card, not a single-dot chart', () => {
-    const data = buildOlympusTearsheet({
-      nav: [navRow('2026-06-23', 99.32)],
-      decisions: [],
-      metrics: null,
-      attribution: [],
-    });
-    const out = html(data);
-    expect(out).toContain('Olympus'); // serif H1
-    expect(out).toMatch(/live since 2026-06-23/);
-    expect(out).toMatch(/equity curve accrues daily/);
-    // the live equity TimeSeries must NOT render with 1 point
-    expect(out).not.toContain('class="ts-line');
+  it('prioritizes NAV, persisted portfolio return, and active return', () => {
+    const out = html();
+    expect(out).toContain('>NAV<');
+    expect(out).toContain('Portfolio return');
+    expect(out).toContain('Active return');
+    expect(out).toContain('112.50');
+    expect(out).toContain('12.50%');
+    expect(out).toContain('4.25%');
+    expect(out).toContain('persisted metrics');
   });
 
-  it('0 resolved decisions → in-flight line, not an empty track-record chart', () => {
-    const data = buildOlympusTearsheet({
-      nav: [navRow('2026-06-23', 99.32)],
-      decisions: [
-        {
-          id: 'q',
-          run_id: 'r',
-          run_date: '2026-06-23',
-          ticker: 'QQQ',
-          stance: 'buy',
-          conviction: 3,
-          thesis: null,
-          benchmark: 'SPY',
-          holding_days: 10,
-          status: 'pending',
-          actual_return: null,
-          alpha: null,
-          reflection: null,
-          resolved_at: null,
-          created_at: null,
-        },
-      ],
-      metrics: null,
-      attribution: [],
-    });
-    const out = html(data);
-    expect(out).toMatch(/1 decision in flight|decisions in flight/);
-    expect(out).toMatch(/track record resolves as holding windows close/);
+  it('renders one additive contribution and exact portfolio-return chart', () => {
+    const out = html();
+    expect(out).toContain('data-testid="portfolio-contribution-chart"');
+    expect(out).toContain('data-chart-layer="contributions"');
+    expect(out).toContain('data-chart-layer="portfolio-return"');
+    expect(out).toContain('data-series="AAA"');
+    expect(out).not.toContain('data-testid="portfolio-return-chart"');
+    expect(out).not.toContain('data-testid="position-return-chart"');
+    expect(out.toLowerCase()).not.toContain('drawdown');
   });
 
-  it('export button is present in all states', () => {
-    const data = buildOlympusTearsheet({ nav: [], decisions: [], metrics: null, attribution: [] });
-    expect(html(data)).toMatch(/Download PDF|Export/);
+  it('uses an icon-only accessible PDF control', () => {
+    const out = html();
+    expect(out).toContain('aria-label="Download performance tear sheet as PDF"');
+    expect(out).not.toContain('>Download PDF<');
   });
 
-  it('≥2 NAV + resolved decisions → renders the equity line and the calibration chart', () => {
-    const data = buildOlympusTearsheet({
-      nav: [navRow('2026-06-23', 100), navRow('2026-06-24', 102)],
-      decisions: [
-        {
-          id: 'a',
-          run_id: 'r',
-          run_date: '2026-06-23',
-          ticker: 'IJR',
-          stance: 'buy',
-          conviction: 5,
-          thesis: null,
-          benchmark: 'SPY',
-          holding_days: 10,
-          status: 'resolved',
-          actual_return: 0.05,
-          alpha: 0.04,
-          reflection: null,
-          resolved_at: null,
-          created_at: null,
-        },
-      ],
-      metrics: null,
-      attribution: [],
-    });
-    const out = html(data);
-    expect(out).toContain('ts-line'); // equity curve drawn
-    expect(out).toMatch(/Conviction calibration/);
-    expect(out).toContain('ts-bar'); // SignedBars rendered
+  it('offers open and closed position performance as tabs', () => {
+    const out = html();
+    expect(out).toContain('Open positions');
+    expect(out).toContain('Closed positions');
+    expect(out).toContain('role="tablist"');
+    expect(out).toContain('role="tabpanel"');
   });
 
-  it('uses a flat command band, asymmetric chart workspace, and bounded decision ledger', () => {
-    const data = buildOlympusTearsheet({
-      nav: [navRow('2026-06-23', 100), navRow('2026-06-24', 102)],
-      decisions: [
-        {
-          id: 'a',
-          run_id: 'r',
-          run_date: '2026-06-23',
-          ticker: 'IJR',
-          stance: 'buy',
-          conviction: 5,
-          thesis: null,
-          benchmark: 'SPY',
-          holding_days: 10,
-          status: 'resolved',
-          actual_return: 0.05,
-          alpha: 0.04,
-          reflection: null,
-          resolved_at: null,
-          created_at: null,
-        },
-      ],
-      metrics: null,
-      attribution: [],
-    });
-    const out = html(data);
-
-    expect(out).toContain('data-testid="performance-command-band"');
-    expect(out).toContain('data-region="performance-chart-grid"');
-    expect(out).toContain('data-layout="asymmetric"');
-    expect(out).toContain('data-region="decision-ledger"');
-    expect(out).not.toContain('glass-card');
+  it('shows current persisted holding performance without decision diagnostics', () => {
+    const out = html();
+    expect(out).toContain('AAA');
+    expect(out).toContain('Unrealized');
+    expect(out).not.toContain('Contribution');
+    expect(out).not.toContain('hit rate');
+    expect(out).not.toContain('mean alpha');
+    expect(out).not.toContain('Conviction calibration');
+    expect(out).not.toContain('live nav');
   });
 
-  it('≤12 resolved decisions → renders all rows without expand control', () => {
-    const decisions = Array.from({ length: 10 }, (_, i) => ({
-      id: `d${i}`,
-      run_id: 'r',
-      run_date: `2026-06-${String(i + 1).padStart(2, '0')}`,
-      ticker: `T${i}`,
-      stance: 'buy',
-      conviction: 3,
-      thesis: null,
-      benchmark: 'SPY',
-      holding_days: 10,
-      status: 'resolved' as const,
-      actual_return: 0.01,
-      alpha: 0.005,
-      reflection: null,
-      resolved_at: null,
-      created_at: null,
+  it('keeps every holding row mounted inside the contained table scroll', () => {
+    const currentHoldings = Array.from({ length: 11 }, (_, index) => ({
+      ...sample.currentHoldings[0],
+      ticker: `T${index + 1}`,
     }));
-    const data = buildOlympusTearsheet({
-      nav: [navRow('2026-06-23', 100), navRow('2026-06-24', 102)],
-      decisions,
-      metrics: null,
-      attribution: [],
-    });
-    const out = html(data);
-    // All 10 tickers should be visible
-    expect(out).toContain('T0');
-    expect(out).toContain('T9');
-    // No expand button when ≤12 rows
-    expect(out).not.toMatch(/Show.*older/i);
-    expect(out).not.toMatch(/Show.*fewer/i);
+    const out = html({ ...sample, currentHoldings });
+    expect(out).toContain('T11');
+    expect(out).not.toContain('Showing latest 10 rows');
   });
 
-  it('>12 resolved decisions → renders 12 most-recent rows + "Show N older" button by default', () => {
-    const decisions = Array.from({ length: 20 }, (_, i) => ({
-      id: `d${i}`,
-      run_id: 'r',
-      run_date: `2026-${String(Math.floor(i / 30) + 1).padStart(2, '0')}-${String((i % 30) + 1).padStart(2, '0')}`,
-      ticker: `T${i}`,
-      stance: 'buy',
-      conviction: 3,
-      thesis: null,
-      benchmark: 'SPY',
-      holding_days: 10,
-      status: 'resolved' as const,
-      actual_return: 0.01,
-      alpha: 0.005,
-      reflection: null,
-      resolved_at: null,
-      created_at: null,
-    }));
-    const data = buildOlympusTearsheet({
-      nav: [navRow('2026-06-23', 100), navRow('2026-06-24', 102)],
-      decisions,
-      metrics: null,
-      attribution: [],
+  it('renders a truthful empty state when persisted metrics are absent', () => {
+    const out = html({
+      ...sample,
+      netReturnPct: null,
+      benchmarkReturnPct: null,
+      relativeReturnPct: null,
+      returnsSource: 'unavailable',
+      metricsAsOf: null,
+      currentNav: null,
+      navSeries: [],
+      contributionSeries: [],
+      currentHoldings: [],
     });
-    const out = html(data);
-    // Newest 12 tickers should be visible (T8 through T19)
-    expect(out).toContain('<td>T19</td>');
-    expect(out).toContain('<td>T8</td>');
-    // Older tickers should NOT be visible by default
-    expect(out).not.toContain('<td>T0</td>');
-    expect(out).not.toContain('<td>T7</td>');
-    // "Show N older" button should be present
-    expect(out).toMatch(/Show 8 older/i);
+    expect(out).toContain('awaiting persisted metrics');
+    expect(out).toContain('No open position performance is stored yet.');
   });
 });

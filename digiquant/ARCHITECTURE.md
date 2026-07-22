@@ -856,6 +856,21 @@ flowchart LR
 | `decision_lessons` | `decision_log` | `fetch_recent_lessons` | PM `past_context` (bounded) | older lessons via `decision_log` query |
 | `phase7c_analysts` | in-run state (`phase_hermes.asset_analysts`) | — | today's fan-out only | prior day → `prior_analyst_by_ticker` |
 
+`portfolio_metrics` persists two distinct return horizons. `pnl_pct` is the daily
+portfolio return. `net_return_pct` is the simple return between the first and latest
+stored NAV observations; `benchmark_return_pct` uses the first and latest benchmark
+closes available inside that NAV date range; `relative_return_pct` is their arithmetic
+difference in percentage points. All metric writers use
+`digiquant.olympus.performance_returns.calculate_performance_returns`; frontend clients
+must read these fields when present. The Olympus Performance view fills only missing
+fields with the same deterministic first/latest calculation over live `nav_history` and
+the benchmark closes inside that exact NAV window, and labels the result as a live-history
+or mixed fallback. Rows in
+`position_attribution` retain their own stored calculation window and are not presented
+as inception-to-date contribution. Its cumulative contribution chart instead applies each
+position snapshot's prior weight to the next interval's price return and overlays the exact
+NAV-rebased portfolio return.
+
 **Excluded from `latest_segments`:** `analyst/*` and `deliberation/*` keys — loaded
 separately so research nodes never pay the per-ticker decision-artifact token tax.
 
