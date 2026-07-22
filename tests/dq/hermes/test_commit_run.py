@@ -434,3 +434,113 @@ class TestCanonicalThesisIds:
         spy_row = next((r for r in positions_written if r.get("ticker") == "SPY"), None)
         assert spy_row is not None
         assert spy_row.get("thesis_id") == "vehicle-spy"
+
+
+class TestMemoUnaddressedHeldCarry:
+    """#1649 — held names the H7 memo omits are carried, never dropped or blocked.
+
+    Run 29936849103 (2026-07-22): the PM memo's roster omitted SEVEN held tickers
+    (neither ``long`` nor ``flat``); H8 dropped them and H9 froze the commit with
+    "held ticker X missing from book and not flat in H7". Memo coverage is LLM
+    discipline — an owned position with no explicit instruction defaults to hold.
+    """
+
+    _SPY_ANALYST = {
+        "ticker": "SPY",
+        "stance": "buy",
+        "conviction_score": 4,
+        "thesis": "x",
+        "risks": "",
+        "sources": [],
+    }
+
+    def _memo_spy_long_only(self) -> PMDirectionMemo:
+        return PMDirectionMemo(
+            date=RUN_DATE,
+            roster=[TickerDirection(ticker="SPY", direction="long", conviction_rank=1)],
+        )
+
+    def test_memo_omitted_held_name_in_book_commits(self) -> None:
+        """Held + analyzed + memo-omitted (the DBO shape) commits once carried."""
+        dbo_analyst = dict(self._SPY_ANALYST, ticker="DBO", thesis="oil carry")
+        client = FakeSupabaseClient()
+        state = _state(
+            sized_book={
+                "recommended_portfolio": [
+                    {"ticker": "SPY", "target_pct": 60.0},
+                    {"ticker": "DBO", "target_pct": 40.0},
+                ],
+                "actions": [],
+                "notes": "",
+            },
+            analysts={"SPY": self._SPY_ANALYST, "DBO": dbo_analyst},
+            prior_book_held=("DBO",),
+            pm_memo=self._memo_spy_long_only(),
+        )
+        out = _run(client, state)
+        assert not out.get("errors"), out.get("errors")
+        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert manifest.get("status") == "committed"
+
+    def test_memo_omitted_held_name_without_analyst_doc_still_commits(self) -> None:
+        """Loop-2 exemption: a carried held name whose H5 failed today is not a stray."""
+        client = FakeSupabaseClient()
+        state = _state(
+            sized_book={
+                "recommended_portfolio": [
+                    {"ticker": "SPY", "target_pct": 60.0},
+                    {"ticker": "DBO", "target_pct": 40.0},
+                ],
+                "actions": [],
+                "notes": "",
+            },
+            analysts={"SPY": self._SPY_ANALYST},
+            prior_book_held=("DBO",),
+            pm_memo=self._memo_spy_long_only(),
+        )
+        out = _run(client, state)
+        assert not out.get("errors"), out.get("errors")
+        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert manifest.get("status") == "committed"
+
+    def test_memo_flat_held_name_is_addressed_not_carried(self) -> None:
+        """An explicit ``flat`` is memo-addressed: exits are honored, never resurrected."""
+        from digiquant.olympus.hermes.writers.commit_io import carried_held_tickers
+
+        client = FakeSupabaseClient()
+        state = _state(
+            sized_book={
+                "recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}],
+                "actions": [],
+                "notes": "",
+            },
+            analysts={"SPY": self._SPY_ANALYST},
+            prior_book_held=("TLT",),
+            pm_memo=PMDirectionMemo(
+                date=RUN_DATE,
+                roster=[
+                    TickerDirection(ticker="SPY", direction="long", conviction_rank=1),
+                    TickerDirection(ticker="TLT", direction="flat", conviction_rank=2),
+                ],
+            ),
+        )
+        assert "TLT" not in carried_held_tickers(state)
+        out = _run(client, state)
+        assert not out.get("errors"), out.get("errors")
+        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert manifest.get("status") == "committed"
+
+    def test_carried_set_is_held_only_and_sizing_carries_drifted_weight(self) -> None:
+        """The carry set never widens beyond held names; H8 injects the drifted weight."""
+        from digiquant.olympus.hermes.phases.phase7e_risk_sizing import _held_carry_weights
+        from digiquant.olympus.hermes.writers.commit_io import carried_held_tickers
+
+        state = _state(
+            with_sized_book=False,
+            analysts={"SPY": self._SPY_ANALYST},
+            prior_book_held=("DBO",),
+            pm_memo=self._memo_spy_long_only(),
+        )
+        state.config.preferences["current_weights"] = {"DBO": 12.5, "SPY": 60.0}
+        assert carried_held_tickers(state) == {"DBO"}, "non-held names must never be carried"
+        assert _held_carry_weights(state) == {"DBO": 12.5}
