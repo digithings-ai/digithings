@@ -234,7 +234,14 @@ function SeriesTipContent({ date, value }: { date: string; value: string }) {
   );
 }
 
-function ContributionReturnTipContent({ point }: { point: ContributionReturnPoint }) {
+function ContributionReturnTipContent({
+  point,
+  colors,
+}: {
+  point: ContributionReturnPoint;
+  /** Per-series swatch colors — replaces a header legend, which does not scale past a handful of assets. */
+  colors?: Record<string, string>;
+}) {
   const contributions = Object.entries(point.contributions)
     .filter(([, value]) => value !== 0)
     .sort((left, right) => Math.abs(right[1]) - Math.abs(left[1]));
@@ -244,7 +251,24 @@ function ContributionReturnTipContent({ point }: { point: ContributionReturnPoin
         <div><dt>Date</dt><dd>{point.t.slice(0, 10)}</dd></div>
         <div><dt>Portfolio</dt><dd>{fmtPct(point.returnPct)}</dd></div>
         {contributions.map(([label, value]) => (
-          <div key={label}><dt>{label}</dt><dd>{fmtPct(value)}</dd></div>
+          <div key={label}>
+            <dt>
+              {colors?.[label] ? (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    display: "inline-block",
+                    width: "0.55em",
+                    height: "0.55em",
+                    marginRight: "0.45em",
+                    backgroundColor: colors[label],
+                  }}
+                />
+              ) : null}
+              {label}
+            </dt>
+            <dd>{fmtPct(value)}</dd>
+          </div>
         ))}
       </dl>
     </div>
@@ -1387,7 +1411,7 @@ function ContributionReturnChartBody({
     const index = Math.max(0, Math.min(points.length - 1, Math.floor((x - pad.left) / slot)));
     setHover({
       ...positionHoverTip(event.clientX, event.clientY, wrap, 220, 128),
-      content: <ContributionReturnTipContent point={points[index]} />,
+      content: <ContributionReturnTipContent point={points[index]} colors={colors} />,
     });
   }, [height, pad.left, pad.right, pad.top, plotBottom, points, slot, vbW]);
 
