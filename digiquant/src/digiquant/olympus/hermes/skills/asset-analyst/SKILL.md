@@ -22,10 +22,23 @@ them:
   the horizon. Write it complete; never truncate mid-sentence.
 - ``risks`` — what would invalidate the thesis: the main downside scenarios, the level or
   signal that proves the call wrong, and the key uncertainties. **Never leave this empty.**
-- ``conviction_score`` — calibrate to evidence strength across the full −5…+5 scale; reserve
-  the extremes for genuinely high-confidence calls. Rubric: ±1 = weak lean / one signal;
-  ±2–3 = a clear multi-signal case; ±4–5 = strong, corroborated conviction with a near-term
-  catalyst. Don't cluster at 0/±2 — spread the scale to match the evidence.
+- ``evidence`` — REQUIRED. Itemize your evidence honestly; ``conviction_score`` is
+  **computed from this block by the system** (#1672 — the number you write is ignored
+  when ``evidence`` is present, so spend your effort on the counts, not the score):
+  - ``independent_confirming_signals`` (0–5): how many INDEPENDENT families confirm the
+    thesis today — technicals, fundamentals, flows/positioning, macro regime,
+    sentiment/news. Count a family only when you cite concrete evidence for it in this
+    payload.
+  - ``contradicting_signals`` (0–5): families actively contradicting the thesis. Be
+    critical — a zero here with a mixed tape is a miscount, and inflating confirmations
+    while hiding contradictions produces a conviction the deliberation will tear apart.
+  - ``catalyst_within_horizon``: true ONLY for a specific, dated/window-bound catalyst
+    named in the thesis.
+  - ``trend_alignment``: with / against / mixed vs the prevailing trend.
+  - ``evidence_quality``: high / medium / low — thin or stale inputs are 'low' and cap
+    conviction; grade honestly.
+  High conviction is structurally rare: it requires ≥4 confirming families, ≤1
+  contradiction, a dated catalyst, high-quality evidence, and not fighting the trend.
 - ``sources`` — the specific data artifacts you consulted (ticker, date, field).
 
 Stance hysteresis: if the underlying data is materially unchanged from your prior read on
