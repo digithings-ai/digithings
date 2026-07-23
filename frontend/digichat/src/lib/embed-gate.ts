@@ -4,8 +4,9 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { logStorageFailure } from "@/lib/storage-debug";
+import { EMBED_FREE_TURN_LIMIT, EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 
-export const EMBED_FREE_TURN_LIMIT = 3;
+export { EMBED_FREE_TURN_LIMIT, EMBED_TRIAL_TURN_LIMIT };
 const STORAGE_PREFIX = "digichat_embed_turns:";
 
 /**

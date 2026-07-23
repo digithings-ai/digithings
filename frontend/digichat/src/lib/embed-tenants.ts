@@ -17,7 +17,7 @@ export type EmbedTenantConfig = {
   slug: string;
   aliases?: string[];
   backend: EmbedBackendConfig;
-  gateMode: "turn_limited" | "ungated";
+  gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
   accent?: { color: string; foreground: string };
   attribution: boolean;
@@ -118,8 +118,8 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: backend.type must be "digigraph", "external-relay", or "foundry"`);
   }
 
-  if (v.gateMode !== "turn_limited" && v.gateMode !== "ungated") {
-    throw new Error(`${ctx}: gateMode must be "turn_limited" or "ungated"`);
+  if (v.gateMode !== "turn_limited" && v.gateMode !== "ungated" && v.gateMode !== "trial_form") {
+    throw new Error(`${ctx}: gateMode must be "turn_limited", "ungated", or "trial_form"`);
   }
 
   if (v.theme !== undefined && v.theme !== "dark" && v.theme !== "light") {
