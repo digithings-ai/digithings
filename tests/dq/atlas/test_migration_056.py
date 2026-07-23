@@ -71,3 +71,18 @@ def test_vehicle_rewire_deduplicates_before_upsert(sql: str) -> None:
     assert "DISTINCT ON (vehicles.date, mapping.canonical_thesis_id, vehicles.ticker)" in rewire
     order_by = re.search(r"ORDER BY\s+vehicles\.date,\s*mapping\.canonical_thesis_id,\s*vehicles\.ticker", rewire)
     assert order_by, "DISTINCT ON requires a matching ORDER BY prefix to pick a deterministic winner"
+
+
+@pytest.mark.unit
+def test_residual_duplicates_swept_before_unique_index(sql: str) -> None:
+    """The enumerated merge map cannot foresee backfill collisions (two live
+    theses slugifying to one topic blocked the index in prod, 2026-07-23).
+    A computed residual sweep must run after the backfill and before the
+    partial unique index, using the index's own predicate."""
+    assert "thesis_topic_residual_map" in sql
+    backfill = sql.index("'legacy-' || substr(md5(thesis_id), 1, 16)")
+    sweep = sql.index("thesis_topic_residual_map")
+    index = sql.index("uq_theses_active_market_topic_date")
+    assert backfill < sweep < index, "sweep must sit between backfill and index"
+    sweep_block = sql[sweep:index]
+    assert "NOT IN ('CLOSED', 'INVALIDATED')" in sweep_block, "sweep must mirror the index predicate"
