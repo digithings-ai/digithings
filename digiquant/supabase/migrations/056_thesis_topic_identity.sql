@@ -100,7 +100,12 @@ INSERT INTO thesis_vehicles AS canonical (
   source_exploration_key,
   created_at
 )
-SELECT
+-- DISTINCT ON: when several duplicate theses collapse into one canonical id,
+-- their vehicle rows can propose the same (date, canonical, ticker) key twice
+-- in this single statement, which ON CONFLICT rejects ("cannot affect row a
+-- second time"). Keep one deterministic winner per key — strongest rank, then
+-- earliest row — before the upsert merges it against any existing canonical.
+SELECT DISTINCT ON (vehicles.date, mapping.canonical_thesis_id, vehicles.ticker)
   vehicles.date,
   mapping.canonical_thesis_id,
   vehicles.ticker,
@@ -114,6 +119,11 @@ FROM thesis_vehicles AS vehicles
 JOIN thesis_topic_merge_map AS mapping
   ON mapping.duplicate_thesis_id = vehicles.thesis_id
 WHERE mapping.duplicate_thesis_id <> mapping.canonical_thesis_id
+ORDER BY vehicles.date,
+         mapping.canonical_thesis_id,
+         vehicles.ticker,
+         vehicles.candidate_rank ASC NULLS LAST,
+         vehicles.created_at ASC
 ON CONFLICT (date, thesis_id, ticker) DO UPDATE
 SET rationale = COALESCE(canonical.rationale, EXCLUDED.rationale),
     exclusion_reasons = COALESCE(canonical.exclusion_reasons, EXCLUDED.exclusion_reasons),
