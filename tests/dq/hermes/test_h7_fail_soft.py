@@ -31,9 +31,7 @@ PRIOR_MEMO_PAYLOAD = {
 
 
 def _state(*, with_prior_memo: bool) -> AtlasResearchState:
-    latest = (
-        {"pm-direction-memo": {"payload": dict(PRIOR_MEMO_PAYLOAD)}} if with_prior_memo else {}
-    )
+    latest = {"pm-direction-memo": {"payload": dict(PRIOR_MEMO_PAYLOAD)}} if with_prior_memo else {}
     return AtlasResearchState(
         run_type="delta",
         run_date=RUN_DATE,
