@@ -26,7 +26,7 @@ Every value the sender must supply is either a `[bracketed]` field or carries a
 - **Bill to** — client legal entity and address.
 - **Amounts** — each deliverable's price, the subtotal, tax/VAT, and the total.
 - **Meta** — invoice №, dates, terms, and the payment details.
-- **Line items** — the specimen is populated with the Twelve X FX-research work
+- **Line items** — the specimen is populated with the 12X FX-research work
   delivered in June 2026; edit for the engagement you are billing.
 
 ## Convert to PDF
