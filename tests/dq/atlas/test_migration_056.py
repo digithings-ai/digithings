@@ -69,5 +69,9 @@ def test_vehicle_rewire_deduplicates_before_upsert(sql: str) -> None:
     ON CONFLICT affecting a row twice (2026-07-23 prod db-migrate failure)."""
     rewire = sql.split("INSERT INTO thesis_vehicles", 1)[1]
     assert "DISTINCT ON (vehicles.date, mapping.canonical_thesis_id, vehicles.ticker)" in rewire
-    order_by = re.search(r"ORDER BY\s+vehicles\.date,\s*mapping\.canonical_thesis_id,\s*vehicles\.ticker", rewire)
-    assert order_by, "DISTINCT ON requires a matching ORDER BY prefix to pick a deterministic winner"
+    order_by = re.search(
+        r"ORDER BY\s+vehicles\.date,\s*mapping\.canonical_thesis_id,\s*vehicles\.ticker", rewire
+    )
+    assert order_by, (
+        "DISTINCT ON requires a matching ORDER BY prefix to pick a deterministic winner"
+    )
