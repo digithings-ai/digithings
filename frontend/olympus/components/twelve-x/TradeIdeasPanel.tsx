@@ -8,8 +8,8 @@ import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
 function dirClass(direction: string): string {
   const d = direction.toLowerCase();
-  if (d.includes('long') || d.includes('bull')) return 'text-up';
-  if (d.includes('short') || d.includes('bear')) return 'text-down';
+  if (d.includes('long') || d.includes('bull')) return 'text-accent';
+  if (d.includes('short') || d.includes('bear')) return 'text-warn';
   return 'text-ink-mute';
 }
 

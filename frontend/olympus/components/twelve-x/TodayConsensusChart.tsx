@@ -114,7 +114,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
           <div className="tc-legend flex items-center flex-wrap gap-3.5 mt-3.5 pt-3 border-t border-hair text-[10.5px] text-ink-mute">
             <span className="flex items-center gap-1.5">
               <span
-                className="inline-block w-4 h-2 rounded-sm bg-up"
+                className="inline-block w-4 h-2 rounded-sm bg-accent"
                 aria-hidden="true"
               />
               Trailing 5-run average (bar)

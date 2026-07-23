@@ -14,20 +14,15 @@ export interface NavItem {
  * Single source of truth consumed by both the desktop sidebar and the mobile
  * app bar so they can never drift.
  *
- * The FX Research suite (/twelve-x) is gated: its entry appears only when
- * NEXT_PUBLIC_TWELVEX_ENABLED=1 is inlined at build time (.env.local.example
- * documented this gate but nothing implemented it until #1551 — the route
- * existed with no way to reach it from the chrome).
+ * The FX Research suite (/twelve-x) is a permanent destination since the
+ * #1664 dashboard integration (previously env-gated behind
+ * NEXT_PUBLIC_TWELVEX_ENABLED and rendered standalone).
  */
-const TWELVEX_ENABLED = process.env.NEXT_PUBLIC_TWELVEX_ENABLED === '1';
-
 export const NAV: NavItem[] = [
   { href: '/', label: 'Brief', icon: LayoutDashboard },
   { href: '/portfolio', label: 'Portfolio', icon: PieChart },
   { href: '/pipeline', label: 'Pipeline', icon: GitBranch },
-  ...(TWELVEX_ENABLED
-    ? [{ href: '/twelve-x', label: 'FX Research', icon: Globe } satisfies NavItem]
-    : []),
+  { href: '/twelve-x', label: 'FX Research', icon: Globe },
   { href: '/system', label: 'System', icon: Activity, demoted: true },
 ];
 
@@ -43,6 +38,9 @@ export const NAV: NavItem[] = [
 export const DB_EXEMPT_PREFIXES = [
   '/system',
   '/settings',
+  // twelve-x reads its own research feed (isTwelveXConfigured), not the main
+  // Olympus backend — the shell's DB gate must not swallow it (#1664).
+  '/twelve-x',
   '/architecture',
   '/library',
   '/observability',

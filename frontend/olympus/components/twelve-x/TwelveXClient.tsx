@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Grid3x3,
   LineChart as LineChartIcon,
+  Workflow,
 } from 'lucide-react';
 import { EmptyState } from '@digithings/web';
 
@@ -42,8 +43,10 @@ import TodayTab from './TodayTab';
 import BriefsIndex from './BriefsIndex';
 import ConsensusTab from './ConsensusTab';
 import EventsTab from './EventsTab';
+import HowItWorksTab from './HowItWorksTab';
 import MatrixTab from './MatrixTab';
 import BriefPanel from './BriefPanel';
+import TwelveXHeading from './TwelveXHeading';
 import { TwelveXProvider, type TwelveXContextValue, type CrossLink, type TwelveXTab } from './context';
 import { useWatchlist } from './useWatchlist';
 
@@ -55,7 +58,36 @@ export const TWELVE_X_TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof Calenda
   { id: 'consensus', Icon: LineChartIcon, label: 'Consensus' },
   { id: 'matrix', Icon: Grid3x3, label: 'Matrix' },
   { id: 'events', Icon: CalendarDays, label: 'Events' },
+  { id: 'how-it-works', Icon: Workflow, label: 'How it works' },
 ];
+
+/**
+ * The workspace command band. `TwelveXHeading` is shared with the route's
+ * Suspense fallback so the static export prerenders the h1; the right rail is
+ * the canonical dl fact grid (as-of run + coverage).
+ */
+function TwelveXCommandBand({ runDate }: { runDate: string | null }) {
+  return (
+    <div className={`${SUBPAGE_MAX} pt-4 md:pt-6`}>
+      <header
+        data-testid="twelvex-command-band"
+        className="grid gap-4 border border-hair bg-surface px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"
+      >
+        <TwelveXHeading />
+        <dl className="grid grid-cols-2 gap-px border border-hair bg-hair text-sm lg:min-w-64">
+          <div className="bg-surface px-3 py-2">
+            <dt className="font-mono text-xs uppercase text-ink-mute">As of</dt>
+            <dd className="mt-1 font-mono font-medium text-ink">{runDate ?? '—'}</dd>
+          </div>
+          <div className="bg-surface px-3 py-2">
+            <dt className="font-mono text-xs uppercase text-ink-mute">Coverage</dt>
+            <dd className="mt-1 font-medium text-ink">G10 FX</dd>
+          </div>
+        </dl>
+      </header>
+    </div>
+  );
+}
 
 function TwelveXTabBar({
   active,
@@ -67,7 +99,7 @@ function TwelveXTabBar({
   disabled?: boolean;
 }) {
   return (
-    <SubpageStickyTabBar aria-label="FX research workspace" topOffset="none">
+    <SubpageStickyTabBar aria-label="FX research workspace">
       {TWELVE_X_TABS.map(({ id, Icon, label }) => (
         <button
           key={id}
@@ -87,12 +119,10 @@ function TwelveXTabBar({
 export function TwelveXUnavailable({ configured }: { configured: boolean }) {
   return (
     <div className="flex min-h-full flex-col">
-      <TwelveXTabBar active="today" disabled />
       <div className={`${SUBPAGE_MAX} flex-1 py-12`}>
         <EmptyState
           variant="error"
-          dress="glass-display"
-          className="glass-card mx-auto max-w-md"
+          className="mx-auto max-w-md border border-hair bg-surface"
           title={configured ? 'FX research is temporarily unavailable' : 'FX research is not connected'}
           body={
             configured
@@ -137,6 +167,7 @@ export function resolveTab(urlTab: string | null): TwelveXTab {
   if (urlTab === 'intelligence') return 'consensus'; // Legacy redirect
   if (urlTab === 'events') return 'events';
   if (urlTab === 'matrix') return 'matrix';
+  if (urlTab === 'how-it-works') return 'how-it-works';
   return 'today';
 }
 
@@ -348,17 +379,13 @@ export default function TwelveXClient() {
     [canonicalRunDate, crossLink, openBrief, watchlist]
   );
 
-  if (loading) return <PageSkeleton />;
-
-  if (error === 'unconfigured') {
-    return <TwelveXUnavailable configured={false} />;
-  }
-
-  if (error) {
-    return <TwelveXUnavailable configured />;
-  }
-
+  // How-it-works is fully static and must stay reachable while the feed loads
+  // or is down; the data tabs degrade to the skeleton / unavailable state
+  // inside the workspace chrome instead of replacing it.
   const renderActiveTab = () => {
+    if (tab === 'how-it-works') return <HowItWorksTab />;
+    if (loading) return <PageSkeleton bare />;
+    if (error) return <TwelveXUnavailable configured={error !== 'unconfigured'} />;
     switch (tab) {
       case 'consensus':
         return (
@@ -402,7 +429,8 @@ export default function TwelveXClient() {
   };
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div data-testid="twelvex-workspace" className="flex min-h-full flex-col">
+      <TwelveXCommandBand runDate={canonicalRunDate} />
       <TwelveXTabBar active={tab} onSelect={setTab} />
 
       <TwelveXProvider value={ctx}>

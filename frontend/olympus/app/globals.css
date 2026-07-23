@@ -405,13 +405,15 @@ html.light .qn-blueprint-bg {
   /* bull grows right of center, bear grows left of center */
   border-radius: 3px;
 }
+/* Consensus lean is view sentiment, not P&L — --up/--down stay reserved for
+   signed returns (#1664): bull reads as accent, bear as warn. */
 .dbar-fill.bull {
   left: 50%;
-  background: var(--up);
+  background: var(--accent);
 }
 .dbar-fill.bear {
   right: 50%;
-  background: var(--down);
+  background: var(--warn);
 }
 .dbar-tick {
   position: absolute;
