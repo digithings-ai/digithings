@@ -8,6 +8,7 @@ import {
   Brain,
   FileText,
   GitBranch,
+  Globe,
   LayoutDashboard,
   LineChart,
   Newspaper,
@@ -97,6 +98,20 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
       hint: 'PM ⇄ analyst debates',
       href: buildPipelineHref({ stage: 'selection' }),
       icon: Brain,
+    },
+    {
+      id: 'go-fx',
+      title: 'FX Research',
+      hint: 'Desk consensus, matrix & events',
+      href: '/twelve-x',
+      icon: Globe,
+    },
+    {
+      id: 'go-fx-how',
+      title: 'FX Research — how it works',
+      hint: 'The research pipeline, explained',
+      href: '/twelve-x?tab=how-it-works',
+      icon: Globe,
     },
     {
       id: 'go-system',

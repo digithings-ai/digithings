@@ -10,25 +10,16 @@ import { useDashboard } from '@/lib/dashboard-context';
 import { isDbExempt } from '@/lib/nav';
 
 /**
- * App frame: the Olympus shell (sidebar + page chrome) for normal routes.
+ * App frame: the Olympus shell (sidebar + page chrome) for all routes.
  *
- * The twelve-x FX Research suite is a STANDALONE surface — reachable only by direct
- * URL, with no sidebar, breadcrumbs, or cross-navigation. For any path under
- * `/twelve-x` we render the page bare (just a scroll container) so it reads as its
- * own self-contained app rather than an Olympus tab.
+ * The twelve-x FX Research suite renders inside this shell like every other
+ * destination (#1664 retired its standalone chrome). It stays DB-exempt in
+ * lib/nav.ts because it reads its own research feed (isTwelveXConfigured)
+ * rather than the main Olympus backend.
  */
 export default function AppFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { dbStatus } = useDashboard();
-  const standalone = pathname?.startsWith('/twelve-x') ?? false;
-
-  if (standalone) {
-    return (
-      <main className="flex min-h-screen min-w-0 flex-1 flex-col overflow-y-auto max-h-screen">
-        {children}
-      </main>
-    );
-  }
 
   // DB-down gate: when the backend is unconfigured/unreachable and the route is
   // not allowlisted, swap the page for the standardized card. The shell itself

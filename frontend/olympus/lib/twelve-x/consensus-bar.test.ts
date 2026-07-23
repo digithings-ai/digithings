@@ -19,14 +19,14 @@ describe('consensus-bar constants', () => {
 });
 
 describe('scoreColorClass', () => {
-  it('is green at and above the lean band', () => {
-    expect(scoreColorClass(LEAN_BAND)).toBe('text-up');
-    expect(scoreColorClass(1.5)).toBe('text-up');
+  it('is accent at and above the lean band', () => {
+    expect(scoreColorClass(LEAN_BAND)).toBe('text-accent');
+    expect(scoreColorClass(1.5)).toBe('text-accent');
   });
 
-  it('is red at and below the negative lean band', () => {
-    expect(scoreColorClass(-LEAN_BAND)).toBe('text-down');
-    expect(scoreColorClass(-1.5)).toBe('text-down');
+  it('is warn at and below the negative lean band', () => {
+    expect(scoreColorClass(-LEAN_BAND)).toBe('text-warn');
+    expect(scoreColorClass(-1.5)).toBe('text-warn');
   });
 
   it('is secondary inside the neutral band', () => {

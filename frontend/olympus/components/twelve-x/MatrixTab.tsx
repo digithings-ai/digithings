@@ -180,10 +180,10 @@ export default function MatrixTab({
           {/* Legend */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-hair bg-term-bg px-4 py-2.5 text-[11px] text-ink-mute">
             <span className="flex items-center gap-1.5">
-              <span className="text-up" aria-hidden>▲</span> Bullish
+              <span className="text-accent" aria-hidden>▲</span> Bullish
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="text-down" aria-hidden>▼</span> Bearish
+              <span className="text-warn" aria-hidden>▼</span> Bearish
             </span>
             <span className="flex items-center gap-1.5">
               <span className="text-warn" aria-hidden>◆</span> Watch

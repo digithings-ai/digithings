@@ -187,10 +187,10 @@ describe('CurrencyDrilldownPanelBody', () => {
     expect(html).toContain('Technical breakout');
     expect(html).toContain('overflow-y-auto overscroll-contain pr-1 pb-1');
     expect(html).toContain('rounded-lg border border-hair');
-    expect(html).toContain('border-up/30 bg-up/[0.05]');
-    expect(html).toContain('capitalize text-up');
-    expect(html).toContain('border-down/30 bg-down/[0.05]');
-    expect(html).toContain('capitalize text-down');
+    expect(html).toContain('border-accent/30 bg-accent/[0.05]');
+    expect(html).toContain('capitalize text-accent');
+    expect(html).toContain('border-warn/30 bg-warn/[0.05]');
+    expect(html).toContain('capitalize text-warn');
     expect(html).not.toContain('Superseded Broker');
     expect(html).not.toContain('Superseded by a newer opinion.');
     expect(html).not.toContain('class="rounded border border-hair');

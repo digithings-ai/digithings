@@ -9,10 +9,10 @@ import type { FxBriefRow, IntelligenceWhyItem } from '@/lib/twelve-x/types';
 function deskDirectionClasses(direction: string): { card: string; label: string } {
   const normalized = direction.trim().toLowerCase();
   if (normalized === 'bullish' || normalized === 'long' || normalized === 'buy') {
-    return { card: 'border-up/30 bg-up/[0.05]', label: 'text-up' };
+    return { card: 'border-accent/30 bg-accent/[0.05]', label: 'text-accent' };
   }
   if (normalized === 'bearish' || normalized === 'short' || normalized === 'sell') {
-    return { card: 'border-down/30 bg-down/[0.05]', label: 'text-down' };
+    return { card: 'border-warn/30 bg-warn/[0.05]', label: 'text-warn' };
   }
   return { card: 'border-hair bg-surface', label: 'text-ink-soft' };
 }
@@ -100,11 +100,11 @@ export function CurrencyDrilldownPanelBody({
             </div>
             <div>
               <dt className="text-ink-mute">Bullish</dt>
-              <dd className="font-mono text-up">{formatPct(consensus.bullish_pct)}</dd>
+              <dd className="font-mono text-accent">{formatPct(consensus.bullish_pct)}</dd>
             </div>
             <div>
               <dt className="text-ink-mute">Bearish</dt>
-              <dd className="font-mono text-down">{formatPct(consensus.bearish_pct)}</dd>
+              <dd className="font-mono text-warn">{formatPct(consensus.bearish_pct)}</dd>
             </div>
             <div>
               <dt className="text-ink-mute">Agreement</dt>
