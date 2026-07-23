@@ -6,10 +6,16 @@ Instrument Serif voices, the phosphor accent (`#0E8C7F` on paper), hairline
 rules, and tabular figures for money. Self-contained single `index.html` — no
 build step, no external assets beyond web fonts.
 
-It fits a detailed 9-line engagement on **one A4 page**. Line items read like an
+The invoice itself is always **one A4 page**. Line items read like an
 AI-services invoice: a bold deliverable followed by a compact scope, with the
 work's traceability (PR range) folded into the Notes rather than cluttering each
 row.
+
+An **optional second page** — the *delivery breakdown* — follows for clients who
+want the fuller per-deliverable scope and PR references. It carries no charges
+(all amounts live on the invoice). Delete the entire
+`<section class="sheet appendix">` block if you only want the one-pager; the
+invoice page is unaffected.
 
 ## Fill it in
 

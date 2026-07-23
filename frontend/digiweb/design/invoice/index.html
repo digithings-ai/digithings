@@ -148,6 +148,27 @@ body{
   font-family:var(--mono); font-size:10px; letter-spacing:.06em; color:var(--ink-mute)}
 .colophon .dot{color:var(--accent)}
 
+/* Optional supplement page — delivery breakdown ----------------------------- */
+.appendix{max-width:820px; margin:28px auto 0; background:var(--surface);
+  border:1px solid var(--hair); border-radius:var(--r-lg);
+  box-shadow:0 1px 2px rgba(10,15,20,.04), 0 24px 60px -32px rgba(10,15,20,.22); overflow:hidden}
+.rule-soft{background:var(--hair-2)}
+.apx-head{display:flex; justify-content:space-between; align-items:flex-start; gap:24px;
+  padding-bottom:12px; border-bottom:1px solid var(--hair)}
+.apx-title{font-family:var(--serif); font-size:26px; line-height:1; margin-top:6px}
+.apx-meta{text-align:right; font-family:var(--mono); font-size:11px; line-height:1.7; color:var(--ink-soft)}
+.apx-meta b{color:var(--ink); font-weight:500}
+.apx-meta .sep{color:var(--ink-mute)}
+.apx-list{list-style:none; margin-top:6px}
+.apx-list li{padding:9px 0; border-bottom:1px solid var(--hair)}
+.apx-h{font-size:13.5px; font-weight:500; color:var(--ink); letter-spacing:-.01em}
+.apx-h .apx-n{font-family:var(--mono); font-size:11px; color:var(--ink-mute); margin-right:10px}
+.apx-list p{margin-top:3px; margin-left:31px; color:var(--ink-soft); font-size:11.5px; line-height:1.45;
+  max-width:660px}
+.apx-refs{margin-top:4px; margin-left:31px; font-family:var(--mono); font-size:10.5px;
+  letter-spacing:.02em; color:var(--ink-mute)}
+.apx-note{margin-top:12px; color:var(--ink-soft); font-size:11.5px; line-height:1.55}
+
 /* Print --------------------------------------------------------------------- */
 @page{ size:A4; margin:11mm }
 @media print{
@@ -155,6 +176,7 @@ body{
   .sheet{max-width:none; border:none; border-radius:0; box-shadow:none; margin:0}
   .pad{padding:0}
   .rule{height:3px}
+  .appendix{break-before:page; page-break-before:always}
   *{ -webkit-print-color-adjust:exact; print-color-adjust:exact }
 }
 @media (max-width:640px){
@@ -174,12 +196,12 @@ body{
       <div>
         <div class="brand">
           <span class="mark"></span>
-          <span class="name">DigiThings</span>
+          <span class="name">digithings</span>
         </div>
         <div class="brand-tag">AI systems · research automation</div>
         <div class="from">
           <div class="who">Chris Stefan</div>
-          <div>chris.stefan00@gmail.com</div>
+          <div>chris.stefan@proton.me</div>
           <div class="ph">[Business name · address]</div>
           <div class="ph">[VAT / tax no. — if applicable]</div>
         </div>
@@ -342,11 +364,103 @@ body{
     </section>
 
     <div class="colophon">
-      <span>DigiThings <span class="dot">·</span> AI systems &amp; research automation</span>
-      <span>INV-2026-06-001 <span class="dot">·</span> Page 1 / 1</span>
+      <span>digithings <span class="dot">·</span> AI systems &amp; research automation</span>
+      <span>INV-2026-06-001 <span class="dot">·</span> thank you</span>
     </div>
 
   </div>
 </main>
+
+<!-- ===========================================================================
+     Optional supplement — delivery breakdown. Detached page for clients who
+     want the fuller per-deliverable scope + PR traceability. Delete this whole
+     <section> if you only want the one-page invoice.
+     =========================================================================== -->
+<section class="sheet appendix">
+  <div class="rule rule-soft"></div>
+  <div class="pad">
+
+    <header class="apx-head">
+      <div>
+        <div class="kick">Delivery breakdown</div>
+        <div class="apx-title">What was delivered</div>
+      </div>
+      <div class="apx-meta">
+        <div>Supplement to <b>INV-2026-06-001</b></div>
+        <div>Twelve X <span class="sep">·</span> 1&ndash;30 Jun 2026</div>
+      </div>
+    </header>
+
+    <ol class="apx-list">
+      <li>
+        <div class="apx-h"><span class="apx-n">01</span> FX research extraction pipeline</div>
+        <p>Multimodal PDF extraction (pipeline&#8209;v2) reads each brief directly; per&#8209;document
+        fault tolerance keeps one bad file from failing the whole run; richer G10 / pair&#8209;leg
+        structured output.</p>
+        <div class="apx-refs">#10 · #21 · #36</div>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">02</span> Consensus engine</div>
+        <p>Pair&#8209;leg decomposition to true G10, relevance&#8209;weighted stances, multi&#8209;timeframe
+        blending on the live pivot, and automated publication to the FX Consensus board each run.</p>
+        <div class="apx-refs">#10 · #11 · #25 · #42 · #43</div>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">03</span> Trade Intelligence &amp; Trade Ideas</div>
+        <p>LLM strategist with a deterministic contradiction / consensus guard, schema&#8209;required
+        grounded citations, and the redesigned Trade Ideas hub table.</p>
+        <div class="apx-refs">#44 · #45 · #61</div>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">04</span> Relevance layer</div>
+        <p>Causal, sequential&#8209;in&#8209;time day&#8209;by&#8209;day LLM review that weights stale opinions
+        out of consensus and the matrix, with deduplicated ledger rows for recurring source files.</p>
+        <div class="apx-refs">#27 · #29</div>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">05</span> Economic &amp; FX calendar</div>
+        <p>Timezone&#8209;correct release times, precise brief&#8209;to&#8209;calendar linking by event date,
+        and consolidation onto a single&#8209;source core economic calendar.</p>
+        <div class="apx-refs">#22 · #24 · #57 · #58</div>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">06</span> Notion hub &amp; rendering</div>
+        <p>Rebuilt hub projection: consensus cells, the multi&#8209;timeframe consensus table, strategist
+        market&#8209;read display, and re&#8209;runnable migrations behind it.</p>
+        <div class="apx-refs">#45 · #62</div>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">07</span> Snapshots &mdash; Olympus data foundation</div>
+        <p>Per&#8209;run consensus and confluence snapshot tables that give the Olympus suite a
+        queryable historical foundation.</p>
+        <div class="apx-refs">#35</div>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">08</span> CI / infrastructure &amp; DevOps</div>
+        <p>Per&#8209;session cron workflows (Asia / London / New York), date&#8209;backfill runs, an
+        idempotent SQL migration runner, Supabase env standardisation, and CI permission fixes.</p>
+        <div class="apx-refs">#16 · #18 · #19 · #23 · #46 · #47 · #48</div>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">09</span> Documentation</div>
+        <p>End&#8209;to&#8209;end architecture map, condensed Notion docs page, Olympus integration scope,
+        and a documentation&#8209;accuracy pass.</p>
+        <div class="apx-refs">#31 · #33 · #59</div>
+      </li>
+    </ol>
+
+    <div class="apx-note">
+      27 pull requests merged to <span class="mono">main</span> across the period
+      (#10&ndash;#62, 12&ndash;29 Jun 2026). This breakdown is a scope reference and
+      carries no charges &mdash; all amounts are on the invoice.
+    </div>
+
+    <div class="colophon">
+      <span>digithings <span class="dot">·</span> AI systems &amp; research automation</span>
+      <span>INV-2026-06-001 <span class="dot">·</span> delivery breakdown</span>
+    </div>
+
+  </div>
+</section>
 </body>
 </html>
