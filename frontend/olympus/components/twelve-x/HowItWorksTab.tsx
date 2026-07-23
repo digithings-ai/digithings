@@ -2,6 +2,8 @@
 
 import {
   CalendarDays,
+  Clock,
+  Cpu,
   FileText,
   GitMerge,
   Landmark,
@@ -43,7 +45,7 @@ const STAGES: Stage[] = [
     icon: Newspaper,
     title: 'Ingest desk research',
     store: 'fx_research_history',
-    what: 'Every sell-side and desk report we receive is captured as a brief: the full note, its central thesis, the desk that wrote it, and its report date. Nothing is summarized away — the original text stays attached to everything derived from it.',
+    what: 'Every sell-side and desk report we receive is read in full and captured as a brief: its central thesis, and — for every currency or pair the analysts actually take a stance on — the direction, conviction, a one-line signal, their rationale, any price targets, the catalysts and risks they flag, and the timeframe the call was made on (short: ≤1 week, medium: ≤4 weeks, or long: ~a quarter), read from the note’s own language. Nothing is summarized away — the original text stays attached to everything derived from it.',
     read: 'Open any brief from the Today tab or from a desk name anywhere in the workspace — the slide-over shows the source note itself.',
     tab: 'today',
     tabLabel: 'Today',
@@ -54,7 +56,7 @@ const STAGES: Stage[] = [
     icon: Scale,
     title: 'Score relevance',
     store: 'fx_relevance_ledger',
-    what: 'Each report is weighed before it can influence a view: how fresh it is, how it sits against the event calendar, and how it survived review. The product is a single relevance weight per report, with a written reason. Stale research decays instead of lingering.',
+    what: 'Each report is weighed before it can influence a view, on three factors: how fresh it is (a same-day call outweighs a two-week-old one), how it sits against the event calendar (a call about an event still ahead counts in full; one about an event that already fired is discounted), and how it read on review. Critically, if the same analyst or desk has since published a newer view, the older one steps aside instead of being counted twice. The product is a single relevance weight per report, with a written reason — see Freshness below.',
     read: 'Desk lists in the currency drilldown are ordered by this relevance weight — the reports doing the work rank first, each with its reason.',
     tab: 'consensus',
     tabLabel: 'Consensus',
@@ -65,7 +67,7 @@ const STAGES: Stage[] = [
     icon: GitMerge,
     title: 'Build consensus',
     store: 'fx_consensus_snapshot',
-    what: `For each of the ${G10_CURRENCIES.length} G10 currencies, the weighted desk views aggregate into one score on a −${SCORE_MAX}…+${SCORE_MAX} scale, alongside its decomposition: agreement between desks, tilt, effective desk count, and the bullish / bearish / neutral / watch split.`,
+    what: `For each of the ${G10_CURRENCIES.length} G10 currencies, views are first grouped by their timeframe into short / medium / long-term buckets, scored within each, then blended into one −${SCORE_MAX}…+${SCORE_MAX} score — alongside its decomposition: agreement between desks, tilt, effective desk count, and the bullish / bearish / neutral / watch split.`,
     read: 'The Consensus tab is this table over time — divergent bars per currency, run-over-run deltas, and the per-currency drilldown for the decomposition.',
     tab: 'consensus',
     tabLabel: 'Consensus',
@@ -112,6 +114,31 @@ const EVENTS_STAGE = {
   what: 'In parallel, a 14-day macro event window is maintained — each event carrying desk opinions and citations, so the calendar reads as research, not just a schedule.',
   read: 'The Events tab shows the window as a list or an intraday timeline; high-impact events are flagged.',
 } as const;
+
+/** Every field captured per currency/pair view, extracted at Ingest. */
+const BRIEF_FIELDS = [
+  { field: 'Thesis', body: "The desk's core argument, in their own terms." },
+  { field: 'Currency view', body: 'Direction + conviction + a one-line signal, per currency or pair the note takes a stance on.' },
+  { field: 'Rationale', body: 'Why the desk holds that view — their own reasoning, not ours.' },
+  { field: 'Targets / levels', body: 'Price levels or ranges the note itself states.' },
+  { field: 'Timeframe', body: 'Short (≤1wk) · Medium (≤4wk) · Long (~quarter) — read from the note’s stated or implied horizon.' },
+  { field: 'Risk events', body: 'Catalysts the desk flags, matched to the tracked economic calendar by name and date.' },
+  { field: 'Positioning', body: 'Crowding, flows, or sentiment the note mentions.' },
+] as const;
+
+/** Directions and conviction levels, as extracted per view. */
+const VIEW_LEGEND = {
+  directions: ['🟢 Bullish', '🔴 Bearish', '⚪ Neutral', '👁 Watch'],
+  conviction: 'High · Medium · Low — higher conviction weighs more in the consensus score.',
+} as const;
+
+/** How a relevance weight resolves to a state a trader can scan at a glance. */
+const FRESHNESS_STATES = [
+  { status: 'Active', body: 'Still relevant today — nothing newer has displaced it.' },
+  { status: 'Confirmed', body: 'Recent data or events have supported the original call.' },
+  { status: 'Superseded', body: 'The same desk has since published a newer view — the old one steps aside so it is never double-counted.' },
+  { status: 'Invalidated', body: 'Markets or data have since moved against the view.' },
+] as const;
 
 function SectionHeader({
   icon: Icon,
@@ -184,7 +211,7 @@ export default function HowItWorksTab() {
         <SectionHeader icon={Landmark} title="What this tool is" />
         <div className="px-5 py-4">
           <p className="max-w-3xl text-sm leading-relaxed text-ink-soft">
-            Twelve-X reads every FX research note the desks publish, weighs each one for freshness
+            The FX Hub reads every FX research note the desks publish, weighs each one for freshness
             and credibility, and distills the whole stack into one question:{' '}
             <span className="text-ink">where do independent desks agree, and how strongly?</span>{' '}
             Each morning it rebuilds the full picture — consensus per currency, confluence across
@@ -223,6 +250,33 @@ export default function HowItWorksTab() {
         </ol>
       </section>
 
+      {/* What's captured per brief */}
+      <section className="border-y border-hair">
+        <SectionHeader icon={Newspaper} title="What's captured in every brief" meta="one row per currency / pair view" />
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[36rem] text-left text-sm">
+            <tbody className="divide-y divide-hair">
+              {BRIEF_FIELDS.map((f) => (
+                <tr key={f.field}>
+                  <th scope="row" className="w-40 whitespace-nowrap px-5 py-3 align-top font-mono text-xs font-semibold uppercase text-ink-mute">
+                    {f.field}
+                  </th>
+                  <td className="px-5 py-3 leading-relaxed text-ink-soft">{f.body}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-hair px-5 py-3">
+          <span className="font-mono text-xs uppercase text-ink-mute">Directions</span>
+          <span className="text-sm text-ink-soft">{VIEW_LEGEND.directions.join('  ·  ')}</span>
+        </div>
+        <div className="border-t border-hair px-5 py-3">
+          <span className="font-mono text-xs uppercase text-ink-mute">Conviction</span>{' '}
+          <span className="text-sm text-ink-soft">{VIEW_LEGEND.conviction}</span>
+        </div>
+      </section>
+
       {/* Parallel events feed */}
       <section className="border-y border-hair">
         <SectionHeader
@@ -252,6 +306,41 @@ export default function HowItWorksTab() {
         <ScaleDiagram />
       </section>
 
+      {/* Freshness / relevance states */}
+      <section className="border-y border-hair">
+        <SectionHeader icon={Clock} title="Freshness — why old views step aside" meta="how a view stays (or stops being) relevant" />
+        <div className="divide-y divide-hair">
+          {FRESHNESS_STATES.map((s) => (
+            <div key={s.status} className="grid gap-2 px-5 py-3 md:grid-cols-[10rem_minmax(0,1fr)]">
+              <p className="font-mono text-xs font-semibold uppercase text-ink-mute">{s.status}</p>
+              <p className="text-sm leading-relaxed text-ink-soft">{s.body}</p>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-hair px-5 py-3">
+          <p className="text-xs leading-relaxed text-ink-mute">
+            Views that fade count less in the live consensus; very stale views drop off the board
+            entirely — the Hub shows the current street, not a pile of old PDFs.
+          </p>
+        </div>
+      </section>
+
+      {/* Models & consistency */}
+      <section className="border-y border-hair">
+        <SectionHeader icon={Cpu} title="Models & consistency" meta="what reads the research, and why the shape never drifts" />
+        <div className="px-5 py-4">
+          <p className="max-w-3xl text-sm leading-relaxed text-ink-soft">
+            Every note is read by a large language model against a strict schema — the same fields,
+            in the same shape, for every desk, every day — and the model grades its own extraction
+            against a faithfulness rubric before anything is stored. That consistency is what lets
+            today&apos;s board compare cleanly to one from months ago, even as the model doing the
+            reading changes. Models run via OpenRouter; the pilot is currently tuned for cost
+            efficiency, with a defined upgrade path to a flagship-tier model chosen specifically for
+            accuracy on financial documents once this moves past pilot.
+          </p>
+        </div>
+      </section>
+
       {/* Provenance */}
       <section data-testid="hiw-provenance" className="border-y border-hair">
         <SectionHeader icon={ShieldCheck} title="Why you can trust a number" meta="three tiers, one click deep" />
@@ -278,7 +367,7 @@ export default function HowItWorksTab() {
         </div>
         <div className="border-t border-hair px-5 py-3">
           <p className="font-mono text-xs text-ink-mute" role="note">
-            Twelve-X is a research tool — it reads and weighs desk research; it never executes
+            The FX Hub is a research tool — it reads and weighs desk research; it never executes
             trades. Research that goes stale loses its weight instead of its trace.
           </p>
         </div>

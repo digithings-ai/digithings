@@ -61,34 +61,6 @@ export const TWELVE_X_TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof Calenda
   { id: 'how-it-works', Icon: Workflow, label: 'How it works' },
 ];
 
-/**
- * The workspace command band. `TwelveXHeading` is shared with the route's
- * Suspense fallback so the static export prerenders the h1; the right rail is
- * the canonical dl fact grid (as-of run + coverage).
- */
-function TwelveXCommandBand({ runDate }: { runDate: string | null }) {
-  return (
-    <div className={`${SUBPAGE_MAX} pt-4 md:pt-6`}>
-      <header
-        data-testid="twelvex-command-band"
-        className="grid gap-4 border border-hair bg-surface px-4 py-4 md:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"
-      >
-        <TwelveXHeading />
-        <dl className="grid grid-cols-2 gap-px border border-hair bg-hair text-sm lg:min-w-64">
-          <div className="bg-surface px-3 py-2">
-            <dt className="font-mono text-xs uppercase text-ink-mute">As of</dt>
-            <dd className="mt-1 font-mono font-medium text-ink">{runDate ?? '—'}</dd>
-          </div>
-          <div className="bg-surface px-3 py-2">
-            <dt className="font-mono text-xs uppercase text-ink-mute">Coverage</dt>
-            <dd className="mt-1 font-medium text-ink">G10 FX</dd>
-          </div>
-        </dl>
-      </header>
-    </div>
-  );
-}
-
 function TwelveXTabBar({
   active,
   onSelect,
@@ -430,7 +402,7 @@ export default function TwelveXClient() {
 
   return (
     <div data-testid="twelvex-workspace" className="flex min-h-full flex-col">
-      <TwelveXCommandBand runDate={canonicalRunDate} />
+      <TwelveXHeading />
       <TwelveXTabBar active={tab} onSelect={setTab} />
 
       <TwelveXProvider value={ctx}>
