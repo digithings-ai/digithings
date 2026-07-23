@@ -295,7 +295,38 @@ def _h6_node_factory(ticker: str):
                     )
                 }
 
-        summary = run_deliberation_loop(state, ticker)
+        try:
+            summary = run_deliberation_loop(state, ticker)
+        except Exception as exc:  # noqa: BLE001 — LLM-output failure degrades this ticker, never the chain (#1665)
+            stance_map = {"buy": "bullish", "sell": "bearish"}
+            logger.warning(
+                "H6 deliberation LLM failed for %s (%s: %s); carrying analyst stance",
+                ticker,
+                type(exc).__name__,
+                exc,
+            )
+            fallback = DeliberationSummary(
+                ticker=ticker,
+                converged=True,
+                conclusion=str(analyst.get("thesis") or f"carried analyst stance: {stance}"),
+                net_stance=stance_map.get(stance, "neutral"),  # type: ignore[arg-type]
+                conviction_delta=0,
+                transcript=[],
+                carried=True,
+            )
+            return {
+                "phase_hermes": PhaseHermesState(
+                    deliberation_summaries={ticker: fallback.model_dump(mode="json")}
+                ),
+                "errors": [
+                    PhaseError(
+                        phase=PHASE_NAME,
+                        node=f"{NODE_ID}-{ticker}",
+                        message=f"deliberation LLM failed; carried analyst stance: {exc}"[:500],
+                        retryable=False,
+                    )
+                ],
+            }
         result: dict[str, Any] = {
             "phase_hermes": PhaseHermesState(
                 deliberation_summaries={ticker: summary.model_dump(mode="json")}
