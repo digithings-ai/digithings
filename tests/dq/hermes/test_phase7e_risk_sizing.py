@@ -553,3 +553,37 @@ class TestHeldContinuityBackstop:
         state = self._held_state()
         out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0, "QQQ": 0.0}, state)
         assert out["QQQ"] == 0.0, "backstop is held-only"
+
+
+@pytest.mark.unit
+class TestActionClassificationAndInvestedCap:
+    """#1676 — held rebalances classify add/trim/hold (not 'new'); Σ invested ≤ 100%."""
+
+    def test_memo_path_actions_classify_against_live_weights(self) -> None:
+        # The H7 memo path passes original_actions=[] — previously EVERYTHING was "new".
+        actions = phase7e_risk_sizing._rebuild_actions(
+            [],
+            pm_targets={"AAA": 1.0, "BBB": 1.0, "CCC": 1.0, "DDD": 1.0},
+            sized={"AAA": 8.0, "BBB": 3.0, "CCC": 5.0, "DDD": 6.0},
+            current_weights={"AAA": 5.0, "BBB": 5.0, "CCC": 5.0},
+        )
+        verbs = {row["ticker"]: row["action"] for row in actions}
+        assert verbs == {"AAA": "add", "BBB": "trim", "CCC": "hold", "DDD": "new"}
+
+    def test_cap_scales_proportionally_over_100(self) -> None:
+        capped = phase7e_risk_sizing._cap_total_invested({"A": 60.0, "B": 50.0})
+        assert round(sum(capped.values()), 6) == 100.0
+        assert round(capped["A"] / capped["B"], 6) == round(60.0 / 50.0, 6)
+
+    def test_cap_leaves_valid_books_untouched(self) -> None:
+        book = {"A": 60.0, "B": 30.0}
+        assert phase7e_risk_sizing._cap_total_invested(dict(book)) == book
+
+    def test_backstop_overshoot_is_capped(self) -> None:
+        # The #1649 backstop legitimately re-adds drifted weight onto a full book;
+        # the cap must bring the composition back to exactly 100.
+        sized = {"A": 70.0, "B": 30.0}
+        sized["DBO"] = 7.5  # backstop re-add
+        capped = phase7e_risk_sizing._cap_total_invested(sized)
+        assert round(sum(capped.values()), 6) == 100.0
+        assert capped["DBO"] > 0, "the rescued position survives the cap"
