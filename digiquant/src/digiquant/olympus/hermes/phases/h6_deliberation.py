@@ -157,7 +157,8 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
             phase_inputs=pm_inputs,
             shared_context=_shared_context(
                 state,
-                context_keys=(f"analyst/{ticker}",),
+                # Atlas digest = the curated cross-checked read (#1674); analyst doc = the case.
+                context_keys=(f"analyst/{ticker}", "digest", "digest-delta"),
                 data_layer_scope="portfolio",
             ),
             output_model=DeliberationPmTurn,
@@ -224,7 +225,9 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
             skill_text=analyst_skill,
             phase_inputs=analyst_inputs,
             shared_context=_shared_context(
-                state, context_keys=(f"analyst/{ticker}",), data_layer_scope="ticker"
+                state,
+                context_keys=(f"analyst/{ticker}", "digest", "digest-delta"),
+                data_layer_scope="ticker",
             ),
             output_model=DeliberationAnalystTurn,
             phase_slug=f"h6_analyst_response-{ticker}",
