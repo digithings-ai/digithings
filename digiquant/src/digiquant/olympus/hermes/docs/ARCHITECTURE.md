@@ -148,6 +148,12 @@ the two can never diverge — covers:
 
 H8 carries both classes into the sized book at their current drifted weight *before* the
 rebalancing-cadence band — a held position stays owned unless the PM explicitly exits it.
+A **final-book backstop** (`_apply_held_continuity_backstop`, #1649) then re-enforces the
+invariant on the finished dict regardless of cause — the 2026-07-22 22:54 run reached H9
+with nine held names at weight ≤ 0 (PM-longed but dropped by sizing, exempt from the
+per-cause carries) — re-adding any held, non-flat name at its drifted weight with a
+WARNING naming the crack (sized-out vs carry-miss). A name with no recoverable weight
+stays out and H9 still fails closed.
 **Regression #1555:** before the gated carry, dropped held names made check (1) fail
 closed with a `PhaseError` that never reached the degraded gate — every delta-day commit
 was silently frozen from 2026-06-26 while runs still reported `ok:true`.
