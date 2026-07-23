@@ -20,6 +20,10 @@ Emitted as a single ``RebalanceDecision`` per run into
 
 from __future__ import annotations
 
+import logging
+
+from digiquant.olympus.atlas.state import PhaseError
+
 from typing import Any, Literal  # noqa: F401 — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
@@ -34,6 +38,9 @@ from digiquant.olympus.atlas.phases._node_factory import (
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.state import HermesState
+
+
+logger = logging.getLogger(__name__)
 
 
 def _pm_tools(state: HermesState, *, segment: str = "pm-rebalance"):
@@ -133,22 +140,40 @@ def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
         segment="risk-aggressive",
         live_search=True,
     )
-    result = run_research_agent(
-        skill_text=skill_text,
-        phase_inputs=phase_inputs,
-        shared_context=_shared_context(
-            state,
-            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
-            # Portfolio-scoped (#935): the PM + risk debaters read the book and
-            # prices via the data tools, so the run-wide per-ticker ETF dump is
-            # dropped from shared_context — macro series + regime signals stay.
-            data_layer_scope="portfolio",
-        ),
-        output_model=RiskCase,
-        phase_slug="risk-aggressive",
-        tools=tools,
-        execute_tool=execute_tool,
-    )
+    try:
+        result = run_research_agent(
+            skill_text=skill_text,
+            phase_inputs=phase_inputs,
+            shared_context=_shared_context(
+                state,
+                context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+                # Portfolio-scoped (#935): the PM + risk debaters read the book and
+                # prices via the data tools, so the run-wide per-ticker ETF dump is
+                # dropped from shared_context — macro series + regime signals stay.
+                data_layer_scope="portfolio",
+            ),
+            output_model=RiskCase,
+            phase_slug="risk-aggressive",
+            tools=tools,
+            execute_tool=execute_tool,
+        )
+    except Exception as exc:  # noqa: BLE001 — LLM-output failure degrades this debate arm (#1665)
+        logger.warning("risk-aggressive LLM failed (%s: %s); empty case", type(exc).__name__, exc)
+        return {
+            "phase7d_risk_debate": {
+                "aggressive_case": "",
+                "conservative_case": "",
+                "key_tension": "",
+            },
+            "errors": [
+                PhaseError(
+                    phase="phase7d_pm",
+                    node="risk-aggressive",
+                    message=f"risk-aggressive LLM failed: {exc}"[:500],
+                    retryable=False,
+                )
+            ],
+        }
     # Prior summary (if any) is None on first debate node; conservative
     # node fills in its half + key_tension.
     return {
@@ -183,22 +208,44 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
         segment="risk-conservative",
         live_search=True,
     )
-    result = run_research_agent(
-        skill_text=skill_text,
-        phase_inputs=inputs,
-        shared_context=_shared_context(
-            state,
-            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
-            # Portfolio-scoped (#935): the PM + risk debaters read the book and
-            # prices via the data tools, so the run-wide per-ticker ETF dump is
-            # dropped from shared_context — macro series + regime signals stay.
-            data_layer_scope="portfolio",
-        ),
-        output_model=RiskDebateSummary,
-        phase_slug="risk-conservative",
-        tools=tools,
-        execute_tool=execute_tool,
-    )
+    try:
+        result = run_research_agent(
+            skill_text=skill_text,
+            phase_inputs=inputs,
+            shared_context=_shared_context(
+                state,
+                context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+                # Portfolio-scoped (#935): the PM + risk debaters read the book and
+                # prices via the data tools, so the run-wide per-ticker ETF dump is
+                # dropped from shared_context — macro series + regime signals stay.
+                data_layer_scope="portfolio",
+            ),
+            output_model=RiskDebateSummary,
+            phase_slug="risk-conservative",
+            tools=tools,
+            execute_tool=execute_tool,
+        )
+    except Exception as exc:  # noqa: BLE001 — LLM-output failure degrades this debate arm (#1665)
+        logger.warning(
+            "risk-conservative LLM failed (%s: %s); keeping aggressive half",
+            type(exc).__name__,
+            exc,
+        )
+        return {
+            "phase7d_risk_debate": {
+                "aggressive_case": aggressive,
+                "conservative_case": "",
+                "key_tension": "",
+            },
+            "errors": [
+                PhaseError(
+                    phase="phase7d_pm",
+                    node="risk-conservative",
+                    message=f"risk-conservative LLM failed: {exc}"[:500],
+                    retryable=False,
+                )
+            ],
+        }
     return {"phase7d_risk_debate": result.model_dump(mode="json")}
 
 
@@ -272,22 +319,39 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
         segment="pm-rebalance",
         live_search=True,
     )
-    result = run_research_agent(
-        skill_text=skill_text,
-        phase_inputs=phase_inputs,
-        shared_context=_shared_context(
-            state,
-            context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
-            # Portfolio-scoped (#935): the PM + risk debaters read the book and
-            # prices via the data tools, so the run-wide per-ticker ETF dump is
-            # dropped from shared_context — macro series + regime signals stay.
-            data_layer_scope="portfolio",
-        ),
-        output_model=RebalanceDecision,
-        phase_slug="pm-rebalance",
-        tools=tools,
-        execute_tool=execute_tool,
-    )
+    try:
+        result = run_research_agent(
+            skill_text=skill_text,
+            phase_inputs=phase_inputs,
+            shared_context=_shared_context(
+                state,
+                context_keys=("pm-rebalance", "digest-delta", "digest-baseline"),
+                # Portfolio-scoped (#935): the PM + risk debaters read the book and
+                # prices via the data tools, so the run-wide per-ticker ETF dump is
+                # dropped from shared_context — macro series + regime signals stay.
+                data_layer_scope="portfolio",
+            ),
+            output_model=RebalanceDecision,
+            phase_slug="pm-rebalance",
+            tools=tools,
+            execute_tool=execute_tool,
+        )
+    except Exception as exc:  # noqa: BLE001 — LLM-output failure degrades legacy PM, never the chain (#1665)
+        # H8 prefers the H7 memo when present; the legacy rebalance is only the
+        # fallback path, so skipping it on an LLM failure is safe degradation.
+        logger.warning(
+            "pm-rebalance LLM failed (%s: %s); skipping legacy PM", type(exc).__name__, exc
+        )
+        return {
+            "errors": [
+                PhaseError(
+                    phase="phase7d_pm",
+                    node="pm-rebalance",
+                    message=f"pm-rebalance LLM failed: {exc}"[:500],
+                    retryable=False,
+                )
+            ]
+        }
     # An empty recommended_portfolio is a valid 100% CASH stance; Phase 9D books
     # it as a CASH position (#713). No cash-proxy padding here.
     return {"phase7d_rebalance": result.model_dump(mode="json")}

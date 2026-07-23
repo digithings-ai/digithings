@@ -108,6 +108,21 @@ fresh `deliberation_transcript` row only when the loop runs.
 
 ---
 
+## LLM-node fail-soft (#1665)
+
+Every hermes LLM call site (H1–H3 via `thesis_common`, H5 via `portfolio_common`, H6
+deliberation turns, H7 memo, 7D debate/PM, phase 9 evolution) is wrapped: a
+research-agent output failure (JSONDecodeError / ValidationError / empty body after
+digillm's retries) degrades **that node** with a node-level `PhaseError` and a
+phase-appropriate fallback — H7 carries the prior memo re-dated (held names it misses
+are covered by the #1649 carry), H6 carries the analyst stance, H5/thesis skip the
+item, 7D empties the debate arm, legacy PM skips (H8 prefers the H7 memo anyway).
+`chain/hermes` (`phase="chain"`) errors can therefore only come from infra
+(checkpointer/graph), never LLM output. Rationale: three runs in two days
+(2026-07-21/22) died run-fatal on one flaky parse, and each outer retry re-runs the
+whole chain at ~$1.2–3.6 — the pipeline must complete (and commit) on the first
+attempt with local degradation instead.
+
 ## H9 commit-run: coherence, held-carry, and observability (#932 / #1030 / #1555 / #1649)
 
 H9 is the sole terminal writer. Before it books, `commit_io.coherence_errors` runs two
@@ -133,6 +148,12 @@ the two can never diverge — covers:
 
 H8 carries both classes into the sized book at their current drifted weight *before* the
 rebalancing-cadence band — a held position stays owned unless the PM explicitly exits it.
+A **final-book backstop** (`_apply_held_continuity_backstop`, #1649) then re-enforces the
+invariant on the finished dict regardless of cause — the 2026-07-22 22:54 run reached H9
+with nine held names at weight ≤ 0 (PM-longed but dropped by sizing, exempt from the
+per-cause carries) — re-adding any held, non-flat name at its drifted weight with a
+WARNING naming the crack (sized-out vs carry-miss). A name with no recoverable weight
+stays out and H9 still fails closed.
 **Regression #1555:** before the gated carry, dropped held names made check (1) fail
 closed with a `PhaseError` that never reached the degraded gate — every delta-day commit
 was silently frozen from 2026-06-26 while runs still reported `ok:true`.
