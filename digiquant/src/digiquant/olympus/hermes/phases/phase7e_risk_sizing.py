@@ -187,7 +187,10 @@ def _verb(current: float | None, target: float) -> str:
 
 
 def _rebuild_actions(
-    original_actions: list[Any], pm_targets: dict[str, float], sized: dict[str, float]
+    original_actions: list[Any],
+    pm_targets: dict[str, float],
+    sized: dict[str, float],
+    current_weights: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """Rebuild the advisory action list to match the SIZED book.
 
@@ -222,13 +225,18 @@ def _rebuild_actions(
                 f"{base} [removed by risk sizing — cap / correlation de-dup / conviction floor]"
             ).strip()
         out.append(row)
-    # Sized tickers the PM had no explicit action row for (rare) → minimal new rows.
+    # Sized tickers the PM had no explicit action row for — the NORM on the H7 memo
+    # path (original_actions is empty there), so every booked day misreported held
+    # rebalances as "new" (#1676). Classify against the live drifted weight instead:
+    # add / trim / hold for existing positions, "new" only for genuinely new names.
+    live = current_weights or {}
     for ticker, target in sized.items():
         if ticker not in seen:
+            verb = _verb(_opt_float(live.get(ticker)), target)
             out.append(
                 {
                     "ticker": ticker,
-                    "action": "new",
+                    "action": verb,
                     "target_pct": round(target, 4),
                     "rationale": "Position weight set by deterministic risk sizing.",
                 }
@@ -331,6 +339,26 @@ def _apply_held_continuity_backstop(
     return out
 
 
+def _cap_total_invested(sized: dict[str, float]) -> dict[str, float]:
+    """FINAL-book allocation invariant (#1676): Σ positive weights ≤ 100%.
+
+    Nothing upstream enforces the total, and the held-continuity backstop (#1649)
+    legitimately ADDS drifted weights on top of an already-allocated book — the
+    correct rescue can overshoot 100%. Proportionally scale all positive weights
+    down when the total exceeds 100 (cash residual < 100 is always valid).
+    """
+    total = sum(w for w in sized.values() if w > 0)
+    if total <= 100.0 + 1e-9:
+        return sized
+    scale = 100.0 / total
+    logger.warning(
+        "total-invested cap: sized book at %.2f%% > 100%%; scaling all positions by %.4f",
+        total,
+        scale,
+    )
+    return {t: (w * scale if w > 0 else w) for t, w in sized.items()}
+
+
 def _build_sized_book(
     *,
     pm_tickers: list[str],
@@ -411,11 +439,12 @@ def _build_sized_book(
         run_date=state.run_date,
     )
     sized = _apply_held_continuity_backstop(sized, state)
+    sized = _cap_total_invested(sized)
     updated: RebalancePayload = {
         "recommended_portfolio": [
             {"ticker": ticker, "target_pct": round(weight, 4)} for ticker, weight in sized.items()
         ],
-        "actions": _rebuild_actions(original_actions, pm_targets, sized),
+        "actions": _rebuild_actions(original_actions, pm_targets, sized, current_weights),
         "notes": (f"{prior_notes}\n\n" if prior_notes else "")
         + f"Risk-sizing (H8): {result.explanation}{breaker_note}",
     }
