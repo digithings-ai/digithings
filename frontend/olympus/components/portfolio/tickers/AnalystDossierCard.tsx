@@ -110,6 +110,17 @@ function References({ sources }: { sources: string[] }) {
   );
 }
 
+function EvidenceCell({ label, value }: { label: string; value: number | string | null }) {
+  return (
+    <div className="bg-term-bg px-3 py-2.5">
+      <dt className="font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+        {label}
+      </dt>
+      <dd className="mt-1 text-sm text-ink capitalize">{value ?? '—'}</dd>
+    </div>
+  );
+}
+
 export default function AnalystDossierCard({
   payload,
   asOf,
@@ -131,6 +142,39 @@ export default function AnalystDossierCard({
 
         {/* Thesis — prominent main argument */}
         <ProseSection title="Thesis" text={payload.thesis} />
+
+        {/* Evidence assessment (#1672) — the itemized counts conviction is DERIVED from;
+            rendered so the derivation is auditable at a glance. Legacy docs: null → hidden. */}
+        {payload.evidence && (
+          <div className="border-t border-hair pt-6">
+            <h3 className="mb-3 font-mono text-[0.6rem] font-bold uppercase tracking-[0.12em] text-ink-mute">
+              Evidence assessment
+            </h3>
+            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-hair bg-hair md:grid-cols-5">
+              <EvidenceCell
+                label="Confirming"
+                value={payload.evidence.independent_confirming_signals}
+              />
+              <EvidenceCell label="Contradicting" value={payload.evidence.contradicting_signals} />
+              <EvidenceCell
+                label="Catalyst"
+                value={
+                  payload.evidence.catalyst_within_horizon == null
+                    ? null
+                    : payload.evidence.catalyst_within_horizon
+                      ? 'dated'
+                      : 'none'
+                }
+              />
+              <EvidenceCell label="Trend" value={payload.evidence.trend_alignment || null} />
+              <EvidenceCell label="Quality" value={payload.evidence.evidence_quality || null} />
+            </dl>
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-mute/70">
+              Conviction is computed from these counts — high requires ≥4 confirming families,
+              ≤1 contradiction, a dated catalyst, and high-quality evidence.
+            </p>
+          </div>
+        )}
 
         {/* Bull/Bear cases — deliberate 2-column grid */}
         {(payload.bull_case.trim() || payload.bear_case.trim()) && (

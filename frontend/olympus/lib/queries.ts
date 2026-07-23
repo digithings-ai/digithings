@@ -22,6 +22,7 @@ import type {
   PipelineTickerDoc,
   PositionPriceChartData,
   AnalystPayload,
+  AnalystEvidence,
   TickerCoverage,
   TickerDossier,
 } from './types';
@@ -447,6 +448,22 @@ export function parseAnalystPayload(raw: unknown): AnalystPayload | null {
     price_targets: priceTargets,
     expectations: s(o.expectations),
     fingerprint_news_hash: s(o.fingerprint_news_hash),
+    evidence: parseAnalystEvidence(o.evidence),
+  };
+}
+
+/** Coerce the #1672 evidence block; null when absent (legacy docs) or malformed. */
+function parseAnalystEvidence(raw: unknown): AnalystEvidence | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const n = (v: unknown): number | null => (typeof v === 'number' ? v : null);
+  return {
+    independent_confirming_signals: n(o.independent_confirming_signals),
+    contradicting_signals: n(o.contradicting_signals),
+    catalyst_within_horizon:
+      typeof o.catalyst_within_horizon === 'boolean' ? o.catalyst_within_horizon : null,
+    trend_alignment: typeof o.trend_alignment === 'string' ? o.trend_alignment : '',
+    evidence_quality: typeof o.evidence_quality === 'string' ? o.evidence_quality : '',
   };
 }
 
