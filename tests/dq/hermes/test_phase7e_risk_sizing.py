@@ -13,7 +13,12 @@ from datetime import date, timedelta
 import polars as pl
 import pytest
 
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.olympus.atlas.state import (
+    AtlasConfigBundle,
+    AtlasResearchState,
+    PhaseHermesState,
+    PriorContext,
+)
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.olympus.hermes.phases import phase7e_risk_sizing
 from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
@@ -496,3 +501,55 @@ def test_correlation_reader_error_falls_back_to_none(monkeypatch: pytest.MonkeyP
     assert "SPY" in _weights(rebal)
     # And corr=None must have been passed (conservative fallback).
     assert captured.get("corr") is None, "expected corr=None fallback on reader error"
+
+
+@pytest.mark.unit
+class TestHeldContinuityBackstop:
+    """#1649 backstop — the FINAL sized book enforces held ⇒ positive weight or flat.
+
+    The 2026-07-22 22:54 run reached H9 with NINE held names at weight<=0 despite the
+    memo-unaddressed carry being live — the invariant must hold on the final dict
+    regardless of which upstream crack fired.
+    """
+
+    def _held_state(self, *, flat: bool = False, with_weight: bool = True) -> AtlasResearchState:
+        prior_book = [{"ticker": "DBO", "weight_pct": 7.5 if with_weight else None}]
+        state = AtlasResearchState(
+            run_type="delta",
+            run_date=RUN_DATE,
+            baseline_date=date(2026, 6, 9),
+            config=AtlasConfigBundle(preferences={}),
+            prior_context=PriorContext(prior_book=prior_book),
+        )
+        roster = [TickerDirection(ticker="SPY", direction="long", conviction_rank=1)]
+        if flat:
+            roster.append(TickerDirection(ticker="DBO", direction="flat", conviction_rank=2))
+        else:
+            # The exact 2026-07-22 shape: PM addressed the held name as long,
+            # but sizing dropped it (weight absent from the final dict).
+            roster.append(TickerDirection(ticker="DBO", direction="long", conviction_rank=2))
+        state.phase_hermes = PhaseHermesState(
+            pm_direction_memo=PMDirectionMemo(date=RUN_DATE, roster=roster)
+        )
+        return state
+
+    def test_sized_out_held_name_is_readded_at_drifted_weight(self) -> None:
+        state = self._held_state()
+        out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0}, state)
+        assert out["DBO"] == 7.5, "held name dropped by sizing must be re-added"
+        assert out["SPY"] == 60.0
+
+    def test_explicit_flat_is_never_resurrected(self) -> None:
+        state = self._held_state(flat=True)
+        out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0}, state)
+        assert "DBO" not in out, "an explicit flat is an exit — never re-added"
+
+    def test_unrecoverable_weight_stays_out_and_fails_closed_downstream(self) -> None:
+        state = self._held_state(with_weight=False)
+        out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0}, state)
+        assert "DBO" not in out, "no recoverable weight → leave out; H9 fails closed"
+
+    def test_non_held_names_untouched(self) -> None:
+        state = self._held_state()
+        out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0, "QQQ": 0.0}, state)
+        assert out["QQQ"] == 0.0, "backstop is held-only"
