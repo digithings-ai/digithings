@@ -35,6 +35,8 @@ describe('ConvictionHistory — flat decision ledger', () => {
     expect(html).toContain('decision-ledger');
     // Should have hairline borders
     expect(html).toContain('border-');
+    expect(html).toContain('>Evaluation<');
+    expect(html).not.toContain('>Holding<');
   });
 });
 

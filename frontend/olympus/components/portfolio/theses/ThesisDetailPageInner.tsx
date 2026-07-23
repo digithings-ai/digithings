@@ -196,7 +196,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
               <span className="font-mono text-xs text-ink-soft">{t.vehicle}</span>
             ) : null}
             {isNonActive(t.status) ? (
-              <span className="rounded-full border border-warn/40 px-2 py-0.5 text-xs font-semibold uppercase tracking-normal text-warn">
+              <span className="rounded-full border border-warn/40 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-warn">
                 {t.status}
               </span>
             ) : null}
@@ -212,7 +212,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
           <div className="min-w-0 space-y-6 px-5 py-6 lg:border-r lg:border-hair">
             {t.notes ? (
               <section>
-                <h2 className="mb-3 text-sm font-semibold uppercase tracking-normal text-ink-mute">
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-ink-mute">
                   Thesis statement
                 </h2>
                 <p className="max-w-3xl text-sm leading-relaxed text-ink-soft">{t.notes}</p>
@@ -226,7 +226,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
 
             <section className="space-y-3 border-t border-hair pt-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold uppercase tracking-normal text-ink-mute">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-mute">
                   Vehicles expressing this view
                 </h2>
                 {story?.asOf ? <AsOfBadge date={story.asOf} /> : null}
@@ -256,7 +256,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
 
           <aside className="space-y-6 border-t border-hair px-5 py-6 lg:border-t-0">
             <div>
-              <p className="font-mono text-xs uppercase tracking-normal text-ink-mute">
+              <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
                 Research frame
               </p>
               <p className="mt-2 text-sm leading-relaxed text-ink-soft">

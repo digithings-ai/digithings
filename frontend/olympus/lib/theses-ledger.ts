@@ -25,6 +25,16 @@ export function sortByConfidenceDesc(theses: Thesis[]): Thesis[] {
   });
 }
 
+/** Keep one research view per durable topic, preferring the highest-conviction row. */
+export function consolidateThesesByTopic(theses: Thesis[]): Thesis[] {
+  const consolidated = new Map<string, Thesis>();
+  for (const thesis of sortByConfidenceDesc(theses)) {
+    const key = thesis.topic_key?.trim().toLowerCase() || `id:${thesis.id}`;
+    if (!consolidated.has(key)) consolidated.set(key, thesis);
+  }
+  return [...consolidated.values()];
+}
+
 export interface VehicleThesisGroup {
   marketId: string | null;
   marketName: string | null;

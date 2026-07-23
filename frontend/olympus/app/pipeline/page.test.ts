@@ -23,15 +23,11 @@ vi.mock('@/components/pipeline/PipelineCanvas', () => ({
 vi.mock('@/components/pipeline/PipelineNodeDetail', () => ({
   default: () => null,
 }));
-vi.mock('@/components/pipeline/PipelineSummaryStrip', () => ({
-  default: () => createElement('div', null, 'summary-strip'),
-}));
 vi.mock('@/components/pipeline/PipelineDaySelector', () => ({
   default: () => createElement('div', null, 'day-selector'),
 }));
 
 import PipelinePage from './page';
-import PipelineHeading from '@/components/pipeline/PipelineHeading';
 
 describe('app/pipeline/page', () => {
   it('mounts and does not redirect — renders pipeline-canvas marker', () => {
@@ -45,10 +41,10 @@ describe('app/pipeline/page', () => {
     expect(html).toContain('Pipeline');
   });
 
-  it('heading is hook-free so the Suspense fallback prerenders the h1', () => {
-    const html = renderToStaticMarkup(createElement(PipelineHeading));
+  it('carries an sr-only h1 so the prerendered artifact keeps its heading', () => {
+    const html = renderToStaticMarkup(createElement(PipelinePage));
     expect(html).toContain('<h1');
-    expect(html).toContain('How today');
+    expect(html).toContain('sr-only');
     expect(html).not.toContain('<main');
   });
 
@@ -58,6 +54,12 @@ describe('app/pipeline/page', () => {
     expect(html).toContain('data-testid="pipeline-command-band"');
     expect(html).toContain('data-testid="pipeline-workflow"');
     expect(html.indexOf('pipeline-command-band')).toBeLessThan(html.indexOf('pipeline-workflow'));
+    expect(html).toContain('min-h-[calc(100dvh-125px)]');
+    expect(html).toContain('md:min-h-0');
+    expect(html).toContain('min-h-12');
+    expect(html).not.toContain('How today');
+    expect(html).not.toContain('research → deliberation → selection');
+    expect(html).not.toContain('summary-strip');
     expect(html).not.toContain('glass-card');
     expect(html).not.toContain('<main'); // AppFrame owns the sole main landmark
   });

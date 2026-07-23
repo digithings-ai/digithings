@@ -352,7 +352,7 @@ class TestPositionRiskFields:
                 [{"ticker": "AAPL", "target_pct": 40}],
                 analysts={"AAPL": {"conviction_score": 4, "stance": "buy"}},
                 debates={"AAPL": {"conviction_delta": 1}},
-                preferences={"holding_days": 30},
+                preferences={"holding_days": 5, "risk_horizon_days": 30},
             )
         )
         aapl = self._book(client)["AAPL"]
@@ -389,7 +389,7 @@ class TestPositionRiskFields:
         aapl = self._book(client)["AAPL"]
         assert aapl["entry_price"] == 150.0  # carried, NOT reset to today's 200 close
         assert aapl["entry_date"] == "2026-06-01"
-        assert aapl["horizon_days"] == 21  # default when preferences omit holding_days
+        assert aapl["horizon_days"] == 21  # decision holding_days does not set risk horizon
 
     def test_on_without_atr_skips_stop_target(self, monkeypatch) -> None:
         monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
@@ -437,7 +437,7 @@ class TestPositionRiskFields:
             assert f not in cash
 
     def test_negative_horizon_defaults_to_21(self, monkeypatch) -> None:
-        # A nonsensical negative holding_days must not persist — fall back to the default.
+        # A nonsensical negative risk horizon must not persist — fall back to the default.
         monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
         client = FakeSupabaseClient(
             canned_reads={
@@ -448,7 +448,7 @@ class TestPositionRiskFields:
             self._state(
                 [{"ticker": "SPY", "target_pct": 50}],
                 analysts={"SPY": {"conviction_score": 3}},
-                preferences={"holding_days": -5},
+                preferences={"risk_horizon_days": -5},
             )
         )
         assert self._book(client)["SPY"]["horizon_days"] == 21
@@ -653,6 +653,9 @@ class TestPortfolioMetricsWriter:
         assert row["volatility"] is None
         assert row["max_drawdown"] is None
         assert row["alpha"] is None
+        assert row["net_return_pct"] is not None
+        assert row["benchmark_return_pct"] is None
+        assert row["relative_return_pct"] is None
         # pnl_pct should still be populated (day return)
         assert row["pnl_pct"] is not None
 
@@ -708,6 +711,9 @@ class TestPortfolioMetricsWriter:
         row = client.store["portfolio_metrics"][0]
         assert row["alpha"] is not None
         assert row["alpha"] > 0  # portfolio beat SPY
+        assert row["net_return_pct"] is not None
+        assert row["benchmark_return_pct"] is not None
+        assert row["relative_return_pct"] == row["alpha"]
 
     def test_no_spy_data_alpha_none(self) -> None:
         """When SPY price_history is missing, alpha must be None (not crash)."""

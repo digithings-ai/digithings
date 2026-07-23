@@ -55,15 +55,15 @@ export default function PipelineNodeDetail({
     return () => { cancelled = true; };
   }, [documentKey, date]);
 
-  // Responsive container: mobile = docked lower pane, desktop = right side panel.
-  // Keeping mobile detail in flow leaves the stage navigator visible above it.
+  // Mobile detail replaces the browser as a full-page surface; closing it returns to
+  // the exact Pipeline selection. Desktop keeps the in-workspace side panel.
   return (
     <aside
       aria-label="Node detail"
       aria-live="polite"
       className={[
-        'relative z-20 flex h-[46%] min-h-40 shrink-0 flex-col border-t border-hair bg-term-bg',
-        'md:h-full md:w-[372px] md:min-h-0 md:border-l md:border-t-0',
+        'fixed inset-0 z-[1100] flex h-dvh w-full shrink-0 flex-col overflow-hidden bg-term-bg',
+        'pt-[env(safe-area-inset-top)] md:relative md:inset-auto md:z-20 md:h-full md:w-[372px] md:min-h-0 md:border-l md:border-hair md:pt-0',
       ].join(' ')}
     >
       {/* Header */}
@@ -85,14 +85,14 @@ export default function PipelineNodeDetail({
           type="button"
           aria-label="Close"
           onClick={onClose}
-          className="ml-3 flex-shrink-0 w-7 h-7 flex items-center justify-center border border-hair rounded-lg text-ink-mute hover:text-ink transition-colors"
+          className="ml-3 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
         >
-          <X size={13} />
+          <X size={18} />
         </button>
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 text-sm leading-relaxed text-ink-mute md:px-5 md:py-4">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-sm leading-relaxed text-ink-mute md:px-5 md:py-4">
         {/* Empty state */}
         {!documentKey && !explanation && (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center">

@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import type { Position, Thesis } from '@/lib/types';
 import type { TableRow } from '@/lib/database.types';
-import { splitTheses } from '@/lib/theses-ledger';
+import { consolidateThesesByTopic, splitTheses } from '@/lib/theses-ledger';
 import { latestDecisionByTicker } from '@/lib/holdings-decisions';
 import {
   buildThesisStory,
@@ -42,7 +42,10 @@ export default function ThesesTab({
       ),
     [theses]
   );
-  const { market, vehicle } = useMemo(() => splitTheses(activeTheses), [activeTheses]);
+  const { market, vehicle } = useMemo(() => {
+    const split = splitTheses(activeTheses);
+    return { ...split, market: consolidateThesesByTopic(split.market) };
+  }, [activeTheses]);
   const decisionsByTicker = useMemo(() => latestDecisionByTicker(decisions), [decisions]);
 
   const stories = useMemo(() => {

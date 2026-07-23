@@ -58,6 +58,15 @@ describe('ThesesTab (story spine)', () => {
     expect(html).toContain('Prices firm');
   });
 
+  it('keeps confidence and timeframe inside the disclosure body, not its summary', () => {
+    const summary = html.match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1] ?? '';
+    expect(summary).toContain('Advanced Materials Growth');
+    expect(summary).not.toContain('80% confidence');
+    expect(summary).not.toContain('long_term');
+    expect(html).toContain('80% confidence');
+    expect(html).toContain('Long term');
+  });
+
   it('renders vehicles from the thesis_vehicles join with rationale and rank', () => {
     expect(html).toContain('AAA expresses the growth view');
     expect(html).toContain('#1 pick');
@@ -95,5 +104,20 @@ describe('ThesesTab (story spine)', () => {
     expect(terminalHtml).toContain('Active opinion');
     expect(terminalHtml).not.toContain('Closed opinion');
     expect(terminalHtml).not.toContain('Invalidated opinion');
+  });
+
+  it('renders one active view per durable topic key', () => {
+    const duplicateHtml = renderToStaticMarkup(createElement(ThesesTab, {
+      ...base,
+      theses: [
+        { ...thesis({ id: 'CTA-NEW', name: 'CTA positioning', confidence: 0.8 }), topic_key: 'cta-positioning' } as Thesis,
+        { ...thesis({ id: 'CTA-OLD', name: 'CTA volatility', confidence: 0.6 }), topic_key: 'cta-positioning' } as Thesis,
+        { ...thesis({ id: 'CHINA', name: 'China recovery', confidence: 0.7 }), topic_key: 'china-recovery' } as Thesis,
+      ],
+    }));
+
+    expect(duplicateHtml).toContain('CTA positioning');
+    expect(duplicateHtml).not.toContain('CTA volatility');
+    expect(duplicateHtml).toContain('China recovery');
   });
 });
