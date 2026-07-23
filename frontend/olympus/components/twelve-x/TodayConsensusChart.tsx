@@ -82,12 +82,13 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
                     {r.currency}
                   </span>
                   <div className="flex-1 min-w-0">
+                    {/* One tick only: today's actual vs the smoothed fill. The
+                        prior-run level is already carried by the momentum arrow
+                        + signed delta beside the bar — a second tick read as an
+                        unexplained stray line (#1664 follow-up). */}
                     <ConsensusScoreBar
                       value={r.avgNow ?? 0}
-                      markers={[
-                        { value: r.actualNow, kind: 'actual', label: "Today's actual" },
-                        { value: r.priorActual, kind: 'prior', label: "Prior run" },
-                      ]}
+                      markers={[{ value: r.actualNow, kind: 'actual', label: "Today's actual" }]}
                     />
                   </div>
                   <span
