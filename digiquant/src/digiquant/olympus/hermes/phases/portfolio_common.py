@@ -250,7 +250,9 @@ def run_asset_analyst_llm(
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=phase_inputs,
-            shared_context=_shared_context(state, context_keys=(), data_layer_scope="ticker"),
+            shared_context=_shared_context(
+                state, context_keys=("digest", "digest-delta"), data_layer_scope="ticker"
+            ),
             output_model=DocumentPatch,
             phase_slug=phase_slug,
             tools=tools,
@@ -289,7 +291,9 @@ def run_asset_analyst_llm(
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=phase_inputs,
-            shared_context=_shared_context(state, context_keys=(), data_layer_scope="ticker"),
+            shared_context=_shared_context(
+                state, context_keys=("digest", "digest-delta"), data_layer_scope="ticker"
+            ),
             output_model=AnalystPayload,
             phase_slug=phase_slug,
             tools=tools,
