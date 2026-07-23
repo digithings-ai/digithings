@@ -20,7 +20,7 @@ export function ThesisStorySpine({
     <section data-region="thesis-ledger" className="min-w-0 border-y border-hair bg-surface">
       <div className="flex items-baseline justify-between gap-3 border-x border-b border-hair px-5 py-4">
         <div>
-          <p className="font-mono text-xs uppercase tracking-normal text-ink-mute">
+          <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
             portfolio research
           </p>
           <h2 className="mt-1 font-display text-2xl text-ink">Research views</h2>

@@ -871,6 +871,31 @@ as inception-to-date contribution. Its cumulative contribution chart instead app
 position snapshot's prior weight to the next interval's price return and overlays the exact
 NAV-rebased portfolio return.
 
+#### Canonical market-thesis identity (#1615)
+
+`theses.topic_key` identifies one durable market opinion independently of its daily title,
+evidence, criteria, or confidence. H2 receives the full active thesis register and every
+proposal declares `action=create|update`. An update preserves the active row's `thesis_id`
+and `topic_key`; a create uses a topic absent from both the active register and the current
+H2 output. `validate_market_thesis_proposals` rejects ID/topic collisions before
+persistence, while migration 056's partial unique `(date, topic_key)` index prevents more
+than one nonterminal market thesis for a topic on a date. The migration also consolidates
+the legacy CTA and Advanced Materials duplicate clusters and rewires their relationships.
+Different wording or evidence is an update, never a new opinion. H2 creates start as
+`ACTIVE`; updates preserve H1's same-run lifecycle decision, falling back to the prior
+nonterminal status when H1 emitted no update. A `PAUSED` topic remains the same opinion and
+cannot be replaced with a new ID.
+
+#### Canonical instrument metadata (#1615)
+
+`instruments` is the security master for every ticker tracked by `positions` or
+`price_history`. Migration 055 backfills existing symbols and a `positions` trigger inserts
+a non-destructive placeholder for every newly booked ticker. The daily
+`digiquant prices fetch-quotes --instrument-metadata --supabase` job resolves Yahoo's best
+available long name plus instrument type, exchange, currency, country, sector, and industry;
+Olympus `sector_map` remains authoritative for the coarse `asset_class` and risk `category`.
+Provider failures never overwrite a resolved row.
+
 **Excluded from `latest_segments`:** `analyst/*` and `deliberation/*` keys — loaded
 separately so research nodes never pay the per-ticker decision-artifact token tax.
 

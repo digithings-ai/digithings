@@ -8,13 +8,9 @@ import { PIPELINE_TOPOLOGY } from '@/lib/pipeline-topology';
 import type { PipelineStageId } from '@/lib/pipeline-topology';
 import type { ExpansionState, LaidOutNode } from '@/lib/pipeline-layout';
 import type { PipelineStage } from '@/lib/pipeline-links';
-import { DIGEST_DOCUMENT_KEYS, parsePipelineParams, resolvePresentDigestKey } from '@/lib/pipeline-links';
-import type { RegimeChip } from '@/lib/render-pipeline-payloads';
-import { regimeChipsFromMacroPayload, summarizeRecommendedPortfolio } from '@/lib/render-pipeline-payloads';
-import PipelineSummaryStrip from './PipelineSummaryStrip';
+import { parsePipelineParams, resolvePresentDigestKey } from '@/lib/pipeline-links';
 import PipelineDaySelector from './PipelineDaySelector';
 import PipelineCanvas from './PipelineCanvas';
-import PipelineHeading from './PipelineHeading';
 import PipelineNodeDetail from './PipelineNodeDetail';
 
 function today(): string {
@@ -78,11 +74,6 @@ export default function PipelineClient() {
     presentKeys: new Set(),
   });
 
-  // Summary strip state
-  const [headline, setHeadline] = useState<string | null>(null);
-  const [regimeChips, setRegimeChips] = useState<RegimeChip[]>([]);
-  const [decision, setDecision] = useState<string | null>(null);
-
   // Node detail
   const [activeNode, setActiveNode] = useState<LaidOutNode | null>(null);
   const [activeDocumentKey, setActiveDocumentKey] = useState<string | null>(params.node ?? null);
@@ -98,12 +89,6 @@ export default function PipelineClient() {
     let cancelled = false;
 
     void (async () => {
-      // Reset before the fetch, not just on success — otherwise switching to a
-      // date with no digest/rebalance/macro doc silently keeps showing the
-      // PREVIOUS date's headline/decision/chips.
-      setHeadline(null);
-      setDecision(null);
-      setRegimeChips([]);
       setDayLoading(true);
 
       try {
@@ -116,7 +101,7 @@ export default function PipelineClient() {
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
         // Independent reads — run them together instead of one round-trip at a time.
-        const [datesRes, docsRes, digestRes, rebalanceRes, macroRes] = await Promise.all([
+        const [datesRes, docsRes] = await Promise.all([
           // Run dates come from daily_snapshots (exactly one row per run day).
           // Deriving them from `documents` selects EVERY row (~40-60/day), and
           // the PostgREST 1000-row default cap silently truncated the oldest
@@ -127,27 +112,6 @@ export default function PipelineClient() {
             .gte('date', thirtyDaysAgo)
             .order('date', { ascending: false }),
           supabase.from('documents').select('document_key').eq('date', selectedDate),
-          // The digest is published as `digest` on baseline days, `digest-delta`
-          // on delta days (the majority of days). A backfilled date can carry
-          // BOTH keys — `.maybeSingle()` errors on >1 row and blanked the
-          // headline, so fetch both and pick by DIGEST_DOCUMENT_KEYS precedence.
-          supabase
-            .from('documents')
-            .select('document_key, payload')
-            .in('document_key', DIGEST_DOCUMENT_KEYS)
-            .eq('date', selectedDate),
-          supabase
-            .from('documents')
-            .select('payload')
-            .eq('document_key', 'pm-rebalance')
-            .eq('date', selectedDate)
-            .maybeSingle(),
-          supabase
-            .from('documents')
-            .select('payload')
-            .eq('document_key', 'macro')
-            .eq('date', selectedDate)
-            .maybeSingle(),
         ]);
 
         if (cancelled) return;
@@ -172,24 +136,6 @@ export default function PipelineClient() {
           setDayData(buildPipelineDayData(docsRes.data as { document_key: string }[]));
         }
 
-        // Headline comes from the digest's structured `headline` field — pipeline
-        // documents leave `documents.content` empty and carry everything in `payload`.
-        const digestRows = (digestRes.data ?? []) as { document_key: string; payload: unknown }[];
-        const digestRow = DIGEST_DOCUMENT_KEYS
-          .map((k) => digestRows.find((r) => r.document_key === k))
-          .find(Boolean);
-        const digestPayload = digestRow?.payload as Record<string, unknown> | undefined;
-        const headlineText = typeof digestPayload?.headline === 'string' ? digestPayload.headline.trim() : '';
-        if (headlineText) setHeadline(headlineText);
-
-        // Decision chip: summarize the day's PM rebalance book (target weights),
-        // not decision_log (a per-ticker analyst-call audit trail, not a per-day summary).
-        const summary = summarizeRecommendedPortfolio(rebalanceRes.data?.payload);
-        if (summary) {
-          setDecision(`${summary.holdingsCount} holdings · ${summary.investedPct.toFixed(0)}% invested`);
-        }
-
-        setRegimeChips(regimeChipsFromMacroPayload(macroRes.data?.payload));
       } catch {
         // Supabase not configured or no data — degrade gracefully
       } finally {
@@ -234,35 +180,24 @@ export default function PipelineClient() {
     >
       <header
         data-testid="pipeline-command-band"
-        className="border-y border-hair bg-surface px-4 py-4 md:px-6"
+        className="flex min-h-12 items-center justify-end border-y border-hair bg-surface px-4 py-2 md:px-4"
       >
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-          <PipelineHeading />
-          <PipelineDaySelector
-            dates={availableDates}
-            value={selectedDate}
-            onChange={handleDateChange}
-          />
-        </div>
-        <div className="mt-4 border-t border-hair pt-3">
-          <PipelineSummaryStrip
-            headline={headline}
-            regimeChips={regimeChips}
-            decision={decision}
-            loading={dayLoading}
-          />
-        </div>
+        <h1 className="sr-only">Pipeline</h1>
         {noRunForDate && (
-          <p className="mt-2 border-t border-hair pt-2 font-mono text-xs text-ink-mute" role="status">
-            No pipeline run recorded for this date — the graph below shows the
-            expected shape, not real output.
+          <p className="mr-auto font-mono text-xs text-ink-mute" role="status">
+            No run recorded — showing the expected pipeline.
           </p>
         )}
+        <PipelineDaySelector
+          dates={availableDates}
+          value={selectedDate}
+          onChange={handleDateChange}
+        />
       </header>
 
       <div
         data-testid="pipeline-workflow"
-        className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row"
+        className="flex min-h-[calc(100dvh-125px)] min-w-0 flex-1 flex-col md:min-h-0 md:flex-row"
       >
         <PipelineCanvas
           day={dayData}

@@ -129,11 +129,11 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
               className="flex flex-col justify-center gap-2 border-b border-hair p-5 lg:border-b-0 lg:border-r lg:p-6"
             >
               <div className="flex flex-wrap items-baseline gap-2">
-                <h1 className="font-mono text-4xl font-medium leading-none tracking-normal text-ink md:text-5xl">
+                <h1 className="font-mono text-4xl font-medium leading-none tracking-tight text-ink md:text-5xl">
                   {ticker}
                 </h1>
                 {stateLabel && (
-                  <span className="font-mono text-xs uppercase tracking-normal text-ink-mute">
+                  <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
                     {stateLabel}
                   </span>
                 )}
@@ -156,7 +156,7 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
             {held && position ? (
               <dl data-region="metrics" className="m-0 grid grid-cols-3 border-b border-hair lg:border-b-0">
                 <div className="flex flex-col justify-center gap-2 border-r border-hair p-4">
-                  <dt className="font-mono text-xs font-medium uppercase tracking-normal text-ink-mute">
+                  <dt className="font-mono text-[0.62rem] font-medium uppercase tracking-wider text-ink-mute">
                     weight
                   </dt>
                   <dd className="font-mono text-lg tabular-nums text-ink">
@@ -171,7 +171,7 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
                 </div>
 
                 <div className="flex flex-col justify-center gap-2 border-r border-hair p-4">
-                  <dt className="font-mono text-xs font-medium uppercase tracking-normal text-ink-mute">
+                  <dt className="font-mono text-[0.62rem] font-medium uppercase tracking-wider text-ink-mute">
                     since entry
                   </dt>
                   <dd
@@ -182,7 +182,7 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
                 </div>
 
                 <div className="flex flex-col justify-center gap-2 p-4">
-                  <dt className="font-mono text-xs font-medium uppercase tracking-normal text-ink-mute">
+                  <dt className="font-mono text-[0.62rem] font-medium uppercase tracking-wider text-ink-mute">
                     entry
                   </dt>
                   <dd className="font-mono text-lg tabular-nums text-ink">
@@ -196,19 +196,19 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
             ) : (
               <dl data-region="metrics" className="m-0 grid grid-cols-3 border-b border-hair lg:border-b-0">
                 <div className="flex min-w-0 flex-col justify-center gap-2 border-r border-hair p-4">
-                  <dt className="font-mono text-xs font-medium uppercase leading-tight tracking-normal text-ink-mute">
+                  <dt className="font-mono text-[0.62rem] font-medium uppercase leading-tight tracking-wider text-ink-mute">
                     position
                   </dt>
                   <dd className="m-0 font-mono text-sm text-ink">not held</dd>
                 </div>
                 <div className="flex min-w-0 flex-col justify-center gap-2 border-r border-hair p-4">
-                  <dt className="font-mono text-xs font-medium uppercase leading-tight tracking-normal text-ink-mute">
+                  <dt className="font-mono text-[0.62rem] font-medium uppercase leading-tight tracking-wider text-ink-mute">
                     coverage
                   </dt>
                   <dd className="m-0 font-mono text-sm text-ink">{coverageLabel}</dd>
                 </div>
                 <div className="flex min-w-0 flex-col justify-center gap-2 p-4">
-                  <dt className="font-mono text-xs font-medium uppercase leading-tight tracking-normal text-ink-mute">
+                  <dt className="font-mono text-[0.62rem] font-medium uppercase leading-tight tracking-wider text-ink-mute">
                     decisions
                   </dt>
                   <dd className="m-0 font-mono text-sm tabular-nums text-ink">
@@ -220,7 +220,7 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
 
             <div
               data-region="stamp"
-              className="flex min-w-0 flex-col items-start justify-center gap-1 border-t border-hair p-5 font-mono text-xs uppercase tracking-normal text-ink-mute lg:min-w-[9rem] lg:items-end lg:border-l lg:border-t-0 lg:p-6"
+              className="flex min-w-0 flex-col items-start justify-center gap-1 border-t border-hair p-5 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute lg:min-w-[9rem] lg:items-end lg:border-l lg:border-t-0 lg:p-6"
             >
               <span>as of</span>
               <strong className="font-medium text-accent">
@@ -259,7 +259,7 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
                 className="border-t border-hair lg:border-l lg:border-t-0"
               >
                 <section className="px-5 py-5">
-                  <h2 className="font-mono text-xs font-medium uppercase tracking-normal text-ink-mute">
+                  <h2 className="font-mono text-[0.62rem] font-medium uppercase tracking-wider text-ink-mute">
                     Dossier state
                   </h2>
                   <dl className="mt-4 space-y-3 text-xs">
@@ -282,7 +282,7 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
 
                 {dossier.analyst && stale ? (
                   <section className="border-t border-hair px-5 py-5">
-                    <h2 className="font-mono text-xs font-medium uppercase tracking-normal text-ink-mute">
+                    <h2 className="font-mono text-[0.62rem] font-medium uppercase tracking-wider text-ink-mute">
                       Staleness
                     </h2>
                     <p className="mt-3 text-xs leading-relaxed text-ink-soft">

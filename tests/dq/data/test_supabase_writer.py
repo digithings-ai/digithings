@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from datetime import datetime, timezone
 from typing import Any
 
 import polars as pl
@@ -13,10 +14,12 @@ from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices.supabase_writer import (
     ohlcv_to_price_history_rows,
     technicals_to_rows,
+    upsert_instruments,
     upsert_macro_observations,
     upsert_price_history,
     upsert_price_technicals,
 )
+from digiquant.olympus.instrument_metadata import InstrumentMetadata
 
 
 # ─── Fake Supabase (ports the Atlas pattern) ───────────────────────────
@@ -160,6 +163,40 @@ def test_upsert_price_history_chunks_and_records() -> None:
     assert res.rows == 12
     assert res.table == "price_history"
     assert len(client.store["price_history"]) == 12
+
+
+@pytest.mark.unit
+def test_upsert_instruments_uses_ticker_conflict_key() -> None:
+    captured: dict[str, Any] = {}
+
+    class _CaptureQuery(_FakeQuery):
+        def upsert(self, rows, on_conflict=None):
+            captured["on_conflict"] = on_conflict
+            return super().upsert(rows, on_conflict=on_conflict)
+
+    class _CaptureClient:
+        def __init__(self):
+            self.store: dict[str, list] = {}
+
+        def table(self, name):
+            return _CaptureQuery(table_name=name, store=self.store)
+
+    instrument = InstrumentMetadata(
+        ticker="XLE",
+        official_name="Energy Select Sector SPDR Fund",
+        instrument_type="ETF",
+        asset_class="EQUITY",
+        category="sector-energy",
+        provider="yahoo",
+        source_updated_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+    )
+    client = _CaptureClient()
+
+    result = upsert_instruments(client, [instrument])
+
+    assert result.rows == 1
+    assert captured["on_conflict"] == "ticker"
+    assert client.store["instruments"][0]["official_name"] == "Energy Select Sector SPDR Fund"
 
 
 @pytest.mark.unit

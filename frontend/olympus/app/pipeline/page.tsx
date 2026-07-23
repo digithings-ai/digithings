@@ -1,6 +1,5 @@
 import { Suspense } from 'react';
 import PipelineClient from '@/components/pipeline/PipelineClient';
-import PipelineHeading from '@/components/pipeline/PipelineHeading';
 import PageSkeleton from '@/components/page-skeleton';
 
 /**
@@ -8,10 +7,14 @@ import PageSkeleton from '@/components/page-skeleton';
  * pipeline (Inputs → Research → Synthesis → Selection → Decision).
  *
  * Deep-link grammar: ?date=YYYY-MM-DD&stage=<stage>&node=<document_key>
- * Replaces the /why redirect placeholder. `PipelineClient` reads the params
- * itself via `useSearchParams()` (this is a static export — no server-side
- * `searchParams` prop is available), which is why it must be Suspense-wrapped
- * here, same as `/why` (`components/why/why-client.tsx`).
+ * `PipelineClient` reads the params itself via `useSearchParams()` (this is a
+ * static export — no server-side `searchParams` prop is available), which is
+ * why it must be Suspense-wrapped here, same as `/why`.
+ *
+ * The workspace intentionally has no visible page heading — the compact
+ * command band maximizes canvas space — so the accessible h1 is sr-only and
+ * mirrored in the fallback to keep the prerendered artifact carrying an h1
+ * (check-static-export pins this).
  */
 export default function PipelinePage() {
   return (
@@ -19,9 +22,7 @@ export default function PipelinePage() {
       <Suspense
         fallback={
           <>
-            <header className="border-y border-hair bg-surface px-4 py-4 md:px-6">
-              <PipelineHeading />
-            </header>
+            <h1 className="sr-only">Pipeline</h1>
             <div className="px-6 py-5">
               <PageSkeleton bare />
             </div>

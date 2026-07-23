@@ -29,7 +29,7 @@ export default function BookReconciliationStrip({
         data-region="identity"
         className="flex flex-col justify-center gap-1.5 border-b border-hair px-5 py-5 sm:border-b-0 sm:border-r"
       >
-        <span className="font-mono text-xs font-medium uppercase leading-tight tracking-normal text-ink-mute">
+        <span className="font-mono text-[0.62rem] font-medium uppercase leading-tight tracking-wider text-ink-mute">
           invested
         </span>
         <strong className="font-mono text-5xl font-medium leading-none tabular-nums text-ink">
@@ -39,7 +39,7 @@ export default function BookReconciliationStrip({
 
       <dl data-region="metrics" className="m-0 grid">
         <div className="flex min-w-0 flex-col justify-center gap-2 border-b border-hair px-5 py-4 sm:border-b-0 sm:border-r">
-          <dt className="font-mono text-xs font-medium uppercase leading-tight tracking-normal text-ink-mute">
+          <dt className="font-mono text-[0.62rem] font-medium uppercase leading-tight tracking-wider text-ink-mute">
             positions
           </dt>
           <dd className="m-0 font-mono text-lg tabular-nums text-ink">{positionCount}</dd>
@@ -50,7 +50,7 @@ export default function BookReconciliationStrip({
       {asOfDate && (
         <div
           data-region="stamp"
-          className="flex min-w-0 flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-xs uppercase leading-tight tracking-normal text-ink-mute sm:min-w-[9rem] sm:items-end sm:border-t-0 sm:py-5"
+          className="flex min-w-0 flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase leading-tight tracking-wider text-ink-mute sm:min-w-[9rem] sm:items-end sm:border-t-0 sm:py-5"
         >
           <span>as of</span>
           <strong className="font-medium text-accent">{asOfDate}</strong>
