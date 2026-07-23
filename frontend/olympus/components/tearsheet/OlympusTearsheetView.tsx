@@ -141,6 +141,36 @@ function HoldingsPanel({
   );
 }
 
+/**
+ * Compact realized read under the live band: the headline above marks the
+ * whole book (unrealized included, per NAV); this strip is the recorded-exits
+ * record only, deliberately smaller so the two are never confused.
+ */
+function RealizedSummary({ rows }: { rows: PerformanceHoldingRow[] }) {
+  const realized = rows
+    .map((row) => row.realizedReturnPct)
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  if (realized.length === 0) return null;
+  const winners = realized.filter((v) => v > 0).length;
+  const avg = realized.reduce((sum, v) => sum + v, 0) / realized.length;
+  const best = Math.max(...realized);
+  const worst = Math.min(...realized);
+  const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+  return (
+    <div
+      data-testid="realized-summary"
+      className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-x border-b border-hair bg-surface px-5 py-2 font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute"
+    >
+      <span className="font-semibold">Realized · closed positions</span>
+      <span>{realized.length} exit{realized.length === 1 ? '' : 's'}</span>
+      <span>win rate {Math.round((winners / realized.length) * 100)}%</span>
+      <span>avg {pct(avg)}</span>
+      <span>best {pct(best)}</span>
+      <span>worst {pct(worst)}</span>
+    </div>
+  );
+}
+
 export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
   const [activeTab, setActiveTab] = useState(0);
   const [printing, setPrinting] = useState(false);
@@ -182,8 +212,8 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
       >
         <dl className="m-0 grid grid-cols-1 sm:grid-cols-3">
           <Metric label="NAV" value={data.currentNav} format="number" />
-          <Metric label="Portfolio return" value={data.netReturnPct} />
-          <Metric label="Active return" value={data.relativeReturnPct} />
+          <Metric label="Portfolio return · live" value={data.netReturnPct} />
+          <Metric label="Active return · live" value={data.relativeReturnPct} />
         </dl>
         <div className="flex min-w-[11rem] flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute md:items-end md:border-l md:border-t-0">
           <span>{hasReturns ? 'as of' : 'status'}</span>
@@ -191,12 +221,15 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
             {data.metricsAsOf ?? 'awaiting persisted metrics'}
           </strong>
           <span>{sourceLabel}</span>
+          {hasReturns ? <span>marks the open book · incl. unrealized</span> : null}
           {data.inceptionDate ? <span>since {data.inceptionDate}</span> : null}
           {data.benchmarkReturnPct != null ? (
             <span>vs {data.benchmarkTicker} {data.benchmarkReturnPct >= 0 ? '+' : ''}{data.benchmarkReturnPct.toFixed(2)}%</span>
           ) : null}
         </div>
       </section>
+
+      <RealizedSummary rows={data.historicalHoldings} />
 
       <PortfolioContributionChart points={data.contributionSeries} />
 

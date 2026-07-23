@@ -28,17 +28,14 @@ export function PortfolioContributionChart({ points }: { points: ContributionRet
             Portfolio attribution
           </h2>
         </div>
+        {/* No per-asset legend — it cannot scale with a long history. Per-asset
+            identification lives in the hover popup, color-coded per series. */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-[0.62rem] text-ink-mute" aria-label="Chart series">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-0 w-5 border-t-2 border-accent" aria-hidden />
             Portfolio return
           </span>
-          {tickers.map((ticker) => (
-            <span key={ticker} className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5" style={{ backgroundColor: colors[ticker] }} aria-hidden />
-              {ticker}
-            </span>
-          ))}
+          <span>hover for per-position contributions</span>
         </div>
       </div>
       {points.length < 2 ? (
