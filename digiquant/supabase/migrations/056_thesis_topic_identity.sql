@@ -199,6 +199,97 @@ SET topic_key = COALESCE(
 WHERE thesis_kind = 'market'
   AND topic_key IS NULL;
 
+-- Residual duplicates: rows the enumerated clusters did not foresee can still
+-- collide AFTER the backfill above (two live theses whose ids slugify to one
+-- topic — e.g. (2026-07-04, advanced-materials-growth) in prod, which blocked
+-- the unique index on 2026-07-23). Collapse them the same way, computed
+-- instead of enumerated, per colliding date: strongest row wins, its vehicle
+-- mappings move, the loser's row for that date deletes. The loser thesis_id
+-- may remain canonical on other dates; vehicle→market links self-heal in H5
+-- each run, so no cross-date link rewrite is attempted here.
+CREATE TEMP TABLE thesis_topic_residual_map ON COMMIT DROP AS
+WITH ranked AS (
+  SELECT
+    date,
+    thesis_id,
+    topic_key,
+    row_number() OVER (
+      PARTITION BY date, topic_key
+      ORDER BY confidence DESC NULLS LAST, thesis_id
+    ) AS preference_rank,
+    first_value(thesis_id) OVER (
+      PARTITION BY date, topic_key
+      ORDER BY confidence DESC NULLS LAST, thesis_id
+    ) AS canonical_thesis_id
+  FROM theses
+  WHERE thesis_kind = 'market'
+    AND topic_key IS NOT NULL
+    AND (status IS NULL OR status NOT IN ('CLOSED', 'INVALIDATED'))
+)
+SELECT
+  date,
+  thesis_id AS duplicate_thesis_id,
+  canonical_thesis_id
+FROM ranked
+WHERE preference_rank > 1;
+
+INSERT INTO thesis_vehicles AS canonical (
+  date,
+  thesis_id,
+  ticker,
+  rationale,
+  exclusion_reasons,
+  candidate_rank,
+  user_mandate_notes,
+  source_exploration_key,
+  created_at
+)
+SELECT DISTINCT ON (vehicles.date, residual.canonical_thesis_id, vehicles.ticker)
+  vehicles.date,
+  residual.canonical_thesis_id,
+  vehicles.ticker,
+  vehicles.rationale,
+  vehicles.exclusion_reasons,
+  vehicles.candidate_rank,
+  vehicles.user_mandate_notes,
+  vehicles.source_exploration_key,
+  vehicles.created_at
+FROM thesis_vehicles AS vehicles
+JOIN thesis_topic_residual_map AS residual
+  ON residual.duplicate_thesis_id = vehicles.thesis_id
+ AND residual.date = vehicles.date
+ORDER BY vehicles.date,
+         residual.canonical_thesis_id,
+         vehicles.ticker,
+         vehicles.candidate_rank ASC NULLS LAST,
+         vehicles.created_at ASC
+ON CONFLICT (date, thesis_id, ticker) DO UPDATE
+SET rationale = COALESCE(canonical.rationale, EXCLUDED.rationale),
+    exclusion_reasons = COALESCE(canonical.exclusion_reasons, EXCLUDED.exclusion_reasons),
+    candidate_rank = COALESCE(
+      LEAST(canonical.candidate_rank, EXCLUDED.candidate_rank),
+      canonical.candidate_rank,
+      EXCLUDED.candidate_rank
+    ),
+    user_mandate_notes = COALESCE(
+      canonical.user_mandate_notes,
+      EXCLUDED.user_mandate_notes
+    ),
+    source_exploration_key = COALESCE(
+      canonical.source_exploration_key,
+      EXCLUDED.source_exploration_key
+    );
+
+DELETE FROM thesis_vehicles AS vehicles
+USING thesis_topic_residual_map AS residual
+WHERE vehicles.thesis_id = residual.duplicate_thesis_id
+  AND vehicles.date = residual.date;
+
+DELETE FROM theses
+USING thesis_topic_residual_map AS residual
+WHERE theses.thesis_id = residual.duplicate_thesis_id
+  AND theses.date = residual.date;
+
 DO $$ BEGIN
   ALTER TABLE theses ADD CONSTRAINT chk_theses_topic_key
     CHECK (
