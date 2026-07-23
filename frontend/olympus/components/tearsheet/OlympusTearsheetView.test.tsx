@@ -124,3 +124,25 @@ describe('OlympusTearsheetView', () => {
     expect(out).toContain('No open position performance is stored yet.');
   });
 });
+
+describe('live vs realized presentation (#1664)', () => {
+  it('headline returns are labeled live and note the unrealized open book', () => {
+    const out = html();
+    expect(out).toContain('Portfolio return · live');
+    expect(out).toContain('Active return · live');
+    expect(out).toContain('marks the open book · incl. unrealized');
+  });
+
+  it('realized exits summarize below the band in the small mono strip', () => {
+    const out = html();
+    expect(out).toContain('data-testid="realized-summary"');
+    expect(out).toContain('Realized · closed positions');
+    expect(out).toContain('win rate');
+  });
+
+  it('contribution chart has no per-asset legend — popup carries the identification', () => {
+    const out = html();
+    expect(out).toContain('hover for per-position contributions');
+    expect(out).not.toContain('aria-hidden="true" style="background-color');
+  });
+});

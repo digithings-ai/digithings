@@ -42,6 +42,19 @@ on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 | **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
 | **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
 
+### H2 market-thesis identity
+
+Every market proposal has a stable lowercase `topic_key` plus an explicit
+`action=create|update`. H2 receives `prior_context.active_theses` with full names, notes,
+criteria, IDs, and topic keys. Revised evidence, wording, confidence, or catalyst detail
+updates the existing topic with its exact `thesis_id`; only a distinct market mechanism
+creates a new topic. `validate_market_thesis_proposals` drops unknown updates, active topic
+collisions, ambiguous legacy topic ownership, changed topic keys, duplicate IDs, and duplicate
+topics before persistence. New topics start `ACTIVE`; updates preserve H1's same-run status,
+or the prior nonterminal status when H1 did not review that topic. A `PAUSED` topic remains
+the same opinion and cannot be replaced with a new ID. Supabase migration 056 provides the
+final one-active-topic-per-date constraint.
+
 ### Vehicle → market thesis linkage (#1563)
 
 `theses.linked_market_thesis_id` ties a `vehicle-{ticker}` thesis to the market
@@ -108,6 +121,21 @@ fresh `deliberation_transcript` row only when the loop runs.
 
 ---
 
+## LLM-node fail-soft (#1665)
+
+Every hermes LLM call site (H1–H3 via `thesis_common`, H5 via `portfolio_common`, H6
+deliberation turns, H7 memo, 7D debate/PM, phase 9 evolution) is wrapped: a
+research-agent output failure (JSONDecodeError / ValidationError / empty body after
+digillm's retries) degrades **that node** with a node-level `PhaseError` and a
+phase-appropriate fallback — H7 carries the prior memo re-dated (held names it misses
+are covered by the #1649 carry), H6 carries the analyst stance, H5/thesis skip the
+item, 7D empties the debate arm, legacy PM skips (H8 prefers the H7 memo anyway).
+`chain/hermes` (`phase="chain"`) errors can therefore only come from infra
+(checkpointer/graph), never LLM output. Rationale: three runs in two days
+(2026-07-21/22) died run-fatal on one flaky parse, and each outer retry re-runs the
+whole chain at ~$1.2–3.6 — the pipeline must complete (and commit) on the first
+attempt with local degradation instead.
+
 ## H9 commit-run: coherence, held-carry, and observability (#932 / #1030 / #1555 / #1649)
 
 H9 is the sole terminal writer. Before it books, `commit_io.coherence_errors` runs two
@@ -117,6 +145,12 @@ fail-closed checks over the H8 `sized_book` weights:
    in the H7 memo (no silent drop of an owned name);
 2. every open position has an H5 analyst doc **or** is `flat` **or** is a deliberately
    carried held name (`commit_io.carried_held_tickers`).
+
+When advisory position risk fields are enabled, H9 resolves `positions.horizon_days` from
+the dedicated `preferences.risk_horizon_days` contract (default 21). It intentionally does
+not reuse `preferences.holding_days`: that separate value controls decision evaluation and
+turnover cadence (default 5). `risk_envelope.risk_horizon_days` owns this validation and is
+shared with the legacy `portfolio_materialize` path so both writers persist identical semantics.
 
 **Held-carry (two classes, one set).** `commit_io.carried_held_tickers` — used by BOTH
 H8's carry injection (`phase7e_risk_sizing._held_carry_weights`) and H9's exemption, so
@@ -133,6 +167,12 @@ the two can never diverge — covers:
 
 H8 carries both classes into the sized book at their current drifted weight *before* the
 rebalancing-cadence band — a held position stays owned unless the PM explicitly exits it.
+A **final-book backstop** (`_apply_held_continuity_backstop`, #1649) then re-enforces the
+invariant on the finished dict regardless of cause — the 2026-07-22 22:54 run reached H9
+with nine held names at weight ≤ 0 (PM-longed but dropped by sizing, exempt from the
+per-cause carries) — re-adding any held, non-flat name at its drifted weight with a
+WARNING naming the crack (sized-out vs carry-miss). A name with no recoverable weight
+stays out and H9 still fails closed.
 **Regression #1555:** before the gated carry, dropped held names made check (1) fail
 closed with a `PhaseError` that never reached the degraded gate — every delta-day commit
 was silently frozen from 2026-06-26 while runs still reported `ok:true`.

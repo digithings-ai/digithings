@@ -162,16 +162,27 @@ def run_thesis_phase_llm(
         body_raw = materialized.get("body", materialized)
         return output_model.model_validate(body_raw), materialized, errors
 
-    result = run_research_agent(
-        skill_text=skill_text,
-        phase_inputs=inputs,
-        shared_context=_shared_context(state, context_keys=context_keys),
-        output_model=output_model,
-        phase_slug=phase_slug,
-        tools=tools,
-        execute_tool=execute_tool,
-        model=eff_model,
-    )
+    try:
+        result = run_research_agent(
+            skill_text=skill_text,
+            phase_inputs=inputs,
+            shared_context=_shared_context(state, context_keys=context_keys),
+            output_model=output_model,
+            phase_slug=phase_slug,
+            tools=tools,
+            execute_tool=execute_tool,
+            model=eff_model,
+        )
+    except Exception as exc:  # noqa: BLE001 — LLM-output failure degrades this artifact, never the chain (#1665)
+        logger.warning(
+            "thesis LLM failed for %s (%s: %s); carrying prior", phase_slug, type(exc).__name__, exc
+        )
+        errors.append(
+            PhaseError(
+                phase="phase_hermes", node=phase_slug, message=f"thesis LLM failed: {exc}"[:500]
+            )
+        )
+        return None, {}, errors
     doc = build_thesis_document(
         doc_type=str(phase_inputs.get("doc_type") or ""),
         run_date=state.run_date,

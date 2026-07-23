@@ -45,6 +45,13 @@ describe('AllocationsTab', () => {
     expect(html).toContain('Holdings view');
   });
 
+  it('fills the available page height while keeping a minimum workspace height', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsTab, base));
+    expect(html).toContain(
+      'data-region="holdings-frame" class="flex min-h-[28rem] flex-1 flex-col overflow-hidden"',
+    );
+  });
+
   it('passes position count to the command band', () => {
     const html = renderToStaticMarkup(createElement(AllocationsTab, base));
     expect(html).toContain('positions');

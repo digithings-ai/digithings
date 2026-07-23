@@ -32,6 +32,10 @@
               "summary": { "type": "string", "maxLength": 500 }
             }
           }
+        },
+        "validation_errors": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 500 }
         }
       }
     },
@@ -55,9 +59,16 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["thesis_id", "title", "direction", "statement", "validation_criteria", "invalidation_criteria"],
+            "required": ["thesis_id", "topic_key", "action", "title", "direction", "statement", "validation_criteria", "invalidation_criteria"],
             "properties": {
               "thesis_id": { "type": "string", "maxLength": 32 },
+              "topic_key": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "action": { "type": "string", "enum": ["create", "update"] },
+              "existing_thesis_id": { "type": ["string", "null"], "maxLength": 32 },
               "title": { "type": "string", "maxLength": 200 },
               "direction": { "type": "string", "maxLength": 64 },
               "statement": { "type": "string", "maxLength": 4000 },
@@ -110,8 +121,15 @@
                   }
                 }
               },
-              "time_horizon": { "type": "string", "maxLength": 120 },
-              "confidence": { "type": "string", "maxLength": 32 }
+              "horizon": {
+                "type": ["string", "null"],
+                "enum": ["short_term", "long_term", null]
+              },
+              "confidence": {
+                "type": ["number", "null"],
+                "minimum": 0,
+                "maximum": 1
+              }
             }
           }
         }

@@ -82,12 +82,13 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
                     {r.currency}
                   </span>
                   <div className="flex-1 min-w-0">
+                    {/* One tick only: today's actual vs the smoothed fill. The
+                        prior-run level is already carried by the momentum arrow
+                        + signed delta beside the bar — a second tick read as an
+                        unexplained stray line (#1664 follow-up). */}
                     <ConsensusScoreBar
                       value={r.avgNow ?? 0}
-                      markers={[
-                        { value: r.actualNow, kind: 'actual', label: "Today's actual" },
-                        { value: r.priorActual, kind: 'prior', label: "Prior run" },
-                      ]}
+                      markers={[{ value: r.actualNow, kind: 'actual', label: "Today's actual" }]}
                     />
                   </div>
                   <span
@@ -114,7 +115,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
           <div className="tc-legend flex items-center flex-wrap gap-3.5 mt-3.5 pt-3 border-t border-hair text-[10.5px] text-ink-mute">
             <span className="flex items-center gap-1.5">
               <span
-                className="inline-block w-4 h-2 rounded-sm bg-up"
+                className="inline-block w-4 h-2 rounded-sm bg-accent"
                 aria-hidden="true"
               />
               Trailing 5-run average (bar)

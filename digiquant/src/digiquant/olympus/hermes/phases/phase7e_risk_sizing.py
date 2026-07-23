@@ -187,7 +187,10 @@ def _verb(current: float | None, target: float) -> str:
 
 
 def _rebuild_actions(
-    original_actions: list[Any], pm_targets: dict[str, float], sized: dict[str, float]
+    original_actions: list[Any],
+    pm_targets: dict[str, float],
+    sized: dict[str, float],
+    current_weights: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """Rebuild the advisory action list to match the SIZED book.
 
@@ -222,13 +225,18 @@ def _rebuild_actions(
                 f"{base} [removed by risk sizing — cap / correlation de-dup / conviction floor]"
             ).strip()
         out.append(row)
-    # Sized tickers the PM had no explicit action row for (rare) → minimal new rows.
+    # Sized tickers the PM had no explicit action row for — the NORM on the H7 memo
+    # path (original_actions is empty there), so every booked day misreported held
+    # rebalances as "new" (#1676). Classify against the live drifted weight instead:
+    # add / trim / hold for existing positions, "new" only for genuinely new names.
+    live = current_weights or {}
     for ticker, target in sized.items():
         if ticker not in seen:
+            verb = _verb(_opt_float(live.get(ticker)), target)
             out.append(
                 {
                     "ticker": ticker,
-                    "action": "new",
+                    "action": verb,
                     "target_pct": round(target, 4),
                     "rationale": "Position weight set by deterministic risk sizing.",
                 }
@@ -262,21 +270,93 @@ def _held_carry_weights(state: AtlasResearchState) -> dict[str, float]:
     gated = carried_held_tickers(state)
     if not gated:
         return {}
-    current = {
-        str(k).strip().upper(): _opt_float(v)
-        for k, v in (state.config.preferences.get("current_weights") or {}).items()
-    }
-    prior = {
-        str(row.get("ticker")).strip().upper(): _opt_float(row.get("weight_pct"))
-        for row in state.prior_context.prior_book
-        if row.get("ticker")
-    }
     carry: dict[str, float] = {}
     for ticker in gated:
-        weight = current.get(ticker) or prior.get(ticker)
+        weight = _drifted_weight(state, ticker)
         if weight is not None and weight > 0:
-            carry[ticker] = float(weight)
+            carry[ticker] = weight
     return carry
+
+
+def _drifted_weight(state: AtlasResearchState, ticker: str) -> float | None:
+    """Current (mark-to-market) weight for *ticker*, falling back to the prior book."""
+    current = _opt_float((state.config.preferences.get("current_weights") or {}).get(ticker))
+    if current is not None and current > 0:
+        return float(current)
+    for row in state.prior_context.prior_book:
+        if str(row.get("ticker")).strip().upper() == ticker:
+            prior = _opt_float(row.get("weight_pct"))
+            if prior is not None and prior > 0:
+                return float(prior)
+    return None
+
+
+def _apply_held_continuity_backstop(
+    sized: dict[str, float], state: AtlasResearchState
+) -> dict[str, float]:
+    """FINAL-book held invariant (#1649): held ⇒ positive weight or explicit flat.
+
+    The per-cause carries (#1030 gated, #1649 memo-unaddressed) cover known cracks,
+    but the 2026-07-22 22:54 run proved unknown ones exist: NINE held names reached
+    H9 with weight<=0 despite the memo-unaddressed carry being live (suspected:
+    PM-longed names dropped by sizing caps — memo-addressed, so exempt from the
+    carry). This backstop enforces the invariant on the FINAL sized dict regardless
+    of cause: any held, non-flat ticker at weight<=0 is re-added at its drifted
+    weight, with a WARNING naming the cause bucket (memo-addressed ⇒ sized-out;
+    else carry-miss) so diagnostics show exactly which crack fired. A held name
+    with NO recoverable weight stays out and H9 still fails closed — that case
+    genuinely needs eyes.
+    """
+    from digiquant.olympus.hermes.writers.commit_io import (
+        flat_tickers_from_memo,
+        held_tickers,
+        memo_addressed_tickers,
+    )
+
+    flats = flat_tickers_from_memo(state)
+    addressed = memo_addressed_tickers(state)
+    out = dict(sized)
+    for ticker in sorted(held_tickers(state)):
+        if out.get(ticker, 0.0) > 0 or ticker in flats:
+            continue
+        weight = _drifted_weight(state, ticker)
+        cause = "pm-addressed but sized out (caps?)" if ticker in addressed else "carry miss"
+        if weight is None:
+            logger.warning(
+                "held-continuity backstop: %s has weight<=0 (%s) and NO recoverable "
+                "drifted weight — H9 will fail closed",
+                ticker,
+                cause,
+            )
+            continue
+        logger.warning(
+            "held-continuity backstop: re-adding %s at drifted %.4f (%s)",
+            ticker,
+            weight,
+            cause,
+        )
+        out[ticker] = weight
+    return out
+
+
+def _cap_total_invested(sized: dict[str, float]) -> dict[str, float]:
+    """FINAL-book allocation invariant (#1676): Σ positive weights ≤ 100%.
+
+    Nothing upstream enforces the total, and the held-continuity backstop (#1649)
+    legitimately ADDS drifted weights on top of an already-allocated book — the
+    correct rescue can overshoot 100%. Proportionally scale all positive weights
+    down when the total exceeds 100 (cash residual < 100 is always valid).
+    """
+    total = sum(w for w in sized.values() if w > 0)
+    if total <= 100.0 + 1e-9:
+        return sized
+    scale = 100.0 / total
+    logger.warning(
+        "total-invested cap: sized book at %.2f%% > 100%%; scaling all positions by %.4f",
+        total,
+        scale,
+    )
+    return {t: (w * scale if w > 0 else w) for t, w in sized.items()}
 
 
 def _build_sized_book(
@@ -358,11 +438,13 @@ def _build_sized_book(
         preferences=dict(state.config.preferences),
         run_date=state.run_date,
     )
+    sized = _apply_held_continuity_backstop(sized, state)
+    sized = _cap_total_invested(sized)
     updated: RebalancePayload = {
         "recommended_portfolio": [
             {"ticker": ticker, "target_pct": round(weight, 4)} for ticker, weight in sized.items()
         ],
-        "actions": _rebuild_actions(original_actions, pm_targets, sized),
+        "actions": _rebuild_actions(original_actions, pm_targets, sized, current_weights),
         "notes": (f"{prior_notes}\n\n" if prior_notes else "")
         + f"Risk-sizing (H8): {result.explanation}{breaker_note}",
     }

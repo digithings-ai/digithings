@@ -18,10 +18,12 @@ finance-tearsheet grammars directly in `app/globals.css`:
 @import "@digithings/web/styles/finance-tearsheet.css"; /* print-grade .ts-* family (#1463) */
 ```
 
-The performance tear sheet (`/portfolio/performance`) renders the shared
-finance-tearsheet family (`TimeSeries`, `SignedBars`, `Kpi`/`KpiStrip`,
-`runTearsheetPrint` from `@digithings/web`); olympus keeps its §13 dashboard
-variants and shell print rules app-side at the bottom of `globals.css`.
+The performance tear sheet (`/portfolio/performance`) renders persisted NAV and
+return metrics, base-zero portfolio and position paths, and open/closed position
+outcomes. The separate attribution workspace (`/portfolio/attribution`) owns the
+latest rolling position decomposition and the resolved-decision calibration
+scorecard. Olympus keeps its finance-tearsheet variants and shell print rules
+app-side at the bottom of `globals.css`.
 
 The root layout scopes the page to the DigiQuant accent and blueprint
 background:
@@ -267,6 +269,13 @@ a base-100 normalized NAV index → `nav_history` (chained from the prior book's
 realized return). So the portfolio + performance panels populate from the first
 run that produces a rebalance. `theses` / `portfolio_metrics` remain
 operator/refresh-script territory and may still be empty.
+
+Instrument identity and classification come from the migration-055 `instruments` table.
+`lib/queries.ts` joins that table once per dashboard load and carries the full provider row on
+each assembled `Position`; the Holdings ledger renders `official_name` below the ticker and
+uses the canonical persisted `category`. If migration 055 is absent, Olympus falls back only
+to the stored `positions.name` / `positions.category` values and labels a missing category
+`unknown`; it never expands or classifies a ticker in React.
 
 ## Theme tokens
 

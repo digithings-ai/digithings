@@ -2,21 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { NAV, isDbExempt } from './nav';
 
 describe('NAV', () => {
-  it('is the 4-destination owner spine, in order (twelve-x gate off)', () => {
-    expect(NAV.map((n) => n.href)).toEqual(['/', '/portfolio', '/pipeline', '/system']);
-    expect(NAV.map((n) => n.label)).toEqual(['Brief', 'Portfolio', 'Pipeline', 'System']);
-  });
-
-  it('surfaces FX Research before the demoted System when NEXT_PUBLIC_TWELVEX_ENABLED=1 (#1551, #1553)', async () => {
-    vi.stubEnv('NEXT_PUBLIC_TWELVEX_ENABLED', '1');
-    vi.resetModules();
-    const { NAV: gated } = await import('./nav');
-    expect(gated.map((n) => n.href)).toEqual([
-      '/', '/portfolio', '/pipeline', '/twelve-x', '/system',
-    ]);
-    expect(gated.find((n) => n.href === '/twelve-x')?.demoted).toBeUndefined();
-    vi.unstubAllEnvs();
-    vi.resetModules();
+  it('is the 5-destination owner spine, in order (FX Research permanent since #1664)', () => {
+    expect(NAV.map((n) => n.href)).toEqual(['/', '/portfolio', '/pipeline', '/twelve-x', '/system']);
+    expect(NAV.map((n) => n.label)).toEqual(['Brief', 'Portfolio', 'Pipeline', 'FX Research', 'System']);
+    expect(NAV.find((n) => n.href === '/twelve-x')?.demoted).toBeUndefined();
   });
 
   it('demotes only System', () => {
@@ -39,6 +28,8 @@ describe('isDbExempt', () => {
     expect(isDbExempt('/research')).toBe(true);
     expect(isDbExempt('/strategy')).toBe(true);
     expect(isDbExempt('/portfolio/theses')).toBe(true);
+    // twelve-x gates itself on its own research feed, not the main backend (#1664)
+    expect(isDbExempt('/twelve-x')).toBe(true);
   });
 
   it('matches nested paths under an exempt prefix', () => {

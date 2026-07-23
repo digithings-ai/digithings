@@ -205,11 +205,11 @@ export default function ConsensusTab({
               </h3>
               <span className="text-[10px] text-ink-mute flex items-center gap-2 w-full">
                 <span className="flex items-center gap-1">
-                  <span className="inline-block h-2.5 w-3 rounded-sm bg-up/15" />
+                  <span className="inline-block h-2.5 w-3 rounded-sm bg-accent/15" />
                   Strong ±{STRONG_BAND}
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="inline-block w-3 border-t border-dashed border-up/60" />
+                  <span className="inline-block w-3 border-t border-dashed border-accent/60" />
                   Lean ±{LEAN_BAND}
                 </span>
                 <span className="ml-auto">Raw per-run scores</span>
@@ -245,13 +245,13 @@ export default function ConsensusTab({
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={scoreSeries} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
                     <CartesianGrid stroke={chart.hair} />
-                    <ReferenceArea y1={STRONG_BAND} y2={SCORE_MAX} fill={chart.up} fillOpacity={0.06} />
-                    <ReferenceArea y1={SCORE_MIN} y2={-STRONG_BAND} fill={chart.down} fillOpacity={0.06} />
-                    <ReferenceLine y={STRONG_BAND} stroke={chart.up} strokeOpacity={0.5} strokeDasharray="4 4" />
-                    <ReferenceLine y={LEAN_BAND} stroke={chart.up} strokeOpacity={0.3} strokeDasharray="2 4" />
+                    <ReferenceArea y1={STRONG_BAND} y2={SCORE_MAX} fill={chart.accent} fillOpacity={0.06} />
+                    <ReferenceArea y1={SCORE_MIN} y2={-STRONG_BAND} fill={chart.warn} fillOpacity={0.06} />
+                    <ReferenceLine y={STRONG_BAND} stroke={chart.accent} strokeOpacity={0.5} strokeDasharray="4 4" />
+                    <ReferenceLine y={LEAN_BAND} stroke={chart.accent} strokeOpacity={0.3} strokeDasharray="2 4" />
                     <ReferenceLine y={0} stroke={withAlpha(chart.ink, 0.25)} />
-                    <ReferenceLine y={-LEAN_BAND} stroke={chart.down} strokeOpacity={0.3} strokeDasharray="2 4" />
-                    <ReferenceLine y={-STRONG_BAND} stroke={chart.down} strokeOpacity={0.5} strokeDasharray="4 4" />
+                    <ReferenceLine y={-LEAN_BAND} stroke={chart.warn} strokeOpacity={0.3} strokeDasharray="2 4" />
+                    <ReferenceLine y={-STRONG_BAND} stroke={chart.warn} strokeOpacity={0.5} strokeDasharray="4 4" />
                     <XAxis
                       dataKey="run_date"
                       tick={{ fill: chart.axis, fontSize: 11 }}

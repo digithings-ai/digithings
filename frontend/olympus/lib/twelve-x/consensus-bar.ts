@@ -23,10 +23,13 @@ export function currencyColor(ccy: string): string {
   return CURRENCY_COLORS[ccy] ?? CURRENCY_FALLBACK;
 }
 
-/** score → P&L text color class (strong/lean bands). */
+/**
+ * score → sentiment text color class (strong/lean bands). Consensus lean is
+ * view sentiment, not P&L — --up/--down stay reserved for signed returns.
+ */
 export function scoreColorClass(score: number): string {
-  if (score >= LEAN_BAND) return 'text-up';
-  if (score <= -LEAN_BAND) return 'text-down';
+  if (score >= LEAN_BAND) return 'text-accent';
+  if (score <= -LEAN_BAND) return 'text-warn';
   return 'text-ink-soft';
 }
 

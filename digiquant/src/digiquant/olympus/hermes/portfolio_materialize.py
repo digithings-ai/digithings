@@ -37,7 +37,9 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries, sized_book
+from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
+from digiquant.olympus.performance_returns import calculate_performance_returns
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +61,6 @@ _ALPHA_BENCHMARK = "SPY"
 _RISK_FIELDS_ENV = "OLYMPUS_POSITION_RISK_FIELDS"
 _ATR_STOP_MULT = 2.0  # advisory stop at ~2× daily ATR below entry
 _ATR_TARGET_MULT = 3.0  # advisory target at ~3× daily ATR above entry (1.5 R:R)
-_DEFAULT_HORIZON_DAYS = 21
 _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
 
 
@@ -282,7 +283,36 @@ def _upsert_portfolio_metrics(
         client.table("nav_history").select("date,nav").lte("date", date_str).order("date").execute()
     )
     nav_rows = list(getattr(resp, "data", None) or [])
-    navs = [_coerce_float(r.get("nav")) for r in nav_rows if r.get("nav") is not None]
+    nav_observations = [row for row in nav_rows if row.get("date") and row.get("nav") is not None]
+    navs = [_coerce_float(row.get("nav")) for row in nav_observations]
+
+    benchmark_closes: list[float] = []
+    if len(nav_observations) >= 2:
+        try:
+            benchmark_resp = (
+                client.table("price_history")
+                .select("date,close")
+                .eq("ticker", _ALPHA_BENCHMARK)
+                .gte("date", str(nav_observations[0]["date"]))
+                .lte("date", str(nav_observations[-1]["date"]))
+                .order("date")
+                .execute()
+            )
+            benchmark_closes = [
+                _coerce_float(row.get("close"))
+                for row in (getattr(benchmark_resp, "data", None) or [])
+                if row.get("close") is not None
+            ]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "phase9d: benchmark return computation failed (%s); benchmark return will be NULL",
+                exc,
+            )
+    performance_returns = calculate_performance_returns(
+        nav_values=navs,
+        benchmark_closes=benchmark_closes,
+        benchmark_ticker=_ALPHA_BENCHMARK,
+    )
 
     # pnl_pct: day-over-day return from the two most recent NAV points.
     pnl_pct: float | None = None
@@ -321,34 +351,7 @@ def _upsert_portfolio_metrics(
                         worst_dd = dd
             max_drawdown = round(worst_dd * 100.0, 6)
 
-        # Alpha: portfolio total return - SPY total return over the same window.
-        nav_dates = [r.get("date") for r in nav_rows if r.get("nav") is not None]
-        if nav_dates and len(nav_dates) >= 2:
-            first_date = nav_dates[0]
-            last_date = nav_dates[-1]
-            try:
-                spy_resp = (
-                    client.table("price_history")
-                    .select("date,close")
-                    .eq("ticker", _ALPHA_BENCHMARK)
-                    .gte("date", str(first_date))
-                    .lte("date", str(last_date))
-                    .order("date")
-                    .execute()
-                )
-                spy_rows = list(getattr(spy_resp, "data", None) or [])
-                spy_closes = [
-                    _coerce_float(r.get("close")) for r in spy_rows if r.get("close") is not None
-                ]
-                if len(spy_closes) >= 2 and spy_closes[0] > 0:
-                    port_total = (navs[-1] - navs[0]) / navs[0]
-                    spy_total = (spy_closes[-1] - spy_closes[0]) / spy_closes[0]
-                    alpha = round((port_total - spy_total) * 100.0, 4)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "phase9d: portfolio_metrics alpha computation failed (%s); alpha will be NULL",
-                    exc,
-                )
+        alpha = performance_returns.relative_return_pct
 
     row: dict[str, Any] = {
         "date": date_str,
@@ -357,6 +360,10 @@ def _upsert_portfolio_metrics(
         "volatility": volatility,
         "max_drawdown": max_drawdown,
         "alpha": alpha,
+        "net_return_pct": performance_returns.net_return_pct,
+        "benchmark_return_pct": performance_returns.benchmark_return_pct,
+        "relative_return_pct": performance_returns.relative_return_pct,
+        "benchmark_ticker": performance_returns.benchmark_ticker,
     }
     client.table("portfolio_metrics").upsert(row, on_conflict="date").execute()
     logger.debug(
@@ -461,8 +468,8 @@ def _enrich_positions(
 
     entry_price/entry_date carry forward from the prior book (or seed at today's close + date
     on a first open); conviction = analyst + debate delta; sector_bucket from sector_map;
-    stop_loss_pct / target_pct_gain are ATR-derived (advisory, NOT orders); horizon_days from
-    preferences. All best-effort — a missing input just leaves that field unset.
+    stop_loss_pct / target_pct_gain are ATR-derived (advisory, NOT orders); horizon_days uses
+    the dedicated risk preference. All best-effort — a missing input just leaves that field unset.
     """
     tickers = [str(r["ticker"]) for r in pos_rows if not _is_cash(r.get("ticker"))]
     if not tickers:
@@ -470,12 +477,7 @@ def _enrich_positions(
     prior = {str(r.get("ticker")): r for r in prior_book if r.get("ticker")}
     closes = _latest_values(client, "price_history", "close", tickers, run_date)
     atr_pct = _latest_values(client, "price_technicals", "atr_pct", tickers, run_date)
-    horizon = preferences.get("holding_days")
-    horizon_days = (
-        int(horizon)
-        if isinstance(horizon, (int, float)) and not isinstance(horizon, bool) and horizon > 0
-        else _DEFAULT_HORIZON_DAYS
-    )
+    horizon_days = risk_horizon_days(preferences)
 
     for row in pos_rows:
         ticker = row.get("ticker")

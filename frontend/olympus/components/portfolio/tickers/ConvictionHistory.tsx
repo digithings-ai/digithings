@@ -118,7 +118,7 @@ export default function ConvictionHistory({ decisions }: { decisions: DecisionLo
               <th className="py-2 pr-4 text-right font-medium">Conviction</th>
               <th className="py-2 pr-4 text-right font-medium">Return</th>
               <th className="py-2 pr-4 text-right font-medium">Alpha</th>
-              <th className="py-2 pr-4 text-right font-medium">Holding</th>
+              <th className="py-2 pr-4 text-right font-medium">Evaluation</th>
               <th className="py-2 font-medium">Reasoning</th>
             </tr>
           </thead>
