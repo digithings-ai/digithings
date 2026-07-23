@@ -51,11 +51,36 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['positions']['Row'], 'id'> & { id?: string };
         Update: Partial<Database['public']['Tables']['positions']['Insert']>;
       };
+      instruments: {
+        Row: {
+          ticker: string;
+          official_name: string;
+          instrument_type: string | null;
+          asset_class: string | null;
+          category: string | null;
+          sector: string | null;
+          industry: string | null;
+          exchange: string | null;
+          currency: string | null;
+          country: string | null;
+          provider: string;
+          provider_metadata: Json;
+          source_updated_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database['public']['Tables']['instruments']['Row'],
+          'created_at' | 'updated_at'
+        > & { created_at?: string; updated_at?: string };
+        Update: Partial<Database['public']['Tables']['instruments']['Insert']>;
+      };
       theses: {
         Row: {
           id: string;
           date: string;
           thesis_id: string;
+          topic_key?: string | null;
           name: string;
           vehicle: string | null;
           invalidation: string | null;

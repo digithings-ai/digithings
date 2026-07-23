@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  BookOpen,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -84,8 +85,46 @@ export function focusRectForTarget(
   return nodeRectForTarget(nodes, target);
 }
 
-export function movePipelineStage(index: number, direction: -1 | 1): number {
-  return Math.max(0, Math.min(PIPELINE_TOPOLOGY.length - 1, index + direction));
+export function buildPipelineWalkthrough(day: PipelineDayData): LaidOutNode[] {
+  const expandedStages = new Set<PipelineStageId>();
+  const expandedFanouts = new Set<string>();
+  for (const stage of PIPELINE_TOPOLOGY) {
+    expandedStages.add(stage.id);
+    for (const subStep of stage.subSteps) {
+      if (subStep.fanout) expandedFanouts.add(`${stage.id}:${subStep.id}`);
+    }
+  }
+
+  return layoutPipeline(day, { expandedStages, expandedFanouts }).nodes.filter(
+    (node) => node.kind !== 'fanout-branch' || node.documentKey,
+  );
+}
+
+export function movePipelineWalkthrough(
+  index: number,
+  direction: -1 | 1,
+  itemCount: number,
+): number {
+  return Math.max(0, Math.min(itemCount - 1, index + direction));
+}
+
+export function findPipelineWalkthroughIndex(
+  nodes: LaidOutNode[],
+  selectedNodeId?: string,
+): number {
+  if (!selectedNodeId) return -1;
+  return nodes.findIndex(
+    (node) => node.id === selectedNodeId || node.documentKey === selectedNodeId,
+  );
+}
+
+export function mobileWalkthroughScrollTarget(
+  nodes: LaidOutNode[],
+  activeNode?: LaidOutNode,
+): 'start' | LaidOutNode | null {
+  if (!activeNode) return null;
+  if (activeNode.kind === 'stage') return 'start';
+  return nodes.find((node) => node.id === activeNode.id) ?? null;
 }
 
 export default function PipelineCanvas({
@@ -102,6 +141,8 @@ export default function PipelineCanvas({
     const index = PIPELINE_TOPOLOGY.findIndex((stage) => stage.id === initialStage);
     return index >= 0 ? index : 0;
   });
+  const [activeWalkthroughIndex, setActiveWalkthroughIndex] = useState(0);
+  const [isWalkthroughNavigating, setIsWalkthroughNavigating] = useState(false);
   const [focusTarget, setFocusTarget] = useState<PipelineFocusTarget | null>(() =>
     selectedNodeId ? { kind: 'document', documentKey: selectedNodeId } : null,
   );
@@ -110,7 +151,19 @@ export default function PipelineCanvas({
   const { viewportRef, layerRef, fit, focusOn } = camera;
 
   const layout = useMemo(() => layoutPipeline(day, expansion), [day, expansion]);
-  const activeStage = PIPELINE_TOPOLOGY[activeStageIndex];
+  const walkthroughNodes = useMemo(() => buildPipelineWalkthrough(day), [day]);
+  const selectedWalkthroughIndex = findPipelineWalkthroughIndex(walkthroughNodes, selectedNodeId);
+  const resolvedWalkthroughIndex = !isWalkthroughNavigating && selectedWalkthroughIndex >= 0
+    ? selectedWalkthroughIndex
+    : Math.min(activeWalkthroughIndex, Math.max(0, walkthroughNodes.length - 1));
+  const activeWalkthroughNode = walkthroughNodes[resolvedWalkthroughIndex] ?? walkthroughNodes[0];
+  const selectedStageIndex = !isWalkthroughNavigating && selectedWalkthroughIndex >= 0
+    ? PIPELINE_TOPOLOGY.findIndex(
+        (stage) => stage.id === walkthroughNodes[selectedWalkthroughIndex]?.stageId,
+      )
+    : -1;
+  const resolvedStageIndex = selectedStageIndex >= 0 ? selectedStageIndex : activeStageIndex;
+  const activeStage = PIPELINE_TOPOLOGY[resolvedStageIndex];
   const mobileNodes = useMemo(() => {
     const mobileExpansion: ExpansionState = {
       expandedStages: new Set([activeStage.id]),
@@ -122,20 +175,21 @@ export default function PipelineCanvas({
   }, [activeStage.id, day, expansion.expandedFanouts]);
 
   useEffect(() => {
-    if (!selectedNodeId) return;
-    const selectedNode = mobileNodes.find(
-      (node) => node.id === selectedNodeId || node.documentKey === selectedNodeId,
-    );
     const list = mobileListRef.current;
-    if (!selectedNode || !list) return;
+    const target = mobileWalkthroughScrollTarget(mobileNodes, activeWalkthroughNode);
+    if (!target || !list) return;
 
     const frame = requestAnimationFrame(() => {
+      if (target === 'start') {
+        list.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
       list
-        .querySelector<HTMLElement>(`[data-mobile-node-id="${CSS.escape(selectedNode.id)}"]`)
-        ?.scrollIntoView({ block: 'nearest' });
+        .querySelector<HTMLElement>(`[data-mobile-node-id="${CSS.escape(target.id)}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
     return () => cancelAnimationFrame(frame);
-  }, [mobileNodes, selectedNodeId]);
+  }, [activeWalkthroughNode, mobileNodes]);
 
   const fitToViewport = useCallback(() => {
     const viewport = viewportRef.current;
@@ -192,8 +246,11 @@ export default function PipelineCanvas({
 
   const handleNodeClick = useCallback(
     (node: LaidOutNode) => {
+      setIsWalkthroughNavigating(false);
       const stageIndex = PIPELINE_TOPOLOGY.findIndex((stage) => stage.id === node.stageId);
       if (stageIndex >= 0) setActiveStageIndex(stageIndex);
+      const walkthroughIndex = walkthroughNodes.findIndex((candidate) => candidate.id === node.id);
+      if (walkthroughIndex >= 0) setActiveWalkthroughIndex(walkthroughIndex);
 
       if (node.kind === 'stage') {
         const willExpand = !expansion.expandedStages.has(node.stageId);
@@ -243,34 +300,75 @@ export default function PipelineCanvas({
       setFocusTarget({ kind: 'node', nodeId: node.id });
       onNodeActivate(node);
     },
-    [expansion.expandedFanouts, expansion.expandedStages, onNodeActivate],
+    [expansion.expandedFanouts, expansion.expandedStages, onNodeActivate, walkthroughNodes],
   );
 
-  const selectWalkthroughStage = useCallback((stageIndex: number) => {
-    const stage = PIPELINE_TOPOLOGY[stageIndex];
-    if (!stage) return;
+  const selectWalkthroughNode = useCallback((
+    node: LaidOutNode,
+    index: number,
+    openDetail = true,
+  ) => {
+    const stageIndex = PIPELINE_TOPOLOGY.findIndex((stage) => stage.id === node.stageId);
+    const subStepId = node.id.split(':')[1];
+    const fanoutKey = subStepId ? `${node.stageId}:${subStepId}` : null;
+    const subStep = subStepId
+      ? stageById(node.stageId)?.subSteps.find((candidate) => candidate.id === subStepId)
+      : undefined;
 
-    const expandedFanouts = new Set(
-      stage.subSteps
-        .filter((subStep) => subStep.fanout)
-        .map((subStep) => `${stage.id}:${subStep.id}`),
-    );
-    const stageNode = layout.nodes.find(
-      (node) => node.kind === 'stage' && node.stageId === stage.id,
-    );
-
-    setActiveStageIndex(stageIndex);
+    setActiveWalkthroughIndex(index);
+    setIsWalkthroughNavigating(!openDetail);
+    if (stageIndex >= 0) setActiveStageIndex(stageIndex);
     setExpansion({
-      expandedStages: new Set([stage.id]),
-      expandedFanouts,
+      expandedStages: new Set([node.stageId]),
+      expandedFanouts: new Set(fanoutKey && (subStep?.fanout || node.kind === 'fanout-branch')
+        ? [fanoutKey]
+        : []),
     });
-    setFocusTarget({ kind: 'stage', stageId: stage.id });
-    if (stageNode) onNodeActivate(stageNode);
-  }, [layout.nodes, onNodeActivate]);
+    setFocusTarget(
+      node.kind === 'stage'
+        ? { kind: 'stage', stageId: node.stageId }
+        : subStep?.fanout && node.kind === 'substep'
+          ? { kind: 'fanout', nodeId: node.id }
+          : { kind: 'node', nodeId: node.id },
+    );
+    if (openDetail) onNodeActivate(node);
+  }, [onNodeActivate]);
 
-  const walkStage = useCallback((direction: -1 | 1) => {
-    selectWalkthroughStage(movePipelineStage(activeStageIndex, direction));
-  }, [activeStageIndex, selectWalkthroughStage]);
+  const walkPipeline = useCallback((direction: -1 | 1) => {
+    const nextIndex = movePipelineWalkthrough(
+      resolvedWalkthroughIndex,
+      direction,
+      walkthroughNodes.length,
+    );
+    const node = walkthroughNodes[nextIndex];
+    if (node) selectWalkthroughNode(node, nextIndex, false);
+  }, [resolvedWalkthroughIndex, selectWalkthroughNode, walkthroughNodes]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (
+        target?.isContentEditable
+        || target?.closest('input, textarea, select, [role="textbox"], a')
+      ) return;
+
+      // Keep native Space activation on focused controls; arrow traversal remains
+      // available after clicking the toolbar.
+      if (event.code === 'Space' && target?.closest('button')) return;
+
+      let direction: -1 | 1 | null = null;
+      if (event.key === 'ArrowLeft') direction = -1;
+      if (event.key === 'ArrowRight') direction = 1;
+      if (event.code === 'Space') direction = event.shiftKey ? -1 : 1;
+      if (direction === null) return;
+
+      event.preventDefault();
+      walkPipeline(direction);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [walkPipeline]);
 
   const handleFitClick = useCallback(() => {
     setFocusTarget(null);
@@ -309,46 +407,10 @@ export default function PipelineCanvas({
   return (
     <div className="flex flex-col flex-1 min-h-0 min-w-0">
       <div className="flex min-h-0 flex-1 flex-col md:hidden">
-        <div className="border-y border-hair bg-surface px-4 py-3">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              aria-label="Previous pipeline section"
-              disabled={activeStageIndex === 0}
-              onClick={() => walkStage(-1)}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair text-ink transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              <ChevronLeft size={20} aria-hidden />
-            </button>
-            <div className="min-w-0 flex-1 text-center">
-              <span className="block font-mono text-xs uppercase text-ink-mute">
-                Stage {activeStageIndex + 1} of {PIPELINE_TOPOLOGY.length}
-              </span>
-              <span className="mt-0.5 block truncate font-display text-xl text-ink">
-                {activeStage.label}
-              </span>
-            </div>
-            <button
-              type="button"
-              aria-label="Next pipeline section"
-              disabled={activeStageIndex === PIPELINE_TOPOLOGY.length - 1}
-              onClick={() => walkStage(1)}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair text-ink transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              <ChevronRight size={20} aria-hidden />
-            </button>
-          </div>
-          <div className="mt-3 grid grid-cols-6 gap-1" aria-hidden>
-            {PIPELINE_TOPOLOGY.map((stage, index) => (
-              <span
-                key={stage.id}
-                className={`h-1 rounded-full ${index === activeStageIndex ? 'bg-accent' : 'bg-hair'}`}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div ref={mobileListRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <div
+          ref={mobileListRef}
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-[calc(7rem+env(safe-area-inset-bottom))]"
+        >
           <div className="border-l border-hair pl-3">
             {mobileNodes.map((node) => {
               const subStepId = node.kind === 'substep' ? node.id.split(':')[1] : undefined;
@@ -361,10 +423,7 @@ export default function PipelineCanvas({
               const count = fanout
                 ? day.fanoutCounts[fanout.id] ?? fanout.defaultCount
                 : undefined;
-              const selected = Boolean(
-                node.id === selectedNodeId
-                  || (node.documentKey && node.documentKey === selectedNodeId),
-              );
+              const selected = node.id === activeWalkthroughNode?.id;
 
               return (
                 <button
@@ -394,13 +453,6 @@ export default function PipelineCanvas({
                     <span className="block font-mono text-xs text-ink">
                       {node.label}
                     </span>
-                    <span className="mt-0.5 block text-xs text-ink-mute">
-                      {node.documentKey
-                        ? 'Run artifact'
-                        : expandable
-                          ? 'Expand and learn'
-                          : 'About this step'}
-                    </span>
                   </span>
                   {count != null && count > 0 ? (
                     <span className="rounded-full bg-accent/15 px-2 py-0.5 font-mono text-xs tabular-nums text-accent">
@@ -409,18 +461,49 @@ export default function PipelineCanvas({
                   ) : null}
                   {expandable ? (
                     expanded ? <ChevronDown size={16} aria-hidden /> : <ChevronRight size={16} aria-hidden />
-                  ) : node.documentKey ? (
-                    <span className="font-mono text-xs uppercase text-accent">
-                      Open
-                    </span>
-                  ) : (
-                    <span className="font-mono text-xs uppercase text-ink-mute">
-                      About
-                    </span>
-                  )}
+                  ) : null}
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        <div className="fixed inset-x-0 bottom-0 z-30 border-y border-hair bg-surface/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              aria-label="Previous pipeline section"
+              disabled={resolvedWalkthroughIndex === 0}
+              onClick={() => walkPipeline(-1)}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair text-ink transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronLeft size={20} aria-hidden />
+            </button>
+            <div className="min-w-0 flex-1 text-center">
+              <span className="block font-mono text-xs uppercase text-ink-mute">
+                {resolvedWalkthroughIndex + 1} of {walkthroughNodes.length}
+              </span>
+              <span className="mt-0.5 block truncate font-display text-xl text-ink">
+                {activeWalkthroughNode?.label ?? activeStage.label}
+              </span>
+            </div>
+            <button
+              type="button"
+              aria-label="Next pipeline section"
+              disabled={resolvedWalkthroughIndex === walkthroughNodes.length - 1}
+              onClick={() => walkPipeline(1)}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair text-ink transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronRight size={20} aria-hidden />
+            </button>
+          </div>
+          <div className="mt-3 grid grid-cols-6 gap-1" aria-hidden>
+            {PIPELINE_TOPOLOGY.map((stage, index) => (
+              <span
+                key={stage.id}
+                className={`h-1 rounded-full ${index === resolvedStageIndex ? 'bg-accent' : 'bg-hair'}`}
+              />
+            ))}
           </div>
         </div>
       </div>
@@ -435,16 +518,12 @@ export default function PipelineCanvas({
         >
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-4">
             <TooltipProvider delay={250}>
-              <div className="pointer-events-auto flex flex-col items-start gap-2">
-                <div
-                  role="toolbar"
-                  aria-label="Pipeline view controls"
-                  data-no-pan=""
-                  className="inline-flex items-center gap-1 rounded-lg border border-hair bg-term-bg/95 p-1 shadow-sm backdrop-blur-md"
-                >
-                <span className="px-2 font-mono text-xs uppercase text-ink-mute">
-                  View
-                </span>
+              <div
+                role="toolbar"
+                aria-label="Pipeline controls"
+                data-no-pan=""
+                className="pointer-events-auto inline-flex items-center gap-1 rounded-lg border border-hair bg-term-bg/95 p-1 shadow-sm backdrop-blur-md"
+              >
                 <Tooltip>
                   <TooltipTrigger
                     render={(
@@ -482,62 +561,78 @@ export default function PipelineCanvas({
                   <TooltipContent skin="reference" side="bottom">Zoom in</TooltipContent>
                 </Tooltip>
                 <span className="mx-1 h-5 w-px bg-hair" aria-hidden />
-                <button
-                  type="button"
-                  data-no-pan=""
-                  onClick={handleExpandAll}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-ink-mute transition-colors hover:bg-accent/10 hover:text-ink"
-                >
-                  <ChevronsDown size={14} aria-hidden />
-                  Expand all
-                </button>
-                <button
-                  type="button"
-                  data-no-pan=""
-                  onClick={handleCollapseAll}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-ink-mute transition-colors hover:bg-accent/10 hover:text-ink"
-                >
-                  <ChevronsUp size={14} aria-hidden />
-                  Collapse
-                </button>
-                </div>
-
-                <div
-                  role="group"
-                  aria-label="Pipeline stage walkthrough"
-                  data-no-pan=""
-                  className="inline-flex h-9 items-center overflow-hidden rounded-lg border border-hair bg-term-bg/95 shadow-sm backdrop-blur-md"
-                >
-                  <button
-                    type="button"
-                    aria-label="Previous pipeline stage"
-                    disabled={activeStageIndex === 0}
-                    onClick={() => walkStage(-1)}
-                    className="flex h-full w-9 items-center justify-center border-r border-hair text-ink-mute transition-colors hover:bg-accent/10 hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    <ChevronLeft size={15} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Open ${activeStage.label} stage guide`}
-                    onClick={() => selectWalkthroughStage(activeStageIndex)}
-                    className="flex h-full min-w-36 items-center justify-between gap-3 px-3 text-left transition-colors hover:bg-accent/[0.06]"
-                  >
-                    <span className="font-mono text-xs uppercase text-ink-mute">
-                      {activeStageIndex + 1} of {PIPELINE_TOPOLOGY.length}
-                    </span>
-                    <span className="text-xs font-medium text-ink">{activeStage.label}</span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Next pipeline stage"
-                    disabled={activeStageIndex === PIPELINE_TOPOLOGY.length - 1}
-                    onClick={() => walkStage(1)}
-                    className="flex h-full w-9 items-center justify-center border-l border-hair text-ink-mute transition-colors hover:bg-accent/10 hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    <ChevronRight size={15} aria-hidden />
-                  </button>
-                </div>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={(
+                      <IconButton aria-label="Expand all" data-no-pan="" onClick={handleExpandAll}>
+                        <ChevronsDown size={15} aria-hidden />
+                      </IconButton>
+                    )}
+                  />
+                  <TooltipContent skin="reference" side="bottom">Expand all</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={(
+                      <IconButton aria-label="Collapse all" data-no-pan="" onClick={handleCollapseAll}>
+                        <ChevronsUp size={15} aria-hidden />
+                      </IconButton>
+                    )}
+                  />
+                  <TooltipContent skin="reference" side="bottom">Collapse all</TooltipContent>
+                </Tooltip>
+                <span className="mx-1 h-5 w-px bg-hair" aria-hidden />
+                <Tooltip>
+                  <TooltipTrigger
+                    render={(
+                      <IconButton
+                        aria-label="Previous pipeline section"
+                        aria-keyshortcuts="ArrowLeft Shift+Space"
+                        data-no-pan=""
+                        disabled={resolvedWalkthroughIndex === 0}
+                        onClick={() => walkPipeline(-1)}
+                      >
+                        <ChevronLeft size={15} aria-hidden />
+                      </IconButton>
+                    )}
+                  />
+                  <TooltipContent skin="reference" side="bottom">Previous section</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={(
+                      <IconButton
+                        aria-label={`Open ${activeWalkthroughNode?.label ?? activeStage.label} pipeline section (${resolvedWalkthroughIndex + 1} of ${walkthroughNodes.length})`}
+                        data-no-pan=""
+                        onClick={() => activeWalkthroughNode
+                          && selectWalkthroughNode(activeWalkthroughNode, resolvedWalkthroughIndex)}
+                      >
+                        <BookOpen size={15} aria-hidden />
+                      </IconButton>
+                    )}
+                  />
+                  <TooltipContent skin="reference" side="bottom">
+                    {resolvedWalkthroughIndex + 1} of {walkthroughNodes.length}
+                    {' · '}
+                    {activeWalkthroughNode?.label ?? activeStage.label}
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={(
+                      <IconButton
+                        aria-label="Next pipeline section"
+                        aria-keyshortcuts="ArrowRight Space"
+                        data-no-pan=""
+                        disabled={resolvedWalkthroughIndex === walkthroughNodes.length - 1}
+                        onClick={() => walkPipeline(1)}
+                      >
+                        <ChevronRight size={15} aria-hidden />
+                      </IconButton>
+                    )}
+                  />
+                  <TooltipContent skin="reference" side="bottom">Next section</TooltipContent>
+                </Tooltip>
               </div>
             </TooltipProvider>
 

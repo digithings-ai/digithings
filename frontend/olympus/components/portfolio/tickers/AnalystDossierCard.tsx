@@ -134,7 +134,7 @@ export default function AnalystDossierCard({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hair pb-4">
           <h2 className="font-display text-lg text-ink">Research argument</h2>
           {asOf && (
-            <span className="font-mono text-xs uppercase tracking-normal text-accent">
+            <span className="font-mono text-[0.65rem] uppercase tracking-wider text-accent">
               {asOf}
             </span>
           )}

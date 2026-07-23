@@ -8,6 +8,7 @@ from uuid import UUID
 import pytest
 
 from digiquant.olympus.atlas.state import (
+    AtlasConfigBundle,
     AtlasResearchState,
     ExcludedTicker,
     FocusRosterEntry,
@@ -44,6 +45,7 @@ def _state(
     excluded_reason: str = "held, no material change (below staleness threshold)",
     analysts: dict | None = None,
     pm_memo: PMDirectionMemo | None = None,
+    preferences: dict | None = None,
 ) -> AtlasResearchState:
     # Prior-book holdings make a name "held" without putting it in the roster — the
     # real shape of a gated-out held position (held in the book, excluded from H5).
@@ -59,6 +61,7 @@ def _state(
         run_date=RUN_DATE,
         baseline_date=date(2026, 6, 9),
         prior_context=prior_context,
+        config=AtlasConfigBundle(preferences=preferences or {}),
     )
     roster = [FocusRosterEntry(ticker=t, roster_reason="held") for t in held]
     excluded_ledger = [ExcludedTicker(ticker=t, reason=excluded_reason) for t in excluded]
@@ -118,6 +121,29 @@ class TestCommitRunBooking:
         assert rows[0]["ticker"] == "SPY"
         assert rows[0]["status"] == "pending"
         assert rows[0]["run_id"] == str(_SOURCE_RUN_ID)
+
+    def test_decision_holding_days_do_not_shorten_position_risk_horizon(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        client = FakeSupabaseClient(
+            canned_reads={
+                "price_history": [{"date": "2026-06-12", "ticker": "SPY", "close": 600.0}],
+                "price_technicals": [{"date": "2026-06-12", "ticker": "SPY", "atr_pct": 1.5}],
+            }
+        )
+
+        _run(client, _state(preferences={"holding_days": 5}))
+
+        spy = next(row for row in client.store["positions"] if row["ticker"] == "SPY")
+        assert spy["horizon_days"] == 21
+
+    def test_explicit_position_risk_horizon_is_persisted(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        client = FakeSupabaseClient()
+
+        _run(client, _state(preferences={"holding_days": 5, "risk_horizon_days": 30}))
+
+        spy = next(row for row in client.store["positions"] if row["ticker"] == "SPY")
+        assert spy["horizon_days"] == 30
 
     def test_analyst_document_persists_full_thesis_and_risks(self) -> None:
         # Regression guard (#948): the analyst/{ticker} document must NOT truncate the

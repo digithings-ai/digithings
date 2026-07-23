@@ -58,19 +58,22 @@ export default function PipelineNodeDetail({
     return () => { cancelled = true; };
   }, [documentKey, date]);
 
-  // Responsive container: mobile = docked lower pane, desktop = right side panel.
-  // Keeping mobile detail in flow leaves the stage navigator visible above it.
+  // Mobile detail replaces the browser as a full-page surface; closing it returns to
+  // the exact Pipeline selection. Desktop keeps the in-workspace side panel.
   return (
     <aside
       aria-label="Node detail"
       aria-live="polite"
       className={[
-        'relative z-20 flex h-[46%] min-h-40 shrink-0 flex-col border-t border-hair bg-term-bg',
+        'fixed inset-0 z-[1100] flex h-dvh w-full shrink-0 flex-col overflow-hidden bg-term-bg',
+        'pt-[env(safe-area-inset-top)] md:pt-0',
+        // Desktop reader sizes (#1679): comfortable / wide / full-screen; mobile is
+        // always the full-page surface from the develop-side mobile pass.
         size === 'full'
-          ? 'md:fixed md:inset-0 md:z-50 md:h-full md:w-full md:border-l-0 md:border-t-0'
+          ? 'md:fixed md:inset-0 md:z-50 md:h-full md:w-full'
           : size === 'wide'
-            ? 'md:h-full md:w-[620px] md:min-h-0 md:border-l md:border-t-0'
-            : 'md:h-full md:w-[372px] md:min-h-0 md:border-l md:border-t-0',
+            ? 'md:relative md:inset-auto md:z-20 md:h-full md:w-[620px] md:min-h-0 md:border-l md:border-hair'
+            : 'md:relative md:inset-auto md:z-20 md:h-full md:w-[372px] md:min-h-0 md:border-l md:border-hair',
       ].join(' ')}
     >
       {/* Header */}
@@ -89,32 +92,32 @@ export default function PipelineNodeDetail({
           )}
         </div>
         <div className="ml-3 flex flex-shrink-0 items-center gap-1.5">
-          {/* Width toggle — desktop only; full-screen has its own control */}
+          {/* Reader-size toggles (#1679) — desktop only; mobile is already full-page */}
           {size !== 'full' && (
             <button
               type="button"
               aria-label={size === 'wide' ? 'Narrow panel' : 'Widen panel'}
               onClick={() => setSize(size === 'wide' ? 'default' : 'wide')}
-              className="hidden md:flex w-7 h-7 items-center justify-center border border-hair rounded-lg text-ink-mute hover:text-ink transition-colors"
+              className="hidden h-8 w-8 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:flex"
             >
-              {size === 'wide' ? <ChevronsRight size={13} /> : <ChevronsLeft size={13} />}
+              {size === 'wide' ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
             </button>
           )}
           <button
             type="button"
             aria-label={size === 'full' ? 'Exit full screen' : 'Full screen'}
             onClick={() => setSize(size === 'full' ? 'default' : 'full')}
-            className="hidden md:flex w-7 h-7 items-center justify-center border border-hair rounded-lg text-ink-mute hover:text-ink transition-colors"
+            className="hidden h-8 w-8 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:flex"
           >
-            {size === 'full' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            {size === 'full' ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
           <button
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center border border-hair rounded-lg text-ink-mute hover:text-ink transition-colors"
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
           >
-            <X size={13} />
+            <X size={18} />
           </button>
         </div>
       </div>
@@ -122,7 +125,7 @@ export default function PipelineNodeDetail({
       {/* Body */}
       <div
         className={[
-          'flex-1 overflow-y-auto px-4 py-3 text-sm leading-relaxed text-ink-mute md:px-5 md:py-4',
+          'flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-sm leading-relaxed text-ink-mute md:px-5 md:py-4',
           size === 'full' ? 'md:mx-auto md:w-full md:max-w-3xl' : '',
         ].join(' ')}
       >

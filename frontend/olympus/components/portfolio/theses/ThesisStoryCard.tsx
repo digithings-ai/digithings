@@ -22,6 +22,11 @@ function isNonActive(status: string | null): boolean {
   return Boolean(s) && !s.includes('active');
 }
 
+function formatTimeframe(horizon: string): string {
+  const value = horizon.replaceAll('_', ' ').replaceAll('-', ' ').trim();
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : horizon;
+}
+
 function dossierHref(ticker: string): string {
   return `/portfolio/tickers?ticker=${encodeURIComponent(ticker.toUpperCase())}`;
 }
@@ -58,7 +63,7 @@ export function ThesisStoryCard({
       className="group border-y border-hair first:border-t-0 last:border-b-0"
       open={defaultOpen}
     >
-      <summary className="flex cursor-pointer list-none flex-col gap-3 px-4 py-4 transition-colors hover:bg-ink/[0.02] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 [&::-webkit-details-marker]:hidden">
+      <summary className="cursor-pointer list-none px-4 py-4 transition-colors hover:bg-ink/[0.02] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 [&::-webkit-details-marker]:hidden">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
             {rank != null && (
@@ -80,20 +85,20 @@ export function ThesisStoryCard({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pl-[3.25rem]">
+      </summary>
+
+      <div className="space-y-5 px-4 pb-5 pl-[3.25rem]">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-hair pb-3">
           <div className="flex items-center gap-2">
             <ConvictionMeter value={pips} max={CONFIDENCE_PIPS} srLabel={confidenceLabel} />
             <span className="text-xs tabular-nums text-ink-mute">{confidenceLabel}</span>
           </div>
           {thesis.horizon ? (
-            <span className="rounded-md border border-hair px-2 py-0.5 text-xs text-ink-soft">
-              {thesis.horizon}
+            <span className="text-xs text-ink-soft">
+              {formatTimeframe(thesis.horizon)}
             </span>
           ) : null}
         </div>
-      </summary>
-
-      <div className="space-y-5 px-4 pb-5 pl-[3.25rem]">
         {thesis.notes ? (
           <p className="whitespace-pre-line text-sm leading-relaxed text-ink-soft">
             {thesis.notes}

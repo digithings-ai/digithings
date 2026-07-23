@@ -11,6 +11,7 @@ import type { TableRow } from './database.types';
 
 export type SnapshotRow = TableRow<'daily_snapshots'>;
 export type PositionRow = TableRow<'positions'>;
+export type InstrumentRow = TableRow<'instruments'>;
 export type ThesisRow = TableRow<'theses'>;
 export type DocumentRow = TableRow<'documents'>;
 export type NavHistoryRow = TableRow<'nav_history'>;
@@ -21,9 +22,27 @@ export type PortfolioMetricsRow = TableRow<'portfolio_metrics'>;
 // ---------------------------------------------------------------------------
 
 /** A single holding as returned to components. */
+export interface InstrumentDetails {
+  ticker: string;
+  official_name: string;
+  instrument_type: string | null;
+  asset_class: string | null;
+  category: string | null;
+  sector: string | null;
+  industry: string | null;
+  exchange: string | null;
+  currency: string | null;
+  country: string | null;
+  provider: string;
+  provider_metadata: TableRow<'instruments'>['provider_metadata'];
+  source_updated_at: string;
+}
+
 export interface Position {
   ticker: string;
   name: string;
+  /** Canonical provider-sourced identity and classification, when migration 055 is present. */
+  instrument?: InstrumentDetails | null;
   type: 'LONG' | 'SHORT';
   weight_actual: number;
   /** Snapshot target weight from digest `proposed_positions` when present (for target vs actual). */
@@ -57,6 +76,8 @@ export interface Position {
 /** Active investment thesis as returned to components. */
 export interface Thesis {
   id: string;
+  /** Durable opinion identity; multiple active rows with one key represent one research view. */
+  topic_key?: string | null;
   name: string;
   vehicle: string | null;
   invalidation: string | null;
