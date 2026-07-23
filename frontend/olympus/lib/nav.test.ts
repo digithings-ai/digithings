@@ -2,9 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { NAV, isDbExempt } from './nav';
 
 describe('NAV', () => {
-  it('is the 5-destination owner spine, in order (FX Research permanent since #1664)', () => {
+  it('is the 5-destination owner spine, in order (FX Hub permanent since #1664)', () => {
     expect(NAV.map((n) => n.href)).toEqual(['/', '/portfolio', '/pipeline', '/twelve-x', '/system']);
-    expect(NAV.map((n) => n.label)).toEqual(['Brief', 'Portfolio', 'Pipeline', 'FX Research', 'System']);
+    expect(NAV.map((n) => n.label)).toEqual(['Brief', 'Portfolio', 'Pipeline', 'FX Hub', 'System']);
     expect(NAV.find((n) => n.href === '/twelve-x')?.demoted).toBeUndefined();
   });
 

@@ -85,10 +85,11 @@ describe('HowItWorksTab', () => {
 });
 
 describe('TwelveXHeading', () => {
-  it('is hook-free heading content the Suspense fallback can prerender', () => {
+  it('is hook-free, off-screen heading content the Suspense fallback can prerender', () => {
     const html = renderToStaticMarkup(createElement(TwelveXHeading));
     expect(html).toContain('<h1');
-    expect(html).toContain('FX Research');
+    expect(html).toContain('sr-only');
+    expect(html).toContain('FX Hub');
     expect(html).not.toContain('<main');
   });
 });

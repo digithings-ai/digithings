@@ -14,7 +14,7 @@ export interface NavItem {
  * Single source of truth consumed by both the desktop sidebar and the mobile
  * app bar so they can never drift.
  *
- * The FX Research suite (/twelve-x) is a permanent destination since the
+ * The FX Hub suite (/twelve-x) is a permanent destination since the
  * #1664 dashboard integration (previously env-gated behind
  * NEXT_PUBLIC_TWELVEX_ENABLED and rendered standalone).
  */
@@ -22,7 +22,7 @@ export const NAV: NavItem[] = [
   { href: '/', label: 'Brief', icon: LayoutDashboard },
   { href: '/portfolio', label: 'Portfolio', icon: PieChart },
   { href: '/pipeline', label: 'Pipeline', icon: GitBranch },
-  { href: '/twelve-x', label: 'FX Research', icon: Globe },
+  { href: '/twelve-x', label: 'FX Hub', icon: Globe },
   { href: '/system', label: 'System', icon: Activity, demoted: true },
 ];
 
