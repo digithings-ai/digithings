@@ -60,3 +60,14 @@ class TestThesisTopicIdentityMigration:
         assert "COMMIT;" in sql
         assert "Rollback" in sql
         assert "-- DROP INDEX IF EXISTS uq_theses_active_market_topic_date;" in sql
+
+
+@pytest.mark.unit
+def test_vehicle_rewire_deduplicates_before_upsert(sql: str) -> None:
+    """Two duplicates collapsing into one canonical must not propose the same
+    (date, canonical, ticker) key twice in the single INSERT — Postgres rejects
+    ON CONFLICT affecting a row twice (2026-07-23 prod db-migrate failure)."""
+    rewire = sql.split("INSERT INTO thesis_vehicles", 1)[1]
+    assert "DISTINCT ON (vehicles.date, mapping.canonical_thesis_id, vehicles.ticker)" in rewire
+    order_by = re.search(r"ORDER BY\s+vehicles\.date,\s*mapping\.canonical_thesis_id,\s*vehicles\.ticker", rewire)
+    assert order_by, "DISTINCT ON requires a matching ORDER BY prefix to pick a deterministic winner"
