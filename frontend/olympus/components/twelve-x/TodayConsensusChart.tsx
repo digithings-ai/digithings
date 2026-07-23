@@ -8,20 +8,20 @@ import { ConsensusScoreBar } from './ConsensusScoreBars';
 import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
 /**
- * The Today page's "Consensus average" chart (frozen visual-spec redesign #1).
+ * The Today page's "Consensus average" chart (frozen visual-spec redesign #1,
+ * compacted to a single reference tick in the #1664 follow-up).
  *
  * For each G10 currency it draws a divergent bar whose fill is the trailing
- * consensus average (last 5 runs), with three legend-coded reference ticks
- * overlaid — today's raw actual, yesterday's average and the ~5-days-ago
- * average — so a reader sees both the smoothed level and the actual-vs-average
- * rate of change at a glance. A momentum arrow (today's actual minus the
- * average) sits at the end of each row.
+ * consensus average (last 5 runs, `avgNow`), with one tick overlaid — today's
+ * raw actual — so a reader sees the smoothed level and today's print against
+ * it at a glance. A momentum arrow with a signed delta (today's actual minus
+ * the prior run's, `priorChange`) sits at the end of each row.
  *
- * The headline value per row is the trailing 5-run average (`avgNow`), shown
- * with a small "avg" unit cue and a subtitle, to make explicit that Today
- * intentionally smooths over 5 runs — the Consensus tab shows the raw latest
- * score, so the two differ by design. Everything derives from `series`, so the
- * component takes a single prop.
+ * The headline value per row is the trailing 5-run average: Today
+ * intentionally smooths, while the Consensus tab plots the raw per-run
+ * history — the two differ by design. Everything derives from `series` via
+ * the same `deriveConsensusRows` the Consensus tab reads, so the two surfaces
+ * can never disagree.
  */
 
 export interface TodayConsensusChartProps {
