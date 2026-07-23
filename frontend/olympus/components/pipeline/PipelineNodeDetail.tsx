@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Skeleton, SkeletonGroup } from '@digithings/web';
-import { BookOpen, FileSearch, X } from 'lucide-react';
+import { BookOpen, ChevronsLeft, ChevronsRight, FileSearch, Maximize2, Minimize2, X } from 'lucide-react';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
 import type { LaidOutNode } from '@/lib/pipeline-layout';
 import { PIPELINE_TOPOLOGY, pipelineNodeExplanation } from '@/lib/pipeline-topology';
@@ -24,6 +24,9 @@ export default function PipelineNodeDetail({
   const [doc, setDoc] = useState<LibraryDocumentResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Reader ergonomics (#1679): comfortable (default) / wide / full-screen. Desktop
+  // only — the mobile docked pane keeps its height-based layout untouched.
+  const [size, setSize] = useState<'default' | 'wide' | 'full'>('default');
   const explanation = node ? pipelineNodeExplanation(node.stageId, node.id) : null;
 
   useEffect(() => {
@@ -63,7 +66,14 @@ export default function PipelineNodeDetail({
       aria-live="polite"
       className={[
         'fixed inset-0 z-[1100] flex h-dvh w-full shrink-0 flex-col overflow-hidden bg-term-bg',
-        'pt-[env(safe-area-inset-top)] md:relative md:inset-auto md:z-20 md:h-full md:w-[372px] md:min-h-0 md:border-l md:border-hair md:pt-0',
+        'pt-[env(safe-area-inset-top)] md:pt-0',
+        // Desktop reader sizes (#1679): comfortable / wide / full-screen; mobile is
+        // always the full-page surface from the develop-side mobile pass.
+        size === 'full'
+          ? 'md:fixed md:inset-0 md:z-50 md:h-full md:w-full'
+          : size === 'wide'
+            ? 'md:relative md:inset-auto md:z-20 md:h-full md:w-[620px] md:min-h-0 md:border-l md:border-hair'
+            : 'md:relative md:inset-auto md:z-20 md:h-full md:w-[372px] md:min-h-0 md:border-l md:border-hair',
       ].join(' ')}
     >
       {/* Header */}
@@ -81,18 +91,44 @@ export default function PipelineNodeDetail({
             </div>
           )}
         </div>
-        <button
-          type="button"
-          aria-label="Close"
-          onClick={onClose}
-          className="ml-3 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
-        >
-          <X size={18} />
-        </button>
+        <div className="ml-3 flex flex-shrink-0 items-center gap-1.5">
+          {/* Reader-size toggles (#1679) — desktop only; mobile is already full-page */}
+          {size !== 'full' && (
+            <button
+              type="button"
+              aria-label={size === 'wide' ? 'Narrow panel' : 'Widen panel'}
+              onClick={() => setSize(size === 'wide' ? 'default' : 'wide')}
+              className="hidden h-8 w-8 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:flex"
+            >
+              {size === 'wide' ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label={size === 'full' ? 'Exit full screen' : 'Full screen'}
+            onClick={() => setSize(size === 'full' ? 'default' : 'full')}
+            className="hidden h-8 w-8 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:flex"
+          >
+            {size === 'full' ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-sm leading-relaxed text-ink-mute md:px-5 md:py-4">
+      <div
+        className={[
+          'flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-sm leading-relaxed text-ink-mute md:px-5 md:py-4',
+          size === 'full' ? 'md:mx-auto md:w-full md:max-w-3xl' : '',
+        ].join(' ')}
+      >
         {/* Empty state */}
         {!documentKey && !explanation && (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center">

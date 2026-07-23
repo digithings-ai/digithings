@@ -12,7 +12,7 @@ import { isDbExempt } from '@/lib/nav';
 /**
  * App frame: the Olympus shell (sidebar + page chrome) for all routes.
  *
- * The twelve-x FX Research suite renders inside this shell like every other
+ * The twelve-x FX Hub suite renders inside this shell like every other
  * destination (#1664 retired its standalone chrome). It stays DB-exempt in
  * lib/nav.ts because it reads its own research feed (isTwelveXConfigured)
  * rather than the main Olympus backend.

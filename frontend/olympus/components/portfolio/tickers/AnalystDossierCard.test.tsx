@@ -28,6 +28,7 @@ const mockPayload: AnalystPayload = {
   fundamentals: 'P/E 12.5, below historical average',
   price_targets: { base: 102, bull: 115, bear: 88 },
   sources: ['https://example.com/analysis'],
+  evidence: null,
   fingerprint_news_hash: 'test-news-hash',
 };
 

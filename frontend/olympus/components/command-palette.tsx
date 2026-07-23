@@ -101,14 +101,14 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     },
     {
       id: 'go-fx',
-      title: 'FX Research',
+      title: 'FX Hub',
       hint: 'Desk consensus, matrix & events',
       href: '/twelve-x',
       icon: Globe,
     },
     {
       id: 'go-fx-how',
-      title: 'FX Research — how it works',
+      title: 'FX Hub — how it works',
       hint: 'The research pipeline, explained',
       href: '/twelve-x?tab=how-it-works',
       icon: Globe,

@@ -480,6 +480,18 @@ export interface AnalystPayload {
   price_targets: Record<string, number | string> | null;
   expectations: string;
   fingerprint_news_hash: string;
+  /** Itemized evidence block (#1672) — conviction_score is DERIVED from these counts
+   *  backend-side; render the counts so the derivation is auditable. Null on legacy docs. */
+  evidence: AnalystEvidence | null;
+}
+
+/** #1672 evidence assessment — mirrors hermes/models/analyst.py:EvidenceAssessment. */
+export interface AnalystEvidence {
+  independent_confirming_signals: number | null;
+  contradicting_signals: number | null;
+  catalyst_within_horizon: boolean | null;
+  trend_alignment: string;
+  evidence_quality: string;
 }
 
 /** The `analyst_coverage` pointer row for one ticker — index only, never a freshness source. */
