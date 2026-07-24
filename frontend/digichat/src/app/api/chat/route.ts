@@ -18,7 +18,15 @@ import { createFoundryStreamResponse } from "@/lib/foundry-stream";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
-import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
+import {
+  checkEmbedIpRateLimit,
+  clientIpForRateLimit,
+} from "@/lib/embed-ip-rate-limit";
+import {
+  recordEmbedTrialTurn,
+  isOverEmbedTrialLimit,
+  unlockEmbedTrial,
+} from "@/lib/embed-turn-quota";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import {
   embedConfigOf,
@@ -109,6 +117,33 @@ export async function POST(req: Request) {
   };
 
   const embedConfig = embedConfigOf(tenantCtx);
+
+  // trial_form gate: DataTap-branded embed that, after EMBED_FREE_TURN_LIMIT free
+  // turns, defers the locked presentation to the embedding page (which shows the
+  // trial form) rather than the BYOK/contact card. Enforced per client IP in
+  // memory — best-effort anti-abuse per the design spec. Fail open on any internal
+  // error so an infra hiccup never blocks a legitimate visitor.
+  if (embedConfig?.gateMode === "trial_form") {
+    try {
+      const ip = clientIpForRateLimit(req);
+      if (req.headers.get("x-embed-trial-unlock") === "1") {
+        unlockEmbedTrial(ip);
+      }
+      if (isOverEmbedTrialLimit(ip)) {
+        return new Response(
+          JSON.stringify({
+            error: "trial_gate",
+            message: "Complete the free trial form to keep chatting.",
+          }),
+          { status: 402, headers: { "content-type": "application/json" } },
+        );
+      }
+      recordEmbedTrialTurn(ip);
+    } catch (e) {
+      console.warn("[trial-gate] quota error, failing open:", e);
+    }
+  }
+
   if (embedConfig?.backend.type === "external-relay") {
     return await createExternalRelayStreamResponse({
       relayUrl: embedConfig.backend.url,

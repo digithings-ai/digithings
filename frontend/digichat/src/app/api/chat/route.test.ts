@@ -17,6 +17,11 @@ vi.mock("@/lib/bff-rate-limit", () => ({
 
 vi.mock("@/lib/embed-ip-rate-limit", () => ({
   checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+  clientIpForRateLimit: vi.fn(() => "127.0.0.1"),
+}));
+
+vi.mock("@/lib/foundry-stream", () => ({
+  createFoundryStreamResponse: vi.fn(async () => new Response("foundry", { status: 200 })),
 }));
 
 vi.mock("@/lib/digigraph-upstream", () => ({
@@ -61,6 +66,8 @@ import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
+import { createFoundryStreamResponse } from "@/lib/foundry-stream";
+import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { streamText } from "ai";
 
 describe("POST /api/chat", () => {
@@ -76,6 +83,8 @@ describe("POST /api/chat", () => {
     });
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    resetEmbedTrialQuotaForTests();
+    vi.mocked(createFoundryStreamResponse).mockClear();
   });
 
   afterEach(() => {
@@ -232,6 +241,52 @@ describe("POST /api/chat", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("byok_model_required");
+  });
+
+  describe("trial_form gate", () => {
+    const trialCtx = {
+      tenantSlug: "datatap",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "datatap",
+        gateMode: "trial_form",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
+      },
+    };
+
+    function trialReq(headers: Record<string, string> = {}): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-embed-host": "https://datatap.stream", ...headers },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      });
+    }
+
+    beforeEach(() => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(trialCtx as never);
+    });
+
+    it("allows the first 3 turns then returns 402 trial_gate without calling Foundry", async () => {
+      for (let i = 0; i < 3; i++) {
+        const ok = await POST(trialReq());
+        expect(ok.status).toBe(200);
+      }
+      const gated = await POST(trialReq());
+      expect(gated.status).toBe(402);
+      expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      // Foundry called 3 times (allowed turns), never on the gated turn.
+      expect(createFoundryStreamResponse).toHaveBeenCalledTimes(3);
+    });
+
+    it("honors X-Embed-Trial-Unlock to allow turns past the free limit", async () => {
+      for (let i = 0; i < 3; i++) await POST(trialReq());
+      const unlocked = await POST(trialReq({ "x-embed-trial-unlock": "1" }));
+      expect(unlocked.status).toBe(200);
+      expect(createFoundryStreamResponse).toHaveBeenCalledTimes(4);
+    });
   });
 });
 
