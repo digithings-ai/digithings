@@ -546,9 +546,10 @@ build step).
 
 ### `invoice/` — invoice template
 
-A polished single-page invoice on the light/paper theme — Geist / Instrument
-Serif voices, phosphor accent, tabular figures, `@page`/print rules for clean
-A4 output. Line items read like an AI-services invoice (bold deliverable +
-compact scope). Fill the `[bracketed]` / `.ph` placeholders, then
+An elegant **monochrome** single-page invoice — Geist / Instrument Serif voices,
+hairline rules, tabular figures, generous whitespace, `@page`/print rules for
+clean A4 output. No colour or logo mark. Line items read like an AI-services
+invoice (deliverable + compact scope), with an optional second-page delivery
+breakdown. Fill the `[bracketed]` placeholders, then
 `chromium --headless --print-to-pdf=invoice.pdf index.html`. See
 [`invoice/README.md`](./invoice/README.md).
