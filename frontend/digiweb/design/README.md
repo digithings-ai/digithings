@@ -536,3 +536,20 @@ open http://localhost:8765/design/smoke/
 ```
 
 The page renders one minimal instance of each primitive for review.
+
+---
+
+## Documents
+
+Canon-styled, print-ready document templates (HTML → PDF, self-contained, no
+build step).
+
+### `invoice/` — invoice template
+
+An elegant **monochrome** single-page invoice — Geist / Instrument Serif voices,
+hairline rules, tabular figures, generous whitespace, `@page`/print rules for
+clean A4 output. No colour or logo mark. Line items read like an AI-services
+invoice (deliverable + compact scope), with an optional second-page delivery
+breakdown. Fill the `[bracketed]` placeholders, then
+`chromium --headless --print-to-pdf=invoice.pdf index.html`. See
+[`invoice/README.md`](./invoice/README.md).

@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Invoice — digithings</title>
+<!--
+  ============================================================================
+  digithings — Invoice template (HTML → PDF)
+  ----------------------------------------------------------------------------
+  Elegant, monochrome (black & white) invoice: Geist / Geist Mono / Instrument
+  Serif voices, hairline rules, generous whitespace, tabular figures for money.
+  No colour, no logo mark — a clean professional document.
+
+  HOW TO USE
+  1. Replace every [bracketed] placeholder (amounts, client details, bank
+     details, dates) with real values.
+  2. Line-item descriptions below are the delivered work — edit for the
+     engagement you are billing.
+  3. Convert to PDF (see invoice/README.md):
+       chromium --headless --print-to-pdf=invoice.pdf --no-pdf-header-footer index.html
+     or open in a browser → Print → Save as PDF (A4, margins: default/none).
+
+  This specimen is populated with the 12X FX-research work delivered across
+  the 12X pilot phase, billed per deliverable.
+  ============================================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+/* --- Tokens (monochrome, black & white) ------------------------------------ */
+:root[data-theme="light"]{
+  --bg:#FFFFFF; --surface:#FFFFFF;
+  --hair:rgba(0,0,0,.11); --hair-2:rgba(0,0,0,.22);
+  --ink:#1A1A1A; --ink-soft:#565656; --ink-mute:#8C8C8C;
+  --accent:var(--ink);                 /* safety: any stray accent resolves to ink */
+  --sans:"Geist",system-ui,-apple-system,sans-serif;
+  --mono:"Geist Mono","JetBrains Mono",ui-monospace,monospace;
+  --serif:"Instrument Serif",Georgia,serif;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:var(--sans); font-weight:400; font-size:11px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  padding:40px 20px;
+}
+
+/* Voices -------------------------------------------------------------------- */
+.kick{font-family:var(--mono); font-size:8.5px; font-weight:500; letter-spacing:.22em;
+  text-transform:uppercase; color:var(--ink-mute)}
+.mono{font-family:var(--mono); font-variant-numeric:tabular-nums lining-nums}
+.ph{color:var(--ink-mute); font-family:var(--mono)}   /* fill-in placeholder */
+
+/* Sheet --------------------------------------------------------------------- */
+.sheet{
+  max-width:780px; margin:0 auto; background:var(--surface);
+  border:1px solid var(--hair);
+  box-shadow:0 18px 50px -30px rgba(0,0,0,.25);
+}
+.pad{padding:52px 56px}
+
+/* Masthead ------------------------------------------------------------------ */
+.masthead{display:flex; justify-content:space-between; align-items:flex-start; gap:40px;
+  padding-bottom:18px; border-bottom:1px solid var(--hair)}
+.brand .name{font-family:var(--serif); font-size:22px; line-height:1; letter-spacing:.01em}
+.brand-tag{margin-top:6px; font-family:var(--mono); font-size:8.5px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--ink-mute)}
+.from{margin-top:13px; color:var(--ink-soft); font-size:11px; line-height:1.75; max-width:250px}
+.from .who{color:var(--ink); font-weight:500}
+
+.doc-title{text-align:right}
+.doc-title .word{font-family:var(--serif); font-size:30px; line-height:.9; letter-spacing:.02em}
+.meta{margin-top:18px; display:grid; grid-template-columns:auto auto; gap:6px 18px;
+  justify-content:end; text-align:right}
+.meta dt{font-family:var(--mono); font-size:8.5px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-mute); align-self:center}
+.meta dd{font-family:var(--mono); font-size:11px; font-variant-numeric:tabular-nums; color:var(--ink)}
+
+/* Parties + amount due ------------------------------------------------------ */
+.band{display:grid; grid-template-columns:1fr 250px; gap:40px; margin-top:20px; align-items:start}
+.billto .kick{margin-bottom:12px}
+.billto .client{font-size:15px; font-weight:500; color:var(--ink); margin-bottom:7px; letter-spacing:-.01em}
+.billto .lines{color:var(--ink-soft); font-size:11px; line-height:1.95}
+.due-card{text-align:right}
+.due-card .kick{margin-bottom:11px}
+.due-card .amt{font-family:var(--mono); font-size:22px; font-weight:500; letter-spacing:-.01em;
+  color:var(--ink); font-variant-numeric:tabular-nums}
+.due-card .amt .cur{font-size:11px; color:var(--ink-mute); margin-right:5px; letter-spacing:.02em}
+.due-card .sub{margin-top:12px; font-size:10px; color:var(--ink-soft); display:flex;
+  justify-content:space-between; gap:16px; text-align:left}
+.due-card .sub b{font-weight:500; color:var(--ink)}
+
+/* Line items ---------------------------------------------------------------- */
+.items{width:100%; border-collapse:collapse; margin-top:22px}
+.items thead th{font-family:var(--mono); font-size:8.5px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-mute); font-weight:500; text-align:left; padding:0 0 12px; border-bottom:1px solid var(--ink)}
+.items thead th.r{text-align:right}
+.items td{padding:7px 0; border-bottom:1px solid var(--hair); vertical-align:baseline}
+.items .idx{width:34px; font-family:var(--mono); font-size:10px; color:var(--ink-mute);
+  font-variant-numeric:tabular-nums}
+.items .desc{line-height:1.5}
+.items .desc .h{display:inline; font-size:12px; font-weight:500; color:var(--ink); letter-spacing:-.01em}
+.items .desc .s{display:inline; color:var(--ink-soft); font-size:10.5px}
+.items .desc .s::before{content:"\2002\2014\2002"; color:var(--ink-mute)}
+.items .amt{width:120px; text-align:right; white-space:nowrap; font-family:var(--mono);
+  font-size:12px; color:var(--ink); font-variant-numeric:tabular-nums; padding-left:12px}
+
+/* Totals -------------------------------------------------------------------- */
+.totals{display:flex; justify-content:flex-end; margin-top:14px}
+.totals table{border-collapse:collapse; min-width:300px}
+.totals td{padding:8px 0; font-size:11px}
+.totals td.k{color:var(--ink-soft); font-family:var(--mono); font-size:9.5px; letter-spacing:.1em;
+  text-transform:uppercase}
+.totals td.v{text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; color:var(--ink);
+  padding-left:40px}
+.totals tr.grand td{padding-top:15px; border-top:1px solid var(--ink)}
+.totals tr.grand td.k{color:var(--ink); font-size:10.5px}
+.totals tr.grand td.v{font-size:17px; font-weight:500; color:var(--ink); letter-spacing:-.01em}
+
+/* Footer blocks ------------------------------------------------------------- */
+.foot{display:grid; grid-template-columns:1fr 1fr; gap:44px; margin-top:20px;
+  padding-top:18px; border-top:1px solid var(--hair)}
+.foot .kick{margin-bottom:12px}
+.foot .body{color:var(--ink-soft); font-size:10.5px; line-height:1.8}
+.foot .body .row{display:flex; justify-content:space-between; gap:16px; max-width:270px; padding:1.5px 0}
+.foot .body .row span:first-child{color:var(--ink-mute)}
+.foot .body .row span:last-child{color:var(--ink); font-family:var(--mono); font-size:10px}
+.colophon{margin-top:14px; padding-top:12px; border-top:1px solid var(--hair);
+  display:flex; justify-content:space-between; align-items:center;
+  font-family:var(--mono); font-size:9px; letter-spacing:.08em; color:var(--ink-mute)}
+
+/* Optional supplement page — delivery breakdown ----------------------------- */
+.appendix{max-width:780px; margin:30px auto 0; background:var(--surface);
+  border:1px solid var(--hair); box-shadow:0 18px 50px -30px rgba(0,0,0,.25)}
+.apx-head{display:flex; justify-content:space-between; align-items:flex-start; gap:24px;
+  padding-bottom:16px; border-bottom:1px solid var(--ink)}
+.apx-title{font-family:var(--serif); font-size:24px; line-height:1; margin-top:7px}
+.apx-meta{text-align:right; font-family:var(--mono); font-size:10px; line-height:1.9; color:var(--ink-soft)}
+.apx-meta b{color:var(--ink); font-weight:500}
+.apx-meta .sep{color:var(--ink-mute)}
+.apx-list{list-style:none; margin-top:10px}
+.apx-list li{padding:12px 0; border-bottom:1px solid var(--hair)}
+.apx-h{font-size:12.5px; font-weight:500; color:var(--ink); letter-spacing:-.01em}
+.apx-h .apx-n{font-family:var(--mono); font-size:10px; color:var(--ink-mute); margin-right:12px}
+.apx-list p{margin-top:5px; margin-left:34px; color:var(--ink-soft); font-size:10.5px; line-height:1.6;
+  max-width:640px}
+.apx-note{margin-top:18px; color:var(--ink-soft); font-size:10.5px; line-height:1.7}
+
+/* Print --------------------------------------------------------------------- */
+@page{ size:A4; margin:12mm }
+@media print{
+  html,body{background:#fff; padding:0}
+  .sheet{max-width:none; border:none; box-shadow:none; margin:0}
+  .pad{padding:0}
+  .appendix{break-before:page; page-break-before:always}
+  *{ -webkit-print-color-adjust:exact; print-color-adjust:exact }
+}
+@media (max-width:640px){
+  .masthead{flex-direction:column} .doc-title{text-align:left}
+  .meta{justify-content:start; text-align:left}
+  .band{grid-template-columns:1fr} .foot{grid-template-columns:1fr}
+  .due-card{text-align:left}
+}
+</style>
+</head>
+<body>
+<main class="sheet">
+  <div class="pad">
+
+    <!-- Masthead -->
+    <header class="masthead">
+      <div>
+        <div class="brand"><span class="name">digithings</span></div>
+        <div class="brand-tag">AI systems · research automation</div>
+        <div class="from">
+          <div class="who">Chris Stefan</div>
+          <div>chris.stefan@proton.me</div>
+          <div class="ph">[Business name · address]</div>
+          <div class="ph">[VAT / tax no. — if applicable]</div>
+        </div>
+      </div>
+      <div class="doc-title">
+        <div class="word">Invoice</div>
+        <dl class="meta">
+          <dt>Invoice №</dt><dd>INV-2026-001</dd>
+          <dt>Issue date</dt><dd>23 Jul 2026</dd>
+          <dt>Due date</dt><dd class="ph">[06 Aug 2026]</dd>
+          <dt>Terms</dt><dd class="ph">[Net 14]</dd>
+        </dl>
+      </div>
+    </header>
+
+    <!-- Bill to + amount due -->
+    <section class="band">
+      <div class="billto">
+        <div class="kick">Bill to</div>
+        <div class="client">12X Wealth Strategies</div>
+        <div class="lines">
+          <div class="ph">[Address line 1]</div>
+          <div class="ph">[Address line 2 · City · Country]</div>
+          <div class="ph">[billing@client.com]</div>
+        </div>
+      </div>
+      <aside class="due-card">
+        <div class="kick">Amount due</div>
+        <div class="amt"><span class="cur">USD</span>5,000.00</div>
+        <div class="sub"><span>Engagement</span><b>12X pilot phase</b></div>
+        <div class="sub"><span>Due by</span><b class="ph">[06 Aug 2026]</b></div>
+      </aside>
+    </section>
+
+    <!-- Line items: 12X pilot, billed per deliverable -->
+    <table class="items">
+      <thead>
+        <tr>
+          <th class="idx">#</th>
+          <th>Deliverable</th>
+          <th class="r">Amount (USD)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="idx">01</td>
+          <td class="desc">
+            <span class="h">FX research extraction pipeline</span>
+            <span class="s">Multimodal extract · fault&#8209;tolerant · richer G10 pair&#8209;leg output</span>
+          </td>
+          <td class="amt">700.00</td>
+        </tr>
+        <tr>
+          <td class="idx">02</td>
+          <td class="desc">
+            <span class="h">Consensus engine</span>
+            <span class="s">Pair&#8209;leg G10 · relevance&#8209;weighted · multi&#8209;timeframe blend · auto&#8209;publish</span>
+          </td>
+          <td class="amt">800.00</td>
+        </tr>
+        <tr>
+          <td class="idx">03</td>
+          <td class="desc">
+            <span class="h">Trade Intelligence &amp; Trade Ideas</span>
+            <span class="s">LLM strategist · deterministic contradiction guard · grounded citations</span>
+          </td>
+          <td class="amt">800.00</td>
+        </tr>
+        <tr>
+          <td class="idx">04</td>
+          <td class="desc">
+            <span class="h">Relevance layer</span>
+            <span class="s">Causal day&#8209;by&#8209;day review · stale&#8209;opinion weighting · deduplicated ledger</span>
+          </td>
+          <td class="amt">500.00</td>
+        </tr>
+        <tr>
+          <td class="idx">05</td>
+          <td class="desc">
+            <span class="h">Economic &amp; FX calendar</span>
+            <span class="s">Timezone&#8209;correct releases · brief&#8209;to&#8209;calendar linking · single&#8209;source core</span>
+          </td>
+          <td class="amt">450.00</td>
+        </tr>
+        <tr>
+          <td class="idx">06</td>
+          <td class="desc">
+            <span class="h">Custom 12X front-end</span>
+            <span class="s">Bespoke research dashboard · consensus, matrix &amp; events</span>
+          </td>
+          <td class="amt">600.00</td>
+        </tr>
+        <tr>
+          <td class="idx">07</td>
+          <td class="desc">
+            <span class="h">Snapshots &mdash; Olympus data foundation</span>
+            <span class="s">Per&#8209;run consensus &amp; confluence snapshot tables</span>
+          </td>
+          <td class="amt">350.00</td>
+        </tr>
+        <tr>
+          <td class="idx">08</td>
+          <td class="desc">
+            <span class="h">CI / infrastructure &amp; DevOps</span>
+            <span class="s">Per&#8209;session cron · date&#8209;backfill · migration runner · env standardisation</span>
+          </td>
+          <td class="amt">450.00</td>
+        </tr>
+        <tr>
+          <td class="idx">09</td>
+          <td class="desc">
+            <span class="h">Documentation</span>
+            <span class="s">Architecture map · condensed Notion docs · Olympus integration scope</span>
+          </td>
+          <td class="amt">350.00</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Totals -->
+    <div class="totals">
+      <table>
+        <tr>
+          <td class="k">Subtotal</td>
+          <td class="v">5,000.00</td>
+        </tr>
+        <tr>
+          <td class="k">Tax / VAT</td>
+          <td class="v">0.00</td>
+        </tr>
+        <tr class="grand">
+          <td class="k">Total due (USD)</td>
+          <td class="v">$&nbsp;5,000.00</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Payment + notes -->
+    <section class="foot">
+      <div>
+        <div class="kick">Payment details</div>
+        <div class="body">
+          <div class="row"><span>Method</span><span class="ph">[Wise / bank transfer]</span></div>
+          <div class="row"><span>Account name</span><span class="ph">[Chris Stefan]</span></div>
+          <div class="row"><span>Account / IBAN</span><span class="ph">[—]</span></div>
+          <div class="row"><span>SWIFT / routing</span><span class="ph">[—]</span></div>
+          <div class="row"><span>Reference</span><span>INV-2026-001</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="kick">Notes</div>
+        <div class="body">
+          <b>12X pilot phase</b> &mdash; delivery of the full working system above, covering all work to date since project inception.
+          Full production delivery and ongoing support are quoted separately on
+          completion. Please quote the invoice number on payment. Thank you.
+        </div>
+      </div>
+    </section>
+
+    <div class="colophon">
+      <span>digithings · AI systems &amp; research automation</span>
+      <span>INV-2026-001 · thank you</span>
+    </div>
+
+  </div>
+</main>
+
+<!-- ===========================================================================
+     Optional supplement — delivery breakdown. Detached page for clients who
+     want the fuller per-deliverable scope. Delete this whole <section> if you
+     only want the one-page invoice.
+     =========================================================================== -->
+<section class="sheet appendix">
+  <div class="pad">
+
+    <header class="apx-head">
+      <div>
+        <div class="kick">Delivery breakdown</div>
+        <div class="apx-title">What was delivered</div>
+      </div>
+      <div class="apx-meta">
+        <div>Supplement to <b>INV-2026-001</b></div>
+        <div>12X <span class="sep">·</span> pilot phase</div>
+      </div>
+    </header>
+
+    <ol class="apx-list">
+      <li>
+        <div class="apx-h"><span class="apx-n">01</span> FX research extraction pipeline</div>
+        <p>Multimodal PDF extraction (pipeline&#8209;v2) reads each brief directly; per&#8209;document
+        fault tolerance keeps one bad file from failing the whole run; richer G10 / pair&#8209;leg
+        structured output.</p>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">02</span> Consensus engine</div>
+        <p>Pair&#8209;leg decomposition to true G10, relevance&#8209;weighted stances, multi&#8209;timeframe
+        blending on the live pivot, and automated publication to the FX Consensus board each run.</p>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">03</span> Trade Intelligence &amp; Trade Ideas</div>
+        <p>LLM strategist with a deterministic contradiction / consensus guard, schema&#8209;required
+        grounded citations, and the redesigned Trade Ideas hub table.</p>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">04</span> Relevance layer</div>
+        <p>Causal, sequential&#8209;in&#8209;time day&#8209;by&#8209;day LLM review that weights stale opinions
+        out of consensus and the matrix, with deduplicated ledger rows for recurring source files.</p>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">05</span> Economic &amp; FX calendar</div>
+        <p>Timezone&#8209;correct release times, precise brief&#8209;to&#8209;calendar linking by event date,
+        and consolidation onto a single&#8209;source core economic calendar.</p>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">06</span> Custom 12X front-end</div>
+        <p>Bespoke client-facing research dashboard: Today, Consensus, Matrix, Events and
+        Trade&#8209;Ideas tabs, with currency drill-downs, broker profiles and an events timeline.</p>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">07</span> Snapshots &mdash; Olympus data foundation</div>
+        <p>Per&#8209;run consensus and confluence snapshot tables that give the Olympus suite a
+        queryable historical foundation.</p>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">08</span> CI / infrastructure &amp; DevOps</div>
+        <p>Per&#8209;session cron workflows (Asia / London / New York), date&#8209;backfill runs, an
+        idempotent SQL migration runner, Supabase env standardisation, and CI permission fixes.</p>
+      </li>
+      <li>
+        <div class="apx-h"><span class="apx-n">09</span> Documentation</div>
+        <p>End&#8209;to&#8209;end architecture map, condensed Notion docs page, Olympus integration scope,
+        and a documentation&#8209;accuracy pass.</p>
+      </li>
+    </ol>
+
+    <div class="apx-note">
+      This breakdown itemises the work delivered in the 12X pilot &mdash; a scope
+      reference only. It carries no charges; all amounts are on the invoice.
+    </div>
+
+    <div class="colophon">
+      <span>digithings · AI systems &amp; research automation</span>
+      <span>INV-2026-001 · delivery breakdown</span>
+    </div>
+
+  </div>
+</section>
+</body>
+</html>
