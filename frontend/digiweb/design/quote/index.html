@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quote — digithings</title>
+<!--
+  ============================================================================
+  digithings — Quote / statement of work template (HTML → PDF)
+  ----------------------------------------------------------------------------
+  Companion to ../invoice/. Same monochrome house style: Geist / Geist Mono /
+  Instrument Serif voices, hairline rules, tabular figures, no colour, no mark.
+
+  HOW TO USE
+  1. Replace every [bracketed] placeholder with real values.
+  2. Edit the scope items, prices, timeline and terms for the engagement.
+  3. Convert to PDF:
+       chromium --headless --print-to-pdf=quote.pdf --no-pdf-header-footer index.html
+     or open in a browser → Print → Save as PDF (A4).
+
+  Figures and line items below are illustrative placeholders. Replace them with
+  the real engagement before sending. Do not commit real client names, amounts,
+  or project detail to this repository.
+  ============================================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+/* --- Tokens (monochrome, black & white) ------------------------------------ */
+:root[data-theme="light"]{
+  --bg:#FFFFFF; --surface:#FFFFFF;
+  --hair:rgba(0,0,0,.11); --hair-2:rgba(0,0,0,.22);
+  --ink:#1A1A1A; --ink-soft:#565656; --ink-mute:#8C8C8C;
+  --sans:"Geist",system-ui,-apple-system,sans-serif;
+  --mono:"Geist Mono","JetBrains Mono",ui-monospace,monospace;
+  --serif:"Instrument Serif",Georgia,serif;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:var(--sans); font-weight:400; font-size:11px; line-height:1.55;
+  -webkit-font-smoothing:antialiased; padding:40px 20px;
+}
+
+/* Voices -------------------------------------------------------------------- */
+.kick{font-family:var(--mono); font-size:8.5px; font-weight:500; letter-spacing:.22em;
+  text-transform:uppercase; color:var(--ink-mute)}
+.mono{font-family:var(--mono); font-variant-numeric:tabular-nums lining-nums}
+.ph{color:var(--ink-mute); font-family:var(--mono)}
+
+/* Sheet --------------------------------------------------------------------- */
+.sheet{max-width:780px; margin:0 auto; background:var(--surface);
+  border:1px solid var(--hair); box-shadow:0 18px 50px -30px rgba(0,0,0,.25)}
+.pad{padding:44px 56px}
+
+/* Masthead ------------------------------------------------------------------ */
+.masthead{display:flex; justify-content:space-between; align-items:flex-start; gap:40px;
+  padding-bottom:14px; border-bottom:1px solid var(--hair)}
+.brand .name{font-family:var(--serif); font-size:22px; line-height:1; letter-spacing:.01em}
+.brand-tag{margin-top:6px; font-family:var(--mono); font-size:8.5px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--ink-mute)}
+.from{margin-top:10px; color:var(--ink-soft); font-size:11px; line-height:1.75; max-width:250px}
+.from .who{color:var(--ink); font-weight:500}
+
+.doc-title{text-align:right}
+.doc-title .word{font-family:var(--serif); font-size:30px; line-height:.9; letter-spacing:.02em}
+.meta{margin-top:18px; display:grid; grid-template-columns:auto auto; gap:6px 18px;
+  justify-content:end; text-align:right}
+.meta dt{font-family:var(--mono); font-size:8.5px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-mute); align-self:center}
+.meta dd{font-family:var(--mono); font-size:11px; font-variant-numeric:tabular-nums; color:var(--ink)}
+
+/* Parties + headline estimate ----------------------------------------------- */
+.band{display:grid; grid-template-columns:1fr 250px; gap:40px; margin-top:16px; align-items:start}
+.billto .kick{margin-bottom:12px}
+.billto .client{font-size:15px; font-weight:500; color:var(--ink); margin-bottom:7px; letter-spacing:-.01em}
+.billto .lines{color:var(--ink-soft); font-size:11px; line-height:1.95}
+.due-card{text-align:right}
+.due-card .kick{margin-bottom:11px}
+.due-card .amt{font-family:var(--mono); font-size:22px; font-weight:500; letter-spacing:-.01em;
+  color:var(--ink); font-variant-numeric:tabular-nums}
+.due-card .amt .cur{font-size:11px; color:var(--ink-mute); margin-right:5px; letter-spacing:.02em}
+.due-card .sub{margin-top:12px; font-size:10px; color:var(--ink-soft); display:flex;
+  justify-content:space-between; gap:16px; text-align:left}
+.due-card .sub b{font-weight:500; color:var(--ink)}
+
+/* Scope items --------------------------------------------------------------- */
+.items{width:100%; border-collapse:collapse; margin-top:18px}
+.items thead th{font-family:var(--mono); font-size:8.5px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-mute); font-weight:500; text-align:left; padding:0 0 10px;
+  border-bottom:1px solid var(--ink)}
+.items thead th.r{text-align:right}
+.items td{padding:7px 0; border-bottom:1px solid var(--hair); vertical-align:top}
+.items .idx{width:34px; font-family:var(--mono); font-size:10px; color:var(--ink-mute);
+  font-variant-numeric:tabular-nums; padding-top:9px}
+.items .desc .h{font-size:12.5px; font-weight:500; color:var(--ink); letter-spacing:-.01em}
+.items .desc .s{margin-top:3px; color:var(--ink-soft); font-size:10.5px; line-height:1.55; max-width:520px}
+.items .amt{width:110px; text-align:right; white-space:nowrap; font-family:var(--mono);
+  font-size:12px; color:var(--ink); font-variant-numeric:tabular-nums; padding-left:12px; padding-top:9px}
+.items tr.sec td{padding:15px 0 6px; border-bottom:1px solid var(--hair-2);
+  font-family:var(--mono); font-size:8.5px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-mute)}
+.items tbody tr.sec:first-child td{padding-top:2px}
+.items tr.opt .desc .h::after{content:"optional"; margin-left:9px; font-family:var(--mono);
+  font-size:8.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-mute);
+  border:1px solid var(--hair-2); padding:1px 5px; vertical-align:2px}
+
+/* Totals -------------------------------------------------------------------- */
+.totals{display:flex; justify-content:flex-end; margin-top:11px}
+.totals table{border-collapse:collapse; min-width:300px}
+.totals td{padding:7px 0; font-size:11px}
+.totals td.k{color:var(--ink-soft); font-family:var(--mono); font-size:9.5px; letter-spacing:.1em;
+  text-transform:uppercase}
+.totals td.v{text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums;
+  color:var(--ink); padding-left:40px}
+.totals tr.grand td{padding-top:13px; border-top:1px solid var(--ink)}
+.totals tr.grand td.k{color:var(--ink); font-size:10.5px}
+.totals tr.grand td.v{font-size:17px; font-weight:500; color:var(--ink); letter-spacing:-.01em}
+
+/* Terms --------------------------------------------------------------------- */
+.terms{display:grid; grid-template-columns:1fr 1fr; gap:44px; margin-top:18px;
+  padding-top:16px; border-top:1px solid var(--hair)}
+.terms .kick{margin-bottom:9px}
+.terms .body{color:var(--ink-soft); font-size:10.5px; line-height:1.65}
+.terms .body .row{display:flex; justify-content:space-between; gap:16px; max-width:280px; padding:1px 0}
+.terms .body .row span:first-child{color:var(--ink-mute)}
+.terms .body .row span:last-child{color:var(--ink); font-family:var(--mono); font-size:10px}
+.terms .body p + p{margin-top:7px}
+.colophon{margin-top:11px; padding-top:10px; border-top:1px solid var(--hair);
+  display:flex; justify-content:space-between; align-items:center;
+  font-family:var(--mono); font-size:9px; letter-spacing:.08em; color:var(--ink-mute)}
+
+/* Print --------------------------------------------------------------------- */
+@page{ size:A4; margin:11mm }
+@media print{
+  html,body{background:#fff; padding:0}
+  /* never split a scope row, the totals, or a terms column across pages */
+  .items tr, .totals, .terms > div, .colophon{break-inside:avoid; page-break-inside:avoid}
+  .items thead{display:table-header-group}
+  .sheet{max-width:none; border:none; box-shadow:none; margin:0}
+  .pad{padding:0}
+  *{ -webkit-print-color-adjust:exact; print-color-adjust:exact }
+}
+@media (max-width:640px){
+  .masthead{flex-direction:column} .doc-title{text-align:left}
+  .meta{justify-content:start; text-align:left}
+  .band{grid-template-columns:1fr} .terms{grid-template-columns:1fr}
+  .due-card{text-align:left}
+}
+</style>
+</head>
+<body>
+<main class="sheet">
+  <div class="pad">
+
+    <!-- Masthead -->
+    <header class="masthead">
+      <div>
+        <div class="brand"><span class="name">digithings</span></div>
+        <div class="brand-tag">AI systems · research automation</div>
+        <div class="from">
+          <div class="who">Chris Stefan</div>
+          <div>chris.stefan@proton.me</div>
+          <div class="ph">[Business name · address]</div>
+        </div>
+      </div>
+      <div class="doc-title">
+        <div class="word">Quote</div>
+        <dl class="meta">
+          <dt>Quote №</dt><dd class="ph">[QTE-0000-000]</dd>
+          <dt>Date</dt><dd class="ph">[25 Jul 2026]</dd>
+          <dt>Valid until</dt><dd class="ph">[24 Aug 2026]</dd>
+          <dt>Phase</dt><dd>Production</dd>
+        </dl>
+      </div>
+    </header>
+
+    <!-- Client + headline -->
+    <section class="band">
+      <div class="billto">
+        <div class="kick">Prepared for</div>
+        <div class="client ph">[Client name]</div>
+        <div class="lines">
+          <div class="ph">[Address line 1]</div>
+          <div class="ph">[City · Country]</div>
+          <div class="ph">[billing@client.com]</div>
+        </div>
+      </div>
+      <aside class="due-card">
+        <div class="kick">Balance due</div>
+        <div class="amt"><span class="cur">USD</span>10,000.00</div>
+        <div class="sub"><span>Fair value</span><b>20,000.00</b></div>
+        <div class="sub"><span>With option</span><b>12,000.00</b></div>
+      </aside>
+    </section>
+
+    <!-- Scope -->
+    <table class="items">
+      <thead>
+        <tr>
+          <th class="idx">#</th>
+          <th>Engagement &mdash; scope of work</th>
+          <th class="r">Fair value (USD)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="sec"><td colspan="3">Delivered &mdash; phase one</td></tr>
+        <tr><td class="idx">01</td><td class="desc"><div class="h">Discovery &amp; technical scoping</div></td><td class="amt">1,500.00</td></tr>
+        <tr><td class="idx">02</td><td class="desc"><div class="h">Data ingestion pipeline</div></td><td class="amt">2,000.00</td></tr>
+        <tr><td class="idx">03</td><td class="desc"><div class="h">Core processing engine</div></td><td class="amt">2,000.00</td></tr>
+        <tr><td class="idx">04</td><td class="desc"><div class="h">Scheduling &amp; automation</div></td><td class="amt">1,000.00</td></tr>
+        <tr><td class="idx">05</td><td class="desc"><div class="h">Third-party integrations</div></td><td class="amt">1,500.00</td></tr>
+        <tr><td class="idx">06</td><td class="desc"><div class="h">Client dashboard</div></td><td class="amt">2,000.00</td></tr>
+        <tr><td class="idx">07</td><td class="desc"><div class="h">Data foundation</div></td><td class="amt">800.00</td></tr>
+        <tr><td class="idx">08</td><td class="desc"><div class="h">Infrastructure &amp; CI</div></td><td class="amt">700.00</td></tr>
+        <tr><td class="idx">09</td><td class="desc"><div class="h">Documentation</div></td><td class="amt">500.00</td></tr>
+        <tr class="sec"><td colspan="3">To complete &mdash; next phase</td></tr>
+        <tr>
+          <td class="idx">10</td>
+          <td class="desc">
+            <div class="h">Quality &amp; evaluation harness</div>
+            <div class="s">Scoring outputs against real outcomes, plus the refinements that follow from it.</div>
+          </td>
+          <td class="amt">3,000.00</td>
+        </tr>
+        <tr>
+          <td class="idx">11</td>
+          <td class="desc">
+            <div class="h">Additional data sources</div>
+            <div class="s">Further sources brought into the pipeline and wired through to the core output.</div>
+          </td>
+          <td class="amt">2,000.00</td>
+        </tr>
+        <tr>
+          <td class="idx">12</td>
+          <td class="desc">
+            <div class="h">User access &amp; authentication</div>
+            <div class="s">Per-user logins, role-based access and session handling.</div>
+          </td>
+          <td class="amt">1,500.00</td>
+        </tr>
+        <tr>
+          <td class="idx">13</td>
+          <td class="desc">
+            <div class="h">Production hardening &amp; handover</div>
+            <div class="s">Alerting, verified backup and restore, cost caps, runbook and handover.</div>
+          </td>
+          <td class="amt">1,500.00</td>
+        </tr>
+        <tr class="opt">
+          <td class="idx">14</td>
+          <td class="desc">
+            <div class="h">Optional add-on</div>
+            <div class="s">An additional capability the client can take up or decline; priced so it stays round after any discount.</div>
+          </td>
+          <td class="amt">2,500.00</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Totals -->
+    <div class="totals">
+      <table>
+        <tr>
+          <td class="k">Delivered &mdash; phase one (01&ndash;09)</td>
+          <td class="v">12,000.00</td>
+        </tr>
+        <tr>
+          <td class="k">To complete &mdash; next phase (10&ndash;13)</td>
+          <td class="v">8,000.00</td>
+        </tr>
+        <tr>
+          <td class="k">Engagement at fair value</td>
+          <td class="v">20,000.00</td>
+        </tr>
+        <tr>
+          <td class="k">Family &amp; friends discount (20%)</td>
+          <td class="v">&minus;4,000.00</td>
+        </tr>
+        <tr>
+          <td class="k">Less phase one invoice, paid</td>
+          <td class="v">&minus;6,000.00</td>
+        </tr>
+        <tr class="grand">
+          <td class="k">Balance due (USD)</td>
+          <td class="v">$&nbsp;10,000.00</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Terms -->
+    <section class="terms">
+      <div>
+        <div class="kick">Terms</div>
+        <div class="body">
+          <div class="row"><span>Payment</span><span>50% start · 50% delivery</span></div>
+          <div class="row"><span>Timeline</span><span class="ph">[~0 weeks core]</span></div>
+          <div class="row"><span>Optional add-on</span><span class="ph">[adds ~0 weeks]</span></div>
+          <div class="row"><span>Quote valid</span><span class="ph">[30 days]</span></div>
+          <p>Fixed fee for the scope above. Anything outside it is agreed in writing first, so
+          there are no surprises on the final invoice.</p>
+        </div>
+      </div>
+      <div>
+        <div class="kick">Running costs &amp; assumptions</div>
+        <div class="body">
+          <p>Any third-party services the system needs are billed by the providers directly and
+          are best held in the client&rsquo;s own name, with nothing added on top. List them here
+          with their pricing model so there are no surprises.</p>
+          <p>State what the quote assumes (continued access to any required system, who subscribes
+          to paid data feeds) and what it excludes. Ongoing support after handover is quoted
+          separately as a retainer.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="colophon">
+      <span>digithings · AI systems &amp; research automation</span>
+      <span>[QTE-0000-000] · [phase]</span>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>

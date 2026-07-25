@@ -553,3 +553,11 @@ invoice (deliverable + compact scope), with an optional second-page delivery
 breakdown. Fill the `[bracketed]` placeholders, then
 `chromium --headless --print-to-pdf=invoice.pdf index.html`. See
 [`invoice/README.md`](./invoice/README.md).
+
+### `quote/` — quote / statement-of-work template
+
+The forward-looking companion to `invoice/`, same monochrome style. One page:
+priced scope rows (optional items carry an "optional" chip and total
+separately), headline figure, timeline, payment terms, and a running-costs /
+assumptions block for third-party services the client pays directly. See
+[`quote/README.md`](./quote/README.md).

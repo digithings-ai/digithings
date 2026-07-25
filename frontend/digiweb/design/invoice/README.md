@@ -18,14 +18,16 @@ you only want the one-pager; the invoice page is unaffected.
 ## Fill it in
 
 Every value the sender must supply is a `[bracketed]` placeholder in muted mono.
-Replace them all before sending:
+Replace them all before sending. **Keep real client names, amounts and project
+detail out of this repository** — fill them in on a working copy.
+
 
 - **From** — business name, address, VAT/tax no. (contact is pre-filled).
 - **Bill to** — client legal entity and address.
 - **Amounts** — each deliverable's price, the subtotal, tax/VAT, and the total.
 - **Meta** — invoice №, dates, terms, and the payment details.
-- **Line items** — the specimen is populated with the 12X pilot deliverables;
-  edit for the engagement you are billing.
+- **Line items** — the specimen uses illustrative generic deliverables; edit
+  for the engagement you are billing.
 
 ## Convert to PDF
 
