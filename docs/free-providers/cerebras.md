@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - email
 data_privacy_on_free: no_training
-verified_at: 2026-07-19
+verified_at: 2026-07-26
 source_urls:
   - https://inference-docs.cerebras.ai/introduction
   - https://inference-docs.cerebras.ai/api-reference
@@ -30,11 +30,11 @@ The fastest inference provider by raw throughput (>2,000 tok/s on Llama 3.3 70B 
 
 | Model ID | Context Window | Max Output | Notes |
 |---|---|---|---|
-| `llama-3.3-70b` | 128,000 | 8,192 | ⚠️ Error code: 404 - {'message': 'Model does not exist or you do not have access to it.', 'type': 'not_found_error', 'param': 'model', 'code': 'model_not_found'} |
-| `llama-4-scout` | 131,072 | 8,192 | active |
-| `qwen-3-32b` | 32,768 | 8,192 | active |
 | `openai/gpt-oss-120b` | 131,072 | 8,192 | active |
 | `qwen3-235b` | 131,072 | 8,192 | active |
+| `llama-3.3-70b` | 128,000 | 8,192 | ⚠️ Error code: 404 - {'message': 'Model does not exist or you do not have access to it.', 'type': 'not_found_error', 'param': 'model', 'code': 'model_not_found'} |
+| `llama-4-scout` | 131,072 | 8,192 | **deprecated** |
+| `qwen-3-32b` | 32,768 | 8,192 | **deprecated** |
 
 > The 8k context cap on free tier is a platform policy, not a model limit. Full context (128k) requires the paid tier.
 
@@ -120,3 +120,4 @@ Paid tier unlocks full 128k context and higher RPM/RPD. Llama 3.3 70B ~$0.60/$0.
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
+| 2026-07-26 | Automated snapshot sync | provider-review scan |

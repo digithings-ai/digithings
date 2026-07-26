@@ -1,5 +1,5 @@
 provider: openai
-last_checked: 2026-07-19
+last_checked: 2026-07-26
 source: agent-research
 
 free_tier:
@@ -143,4 +143,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "MATERIAL CHANGE 2026-07-19: GPT-5.6 family went GA 2026-07-09 — Luna $1/$6, Terra $2.50/$15, Sol $5/$30 per 1M (input/output); this is a full flagship-lineup update, not just an add-on. gpt-5.5/gpt-5.5-pro remain callable per some sources but are likely aging out — not yet confirmed removed from the API (only ChatGPT-surface retirements confirmed: o3 retiring from ChatGPT 2026-08-26; GPT-4o/4.1/4.1-mini/o4-mini already retired from ChatGPT 2026-02-13; older GPT-5/o3 API snapshots deprecated 2026-06-11, removal scheduled 2026-12-11). gpt-4.1-mini corrected to $0.40/$1.60 (snapshot had $0.15/$0.60 which is gpt-4o-mini pricing). Container sessions now billed per-minute (5-min minimum) as of 2026-06-02. No key configured yet; no probe run (method: skipped)."
+notes: "MATERIAL CHANGE 2026-07-19: GPT-5.6 family went GA 2026-07-09 — Luna $1/$6, Terra $2.50/$15, Sol $5/$30 per 1M (input/output); this is a full flagship-lineup update, not just an add-on. gpt-5.5/gpt-5.5-pro remain callable per some sources but are likely aging out — not yet confirmed removed from the API (only ChatGPT-surface retirements confirmed: o3 retiring from ChatGPT 2026-08-26; GPT-4o/4.1/4.1-mini/o4-mini already retired from ChatGPT 2026-02-13; older GPT-5/o3 API snapshots deprecated 2026-06-11, removal scheduled 2026-12-11). gpt-4.1-mini corrected to $0.40/$1.60 (snapshot had $0.15/$0.60 which is gpt-4o-mini pricing). Container sessions now billed per-minute (5-min minimum) as of 2026-06-02. No key configured yet; no probe run (method: skipped). 2026-07-26: no targeted re-research this cycle — no contradicting signals surfaced incidentally; treat prior-cycle figures as still current but unconfirmed."
