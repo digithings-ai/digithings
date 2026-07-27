@@ -17,12 +17,11 @@ import type {
 } from './types';
 
 /**
- * `boardColumn` must consolidate broker view currencies into the 8 G10 matrix
- * columns IDENTICALLY to the twelve-x Notion matrix (`nodes/publish.py`
- * `_board_column`), so the two surfaces never disagree. This mirrors the
- * authoritative mapping table in twelve-x `tests/test_publish_node.py`.
+ * `boardColumn` consolidates broker view currencies into the 8 G10 matrix
+ * columns. Olympus owns this rule outright, so this table is the authoritative
+ * statement of it — keep it exhaustive.
  */
-describe('boardColumn (Notion-matrix-consistent currency consolidation)', () => {
+describe('boardColumn (currency consolidation)', () => {
   it('files a single G10 currency under itself', () => {
     expect(boardColumn('USD')).toBe('USD');
     expect(boardColumn('EUR')).toBe('EUR');

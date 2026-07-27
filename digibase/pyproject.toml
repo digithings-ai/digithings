@@ -17,9 +17,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-notion = [
-    "notion-client>=2.2",
-]
 supabase = [
     "supabase>=2",
 ]
