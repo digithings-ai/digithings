@@ -29,6 +29,8 @@ import {
   useEmbedGate,
   EMBED_FREE_TURN_LIMIT,
 } from "@/lib/embed-gate";
+import { GATED_MESSAGE, isUnlockedMessage } from "@/lib/embed-trial-messages";
+import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { readEmbedUiParams } from "@/lib/embed-ui-params";
 import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
 import {
@@ -161,8 +163,26 @@ function EmbedChat({
   const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } =
     useBYOKKey();
   const ungated = tenantCfg.gateMode === "ungated";
-  const showByok = !ungated;
-  const gate = useEmbedGate(byokIsSet || ungated, host);
+  const isTrialForm = tenantCfg.gateMode === "trial_form";
+  const showByok = !ungated && !isTrialForm; // trial_form defers unlock to the parent form, not BYOK
+
+  const [trialUnlocked, setTrialUnlocked] = useState(false);
+  const [serverGated, setServerGated] = useState(false);
+
+  const gate = useEmbedGate(
+    byokIsSet || ungated || trialUnlocked,
+    host,
+    trialUnlocked ? EMBED_TRIAL_TURN_LIMIT : undefined, // undefined => EMBED_FREE_TURN_LIMIT default
+  );
+
+  // trial_form is locked when EITHER the client counter hit the free limit
+  // (normal path) OR the server reported a gate (localStorage-bypass path).
+  const trialLocked = isTrialForm && !trialUnlocked && (gate.locked || serverGated);
+
+  // Standalone (top-level, not embedded) => no parent will show a form. Fall back
+  // to the lockedContact card so a visitor is never dead-ended (design spec).
+  const isStandalone =
+    typeof window !== "undefined" && window.parent === window.self;
 
   const chat = useEmbedDigiChat({
     accent,
@@ -172,7 +192,26 @@ function EmbedChat({
     byokKey: byokIsSet ? byokKey : undefined,
     byokProvider,
     byokModel,
+    trialUnlocked,
+    onGated: isTrialForm ? () => setServerGated(true) : undefined,
   });
+
+  useEffect(() => {
+    if (!trialLocked || isStandalone || !host) return;
+    window.parent.postMessage(GATED_MESSAGE, host);
+  }, [trialLocked, isStandalone, host]);
+
+  useEffect(() => {
+    if (!isTrialForm) return;
+    const onMessage = (event: MessageEvent) => {
+      if (isUnlockedMessage(event, host)) {
+        setTrialUnlocked(true);
+        setServerGated(false);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [isTrialForm, host]);
 
   const uiParams = useMemo(() => {
     if (typeof window === "undefined") return {};
@@ -197,7 +236,7 @@ function EmbedChat({
 
   const wrappedSend = useCallback(
     (question: string) => {
-      if (gate.locked && !ungated) return;
+      if ((gate.locked || trialLocked) && !ungated) return;
       void chat.send(question);
       emit("embed_turn_submitted", {
         accent,
@@ -206,7 +245,7 @@ function EmbedChat({
       });
       if (!ungated) gate.increment();
     },
-    [chat, gate, ungated, accent, byokIsSet],
+    [chat, gate, trialLocked, ungated, accent, byokIsSet],
   );
 
   const headerSlot =
@@ -258,11 +297,17 @@ function EmbedChat({
       headerSlot={headerSlot}
       footerSlot={footerSlot}
       formReplacement={
-        gate.locked && !ungated ? (
+        trialLocked ? (
+          isStandalone ? (
+            <PaywallCard lockedContact={tenantCfg.lockedContact} />
+          ) : (
+            <TrialGatePlaceholder />
+          )
+        ) : gate.locked && !ungated && !isTrialForm ? (
           <PaywallCard lockedContact={tenantCfg.lockedContact} />
         ) : undefined
       }
-      showIntro={!gate.locked}
+      showIntro={!gate.locked && !trialLocked}
       ariaLabel={headerTitle ?? "digichat embed"}
     />
   );
@@ -428,6 +473,18 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+function TrialGatePlaceholder() {
+  return (
+    <div className="border-t border-border bg-muted/40 p-4">
+      <p className="text-sm font-medium">Complete the form to keep chatting.</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions. Fill in the
+        short form to unlock more.
+      </p>
     </div>
   );
 }

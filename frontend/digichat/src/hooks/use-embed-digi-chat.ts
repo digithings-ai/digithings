@@ -76,6 +76,8 @@ type UseEmbedDigiChatOptions = {
   byokKey?: string;
   byokProvider?: string;
   byokModel?: string;
+  trialUnlocked?: boolean;
+  onGated?: () => void;
 };
 
 export function useEmbedDigiChat({
@@ -86,6 +88,8 @@ export function useEmbedDigiChat({
   byokKey,
   byokProvider,
   byokModel,
+  trialUnlocked,
+  onGated,
 }: UseEmbedDigiChatOptions): DigiChatController {
   const transport = useMemo(
     () =>
@@ -109,6 +113,7 @@ export function useEmbedDigiChat({
               headers["X-BYOK-Model"] = byokModel.trim();
             }
           }
+          if (trialUnlocked) headers["X-Embed-Trial-Unlock"] = "1";
           try {
             const conversationId = window.sessionStorage.getItem(
               conversationStorageKey(resolvedHost),
@@ -126,7 +131,7 @@ export function useEmbedDigiChat({
           };
         },
       }),
-    [accent, token, host, embedHost, byokKey, byokProvider, byokModel],
+    [accent, token, host, embedHost, byokKey, byokProvider, byokModel, trialUnlocked],
   );
 
   const { messages, sendMessage, status, error, regenerate } = useChat<UIMessage>({
@@ -152,6 +157,16 @@ export function useEmbedDigiChat({
 
   const busy = status === "streaming" || status === "submitted";
   const chatError = formatEmbedChatError(error);
+
+  useEffect(() => {
+    if (!error?.message || !onGated) return;
+    try {
+      const parsed = JSON.parse(error.message.trim()) as { error?: string };
+      if (parsed.error === "trial_gate") onGated();
+    } catch {
+      /* non-JSON error — not a gate signal */
+    }
+  }, [error, onGated]);
 
   const send = useCallback(
     (question: string) => {
