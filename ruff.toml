@@ -25,6 +25,17 @@ extend-exclude = [
   "docs/openapi",
 ]
 
+[lint]
+# Rule selection is EXPLICIT and version-independent on purpose. ruff 0.16 widened
+# its default selection from 59 rules to 413, which turned ~981 findings red across
+# the monorepo overnight on an unchanged codebase (see #1701). Leaving `select`
+# unset means the lint policy is whatever ruff happens to ship, so it is stated here
+# instead. These four groups are the selection this repo has always enforced.
+#
+# To adopt more, widen this list deliberately — one rule family per PR, with the
+# resulting fixes reviewed. Do not widen it by upgrading ruff.
+select = ["E4", "E7", "E9", "F"]
+
 # Per-file-ignores are intentional exceptions, documented inline.
 [lint.per-file-ignores]
 # Service entrypoints import after bootstrap (dotenv load, sys.path fixes).
