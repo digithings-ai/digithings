@@ -23,13 +23,13 @@ import {
   validateBYOKModel,
   type BYOKProvider,
 } from "@/hooks/use-byok-key";
-import { useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
+import { readEmbedConversationId, useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
 import {
   emit,
   useEmbedGate,
   EMBED_FREE_TURN_LIMIT,
 } from "@/lib/embed-gate";
-import { GATED_MESSAGE, isUnlockedMessage } from "@/lib/embed-trial-messages";
+import { buildGatedMessage, isUnlockedMessage } from "@/lib/embed-trial-messages";
 import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { readEmbedUiParams } from "@/lib/embed-ui-params";
 import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
@@ -196,10 +196,15 @@ function EmbedChat({
     onGated: isTrialForm ? () => setServerGated(true) : undefined,
   });
 
+  // The upstream conversation id is the useful handle (it maps to the real backend
+  // conversation); fall back to nothing rather than blocking the gate.
   useEffect(() => {
     if (!trialLocked || isStandalone || !host) return;
-    window.parent.postMessage(GATED_MESSAGE, host);
-  }, [trialLocked, isStandalone, host]);
+    window.parent.postMessage(
+      buildGatedMessage(readEmbedConversationId(gate.host), chat.messages),
+      host,
+    );
+  }, [trialLocked, isStandalone, host, gate.host, chat.messages]);
 
   useEffect(() => {
     if (!isTrialForm) return;

@@ -26,6 +26,15 @@ function conversationStorageKey(host: string): string {
   return `${CONVERSATION_STORAGE_PREFIX}${host}`;
 }
 
+/** The upstream conversation id for this embed host, when one has been established. */
+export function readEmbedConversationId(embedHost: string): string | null {
+  try {
+    return window.sessionStorage.getItem(conversationStorageKey(embedHost));
+  } catch {
+    return null;
+  }
+}
+
 type TracePartData = {
   type?: string;
   payload?: { label?: unknown; status?: unknown };
