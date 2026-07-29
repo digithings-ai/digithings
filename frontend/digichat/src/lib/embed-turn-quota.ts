@@ -12,7 +12,7 @@
 
 import { BoundedTTLMap } from "@/lib/bounded-map";
 import {
-  EMBED_FREE_TURN_LIMIT,
+  EMBED_TRIAL_SERVER_TURN_LIMIT,
   EMBED_TRIAL_TURN_LIMIT,
 } from "@/lib/embed-turn-limits";
 
@@ -23,8 +23,14 @@ type TurnState = { count: number; limit: number };
 
 const quota = new BoundedTTLMap<string, TurnState>(MAX_QUOTA_KEYS, QUOTA_TTL_MS);
 
+// Seeded with EMBED_TRIAL_SERVER_TURN_LIMIT, NOT EMBED_FREE_TURN_LIMIT — see
+// that constant's doc comment in embed-turn-limits.ts. The client-side
+// counter (embed-gate.ts) is what enforces the advertised free-3; this
+// server-side counter is a best-effort backstop against localStorage/
+// incognito bypass, and a tighter cap here would gate honest visitors who
+// merely share an egress IP (mobile CGNAT, corporate NAT) with someone else.
 function stateFor(ip: string): TurnState {
-  return quota.get(ip) ?? { count: 0, limit: EMBED_FREE_TURN_LIMIT };
+  return quota.get(ip) ?? { count: 0, limit: EMBED_TRIAL_SERVER_TURN_LIMIT };
 }
 
 /** Increment this IP's turn count and return the running total. */

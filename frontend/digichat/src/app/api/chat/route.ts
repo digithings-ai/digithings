@@ -126,19 +126,29 @@ export async function POST(req: Request) {
   if (embedConfig?.gateMode === "trial_form") {
     try {
       const ip = clientIpForRateLimit(req);
-      if (req.headers.get("x-embed-trial-unlock") === "1") {
-        unlockEmbedTrial(ip);
+      // "unknown" is what clientIpForRateLimit returns when the ingress fails
+      // to set cf-connecting-ip/x-forwarded-for — it is not an identity (see
+      // that module's own doc comment). Treating it as one would collapse
+      // every visitor behind a broken/missing IP header into a single shared
+      // quota bucket, permanently gating everyone after the first 3 turns
+      // total. Skip the quota entirely in that case and fail open, consistent
+      // with this module's "best-effort, not an authorization boundary"
+      // philosophy (embed-turn-quota.ts).
+      if (ip !== "unknown") {
+        if (req.headers.get("x-embed-trial-unlock") === "1") {
+          unlockEmbedTrial(ip);
+        }
+        if (isOverEmbedTrialLimit(ip)) {
+          return new Response(
+            JSON.stringify({
+              error: "trial_gate",
+              message: "Complete the free trial form to keep chatting.",
+            }),
+            { status: 402, headers: { "content-type": "application/json" } },
+          );
+        }
+        recordEmbedTrialTurn(ip);
       }
-      if (isOverEmbedTrialLimit(ip)) {
-        return new Response(
-          JSON.stringify({
-            error: "trial_gate",
-            message: "Complete the free trial form to keep chatting.",
-          }),
-          { status: 402, headers: { "content-type": "application/json" } },
-        );
-      }
-      recordEmbedTrialTurn(ip);
     } catch (e) {
       console.warn("[trial-gate] quota error, failing open:", e);
     }
