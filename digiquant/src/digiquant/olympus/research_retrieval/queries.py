@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+
 from digiquant.olympus.atlas.decision_log import fetch_recent_lessons
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.research_retrieval.blinding import (

@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import pytest
+from digibase.metrics import install_metrics
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-
-from digibase.metrics import install_metrics
 
 pytestmark = pytest.mark.unit
 

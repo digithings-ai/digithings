@@ -20,9 +20,7 @@ from typing import Any  # noqa: F401 — fake-completion dict shape
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.graph.pipeline_builder import build_pipeline
-
 from digiquant.olympus.atlas.diagnostics import summarize_run
 from digiquant.olympus.atlas.phases.phase2_institutional import (
     ABSENCE_BREAKER_THRESHOLD,

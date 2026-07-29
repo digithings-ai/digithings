@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digiquant.olympus.performance_returns import calculate_performance_returns
 
 pytestmark = pytest.mark.unit

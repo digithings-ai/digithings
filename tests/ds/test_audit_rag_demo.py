@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digisearch.demos.audit_rag_demo import (
     _assertions,
     _render_summary,

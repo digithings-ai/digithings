@@ -8,16 +8,15 @@ from datetime import date, datetime, timedelta
 from typing import Any  # noqa: F401 — used for fake-client payload dict shape
 
 import pytest
-
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseConfig,
     SupabaseNotConfiguredError,
     load_active_theses_rows,
+    load_portfolio_performance_snapshot,
     load_prior_analyst_summaries,
     load_prior_book,
     load_prior_context,
     load_prior_deliberation_summaries,
-    load_portfolio_performance_snapshot,
     prior_book_current_weights,
     publish_daily_snapshot,
     publish_document,
@@ -27,7 +26,6 @@ from digiquant.olympus.atlas.supabase_io import (
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
-
 
 # ─── In-memory fake Supabase client ─────────────────────────────────────────
 
@@ -277,9 +275,9 @@ class TestPublishDocument:
         """If a caller inadvertently passed an api_key field via the outer
         audit payload it would be redacted. The adapter never puts secrets
         there today, but the contract must hold."""
-        from digiquant.olympus.atlas.supabase_io import _audit
-
         import logging
+
+        from digiquant.olympus.atlas.supabase_io import _audit
 
         with caplog.at_level(logging.INFO, logger="digiquant.olympus.atlas.supabase_io"):
             _audit("test", {"document_key": "k", "api_key": "sk-should-not-appear"})

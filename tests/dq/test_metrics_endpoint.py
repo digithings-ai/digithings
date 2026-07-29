@@ -6,9 +6,9 @@ import pytest
 
 pytest.importorskip("nautilus_trader")
 
+from digiquant.server import app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from digiquant.server import app  # noqa: E402
 from tests.conftest import assert_prom_metrics_labels  # noqa: E402
 
 pytestmark = pytest.mark.unit

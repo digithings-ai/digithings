@@ -6,7 +6,6 @@ from datetime import date
 from uuid import UUID
 
 import pytest
-
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,

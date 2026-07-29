@@ -12,11 +12,10 @@ import pytest
 pytest.importorskip("digifetch")
 
 import httpx  # noqa: E402
-
-from digifetch import HttpFetcher  # noqa: E402
-
 from digiskills.ingest_url import UrlCorpusBuilder  # noqa: E402
 from digiskills.models import SkillSource, SourceKind  # noqa: E402
+
+from digifetch import HttpFetcher  # noqa: E402
 
 pytestmark = pytest.mark.unit
 

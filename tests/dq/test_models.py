@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from digiquant.models import BacktestResult, ExportResult, OptimizeResult
+from pydantic import ValidationError
 
 
 @pytest.mark.unit

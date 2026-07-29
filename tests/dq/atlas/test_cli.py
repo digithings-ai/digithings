@@ -12,7 +12,6 @@ import warnings
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.atlas.graph import build_cli_parser, resolve_cli_inputs
 
 pytestmark = pytest.mark.unit

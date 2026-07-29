@@ -6,9 +6,6 @@ import logging
 import re
 
 import pytest
-from fastapi import FastAPI, Request
-from fastapi.testclient import TestClient
-
 from digibase.http import (
     RequestIdLogFilter,
     current_request_id,
@@ -17,7 +14,8 @@ from digibase.http import (
     outbound_request_id_headers,
     outbound_service_headers,
 )
-
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.unit
 

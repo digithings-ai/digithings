@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digisearch.core.models import Document
 from digisearch.ingestion.chunkers.fixed import FixedSizeChunker
 from digisearch.ingestion.chunkers.recursive import RecursiveChunker

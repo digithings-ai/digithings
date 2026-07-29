@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-
 from digiquant.data.prices.macro_ingest import (
     YAHOO_FX_DEFAULT,
     MacroManifest,
@@ -113,7 +112,6 @@ def test_fetch_fred_isolates_per_series_failure(monkeypatch) -> None:
     # One series succeeds, the other raises. The succeeding series' rows are
     # returned; the failing one is skipped (logged to stderr), not propagated.
     import requests
-
     from digiquant.data.prices import macro_ingest
 
     def fake_fetch(api_key, series_id, *args, **kwargs):
@@ -130,7 +128,6 @@ def test_fetch_fred_isolates_per_series_failure(monkeypatch) -> None:
 @pytest.mark.unit
 def test_fetch_fred_fails_only_when_all_series_fail(monkeypatch) -> None:
     import requests
-
     from digiquant.data.prices import macro_ingest
 
     def always_fail(*args, **kwargs):
@@ -255,9 +252,8 @@ def test_fetch_fx_yahoo_returns_correct_schema(monkeypatch) -> None:
 def test_fetch_fx_yahoo_handles_empty_payload(monkeypatch) -> None:
     """Upstream returns an empty frame (e.g. weekend / blackout) → empty rows,
     not a crash."""
-    import polars as pl
-
     import digiquant.data.prices.macro_ingest as mi
+    import polars as pl
 
     empty_frame = pl.DataFrame(
         schema={"obs_date": pl.String, "yahoo_symbol": pl.String, "close": pl.Float64}

@@ -15,7 +15,13 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Literal  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Literal,
+)
+
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:

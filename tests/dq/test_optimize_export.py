@@ -6,7 +6,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.export import run_export
 from digiquant.optimize import run_optimize

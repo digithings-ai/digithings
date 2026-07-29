@@ -6,7 +6,6 @@ import os
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.graph.graph import WORKFLOW_PROFILES, build_workflow_graph
 from digigraph.project_config import DigiProjectConfig
 

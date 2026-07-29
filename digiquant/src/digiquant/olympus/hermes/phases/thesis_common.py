@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Any, TypeVar  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
-from pydantic import BaseModel, ValidationError
+from typing import (  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+    Any,
+    TypeVar,
+)
 
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
+from pydantic import BaseModel, ValidationError
 
 from digiquant.olympus.atlas.phases._node_factory import (
     _shared_context,

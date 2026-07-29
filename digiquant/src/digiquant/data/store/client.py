@@ -14,7 +14,10 @@ half-migrated environment keeps working until the legacy names are dropped.
 from __future__ import annotations
 
 import os
-from typing import Any, Protocol  # noqa: ANN401 — SupabaseLike.table returns the driver's dynamic type
+from typing import (  # noqa: ANN401 — SupabaseLike.table returns the driver's dynamic type
+    Any,
+    Protocol,
+)
 
 CORE_URL_ENV = "CORE_SUPABASE_URL"
 CORE_SERVICE_KEY_ENV = "CORE_SUPABASE_SERVICE_KEY"

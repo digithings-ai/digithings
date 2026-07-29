@@ -13,7 +13,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from digigraph.model_config import (
     ModelModesConfig,
     _load_model_modes,
@@ -247,8 +246,9 @@ class TestResolveRequestModel:
         ``_parse_provider_prefix`` recognize it immediately — proving there is a
         single source of truth, not two dicts that can drift apart.
         """
-        import digillm
         import digillm.client
+
+        import digillm
 
         digillm.register_provider(
             "zzz-test-provider", "https://example.invalid/v1", "ZZZ_TEST_PROVIDER_API_KEY"

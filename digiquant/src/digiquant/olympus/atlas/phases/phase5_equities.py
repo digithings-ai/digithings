@@ -19,7 +19,6 @@ from digiquant.olympus.atlas.sectors_config import SectorConfig, load_sectors
 from digiquant.olympus.atlas.segments import Bias, DataQuality, SegmentReport, Source
 from digiquant.olympus.atlas.state import AtlasResearchState, SegmentPayload, SegmentSlot
 
-
 # ─── Output models ──────────────────────────────────────────────────────────
 
 

@@ -212,13 +212,13 @@ def compute_technicals_cmd(
     tickers: str, cache_dir: Path, target_date: str | None, days: int, dry_run: bool, supabase: bool
 ) -> None:
     """Compute 35+ indicators from cached OHLCV and optionally upsert."""
+    from digiquant.data.prices._utils import filter_rows_by_trading_days
     from digiquant.data.prices.history_cache import load_cached
     from digiquant.data.prices.supabase_writer import (
         build_supabase_client,
         technicals_to_rows,
         upsert_price_technicals,
     )
-    from digiquant.data.prices._utils import filter_rows_by_trading_days
     from digiquant.data.prices.technicals import MIN_BARS, compute_indicators
     from digiquant.data.prices.ticker_venues import venue_for
 
@@ -355,6 +355,8 @@ def fetch_macro_cmd(
     sources: str, manifest: Path, backfill: bool, dry_run: bool, supabase: bool
 ) -> None:
     """Ingest macro series (FRED + Yahoo FX) into macro_series_observations."""
+    import concurrent.futures
+
     from digiquant.data.prices.macro_ingest import (
         MacroManifest,
         dedupe_observation_rows,
@@ -365,8 +367,6 @@ def fetch_macro_cmd(
         build_supabase_client,
         upsert_macro_observations,
     )
-
-    import concurrent.futures
 
     sources_set = {s.strip() for s in sources.split(",") if s.strip()}
     mani = MacroManifest.from_yaml(manifest)

@@ -17,7 +17,6 @@ from __future__ import annotations
 import urllib.request
 from pathlib import Path
 
-
 NAUTILUS_TEST_DATA_URL = (
     "https://raw.githubusercontent.com/nautechsystems/nautilus_trader/develop"
     "/tests/test_data/binance/ethusdt-trades.csv"

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
+from digisearch.server import app
 from fastapi.testclient import TestClient
 
-from digisearch.server import app
 from tests.conftest import assert_prom_metrics_labels
 
 pytestmark = pytest.mark.unit

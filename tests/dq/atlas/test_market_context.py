@@ -10,7 +10,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.atlas.data.queries import get_market_context
 from digiquant.olympus.atlas.phases.preflight import (
     PreflightDeps,

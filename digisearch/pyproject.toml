@@ -81,7 +81,7 @@ exclude = ["*.md"]
 [tool.ruff.lint]
 # Explicit rule selection — see the root ruff.toml and #1701. This component config
 # overrides the root for this tree, so the selection has to be restated here.
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["../tests/ds"]

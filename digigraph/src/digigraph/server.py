@@ -18,16 +18,17 @@ logger = logging.getLogger(__name__)
 _DEBUG_REQUEST_LOG: list[dict] = []
 _DEBUG_REQUEST_LOG_MAX = 5
 
-from fastapi import APIRouter, FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-
-from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS, STREAM_SSE_ERRORS
 from digibase.cors import install_cors, resolve_cors_origins
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digigraph_path_scopes
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+
+from digigraph import __version__
+from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS, STREAM_SSE_ERRORS
 from digigraph.formatters import get_stream_formatter
 from digigraph.llm_client import completion_text
 from digigraph.model_config import get_model_for_mode
@@ -38,7 +39,6 @@ from digigraph.models import (
     WorkflowResult,
 )
 from digigraph.policy import debug_endpoints_enabled, thread_api_enabled
-from digigraph import __version__
 from digigraph.thread_scope import (
     assert_thread_access,
     auth_subject_from_request,

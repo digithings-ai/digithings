@@ -9,7 +9,6 @@ mapping and asserts every category the publish path can emit is allow-listed.
 from __future__ import annotations
 
 import pytest
-
 from digiquant.olympus.atlas.phases.publish_phase import _segment_category
 
 # Source of truth: chk_documents_category in

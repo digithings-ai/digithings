@@ -6,6 +6,7 @@ import logging
 import os
 from collections.abc import Collection
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+
 from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase

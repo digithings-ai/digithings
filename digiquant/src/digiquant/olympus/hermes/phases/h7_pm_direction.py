@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
 
-from pydantic import ValidationError
-
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
+from pydantic import ValidationError
 
 from digiquant.olympus.atlas.phases._node_factory import (
     _shared_context,

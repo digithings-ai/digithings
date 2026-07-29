@@ -31,11 +31,11 @@ from digiquant.olympus.atlas.state import (
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
     load_active_theses_rows,
+    load_portfolio_performance_snapshot,
     load_prior_analyst_summaries,
     load_prior_book,
     load_prior_context,
     load_prior_deliberation_summaries,
-    load_portfolio_performance_snapshot,
     prior_book_current_weights,
     query_institutional_absence_streak,
     query_macro_series_freshness,

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digiquant.constraints import satisfies_constraints
 from digiquant.models import BacktestResult, OptimizationConstraints
 

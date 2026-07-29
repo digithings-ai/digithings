@@ -5,7 +5,6 @@ from __future__ import annotations
 import inspect
 
 import pytest
-
 from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_asset_analyst
 from digiquant.olympus.hermes.phases.h6_deliberation import build_h6_deliberation
 from digiquant.olympus.hermes.roster_cap import capped_tickers

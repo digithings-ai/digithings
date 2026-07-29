@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-
 from digiquant.data.prices import refresh as refresh_mod
 from digiquant.olympus.atlas.phases.preflight import PreflightDeps, build_preflight_node
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState

@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from digiquant.olympus.atlas.data.tools import DATA_TOOLS, build_data_tool_dispatcher
+
 from tests.dq.atlas.data.test_queries import _FakeClient
 
 

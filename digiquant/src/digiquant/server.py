@@ -10,17 +10,15 @@ import threading
 from queue import Empty, Queue
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
-
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digiquant_path_scopes
-
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +26,8 @@ from digiquant import __version__
 from digiquant.addm import AddmResult, check_drift, record_sharpe
 from digiquant.audit import audit_log as dq_audit_log
 from digiquant.backtest_jobs import create_backtest_job, get_backtest_job
-from digiquant.models import BacktestResult, ExportResult, OptimizeResult, OptimizationConstraints
 from digiquant.graph.pipeline import run_quant_workflow
+from digiquant.models import BacktestResult, ExportResult, OptimizationConstraints, OptimizeResult
 from digiquant.service import (
     service_list_strategies,
     service_run_backtest,

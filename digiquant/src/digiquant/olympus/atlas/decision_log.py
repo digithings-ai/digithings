@@ -28,7 +28,6 @@ from typing import Any, Callable
 from pydantic import BaseModel, Field
 
 from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.hermes.payloads import analyst_payloads
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
     query_pending_decisions,
@@ -36,6 +35,7 @@ from digiquant.olympus.atlas.supabase_io import (
     query_returns_window,
     update_decision_resolution,
 )
+from digiquant.olympus.hermes.payloads import analyst_payloads
 
 logger = logging.getLogger(__name__)
 

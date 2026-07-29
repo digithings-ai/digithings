@@ -11,12 +11,11 @@ if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
 
 import digikey.db as digikey_db
 import pytest
-from fastapi.testclient import TestClient
-
 from digikey.db import init_db, session_factory
 from digikey.db_schema import ApiKeyRow
 from digikey.key_crypto import generate_raw_key, hash_secret
 from digikey.server import app
+from fastapi.testclient import TestClient
 
 
 @pytest.mark.unit

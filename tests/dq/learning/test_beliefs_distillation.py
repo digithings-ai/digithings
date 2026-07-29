@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Any  # noqa  # scored-lint: heterogeneous fake-row / fixture dicts
-import pytest
 
+import pytest
 from digiquant.olympus.atlas.phases.preflight import (
     PreflightReflectDeps,
     build_preflight_reflect_node,

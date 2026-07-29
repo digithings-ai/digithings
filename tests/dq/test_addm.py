@@ -5,16 +5,15 @@ from __future__ import annotations
 import time
 
 import pytest
-
 from digiquant.addm import (
     _DEFAULT_TTL_SECONDS,
     _DEFAULT_Z_THRESHOLD,
+    _prune_stale_history,
     _sharpe_history,
     _sharpe_last_access,
     check_drift,
     clear_history,
     record_sharpe,
-    _prune_stale_history,
 )
 
 

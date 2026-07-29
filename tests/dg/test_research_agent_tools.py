@@ -4,9 +4,8 @@ import json
 from unittest.mock import patch
 
 import pytest
-from pydantic import BaseModel
-
 from digigraph.graph import research_agent
+from pydantic import BaseModel
 
 
 class _Out(BaseModel):

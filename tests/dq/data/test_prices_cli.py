@@ -13,7 +13,6 @@ from unittest.mock import Mock, patch
 import polars as pl
 import pytest
 from click.testing import CliRunner
-
 from digiquant.cli.prices import compute_technicals_cmd, fetch_quotes_cmd
 from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices.instrument_metadata import InstrumentMetadataFetchResult

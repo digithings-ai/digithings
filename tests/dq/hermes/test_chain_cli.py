@@ -6,7 +6,6 @@ import warnings
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.hermes import chain as chain_mod
 
 pytestmark = pytest.mark.unit

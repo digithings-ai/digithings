@@ -17,15 +17,15 @@ from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digisearch_path_scopes
 
 from digisearch import __version__
-from digisearch.core.models import Query
-from digisearch.logging import configure_logging
-from digisearch.ingest_paths import resolve_ingest_source
 from digisearch.agent.pipeline_models import ResearchTurnOutput
+from digisearch.core.models import Query
+from digisearch.ingest_paths import resolve_ingest_source
+from digisearch.logging import configure_logging
 from digisearch.orchestrator_tools import (
-    OpenAIToolDict,
     TOOL_DIGISEARCH,
     TOOL_DIGISEARCH_FETCH_ALL,
     TOOL_DIGISEARCH_RESEARCH_DELEGATE,
+    OpenAIToolDict,
 )
 from digisearch.search._stub import query_index, route_add_chunks
 
@@ -284,7 +284,7 @@ def healthz() -> dict[str, bool]:
 def azure_status() -> dict[str, bool | str]:
     """Check if Azure AI Search is configured and reachable."""
     try:
-        from digisearch.indexes.backends.azure_search import is_azure_configured, _get_client
+        from digisearch.indexes.backends.azure_search import _get_client, is_azure_configured
 
         if not is_azure_configured():
             return {

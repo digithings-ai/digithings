@@ -12,8 +12,8 @@ from digisearch.agent.pipeline_models import (
     ResearchTurnTraceStep,
 )
 from digisearch.core.models import Query
-from digisearch.core.workspace_filter import build_query_filters
 from digisearch.core.standard_hits import normalize_query_hit
+from digisearch.core.workspace_filter import build_query_filters
 from digisearch.search._stub import query_index
 
 logger = logging.getLogger(__name__)

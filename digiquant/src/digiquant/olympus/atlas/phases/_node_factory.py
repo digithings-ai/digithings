@@ -13,10 +13,9 @@ from datetime import date, datetime
 from functools import lru_cache
 from typing import Any, Callable, Literal  # noqa: F401 — heterogeneous node-update dict shape
 
-from pydantic import BaseModel
-
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
+from pydantic import BaseModel
 
 from digiquant.olympus.atlas.phases.fail_soft import run_segment_fail_soft
 from digiquant.olympus.atlas.skills import load_skill, load_skill_edit
@@ -221,6 +220,7 @@ def build_grounding(
             logger.warning("research tools unavailable (%s); proceeding without them", exc)
     if ai_portfolios:
         from digigraph.model_config import get_grounding_model
+
         from digiquant.olympus.atlas.data.ai_portfolios import fetch_ai_portfolio_grounding
 
         grounding = get_grounding_model(segment=segment or "ai-portfolios")

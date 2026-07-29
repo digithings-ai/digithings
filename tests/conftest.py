@@ -18,7 +18,6 @@ def pytest_configure(config: pytest.Config) -> None:
         return
     try:
         from cryptography.hazmat.primitives.asymmetric import rsa
-
         from digikey.crypto_keys import private_key_to_pem, public_key_to_pem
     except ImportError as exc:
         # `digikey` source is always on sys.path (see pytest.ini pythonpath=), but its

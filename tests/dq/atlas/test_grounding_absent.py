@@ -16,7 +16,6 @@ from typing import Any  # noqa  # scored-lint suppression: heterogeneous fake me
 from unittest.mock import patch
 
 import pytest
-
 from digiquant.olympus.atlas.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,

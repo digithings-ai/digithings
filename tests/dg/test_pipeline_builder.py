@@ -7,14 +7,13 @@ from __future__ import annotations
 from typing import Annotated, Any  # noqa  # scored-lint suppression
 
 import pytest
-from pydantic import BaseModel, Field
-
 from digigraph.graph.pipeline_builder import (
     FanOutPhase,
     NodeSpec,
     PipelinePhase,
     build_pipeline,
 )
+from pydantic import BaseModel, Field
 
 
 class _State(BaseModel):

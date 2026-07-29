@@ -10,7 +10,6 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 import pytest
-
 from digiquant.olympus.atlas import diagnostics
 from digiquant.olympus.atlas.phases.fail_soft import NODE_FAILED_REASON
 from digiquant.olympus.atlas.state import (

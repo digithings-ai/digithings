@@ -15,7 +15,6 @@ from typing import Any  # noqa  # scored-lint: heterogeneous FakeSupabase fixtur
 
 import polars as pl
 import pytest
-
 from digiquant.data.prices.correlation import pairwise_return_correlations
 from digiquant.olympus.atlas.data.queries import get_return_correlations
 

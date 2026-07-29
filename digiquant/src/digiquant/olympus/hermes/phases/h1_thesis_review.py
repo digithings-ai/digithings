@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.supabase_io import SupabaseClient

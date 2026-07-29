@@ -12,6 +12,7 @@ import os
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import date
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import ExcludedTicker, FocusRosterEntry

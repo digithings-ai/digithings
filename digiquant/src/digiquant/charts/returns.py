@@ -8,9 +8,9 @@ from typing import Any  # noqa: ANN401 — plotly Figure typing
 import polars as pl
 
 from digiquant.charts.common import (
-    ChartUnavailable,
     _CHART_BUILD_ERRORS,
     _CHART_LAYOUT,
+    ChartUnavailable,
     _apply_layout,
     _extract_frame,
 )
