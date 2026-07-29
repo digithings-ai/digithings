@@ -214,11 +214,13 @@ __all__ = [
 
 
 def _parse_cli_date(value: str):
-    # A calendar date has no timezone, so parse straight to `date` rather than
-    # building a naive datetime and discarding its time (DTZ007).
-    from datetime import date as _date
+    from datetime import datetime as _dt
 
-    return _date.fromisoformat(value)
+    # strptime, not date.fromisoformat: the CLI must reject non-ISO-extended input
+    # such as "20260420" (asserted by test_run_date_format_validated), and
+    # fromisoformat accepts the basic and week formats. The intermediate datetime is
+    # naive, which is harmless — .date() discards the time immediately.
+    return _dt.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
 
 
 # ─── Config-file helpers ─────────────────────────────────────────────────────

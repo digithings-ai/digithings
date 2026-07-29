@@ -339,9 +339,12 @@ def run_atlas_then_hermes(
 
 
 def _parse_cli_date(value: str) -> date:
-    # A calendar date has no timezone, so parse straight to `date` rather than
-    # building a naive datetime and discarding its time (DTZ007).
-    return date.fromisoformat(value)
+    from datetime import datetime as _dt
+
+    # strptime, not date.fromisoformat: mirrors the Atlas CLI, which must reject
+    # non-ISO-extended input such as "20260420". The intermediate datetime is naive,
+    # which is harmless — .date() discards the time immediately.
+    return _dt.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
 
 
 def _build_cli_parser():

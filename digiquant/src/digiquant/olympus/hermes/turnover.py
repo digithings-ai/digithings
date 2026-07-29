@@ -7,7 +7,7 @@ configurable cadence controls how often a calendar rebalance is allowed.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any  # noqa  # scored-lint suppression: entry_date coercion
 
 # Cadence values read from config preferences (``preferences["rebalancing_cadence"]``),
@@ -21,9 +21,10 @@ def _parse_entry_date(value: Any) -> date | None:
     if isinstance(value, date):
         return value
     try:
-        # Date-only value: parse straight to `date` — the discarded time made the
-        # intermediate datetime naive for no reason (DTZ007).
-        return date.fromisoformat(str(value)[:10])
+        # strptime keeps the accepted shape exactly as it was: a stored "20260729"
+        # stays rejected (-> None) rather than silently parsing. The intermediate
+        # datetime is naive, which is harmless — .date() discards the time.
+        return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()  # noqa: DTZ007
     except ValueError:
         return None
 
