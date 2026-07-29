@@ -16,7 +16,7 @@ Design (mirrors the existing connectors):
 - Writes are idempotent upserts on schema-declared unique keys
   (``on_conflict=...``); replays of the same node are safe. Write failures are
   caught and returned as ``SupabaseWriteResult(success=False, error=...)``,
-  mirroring ``NotionConnector``'s ``UpsertResult`` contract.
+  reporting per-write success/error rather than raising.
 - Every write emits a redacted audit line via ``digibase.audit.redact_mapping``.
   Only non-sensitive *metadata* (table, operation, row count, on_conflict) is
   audited — never row bodies, which may carry PII/licensed data the shallow,
@@ -56,7 +56,7 @@ class SupabaseWriteResult:
     """Result of an upsert. ``rows`` is the number of rows sent (not the count
     PostgREST echoes back, which depends on ``returning=`` and is not always
     available). Mirrors ``digiquant...supabase_writer.UpsertResult`` plus the
-    ``success``/``error`` shape of ``NotionConnector``'s result.
+    ``success``/``error`` shape callers branch on without try/except.
     """
 
     success: bool

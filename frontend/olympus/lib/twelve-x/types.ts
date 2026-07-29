@@ -22,12 +22,11 @@ export const G10_CURRENCIES = [
 export type G10Currency = (typeof G10_CURRENCIES)[number];
 
 /**
- * The Research Matrix columns — the 8 board currencies, in the SAME order the
- * twelve-x Notion matrix uses (`nodes/publish.py` `_board_column`). A broker
- * currency_view is filed under its base currency only (pairs land under the
- * numerator, e.g. EUR/USD → EUR); views whose legs fall outside the extended
- * set (these 8 + NOK/SEK) are dropped. Kept deliberately separate from the
- * 10-entry `G10_CURRENCIES` (which the consensus uses) so the grid matches Notion.
+ * The Research Matrix columns — the 8 board currencies. A broker currency_view
+ * is filed under its base currency only (pairs land under the numerator, e.g.
+ * EUR/USD → EUR); views whose legs fall outside the extended set (these 8 +
+ * NOK/SEK) are dropped. Kept deliberately separate from the 10-entry
+ * `G10_CURRENCIES`, which the consensus uses.
  */
 export const MATRIX_COLUMNS = ['USD', 'EUR', 'GBP', 'AUD', 'CAD', 'CHF', 'JPY', 'NZD'] as const;
 export type MatrixColumn = (typeof MATRIX_COLUMNS)[number];

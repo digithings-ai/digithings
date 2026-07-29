@@ -511,8 +511,8 @@ export async function getTodayEvents(): Promise<FxEconomicCalendarRow[]> {
 const MATRIX_EXTENDED: readonly string[] = [...MATRIX_COLUMNS, 'NOK', 'SEK'];
 
 /**
- * Map a broker's view `currency` to its Research Matrix column, matching the
- * twelve-x Notion matrix exactly (nodes/publish.py `_board_column`):
+ * Map a broker's view `currency` to its Research Matrix column. This is the
+ * canonical definition of the board-column rule:
  *   - upper/trim, split on "/";
  *   - drop the view if ANY leg is outside the extended set (pairs with an exotic
  *     leg, gold/XAU, DXY, indices, blanks -> no column);
@@ -611,8 +611,7 @@ export function assembleMatrix(briefs: FxBriefRow[]): MatrixCell[] {
 }
 
 /**
- * The broker x G10-currency matrix — the SAME consolidation the twelve-x Notion
- * "Research Matrix" uses, so the two surfaces agree. The LATEST currency_view per
+ * The broker x G10-currency matrix. The LATEST currency_view per
  * (broker, board-column) over a recent window (default 14 days), filed under its
  * base G10 currency via boardColumn (pairs land under the numerator; non-G10 /
  * non-currency instruments are dropped). Newest brief (run_date, then report_date)
