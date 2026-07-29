@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any, Callable  # noqa  # scored-lint suppression: duck-typed client + tool args
 
 from digiquant.olympus.atlas.data.queries import (
@@ -180,7 +180,7 @@ def build_data_tool_dispatcher(
     ``allowed_tables`` narrows the tables ``query_data`` may read (e.g. market-data
     only for blinded analyst nodes); ``None`` keeps the full read whitelist.
     """
-    as_of = run_date or date.today()
+    as_of = run_date or datetime.now(UTC).date()
 
     def execute_tool(name: str, args: dict[str, Any]) -> str:
         try:

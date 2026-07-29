@@ -22,7 +22,7 @@ keeps the fetchers unit-testable without a Supabase client.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -235,7 +235,7 @@ def fetch_fred(
     rows: list[MacroObservation] = []
     failed: list[tuple[str, str]] = []
     attempted: list[str] = []
-    end_s = end or date.today().isoformat()
+    end_s = end or datetime.now(UTC).date().isoformat()
     sess = _retrying_session()
     for item in manifest.fred_series:
         if not isinstance(item, dict):

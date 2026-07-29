@@ -21,7 +21,10 @@ def _parse_entry_date(value: Any) -> date | None:
     if isinstance(value, date):
         return value
     try:
-        return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+        # strptime keeps the accepted shape exactly as it was: a stored "20260729"
+        # stays rejected (-> None) rather than silently parsing. The intermediate
+        # datetime is naive, which is harmless — .date() discards the time.
+        return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()  # noqa: DTZ007
     except ValueError:
         return None
 
