@@ -259,7 +259,11 @@ def run_nautilus(
 
     def _epoch_ns(value) -> int:
         # Polars Date -> midnight-UTC ns (matches the previous BarDataWrangler index).
-        dt = value if isinstance(value, datetime) else datetime(value.year, value.month, value.day)
+        dt = (
+            value
+            if isinstance(value, datetime)
+            else datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+        )
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return int(dt.timestamp() * 1_000_000_000)

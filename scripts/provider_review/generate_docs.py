@@ -25,7 +25,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from datetime import date
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -213,7 +213,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Print changes without writing files")
     args = parser.parse_args()
 
-    today = date.today().isoformat()
+    today = datetime.now(UTC).date().isoformat()
     updated: list[str] = []
     snapshots: list[dict[str, Any]] = []
 

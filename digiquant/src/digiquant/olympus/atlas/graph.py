@@ -214,9 +214,11 @@ __all__ = [
 
 
 def _parse_cli_date(value: str):
-    from datetime import datetime as _dt
+    # A calendar date has no timezone, so parse straight to `date` rather than
+    # building a naive datetime and discarding its time (DTZ007).
+    from datetime import date as _date
 
-    return _dt.strptime(value, "%Y-%m-%d").date()
+    return _date.fromisoformat(value)
 
 
 # ─── Config-file helpers ─────────────────────────────────────────────────────

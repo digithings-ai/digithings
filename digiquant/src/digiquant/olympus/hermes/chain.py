@@ -339,9 +339,9 @@ def run_atlas_then_hermes(
 
 
 def _parse_cli_date(value: str) -> date:
-    from datetime import datetime as _dt
-
-    return _dt.strptime(value, "%Y-%m-%d").date()
+    # A calendar date has no timezone, so parse straight to `date` rather than
+    # building a naive datetime and discarding its time (DTZ007).
+    return date.fromisoformat(value)
 
 
 def _build_cli_parser():
