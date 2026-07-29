@@ -25,6 +25,19 @@ extend-exclude = [
   "docs/openapi",
 ]
 
+[format]
+# Markdown is NOT source. ruff 0.16 began formatting Python code blocks inside
+# `.md` files — 0.15.8 reported "No Python files found" for the same paths — which
+# turned the atlas-graph format check red on unchanged docs (#1705, same unpinned
+# -upgrade root cause as #1701).
+#
+# The snippets in docs/ are illustrative specification excerpts with deliberate
+# alignment (aligned trailing comments, one-line field declarations kept readable).
+# Reformatting them makes the documentation worse: a commented field becomes a
+# three-line wrap, and aligned comment columns collapse. Documentation prose is
+# reviewed by humans, not compiled, so it is excluded from the formatter.
+exclude = ["*.md"]
+
 [lint]
 # Rule selection is EXPLICIT and version-independent on purpose. ruff 0.16 widened
 # its default selection from 59 rules to 413, which turned ~981 findings red across
