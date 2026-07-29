@@ -68,7 +68,7 @@ import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
 import { createFoundryStreamResponse } from "@/lib/foundry-stream";
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
-import { EMBED_TRIAL_SERVER_TURN_LIMIT } from "@/lib/embed-turn-limits";
+import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { streamText } from "ai";
 
 describe("POST /api/chat", () => {
@@ -270,12 +270,12 @@ describe("POST /api/chat", () => {
       vi.mocked(resolveChatTenantContext).mockResolvedValue(trialCtx as never);
     });
 
-    it(`allows the first ${EMBED_TRIAL_SERVER_TURN_LIMIT} turns (server cap) then returns 402 trial_gate without calling Foundry`, async () => {
+    it(`allows the first ${EMBED_FREE_TURN_LIMIT} turns (server cap) then returns 402 trial_gate without calling Foundry`, async () => {
       // The server-side cap is deliberately looser than the client-advertised
-      // free-3 (EMBED_TRIAL_SERVER_TURN_LIMIT, see embed-turn-limits.ts) — it's
+      // free-3 (EMBED_FREE_TURN_LIMIT, see embed-turn-limits.ts) — it's
       // a backstop against localStorage/incognito bypass, not the primary
       // enforcement, so this exercises the route with that cap.
-      for (let i = 0; i < EMBED_TRIAL_SERVER_TURN_LIMIT; i++) {
+      for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
         const ok = await POST(trialReq());
         expect(ok.status).toBe(200);
       }
@@ -284,14 +284,14 @@ describe("POST /api/chat", () => {
       expect(gated.headers.get("content-type")).toBe("application/json");
       expect(await gated.json()).toMatchObject({ error: "trial_gate" });
       // Foundry called once per allowed turn, never on the gated turn.
-      expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_TRIAL_SERVER_TURN_LIMIT);
+      expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_FREE_TURN_LIMIT);
     });
 
     it("honors X-Embed-Trial-Unlock to allow turns past the free limit", async () => {
-      for (let i = 0; i < EMBED_TRIAL_SERVER_TURN_LIMIT; i++) await POST(trialReq());
+      for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) await POST(trialReq());
       const unlocked = await POST(trialReq({ "x-embed-trial-unlock": "1" }));
       expect(unlocked.status).toBe(200);
-      expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_TRIAL_SERVER_TURN_LIMIT + 1);
+      expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_FREE_TURN_LIMIT + 1);
     });
 
     it("fails open when the quota check throws, so the turn still reaches the backend", async () => {
@@ -316,7 +316,7 @@ describe("POST /api/chat", () => {
       try {
         // Even well past the server cap, every "unknown"-IP request succeeds —
         // the quota is never consulted for a non-identity IP (route.ts).
-        for (let i = 0; i < EMBED_TRIAL_SERVER_TURN_LIMIT + 2; i++) {
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT + 2; i++) {
           const res = await POST(trialReq());
           expect(res.status).toBe(200);
         }
