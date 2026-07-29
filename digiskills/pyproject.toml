@@ -27,7 +27,7 @@ ingest = ["digifetch>=0.1.0"]
 # Real LLM-backed synthesis (DigiLLMSynthesizer) via digillm.completion.
 # Lazily imported; the default TemplateSynthesizer needs no LLM/API key.
 llm = ["digillm>=0.1.0"]
-dev = ["digiskills[cli,ingest,llm]", "pytest>=8", "ruff>=0.8"]
+dev = ["digiskills[cli,ingest,llm]", "pytest>=8", "ruff>=0.16,<0.17"]
 
 [project.scripts]
 digiskills = "digiskills.cli:app"
@@ -38,6 +38,11 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint]
+# Explicit rule selection — see the root ruff.toml and #1701. This component config
+# overrides the root for this tree, so the selection has to be restated here.
+select = ["E4", "E7", "E9", "F"]
 
 [tool.ruff.lint.per-file-ignores]
 # Package __init__ re-exports public symbols; ruff flags them as unused.

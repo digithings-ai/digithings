@@ -284,7 +284,10 @@ jobs:
           python -m pip install -U pip
           pip install -e "./digibase[dev]"
           pip install -e "./digikey[dev]"
-          pip install cryptography ruff polars tabulate pyyaml pytest openai httpx
+          # ruff is version-bounded to match the [dev] extras (#1701): the lint
+          # policy is pinned by ruff.toml's explicit `select`, and the version is
+          # pinned so a release cannot change rule behaviour under a green CI.
+          pip install cryptography "ruff>=0.16,<0.17" polars tabulate pyyaml pytest openai httpx
 
       - name: CI path filters in sync (ci.yml ⇄ ci_paths.yaml)
         run: python scripts/generate_ci_path_filters.py --check
