@@ -41,6 +41,11 @@ where = ["src"]
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.format]
+# Markdown is not source — see the root ruff.toml and #1705. This component config
+# overrides the root for this tree, so the exclusion has to be restated here.
+exclude = ["*.md"]
+
 [tool.ruff.lint]
 # Explicit rule selection — see the root ruff.toml and #1701. This component config
 # overrides the root for this tree, so the selection has to be restated here.
