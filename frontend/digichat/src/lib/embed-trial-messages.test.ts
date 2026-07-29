@@ -56,4 +56,16 @@ describe("buildGatedMessage", () => {
       buildGatedMessage(null, [msg("user", "  "), msg("user", "q1")]).questions,
     ).toEqual(["q1"]);
   });
+
+  it("does not let a blank turn consume one of the 3 slots", () => {
+    expect(
+      buildGatedMessage(null, [
+        msg("user", "  "),
+        msg("user", "q1"),
+        msg("user", "q2"),
+        msg("user", "q3"),
+        msg("user", "q4"),
+      ]).questions,
+    ).toEqual(["q1", "q2", "q3"]);
+  });
 });

@@ -11,7 +11,7 @@
  * Uses the shared @digithings/digichat-ui DigiChatSession widget.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DigiChatSession } from "@digithings/digichat-ui";
 import { Key, ExternalLink, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -198,12 +198,19 @@ function EmbedChat({
 
   // The upstream conversation id is the useful handle (it maps to the real backend
   // conversation); fall back to nothing rather than blocking the gate.
+  //
+  // chat.messages gets a new identity on every streaming chunk, and trialLocked
+  // flips true while the gating question's answer is still streaming — so guard on
+  // the payload itself, or the parent gets a repost per chunk (and an overlay the
+  // visitor dismissed would pop back open).
+  const lastGatedPost = useRef<string | null>(null);
   useEffect(() => {
     if (!trialLocked || isStandalone || !host) return;
-    window.parent.postMessage(
-      buildGatedMessage(readEmbedConversationId(gate.host), chat.messages),
-      host,
-    );
+    const payload = buildGatedMessage(readEmbedConversationId(gate.host), chat.messages);
+    const key = JSON.stringify(payload);
+    if (lastGatedPost.current === key) return;
+    lastGatedPost.current = key;
+    window.parent.postMessage(payload, host);
   }, [trialLocked, isStandalone, host, gate.host, chat.messages]);
 
   useEffect(() => {
