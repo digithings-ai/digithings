@@ -6,9 +6,8 @@ import logging
 import os
 from pathlib import Path
 
-import pytest
-
 import digigraph.project_config as project_config_module
+import pytest
 from digigraph.project_config import DigiProjectConfig, _resolve_config_path, load_project_config
 
 

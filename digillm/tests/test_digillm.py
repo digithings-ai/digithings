@@ -11,7 +11,8 @@ from typing import Any  # noqa: ANN401 — fake OpenAI client dict shapes
 from unittest.mock import MagicMock, patch
 
 import pytest
-from openai.types.chat import ChatCompletion, ChatCompletionMessage as OpenAIMessage
+from openai.types.chat import ChatCompletion
+from openai.types.chat import ChatCompletionMessage as OpenAIMessage
 from openai.types.chat.chat_completion import Choice
 from pydantic import BaseModel, ValidationError
 

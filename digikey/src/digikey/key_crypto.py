@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import bcrypt
 import secrets
+
+import bcrypt
 
 from digikey.settings import KEY_PREFIX_LEN, RAW_KEY_PREFIX
 

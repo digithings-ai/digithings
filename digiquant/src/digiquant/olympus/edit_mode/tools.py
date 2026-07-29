@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Protocol  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+    Any,
+    Protocol,
+)
 
 from digiquant.olympus.research_retrieval import ResearchRetriever
 from digiquant.olympus.research_retrieval.queries import extract_section

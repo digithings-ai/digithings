@@ -10,7 +10,7 @@ from pathlib import Path
 
 from digiquant.models import BacktestResult
 from digiquant.nautilus_runner import run_nautilus_backtest
-from digiquant.strategy_specs import STRATEGY_PARAM_SPECS, _ALIAS_TO_CANONICAL
+from digiquant.strategy_specs import _ALIAS_TO_CANONICAL, STRATEGY_PARAM_SPECS
 
 # Lazily populated on first call to run_backtest. Importing digiquant.strategies (or its
 # registry submodule) at module level triggers strategies/__init__.py which pulls in

@@ -13,6 +13,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer/graph
 
+from digigraph import usage as _usage
+
+from digiquant.olympus.atlas import diagnostics as _diagnostics
 from digiquant.olympus.atlas.graph import (
     AtlasGraphDeps,
     AtlasInput,
@@ -27,14 +30,12 @@ from digiquant.olympus.atlas.phases.preflight import (
 from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
 from digiquant.olympus.atlas.state import AtlasResearchState, PhaseError
-from digiquant.olympus.atlas import diagnostics as _diagnostics
-from digiquant.olympus.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
 from digiquant.olympus.hermes.graph import (
     HermesGraphDeps,
     ThesisGraphDeps,
     build_hermes_graph,
 )
-from digigraph import usage as _usage
+from digiquant.olympus.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
 
 _logger = logging.getLogger(__name__)
 

@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
 from datetime import datetime, timezone
 from typing import Any
-import urllib.error
 from urllib.request import Request as UrlRequest
 from urllib.request import urlopen
 

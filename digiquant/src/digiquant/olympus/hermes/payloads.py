@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+
 from digiquant.olympus.atlas.state import RebalancePayload
 from digiquant.olympus.hermes.state import HermesState
 

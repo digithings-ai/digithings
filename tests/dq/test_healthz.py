@@ -12,9 +12,8 @@ import pytest
 
 pytest.importorskip("nautilus_trader")
 
-from fastapi.testclient import TestClient  # noqa: E402
-
 from digiquant.server import app  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
 
 @pytest.fixture

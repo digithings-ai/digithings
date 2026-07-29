@@ -10,7 +10,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,

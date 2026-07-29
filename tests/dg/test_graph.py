@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import digigraph.graph.graph as _graph_module
 from unittest.mock import patch
 
+import digigraph.graph.graph as _graph_module
 import pytest
-
 from digigraph.graph import build_workflow_graph
 
 

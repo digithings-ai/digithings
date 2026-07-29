@@ -21,9 +21,6 @@ Emitted as a single ``RebalanceDecision`` per run into
 from __future__ import annotations
 
 import logging
-
-from digiquant.olympus.atlas.state import PhaseError
-
 from typing import Any, Literal  # noqa: F401 — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
@@ -35,10 +32,10 @@ from digiquant.olympus.atlas.phases._node_factory import (
     apply_web_grounding_to_inputs,
     build_grounding,
 )
+from digiquant.olympus.atlas.state import PhaseError
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.state import HermesState
-
 
 logger = logging.getLogger(__name__)
 

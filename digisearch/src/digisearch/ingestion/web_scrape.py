@@ -6,7 +6,6 @@ import ipaddress
 import socket
 from urllib.parse import urlparse
 
-
 _BLOCKED_SCHEMES = frozenset({"file", "ftp", "gopher", "data", "javascript"})
 
 

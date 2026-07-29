@@ -6,11 +6,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
-
 from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.models import BacktestResult
 from digiquant.server import app
+from fastapi.testclient import TestClient
+
 from tests.digi_test_jwt import auth_headers
 from tests.dq.conftest import SKIP_NATIVE_CRASH
 

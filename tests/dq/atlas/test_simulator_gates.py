@@ -20,7 +20,6 @@ from typing import Iterator
 from unittest.mock import patch
 
 import pytest
-
 from digiquant.olympus.atlas.graph import AtlasInput
 from digiquant.olympus.atlas.testing import simulated_pipeline
 from digiquant.olympus.atlas.testing.simulator import (

@@ -5,8 +5,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from pydantic import ValidationError
-
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
@@ -27,6 +25,7 @@ from digiquant.olympus.atlas.state import (
     _merge_right_wins_dict,
     _merge_segment_dict,
 )
+from pydantic import ValidationError
 
 
 @pytest.mark.unit

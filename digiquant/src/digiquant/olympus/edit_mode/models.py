@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Literal  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+    Any,
+    Literal,
+)
+
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 PatchOpType = Literal["set", "append", "remove"]

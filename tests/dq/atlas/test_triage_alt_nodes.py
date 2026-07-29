@@ -17,7 +17,6 @@ from datetime import date
 from typing import Any  # noqa: F401 — used for snapshot/injection dict shape
 
 import pytest
-
 from digiquant.olympus.atlas.phases.phase1_altdata import _SPECS as ALT_SPECS
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,

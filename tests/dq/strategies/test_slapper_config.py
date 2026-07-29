@@ -10,9 +10,9 @@ from __future__ import annotations
 import pytest
 
 try:
-    from nautilus_trader.model.identifiers import InstrumentId
-    from nautilus_trader.model.data import BarType, BarSpecification
+    from nautilus_trader.model.data import BarSpecification, BarType
     from nautilus_trader.model.enums import BarAggregation, PriceType
+    from nautilus_trader.model.identifiers import InstrumentId
 
     NAUTILUS_AVAILABLE = True
 except ImportError:
@@ -35,6 +35,7 @@ def bar_type(btc_instrument_id: "InstrumentId") -> "BarType":
 class TestSlapperConfig:
     def test_btc_defaults(self, btc_instrument_id, bar_type) -> None:
         from decimal import Decimal
+
         from digiquant.strategies.slapper import SlapperConfig
 
         cfg = SlapperConfig(
@@ -51,6 +52,7 @@ class TestSlapperConfig:
 
     def test_all_fields_are_frozen(self, btc_instrument_id, bar_type) -> None:
         from decimal import Decimal
+
         from digiquant.strategies.slapper import SlapperConfig
 
         cfg = SlapperConfig(
@@ -65,6 +67,7 @@ class TestSlapperConfig:
 class TestSlapperStrategyInstantiation:
     def test_can_instantiate(self, btc_instrument_id, bar_type) -> None:
         from decimal import Decimal
+
         from digiquant.strategies.slapper import SlapperConfig, SlapperStrategy
 
         cfg = SlapperConfig(
@@ -77,8 +80,9 @@ class TestSlapperStrategyInstantiation:
 
     def test_indicator_instances_created(self, btc_instrument_id, bar_type) -> None:
         from decimal import Decimal
+
+        from digiquant.indicators import RSI, BollingerBands, DPSDTrend, RollingADF
         from digiquant.strategies.slapper import SlapperConfig, SlapperStrategy
-        from digiquant.indicators import RSI, RollingADF, BollingerBands, DPSDTrend
 
         cfg = SlapperConfig(
             instrument_id=btc_instrument_id,

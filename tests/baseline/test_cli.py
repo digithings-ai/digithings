@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import pytest
 from click.testing import CliRunner
-
 from digiquant.cli import main as digiquant_main
 
 

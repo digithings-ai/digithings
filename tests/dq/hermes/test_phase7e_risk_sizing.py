@@ -12,7 +12,6 @@ from datetime import date, timedelta
 
 import polars as pl
 import pytest
-
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,

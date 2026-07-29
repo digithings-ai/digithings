@@ -19,7 +19,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # Narrow stance vocabulary shared across asset classes / sectors.
 # Phase 7 synthesis maps these to the digest's bias row.
 Bias = Literal[

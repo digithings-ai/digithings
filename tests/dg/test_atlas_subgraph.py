@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from digigraph.graph import AtlasResearchState, atlas_subgraph, build_atlas_subgraph
 
 

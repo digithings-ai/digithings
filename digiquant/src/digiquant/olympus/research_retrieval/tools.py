@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date
-from typing import Any, Callable  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+    Any,
+    Callable,
+)
+
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.research_retrieval.blinding import RetrievalPhase
 from digiquant.olympus.research_retrieval.cache import ResearchCache

@@ -12,9 +12,9 @@ from datetime import date
 from typing import Any, Callable  # noqa  # scored-lint suppression: duck-typed client + tool args
 
 from digiquant.olympus.atlas.data.queries import (
-    get_macro_series,
     get_etf_flows_proxy,
     get_fed_rate_probabilities,
+    get_macro_series,
     get_market_breadth,
     get_sector_relative_strength,
     get_vix_term_structure,

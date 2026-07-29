@@ -12,9 +12,7 @@ import threading
 from typing import Any
 
 import pytest
-
 from digigraph.graph.state import WorkflowState
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -14,7 +14,6 @@ import shutil
 from pathlib import Path
 
 import pytest
-
 from digiskills.compiler import compile_skill
 from digiskills.frontmatter import parse_skill_md
 from digiskills.models import SkillSource, SourceKind

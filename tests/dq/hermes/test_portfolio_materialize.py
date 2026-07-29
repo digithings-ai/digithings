@@ -10,7 +10,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
 from digiquant.olympus.hermes.portfolio_materialize import (
     MaterializeDeps,

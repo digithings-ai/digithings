@@ -13,9 +13,8 @@ from __future__ import annotations
 import pathlib
 from datetime import date
 
-import pytest
-
 import digiquant.olympus.hermes.phases as hermes_phases_pkg
+import pytest
 from digiquant.olympus.atlas.phases._node_factory import _shared_context
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PriorContext
 

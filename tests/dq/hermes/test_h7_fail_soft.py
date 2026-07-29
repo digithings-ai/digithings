@@ -12,7 +12,6 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
-
 from digiquant.olympus.atlas.state import AtlasResearchState, PriorContext
 from digiquant.olympus.hermes.phases.h7_pm_direction import NODE_ID, _h7_node
 

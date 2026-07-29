@@ -20,8 +20,6 @@ at the fields the legacy system enforces.
 
 from __future__ import annotations
 
-from digiquant.olympus.atlas.state import PhaseError
-
 from dataclasses import dataclass
 from typing import Any, Callable, Literal  # noqa: F401 — used for JSON-derived dict shape
 
@@ -30,9 +28,9 @@ from pydantic import BaseModel, Field, model_validator
 
 from digiquant.olympus.atlas.decision_log import persist_pending
 from digiquant.olympus.atlas.phases._node_factory import _shared_context
-from digiquant.olympus.hermes.state import HermesState
+from digiquant.olympus.atlas.state import PhaseError
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
-
+from digiquant.olympus.hermes.state import HermesState
 
 # ─── 9A Sources Scorecard ──────────────────────────────────────────────────
 

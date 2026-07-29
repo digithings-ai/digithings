@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
+from digigraph.server import app
 from fastapi.testclient import TestClient
 
-from digigraph.server import app
 from tests.digi_test_jwt import mint_test_jwt
 
 

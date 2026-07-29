@@ -8,10 +8,9 @@ reflection on preflight; a disallowed origin does not.
 from __future__ import annotations
 
 import pytest
+from digibase.cors import install_cors
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
-from digibase.cors import install_cors
 
 SERVICE = "digigraph"
 

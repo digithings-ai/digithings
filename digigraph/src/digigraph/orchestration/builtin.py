@@ -25,11 +25,11 @@ from digigraph.policy import code_execution_allowed, federated_hub_enabled
 from digigraph.project_config import DigiProjectConfig
 from digigraph.trace_events import rag_sources_from_results
 from digigraph.vertical_orchestrator import (
-    fetch_digisearch_tool_dicts,
     fetch_digiquant_tool_dicts,
+    fetch_digisearch_tool_dicts,
     fetch_digivault_tool_dicts,
-    invoke_digisearch_tool,
     invoke_digiquant_tool,
+    invoke_digisearch_tool,
     invoke_digivault_tool,
 )
 

@@ -18,9 +18,8 @@ _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
-from pine_backtest import run_backtest, summarize, write_trades_csv  # noqa: E402
-
 from digiquant.tearsheet_data import from_pine  # noqa: E402
+from pine_backtest import run_backtest, summarize, write_trades_csv  # noqa: E402
 
 DATA_DIR = Path("digiquant/data/validation")
 OUT_DIR = Path("digiquant/results/validation")

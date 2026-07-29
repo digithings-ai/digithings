@@ -155,8 +155,8 @@ class UrlCorpusBuilder:
         if self._fetcher is not None:
             fetcher = self._fetcher
         else:
-            from digifetch import HttpFetcher  # lazy: keeps the core import digifetch-free
             import httpx  # lazy: same extra as digifetch
+            from digifetch import HttpFetcher  # lazy: keeps the core import digifetch-free
 
             # follow_redirects=False: a redirect must be re-validated against
             # the SSRF allowlist before it's requested, which digifetch's own

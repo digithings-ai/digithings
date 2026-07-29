@@ -13,8 +13,8 @@ from digibase.http_client import sync_client
 
 from digigraph.graph.research import _stream_callback_ctx, research_node
 from digigraph.graph.state import WorkflowState
-from digigraph.trading_profile import optimization_constraints_dict_from_profile
 from digigraph.trace_events import TraceEventV1
+from digigraph.trading_profile import optimization_constraints_dict_from_profile
 
 logger = logging.getLogger(__name__)
 

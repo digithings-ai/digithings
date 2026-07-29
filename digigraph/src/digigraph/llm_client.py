@@ -21,16 +21,18 @@ import logging
 from collections.abc import Callable
 from typing import Any  # noqa: ANN401 — heterogeneous LLM tool/step payloads
 
-from digillm import (
+from digillm import (  # re-exported: grounding pre-passes
     ChatCompletionMessage,
     JsonSchemaResponseFormat,
     ToolArguments,
     ToolDefinition,
+    openrouter_web_search,
+    web_search,
+    x_search,
 )
 from digillm import completion as _digillm_completion
 from digillm import run_tools as _digillm_run_tools
 from digillm import set_usage_observer as _set_usage_observer
-from digillm import web_search, openrouter_web_search, x_search  # re-exported: grounding pre-passes
 from openai.types.chat import ChatCompletion
 
 from digigraph import usage as _usage

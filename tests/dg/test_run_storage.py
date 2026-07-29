@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 
 import pytest
-
 from digigraph.run_storage import (
     resolve_dataset_ref,
     write_search_results,

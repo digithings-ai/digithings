@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-
 from digigraph.orchestration.registry import ToolContext, ToolExposureMode, get_tools, has_tool
 
 

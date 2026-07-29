@@ -19,7 +19,6 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-
 from digiquant.nautilus_runner import (
     DEFAULT_NOTIONAL_FRACTION,
     STARTING_BALANCE_USD,

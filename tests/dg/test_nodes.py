@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-
 from digigraph.graph.nodes import backtest_node, research_node
 
 

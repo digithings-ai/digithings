@@ -15,9 +15,7 @@ from typing import Any  # noqa  # scored-lint: heterogeneous FakeSupabase fixtur
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.graph.pipeline_builder import build_pipeline
-
 from digiquant.olympus.atlas.phases.phase6_consolidate import build_phase6
 from digiquant.olympus.atlas.phases.phase7_synthesis import (
     DigestSnapshot,
@@ -34,7 +32,6 @@ from digiquant.olympus.atlas.state import (
 )
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -279,8 +276,8 @@ class TestFedOddsWiring:
 
     def test_fed_odds_fail_soft_on_db_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A database error in get_fed_rate_probabilities must not crash preflight."""
-        from digiquant.olympus.atlas.phases.preflight import build_preflight_node
         import digiquant.olympus.atlas.phases.preflight as pf_mod
+        from digiquant.olympus.atlas.phases.preflight import build_preflight_node
 
         deps = self._preflight_deps([])
         node = build_preflight_node(deps)

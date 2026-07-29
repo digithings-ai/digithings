@@ -4,7 +4,6 @@ from datetime import date
 from types import SimpleNamespace
 
 import pytest
-
 from digiquant.olympus.hermes.budget_controller import (
     RegimeAssessment,
     assess_budget,

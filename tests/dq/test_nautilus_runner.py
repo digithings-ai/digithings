@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
-
-from digiquant.nautilus_runner import _extract_pnl, _build_result
-
+from digiquant.nautilus_runner import _build_result, _extract_pnl
 
 # ---------------------------------------------------------------------------
 # _extract_pnl

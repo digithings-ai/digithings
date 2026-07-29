@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import polars as pl
 import pytest
-
 from digiquant.data.prices import OHLCV_COLUMNS
 from digiquant.data.prices.fetchers import (
     FetchResult,

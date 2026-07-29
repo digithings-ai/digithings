@@ -15,7 +15,6 @@ from digiquant.olympus.atlas.phases._node_factory import (
 from digiquant.olympus.atlas.segments import SegmentReport
 from digiquant.olympus.atlas.state import AtlasResearchState
 
-
 # Per ARCHITECTURE.md §Phase 3: 4-factor model.
 GrowthFactor = Literal["expanding", "slowing", "contracting"]
 InflationFactor = Literal["hot", "cooling", "cold"]

@@ -19,7 +19,6 @@ from typing import Any  # noqa  # scored-lint suppression — heterogeneous fake
 from uuid import UUID
 
 import pytest
-
 from digiquant.olympus.atlas.decision_log import (
     DEFAULT_BENCHMARK,
     DEFAULT_HOLDING_DAYS,
@@ -30,7 +29,6 @@ from digiquant.olympus.atlas.decision_log import (
     persist_pending,
     resolve_pending,
 )
-from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps, build_phase9
 from digiquant.olympus.atlas.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,
@@ -42,9 +40,9 @@ from digiquant.olympus.atlas.state import (
     AtlasResearchState,
     PhaseHermesState,
 )
+from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps, build_phase9
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-
 
 # ─── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -669,8 +667,8 @@ class TestLessonsInjection:
         """Phase 7D's _pm_node passes prior_context.decision_lessons as past_context."""
         from unittest.mock import patch
 
-        from digiquant.olympus.hermes.phases.phase7d_pm import _pm_node
         from digiquant.olympus.atlas.state import PriorContext
+        from digiquant.olympus.hermes.phases.phase7d_pm import _pm_node
 
         lessons = [{"ticker": "AAPL", "reflection": "Past lesson", "alpha": 0.02}]
         state = AtlasResearchState(

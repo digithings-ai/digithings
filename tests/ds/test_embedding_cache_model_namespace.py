@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digisearch.embedding.base import EmbeddingProvider
 from digisearch.embedding.cache import EmbeddingCache
 

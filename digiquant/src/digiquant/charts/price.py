@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any  # noqa: ANN401 — plotly Figure typing
 
 from digiquant.charts.common import (
-    ChartUnavailable,
     _CHART_BUILD_ERRORS,
+    ChartUnavailable,
     _apply_layout,
     _compute_bollinger_bands,
 )

@@ -12,13 +12,13 @@ pytest.importorskip("fastapi")
 pytest.importorskip("digikey")
 pytest.importorskip("digibase")
 
+from digivault.orchestrator_tools import ORCHESTRATOR_TOOL_NAMES  # noqa: E402
+from digivault.path_scopes import SCOPE_WRITE  # noqa: E402
+from digivault.supabase_store import SupabaseStore  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from digivault import server  # noqa: E402
-from digivault.orchestrator_tools import ORCHESTRATOR_TOOL_NAMES  # noqa: E402
-from digivault.path_scopes import SCOPE_WRITE  # noqa: E402
-from digivault.supabase_store import SupabaseStore  # noqa: E402
 
 pytestmark = pytest.mark.unit
 

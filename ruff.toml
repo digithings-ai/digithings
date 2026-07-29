@@ -47,7 +47,7 @@ exclude = ["*.md"]
 #
 # To adopt more, widen this list deliberately — one rule family per PR, with the
 # resulting fixes reviewed. Do not widen it by upgrading ruff.
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E7", "E9", "F", "I"]
 
 # Per-file-ignores are intentional exceptions, documented inline.
 [lint.per-file-ignores]

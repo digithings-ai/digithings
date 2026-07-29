@@ -6,6 +6,7 @@ import logging
 from collections.abc import Mapping
 from datetime import date
 from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.models.thesis import (
     MarketThesisExplorationOutput,

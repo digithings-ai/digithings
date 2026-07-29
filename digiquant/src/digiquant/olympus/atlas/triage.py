@@ -49,7 +49,6 @@ from digiquant.olympus.atlas.state import (
 from digiquant.olympus.atlas.triage_signals import max_abs_move_for_segment
 from digiquant.olympus.edit_mode.models import TriageSignal
 
-
 # Default price-move thresholds (fractional, not percent — matches the
 # ``state.price_deltas`` value scale). Sourced from the ARCHITECTURE.md
 # Mon–Sat Daily Delta table; exported as constants so the test suite can

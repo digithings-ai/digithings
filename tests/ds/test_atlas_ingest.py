@@ -14,7 +14,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digisearch.atlas_ingest import (
     ATLAS_INDEX_NAME,
     IndexedDocument,
@@ -22,8 +21,8 @@ from digisearch.atlas_ingest import (
     ingest_atlas_document,
     ingest_atlas_payload,
 )
-from digisearch.core.models import Query
 from digisearch.atlas_search import search_strategies
+from digisearch.core.models import Query
 from digisearch.search import query_index
 from digisearch.search._stub import _stub_index
 

@@ -12,7 +12,6 @@ from typing import Any  # noqa  # scored-lint: heterogeneous GraphQL fixture / J
 
 import polars as pl
 import pytest
-
 from digiquant.data.onchain.hyperdash import (
     CohortPositioning,
     HyperdashScraper,

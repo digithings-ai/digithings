@@ -5,9 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import pytest
-
 import digigraph.model_config as model_config
+import pytest
 from digigraph.model_config import (
     apply_olympus_openrouter_env,
     get_grounding_model,

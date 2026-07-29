@@ -16,10 +16,9 @@ if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
     os.environ.setdefault("DIGIKEY_ALLOW_EPHEMERAL_KEY", "1")
 
 import pytest
-from fastapi.testclient import TestClient
-
 from digikey.ratelimit import reset_limiter_for_tests
 from digikey.server import app
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture

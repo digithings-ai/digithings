@@ -8,7 +8,6 @@ from typing import Any  # noqa: ANN401 — fake client mirrors the driver's dyna
 
 import polars as pl
 import pytest
-
 from digiquant.data.store import (
     PUBLIC_STRATEGY_COLUMNS,
     build_digiquant_client,
@@ -31,7 +30,6 @@ from digiquant.data.store.client import (
     SUPABASE_SERVICE_ROLE_KEY_ENV,
     SUPABASE_URL_ENV,
 )
-
 
 # ─── Fake Supabase client (records selects; honors eq/limit; upsert/insert) ──────
 

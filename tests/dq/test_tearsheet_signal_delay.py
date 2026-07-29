@@ -26,7 +26,6 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-
 from digiquant.tearsheet_data import TearsheetData, from_nautilus_run
 
 _SCRIPT = Path(__file__).resolve().parents[2] / "digiquant" / "scripts" / "generate_tearsheets.py"

@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
-
 from digigraph.thread_scope import (
     assert_thread_access,
     resolve_client_thread_id,
     workflow_thread_id,
 )
+from fastapi import HTTPException
 
 
 @pytest.mark.unit

@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer handle
 
 from digigraph.graph.pipeline_builder import NodeSpec
-from digiquant.olympus.hermes.pipeline_builder import PipelinePhase, build_pipeline
 
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
@@ -31,6 +30,7 @@ from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
     build_risk_sizing_phase,
 )
 from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps
+from digiquant.olympus.hermes.pipeline_builder import PipelinePhase, build_pipeline
 from digiquant.olympus.hermes.state import HermesState
 
 __all__ = [

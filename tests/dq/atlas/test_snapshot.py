@@ -12,14 +12,12 @@ import json
 from datetime import date, datetime, timezone
 
 import pytest
-from pydantic import ValidationError
-
 from digiquant.olympus.atlas.snapshot import (
     SCHEMA_VERSION,
     DigestPayload,
     SnapshotEnvelope,
 )
-
+from pydantic import ValidationError
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -228,8 +226,8 @@ class TestParityWithPipelineDigest:
 
     def test_actionable_item_field_parity(self) -> None:
         DigestSnapshot = self._digest_snapshot_class()
-        from digiquant.olympus.atlas.snapshot import ActionableItem as LocalActionableItem
         from digiquant.olympus.atlas.phases.phase7_synthesis import ActionableItem as UpstreamItem
+        from digiquant.olympus.atlas.snapshot import ActionableItem as LocalActionableItem
 
         assert set(LocalActionableItem.model_fields) == set(UpstreamItem.model_fields)
         # Touch the upstream digest class so the import is exercised.
@@ -237,8 +235,8 @@ class TestParityWithPipelineDigest:
 
     def test_risk_item_field_parity(self) -> None:
         self._digest_snapshot_class()  # gate skip on availability
-        from digiquant.olympus.atlas.snapshot import RiskItem as LocalRiskItem
         from digiquant.olympus.atlas.phases.phase7_synthesis import RiskItem as UpstreamRiskItem
+        from digiquant.olympus.atlas.snapshot import RiskItem as LocalRiskItem
 
         assert set(LocalRiskItem.model_fields) == set(UpstreamRiskItem.model_fields)
 

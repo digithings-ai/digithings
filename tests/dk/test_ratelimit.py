@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import Depends, FastAPI
-from fastapi.testclient import TestClient
-
 from digikey.ratelimit import (
     TokenBucketRateLimiter,
     rate_limit_dependency,
     register_rate_limit_handler,
     reset_limiter_for_tests,
 )
+from fastapi import Depends, FastAPI
+from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.unit
 

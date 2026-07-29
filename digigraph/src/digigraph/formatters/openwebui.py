@@ -9,8 +9,10 @@ from pathlib import Path
 
 from tabulate import tabulate
 
-from digigraph.orchestration import builtin  # noqa: F401 - register built-in tools
-from digigraph.orchestration import list_tool_names
+from digigraph.orchestration import (
+    builtin,  # noqa: F401 - register built-in tools
+    list_tool_names,
+)
 
 _DELEGATE_TOOL_NAMES = frozenset(list_tool_names(tag="delegate"))
 

@@ -11,7 +11,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from digiquant.tearsheet_data import (
     SCHEMA_VERSION,
     OHLCBar,

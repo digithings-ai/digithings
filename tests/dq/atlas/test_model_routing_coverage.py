@@ -12,9 +12,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 import digigraph.model_config as model_config
+import pytest
 from digiquant.olympus.atlas.phases.phase1_altdata import _SPECS as ALT_SPECS
 from digiquant.olympus.atlas.phases.phase2_institutional import _SPECS as INST_SPECS
 from digiquant.olympus.atlas.phases.phase3_macro import _SPEC as MACRO_SPEC

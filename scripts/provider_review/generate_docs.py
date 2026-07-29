@@ -31,7 +31,6 @@ from typing import Any
 
 import yaml  # pip install pyyaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOTS_DIR = REPO_ROOT / "docs" / "providers" / "snapshots"
 DOCS_DIR = REPO_ROOT / "docs" / "free-providers"

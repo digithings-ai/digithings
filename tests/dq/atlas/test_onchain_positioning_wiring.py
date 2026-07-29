@@ -15,9 +15,7 @@ from typing import Any  # noqa  # scored-lint: heterogeneous fixture / kwargs di
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.graph.pipeline_builder import build_pipeline
-
 from digiquant.data.onchain.hyperdash import CohortPositioning, cohort_summary_to_positioning
 from digiquant.olympus.atlas.phases.phase6_consolidate import build_phase6
 from digiquant.olympus.atlas.phases.phase7_synthesis import build_phase7

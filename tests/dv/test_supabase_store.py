@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Any  # noqa: ANN401 — fake client mirrors the dynamic supabase client
 
 import pytest
-
 from digivault.supabase_store import SupabaseStore, SupabaseStoreError
 from digivault.vault import VaultError
 

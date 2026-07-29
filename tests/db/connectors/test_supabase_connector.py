@@ -16,7 +16,6 @@ from dataclasses import dataclass, field
 from typing import Any  # noqa: ANN401 — fake supabase client dict shapes
 
 import pytest
-
 from digibase.connectors.supabase import (
     SupabaseConnector,
     SupabaseNotConfiguredError,
