@@ -8,7 +8,9 @@ itself is exercised with an injected fake session (still no network).
 
 from __future__ import annotations
 
-from typing import Any  # noqa  # scored-lint: heterogeneous GraphQL fixture / JSON dicts
+from typing import (
+    Any,  # score:allow untyped any — scored-lint: heterogeneous GraphQL fixture / JSON dicts
+)
 
 import polars as pl
 import pytest
@@ -74,7 +76,7 @@ class _FakeResp:
     def __init__(self, body: dict[str, Any]) -> None:
         self._body = body
 
-    def raise_for_status(self) -> None:  # noqa: D401
+    def raise_for_status(self) -> None:
         return None
 
     def json(self) -> dict[str, Any]:

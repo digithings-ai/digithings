@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import (  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
     Any,
     Literal,
 )

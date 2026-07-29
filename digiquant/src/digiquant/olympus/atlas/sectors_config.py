@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any  # noqa: F401 — used for YAML-derived dict shape
+from typing import Any  # score:allow untyped any — used for YAML-derived dict shape
 
 import yaml
 

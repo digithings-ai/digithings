@@ -13,7 +13,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any  # noqa: ANN401 — frontmatter values are arbitrary YAML scalars/maps
+from typing import (
+    Any,  # score:allow untyped any — frontmatter values are arbitrary YAML scalars/maps
+)
 
 import yaml
 

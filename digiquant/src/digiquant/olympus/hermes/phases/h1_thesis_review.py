@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 

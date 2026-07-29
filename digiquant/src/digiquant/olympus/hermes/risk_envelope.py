@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import (
-    Any,  # noqa  # scored-lint suppression: duck-typed preferences mapping from Supabase rows
+    Any,  # scored-lint suppression: duck-typed preferences mapping from Supabase rows
 )
 
 DEFAULT_RISK_HORIZON_DAYS = 21

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
 
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.research_retrieval.blinding import RetrievalPhase

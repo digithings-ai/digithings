@@ -9,7 +9,10 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, date, datetime
-from typing import Any, Callable  # noqa  # scored-lint suppression: duck-typed client + tool args
+from typing import (  # score:allow untyped any — scored-lint suppression: duck-typed client + tool args
+    Any,
+    Callable,
+)
 
 from digiquant.olympus.atlas.data.queries import (
     get_etf_flows_proxy,
@@ -238,7 +241,7 @@ def build_data_tool_dispatcher(
             else:
                 return f"Error: unknown tool {name!r}"
             return json.dumps(result, default=str)
-        except Exception as exc:  # noqa: BLE001 — tool errors are returned to the model, not raised
+        except Exception as exc:  # tool errors are returned to the model, not raised
             logger.warning("data tool %s failed: %s", name, exc)
             return f"Error: {name} failed: {exc}"
 

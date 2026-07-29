@@ -112,7 +112,7 @@ class TestPreflightInjection:
         # unique to get_market_context's macro path — the freshness probes
         # (no eq) must keep working.
         class _ExplodingClient(FakeSupabaseClient):
-            def table(self, name: str):  # noqa: ANN201 — duck-typed fake
+            def table(self, name: str):  # duck-typed fake
                 query = super().table(name)
                 if name == "macro_series_observations":
 

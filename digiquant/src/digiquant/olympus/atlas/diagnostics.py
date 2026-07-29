@@ -23,7 +23,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any  # noqa  # scored-lint: duck-typed Supabase client + rows
+from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 
 from digiquant.olympus.atlas.phases.fail_soft import NODE_FAILED_REASON
 from digiquant.olympus.atlas.state import AtlasResearchState
@@ -421,7 +421,7 @@ def write_row(
             finished_at=finished_at,
         )
         client.table("atlas_run_diagnostics").upsert(row, on_conflict="run_id").execute()
-    except Exception as exc:  # noqa: BLE001 — telemetry write must never crash the run
+    except Exception as exc:  # telemetry write must never crash the run
         logger.warning("diagnostics: write_row failed (%s); run continues", exc)
         return None
     logger.info(

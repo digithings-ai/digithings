@@ -6,7 +6,9 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any  # noqa  # scored-lint suppression: provider jsonb payloads are heterogeneous
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: provider jsonb payloads are heterogeneous
+)
 
 from digiquant.olympus.hermes.sector_map import asset_class, sector_bucket
 from digiquant.olympus.instrument_metadata import InstrumentMetadata
@@ -97,7 +99,7 @@ def fetch_instrument_metadata(
             continue
         try:
             records[ticker] = metadata_from_yahoo_info(ticker, loader(ticker))
-        except Exception as exc:  # noqa: BLE001 — provider failures are isolated per symbol
+        except Exception as exc:  # provider failures are isolated per symbol
             errors[ticker] = str(exc)
         if throttle_s > 0 and index + 1 < len(normalized):
             time.sleep(throttle_s)

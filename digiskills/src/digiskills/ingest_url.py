@@ -179,7 +179,7 @@ class UrlCorpusBuilder:
 
                 try:
                     result = fetcher.download(url)
-                except Exception as exc:  # noqa: BLE001 — one bad URL must not abort the build
+                except Exception as exc:  # one bad URL must not abort the build
                     logger.warning("skipping %s: fetch failed (%s)", url, exc)
                     truncated = True
                     continue

@@ -8,8 +8,8 @@ import pytest
 
 pytest.importorskip("typer")
 
-from digiskills.cli import app  # noqa: E402
-from typer.testing import CliRunner  # noqa: E402
+from digiskills.cli import app
+from typer.testing import CliRunner
 
 pytestmark = pytest.mark.unit
 

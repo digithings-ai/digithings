@@ -6,7 +6,7 @@ via ``POST /v1/orchestrator_invoke`` so vault tooling is owned by this service.
 
 from __future__ import annotations
 
-from typing import Any, TypedDict  # noqa: ANN401 — OpenAI tool JSON-schema property maps
+from typing import Any, TypedDict  # score:allow untyped any — OpenAI tool JSON-schema property maps
 
 
 class FunctionParametersSchema(TypedDict, total=False):

@@ -15,7 +15,9 @@ Covers:
 from __future__ import annotations
 
 from datetime import date
-from typing import Any  # noqa  # scored-lint suppression — heterogeneous fake-row dict shape
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression — heterogeneous fake-row dict shape
+)
 from uuid import UUID
 
 import pytest
@@ -185,7 +187,7 @@ class TestPhaseAWritesPending:
 
         called: dict[str, int] = {"persist": 0}
 
-        def stub_persist(*, client: Any, state: Any) -> int:  # noqa: ARG001
+        def stub_persist(*, client: Any, state: Any) -> int:
             called["persist"] += 1
             return 1
 
@@ -216,7 +218,7 @@ class TestPhaseAWritesPending:
 
         called: dict[str, int] = {"persist": 0}
 
-        def stub_persist(*, client: Any, state: Any) -> int:  # noqa: ARG001
+        def stub_persist(*, client: Any, state: Any) -> int:
             called["persist"] += 1
             return 1
 
@@ -692,7 +694,7 @@ class TestLessonsInjection:
 
         captured: dict[str, Any] = {}
 
-        def fake_run(skill_text, phase_inputs, **kw):  # noqa: ARG001
+        def fake_run(skill_text, phase_inputs, **kw):
             captured.update(phase_inputs)
             from digiquant.olympus.hermes.phases.phase7d_pm import RebalanceDecision
 
@@ -716,7 +718,7 @@ class TestPreflightReflectNode:
 
         called: dict[str, int] = {"resolve": 0}
 
-        def stub_resolve(*, client: Any, run_date: Any, reflector: Any) -> int:  # noqa: ARG001
+        def stub_resolve(*, client: Any, run_date: Any, reflector: Any) -> int:
             called["resolve"] += 1
             return 0
 

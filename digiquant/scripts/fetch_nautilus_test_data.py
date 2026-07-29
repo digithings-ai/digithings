@@ -25,7 +25,7 @@ NAUTILUS_TEST_DATA_URL = (
 
 def main() -> int:
     try:
-        import nautilus_trader.test_kit.providers as pmod  # noqa: F401
+        import nautilus_trader.test_kit.providers as pmod
     except ImportError:
         print("nautilus_trader not installed. Run: uv pip install -e '.[nautilus]'")
         return 1

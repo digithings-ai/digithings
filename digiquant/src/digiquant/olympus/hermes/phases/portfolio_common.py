@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import (  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
     Any,
     TypeVar,
 )
@@ -303,7 +303,7 @@ def run_asset_analyst_llm(
             execute_tool=execute_tool,
             model=eff_model,
         )
-    except Exception as exc:  # noqa: BLE001 — LLM-output failure degrades this ticker, never the chain (#1665)
+    except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
         logger.warning(
             "H5 analyst LLM failed for %s (%s: %s); skipping ticker",
             ticker,

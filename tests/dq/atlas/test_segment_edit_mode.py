@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import Any  # noqa  # scored-lint: heterogeneous fake-row / fixture dicts
+from typing import (
+    Any,  # score:allow untyped any — scored-lint: heterogeneous fake-row / fixture dicts
+)
 from unittest.mock import patch
 
 import pytest

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 # The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
 # gate flags unscoped `Any` imports. Here Any matches LangGraph node updates.
-from typing import Annotated, Any  # noqa  # scored-lint suppression
+from typing import Annotated, Any  # score:allow untyped any — scored-lint suppression
 
 import pytest
 from digigraph.graph.pipeline_builder import (

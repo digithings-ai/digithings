@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Callable  # noqa: F401 — used for LangGraph node shape
+from typing import Any, Callable  # score:allow untyped any — used for LangGraph node shape
 from uuid import UUID
 
 from digigraph.graph.pipeline_builder import PipelinePhase, build_pipeline

@@ -108,7 +108,7 @@ def test_log_filter_picks_up_in_flight_request_id() -> None:
     captured: list[str] = []
 
     class _Capture(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:  # noqa: D401
+        def emit(self, record: logging.LogRecord) -> None:
             captured.append(getattr(record, "request_id", "MISSING"))
 
     log.addHandler(_Capture())

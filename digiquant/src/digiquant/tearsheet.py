@@ -11,7 +11,7 @@ import base64
 import logging
 import math
 from pathlib import Path
-from typing import Any  # noqa: ANN401 — tearsheet HTML assembly
+from typing import Any  # score:allow untyped any — tearsheet HTML assembly
 
 import polars as pl
 

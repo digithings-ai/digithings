@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Any  # noqa  # scored-lint suppression: test fixture dicts
+from typing import Any  # score:allow untyped any — scored-lint suppression: test fixture dicts
 
 import pytest
 from digiquant.olympus.atlas.phases._node_factory import (

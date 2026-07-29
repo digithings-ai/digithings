@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import (
-    Any,  # noqa: ANN401 — JSONB payloads and driver rows are dynamic at the DB boundary
+    Any,  # JSONB payloads and driver rows are dynamic at the DB boundary
 )
 
 import polars as pl

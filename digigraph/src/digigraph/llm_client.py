@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any  # noqa: ANN401 — heterogeneous LLM tool/step payloads
+from typing import Any  # score:allow untyped any — heterogeneous LLM tool/step payloads
 
 from digillm import (  # re-exported: grounding pre-passes
     ChatCompletionMessage,
