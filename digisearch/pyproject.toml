@@ -31,7 +31,10 @@ dependencies = [
 server = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
-    "mcp>=1.0",
+    # Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp`, which this package's
+    # MCP server imports at module scope — unbounded, it is a hard ImportError
+    # (#1711). Lift only together with a migration to the 2.x API.
+    "mcp>=1.0,<2",
     "typer>=0.12",
     "digikey>=0.1.0",
     "python-json-logger>=2.0",
@@ -50,7 +53,7 @@ edgar-corpus = ["datasets>=3.0"]
 # dev folds in [server] + [ingestion] so every CI/dev install (and pip-audit's
 # [dev] row) exercises and audits the full shipped surface, not just the light
 # base. Keep this in sync when adding runtime/parser deps.
-dev = ["digisearch[server]", "digisearch[ingestion]", "pytest>=8", "pytest-cov>=4", "ruff>=0.16,<0.17", "langgraph>=0.2"]
+dev = ["digisearch[server]", "digisearch[ingestion]", "pytest>=8,<10", "pytest-cov>=4,<8", "ruff>=0.16,<0.17", "langgraph>=0.2"]
 otel = ["digibase[otel]"]
 all = ["digisearch[server]", "digisearch[chroma]", "digisearch[embedding]", "digisearch[azure]", "digisearch[ingestion]", "digisearch[agent]"]
 

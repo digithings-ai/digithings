@@ -31,7 +31,7 @@ dependencies = [
 
 [project.optional-dependencies]
 tracing = ["langsmith>=0.1"]
-dev = ["pytest>=8", "pytest-cov>=4", "ruff>=0.16,<0.17", "langgraph-checkpoint-sqlite>=2.0"]
+dev = ["pytest>=8,<10", "pytest-cov>=4,<8", "ruff>=0.16,<0.17", "langgraph-checkpoint-sqlite>=2.0"]
 otel = ["digibase[otel]"]
 # Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp`, which both MCP servers
 # import (see #1705). Lift the bound only together with a migration to the 2.x API.
