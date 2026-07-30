@@ -22,16 +22,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
 
       - name: Run pip-audit
         id: audit
+        # This audit was silently dead. It ran `pip-audit -r requirements*.txt`,
+        # but this repo has no requirements*.txt at any path — the glob never
+        # expanded, so pip-audit errored, `|| true` swallowed it, and the bare
+        # `except: print(0)` below turned the unparseable output into a clean
+        # "0 vulnerabilities". The weekly CVE sweep has therefore been reporting
+        # all-clear without auditing anything.
+        #
+        # uv.lock (#1714) finally gives it something real to audit: export the
+        # whole workspace closure and audit that. `uvx` runs pip-audit as an
+        # ephemeral tool rather than a project dependency (#1715).
         run: |
-          pip install pip-audit --quiet
+          uv export --frozen --all-packages --all-extras \
+            --format requirements-txt \
+            --no-emit-project --no-emit-workspace --no-hashes \
+            -o audit-requirements.txt
+          echo "── audited closure: $(grep -c '==' audit-requirements.txt) pinned packages"
           set +e
-          OUTPUT=$(pip-audit --format=json -r requirements*.txt 2>&1 || true)
+          OUTPUT=$(uvx pip-audit --format=json -r audit-requirements.txt 2>&1 || true)
           COUNT=$(echo "$OUTPUT" | python3 -c "
           import json,sys
           try:
@@ -226,17 +240,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
 
-      - run: pip install pyyaml --quiet
+      # pyyaml from the lock instead of an unpinned `pip install` (#1715).
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
 
       - name: Check for drift
         id: drift
         run: |
           set +e
-          OUTPUT=$(python3 scripts/agents_init.py --check 2>&1)
+          OUTPUT=$(uv run --frozen --no-sync python scripts/agents_init.py --check 2>&1)
           EXIT=$?
           echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
           echo "output=$OUTPUT" >> "$GITHUB_OUTPUT"

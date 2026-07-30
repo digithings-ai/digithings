@@ -33,17 +33,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
 
       # digivault (core: pydantic + pyyaml) parses the vault; digibase[supabase]
-      # upserts. Installed as regular packages so they shadow the repo-root namespace dirs.
-      - name: Install DigiThings modules
-        run: python3 -m pip install ./digivault "./digibase[supabase]"
+      # upserts. Installs from the committed uv.lock rather than resolving fresh
+      # (#1715). uv installs workspace members into the synced venv, which takes
+      # precedence over the repo-root namespace dirs the same way the previous
+      # non-editable `pip install ./digivault` did.
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
 
       - name: Sync docs/vision → public.architecture_notes
         env:
           CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
           CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python3 scripts/sync_architecture_vault.py
+        run: uv run --frozen --no-sync python scripts/sync_architecture_vault.py
