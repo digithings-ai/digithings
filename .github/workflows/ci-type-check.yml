@@ -34,7 +34,12 @@ jobs:
           python -m pip install -U pip
           pip install -e "./digibase"
           pip install -e "./digikey"
-          pip install mypy types-PyYAML
+          # Version-bounded like ruff and the test tooling (#1711). mypy was
+          # installed completely unpinned here, so a release adding checks could
+          # turn this gate red on unchanged code — the failure mode that cost a
+          # day in #1701/#1705. mypy 2.x is what CI already resolves and passes,
+          # so this holds the current behaviour rather than changing it.
+          pip install "mypy>=2,<3" types-PyYAML
 
       - name: Run mypy
         run: |

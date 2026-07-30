@@ -27,7 +27,7 @@ ingest = ["digifetch>=0.1.0"]
 # Real LLM-backed synthesis (DigiLLMSynthesizer) via digillm.completion.
 # Lazily imported; the default TemplateSynthesizer needs no LLM/API key.
 llm = ["digillm>=0.1.0"]
-dev = ["digiskills[cli,ingest,llm]", "pytest>=8", "ruff>=0.16,<0.17"]
+dev = ["digiskills[cli,ingest,llm]", "pytest>=8,<10", "ruff>=0.16,<0.17"]
 
 [project.scripts]
 digiskills = "digiskills.cli:app"

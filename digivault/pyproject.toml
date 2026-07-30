@@ -23,10 +23,13 @@ dependencies = [
 service = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    "mcp>=1.0",
+    # Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp`, which this package's
+    # MCP server imports at module scope — unbounded, it is a hard ImportError
+    # (#1711). Lift only together with a migration to the 2.x API.
+    "mcp>=1.0,<2",
     "typer>=0.12",
 ]
-dev = ["pytest>=8", "ruff>=0.16,<0.17"]
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
 # Supabase-backed vault store (digivault.supabase_store). Lazily imported — the
 # core stays pydantic+pyyaml-only; this extra adds the DB read/search path.
 supabase = ["supabase>=2"]
