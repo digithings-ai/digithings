@@ -232,7 +232,7 @@ def _corr_dedup(
         return weights
     try:
         rows = corr.select(["a", "b", "corr"]).to_dicts()
-    except Exception:  # noqa: BLE001 — bad/empty corr frame → skip de-dup (conservative)
+    except Exception:  # bad/empty corr frame → skip de-dup (conservative)
         return weights
     held = set(weights)
     dropped: set[str] = set()
@@ -328,7 +328,7 @@ def _portfolio_vol(
                 (r["a"], r["b"]): float(r["corr"])
                 for r in corr.select(["a", "b", "corr"]).to_dicts()
             }
-        except Exception:  # noqa: BLE001 — bad corr frame → full-correlation default below
+        except Exception:  # bad corr frame → full-correlation default below
             lookup = {}
     var = 0.0
     for ti in tickers:

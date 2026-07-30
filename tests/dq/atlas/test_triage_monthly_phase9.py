@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Any  # noqa: F401 — used for fake-completion dict shape
+from typing import Any  # score:allow untyped any — used for fake-completion dict shape
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.graph.pipeline_builder import build_pipeline
-
 from digiquant.olympus.atlas.phases._node_factory import SegmentNodeSpec, build_segment_node
-from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Artifacts, build_phase9
 from digiquant.olympus.atlas.phases.phase_monthly import MonthlyDigest, build_phase_monthly
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
@@ -20,6 +17,7 @@ from digiquant.olympus.atlas.state import (
     PriorContext,
 )
 from digiquant.olympus.atlas.triage import evaluate, make_triage_gate
+from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Artifacts, build_phase9
 
 
 def _delta_state(
@@ -448,6 +446,7 @@ class TestTriagePhaseNode:
         """Happy path: Supabase returns flat-tape rows for high-tier ETFs and
         the bonds segment carries while a sharp single-ETF mover regens."""
         from digiquant.olympus.atlas.phases.triage_phase import TriageDeps, build_triage_node
+
         from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
         # Bonds: TLT/IEF/SHY all flat. Commodities: GLD up 1.2% (above 0.5%).
@@ -482,6 +481,7 @@ class TestTriagePhaseNode:
     def test_node_handles_missing_price_history_gracefully(self) -> None:
         """price_history empty → empty deltas → conservative regen everywhere."""
         from digiquant.olympus.atlas.phases.triage_phase import TriageDeps, build_triage_node
+
         from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
         client = FakeSupabaseClient(canned_reads={"price_history": []})
@@ -498,8 +498,9 @@ class TestTriageIntegrationWithPhaseNode:
     """End-to-end: a phase node with triage_gate short-circuits on carry."""
 
     def test_phase_node_emits_carried_when_gate_signals_carry(self) -> None:
-        from pydantic import BaseModel
         from datetime import date as _d
+
+        from pydantic import BaseModel
 
         class _StubModel(BaseModel):
             segment: str

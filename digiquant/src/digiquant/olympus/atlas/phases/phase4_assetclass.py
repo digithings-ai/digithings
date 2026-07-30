@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal  # noqa: F401 — used for dict shape typing below
+from typing import Any, Literal  # score:allow untyped any — used for dict shape typing below
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import Field

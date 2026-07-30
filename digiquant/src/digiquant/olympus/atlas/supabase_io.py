@@ -22,7 +22,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any, Protocol, TypedDict  # noqa: F401 — Protocol for client surface
+from typing import Any, Protocol, TypedDict  # score:allow untyped any — Protocol for client surface
 
 from digibase.audit import redact_mapping
 
@@ -133,7 +133,7 @@ class SupabaseClient(Protocol):
     supabase dependency. Production callers pass the real ``Client``.
     """
 
-    def table(self, name: str) -> Any: ...  # noqa: D401, E704
+    def table(self, name: str) -> Any: ...
 
 
 class SupabaseNotConfiguredError(RuntimeError):

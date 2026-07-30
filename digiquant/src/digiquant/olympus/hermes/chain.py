@@ -11,8 +11,13 @@ import os
 from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer/graph
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: opaque LangGraph checkpointer/graph
+)
 
+from digigraph import usage as _usage
+
+from digiquant.olympus.atlas import diagnostics as _diagnostics
 from digiquant.olympus.atlas.graph import (
     AtlasGraphDeps,
     AtlasInput,
@@ -27,14 +32,12 @@ from digiquant.olympus.atlas.phases.preflight import (
 from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
 from digiquant.olympus.atlas.state import AtlasResearchState, PhaseError
-from digiquant.olympus.atlas import diagnostics as _diagnostics
-from digiquant.olympus.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
 from digiquant.olympus.hermes.graph import (
     HermesGraphDeps,
     ThesisGraphDeps,
     build_hermes_graph,
 )
-from digigraph import usage as _usage
+from digiquant.olympus.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
 
 _logger = logging.getLogger(__name__)
 
@@ -64,7 +67,7 @@ class ChainDeps:
     publish: PublishDeps | None = None
     # Phase 7E / H8 risk-sizing runs inside the Hermes graph (PR 4c). ``risk_sizing`` is
     # wired via ``HermesGraphDeps`` for the H8 node — not as a chain terminal phase.
-    risk_sizing: Any | None = None  # noqa: ANN401 — legacy ChainDeps field; use hermes.risk_sizing
+    risk_sizing: Any | None = None  # legacy ChainDeps field; use hermes.risk_sizing
     # Phase 9D paper-portfolio materialization folded into Hermes H9 (PR 4d).
     materialize: Any | None = None  # legacy ChainDeps field — use hermes.commit_run
     # Per-run telemetry row (#726, 1B). None → skip the diagnostics write (dry-run /
@@ -99,7 +102,7 @@ def _acquire_checkpointer() -> Any:
         from digigraph.graph.graph import get_checkpointer
 
         return get_checkpointer()
-    except Exception as exc:  # noqa: BLE001 — checkpointing is best-effort; never crash the run
+    except Exception as exc:  # checkpointing is best-effort; never crash the run
         _logger.warning("checkpointer unavailable (%s); running without resume", exc)
         return None
 
@@ -123,7 +126,7 @@ def _invoke_resumable(
     resuming = False
     try:
         resuming = checkpointer.get_tuple(cfg) is not None
-    except Exception as exc:  # noqa: BLE001 — treat checkpoint-lookup failure as fresh run
+    except Exception as exc:  # treat checkpoint-lookup failure as fresh run
         _logger.warning("checkpoint lookup failed for %s (%s); running fresh", suffix, exc)
     if resuming:
         _logger.info(
@@ -169,7 +172,7 @@ def _record_chain_error(state: AtlasResearchState, label: str, exc: Exception) -
         state.errors.append(
             PhaseError(phase="chain", node=label, message=str(exc)[:500], retryable=True)
         )
-    except Exception:  # noqa: BLE001 — defensive; a bad append can't be allowed to abort the run
+    except Exception:  # defensive; a bad append can't be allowed to abort the run
         _logger.debug("chain: could not record error for %s", label, exc_info=True)
 
 
@@ -182,7 +185,7 @@ def _safe_invoke_graph(
     the belt-and-suspenders for a rare whole-graph raise (infra / checkpointer)."""
     try:
         return _invoke_resumable(graph, state, checkpointer, thread_base, label)
-    except Exception as exc:  # noqa: BLE001 — a late crash must still reach publish/materialize
+    except Exception as exc:  # a late crash must still reach publish/materialize
         _logger.exception("chain: %s graph failed; continuing with last-good state", label)
         _record_chain_error(state, label, exc)
         return state
@@ -202,7 +205,7 @@ def _run_terminal_phase(
         return _coerce_atlas_state(
             build_pipeline(AtlasResearchState, [build_phase(phase_deps)]).invoke(state)
         )
-    except Exception as exc:  # noqa: BLE001 — one terminal phase failing must not abort the rest
+    except Exception as exc:  # one terminal phase failing must not abort the rest
         _logger.exception("chain: terminal phase %s failed; continuing", label)
         _record_chain_error(state, label, exc)
         return state
@@ -340,7 +343,10 @@ def run_atlas_then_hermes(
 def _parse_cli_date(value: str) -> date:
     from datetime import datetime as _dt
 
-    return _dt.strptime(value, "%Y-%m-%d").date()
+    # strptime, not date.fromisoformat: mirrors the Atlas CLI, which must reject
+    # non-ISO-extended input such as "20260420". The intermediate datetime is naive,
+    # which is harmless — .date() discards the time immediately.
+    return _dt.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
 
 
 def _build_cli_parser():

@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import date, datetime
 
 import pytest
-
 from digiquant.olympus.atlas.phases import _node_factory
 from digiquant.olympus.atlas.phases.phase1_altdata import _SPECS as ALT_SPECS
 from digiquant.olympus.atlas.phases.phase2_institutional import _SPECS as INST_SPECS
@@ -114,7 +113,6 @@ def test_options_segment_makes_no_paid_search(monkeypatch):
 def test_macro_series_yaml_has_volatility_complex():
     # The FRED vol series alt-options-derivatives reads must be in the manifest.
     import yaml
-
     from digiquant.olympus.atlas.graph import _atlas_config_root
 
     raw = yaml.safe_load((_atlas_config_root() / "macro_series.yaml").read_text())

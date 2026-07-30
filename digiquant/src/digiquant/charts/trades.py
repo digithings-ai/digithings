@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import math
-from typing import Any  # noqa: ANN401 — plotly Figure typing
+from typing import Any  # score:allow untyped any — plotly Figure typing
 
 from digiquant.charts.common import (
-    ChartUnavailable,
     _CHART_BUILD_ERRORS,
     _CHART_LAYOUT,
+    ChartUnavailable,
     _apply_layout,
     _extract_frame,
 )

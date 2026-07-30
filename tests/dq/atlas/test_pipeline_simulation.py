@@ -16,7 +16,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.atlas.graph import AtlasInput
 from digiquant.olympus.atlas.testing import (
     DEFAULT_RESPONSES,

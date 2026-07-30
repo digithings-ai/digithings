@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 
 import pytest
-
 from digiquant.data.prices.instrument_metadata import (
     fetch_instrument_metadata,
     metadata_from_yahoo_info,

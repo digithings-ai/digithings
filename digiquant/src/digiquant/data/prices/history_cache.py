@@ -13,7 +13,7 @@ grace period. Writes are atomic (temp file + rename).
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import polars as pl
@@ -91,7 +91,7 @@ def incremental_update(
     uncached: list[str] = []
     to_update: list[tuple[str, pl.DataFrame, str]] = []  # (ticker, existing_df, fetch_start)
 
-    today = date.today()
+    today = datetime.now(UTC).date()
     today_s = today.isoformat()
     for t in tickers:
         cached = load_cached(t, cache_dir)

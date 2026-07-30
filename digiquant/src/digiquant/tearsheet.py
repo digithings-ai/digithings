@@ -11,14 +11,12 @@ import base64
 import logging
 import math
 from pathlib import Path
-from typing import Any  # noqa: ANN401 — tearsheet HTML assembly
+from typing import Any  # score:allow untyped any — tearsheet HTML assembly
 
 import polars as pl
 
-from digiquant.models import BacktestResult
 from digiquant.charts import (
     ChartUnavailable,
-    section_unavailable_html,
     _build_cumulative_trade_pnl,
     _build_distribution_chart,
     _build_drawdown_chart,
@@ -36,7 +34,9 @@ from digiquant.charts import (
     _build_underwater_from_returns,
     _build_win_rate_donut,
     _build_yearly_returns_chart,
+    section_unavailable_html,
 )
+from digiquant.models import BacktestResult
 
 logger = logging.getLogger(__name__)
 

@@ -29,7 +29,6 @@ def _load_hyphenated(name: str, path: Path):
 gs = _load_hyphenated("generate_snapshot", SCRIPTS / "generate-snapshot.py")
 import update_tearsheet as ut  # noqa: E402
 
-
 # ─── generate-snapshot.py: parse_regime ────────────────────────────────────
 
 SAMPLE_DIGEST = """\

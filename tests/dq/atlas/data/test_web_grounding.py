@@ -9,7 +9,7 @@ import pytest
 # in the digiquant-only CI job). Skip cleanly there; runs in atlas-graph-ci / locally.
 pytest.importorskip("openai")
 
-from digiquant.olympus.atlas.data import web_grounding  # noqa: E402
+from digiquant.olympus.atlas.data import web_grounding
 
 
 def _domains_for(monkeypatch_segment: str) -> list[str]:

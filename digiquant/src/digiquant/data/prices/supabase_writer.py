@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 import polars as pl
-
 from digibase.audit import redact_mapping
 
 from digiquant.data.prices import TECHNICAL_COLUMNS

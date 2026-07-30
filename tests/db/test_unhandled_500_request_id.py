@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
 from digibase.errors import register_fastapi_error_handlers
 from digibase.http import install_request_id_middleware
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
 @pytest.mark.unit

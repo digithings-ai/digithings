@@ -11,8 +11,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from digigraph.llm_client import completion as dg_completion
+
 from digillm import completion, run_tools
 
 SEARCH_PARAMS = {

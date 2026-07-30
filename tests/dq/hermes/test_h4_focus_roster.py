@@ -5,12 +5,10 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.atlas.state import FocusRosterEntry
 from digiquant.olympus.hermes.phases.h4_opportunity_screener import compute_focus_roster
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-
 
 _BOOK = ["AAA", "BBB", "SPY", "CCC", "IJR", "DDD", "XLP"]
 _HELD = {"SPY", "IJR", "XLP"}
@@ -369,6 +367,7 @@ def test_compute_focus_roster_excluded_ledger(monkeypatch: pytest.MonkeyPatch) -
     from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
         compute_focus_roster_excluded,
     )
+
     from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
     monkeypatch.setenv("HERMES_HELD_STALENESS_DELTA", "0.005")

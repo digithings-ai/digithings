@@ -8,7 +8,6 @@ import sys
 import textwrap
 
 import pytest
-
 from digisearch.ingestion.parsers.plaintext import PlainTextParser
 from digisearch.ingestion.registry import ParserRegistry
 
@@ -100,9 +99,10 @@ def test_top_level_import_stays_lazy() -> None:
 @pytest.mark.unit
 def test_lazy_client_attribute_still_resolves() -> None:
     """`digisearch.DigiSearch` (and core models) still resolve via PEP 562 __getattr__."""
-    import digisearch
     from digisearch.client import DigiSearch as RealClient
     from digisearch.core.models import Document as RealDocument
+
+    import digisearch
 
     # Public names are exported and discoverable...
     for name in ("DigiSearch", "Chunk", "Document", "Query", "Result"):
@@ -116,4 +116,4 @@ def test_lazy_client_attribute_still_resolves() -> None:
     assert all(getattr(digisearch, n) is not None for n in ("Chunk", "Query", "Result"))
 
     with pytest.raises(AttributeError):
-        digisearch.does_not_exist  # noqa: B018 - intentional attribute probe
+        digisearch.does_not_exist  # intentional attribute probe

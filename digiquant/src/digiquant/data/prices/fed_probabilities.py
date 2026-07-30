@@ -26,7 +26,9 @@ import hashlib
 import json
 import logging
 from datetime import date, datetime, timezone
-from typing import Any  # noqa  # scored-lint: heterogeneous prediction-market JSON
+from typing import (
+    Any,  # score:allow untyped any — scored-lint: heterogeneous prediction-market JSON
+)
 
 from digiquant.data.prices.macro_ingest import MacroObservation, retrying_session
 
@@ -137,7 +139,7 @@ def fetch_fed_prob_kalshi(
             cursor = body.get("cursor") or ""
             if not cursor or not batch:
                 break
-    except Exception as exc:  # noqa: BLE001 — a data-source flake must never break the macro job
+    except Exception as exc:  # a data-source flake must never break the macro job
         logger.warning("Kalshi KXFED fetch failed: %s", exc)
         return []
     return kalshi_markets_to_rows(markets, as_of=as_of)
@@ -231,7 +233,7 @@ def fetch_fed_prob_polymarket(
         events = r.json()
         if not isinstance(events, list):
             return []
-    except Exception as exc:  # noqa: BLE001 — cross-check source; degrade silently
+    except Exception as exc:  # cross-check source; degrade silently
         logger.warning("Polymarket fed-rates fetch failed: %s", exc)
         return []
     return polymarket_events_to_rows(events, as_of=as_of)

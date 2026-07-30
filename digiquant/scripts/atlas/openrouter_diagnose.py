@@ -28,7 +28,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any  # noqa  # scored-lint: OpenRouter JSON ``data`` objects are heterogeneous
+from typing import Any  # score:allow untyped any — scored-lint: OpenRouter JSON ``data`` objects are heterogeneous
 
 import httpx
 

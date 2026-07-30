@@ -7,9 +7,8 @@ liveness probe; ``/v1/status`` remains the richer diagnostic surface.
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
-
 from digismith.server import app
+from fastapi.testclient import TestClient
 
 _client = TestClient(app)
 

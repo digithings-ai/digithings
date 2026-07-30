@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digigraph.policy import code_execution_allowed
 
 

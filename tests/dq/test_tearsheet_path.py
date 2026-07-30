@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digiquant.nautilus_runner import _resolve_tearsheet_output
 
 

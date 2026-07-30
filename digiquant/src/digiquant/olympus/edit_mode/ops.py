@@ -10,7 +10,9 @@ crash used to cost the whole segment (``int('-')`` ValueError, IndexError).
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
 
 
 def _json_pointer_tokens(ptr: str) -> list[str]:

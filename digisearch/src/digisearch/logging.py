@@ -40,7 +40,7 @@ _HANDLER_MARKER = "_digi_json_handler"
 class _ServiceFilter(logging.Filter):
     """Stamp every record with ``service='digisearch'`` so the JSON formatter has it."""
 
-    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003 - logging API
+    def filter(self, record: logging.LogRecord) -> bool:  # logging API
         record.service = _SERVICE
         return True
 

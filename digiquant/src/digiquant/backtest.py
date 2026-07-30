@@ -10,7 +10,7 @@ from pathlib import Path
 
 from digiquant.models import BacktestResult
 from digiquant.nautilus_runner import run_nautilus_backtest
-from digiquant.strategy_specs import STRATEGY_PARAM_SPECS, _ALIAS_TO_CANONICAL
+from digiquant.strategy_specs import _ALIAS_TO_CANONICAL, STRATEGY_PARAM_SPECS
 
 # Lazily populated on first call to run_backtest. Importing digiquant.strategies (or its
 # registry submodule) at module level triggers strategies/__init__.py which pulls in
@@ -23,9 +23,9 @@ def _get_known_strategies() -> frozenset[str]:
     if _KNOWN_STRATEGIES is None:
         base = frozenset(STRATEGY_PARAM_SPECS.keys()) | frozenset(_ALIAS_TO_CANONICAL.keys())
         try:
-            import digiquant.strategies  # noqa: F401, PLC0415
-            from digiquant.strategies.registry import _ALIASES as _ra  # noqa: PLC0415
-            from digiquant.strategies.registry import _REGISTRY as _reg  # noqa: PLC0415
+            import digiquant.strategies  # noqa: F401
+            from digiquant.strategies.registry import _ALIASES as _ra
+            from digiquant.strategies.registry import _REGISTRY as _reg
             registry_names: frozenset[str] = frozenset(_reg.keys()) | frozenset(_ra.keys())
         except ImportError:
             registry_names = frozenset()

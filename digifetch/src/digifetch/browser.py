@@ -41,7 +41,11 @@ import logging
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable  # noqa: ANN401 — see Page protocol below
+from typing import (  # score:allow untyped any — see Page protocol below
+    Any,
+    Protocol,
+    runtime_checkable,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,13 +64,13 @@ class Page(Protocol):
     the optional dependency is absent (the whole point of the Protocol).
     """
 
-    def goto(self, url: str, **kwargs: Any) -> Any:  # noqa: ANN401
+    def goto(self, url: str, **kwargs: Any) -> Any:
         """Navigate to ``url`` (see Playwright ``Page.goto``)."""
 
     def content(self) -> str:
         """Return the page's current full HTML content."""
 
-    def wait_for_selector(self, selector: str, **kwargs: Any) -> Any:  # noqa: ANN401
+    def wait_for_selector(self, selector: str, **kwargs: Any) -> Any:
         """Wait for ``selector`` (see Playwright ``Page.wait_for_selector``)."""
 
     def set_default_timeout(self, timeout: float) -> None:
@@ -81,10 +85,10 @@ class BrowserContext(Protocol):
     authenticated session over plain HTTP (see :mod:`digifetch.http`).
     """
 
-    def cookies(self, urls: str | list[str] | None = None) -> list[dict[str, Any]]:  # noqa: ANN401
+    def cookies(self, urls: str | list[str] | None = None) -> list[dict[str, Any]]:
         """Return the context's cookies (see Playwright ``BrowserContext.cookies``)."""
 
-    def new_page(self) -> Any:  # noqa: ANN401
+    def new_page(self) -> Any:
         """Open and return a new page in this context."""
 
 
@@ -114,7 +118,7 @@ class BrowserConfig:
     launch_args: Mapping[str, Any] | None = None
 
 
-def _import_sync_playwright(browser: str = "chromium") -> Any:  # noqa: ANN401 — playwright is an optional dep, untyped here
+def _import_sync_playwright(browser: str = "chromium") -> Any:  # playwright is an optional dep, untyped here
     """Import ``sync_playwright`` lazily; raise an actionable error if absent.
 
     ``browser`` only shapes the install hint so a ``firefox``/``webkit`` config
@@ -134,7 +138,7 @@ def _import_sync_playwright(browser: str = "chromium") -> Any:  # noqa: ANN401 �
 def browser_session(
     config: BrowserConfig | None = None,
     *,
-    sync_playwright_factory: Any = None,  # noqa: ANN401 — injected callable for tests
+    sync_playwright_factory: Any = None,  # injected callable for tests
 ) -> Iterator[tuple[Page, BrowserContext]]:
     """Open a headless browser and yield the live ``(page, context)`` pair.
 

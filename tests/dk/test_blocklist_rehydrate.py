@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 
 import pytest
-
 from digikey.db import init_db
 from digikey.db_schema import ApiKeyRow, JtiIssuedRow, utcnow
 
@@ -13,8 +12,9 @@ from digikey.db_schema import ApiKeyRow, JtiIssuedRow, utcnow
 @pytest.mark.unit
 def test_rehydrate_writes_revoked_key_jtis(fake_blocklist_redis, monkeypatch, tmp_path):
     _fake, blocklist = fake_blocklist_redis
-    from digikey import db as dk_db
     from digikey.blocklist_rehydrate import rehydrate_blocklist_from_db
+
+    from digikey import db as dk_db
 
     db_path = tmp_path / "digikey.db"
     monkeypatch.setenv("DIGIKEY_DATABASE_URL", f"sqlite:///{db_path}")

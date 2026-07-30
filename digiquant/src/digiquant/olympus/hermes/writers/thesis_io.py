@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from datetime import date
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
+
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.models.thesis import (
     MarketThesisExplorationOutput,
@@ -155,7 +158,7 @@ def resolve_primary_market_thesis(
             .order("date", desc=True)
             .execute()
         )
-    except Exception as exc:  # noqa: BLE001 — linkage is enrichment; never block the graph
+    except Exception as exc:  # linkage is enrichment; never block the graph
         logger.warning("thesis_vehicles lookup failed for %s (%s)", ticker, exc)
         return None
     rows = list(getattr(resp, "data", None) or [])
@@ -203,7 +206,7 @@ def upsert_thesis_vehicles(
                 row, on_conflict="date,thesis_id,ticker"
             ).execute()
             written += 1
-        except Exception as exc:  # noqa: BLE001 — enrichment must not block graph
+        except Exception as exc:  # enrichment must not block graph
             logger.warning("thesis_vehicles upsert failed for %s/%s (%s)", thesis_id, ticker, exc)
             continue
         # Best-effort re-link of any vehicle-{ticker} row that ALREADY exists for
@@ -214,7 +217,7 @@ def upsert_thesis_vehicles(
             client.table("theses").update({"linked_market_thesis_id": thesis_id}).eq(
                 "date", date_str
             ).eq("thesis_id", f"vehicle-{ticker.lower()}").execute()
-        except Exception as exc:  # noqa: BLE001 — enrichment must not block graph
+        except Exception as exc:  # enrichment must not block graph
             logger.warning(
                 "thesis link update failed for vehicle-%s → %s (%s)", ticker, thesis_id, exc
             )

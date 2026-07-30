@@ -10,7 +10,6 @@ from typing import Any
 import yaml
 
 
-
 def _subst_env(val: Any) -> Any:
     """Replace ${VAR_NAME} with os.environ value."""
     if isinstance(val, str):

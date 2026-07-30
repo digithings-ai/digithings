@@ -8,14 +8,13 @@ import secrets
 import time
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
-
 from digibase.cors import install_cors
 from digibase.errors import register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
+from fastapi import Depends, FastAPI, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 
 from digikey import __version__, blocklist
 from digikey.blocklist_rehydrate import rehydrate_blocklist_from_db

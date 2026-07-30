@@ -10,9 +10,6 @@ covered by digillm/tests/test_digillm.py.
 from __future__ import annotations
 
 import pytest
-from digillm import get_byok as digillm_get_byok
-from digillm import get_proxy_key as digillm_get_proxy_key
-
 from digigraph.llm_auth import (
     get_byok_model_override,
     get_byok_override,
@@ -21,6 +18,9 @@ from digigraph.llm_auth import (
     push_byok_header,
     push_lite_llm_proxy_header,
 )
+
+from digillm import get_byok as digillm_get_byok
+from digillm import get_proxy_key as digillm_get_proxy_key
 
 
 class _Headers:

@@ -10,7 +10,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.atlas.segments import SegmentReport
 
 pytestmark = pytest.mark.unit

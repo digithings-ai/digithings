@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any  # noqa  # scored-lint: duck-typed Supabase client + rows
+from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 
 import polars as pl
 

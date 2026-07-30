@@ -196,6 +196,7 @@ def create_mcp_server() -> Any:
             return f"[DigiGraph chat error: {exc}]"
         try:
             from fastapi.testclient import TestClient
+
             from digigraph.server import app as dg_app
 
             client = TestClient(dg_app, raise_server_exceptions=False)
@@ -234,6 +235,7 @@ def create_mcp_server() -> Any:
             return json.dumps({"error": "thread_id is required"})
         try:
             from fastapi.testclient import TestClient
+
             from digigraph.server import app as dg_app
 
             client = TestClient(dg_app, raise_server_exceptions=False)

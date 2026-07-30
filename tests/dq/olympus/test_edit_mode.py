@@ -7,7 +7,6 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-
 from digiquant.olympus.edit_mode import (
     DocumentPatch,
     MergeError,

@@ -6,13 +6,13 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from digiquant.data.loader import list_symbols_from_dir
 
 from digiquant.data import (
     OHLCV_COLUMNS,
     generate_synthetic_ohlcv,
     load_ohlcv_csv,
 )
-from digiquant.data.loader import list_symbols_from_dir
 
 
 @pytest.mark.unit

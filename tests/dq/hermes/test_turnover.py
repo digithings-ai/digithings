@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.hermes.turnover import apply_turnover_to_sized_book
 
 pytestmark = pytest.mark.unit

@@ -12,7 +12,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from digiquant.data.prices import refresh
 from digiquant.data.prices.technicals import MIN_BARS
 

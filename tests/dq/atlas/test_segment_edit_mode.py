@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import Any  # noqa  # scored-lint: heterogeneous fake-row / fixture dicts
+from typing import (
+    Any,  # score:allow untyped any — scored-lint: heterogeneous fake-row / fixture dicts
+)
 from unittest.mock import patch
 
 import pytest
-
-from digiquant.olympus.edit_mode import DocumentPatch, PatchOp
 from digiquant.olympus.atlas.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
@@ -27,6 +27,8 @@ from digiquant.olympus.atlas.state import (
     SegmentPayload,
 )
 from digiquant.olympus.atlas.triage import evaluate
+from digiquant.olympus.edit_mode import DocumentPatch, PatchOp
+
 from tests.dq.atlas.test_triage_monthly_phase9 import _delta_state, _quiet_bias_for_all_segments
 
 _ATLAS_EDIT_SKILL_SLUGS = (

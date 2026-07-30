@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
+    Any,
+    Literal,
+)
+
 from pydantic import BaseModel, Field, model_validator
 
 

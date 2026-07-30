@@ -21,7 +21,7 @@ modes = ["pyyaml>=6"]
 # Optional LangSmith tracing via digismith. digillm has no hard dependency on it;
 # the @traceable decorator degrades to a no-op when digismith is absent.
 trace = ["digismith>=0.1.0"]
-dev = ["pytest>=8", "ruff>=0.8", "pyyaml>=6"]
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "pyyaml>=6"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -29,6 +29,16 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.format]
+# Markdown is not source — see the root ruff.toml and #1705. This component config
+# overrides the root for this tree, so the exclusion has to be restated here.
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+# Explicit rule selection — see the root ruff.toml and #1701. This component config
+# overrides the root for this tree, so the selection has to be restated here.
+select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

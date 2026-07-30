@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import polars as pl
 import pytest
-
 from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices.supabase_writer import (
     ohlcv_to_price_history_rows,
@@ -20,7 +18,6 @@ from digiquant.data.prices.supabase_writer import (
     upsert_price_technicals,
 )
 from digiquant.olympus.instrument_metadata import InstrumentMetadata
-
 
 # ─── Fake Supabase (ports the Atlas pattern) ───────────────────────────
 

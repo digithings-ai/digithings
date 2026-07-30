@@ -4,23 +4,21 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Any  # noqa: F401 — used for fake-completion dict shape
+from typing import Any  # score:allow untyped any — used for fake-completion dict shape
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.graph.pipeline_builder import build_pipeline
-
+from digiquant.olympus.atlas.state import (
+    AtlasConfigBundle,
+    AtlasResearchState,
+    PhaseHermesState,
+)
 from digiquant.olympus.hermes.phases.phase7d_pm import (
     build_phase7d,
     build_phase7d_pm,
     build_phase7d_risk_aggressive,
     build_phase7d_risk_conservative,
-)
-from digiquant.olympus.atlas.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
-    PhaseHermesState,
 )
 
 

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any  # noqa  # scored-lint suppression: provider jsonb payloads are heterogeneous
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: provider jsonb payloads are heterogeneous
+)
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 

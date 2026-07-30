@@ -7,7 +7,6 @@ import json
 import logging
 
 import pytest
-
 from digibase.http import _REQUEST_ID_CTX  # type: ignore[attr-defined]
 from digisearch.logging import _HANDLER_MARKER, configure_logging
 

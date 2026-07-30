@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from digigraph.models import ChatMessage, WorkflowRequest, WorkflowResult
+from pydantic import ValidationError
 
 
 @pytest.mark.unit

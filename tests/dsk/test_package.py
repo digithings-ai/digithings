@@ -6,7 +6,6 @@ import zipfile
 from pathlib import Path
 
 import pytest
-
 from digiskills.frontmatter import parse_skill_md
 from digiskills.models import SkillManifest, SkillPackage, SkillReference
 from digiskills.package import write_skill_package, write_skill_zip

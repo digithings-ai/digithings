@@ -30,7 +30,9 @@ import math
 import os
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any  # noqa  # scored-lint suppression: duck-typed Supabase client + rows
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: duck-typed Supabase client + rows
+)
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
@@ -214,7 +216,7 @@ def _upsert_theses(
             client.table("thesis_vehicles").upsert(
                 row, on_conflict="date,thesis_id,ticker"
             ).execute()
-        except Exception as exc:  # noqa: BLE001 — vehicles are enrichment; never block the book
+        except Exception as exc:  # vehicles are enrichment; never block the book
             logger.warning("phase9d: thesis_vehicles upsert failed (%s); continuing", exc)
     return len(thesis_rows)
 
@@ -303,7 +305,7 @@ def _upsert_portfolio_metrics(
                 for row in (getattr(benchmark_resp, "data", None) or [])
                 if row.get("close") is not None
             ]
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "phase9d: benchmark return computation failed (%s); benchmark return will be NULL",
                 exc,
@@ -430,7 +432,7 @@ def _latest_values(
             .limit(len(tickers) * (lookback_days + 1))
             .execute()
         )
-    except Exception as exc:  # noqa: BLE001 — risk fields are advisory; never block the book
+    except Exception as exc:  # risk fields are advisory; never block the book
         logger.warning(
             "phase9d: %s.%s read failed (%s); risk fields degrade", table, value_col, exc
         )
@@ -583,7 +585,7 @@ def build_materialize_node(deps: MaterializeDeps):
                     debates=deliberation_summaries(state),
                     preferences=dict(state.config.preferences),
                 )
-            except Exception as exc:  # noqa: BLE001 — advisory fields must never block the book
+            except Exception as exc:  # advisory fields must never block the book
                 logger.warning(
                     "phase9d: position risk-field enrichment failed (%s); booking plain weights",
                     exc,
@@ -616,7 +618,7 @@ def build_materialize_node(deps: MaterializeDeps):
         # a failure here must never block the book.
         try:
             _upsert_portfolio_metrics(client=client, run_date=run_date)
-        except Exception as exc:  # noqa: BLE001 — metrics are advisory
+        except Exception as exc:  # metrics are advisory
             logger.warning(
                 "phase9d: portfolio_metrics write failed (%s); continuing",
                 exc,

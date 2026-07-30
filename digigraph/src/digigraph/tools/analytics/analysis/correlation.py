@@ -7,8 +7,8 @@ from typing import Any
 
 import polars as pl
 
-from digigraph.tools.analytics.load import load_dataset
 from digigraph.tools.analytics.analysis._helpers import _artifacts_dir, _next_filename
+from digigraph.tools.analytics.load import load_dataset
 
 
 def _corr_polars(df: pl.DataFrame) -> dict:
