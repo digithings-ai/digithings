@@ -3,8 +3,9 @@ name: "Test: digibase"
 # Pilot for the uv-workspace cutover (#1714). This gate installs from the
 # committed uv.lock instead of resolving fresh, so a new release of a tool
 # cannot change what runs here without a lockfile change showing up in a diff.
-# The other 26 workflows still use pip; they are converted in a follow-up so the
-# pattern is proven on one small gate first.
+# The seven other per-component test gates and the type-check gate followed once
+# the pattern was proven here. The production pipelines still use pip and are
+# deliberately not converted — see the PR that added the rest.
 on:
   workflow_call:
 
