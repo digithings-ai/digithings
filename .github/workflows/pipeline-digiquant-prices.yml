@@ -55,23 +55,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main   # scheduled triggers fire from default branch; code pinned to main (#1626)
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            digibase/pyproject.toml
-            digikey/pyproject.toml
-            digiquant/pyproject.toml
-      - name: Install digiquant (prices extra)
-        run: |
-          python -m pip install -U pip
-          pip install -e "./digibase"
-          pip install -e "./digikey"
-          pip install -e "./digiquant[prices]"
+          enable-cache: true
+      # Installs from the uv.lock in the CHECKED-OUT tree (`main`), which only
+      # became possible with the develop→main release (#1721) — see #1717.
+      # digibase and digikey are declared dependencies of digiquant, so naming
+      # the package and its extra reproduces the previous three-line install.
+      - name: Install from lockfile
+        run: uv sync --frozen --package digiquant --extra prices
       - name: Fetch quotes -> update cache -> upsert price_history
         run: |
-          python -m digiquant prices fetch-quotes \
+          uv run --frozen --no-sync python -m digiquant prices fetch-quotes \
             --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
             --cache-dir data/price-history \
             --period 1y \
@@ -79,7 +74,7 @@ jobs:
             --supabase
       - name: Compute technicals -> upsert price_technicals
         run: |
-          python -m digiquant prices compute-technicals \
+          uv run --frozen --no-sync python -m digiquant prices compute-technicals \
             --cache-dir data/price-history \
             --days 365 \
             --supabase
@@ -149,14 +144,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main   # scheduled triggers fire from default branch; code pinned to main (#1626)
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-      - name: Install supabase client
-        run: python -m pip install -U pip supabase python-dotenv
+          enable-cache: true
+      # execute_at_open.py imports supabase and dotenv lazily inside functions;
+      # both are already in digiquant's locked closure, so the same
+      # `--extra prices` sync the sibling jobs use covers this one too rather
+      # than installing two packages unpinned.
+      - name: Install from lockfile
+        run: uv sync --frozen --package digiquant --extra prices
       - name: execute_at_open.py (prior-trading-day rebalance)
         run: |
-          python digiquant/scripts/atlas/execute_at_open.py --prior-trading-day-rebalance
+          uv run --frozen --no-sync python digiquant/scripts/atlas/execute_at_open.py --prior-trading-day-rebalance
 
   eod-macro:
     name: EOD macro ingest
@@ -176,26 +175,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main   # scheduled triggers fire from default branch; code pinned to main (#1626)
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            digibase/pyproject.toml
-            digikey/pyproject.toml
-            digiquant/pyproject.toml
-      - name: Install digiquant (prices extra)
-        run: |
-          python -m pip install -U pip
-          pip install -e "./digibase"
-          pip install -e "./digikey"
-          pip install -e "./digiquant[prices]"
+          enable-cache: true
+      # Installs from the uv.lock in the CHECKED-OUT tree (`main`), which only
+      # became possible with the develop→main release (#1721) — see #1717.
+      # digibase and digikey are declared dependencies of digiquant, so naming
+      # the package and its extra reproduces the previous three-line install.
+      - name: Install from lockfile
+        run: uv sync --frozen --package digiquant --extra prices
       - name: Sync trading_calendar (NYSE/NASDAQ/CRYPTO/FX)
         # Daily idempotent upsert (~30s, one-shot library query + chunked
         # upsert on PK (date,venue)).  Runs before the macro ingest so any
         # downstream join sites see today's calendar row.  ADR-0013, issue #337.
         run: |
-          python -m digiquant prices sync-calendar \
+          uv run --frozen --no-sync python -m digiquant prices sync-calendar \
             --venues NYSE,NASDAQ,CRYPTO,FX \
             --start 1950-01-01 \
             --end +5y \
@@ -203,7 +197,7 @@ jobs:
       - name: Ingest macro series (FRED + Yahoo FX)
         # Default --sources is fred,yahoo (issue #328 dropped Frankfurter+FNG).
         run: |
-          python -m digiquant prices fetch-macro \
+          uv run --frozen --no-sync python -m digiquant prices fetch-macro \
             --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml \
             --supabase
       - name: Fetch sector single-name quotes + technicals (daily, #946)
@@ -212,13 +206,13 @@ jobs:
         # sector report degrades to a one-ETF read. Refresh the full sector universe once
         # after the close so price_technicals carries single-name indicators.
         run: |
-          python -m digiquant prices fetch-quotes \
+          uv run --frozen --no-sync python -m digiquant prices fetch-quotes \
             --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
             --include-sectors \
             --cache-dir data/price-history \
             --period 1y \
             --supabase
-          python -m digiquant prices compute-technicals \
+          uv run --frozen --no-sync python -m digiquant prices compute-technicals \
             --cache-dir data/price-history \
             --days 365 \
             --supabase
