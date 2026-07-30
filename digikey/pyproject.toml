@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "fakeredis>=2.20"]
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "mypy>=2,<3", "fakeredis>=2.20"]
 
 [project.scripts]
 digikey = "digikey.cli:main"
