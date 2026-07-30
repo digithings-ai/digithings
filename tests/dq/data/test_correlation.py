@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Any  # noqa  # scored-lint: heterogeneous FakeSupabase fixture dicts
+from typing import (
+    Any,  # score:allow untyped any — scored-lint: heterogeneous FakeSupabase fixture dicts
+)
 
 import polars as pl
 import pytest

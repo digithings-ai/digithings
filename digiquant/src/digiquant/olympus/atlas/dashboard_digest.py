@@ -8,7 +8,9 @@ import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous digest JSON
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous digest JSON
+)
 
 logger = logging.getLogger(__name__)
 

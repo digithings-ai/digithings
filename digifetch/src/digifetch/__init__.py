@@ -91,7 +91,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str) -> Any:  # noqa: ANN401 — PEP 562 lazy re-export shim
+def __getattr__(name: str) -> Any:  # PEP 562 lazy re-export shim
     """Resolve browser-seam symbols lazily (PEP 562).
 
     Keeps ``import digifetch`` free of any browser import while still letting

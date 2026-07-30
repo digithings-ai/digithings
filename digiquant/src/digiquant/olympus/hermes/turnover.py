@@ -8,7 +8,7 @@ configurable cadence controls how often a calendar rebalance is allowed.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any  # noqa  # scored-lint suppression: entry_date coercion
+from typing import Any  # score:allow untyped any — scored-lint suppression: entry_date coercion
 
 # Cadence values read from config preferences (``preferences["rebalancing_cadence"]``),
 # sourced from portfolio.json ``constraints`` during preflight. Default "daily".

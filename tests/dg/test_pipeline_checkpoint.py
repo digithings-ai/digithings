@@ -7,14 +7,17 @@ nodes, and distinct thread_ids isolate independent graph lineages.
 
 from __future__ import annotations
 
-from typing import Any, TypedDict  # noqa  # scored-lint suppression: test graph node state
+from typing import (  # score:allow untyped any — scored-lint suppression: test graph node state
+    Any,
+    TypedDict,
+)
 
 import pytest
 
 pytest.importorskip("langgraph")
 
-from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase, build_pipeline  # noqa: E402
-from langgraph.checkpoint.memory import MemorySaver  # noqa: E402
+from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase, build_pipeline
+from langgraph.checkpoint.memory import MemorySaver
 
 
 class _S(TypedDict, total=False):

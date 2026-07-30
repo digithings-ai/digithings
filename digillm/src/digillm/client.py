@@ -45,7 +45,10 @@ import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import ContextVar
-from typing import Any, TypedDict  # noqa: ANN401 — OpenAI message dict payloads are heterogeneous
+from typing import (  # score:allow untyped any — OpenAI message dict payloads are heterogeneous
+    Any,
+    TypedDict,
+)
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
@@ -454,7 +457,7 @@ def _record_usage(**fields: Any) -> None:
         return
     try:
         observer(**fields)
-    except Exception as exc:  # noqa: BLE001 — telemetry must never break the LLM call
+    except Exception as exc:  # telemetry must never break the LLM call
         logger.debug("usage observer raised: %s", exc)
 
 
@@ -508,7 +511,7 @@ def _compact_tool_message_content(msg_content: str) -> str:
 def _sleep_transient_retry(delay: float, *, max_delay: float = 300.0) -> float:
     """Sleep ``delay`` plus up to 25% jitter; return the next (doubled, capped) delay."""
     jitter = random.uniform(0.0, delay * 0.25)
-    time.sleep(delay + jitter)  # noqa: S110 — intentional blocking backoff
+    time.sleep(delay + jitter)  # intentional blocking backoff
     return min(delay * 2, max_delay)
 
 
@@ -892,7 +895,7 @@ def completion(
 
     try:
         r: ChatCompletion = _create_with_retry(client, **kwargs)
-    except Exception as exc:  # noqa: BLE001 — only the 410 case is soft; everything else re-raises
+    except Exception as exc:  # only the 410 case is soft; everything else re-raises
         # xAI deprecated Live Search (HTTP 410) in favour of the Agent Tools API
         # (:func:`web_search`). Fail soft: drop the deprecated extra_body and retry once
         # ungrounded so the phase/pipeline keeps producing instead of crashing.
@@ -922,7 +925,7 @@ def completion(
             _EMPTY_RETRY_MAX,
             _EMPTY_RETRY_DELAY,
         )
-        time.sleep(_EMPTY_RETRY_DELAY)  # noqa: S110 — intentional short backoff on empty
+        time.sleep(_EMPTY_RETRY_DELAY)  # intentional short backoff on empty
         r = _create_with_retry(client, **retry_kwargs)
 
     _u = getattr(r, "usage", None)
@@ -1026,7 +1029,7 @@ def openrouter_web_search(
                 temperature=0.2,
                 usage_kind="web_search",
             )
-    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+    except Exception as exc:  # grounding is best-effort; degrade gracefully
         logger.warning("openrouter_web_search failed (%s); continuing ungrounded", exc)
         _record_usage(kind="web_search", model=model_id, ok=False)
         return None
@@ -1076,7 +1079,7 @@ def web_search(
             input=[{"role": "user", "content": query}],
             tools=[tool],
         )
-    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+    except Exception as exc:  # grounding is best-effort; degrade gracefully
         logger.warning("web_search failed (%s); continuing ungrounded", exc)
         _record_usage(kind="web_search", model=model_id, ok=False)
         return None
@@ -1121,7 +1124,7 @@ def x_search(
             input=[{"role": "user", "content": query}],
             tools=[{"type": "x_search", "max_search_results": max_results}],
         )
-    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+    except Exception as exc:  # grounding is best-effort; degrade gracefully
         logger.warning("x_search failed (%s); continuing ungrounded", exc)
         _record_usage(kind="x_search", model=model_id, ok=False)
         return None

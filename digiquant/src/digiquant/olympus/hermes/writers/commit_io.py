@@ -8,7 +8,9 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
 
 from digiquant.olympus.atlas.decision_log import persist_pending
 from digiquant.olympus.atlas.state import AtlasResearchState, PublishedArtifact, RebalancePayload
@@ -120,7 +122,7 @@ def _latest_values(
             .limit(len(tickers) * (lookback_days + 1))
             .execute()
         )
-    except Exception as exc:  # noqa: BLE001 — advisory fields must never block the book
+    except Exception as exc:  # advisory fields must never block the book
         logger.warning(
             "commit_io: %s.%s read failed (%s); risk fields degrade", table, value_col, exc
         )
@@ -232,7 +234,7 @@ def _canonical_thesis_ids(
             .execute()
         )
         rows = list(getattr(resp, "data", None) or [])
-    except Exception:  # noqa: BLE001 — thesis lookup must never block booking
+    except Exception:  # thesis lookup must never block booking
         rows = []
     # Latest-date row wins when multiple theses cover the same ticker.
     return {str(r["ticker"]): str(r["thesis_id"]) for r in rows if r.get("thesis_id")}
@@ -291,7 +293,7 @@ def book_portfolio(
                 debates=deliberation_summaries(state),
                 preferences=dict(state.config.preferences),
             )
-        except Exception as exc:  # noqa: BLE001 — advisory fields must never block the book
+        except Exception as exc:  # advisory fields must never block the book
             logger.warning(
                 "commit_io: position risk-field enrichment failed (%s); booking plain weights",
                 exc,

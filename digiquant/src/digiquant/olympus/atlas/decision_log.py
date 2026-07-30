@@ -209,7 +209,7 @@ def resolve_pending(
                     "alpha": alpha,
                 }
             )
-        except Exception as exc:  # noqa: BLE001 — reflector failure must not block sibling rows
+        except Exception as exc:  # reflector failure must not block sibling rows
             logger.warning(
                 "decision_log reflector failed for %s (run_id=%s): %s",
                 ticker,

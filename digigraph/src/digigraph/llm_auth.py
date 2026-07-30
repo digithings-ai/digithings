@@ -23,7 +23,7 @@ accepts ``Request`` objects.
 from __future__ import annotations
 
 from contextvars import ContextVar
-from typing import Any, NamedTuple  # noqa: ANN401 — Starlette Request kept loose
+from typing import Any, NamedTuple  # score:allow untyped any — Starlette Request kept loose
 
 from digillm import reset_byok, reset_proxy_key, set_byok, set_proxy_key
 

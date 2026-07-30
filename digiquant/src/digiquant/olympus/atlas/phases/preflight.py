@@ -10,7 +10,10 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-update dict shape
+from typing import (  # score:allow untyped any — used for heterogeneous node-update dict shape
+    Any,
+    Callable,
+)
 
 import yaml
 
@@ -139,7 +142,7 @@ def _refresh_stale_technicals(
             client=deps.client, tickers=tickers, as_of=run_date
         )
         return result.rows_upserted > 0
-    except Exception as exc:  # noqa: BLE001 — refresh is best-effort; never block preflight
+    except Exception as exc:  # refresh is best-effort; never block preflight
         logger.warning(
             "preflight: on-demand technicals refresh failed (%s); using stale data",
             exc,
@@ -203,7 +206,7 @@ def _data_layer_snapshot(
     # backtest. Best-effort end to end — a Hyperdash outage/shape-drift must never block a run.
     try:
         onchain = get_onchain_cohort_positioning()
-    except Exception as exc:  # noqa: BLE001 — provider is fail-soft, but never let it crash preflight
+    except Exception as exc:  # provider is fail-soft, but never let it crash preflight
         logger.warning("onchain positioning unavailable (%s); slot will be None this run", exc)
         onchain = None
     if onchain is not None and onchain.error is None and onchain.has_data:
@@ -214,7 +217,7 @@ def _data_layer_snapshot(
             upsert_onchain_cohort_positioning(
                 client=deps.client, rows=onchain.to_rows(run_date.isoformat())
             )
-        except Exception as exc:  # noqa: BLE001 — persistence is best-effort; a missing table
+        except Exception as exc:  # persistence is best-effort; a missing table
             # (pre-migration window) or any postgrest/network error must never block the run.
             logger.warning("onchain positioning persist failed (%s); continuing", exc)
 

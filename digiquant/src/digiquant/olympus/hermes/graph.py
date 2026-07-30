@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from collections.abc import Collection
 from dataclasses import dataclass
-from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer handle
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: opaque LangGraph checkpointer handle
+)
 
 from digigraph.graph.pipeline_builder import NodeSpec
 
@@ -89,7 +91,7 @@ def build_hermes_phases_thesis(
     *,
     watchlist: list[str],
     deps: HermesGraphDeps | None = None,
-    debate_rounds: int = 1,  # noqa: ARG001 — removed with 7CD; kept for CLI compat
+    debate_rounds: int = 1,  # removed with 7CD; kept for CLI compat
     held: Collection[str] = (),
 ) -> list[PipelinePhase]:
     """Thesis-first Hermes phases H1–H9 (PR 4d)."""

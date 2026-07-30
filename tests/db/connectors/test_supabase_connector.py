@@ -13,7 +13,7 @@ would be premature here.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any  # noqa: ANN401 — fake supabase client dict shapes
+from typing import Any  # score:allow untyped any — fake supabase client dict shapes
 
 import pytest
 from digibase.connectors.supabase import (

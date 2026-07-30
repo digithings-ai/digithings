@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Any  # noqa  # scored-lint: heterogeneous fixture / kwargs dicts
+from typing import (
+    Any,  # score:allow untyped any — scored-lint: heterogeneous fixture / kwargs dicts
+)
 from unittest.mock import patch
 
 import pytest

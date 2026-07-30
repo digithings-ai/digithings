@@ -12,7 +12,9 @@ import os
 import time as _time
 from collections import deque as _deque
 from threading import Lock as _Lock
-from typing import Any  # noqa: ANN401 — frontmatter / orchestrator argument maps are arbitrary
+from typing import (
+    Any,  # score:allow untyped any — frontmatter / orchestrator argument maps are arbitrary
+)
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers

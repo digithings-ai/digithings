@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
@@ -117,7 +119,7 @@ def _h7_node(state: HermesState) -> dict[str, Any]:
             tools=tools,
             execute_tool=execute_tool,
         )
-    except Exception as exc:  # noqa: BLE001 — LLM-output failure degrades H7, never the chain (#1665)
+    except Exception as exc:  # LLM-output failure degrades H7, never the chain (#1665)
         # Fallback: carry the PRIOR direction memo re-dated to today. Held names it
         # addressed keep their directions; anything it misses is covered by the
         # #1649 memo-unaddressed held-carry, so the book still coheres and COMMITS —

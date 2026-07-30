@@ -14,7 +14,7 @@ half-migrated environment keeps working until the legacy names are dropped.
 from __future__ import annotations
 
 import os
-from typing import (  # noqa: ANN401 — SupabaseLike.table returns the driver's dynamic type
+from typing import (  # SupabaseLike.table returns the driver's dynamic type
     Any,
     Protocol,
 )

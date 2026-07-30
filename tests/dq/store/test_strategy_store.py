@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any  # noqa: ANN401 — fake client mirrors the driver's dynamic surface
+from typing import Any  # score:allow untyped any — fake client mirrors the driver's dynamic surface
 
 import polars as pl
 import pytest

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import Any  # noqa: F401 — used for fake-client payload dict shape
+from typing import Any  # score:allow untyped any — used for fake-client payload dict shape
 
 import pytest
 from digiquant.olympus.atlas.supabase_io import (

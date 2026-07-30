@@ -84,7 +84,7 @@ class TestSelectFocusTickers:
 
     def test_fails_soft_to_watchlist_head(self) -> None:
         class _Exploding(FakeSupabaseClient):
-            def table(self, name: str):  # noqa: ANN201 — duck-typed fake
+            def table(self, name: str):  # duck-typed fake
                 raise RuntimeError("boom")
 
         focus = select_focus_tickers(
@@ -116,7 +116,7 @@ class TestSelectFocusTickers:
 
     def test_top_n_zero_skips_scoring_and_returns_holdings(self) -> None:
         class _MustNotQuery(FakeSupabaseClient):
-            def table(self, name: str):  # noqa: ANN201 — duck-typed fake
+            def table(self, name: str):  # duck-typed fake
                 raise AssertionError("scoring query should not run when top_n=0")
 
         focus = select_focus_tickers(

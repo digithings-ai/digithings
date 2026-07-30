@@ -10,9 +10,9 @@ from fastapi.testclient import TestClient
 if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
     os.environ.setdefault("DIGIKEY_ALLOW_EPHEMERAL_KEY", "1")
 
-from digikey.server import app  # noqa: E402
+from digikey.server import app
 
-from tests.conftest import assert_prom_metrics_labels  # noqa: E402
+from tests.conftest import assert_prom_metrics_labels
 
 pytestmark = pytest.mark.unit
 

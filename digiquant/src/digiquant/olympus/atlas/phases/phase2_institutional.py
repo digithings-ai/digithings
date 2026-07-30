@@ -13,7 +13,11 @@ re-probe the layer rather than inherit a stale absence.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Literal  # noqa: F401 — used for node-update dict shape
+from typing import (  # score:allow untyped any — used for node-update dict shape
+    Any,
+    Callable,
+    Literal,
+)
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import Field, field_validator

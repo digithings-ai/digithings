@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any  # noqa  # scored-lint: duck-typed Supabase client + rows
+from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
@@ -158,7 +158,7 @@ def _load_ticker_risk(
                 ticker = row.get("ticker")
                 if ticker and ticker not in latest:  # desc order → first seen is freshest
                     latest[ticker] = row
-        except Exception as exc:  # noqa: BLE001 — vol read is best-effort; default vol used
+        except Exception as exc:  # vol read is best-effort; default vol used
             logger.warning("phase7e: price_technicals read failed (%s); using default vol", exc)
     return {
         ticker: TickerRisk(
@@ -380,7 +380,7 @@ def _build_sized_book(
         )
         breaker_scale = breaker.scale
         breaker_note = f" Drawdown breaker: {breaker.reason}." if breaker.scale < 1.0 else ""
-    except Exception as exc:  # noqa: BLE001 — breaker is best-effort; neutral on failure
+    except Exception as exc:  # breaker is best-effort; neutral on failure
         logger.warning("phase7e: drawdown breaker failed (%s); neutral scale", exc)
         breaker_scale, breaker_note = 1.0, ""
 
@@ -390,7 +390,7 @@ def _build_sized_book(
             tickers=pm_tickers,
             run_date=state.run_date,
         )
-    except Exception as exc:  # noqa: BLE001 — correlation is best-effort
+    except Exception as exc:  # correlation is best-effort
         logger.warning("phase7e: correlation read failed (%s); using full-correlation default", exc)
         corr_frame = None
 
@@ -414,7 +414,7 @@ def _build_sized_book(
             caps=caps,
             breaker_scale=breaker_scale,
         )
-    except Exception as exc:  # noqa: BLE001 — sizing must never crash the run
+    except Exception as exc:  # sizing must never crash the run
         logger.warning("phase7e: risk sizing failed (%s); keeping prior book", exc)
         return None
 

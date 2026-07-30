@@ -112,7 +112,7 @@ class RequestIdLogFilter(logging.Filter):
     ``KeyError`` in the formatter.
     """
 
-    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+    def filter(self, record: logging.LogRecord) -> bool:
         record.request_id = _REQUEST_ID_CTX.get() or _UNSET_REQUEST_ID
         return True
 

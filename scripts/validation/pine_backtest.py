@@ -54,7 +54,7 @@ def _load_calibrations() -> dict[str, dict]:
 
 _FALLBACK_PARAMS: dict[str, dict] = _load_calibrations()
 try:
-    from digiquant.strategies.registry import _REGISTRY  # noqa: PLC0415
+    from digiquant.strategies.registry import _REGISTRY
 except ImportError:
     _REGISTRY = {}  # type: ignore[assignment]
 

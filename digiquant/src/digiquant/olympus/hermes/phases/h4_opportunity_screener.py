@@ -11,7 +11,9 @@ import logging
 import os
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import date
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 

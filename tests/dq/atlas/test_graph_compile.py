@@ -8,7 +8,7 @@ behaves as advertised.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any  # noqa: F401 — used for fake-client shape
+from typing import Any  # score:allow untyped any — used for fake-client shape
 
 import pytest
 from digiquant.olympus.atlas.graph import (

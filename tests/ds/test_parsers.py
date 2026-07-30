@@ -116,4 +116,4 @@ def test_lazy_client_attribute_still_resolves() -> None:
     assert all(getattr(digisearch, n) is not None for n in ("Chunk", "Query", "Result"))
 
     with pytest.raises(AttributeError):
-        digisearch.does_not_exist  # noqa: B018 - intentional attribute probe
+        digisearch.does_not_exist  # intentional attribute probe

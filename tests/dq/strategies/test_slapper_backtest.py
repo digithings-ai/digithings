@@ -31,7 +31,7 @@ import pytest
 
 pytest.importorskip("nautilus_trader")
 
-from digiquant.backtest import run_backtest  # noqa: E402
+from digiquant.backtest import run_backtest
 
 DATA = Path(__file__).resolve().parents[3] / "digiquant" / "data" / "BTC-USD.csv"
 

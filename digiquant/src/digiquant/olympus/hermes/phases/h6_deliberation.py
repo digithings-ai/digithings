@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Collection
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
 
 from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
@@ -301,7 +303,7 @@ def _h6_node_factory(ticker: str):
 
         try:
             summary = run_deliberation_loop(state, ticker)
-        except Exception as exc:  # noqa: BLE001 — LLM-output failure degrades this ticker, never the chain (#1665)
+        except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
             stance_map = {"buy": "bullish", "sell": "bearish"}
             logger.warning(
                 "H6 deliberation LLM failed for %s (%s: %s); carrying analyst stance",

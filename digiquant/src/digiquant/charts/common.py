@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any  # noqa: ANN401 — plotly Figure typing
+from typing import Any  # score:allow untyped any — plotly Figure typing
 
 import polars as pl
 
