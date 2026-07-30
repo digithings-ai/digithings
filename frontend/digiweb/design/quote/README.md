@@ -17,20 +17,20 @@ under a flat-fee earlier phase is listed **at full fair value** alongside the wo
 to come, and anything already paid is then credited back on its own line:
 
 ```
-Delivered — phase one (01–09)        12,000.00
-To complete — next phase (10–13)      8,000.00
-Engagement at fair value             20,000.00
-Discount (20%)                       −4,000.00
-Less phase one invoice, paid         −6,000.00
-Balance due                          10,000.00
+Delivered — phase one (01–09)              A
+To complete — next phase (10–13)           B
+Engagement at fair value                 A + B
+Discount (n%)                             − D
+Less phase one invoice, paid              − P
+Balance due                    A + B − D − P
 ```
 
 Line items carry **fair market value**, and every concession is its own line:
 the relationship discount and any payment already made. That way the client
 sees what the engagement is actually worth, the discount is explicit rather
 than silent, and the flat earlier-phase fee never reads as the standing rate.
-Price optional items so they stay round *after* the discount (here 2,500 at
-fair value adds a clean 2,000 net). Use `class="sec"` on a
+Price optional items so they stay round *after* the discount — pick the fair-value
+figure such that `fair × (1 − n)` lands on a round net. Use `class="sec"` on a
 `<tr><td colspan="3">` to start each phase section.
 
 ## Fill it in
