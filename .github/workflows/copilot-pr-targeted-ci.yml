@@ -38,9 +38,9 @@ jobs:
           ref: ${{ inputs.head_sha }}
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
 
       - uses: actions/setup-node@v4
         with:
@@ -50,14 +50,17 @@ jobs:
         run: git fetch origin "${{ inputs.base_ref }}"
 
       - name: Plan suites
+        # pyyaml comes from the lock via uv (#1715) instead of an unpinned
+        # `pip install -q pyyaml`. This job checks out inputs.head_sha, so the
+        # lock is present for any ref that has it.
         run: |
           set -euo pipefail
-          python -m pip install -q pyyaml
-          python3 scripts/copilot_pr_suites.py \
+          uv sync --frozen --all-packages --all-extras
+          uv run --frozen --no-sync python scripts/copilot_pr_suites.py \
             --base-ref "origin/${{ inputs.base_ref }}" \
             --head-ref HEAD \
             --json > /tmp/suite-plan.json
-          python3 scripts/copilot_pr_suites.py \
+          uv run --frozen --no-sync python scripts/copilot_pr_suites.py \
             --base-ref "origin/${{ inputs.base_ref }}" \
             --head-ref HEAD
           cat /tmp/suite-plan.json
@@ -65,7 +68,7 @@ jobs:
       - name: Run targeted checks
         run: |
           set -euo pipefail
-          python3 scripts/copilot_pr_suites.py \
+          uv run --frozen --no-sync python scripts/copilot_pr_suites.py \
             --base-ref "origin/${{ inputs.base_ref }}" \
             --head-ref HEAD \
             --run

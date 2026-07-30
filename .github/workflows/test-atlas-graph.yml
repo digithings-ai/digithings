@@ -3,9 +3,17 @@ name: "Test: Atlas graph"
 # Unit tests + lint + actionlint for the Atlas sub-graph package and its
 # scheduler workflows. Complements `digiquant tests` — that job installs
 # only `digiquant[dev]`, which doesn't pull `digigraph`, so atlas tests get
-# skipped there (see tests/dq/atlas/conftest.py). This workflow installs
-# the full monorepo workspace via install-workspace.sh, so the atlas
-# pipeline tests actually run.
+# skipped there (see tests/dq/atlas/conftest.py). This workflow needs the full
+# monorepo workspace so the atlas pipeline tests actually run.
+#
+# Installs from the committed uv.lock rather than resolving fresh (#1714, #1715).
+# `uv sync --all-packages` replaces scripts/install-workspace.sh here: that script
+# exists because sibling packages (digismith, digillm) are hard dependencies that
+# are not on PyPI, so a naive `pip install -e ./digigraph` cannot resolve them and
+# the install had to be hand-ordered topologically. A uv workspace resolves
+# siblings natively, so the ordering problem the script solved no longer exists.
+# The script is still used by the pipelines that check out `ref: main`, which has
+# no uv.lock yet.
 
 on:
   workflow_call:
@@ -20,17 +28,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
 
-      - name: Install workspace (dependency-ordered; includes digismith)
-        run: |
-          bash scripts/install-workspace.sh --with-dev digiquant
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
 
       - name: Ruff check
         run: |
-          ruff check \
+          uv run --frozen --no-sync ruff check \
             digiquant/src/digiquant/olympus/atlas \
             digiquant/src/digiquant/olympus/hermes \
             digiquant/src/digiquant/olympus/learning \
@@ -40,7 +47,7 @@ jobs:
 
       - name: Ruff format check
         run: |
-          ruff format --check \
+          uv run --frozen --no-sync ruff format --check \
             digiquant/src/digiquant/olympus/atlas \
             digiquant/src/digiquant/olympus/hermes \
             digiquant/src/digiquant/olympus/learning \
@@ -49,7 +56,9 @@ jobs:
             tests/dq/learning
 
       - name: Pytest
-        run: pytest -m unit tests/dq/atlas/ tests/dq/hermes/ tests/dq/learning/ -v --tb=short
+        run: |
+          uv run --frozen --no-sync pytest -m unit \
+            tests/dq/atlas/ tests/dq/hermes/ tests/dq/learning/ -v --tb=short
 
   actionlint:
     runs-on: ubuntu-latest

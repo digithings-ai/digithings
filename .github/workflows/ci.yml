@@ -275,45 +275,55 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
 
-      - name: Install
-        run: |
-          python -m pip install -U pip
-          pip install -e "./digibase[dev]"
-          pip install -e "./digikey[dev]"
-          # ruff is version-bounded to match the [dev] extras (#1701): the lint
-          # policy is pinned by ruff.toml's explicit `select`, and the version is
-          # pinned so a release cannot change rule behaviour under a green CI.
-          pip install cryptography "ruff>=0.16,<0.17" polars tabulate pyyaml pytest openai httpx
+      # Installs from the committed uv.lock rather than resolving fresh (#1715).
+      # The hand-listed `cryptography ruff polars tabulate pyyaml pytest openai
+      # httpx` are all declared dependencies of workspace members, so the lock
+      # supplies them pinned. ruff stays version-bounded through the [dev] extras
+      # (#1701) and is now additionally pinned by the lock (0.16.0), so neither a
+      # release nor a resolution change can move the lint policy under a green CI.
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
 
       - name: CI path filters in sync (ci.yml ⇄ ci_paths.yaml)
-        run: python scripts/generate_ci_path_filters.py --check
+        run: uv run --frozen --no-sync python scripts/generate_ci_path_filters.py --check
 
       - name: Validate model routing (config only)
-        run: python scripts/validate_model_routing.py --routing
+        run: uv run --frozen --no-sync python scripts/validate_model_routing.py --routing
 
       - name: Ruff (all src + tests)
         run: |
-          python -m ruff check \
+          uv run --frozen --no-sync ruff check \
             digibase/src digiclaw/src digigraph/src digiquant/src \
             digisearch/src digismith/src tests
 
       - name: Pytest (scripts + agents + integration hops + baseline)
         run: |
-          python -m pytest tests/scripts/ tests/agents/ tests/integration/test_request_id_hops.py tests/baseline/ -m "unit or baseline" -v --tb=short --ignore=tests/baseline/test_cli.py
+          uv run --frozen --no-sync pytest tests/scripts/ tests/agents/ tests/integration/test_request_id_hops.py tests/baseline/ -m "unit or baseline" -v --tb=short --ignore=tests/baseline/test_cli.py
 
       - name: Pytest (provider review unit tests)
-        run: python -m pytest tests/provider_review/ -m unit -v --tb=short
+        run: uv run --frozen --no-sync pytest tests/provider_review/ -m unit -v --tb=short
 
       - name: Protected-path bash guard (REM-127)
         env:
           DIGI_ALLOW_PROTECTED: "0"
-        run: bash tests/scripts/test_protected_path_bash_guard.sh
+        # uv run so the script's own `python3` calls resolve to the locked venv.
+        run: uv run --frozen --no-sync bash tests/scripts/test_protected_path_bash_guard.sh
 
       - name: Pandas boundary (REM-132)
+        # Not wrapped in `uv run`: this script is pure bash + ripgrep and calls no
+        # Python, so the venv would buy nothing.
+        #
+        # NOTE (#1715): this gate is currently a no-op on runners without
+        # ripgrep. Its scan ends in `|| true`, so a missing `rg` yields an empty
+        # violation list and prints "pandas boundary OK". Run locally with rg
+        # present it FAILS on digiquant/scripts/fetch_real_ohlcv.py:17
+        # (`import pandas as pd`), which is outside the allowlist and contrary to
+        # the Polars-only rule. Left as-is here because fixing it is a digiquant
+        # code change, not a dependency-management one — tracked separately.
         run: bash scripts/check_pandas_boundary.sh
 
   # ── Request Copilot PR review (Tier 1 primary reviewer) — REM-098 ───────────
