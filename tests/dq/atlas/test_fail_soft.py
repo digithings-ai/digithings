@@ -11,7 +11,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.atlas.phases.fail_soft import (
     NODE_FAILED_REASON,
     run_segment_fail_soft,

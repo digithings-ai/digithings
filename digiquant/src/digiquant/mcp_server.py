@@ -158,7 +158,7 @@ def create_mcp_server() -> Any:
         try:
             client = build_client(SupabaseConfig.from_env())
             result = get_price_technicals(client=client, ticker=ticker, lookback=lookback)
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller, never crash
+        except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return json.dumps(result, default=str)
 
@@ -175,7 +175,7 @@ def create_mcp_server() -> Any:
         try:
             client = build_client(SupabaseConfig.from_env())
             result = get_macro_series(client=client, series_ids=series_ids, lookback=lookback)
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller, never crash
+        except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return json.dumps(result, default=str)
 
@@ -217,7 +217,7 @@ def create_mcp_server() -> Any:
                 desc=desc,
                 limit=limit,
             )
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller, never crash
+        except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return json.dumps(result, default=str)
 
@@ -281,7 +281,7 @@ def create_mcp_server() -> Any:
                     "last": df["timestamp"][-1],
                     "path": str(path),
                 }
-            except Exception as exc:  # noqa: BLE001 — surface per-symbol, never crash
+            except Exception as exc:  # surface per-symbol, never crash
                 out[ticker] = {"error": f"{type(exc).__name__}: {exc}"}
         return json.dumps(out, indent=2, default=str)
 
@@ -324,7 +324,7 @@ def create_mcp_server() -> Any:
                 prefer_supabase=False,
                 allow_example=allow_example_calibrations,
             )
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller
+        except Exception as exc:  # surface as JSON to the caller
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
         settings = gt.load_settings()
@@ -381,7 +381,7 @@ def create_mcp_server() -> Any:
             return json.dumps(
                 compare(strategy, ohlcv_csv, tv_export_csv, start_date), indent=2, default=str
             )
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller
+        except Exception as exc:  # surface as JSON to the caller
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
     return mcp

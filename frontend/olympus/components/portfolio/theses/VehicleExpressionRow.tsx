@@ -25,7 +25,7 @@ function pnlTone(v: number | null | undefined): string {
 function EnvelopeChip({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-ink-mute">{label}</span>
+      <span className="text-xs uppercase tracking-wider text-ink-mute">{label}</span>
       <span className="font-mono text-sm tabular-nums text-ink">{value}</span>
     </div>
   );
@@ -91,7 +91,7 @@ export function VehicleExpressionRow({
             </span>
           </span>
         ) : (
-          <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-ink-mute">
+          <span className="shrink-0 text-xs uppercase tracking-wider text-ink-mute">
             not held
           </span>
         )}
@@ -138,7 +138,7 @@ export function VehicleExpressionRow({
         {/* Latest signed analyst call */}
         {latestDecision ? (
           <div className="flex flex-wrap items-center gap-3 text-sm text-ink-soft">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-ink-mute">
+            <span className="text-xs uppercase tracking-wider text-ink-mute">
               Latest call
             </span>
             {latestDecision.stance ? (

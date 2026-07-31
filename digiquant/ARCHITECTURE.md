@@ -728,7 +728,11 @@ DigiQuant ships two sibling sub-graphs that compose end-to-end on **one daily to
 - **Atlas** (`digiquant/src/digiquant/olympus/atlas/`) — research only. **A0–A4:**
   preflight → triage → phases 1–5 segments → phase6 consolidate → phase7 digest.
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
-  `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`.
+  `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
+  merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
+  appends) and fail-soft list indices (past-end set → append; OOR remove → no-op),
+  and a segment whose patch cannot merge falls back to full-mode regeneration
+  instead of carrying + degrading the run (#1641).
 - **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — thesis-aware portfolio loop.
   **H1–H9:** market thesis review → exploration → vehicle map → opportunity screener →
   unified asset analyst (×N) → PM↔analyst deliberation (×N) → PM direction memo →
@@ -851,6 +855,46 @@ flowchart LR
 | `portfolio_performance` | `nav_history` + `portfolio_metrics` | `load_portfolio_performance_snapshot` | latest NAV + metrics pointer | full NAV series via `nav_history` tool |
 | `decision_lessons` | `decision_log` | `fetch_recent_lessons` | PM `past_context` (bounded) | older lessons via `decision_log` query |
 | `phase7c_analysts` | in-run state (`phase_hermes.asset_analysts`) | — | today's fan-out only | prior day → `prior_analyst_by_ticker` |
+
+`portfolio_metrics` persists two distinct return horizons. `pnl_pct` is the daily
+portfolio return. `net_return_pct` is the simple return between the first and latest
+stored NAV observations; `benchmark_return_pct` uses the first and latest benchmark
+closes available inside that NAV date range; `relative_return_pct` is their arithmetic
+difference in percentage points. All metric writers use
+`digiquant.olympus.performance_returns.calculate_performance_returns`; frontend clients
+must read these fields when present. The Olympus Performance view fills only missing
+fields with the same deterministic first/latest calculation over live `nav_history` and
+the benchmark closes inside that exact NAV window, and labels the result as a live-history
+or mixed fallback. Rows in
+`position_attribution` retain their own stored calculation window and are not presented
+as inception-to-date contribution. Its cumulative contribution chart instead applies each
+position snapshot's prior weight to the next interval's price return and overlays the exact
+NAV-rebased portfolio return.
+
+#### Canonical market-thesis identity (#1615)
+
+`theses.topic_key` identifies one durable market opinion independently of its daily title,
+evidence, criteria, or confidence. H2 receives the full active thesis register and every
+proposal declares `action=create|update`. An update preserves the active row's `thesis_id`
+and `topic_key`; a create uses a topic absent from both the active register and the current
+H2 output. `validate_market_thesis_proposals` rejects ID/topic collisions before
+persistence, while migration 056's partial unique `(date, topic_key)` index prevents more
+than one nonterminal market thesis for a topic on a date. The migration also consolidates
+the legacy CTA and Advanced Materials duplicate clusters and rewires their relationships.
+Different wording or evidence is an update, never a new opinion. H2 creates start as
+`ACTIVE`; updates preserve H1's same-run lifecycle decision, falling back to the prior
+nonterminal status when H1 emitted no update. A `PAUSED` topic remains the same opinion and
+cannot be replaced with a new ID.
+
+#### Canonical instrument metadata (#1615)
+
+`instruments` is the security master for every ticker tracked by `positions` or
+`price_history`. Migration 055 backfills existing symbols and a `positions` trigger inserts
+a non-destructive placeholder for every newly booked ticker. The daily
+`digiquant prices fetch-quotes --instrument-metadata --supabase` job resolves Yahoo's best
+available long name plus instrument type, exchange, currency, country, sector, and industry;
+Olympus `sector_map` remains authoritative for the coarse `asset_class` and risk `category`.
+Provider failures never overwrite a resolved row.
 
 **Excluded from `latest_segments`:** `analyst/*` and `deliberation/*` keys — loaded
 separately so research nodes never pay the per-ticker decision-artifact token tax.

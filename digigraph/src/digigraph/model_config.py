@@ -27,9 +27,8 @@ import os
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-
 from digillm import get_provider_api_key_env, is_registered_provider
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from digigraph.llm_auth import get_byok_model_override, get_byok_override
 

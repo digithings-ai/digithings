@@ -37,6 +37,11 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from digiquant.olympus.performance_returns import (
+    PerformanceReturns,
+    calculate_performance_returns,
+)
+
 _POSITION_INSERT_SKIP = frozenset({"id", "created_at", "updated_at"})
 _METRIC_CLEAR = (
     "unrealized_pnl_pct",
@@ -60,7 +65,7 @@ try:
 except ImportError:
     pass
 
-from position_entry_from_events import patch_positions_entries_for_date
+from position_entry_from_events import patch_positions_entries_for_date  # noqa: E402
 
 
 def _sb():
@@ -142,6 +147,40 @@ def carry_forward_positions(sb, as_of: str) -> int:
 
 
 _MIN_HISTORY_ROWS = 20  # fewer rows → Sharpe / vol / max_dd / alpha are unreliable; write NULL
+_PERFORMANCE_BENCHMARK = "SPY"
+
+
+def _performance_returns_from_history(
+    sb, as_of: str, benchmark_ticker: str = _PERFORMANCE_BENCHMARK
+) -> PerformanceReturns:
+    """Calculate the persisted cumulative return fields through ``as_of``."""
+    nav_res = sb.table("nav_history").select("date,nav").lte("date", as_of).order("date").execute()
+    nav_rows = [
+        row
+        for row in (getattr(nav_res, "data", None) or [])
+        if row.get("date") and row.get("nav") is not None
+    ]
+    benchmark_closes: list[float] = []
+    if len(nav_rows) >= 2:
+        benchmark_res = (
+            sb.table("price_history")
+            .select("date,close")
+            .eq("ticker", benchmark_ticker)
+            .gte("date", str(nav_rows[0]["date"]))
+            .lte("date", str(nav_rows[-1]["date"]))
+            .order("date")
+            .execute()
+        )
+        benchmark_closes = [
+            float(row["close"])
+            for row in (getattr(benchmark_res, "data", None) or [])
+            if row.get("close") is not None
+        ]
+    return calculate_performance_returns(
+        nav_values=[float(row["nav"]) for row in nav_rows],
+        benchmark_closes=benchmark_closes,
+        benchmark_ticker=benchmark_ticker,
+    )
 
 
 def _sum_attribution_pnl(sb, as_of: str) -> Optional[float]:
@@ -176,22 +215,14 @@ def _nav_history_count(sb, as_of: str) -> int:
 
 def _risk_metrics_from_nav_history(sb, as_of: str) -> dict[str, float] | None:
     """Compute Sharpe, annualized vol %, and max drawdown % from nav_history through ``as_of``."""
-    res = (
-        sb.table("nav_history")
-        .select("date,nav")
-        .lte("date", as_of)
-        .order("date")
-        .execute()
-    )
+    res = sb.table("nav_history").select("date,nav").lte("date", as_of).order("date").execute()
     rows = getattr(res, "data", None) or []
     navs = [float(r["nav"]) for r in rows if r.get("nav") is not None]
     if len(navs) < _MIN_HISTORY_ROWS:
         return None
 
     returns = [
-        (navs[i] - navs[i - 1]) / navs[i - 1]
-        for i in range(1, len(navs))
-        if navs[i - 1] > 0
+        (navs[i] - navs[i - 1]) / navs[i - 1] for i in range(1, len(navs)) if navs[i - 1] > 0
     ]
     if len(returns) < 2:
         return None
@@ -221,8 +252,10 @@ def _risk_metrics_from_nav_history(sb, as_of: str) -> dict[str, float] | None:
 def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
     """Ensure one ``portfolio_metrics`` row per calendar day (dashboard continuity).
 
-    Skips if a ``tearsheet`` row already exists for ``as_of``. Otherwise upserts
-    with ``computed_from='refresh_script'`` (or ``'refresh_script_insufficient_history'``
+    If a ``tearsheet`` row already exists for ``as_of``, updates only its persisted
+    cumulative-return fields so migration-era rows are backfilled without replacing
+    tear-sheet risk metrics. Otherwise upserts with ``computed_from='refresh_script'``
+    (or ``'refresh_script_insufficient_history'``
     when nav_history has < 20 rows):
     - ``pnl_pct`` derived from SUM(position_attribution.contribution_pct) for
       non-CASH positions on ``as_of``; falls back to nav-based day return when no
@@ -238,7 +271,16 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
     """
     ex = sb.table("portfolio_metrics").select("computed_from").eq("date", as_of).limit(1).execute()
     if getattr(ex, "data", None) and ex.data[0].get("computed_from") == "tearsheet":
-        print(f"   portfolio_metrics {as_of}: skip (tearsheet row)")
+        performance_returns = _performance_returns_from_history(sb, as_of)
+        sb.table("portfolio_metrics").update(
+            {
+                "net_return_pct": performance_returns.net_return_pct,
+                "benchmark_return_pct": performance_returns.benchmark_return_pct,
+                "relative_return_pct": performance_returns.relative_return_pct,
+                "benchmark_ticker": performance_returns.benchmark_ticker,
+            }
+        ).eq("date", as_of).execute()
+        print(f"   portfolio_metrics {as_of}: backfilled returns (tearsheet row preserved)")
         return
 
     # pnl_pct: prefer attribution-derived sum (the real per-position return #814);
@@ -282,6 +324,7 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
     # 20-row gate is met. With less history, write NULL so the dashboard doesn't
     # display misleading zeros.
     risk_metrics = _risk_metrics_from_nav_history(sb, as_of)
+    performance_returns = _performance_returns_from_history(sb, as_of)
     has_sufficient_history = risk_metrics is not None
     sharpe = volatility = max_drawdown = None
     alpha = None
@@ -312,6 +355,10 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         "volatility": volatility,
         "max_drawdown": max_drawdown,
         "alpha": alpha,
+        "net_return_pct": performance_returns.net_return_pct,
+        "benchmark_return_pct": performance_returns.benchmark_return_pct,
+        "relative_return_pct": performance_returns.relative_return_pct,
+        "benchmark_ticker": performance_returns.benchmark_ticker,
         "invested_pct": round(total_invested, 4) if prow else None,
         "computed_from": computed_from,
         "as_of_date": as_of,

@@ -11,12 +11,15 @@ import os
 from dataclasses import dataclass
 from datetime import date, datetime
 from functools import lru_cache
-from typing import Any, Callable, Literal  # noqa: F401 — heterogeneous node-update dict shape
-
-from pydantic import BaseModel
+from typing import (  # score:allow untyped any — heterogeneous node-update dict shape
+    Any,
+    Callable,
+    Literal,
+)
 
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
+from pydantic import BaseModel
 
 from digiquant.olympus.atlas.phases.fail_soft import run_segment_fail_soft
 from digiquant.olympus.atlas.skills import load_skill, load_skill_edit
@@ -106,14 +109,14 @@ def _ingested_macro_stale(run_date: Any) -> bool:
         return True
     try:
         client = _atlas_data_client()
-    except Exception as exc:  # noqa: BLE001 — any client failure → paid fallback, never crash
+    except Exception as exc:  # any client failure → paid fallback, never crash
         logger.warning("macro freshness probe: client unavailable (%s); paid fallback", exc)
         return True
     try:
         from digiquant.olympus.atlas.supabase_io import query_macro_series_freshness
 
         latest = query_macro_series_freshness(client=client)
-    except Exception as exc:  # noqa: BLE001 — any probe failure → paid fallback
+    except Exception as exc:  # any probe failure → paid fallback
         logger.warning("macro freshness probe failed (%s); paid fallback", exc)
         return True
     if latest is None:
@@ -180,7 +183,7 @@ def build_grounding(
                 _atlas_data_client(), run_date=run_date, allowed_tables=data_tool_tables
             )
             tools = DATA_TOOLS
-        except Exception as exc:  # noqa: BLE001 — degrade to tool-less rather than crash the phase
+        except Exception as exc:  # degrade to tool-less rather than crash the phase
             logger.warning("data tools unavailable (%s); proceeding without them", exc)
             tools = None
             execute_tool = None
@@ -217,10 +220,11 @@ def build_grounding(
 
                 tools = list(tools) + research_defs
                 execute_tool = _combined_execute
-        except Exception as exc:  # noqa: BLE001 — degrade to tool-less rather than crash the phase
+        except Exception as exc:  # degrade to tool-less rather than crash the phase
             logger.warning("research tools unavailable (%s); proceeding without them", exc)
     if ai_portfolios:
         from digigraph.model_config import get_grounding_model
+
         from digiquant.olympus.atlas.data.ai_portfolios import fetch_ai_portfolio_grounding
 
         grounding = get_grounding_model(segment=segment or "ai-portfolios")
@@ -682,7 +686,9 @@ def _run_edit_segment(
     tools: list[dict[str, Any]] | None,
     execute_tool: Callable[[str, dict[str, Any]], str] | None,
     model: str | None,
-) -> tuple[SegmentSlot, list[PhaseError], DocumentPatch | None]:
+) -> tuple[SegmentSlot | None, list[PhaseError], DocumentPatch | None]:
+    """Run one segment in edit mode. A ``None`` slot means the patch merge failed and
+    the caller must fall back to full-mode regeneration (#1641)."""
     skill_text = load_skill_edit(spec.skill_slug)
     edit_inputs = _edit_phase_inputs(
         base_inputs=inputs,
@@ -728,19 +734,18 @@ def _run_edit_segment(
             schema_validator=lambda body: spec.output_model.model_validate(body),
         )
     except (MergeError, Exception) as exc:
+        # Fall back to FULL regeneration instead of carrying + failing the segment
+        # (#1641): a merge failure is a patch-shape defect, not evidence the segment
+        # can't be researched today. Mirrors the digest edit path's fallback. No
+        # PhaseError here — a successful full run must not leave the run degraded;
+        # the full path's own fail-soft covers a second failure.
         logger.warning(
-            "edit-mode merge failed for segment %r (%s: %s); carrying prior",
+            "edit-mode merge failed for segment %r (%s: %s); falling back to full generation",
             spec.segment_slug,
             type(exc).__name__,
             exc,
         )
-        carried = Carried(baseline_date=prior.date, reason="edit_merge_failed")
-        err = PhaseError(
-            phase=spec.phase_outputs_field,
-            node=spec.segment_slug,
-            message=f"edit merge failed: {exc}",
-        )
-        return SegmentSlot(payload=carried), [err], None
+        return None, [], None
 
     merged_body = dict(merge_result.materialized)
     merged_body.setdefault("segment", spec.segment_slug)
@@ -825,12 +830,17 @@ def build_segment_node(
                     execute_tool=execute_tool,
                     model=model,
                 )
-                update = write_adapter(spec, slot)
-                if delta is not None:
-                    update["document_deltas"] = {spec.segment_slug: delta.model_dump(mode="json")}
-                if errors:
-                    update["errors"] = errors
-                return update
+                if slot is not None:
+                    update = write_adapter(spec, slot)
+                    if delta is not None:
+                        update["document_deltas"] = {
+                            spec.segment_slug: delta.model_dump(mode="json")
+                        }
+                    if errors:
+                        update["errors"] = errors
+                    return update
+                # slot is None ⇒ patch merge failed (#1641) — regenerate from scratch
+                # via the full path below rather than carrying + degrading the run.
 
         skill_text = load_skill(spec.skill_slug)
 

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-
 import pytest
-
 from digiquant.olympus.atlas.skills import (
     MalformedFrontmatterError,
     SkillNotFoundError,

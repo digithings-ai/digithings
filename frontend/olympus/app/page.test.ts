@@ -50,6 +50,25 @@ function makeData(actions: Action[]): DashboardData {
 }
 
 describe('Today (Overview) page', () => {
+  it('uses the shared content-shaped loading state', () => {
+    useDashboardMock.mockReturnValue({ data: null, loading: true, error: null });
+    const html = renderToStaticMarkup(createElement(OverviewPage));
+    expect(html).toContain('aria-label="Loading page"');
+  });
+
+  it('uses the shared flat error state with one recovery action', () => {
+    useDashboardMock.mockReturnValue({
+      data: null,
+      loading: false,
+      error: 'Service unavailable',
+    });
+    const html = renderToStaticMarkup(createElement(OverviewPage));
+    expect(html).toContain('data-slot="empty-state"');
+    expect(html).toContain('Service unavailable');
+    expect(html).toContain('Try again');
+    expect(html).not.toContain('glass-card');
+  });
+
   it('leads with the read, demotes the move, and shows honest NAV + all bands', () => {
     useDashboardMock.mockReturnValue({
       data: makeData([{ ticker: 'NVDA', current_pct: 8, recommended_pct: 6, action: 'TRIM' }]),
@@ -83,5 +102,13 @@ describe('Today (Overview) page', () => {
     useDashboardMock.mockReturnValue({ data: makeData([]), loading: false, error: null });
     const html = renderToStaticMarkup(createElement(OverviewPage));
     expect(html).not.toContain('inset_0_0_140px');
+  });
+
+  it('renders the populated brief as a section inside the app shell main', () => {
+    useDashboardMock.mockReturnValue({ data: makeData([]), loading: false, error: null });
+    const html = renderToStaticMarkup(createElement(OverviewPage));
+    expect(html).toContain('data-testid="brief-workspace"');
+    expect(html).toContain('aria-label="Daily investment brief"');
+    expect(html).not.toContain('<main');
   });
 });

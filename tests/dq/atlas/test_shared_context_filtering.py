@@ -10,7 +10,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.atlas.phases._node_factory import _shared_context
 from digiquant.olympus.atlas.phases.phase1_altdata import _SPECS as ALT_SPECS
 from digiquant.olympus.atlas.phases.phase3_macro import _SPEC as MACRO_SPEC

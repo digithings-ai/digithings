@@ -2,6 +2,7 @@
 
 import { SectionTitle } from '@/components/ui';
 import { SleeveStackedChart } from '@/components/portfolio/sleeve-stacked-chart';
+import { SegmentedControl } from '@digithings/web';
 import type { SleeveStackMode } from '@/lib/portfolio-aggregates';
 
 export default function SleeveHistorySection(props: {
@@ -32,36 +33,19 @@ export default function SleeveHistorySection(props: {
   const enoughHistory = sleeveData.length >= 2;
 
   return (
-    <section className="space-y-4">
-      <div className="glass-card p-6 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <SectionTitle className="mb-0">Sleeves</SectionTitle>
-          <div className="flex rounded-lg border border-hair overflow-hidden text-xs">
-            <button
-              type="button"
-              onClick={() => setHistoryMode('ticker')}
-              className={`px-3 py-1.5 font-medium ${historyMode === 'ticker' ? 'bg-accent/15 text-accent' : 'text-ink-mute hover:bg-ink/[0.04]'}`}
-            >
-              Ticker
-            </button>
-            <button
-              type="button"
-              onClick={() => setHistoryMode('category')}
-              className={`px-3 py-1.5 font-medium border-l border-hair ${historyMode === 'category' ? 'bg-accent/15 text-accent' : 'text-ink-mute hover:bg-ink/[0.04]'}`}
-            >
-              Category
-            </button>
-            <button
-              type="button"
-              onClick={() => setHistoryMode('thesis')}
-              className={`px-3 py-1.5 font-medium border-l border-hair ${historyMode === 'thesis' ? 'bg-accent/15 text-accent' : 'text-ink-mute hover:bg-ink/[0.04]'}`}
-            >
-              Thesis
-            </button>
-          </div>
-        </div>
+    <section className="mt-10 border border-hair bg-surface p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SectionTitle className="mb-0">Sleeves</SectionTitle>
+        <SegmentedControl<SleeveStackMode>
+          options={['ticker', 'category', 'thesis']}
+          value={historyMode}
+          onChange={setHistoryMode}
+          dress="accent"
+          aria-label="Sleeve grouping mode"
+        />
+      </div>
         {showHistoryDateBanner ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs">
             <span className="text-ink-soft">
               <span className="text-ink-mute">Sleeve mix pinned to </span>
               <span className="font-mono text-ink">{dateParam}</span>
@@ -76,7 +60,7 @@ export default function SleeveHistorySection(props: {
           </div>
         ) : null}
         {enoughHistory ? (
-          <div className="h-[380px]" aria-label="Sleeve weights stacked over time">
+          <div className="mt-4 h-[380px]" aria-label="Sleeve weights stacked over time">
             <SleeveStackedChart
               data={sleeveData}
               keys={sleeveKeys}
@@ -86,11 +70,10 @@ export default function SleeveHistorySection(props: {
             />
           </div>
         ) : (
-          <p className="py-8 text-center text-sm text-ink-mute">
+          <p className="mt-4 py-8 text-center text-sm text-ink-mute">
             Sleeve history builds daily — one snapshot so far. The stacked weight chart appears once a second day is recorded.
           </p>
         )}
-      </div>
     </section>
   );
 }

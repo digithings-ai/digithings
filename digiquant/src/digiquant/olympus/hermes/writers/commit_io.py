@@ -8,7 +8,10 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
+
 from digiquant.olympus.atlas.decision_log import persist_pending
 from digiquant.olympus.atlas.state import AtlasResearchState, PublishedArtifact, RebalancePayload
 from digiquant.olympus.atlas.supabase_io import (
@@ -19,6 +22,7 @@ from digiquant.olympus.atlas.supabase_io import (
 )
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
+from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
 
 logger = logging.getLogger(__name__)
@@ -27,7 +31,6 @@ _SEED_NAV = 100.0
 _RISK_FIELDS_ENV = "OLYMPUS_POSITION_RISK_FIELDS"
 _ATR_STOP_MULT = 2.0
 _ATR_TARGET_MULT = 3.0
-_DEFAULT_HORIZON_DAYS = 21
 _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
 _MANIFEST_DOC_PREFIX = "commit-run/"
 
@@ -119,7 +122,7 @@ def _latest_values(
             .limit(len(tickers) * (lookback_days + 1))
             .execute()
         )
-    except Exception as exc:  # noqa: BLE001 — advisory fields must never block the book
+    except Exception as exc:  # advisory fields must never block the book
         logger.warning(
             "commit_io: %s.%s read failed (%s); risk fields degrade", table, value_col, exc
         )
@@ -151,12 +154,7 @@ def _enrich_positions(
     prior = {str(r.get("ticker")): r for r in prior_book if r.get("ticker")}
     closes = _latest_values(client, "price_history", "close", tickers, run_date)
     atr_pct = _latest_values(client, "price_technicals", "atr_pct", tickers, run_date)
-    horizon = preferences.get("holding_days")
-    horizon_days = (
-        int(horizon)
-        if isinstance(horizon, (int, float)) and not isinstance(horizon, bool) and horizon > 0
-        else _DEFAULT_HORIZON_DAYS
-    )
+    horizon_days = risk_horizon_days(preferences)
 
     for row in pos_rows:
         ticker = row.get("ticker")
@@ -236,7 +234,7 @@ def _canonical_thesis_ids(
             .execute()
         )
         rows = list(getattr(resp, "data", None) or [])
-    except Exception:  # noqa: BLE001 — thesis lookup must never block booking
+    except Exception:  # thesis lookup must never block booking
         rows = []
     # Latest-date row wins when multiple theses cover the same ticker.
     return {str(r["ticker"]): str(r["thesis_id"]) for r in rows if r.get("thesis_id")}
@@ -295,7 +293,7 @@ def book_portfolio(
                 debates=deliberation_summaries(state),
                 preferences=dict(state.config.preferences),
             )
-        except Exception as exc:  # noqa: BLE001 — advisory fields must never block the book
+        except Exception as exc:  # advisory fields must never block the book
             logger.warning(
                 "commit_io: position risk-field enrichment failed (%s); booking plain weights",
                 exc,
@@ -528,12 +526,52 @@ def gated_out_tickers(state: AtlasResearchState) -> set[str]:
     return excluded & held_tickers(state)
 
 
+def memo_addressed_tickers(state: AtlasResearchState) -> set[str]:
+    """Tickers the H7 PM memo's roster explicitly addressed (``long`` or ``flat``)."""
+    memo = state.phase_hermes.pm_direction_memo
+    if memo is None:
+        return set()
+    roster = memo.roster if hasattr(memo, "roster") else memo.get("roster", [])
+    addressed: set[str] = set()
+    for entry in roster:
+        ticker = entry.ticker if hasattr(entry, "ticker") else entry.get("ticker")
+        if isinstance(ticker, str) and ticker:
+            addressed.add(ticker.strip().upper())
+    return addressed
+
+
+def carried_held_tickers(state: AtlasResearchState) -> set[str]:
+    """HELD names carried at drifted weight instead of resized or dropped (#1030, #1649).
+
+    Two deliberate-carry classes share ONE set so H8's carry injection and H9's
+    coherence exemption can never diverge into a silent mismatch (the #1030
+    principle):
+
+    - **H4-gated** (:func:`gated_out_tickers`): quiet held names never dispatched
+      to H5 — "we own it and nothing material changed".
+    - **Memo-unaddressed** (#1649): held names the H7 PM memo's roster addresses
+      with neither ``long`` nor ``flat``. Memo coverage is LLM discipline — run
+      29936849103 (2026-07-22) omitted SEVEN held tickers and froze the commit.
+      Owning a position with no explicit PM instruction defaults to "hold at
+      drifted weight"; exiting requires an explicit ``flat``. Only applies when a
+      memo exists — with no memo at all the legacy sizing path owns the decision.
+
+    Intersected with :func:`held_tickers`: a non-held stray in the book still
+    fails closed downstream — this is a held-carry pass, never a blanket one.
+    """
+    held = held_tickers(state)
+    carried = gated_out_tickers(state)
+    if state.phase_hermes.pm_direction_memo is not None:
+        carried = carried | (held - memo_addressed_tickers(state))
+    return carried & held
+
+
 def coherence_errors(state: AtlasResearchState, weights: dict[str, float]) -> list[str]:
     """Fail-closed checks before terminal write."""
     errors: list[str] = []
     flats = flat_tickers_from_memo(state)
     analysts = set(analyst_payloads(state).keys())
-    gated = gated_out_tickers(state)
+    carried = carried_held_tickers(state)
 
     for ticker in held_tickers(state):
         if weights.get(ticker, 0.0) <= 0 and ticker not in flats:
@@ -542,11 +580,10 @@ def coherence_errors(state: AtlasResearchState, weights: dict[str, float]) -> li
     for ticker, weight in weights.items():
         if weight <= 0:
             continue
-        # A deliberately-gated held name (#1030) is a carry: no fresh analyst doc
-        # is expected. The exemption only suppresses errors for names H4 chose not
-        # to re-analyze; a genuine missing-doc gap (not in the excluded ledger)
-        # still fails closed.
-        if ticker not in analysts and ticker not in flats and ticker not in gated:
+        # A deliberately-carried held name (#1030 gated, #1649 memo-unaddressed) needs
+        # no fresh analyst doc. The exemption only covers held carries; a genuine
+        # missing-doc gap (a non-held stray with a positive weight) still fails closed.
+        if ticker not in analysts and ticker not in flats and ticker not in carried:
             errors.append(f"open position {ticker} lacks H5 analyst doc and is not flat in H7")
 
     return errors
@@ -559,6 +596,7 @@ def persist_decision_log(*, client: SupabaseClient, state: AtlasResearchState) -
 __all__ = [
     "BookedPortfolio",
     "book_portfolio",
+    "carried_held_tickers",
     "coherence_errors",
     "flat_tickers_from_memo",
     "held_tickers",

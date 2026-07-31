@@ -67,7 +67,7 @@ def _fetch_trading_days(client: Any, venue: str, *, page_size: int = 1000) -> pl
             if len(batch) < page_size:
                 break
             offset += page_size
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _logger.warning("trading_calendar query failed for venue %s: %s", venue, exc)
         return None
     if not all_dates:
@@ -93,6 +93,11 @@ def _fetch_trading_days(client: Any, venue: str, *, page_size: int = 1000) -> pl
 @click.option("--dry-run", is_flag=True, help="Synthesize fixture data; no network calls.")
 @click.option("--supabase", is_flag=True, help="Upsert OHLCV to price_history.")
 @click.option(
+    "--instrument-metadata",
+    is_flag=True,
+    help="Resolve official names and classifications, then upsert canonical instruments.",
+)
+@click.option(
     "--include-sectors",
     is_flag=True,
     help=(
@@ -108,6 +113,7 @@ def fetch_quotes_cmd(
     period: str,
     dry_run: bool,
     supabase: bool,
+    instrument_metadata: bool,
     include_sectors: bool,
 ) -> None:
     """Fetch latest OHLCV for watchlist tickers, update cache, optionally upsert."""
@@ -116,6 +122,7 @@ def fetch_quotes_cmd(
     from digiquant.data.prices.supabase_writer import (
         build_supabase_client,
         ohlcv_to_price_history_rows,
+        upsert_instruments,
         upsert_price_history,
     )
 
@@ -161,10 +168,24 @@ def fetch_quotes_cmd(
             try:
                 res = upsert_price_history(client, all_rows)
                 total = res.rows
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _logger.warning("price_history upsert failed (non-fatal): %s", exc, exc_info=True)
                 click.echo(f"  warning: upsert skipped — {exc}", err=True)
         click.echo(f"  upserted {total} rows into price_history")
+
+        if instrument_metadata:
+            from digiquant.data.prices.instrument_metadata import fetch_instrument_metadata
+
+            try:
+                metadata_result = fetch_instrument_metadata(universe)
+                if metadata_result.errors:
+                    failed = ", ".join(sorted(metadata_result.errors))
+                    click.echo(f"  warning: instrument metadata unresolved for {failed}", err=True)
+                result = upsert_instruments(client, list(metadata_result.records.values()))
+                click.echo(f"  upserted {result.rows} rows into instruments")
+            except Exception as exc:  # metadata enrichment never blocks prices
+                _logger.warning("instruments upsert failed (non-fatal): %s", exc, exc_info=True)
+                click.echo(f"  warning: instrument metadata skipped — {exc}", err=True)
 
 
 # ─── compute-technicals ──────────────────────────────────────────────────
@@ -191,13 +212,13 @@ def compute_technicals_cmd(
     tickers: str, cache_dir: Path, target_date: str | None, days: int, dry_run: bool, supabase: bool
 ) -> None:
     """Compute 35+ indicators from cached OHLCV and optionally upsert."""
+    from digiquant.data.prices._utils import filter_rows_by_trading_days
     from digiquant.data.prices.history_cache import load_cached
     from digiquant.data.prices.supabase_writer import (
         build_supabase_client,
         technicals_to_rows,
         upsert_price_technicals,
     )
-    from digiquant.data.prices._utils import filter_rows_by_trading_days
     from digiquant.data.prices.technicals import MIN_BARS, compute_indicators
     from digiquant.data.prices.ticker_venues import venue_for
 
@@ -300,7 +321,7 @@ def compute_technicals_cmd(
         try:
             res = upsert_price_technicals(client, all_rows)
             total = res.rows
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _logger.warning("price_technicals upsert failed (non-fatal): %s", exc, exc_info=True)
             click.echo(f"  warning: upsert skipped — {exc}", err=True)
     if supabase and not dry_run:
@@ -334,6 +355,8 @@ def fetch_macro_cmd(
     sources: str, manifest: Path, backfill: bool, dry_run: bool, supabase: bool
 ) -> None:
     """Ingest macro series (FRED + Yahoo FX) into macro_series_observations."""
+    import concurrent.futures
+
     from digiquant.data.prices.macro_ingest import (
         MacroManifest,
         dedupe_observation_rows,
@@ -344,8 +367,6 @@ def fetch_macro_cmd(
         build_supabase_client,
         upsert_macro_observations,
     )
-
-    import concurrent.futures
 
     sources_set = {s.strip() for s in sources.split(",") if s.strip()}
     mani = MacroManifest.from_yaml(manifest)

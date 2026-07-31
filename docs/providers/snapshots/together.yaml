@@ -1,16 +1,16 @@
 provider: together
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
-  available: true
-  tier_type: credits
-  credit_amount_usd: 25.00     # $25 free credits on signup, no CC required
+  available: false             # MATERIAL CHANGE 2026-07-19: free signup credit discontinued
+  tier_type: null
+  credit_amount_usd: null
   credit_expiry_days: null
-  privacy_warning: null
+  privacy_warning: "Together AI's own docs now state: 'Together AI does not currently offer free trials. Access to the Together platform requires a minimum $5 credit purchase.' A startup program still offers up to $50,000 in credits for qualifying applicants — not a standing free tier."
   signup_required: true
-  cc_required: false
-  models: []                   # all paid models accessible via credits
+  cc_required: true            # payment method required upfront; fully prepaid billing model
+  models: []                   # no free-tier models; all access requires a paid $5+ prepaid balance
   rate_limits:
     rpm: null
     rpd: null
@@ -113,4 +113,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "Free tier changed: $25 signup credits, no CC required (was CC-required). DeepSeek-V3-0324 (V3.1) at $0.60/$1.70 is now the current flagship — cheaper and newer than the original V3 ($1.25/$1.25). Added DeepSeek V4 Pro ($2.10/$4.40, 1M ctx) and Qwen 3.6 Plus ($0.50/$3.00). Fully prepaid billing model. No key configured yet."
+notes: "MATERIAL CHANGE 2026-07-19: the $25 no-CC signup credit recorded in the prior snapshot is GONE — Together's own billing docs (docs.together.ai/docs/billing-credits) now state there are no free trials and a minimum $5 prepaid purchase with a payment method is required for any access. Multiple third-party aggregators still cite stale $25/$50/$100 figures; the $25 credit was reportedly retired around mid-2025. This flips free_tier.available from true to false — Together should be moved out of any 'free tier' recommendation list in DigiThings docs. Startup program (up to $50,000 in credits for qualifying applicants) remains active but is not a standing free tier. Pricing note: DeepSeek V4 Pro figures vary by source ($2.10/$4.40 here vs. $1.74/$3.48 cited elsewhere, possibly a cached-vs-standard mixup) — could not get a clean read from the JS-rendered official pricing page this cycle, retained as-is pending a direct recheck. Qwen3.6-Plus $0.50/$3.00 reconfirmed unchanged. DeepSeek-V3-0324 naming may have been superseded industry-wide by V3.1/V3.2 (seen on SambaNova too) — not confirmed for Together specifically. No key configured yet; no probe run (method: skipped)."

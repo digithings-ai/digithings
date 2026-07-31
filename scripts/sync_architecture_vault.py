@@ -32,7 +32,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any  # noqa: ANN401 — frontmatter/row values are arbitrary YAML/JSON
+from typing import Any  # score:allow untyped any — frontmatter/row values are arbitrary YAML/JSON
 
 from digivault import Vault, split_frontmatter
 
@@ -86,7 +86,7 @@ def build_rows(vault_dir: str) -> list[dict[str, Any]]:
 
 def _connector():  # type: ignore[no-untyped-def]
     """Build a digibase SupabaseConnector, preferring the ADR-0022 CORE_* names."""
-    from digibase.connectors.supabase import (  # noqa: PLC0415 (deferred: optional extra)
+    from digibase.connectors.supabase import (  # (deferred: optional extra)
         SupabaseConnector,
         SupabaseNotConfiguredError,
     )

@@ -10,7 +10,7 @@ import json
 import logging
 import re
 from datetime import date
-from typing import Any, Literal  # noqa: F401 — used for JSON-derived dict shape
+from typing import Any, Literal  # score:allow untyped any — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
@@ -571,7 +571,7 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
                     output_model=DocumentPatch,
                     phase_slug="master-digest",
                 )
-            except Exception as exc:  # noqa: BLE001 — observable degrade, not a swallow
+            except Exception as exc:  # observable degrade, not a swallow
                 return _carry_prior_digest_or_raise(state, document_key, exc)
             if not isinstance(patch, DocumentPatch):
                 msg = f"digest edit expected DocumentPatch, got {type(patch).__name__}"
@@ -599,7 +599,7 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
             output_model=DigestSnapshot,
             phase_slug="master-digest",
         )
-    except Exception as exc:  # noqa: BLE001 — observable degrade, not a swallow
+    except Exception as exc:  # observable degrade, not a swallow
         return _carry_prior_digest_or_raise(state, document_key, exc)
     return {"phase7_digest": _finalize_digest(state, result.model_dump(mode="json"))}
 

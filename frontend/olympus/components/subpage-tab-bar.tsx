@@ -11,9 +11,7 @@ import {
 } from 'react';
 import { usePathname } from 'next/navigation';
 import { TabStrip } from '@digithings/web';
-
-/** Max width and horizontal padding for portfolio, research, overview, and related pages. */
-export const SUBPAGE_MAX = 'max-w-[1600px] mx-auto w-full px-4 md:px-6';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 
 export function subpageTabButtonClass(active: boolean): string {
   return `flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:py-2 sm:text-sm shrink-0 ${
@@ -86,7 +84,8 @@ function mapStripItems(children: ReactNode): StripItem[] | null {
  * dress — sliding accent indicator, roving tabindex, aria-selected) whenever
  * the children map onto it (see mapStripItems); below md the SAME chips render
  * as a horizontally-scrollable row (no menu — #1570) with the active chip
- * auto-centered. Public API is unchanged — consumers keep passing
+ * kept fully visible using the smallest necessary scroll. Public API is
+ * unchanged — consumers keep passing
  * `subpageTabButtonClass`-styled buttons or links.
  */
 export function SubpageStickyTabBar({
@@ -113,7 +112,7 @@ export function SubpageStickyTabBar({
     if (typeof window === 'undefined') return;
     if (!window.matchMedia('(max-width: 767px)').matches) return;
     const active = containerRef.current?.querySelector<HTMLElement>('[class*="border-accent"]');
-    active?.scrollIntoView({ inline: 'center', block: 'nearest' });
+    active?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }, [pathname, activeIndex]);
 
   // TabStrip owns the desktop buttons, so re-dispatch activation to the

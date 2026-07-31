@@ -22,6 +22,7 @@ import type {
   PipelineTickerDoc,
   PositionPriceChartData,
   AnalystPayload,
+  AnalystEvidence,
   TickerCoverage,
   TickerDossier,
 } from './types';
@@ -41,7 +42,7 @@ import {
 } from './snapshot-context';
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
 import { getDocLibraryTier } from './library-doc-tier';
-import { inferPortfolioCategory } from './portfolio-categories';
+import { buildInstrumentLookup, resolveInstrumentIdentity } from './instrument-metadata';
 import { normalizePositionEvent } from './position-events';
 import { thesisIdEquals } from './thesis-id';
 import type { ThesisVehicleRow } from './thesis-story';
@@ -61,6 +62,7 @@ export function lastRunAt(snapshot: Pick<TableRow<'daily_snapshots'>, 'created_a
 export function mapThesisRow(t: TableRow<'theses'>): Thesis {
   return {
     id: t.thesis_id,
+    topic_key: t.topic_key ?? null,
     name: t.name,
     vehicle: t.vehicle,
     invalidation: t.invalidation,
@@ -447,6 +449,22 @@ export function parseAnalystPayload(raw: unknown): AnalystPayload | null {
     price_targets: priceTargets,
     expectations: s(o.expectations),
     fingerprint_news_hash: s(o.fingerprint_news_hash),
+    evidence: parseAnalystEvidence(o.evidence),
+  };
+}
+
+/** Coerce the #1672 evidence block; null when absent (legacy docs) or malformed. */
+function parseAnalystEvidence(raw: unknown): AnalystEvidence | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const n = (v: unknown): number | null => (typeof v === 'number' ? v : null);
+  return {
+    independent_confirming_signals: n(o.independent_confirming_signals),
+    contradicting_signals: n(o.contradicting_signals),
+    catalyst_within_horizon:
+      typeof o.catalyst_within_horizon === 'boolean' ? o.catalyst_within_horizon : null,
+    trend_alignment: typeof o.trend_alignment === 'string' ? o.trend_alignment : '',
+    evidence_quality: typeof o.evidence_quality === 'string' ? o.evidence_quality : '',
   };
 }
 
@@ -663,12 +681,13 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   })();
 
   const [
-    snapshotRes, positionsRes, thesesRes, navRes,
+    snapshotRes, positionsRes, instrumentsRes, thesesRes, navRes,
     benchRes, metricsRes, docsRes, deltaDocsRes, changelogDocsRes, tickerViewRes, snapshotRunTypesRes,
     pmRebalanceRes,
   ] = await Promise.all([
     supabase.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).single(),
     supabase.from('positions').select('*').order('date', { ascending: false }).limit(1000),
+    supabase.from('instruments').select('*').order('ticker', { ascending: true }),
     supabase.from('theses').select('*').order('date', { ascending: false }).limit(50),
     supabase.from('nav_history').select('*').order('date', { ascending: true }),
     supabase
@@ -714,6 +733,9 @@ export async function getFullDashboardData(): Promise<DashboardData> {
 
   if (pmRebalanceRes.error) {
     console.warn('Supabase pm-rebalance prefetch:', pmRebalanceRes.error);
+  }
+  if (instrumentsRes.error) {
+    console.warn('Supabase instruments query (apply migration 055 if missing):', instrumentsRes.error);
   }
   if (deltaDocsRes.error) {
     console.error('Supabase delta-request documents query:', deltaDocsRes.error);
@@ -763,6 +785,8 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       ? (rawSnapshotJson as DigestSnapshot)
       : null;
   const allPositions: TableRow<'positions'>[] = positionsRes.data ?? [];
+  const allInstruments: TableRow<'instruments'>[] = instrumentsRes.data ?? [];
+  const instrumentByTicker = buildInstrumentLookup(allInstruments);
   const allTheses: TableRow<'theses'>[] = thesesRes.data ?? [];
   const navHistory: TableRow<'nav_history'>[] = navRes.data ?? [];
   const benchRows: Pick<TableRow<'price_history'>, 'date' | 'ticker' | 'close'>[] =
@@ -1075,10 +1099,13 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     return null;
   }
 
-  const positions: Position[] = effectiveCurrentPositions.map((p) => ({
+  const positions: Position[] = effectiveCurrentPositions.map((p) => {
+    const identity = resolveInstrumentIdentity(p, instrumentByTicker);
+    return {
     // Prices: prefer explicit position fields; else derive from price_history
     ticker: p.ticker,
-    name: p.name ?? p.ticker,
+    name: identity.name,
+    instrument: identity.instrument,
     type: 'LONG' as const,
     weight_actual: Number(p.weight_pct ?? 0),
     weight_target: targetWeightByTicker.has(p.ticker) ? targetWeightByTicker.get(p.ticker)! : null,
@@ -1091,7 +1118,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     entry_date: p.entry_date ?? null,
     rationale: p.rationale ?? '',
     thesis_ids: p.thesis_id ? [p.thesis_id] : [],
-    category: inferPortfolioCategory(p.ticker, p.category),
+    category: identity.category,
     pm_notes: p.pm_notes ?? '',
     stats: {},
     unrealized_pnl_pct: (() => {
@@ -1131,7 +1158,8 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     target_pct_gain: p.target_pct_gain ?? null,
     horizon_days: p.horizon_days ?? null,
     sector_bucket: p.sector_bucket ?? null,
-  }));
+    };
+  });
 
   // Rebalance actions — prefer pm-rebalance.actions (carry per-ticker rationale
   // from the PM LLM) over the locally derived action labels when pm-rebalance is
@@ -1264,16 +1292,19 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     },
     positions,
     portfolio_management: {
-      current_positions: effectiveCurrentPositions.map((p) => ({
-        ticker: p.ticker,
-        name: p.name ?? p.ticker,
-        category: inferPortfolioCategory(p.ticker, p.category),
-        weight_pct: Number(p.weight_pct ?? 0),
-        thesis_ids: p.thesis_id ? [p.thesis_id] : [],
-        entry_date: p.entry_date ?? null,
-        entry_price_usd: resolvedEntryPrice(p),
-        notes: p.pm_notes ?? '',
-      })),
+      current_positions: effectiveCurrentPositions.map((p) => {
+        const identity = resolveInstrumentIdentity(p, instrumentByTicker);
+        return {
+          ticker: p.ticker,
+          name: identity.name,
+          category: identity.category,
+          weight_pct: Number(p.weight_pct ?? 0),
+          thesis_ids: p.thesis_id ? [p.thesis_id] : [],
+          entry_date: p.entry_date ?? null,
+          entry_price_usd: resolvedEntryPrice(p),
+          notes: p.pm_notes ?? '',
+        };
+      }),
       proposed_positions: proposedPositions.map((p) => ({
         ticker: p.ticker,
         weight_pct: p.weight_pct,
@@ -1287,7 +1318,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       date: p.date,
       ticker: p.ticker,
       weight_pct: Number(p.weight_pct ?? 0),
-      category: inferPortfolioCategory(p.ticker, p.category),
+      category: resolveInstrumentIdentity(p, instrumentByTicker).category,
       thesis_id: p.thesis_id ?? null,
     })),
     position_events,

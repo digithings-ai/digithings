@@ -6,9 +6,11 @@ import json
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous digest JSON
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous digest JSON
+)
 
 logger = logging.getLogger(__name__)
 
@@ -426,7 +428,7 @@ def load_all_markdowns(root: Path) -> list[dict]:
             file_date = (
                 date_match.group(1)
                 if date_match
-                else datetime.fromtimestamp(os.path.getmtime(md_file)).strftime("%Y-%m-%d")
+                else datetime.fromtimestamp(os.path.getmtime(md_file), tz=UTC).strftime("%Y-%m-%d")
             )
             docs.append(
                 {

@@ -38,7 +38,7 @@ export default function PipelineDaySelector({ dates, value, onChange }: Pipeline
 
   return (
     <div className="flex items-center justify-between gap-3 lg:justify-end">
-      <span className="font-mono text-[0.6rem] font-medium uppercase tracking-[0.1em] text-ink-mute">
+      <span className="font-mono text-xs font-medium uppercase text-ink-mute">
         Run date
       </span>
       <Pager

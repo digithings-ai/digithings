@@ -25,7 +25,13 @@ vi.mock('@/components/pipeline/useCanvasCamera', async (importOriginal) => {
   };
 });
 
-import PipelineCanvas, { focusRectForTarget, movePipelineStage } from './PipelineCanvas';
+import PipelineCanvas, {
+  buildPipelineWalkthrough,
+  findPipelineWalkthroughIndex,
+  focusRectForTarget,
+  mobileWalkthroughScrollTarget,
+  movePipelineWalkthrough,
+} from './PipelineCanvas';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import type { PipelineStageId } from '@/lib/pipeline-topology';
 import type { LaidOutNode } from '@/lib/pipeline-layout';
@@ -58,23 +64,41 @@ describe('PipelineCanvas', () => {
     expect(html).toContain('Sectors');
   });
 
-  it('contains toolbar buttons: Fit, Expand all, Collapse', () => {
+  it('renders every canvas control as an accessible icon in one toolbar', () => {
     const html = renderToStaticMarkup(
       createElement(PipelineCanvas, { day: emptyDay, onNodeActivate: () => {} }),
     );
-    expect(html).toContain('Fit');
-    expect(html).toContain('Expand all');
-    expect(html).toContain('Collapse');
+
+    expect(html).toContain('aria-label="Pipeline controls"');
+    expect(html).toContain('aria-label="Fit pipeline to view"');
+    expect(html).toContain('aria-label="Expand all"');
+    expect(html).toContain('aria-label="Collapse all"');
+    expect(html).not.toContain('aria-label="Pipeline view controls"');
+    expect(html).not.toContain('aria-label="Pipeline walkthrough"');
   });
 
-  it('keeps previous and next stage walkthrough controls in the canvas toolbar', () => {
+  it('walks every stage and subsection from the canvas toolbar', () => {
     const html = renderToStaticMarkup(
       createElement(PipelineCanvas, { day: emptyDay, onNodeActivate: () => {} }),
     );
 
-    expect(html).toContain('Previous pipeline stage');
-    expect(html).toContain('Next pipeline stage');
-    expect(html).toContain(`1 of 6`);
+    expect(html).toContain('Previous pipeline section');
+    expect(html).toContain('Next pipeline section');
+    expect(html).toContain('1 of 23');
+    expect(buildPipelineWalkthrough(emptyDay).map((node) => node.label)).toContain('Risk sizing');
+  });
+
+  it('adds real fan-out artifacts to the walkthrough without placeholder stops', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: { 'alt-data': 1 },
+      fanoutKeys: { 'alt-data': ['alt-onchain-positioning'] },
+      presentKeys: new Set(['alt-onchain-positioning']),
+    };
+    const nodes = buildPipelineWalkthrough(day);
+
+    expect(nodes).toHaveLength(24);
+    expect(nodes.find((node) => node.documentKey === 'alt-onchain-positioning')).toBeDefined();
+    expect(nodes.some((node) => node.label === 'Alt-data 2')).toBe(false);
   });
 
   it('clips the camera viewport without creating a competing native scroll container', () => {
@@ -86,22 +110,67 @@ describe('PipelineCanvas', () => {
     expect(html).not.toContain('select-none overflow-hidden cursor-grab');
   });
 
-  it('renders a touch-first section navigator with the first stage expanded', () => {
+  it('renders a touch-first navigator over the complete walkthrough', () => {
     const html = renderToStaticMarkup(
       createElement(PipelineCanvas, { day: emptyDay, onNodeActivate: () => {} }),
     );
 
     expect(html).toContain('Previous pipeline section');
     expect(html).toContain('Next pipeline section');
-    expect(html).toContain('Stage 1 of 6');
+    expect(html).toContain('1 of 23');
     expect(html).toContain('Preflight / market data');
     expect(html).toContain('md:hidden');
+    expect(html).toContain('fixed inset-x-0 bottom-0');
+    expect(html).toContain('pb-[calc(7rem+env(safe-area-inset-bottom))]');
+    expect(html).not.toContain('Run artifact');
+    expect(html).not.toContain('About this step');
+    expect(html).not.toContain('>Open<');
+    expect(html).not.toContain('>About<');
   });
 
-  it('clamps mobile section navigation at both ends', () => {
-    expect(movePipelineStage(0, -1)).toBe(0);
-    expect(movePipelineStage(0, 1)).toBe(1);
-    expect(movePipelineStage(5, 1)).toBe(5);
+  it('clamps full walkthrough keyboard navigation at both ends', () => {
+    expect(movePipelineWalkthrough(0, -1, 23)).toBe(0);
+    expect(movePipelineWalkthrough(0, 1, 23)).toBe(1);
+    expect(movePipelineWalkthrough(22, 1, 23)).toBe(22);
+  });
+
+  it('synchronizes a selected node or artifact with the walkthrough', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: { 'alt-data': 1 },
+      fanoutKeys: { 'alt-data': ['alt-onchain-positioning'] },
+      presentKeys: new Set(['alt-onchain-positioning']),
+    };
+    const nodes = buildPipelineWalkthrough(day);
+
+    expect(findPipelineWalkthroughIndex(nodes, 'research:sectors')).toBeGreaterThan(0);
+    expect(findPipelineWalkthroughIndex(nodes, 'alt-onchain-positioning')).toBeGreaterThan(0);
+    expect(findPipelineWalkthroughIndex(nodes, 'missing')).toBe(-1);
+  });
+
+  it('scrolls stage stops to the section start and node stops to their row', () => {
+    const stage = {
+      id: 'research',
+      kind: 'stage',
+      stageId: 'research',
+      label: 'Research',
+      x: 0,
+      y: 0,
+      width: 160,
+      height: 48,
+    } satisfies LaidOutNode;
+    const node = {
+      id: 'research:sectors',
+      kind: 'substep',
+      stageId: 'research',
+      label: 'Sectors',
+      x: 0,
+      y: 0,
+      width: 160,
+      height: 48,
+    } satisfies LaidOutNode;
+
+    expect(mobileWalkthroughScrollTarget([node], stage)).toBe('start');
+    expect(mobileWalkthroughScrollTarget([node], node)).toBe(node);
   });
 });
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.data.prices.fed_probabilities import (
     fed_distribution_from_ladder,
     kalshi_markets_to_rows,
@@ -197,6 +196,7 @@ class TestDistribution:
 class TestReader:
     def test_get_fed_rate_probabilities_nearest_meeting(self) -> None:
         from digiquant.olympus.atlas.data.queries import get_fed_rate_probabilities
+
         from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
         client = FakeSupabaseClient(
@@ -234,6 +234,7 @@ class TestReader:
 
     def test_get_fed_rate_probabilities_empty_when_no_rows(self) -> None:
         from digiquant.olympus.atlas.data.queries import get_fed_rate_probabilities
+
         from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
         client = FakeSupabaseClient(canned_reads={"macro_series_observations": []})

@@ -5,9 +5,11 @@
  * wrapper below stay app-local data wiring.
  */
 
-import type { TearsheetSeriesPoint, TearsheetTrade } from '@digithings/web';
-import type { DecisionTrackRecord } from '@/lib/decision-track-record';
-import type { TableRow } from '@/lib/database.types';
+import type {
+  ContributionReturnPoint,
+  TearsheetSeriesPoint,
+  TearsheetTrade,
+} from '@digithings/web';
 
 export interface TearsheetBreakdown {
   trades: number;
@@ -53,34 +55,39 @@ export interface TearsheetData {
   notes: string[];
 }
 
-/**
- * Olympus-specific wrapper around the ported TearsheetData. The live-NAV track reuses
- * TearsheetData (engine='live', strategy='Olympus', symbol='AI-INTELLIGENCE'); the
- * decision track-record track uses DecisionTrackRecord (TS port of atlas/backtest.py).
- * Each track degrades independently against its own empty-state predicate.
- */
-export interface DecisionLogRow {
-  run_date: string;
+export interface PerformanceHoldingRow {
   ticker: string;
-  stance: string;
-  conviction: number | null;
-  status: string;
-  alpha: number | null;
-  holding_days: number | null;
+  category: string | null;
+  weightPct: number | null;
+  unrealizedReturnPct: number | null;
+  realizedReturnPct: number | null;
+  attributionDate: string | null;
 }
 
+export interface PortfolioReturnPoint {
+  date: string;
+  nav: number;
+  /** Return rebased to 0% at the first stored NAV observation. */
+  returnPct: number;
+}
+
+export type PerformanceReturnsSource = 'persisted' | 'derived' | 'mixed' | 'unavailable';
+
 export interface OlympusTearsheet {
-  live: TearsheetData; // engine='live', strategy='Olympus', symbol='AI-INTELLIGENCE'
-  navPoints: number; // nav_history row count (gates the live track)
-  decision: DecisionTrackRecord; // from lib/decision-track-record (resolved decisions only)
-  decisionRows: DecisionLogRow[]; // resolved + pending, for the small decision-log table
-  nResolved: number;
-  nPending: number;
-  attribution: TableRow<'position_attribution'>[]; // latest date (absorbed from System)
-  attributionDate: string | null;
-  inceptionDate: string | null; // first nav_history.date
-  latestNav: number | null;
-  generatedAt: string; // ISO now
+  currentNav: number | null;
+  netReturnPct: number | null;
+  benchmarkReturnPct: number | null;
+  relativeReturnPct: number | null;
+  benchmarkTicker: string;
+  returnsSource: PerformanceReturnsSource;
+  metricsAsOf: string | null;
+  inceptionDate: string | null;
+  holdingsAsOf: string | null;
+  generatedAt: string | null;
+  navSeries: PortfolioReturnPoint[];
+  contributionSeries: ContributionReturnPoint[];
+  currentHoldings: PerformanceHoldingRow[];
+  historicalHoldings: PerformanceHoldingRow[];
 }
 
 /** Compact card summary in `strategies/index.json` (the library manifest). */

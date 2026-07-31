@@ -11,7 +11,7 @@ access_requirements:
   - email
   - phone_verification
 data_privacy_on_free: trains_on_data
-verified_at: 2026-05-03
+verified_at: 2026-07-19
 source_urls:
   - https://docs.mistral.ai/deployment/cloud/laplateforme/
   - https://mistral.ai/technology/#pricing
@@ -32,12 +32,9 @@ Mistral's "Experimental" free tier gives access to their full model lineup inclu
 
 | Model ID | Context Window | Max Output | Notes |
 |---|---|---|---|
-| `mistral-large-latest` | 131,072 | 131,072 | Flagship; strong reasoning |
-| `mistral-small-latest` | 32,768 | 32,768 | Fast, cheap; good for extraction |
-| `codestral-latest` | 262,144 | 262,144 | Best coding model; 256k ctx |
-| `pixtral-large-latest` | 131,072 | 131,072 | Vision multimodal |
-| `ministral-8b-latest` | 131,072 | 131,072 | Small fast model |
-| `mistral-embed` | 8,192 | — | Embeddings |
+| `mistral-large-latest` | 131,072 | 131,072 | active |
+| `mistral-small-latest` | 32,768 | 32,768 | active |
+| `codestral-latest` | 262,144 | 262,144 | active |
 
 > Codestral commercial use requires a paid Codestral plan even when accessed via Experimental tier — check ToS.
 
@@ -119,3 +116,4 @@ Enable billing in console. Same API key. Large ~$2/$6 per 1M in/out; Small ~$0.2
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-07-19 | Automated snapshot sync | provider-review scan |

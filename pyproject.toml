@@ -1,0 +1,34 @@
+[project]
+name = "digithings-workspace"
+version = "0.0.0"
+description = "Workspace root — not published. Hosts the uv workspace and its single lockfile."
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+  "digibase",
+  "digiclaw",
+  "digifetch",
+  "digigraph",
+  "digikey",
+  "digillm",
+  "digiquant",
+  "digisearch",
+  "digiskills",
+  "digismith",
+  "digivault",
+]
+
+[tool.uv.sources]
+digibase = { workspace = true }
+digiclaw = { workspace = true }
+digifetch = { workspace = true }
+digigraph = { workspace = true }
+digikey = { workspace = true }
+digillm = { workspace = true }
+digiquant = { workspace = true }
+digisearch = { workspace = true }
+digiskills = { workspace = true }
+digismith = { workspace = true }
+digivault = { workspace = true }

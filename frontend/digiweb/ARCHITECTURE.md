@@ -48,7 +48,7 @@ print-grade SVG tearsheet grammar (`.ts-*`) promoted from
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
-| `finance-tearsheet` | CandlestickChart (trade entry/exit markers + hover cards), TimeSeries, SignedBars, TradeReturnChart (linear/log/symlog scales; one shared normalized `ViewWindow` synced across charts; `LOOKBACK_OPTIONS`/`viewWindowForPreset`/`matchLookbackPreset`), ReturnsMatrix (3 metrics × 3 periods — THE matrix grammar), KpiStrip/Kpi, TradeLogTable/DirectionPill (ReactNode cells, open-row state), TearsheetCard(+Kpis/Kpi) anchor dress, LiveBadge, `runTearsheetPrint`/`PRINT_FULL_VIEW` (flushSync + `window.print` PDF pipeline), format/tone helpers, `TEARSHEET_DEMO` | `./styles/finance-tearsheet.css` (self-layering; the ENTIRE `@media print` grammar lives here, unlayered — the family's differentiator) |
+| `finance-tearsheet` | CandlestickChart (trade entry/exit markers + hover cards), TimeSeries, SignedBars, TradeReturnChart, ContributionReturnChart (signed cumulative contribution bars + exact portfolio-return line; linear/log/symlog scales; one shared normalized `ViewWindow` synced across interactive series charts; `LOOKBACK_OPTIONS`/`viewWindowForPreset`/`matchLookbackPreset`), ReturnsMatrix (3 metrics × 3 periods — THE matrix grammar), KpiStrip/Kpi, TradeLogTable/DirectionPill (ReactNode cells, open-row state), TearsheetCard(+Kpis/Kpi) anchor dress, LiveBadge, `runTearsheetPrint`/`PRINT_FULL_VIEW` (flushSync + `window.print` PDF pipeline), format/tone helpers, `TEARSHEET_DEMO` | `./styles/finance-tearsheet.css` (self-layering; the ENTIRE `@media print` grammar lives here, unlayered — the family's differentiator) |
 
 Engine ruling: canvas families are for screen-only dashboards; any surface
 with a PDF export composes finance-tearsheet — see [CHARTS.md](CHARTS.md).
@@ -72,6 +72,14 @@ the dashboard sub-nav chip row, which may flex-wrap; the ink follows across
 rows), takes `ReactNode` labels, and accepts `linkPanels={false}` to omit
 `aria-controls` when the consumer owns no panel ids (wrapper-adaption cases
 like olympus's subpage tab bar).
+
+Page-level dashboard composition is specified by
+`reference/components/dashboard-workspace-reference.tsx` on the Finance page.
+Its `dw-*` grammar is deliberately reference-only: a command band establishes
+one primary state, compact metrics add context, and a flat hairline ledger owns
+the working detail. Product apps adapt that composition around their own data
+and interactions rather than introducing generic cards or duplicating existing
+controls such as `TabStrip`, `SegmentedControl`, `Sheet`, and `EmptyState`.
 
 Since the canon migration (#1399, 2026-07): apps declare **no local `@theme`
 block** — `web-theme.css` is the one bridge (its `inline` semantics keep scoped

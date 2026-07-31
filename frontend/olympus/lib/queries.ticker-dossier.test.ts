@@ -35,6 +35,7 @@ describe('parseAnalystPayload (#1562 PR2)', () => {
       bear_case: 'Guidance cut.',
       price_targets: { base_case: 302, bear_case: 280, bull_case: 320 },
       expectations: 'Chop into earnings.',
+      evidence: null,
       fingerprint_news_hash: 'abc123',
     });
   });

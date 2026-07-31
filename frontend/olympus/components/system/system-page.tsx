@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Skeleton, SkeletonGroup } from '@digithings/web';
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { EmptyState } from '@/components/observability/shared';
 import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
 import type { AtlasRunDiagnostics } from '@/lib/types';

@@ -10,7 +10,7 @@ free_tier_type: credit-based
 access_requirements:
   - email
 data_privacy_on_free: regional_law
-verified_at: 2026-05-03
+verified_at: 2026-07-19
 source_urls:
   - https://api-docs.deepseek.com/quick_start/pricing
   - https://platform.deepseek.com/api-docs
@@ -30,8 +30,10 @@ DeepSeek offers the strongest math/quantitative reasoning of any free-accessible
 
 | Model ID | Context Window | Max Output | Notes |
 |---|---|---|---|
-| `deepseek-chat` | 65,536 | 8,192 | DeepSeek V3; strong reasoning + coding |
-| `deepseek-reasoner` | 65,536 | 8,192 | DeepSeek R1; chain-of-thought reasoning |
+| `deepseek-v4-flash` | 1,000,000 | 384,000 | active |
+| `deepseek-v4-pro` | 1,000,000 | 384,000 | active |
+| `deepseek-chat` | 65,536 | 8,192 | ⚠️ Error code: 402 - {'error': {'message': 'Insufficient Balance', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}} |
+| `deepseek-reasoner` | 65,536 | 8,192 | **deprecated** |
 
 > DeepSeek V4 / R2 variants may be available by the time you read this — check platform.deepseek.com for the current model list.
 
@@ -118,3 +120,4 @@ After grant: $0.27/$1.10 per 1M in/out (V3/chat); $0.55/$2.19 (R1/reasoner). Off
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-07-19 | Automated snapshot sync | provider-review scan |

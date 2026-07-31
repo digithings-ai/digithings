@@ -2,14 +2,14 @@
 
 import { TrendingDown, TrendingUp } from 'lucide-react';
 import type { AnalystPayload } from '@/lib/types';
-import { AsOfBadge } from '@/components/shared/as-of-badge';
 
 /**
- * Renders the full H5 analyst payload (#1562 PR2) — every section the blueprint
- * names, keyed off the exact backend field names (`digiquant/.../hermes/models/
- * analyst.py:AnalystPayload`). `AnalystDocumentView` (components/library) now
- * converges on this same renderer (#1562 PR4) so the dossier route and the
- * library path render analyst payloads identically.
+ * Renders the full H5 analyst payload (#1562 PR2, #1615 flat editorial workspace)
+ * — every section the blueprint names, keyed off the exact backend field names
+ * (`digiquant/.../hermes/models/analyst.py:AnalystPayload`).
+ *
+ * Flat hairline-led editorial workspace (#1615): thesis/current call prominent,
+ * bull/bear and tailwind/headwind evidence in deliberate columns. NOT a glass-card.
  *
  * Canon: `--up`/`--down` are reserved for realized P&L / signed conviction
  * values (SignedConvictionBadge, pnlColor) — tailwinds/headwinds are qualitative
@@ -19,7 +19,7 @@ import { AsOfBadge } from '@/components/shared/as-of-badge';
 
 function Kicker({ children }: { children: string }) {
   return (
-    <h3 className="font-mono text-[11px] font-semibold uppercase tracking-wider text-ink-mute">
+    <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
       {children}
     </h3>
   );
@@ -74,7 +74,7 @@ function PriceTargets({ targets }: { targets: Record<string, number | string> | 
       <div className="flex flex-wrap gap-x-6 gap-y-2">
         {entries.map(([label, value]) => (
           <div key={label} className="flex flex-col gap-0.5">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-ink-mute">
+            <span className="text-xs uppercase tracking-wider text-ink-mute">
               {label.replace(/_/g, ' ')}
             </span>
             <span className="font-mono text-sm tabular-nums text-ink">
@@ -110,6 +110,17 @@ function References({ sources }: { sources: string[] }) {
   );
 }
 
+function EvidenceCell({ label, value }: { label: string; value: number | string | null }) {
+  return (
+    <div className="bg-term-bg px-3 py-2.5">
+      <dt className="font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+        {label}
+      </dt>
+      <dd className="mt-1 text-sm text-ink capitalize">{value ?? '—'}</dd>
+    </div>
+  );
+}
+
 export default function AnalystDossierCard({
   payload,
   asOf,
@@ -118,36 +129,99 @@ export default function AnalystDossierCard({
   asOf: string | null;
 }) {
   return (
-    <div className="glass-card space-y-6 p-5 md:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-lg text-ink">Analyst view</h2>
-        <AsOfBadge date={asOf} />
-      </div>
-
-      <ProseSection title="Thesis" text={payload.thesis} />
-
-      {(payload.bull_case.trim() || payload.bear_case.trim()) && (
-        <div className="grid gap-4 md:grid-cols-2">
-          <ProseSection title="Bull case" text={payload.bull_case} />
-          <ProseSection title="Bear case" text={payload.bear_case} />
+    <div className="analyst-workspace space-y-0 bg-surface/[0.82] py-6">
+      <div className="space-y-6 px-5 md:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hair pb-4">
+          <h2 className="font-display text-lg text-ink">Research argument</h2>
+          {asOf && (
+            <span className="font-mono text-[0.65rem] uppercase tracking-wider text-accent">
+              {asOf}
+            </span>
+          )}
         </div>
-      )}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <WindList title="Tailwinds" items={payload.tailwinds} icon={TrendingUp} />
-        <WindList title="Headwinds" items={payload.headwinds} icon={TrendingDown} />
+        {/* Thesis — prominent main argument */}
+        <ProseSection title="Thesis" text={payload.thesis} />
+
+        {/* Evidence assessment (#1672) — the itemized counts conviction is DERIVED from;
+            rendered so the derivation is auditable at a glance. Legacy docs: null → hidden. */}
+        {payload.evidence && (
+          <div className="border-t border-hair pt-6">
+            <h3 className="mb-3 font-mono text-[0.6rem] font-bold uppercase tracking-[0.12em] text-ink-mute">
+              Evidence assessment
+            </h3>
+            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-hair bg-hair md:grid-cols-5">
+              <EvidenceCell
+                label="Confirming"
+                value={payload.evidence.independent_confirming_signals}
+              />
+              <EvidenceCell label="Contradicting" value={payload.evidence.contradicting_signals} />
+              <EvidenceCell
+                label="Catalyst"
+                value={
+                  payload.evidence.catalyst_within_horizon == null
+                    ? null
+                    : payload.evidence.catalyst_within_horizon
+                      ? 'dated'
+                      : 'none'
+                }
+              />
+              <EvidenceCell label="Trend" value={payload.evidence.trend_alignment || null} />
+              <EvidenceCell label="Quality" value={payload.evidence.evidence_quality || null} />
+            </dl>
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-mute/70">
+              Conviction is computed from these counts — high requires ≥4 confirming families,
+              ≤1 contradiction, a dated catalyst, and high-quality evidence.
+            </p>
+          </div>
+        )}
+
+        {/* Bull/Bear cases — deliberate 2-column grid */}
+        {(payload.bull_case.trim() || payload.bear_case.trim()) && (
+          <div className="grid gap-6 border-t border-hair pt-6 md:grid-cols-2">
+            <ProseSection title="Bull case" text={payload.bull_case} />
+            <ProseSection title="Bear case" text={payload.bear_case} />
+          </div>
+        )}
+
+        {/* Tailwinds/Headwinds — deliberate 2-column grid, neutral styling */}
+        <div className="grid gap-6 border-t border-hair pt-6 md:grid-cols-2">
+          <WindList title="Tailwinds" items={payload.tailwinds} icon={TrendingUp} />
+          <WindList title="Headwinds" items={payload.headwinds} icon={TrendingDown} />
+        </div>
+
+        {/* Risks — full-width */}
+        {payload.risks.trim() && (
+          <div className="border-t border-hair pt-6">
+            <ProseSection title="Risks" text={payload.risks} />
+          </div>
+        )}
+
+        {/* Technicals / Expectations / Fundamentals — 3-column grid */}
+        {(payload.technicals.trim() ||
+          payload.expectations.trim() ||
+          payload.fundamentals.trim()) && (
+          <div className="grid gap-6 border-t border-hair pt-6 md:grid-cols-3">
+            <ProseSection title="Technicals" text={payload.technicals} />
+            <ProseSection title="Expectations" text={payload.expectations} />
+            <ProseSection title="Fundamentals" text={payload.fundamentals} />
+          </div>
+        )}
+
+        {/* Price targets — inline metrics */}
+        {payload.price_targets && (
+          <div className="border-t border-hair pt-6">
+            <PriceTargets targets={payload.price_targets} />
+          </div>
+        )}
+
+        {/* References — footer */}
+        {payload.sources.length > 0 && (
+          <div className="border-t border-hair pt-6">
+            <References sources={payload.sources} />
+          </div>
+        )}
       </div>
-
-      <ProseSection title="Risks" text={payload.risks} />
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <ProseSection title="Technicals" text={payload.technicals} />
-        <ProseSection title="Expectations" text={payload.expectations} />
-        <ProseSection title="Fundamentals" text={payload.fundamentals} />
-      </div>
-
-      <PriceTargets targets={payload.price_targets} />
-      <References sources={payload.sources} />
     </div>
   );
 }

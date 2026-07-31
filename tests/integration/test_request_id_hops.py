@@ -14,14 +14,12 @@ import asyncio
 
 import httpx
 import pytest
-from fastapi import FastAPI, Request
-
 from digibase.http import (
     current_request_id,
     install_request_id_middleware,
     outbound_service_headers,
 )
-
+from fastapi import FastAPI, Request
 
 pytestmark = pytest.mark.unit
 

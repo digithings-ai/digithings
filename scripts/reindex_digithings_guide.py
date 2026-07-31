@@ -85,7 +85,7 @@ def dry_run(index_name: str, paths: list[Path]) -> int:
             chunks = chunker.chunk(doc)
             total_chunks += len(chunks)
             print(f"  {path.relative_to(REPO_ROOT)}: {len(chunks)} chunks")
-        except Exception as exc:  # noqa: BLE001 — dry-run surfaces parser errors
+        except Exception as exc:  # dry-run surfaces parser errors
             skipped.append((path, str(exc)))
 
     print(f"\nindex={index_name} files={len(paths)} chunks={total_chunks} skipped={len(skipped)}")

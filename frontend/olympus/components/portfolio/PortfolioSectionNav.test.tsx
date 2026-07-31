@@ -7,9 +7,9 @@ vi.mock('next/link', () => ({ default: (p: { children?: unknown }) => p.children
 import PortfolioSectionNav from './PortfolioSectionNav';
 
 describe('PortfolioSectionNav', () => {
-  it('shows the three book sections', () => {
+  it('shows the four book sections', () => {
     const html = renderToStaticMarkup(createElement(PortfolioSectionNav, { active: 'holdings' as const }));
-    for (const label of ['Holdings', 'Theses', 'Performance']) {
+    for (const label of ['Holdings', 'Theses', 'Performance', 'Attribution']) {
       expect(html).toContain(label);
     }
   });

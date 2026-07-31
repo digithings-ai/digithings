@@ -174,7 +174,7 @@ _PING_MESSAGE = [
 def ping_providers(by_model: dict[str, list[str]]) -> bool:
     sys.path.insert(0, str(ROOT / "digigraph" / "src"))
     sys.path.insert(0, str(ROOT / "digillm" / "src"))
-    from digigraph.llm_client import completion_text  # noqa: PLC0415
+    from digigraph.llm_client import completion_text
 
     print(f"{'=' * 70}")
     print("  Provider connectivity check")

@@ -29,8 +29,12 @@ function makeRow(
 }
 
 /** Render the component to a static HTML string for text-content assertions. */
-function render(attribution: AttributionRow[], date: string | null = '2026-06-17'): string {
-  return renderToStaticMarkup(createElement(AttributionTab, { attribution, date }));
+function render(
+  attribution: AttributionRow[],
+  date: string | null = '2026-06-17',
+  embedded = false,
+): string {
+  return renderToStaticMarkup(createElement(AttributionTab, { attribution, date, embedded }));
 }
 
 describe('AttributionTab — empty state', () => {
@@ -140,5 +144,10 @@ describe('AttributionTab — stat tile labels', () => {
   it('renders Active return label', () => {
     const html = render(rows);
     expect(html).toContain('Active return');
+  });
+
+  it('uses flat sections when embedded without changing the default card presentation', () => {
+    expect(render(rows)).toContain('glass-card');
+    expect(render(rows, '2026-06-17', true)).not.toContain('glass-card');
   });
 });

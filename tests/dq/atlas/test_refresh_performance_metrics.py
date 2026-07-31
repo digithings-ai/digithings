@@ -163,6 +163,32 @@ class TestUpsertPortfolioMetricsDaily:
         row = sb.store["portfolio_metrics"][0]
         assert row["pnl_pct"] == pytest.approx(0.60, abs=1e-4)
 
+    def test_persists_cumulative_portfolio_and_benchmark_returns(self) -> None:
+        sb = _fake_with(
+            {
+                "portfolio_metrics": [],
+                "position_attribution": [],
+                "positions": [],
+                "nav_history": [
+                    {"date": "2026-06-10", "nav": 100.0},
+                    {"date": "2026-06-11", "nav": 105.0},
+                    {"date": "2026-06-12", "nav": 110.0},
+                ],
+                "price_history": [
+                    {"date": "2026-06-10", "ticker": "SPY", "close": 400.0},
+                    {"date": "2026-06-12", "ticker": "SPY", "close": 420.0},
+                ],
+            }
+        )
+
+        upsert_portfolio_metrics_daily(sb, "2026-06-12")
+
+        row = sb.store["portfolio_metrics"][0]
+        assert row["net_return_pct"] == pytest.approx(10.0)
+        assert row["benchmark_return_pct"] == pytest.approx(5.0)
+        assert row["relative_return_pct"] == pytest.approx(5.0)
+        assert row["benchmark_ticker"] == "SPY"
+
     def test_pnl_pct_falls_back_to_nav_day_return_when_no_attribution(self) -> None:
         # No attribution rows → fall back to day-over-day nav return (#814).
         # nav_prev=100.0, nav=100.6 → (100.6 - 100.0) / 100.0 * 100 = +0.6%.
@@ -306,19 +332,36 @@ class TestUpsertPortfolioMetricsDaily:
         assert row["max_drawdown"] != -0.05
         assert row["alpha"] == 0.02
 
-    def test_skips_tearsheet_row(self) -> None:
-        # If a 'tearsheet' row exists for the date, must skip (no write).
-        sb = _fake_with(
-            {
-                "portfolio_metrics": [{"date": "2026-06-12", "computed_from": "tearsheet"}],
-                "position_attribution": [],
-                "nav_history": [],
-                "positions": [],
-            }
+    def test_backfills_returns_without_replacing_tearsheet_metrics(self) -> None:
+        existing = {
+            "date": "2026-06-12",
+            "computed_from": "tearsheet",
+            "sharpe": 1.25,
+        }
+        sb = FakeSupabaseClient(
+            store={"portfolio_metrics": [existing]},
+            canned_reads={
+                "portfolio_metrics": [existing],
+                "nav_history": [
+                    {"date": "2026-06-10", "nav": 100.0},
+                    {"date": "2026-06-12", "nav": 110.0},
+                ],
+                "price_history": [
+                    {"date": "2026-06-10", "ticker": "SPY", "close": 400.0},
+                    {"date": "2026-06-12", "ticker": "SPY", "close": 420.0},
+                ],
+            },
         )
+
         upsert_portfolio_metrics_daily(sb, "2026-06-12")
-        # store should have no NEW rows written (the canned_reads row is the tearsheet one)
-        assert len(sb.store.get("portfolio_metrics", [])) == 0
+
+        row = sb.store["portfolio_metrics"][0]
+        assert len(sb.store["portfolio_metrics"]) == 1
+        assert row["computed_from"] == "tearsheet"
+        assert row["sharpe"] == 1.25
+        assert row["net_return_pct"] == pytest.approx(10.0)
+        assert row["benchmark_return_pct"] == pytest.approx(5.0)
+        assert row["relative_return_pct"] == pytest.approx(5.0)
 
 
 # ---------------------------------------------------------------------------

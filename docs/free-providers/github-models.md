@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - github_account
 data_privacy_on_free: unknown
-verified_at: 2026-05-03
+verified_at: 2026-07-19
 source_urls:
   - https://docs.github.com/en/github-models/about-github-models
   - https://docs.github.com/en/github-models/prototyping-with-ai-models
@@ -29,16 +29,12 @@ GitHub Models provides free access to GPT-5, Claude (subset), Llama, Mistral, an
 
 ## Free-Tier Models (selection — full list at github.com/marketplace/models)
 
-| Model ID | Context Window | Notes |
-|---|---|---|
-| `gpt-4o` | 128,000 | GPT-4o |
-| `gpt-4o-mini` | 128,000 | GPT-4o Mini |
-| `gpt-4.1` | 1,047,576 | GPT-4.1 (if available on free) |
-| `meta-llama/Llama-3.3-70B-Instruct` | 131,072 | Llama 3.3 70B |
-| `mistral-large-2411` | 131,072 | Mistral Large |
-| `AI21-Jamba-1.5-Large` | 262,144 | Jamba 256k context |
-| `Phi-4` | 16,384 | Microsoft Phi-4 |
-| `DeepSeek-R1` | 163,840 | DeepSeek R1 (verify availability) |
+| Model ID | Context Window | Max Output | Notes |
+|---|---|---|---|
+| `gpt-4o-mini` | 128,000 | 16,384 | ⚠️ Error code: 401 - {'error': {'code': 'unauthorized', 'message': 'The `models` permission is required to access this endpoint', 'details': 'The `models` permission is required to access this endpoint'}} |
+| `gpt-4o` | 128,000 | 16,384 | **deprecated** |
+| `meta-llama/Llama-3.3-70B-Instruct` | 131,072 | 4,096 | **deprecated** |
+| `mistral-large-2411` | 131,072 | 4,096 | **deprecated** |
 
 > Context windows are model native values; **effective context in playground may be capped**. API access uses full context.
 
@@ -112,3 +108,4 @@ Graduate to Azure AI Foundry (same models, production SLA, full rate limits). Pr
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-07-19 | Automated snapshot sync | provider-review scan |

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDashboard } from '@/lib/dashboard-context';
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import type { PortfolioSectionId } from '@/components/portfolio/PortfolioSectionNav';
 import { getDocLibraryTier } from '@/lib/library-doc-tier';
@@ -31,9 +31,7 @@ import {
 } from '@/lib/portfolio-url-state';
 import { normalizeThesisId } from '@/lib/thesis-id';
 import AllocationsTab from './tabs/AllocationsTab';
-import PerformanceTab from './tabs/PerformanceTab';
 import ThesesTab from './tabs/ThesesTab';
-import DecisionQuality from './DecisionQuality';
 import PageSkeleton from '@/components/page-skeleton';
 
 export default function PortfolioShellInner() {
@@ -205,7 +203,7 @@ export default function PortfolioShellInner() {
     <div className="flex min-h-full flex-col">
       <PortfolioSectionNav active={sectionActive} />
 
-      <div className={`${SUBPAGE_MAX} flex-1 space-y-6 py-4 md:py-5`}>
+      <div className={`${SUBPAGE_MAX} flex min-h-0 flex-1 flex-col space-y-6 py-4 md:py-5`}>
         {tab === 'holdings' && (
           <AllocationsTab
             lastUpdated={lastUpdated}
@@ -236,13 +234,6 @@ export default function PortfolioShellInner() {
             decisions={decisions}
             thesisVehicleRows={thesisVehicleRows}
           />
-        )}
-
-        {tab === 'performance' && (
-          <div className="space-y-10">
-            <PerformanceTab />
-            <DecisionQuality />
-          </div>
         )}
       </div>
     </div>

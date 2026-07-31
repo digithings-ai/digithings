@@ -4,9 +4,11 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { logStorageFailure } from "@/lib/storage-debug";
+import { EMBED_FREE_TURN_LIMIT, EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 
-export const EMBED_FREE_TURN_LIMIT = 3;
+export { EMBED_FREE_TURN_LIMIT, EMBED_TRIAL_TURN_LIMIT };
 const STORAGE_PREFIX = "digichat_embed_turns:";
+const TRIAL_UNLOCK_STORAGE_PREFIX = "digichat_embed_trial_unlocked:";
 
 /**
  * Resolve the host-origin key this embed is running under.
@@ -61,6 +63,38 @@ export function writeTurns(host: string, value: number): void {
     localStorage.setItem(storageKey(host), String(Math.max(0, value)));
   } catch (err) {
     logStorageFailure("writeTurns", err);
+  }
+}
+
+function trialUnlockStorageKey(host: string): string {
+  return `${TRIAL_UNLOCK_STORAGE_PREFIX}${host}`;
+}
+
+/**
+ * Persisted trial-form unlock flag (localStorage, per host origin) — mirrors
+ * readTurns/writeTurns above. Without this, `trialUnlocked` would live only
+ * in React state while the turn counter it overrides is persisted: after any
+ * reload a registered visitor's counter still reads >= limit but the unlock
+ * that raised the limit is gone, permanently re-gating them (see page.tsx).
+ */
+export function readTrialUnlocked(host: string): boolean {
+  try {
+    return localStorage.getItem(trialUnlockStorageKey(host)) === "1";
+  } catch (err) {
+    logStorageFailure("readTrialUnlocked", err);
+    return false;
+  }
+}
+
+export function writeTrialUnlocked(host: string, value: boolean): void {
+  try {
+    if (value) {
+      localStorage.setItem(trialUnlockStorageKey(host), "1");
+    } else {
+      localStorage.removeItem(trialUnlockStorageKey(host));
+    }
+  } catch (err) {
+    logStorageFailure("writeTrialUnlocked", err);
   }
 }
 

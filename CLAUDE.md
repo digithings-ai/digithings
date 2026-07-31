@@ -52,6 +52,26 @@ app builds, the digithings deploy build-check. (See #1310.)
 - New external service dependency or network exposure change
 - Novel architecture decision not covered by any existing `ARCHITECTURE.md`
 
+## Dependency version bounds
+
+**Tools whose output gates CI carry an upper bound; runtime libraries do not.**
+
+A new `ruff` turned ~981 lint findings red across an unchanged codebase, then
+started reformatting Markdown; `mcp` 2.0 removed a module two servers import.
+Three CI breakages, one cause: an unpinned tool changing behaviour under a green
+build (#1701, #1705, #1711). So `ruff`, `mypy`, `pytest` and `pytest-cov` are
+bounded to their current major, as is `mcp`.
+
+Runtime dependencies are deliberately **left unbounded**. `digibase`, `digillm`,
+`digifetch`, `digiskills` and `digivault` are installable libraries, and an upper
+bound in a library propagates to every consumer and causes resolution conflicts —
+capping `pydantic<3` in ten places would create more breakage than it prevents.
+Cap a runtime dep only when there is a *known* incompatibility, and say so in a
+comment next to it (see the `mcp` extras).
+
+When a bound blocks an upgrade, raise it deliberately in its own PR with the
+resulting fixes reviewed — the same rule the `ruff.toml` rule selection follows.
+
 ## Core commands
 
 ```bash

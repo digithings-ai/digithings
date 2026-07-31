@@ -6,16 +6,12 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Any  # noqa: F401 — used for fake-completion dict shape
+from typing import Any  # score:allow untyped any — used for fake-completion dict shape
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.graph.pipeline_builder import build_pipeline
-
 from digiquant.olympus.atlas import diagnostics
-from digiquant.olympus.atlas.skills import load_skill
-from digiquant.olympus.edit_mode import DocumentPatch, PatchOp, merge_document_patch
 from digiquant.olympus.atlas.phases.phase6_consolidate import build_phase6
 from digiquant.olympus.atlas.phases.phase7_synthesis import (
     _DIGEST_MODEL_CONTEXT_TOKENS,
@@ -30,9 +26,7 @@ from digiquant.olympus.atlas.phases.phase7_synthesis import (
     _slim_segment_body,
     build_phase7,
 )
-from digiquant.olympus.hermes.models.analyst import AnalystPayload
-from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_asset_analyst
-from digiquant.olympus.hermes.phases.phase7d_pm import RebalanceDecision, build_phase7d
+from digiquant.olympus.atlas.skills import load_skill
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
@@ -42,6 +36,10 @@ from digiquant.olympus.atlas.state import (
     SegmentPayload,
     SegmentSlot,
 )
+from digiquant.olympus.edit_mode import DocumentPatch, PatchOp, merge_document_patch
+from digiquant.olympus.hermes.models.analyst import AnalystPayload
+from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_asset_analyst
+from digiquant.olympus.hermes.phases.phase7d_pm import RebalanceDecision, build_phase7d
 
 
 def _seed_state_through_phase5() -> AtlasResearchState:

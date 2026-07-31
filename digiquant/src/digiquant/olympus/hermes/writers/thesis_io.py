@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from datetime import date
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
+
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.models.thesis import (
     MarketThesisExplorationOutput,
+    ThesisProposal,
     ThesisReviewOutput,
     ThesisStatusUpdate,
     ThesisVehicleMapOutput,
@@ -81,6 +86,7 @@ def upsert_thesis_row(
     *,
     run_date: date,
     thesis_id: str,
+    topic_key: str | None = None,
     name: str,
     status: str,
     vehicle: str | None = None,
@@ -100,6 +106,8 @@ def upsert_thesis_row(
         "name": name,
         "status": normalize_thesis_status(status),
     }
+    if topic_key is not None:
+        row["topic_key"] = topic_key
     if vehicle is not None:
         row["vehicle"] = vehicle
     if invalidation is not None:
@@ -150,7 +158,7 @@ def resolve_primary_market_thesis(
             .order("date", desc=True)
             .execute()
         )
-    except Exception as exc:  # noqa: BLE001 — linkage is enrichment; never block the graph
+    except Exception as exc:  # linkage is enrichment; never block the graph
         logger.warning("thesis_vehicles lookup failed for %s (%s)", ticker, exc)
         return None
     rows = list(getattr(resp, "data", None) or [])
@@ -198,7 +206,7 @@ def upsert_thesis_vehicles(
                 row, on_conflict="date,thesis_id,ticker"
             ).execute()
             written += 1
-        except Exception as exc:  # noqa: BLE001 — enrichment must not block graph
+        except Exception as exc:  # enrichment must not block graph
             logger.warning("thesis_vehicles upsert failed for %s/%s (%s)", thesis_id, ticker, exc)
             continue
         # Best-effort re-link of any vehicle-{ticker} row that ALREADY exists for
@@ -209,7 +217,7 @@ def upsert_thesis_vehicles(
             client.table("theses").update({"linked_market_thesis_id": thesis_id}).eq(
                 "date", date_str
             ).eq("thesis_id", f"vehicle-{ticker.lower()}").execute()
-        except Exception as exc:  # noqa: BLE001 — enrichment must not block graph
+        except Exception as exc:  # enrichment must not block graph
             logger.warning(
                 "thesis link update failed for vehicle-%s → %s (%s)", ticker, thesis_id, exc
             )
@@ -235,6 +243,7 @@ def persist_thesis_review(
             client,
             run_date=run_date,
             thesis_id=update.thesis_id,
+            topic_key=prior_row.get("topic_key"),
             name=name,
             status=update.new_status,
             vehicle=prior_row.get("vehicle"),
@@ -251,11 +260,89 @@ def persist_thesis_review(
     return count
 
 
+def validate_market_thesis_proposals(
+    proposals: list[ThesisProposal],
+    active_theses: list[dict[str, Any]],
+) -> tuple[list[ThesisProposal], list[str]]:
+    """Keep only proposals that preserve one canonical active thesis per topic."""
+    active_market = [
+        row for row in active_theses if str(row.get("thesis_kind") or "market").lower() == "market"
+    ]
+    active_by_id = {
+        str(row.get("thesis_id") or "").strip(): row
+        for row in active_market
+        if str(row.get("thesis_id") or "").strip()
+    }
+    active_ids_by_topic: dict[str, list[str]] = {}
+    for thesis_id, row in active_by_id.items():
+        topic_key = str(row.get("topic_key") or "").strip()
+        if topic_key:
+            active_ids_by_topic.setdefault(topic_key, []).append(thesis_id)
+    accepted: list[ThesisProposal] = []
+    errors: list[str] = []
+    proposed_id_by_topic: dict[str, str] = {}
+    proposed_ids: set[str] = set()
+
+    for proposal in proposals:
+        if proposal.thesis_id in proposed_ids:
+            errors.append(f"{proposal.thesis_id}: thesis_id is already proposed in this run")
+            continue
+
+        prior_proposal_id = proposed_id_by_topic.get(proposal.topic_key)
+        if prior_proposal_id is not None:
+            errors.append(
+                f"{proposal.thesis_id}: topic '{proposal.topic_key}' is already proposed "
+                f"in this run by '{prior_proposal_id}'"
+            )
+            continue
+
+        active_ids = sorted(active_ids_by_topic.get(proposal.topic_key, []))
+        if len(active_ids) > 1:
+            errors.append(
+                f"{proposal.thesis_id}: topic '{proposal.topic_key}' has multiple active "
+                f"theses {active_ids}; consolidate the register before writing"
+            )
+            continue
+        active_id = active_ids[0] if active_ids else None
+        if proposal.action == "create":
+            if active_id is not None:
+                errors.append(
+                    f"{proposal.thesis_id}: topic '{proposal.topic_key}' already belongs to "
+                    f"active thesis '{active_id}'; update that thesis instead"
+                )
+                continue
+            if proposal.thesis_id in active_by_id:
+                errors.append(
+                    f"{proposal.thesis_id}: thesis_id already exists; use action='update'"
+                )
+                continue
+        else:
+            active_row = active_by_id.get(proposal.thesis_id)
+            if active_row is None:
+                errors.append(
+                    f"{proposal.thesis_id}: action='update' does not reference an active thesis"
+                )
+                continue
+            active_topic = str(active_row.get("topic_key") or "").strip()
+            if active_topic and active_topic != proposal.topic_key:
+                errors.append(
+                    f"{proposal.thesis_id}: topic_key must remain '{active_topic}' when updating"
+                )
+                continue
+
+        accepted.append(proposal)
+        proposed_ids.add(proposal.thesis_id)
+        proposed_id_by_topic[proposal.topic_key] = proposal.thesis_id
+
+    return accepted, errors
+
+
 def persist_market_thesis_exploration(
     client: SupabaseClient,
     *,
     run_date: date,
     exploration: MarketThesisExplorationOutput,
+    status_by_id: Mapping[str, str] | None = None,
 ) -> int:
     """Insert/refresh market theses from H2 proposals."""
     count = 0
@@ -265,8 +352,11 @@ def persist_market_thesis_exploration(
             client,
             run_date=run_date,
             thesis_id=proposal.thesis_id,
+            topic_key=proposal.topic_key,
             name=proposal.title,
-            status="ACTIVE",
+            status=(status_by_id or {}).get(proposal.thesis_id, "ACTIVE")
+            if proposal.action == "update"
+            else "ACTIVE",
             invalidation=invalidation,
             notes=proposal.statement,
             confidence=proposal.confidence,

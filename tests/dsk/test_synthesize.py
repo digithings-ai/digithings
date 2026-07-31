@@ -12,7 +12,6 @@ import json
 from types import SimpleNamespace
 
 import pytest
-
 from digiskills.models import Corpus, SkillSource, SourceDocument, SourceKind
 from digiskills.synthesize import TemplateSynthesizer
 

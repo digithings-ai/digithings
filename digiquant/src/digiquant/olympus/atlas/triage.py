@@ -37,7 +37,7 @@ import os
 from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import lru_cache
-from typing import Any, Callable, Literal  # noqa: F401 — heterogeneous rule signatures
+from typing import Callable, Literal  # heterogeneous rule signatures
 
 from digiquant.olympus.atlas.sectors_config import load_sectors
 from digiquant.olympus.atlas.state import (
@@ -48,7 +48,6 @@ from digiquant.olympus.atlas.state import (
 )
 from digiquant.olympus.atlas.triage_signals import max_abs_move_for_segment
 from digiquant.olympus.edit_mode.models import TriageSignal
-
 
 # Default price-move thresholds (fractional, not percent — matches the
 # ``state.price_deltas`` value scale). Sourced from the ARCHITECTURE.md

@@ -10,7 +10,7 @@ free_tier_type: trial
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-05-03
+verified_at: 2026-07-19
 source_urls:
   - https://cohere.com/pricing
   - https://docs.cohere.com/docs/rate-limits
@@ -31,13 +31,8 @@ Cohere's trial key provides access to Command A (their flagship 256k context mod
 
 | Model ID | Context Window | Max Output | Notes |
 |---|---|---|---|
-| `command-a-03-2025` | 256,000 | 8,192 | Flagship; 256k context; RAG-optimised |
-| `command-r-plus` | 128,000 | 4,096 | Previous flagship; good RAG |
-| `command-r` | 128,000 | 4,096 | Fast; lower cost |
-| `embed-english-v3.0` | 512 | — | Best-in-class embeddings |
-| `embed-multilingual-v3.0` | 512 | — | Multilingual embeddings |
-| `rerank-english-v3.0` | — | — | Reranking; excellent for RAG |
-| `rerank-multilingual-v3.0` | — | — | Multilingual reranking |
+| `command-a-03-2025` | 256,000 | 8,192 | active |
+| `command-a-plus-05-2026` | 128,000 | 8,192 | active |
 
 ---
 
@@ -112,3 +107,4 @@ Remove the trial restriction by adding billing. Command A: $2.50/$10 per 1M in/o
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-07-19 | Automated snapshot sync | provider-review scan |

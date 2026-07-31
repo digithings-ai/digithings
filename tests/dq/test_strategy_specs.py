@@ -5,7 +5,6 @@ from __future__ import annotations
 import random
 
 import pytest
-
 from digiquant.strategy_specs import (
     MAX_GRID_SIZE,
     _resolve_strategy_name,

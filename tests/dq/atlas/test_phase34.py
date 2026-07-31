@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Any  # noqa: F401 — used for fake-completion dict shape
+from typing import Any  # score:allow untyped any — used for fake-completion dict shape
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.graph.pipeline_builder import build_pipeline
-
 from digiquant.olympus.atlas.phases.phase3_macro import MacroRegimeReport, build_phase3
 from digiquant.olympus.atlas.phases.phase4_assetclass import (
     BondsReport,

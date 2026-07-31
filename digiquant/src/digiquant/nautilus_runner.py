@@ -419,11 +419,9 @@ def _run_backtest_ohlcv(
     """Run Nautilus backtest on OHLCV bar data."""
     try:
         from nautilus_trader.backtest.engine import BacktestEngine
-        from nautilus_trader.model import BarType
-        from nautilus_trader.model import Venue
+        from nautilus_trader.model import BarType, Venue
         from nautilus_trader.model.currencies import USD
-        from nautilus_trader.model.enums import AccountType
-        from nautilus_trader.model.enums import OmsType
+        from nautilus_trader.model.enums import AccountType, OmsType
         from nautilus_trader.model.objects import Money
         from nautilus_trader.persistence.wranglers import BarDataWrangler
         from nautilus_trader.test_kit.providers import TestInstrumentProvider

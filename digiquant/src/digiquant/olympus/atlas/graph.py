@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Callable  # noqa: F401 — used for LangGraph node shape
+from typing import Any, Callable  # score:allow untyped any — used for LangGraph node shape
 from uuid import UUID
 
 from digigraph.graph.pipeline_builder import PipelinePhase, build_pipeline
@@ -216,7 +216,11 @@ __all__ = [
 def _parse_cli_date(value: str):
     from datetime import datetime as _dt
 
-    return _dt.strptime(value, "%Y-%m-%d").date()
+    # strptime, not date.fromisoformat: the CLI must reject non-ISO-extended input
+    # such as "20260420" (asserted by test_run_date_format_validated), and
+    # fromisoformat accepts the basic and week formats. The intermediate datetime is
+    # naive, which is harmless — .date() discards the time immediately.
+    return _dt.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
 
 
 # ─── Config-file helpers ─────────────────────────────────────────────────────

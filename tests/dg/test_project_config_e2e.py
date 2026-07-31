@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 import yaml
-from fastapi.testclient import TestClient
-
 from digigraph.project_config import DigiProjectConfig
 from digigraph.server import app
+from fastapi.testclient import TestClient
+
 from tests.digi_test_jwt import auth_headers
 
 TEMPLATE_PATH = (

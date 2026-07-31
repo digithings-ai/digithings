@@ -6,9 +6,8 @@ import json
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
-
 from digiquant.profiles import AssetPreferences
+from pydantic import ValidationError
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "example_asset_preferences.json"
 

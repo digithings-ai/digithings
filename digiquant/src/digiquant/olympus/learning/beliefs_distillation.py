@@ -15,7 +15,13 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Literal  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Literal,
+)
+
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
@@ -152,7 +158,7 @@ def distill_beliefs(
     if theses is None:
         try:
             theses = load_active_theses_rows(client, run_date)
-        except Exception as exc:  # noqa: BLE001 — optional context must not block beliefs fold
+        except Exception as exc:  # optional context must not block beliefs fold
             logger.warning("beliefs: active_theses unavailable (%s); continuing", exc)
             theses = []
 
@@ -250,7 +256,7 @@ def run_beliefs_distillation_if_triggered(
             same_ticker_limit=50,
             cross_ticker_limit=50,
         )
-    except Exception as exc:  # noqa: BLE001 — optional context must not block beliefs fold
+    except Exception as exc:  # optional context must not block beliefs fold
         logger.warning("beliefs: lessons fetch failed (%s); using unfolded rows", exc)
         lessons = query_unfolded_resolved_decisions(client=client)
 

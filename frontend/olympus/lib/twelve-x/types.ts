@@ -22,12 +22,11 @@ export const G10_CURRENCIES = [
 export type G10Currency = (typeof G10_CURRENCIES)[number];
 
 /**
- * The Research Matrix columns — the 8 board currencies, in the SAME order the
- * twelve-x Notion matrix uses (`nodes/publish.py` `_board_column`). A broker
- * currency_view is filed under its base currency only (pairs land under the
- * numerator, e.g. EUR/USD → EUR); views whose legs fall outside the extended
- * set (these 8 + NOK/SEK) are dropped. Kept deliberately separate from the
- * 10-entry `G10_CURRENCIES` (which the consensus uses) so the grid matches Notion.
+ * The Research Matrix columns — the 8 board currencies. A broker currency_view
+ * is filed under its base currency only (pairs land under the numerator, e.g.
+ * EUR/USD → EUR); views whose legs fall outside the extended set (these 8 +
+ * NOK/SEK) are dropped. Kept deliberately separate from the 10-entry
+ * `G10_CURRENCIES`, which the consensus uses.
  */
 export const MATRIX_COLUMNS = ['USD', 'EUR', 'GBP', 'AUD', 'CAD', 'CHF', 'JPY', 'NZD'] as const;
 export type MatrixColumn = (typeof MATRIX_COLUMNS)[number];
@@ -124,8 +123,14 @@ export interface FxEventSnapshotRow {
 }
 
 /**
- * `fx_economic_calendar` (twelve-x migration 001/002) — upcoming macro catalysts.
+ * `economic_calendar` in the shared DigiQuant **core** project — upcoming macro catalysts.
  * Read for the next-14-day window, ordered by `event_datetime_utc`.
+ *
+ * Not a twelve-x table, despite living in this module. The calendar is shared, so #1066
+ * made `core` its single source and retired twelve-x's own `fx_economic_calendar`
+ * (no dual-write) — which is why `getUpcomingEvents` reads it through the MAIN Olympus
+ * client rather than `twelveXSupabase`. The `Fx` prefix on this interface is a naming
+ * leftover, not a claim of ownership.
  */
 export interface FxEconomicCalendarRow {
   id: number; // bigserial

@@ -10,7 +10,7 @@ free_tier_type: credit-based
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-05-03
+verified_at: 2026-07-19
 source_urls:
   - https://build.nvidia.com/explore/discover
   - https://docs.api.nvidia.com/nim/reference/llm-apis
@@ -30,13 +30,10 @@ NVIDIA NIM offers access to 80–200+ optimized open-weight models via a single 
 
 | Model ID | Context Window | Max Output | Notes |
 |---|---|---|---|
-| `meta/llama-3.3-70b-instruct` | 128,000 | 4,096 | Llama 3.3 70B |
-| `nvidia/llama-3.3-nemotron-super-49b-v1` | 131,072 | 4,096 | Nemotron reasoning |
-| `nvidia/llama-3.1-nemotron-70b-instruct` | 131,072 | 4,096 | Nemotron 70B |
-| `deepseek-ai/deepseek-r1` | 163,840 | 32,768 | DeepSeek R1 |
-| `deepseek-ai/deepseek-v3-0324` | 163,840 | 16,384 | DeepSeek V3 |
-| `moonshotai/kimi-k2-instruct` | 131,072 | 16,384 | Kimi K2 |
-| `google/gemma-3-27b-it` | 131,072 | 8,192 | Gemma 3 27B |
+| `meta/llama-3.3-70b-instruct` | 128,000 | 4,096 | ⚠️ Request timed out. |
+| `nvidia/llama-3.3-nemotron-super-49b-v1` | 131,072 | 4,096 | active |
+| `deepseek-ai/deepseek-r1` | 163,840 | 32,768 | active |
+| `nvidia/nemotron-3-ultra-550b-a55b` | 1,000,000 | — | active |
 
 > Catalog of 80–200+ models; verify current availability at build.nvidia.com/explore/discover.
 
@@ -114,3 +111,4 @@ NVIDIA NIM API pay-per-token after credits. Pricing varies by model. Enterprise 
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-07-19 | Automated snapshot sync | provider-review scan |

@@ -8,10 +8,10 @@ import { reconcileBook, heldByWeight } from '@/lib/book-reconciliation';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 
 /**
- * The three quiet "doorway" cards beneath the hero. Each is a scannable summary
- * that links into a deep surface — never full visual weight, so the read stays
- * the focal element on the page. The performance doorway is retired until a
- * meaningful time-series exists.
+ * Three divided doorway columns at the foot of the Brief workspace. Each is a
+ * scannable summary that links into a deep surface without becoming a separate
+ * decorative card. The performance doorway is retired until a meaningful
+ * time-series exists.
  *
  * The Holdings doorway shares the book's single reconciliation basis (F3 /
  * #1553): weights are % of NAV via `reconcileBook`, so a ticker reads the same
@@ -63,7 +63,7 @@ function Doorway({
   return (
     <Link
       href={href}
-      className="glass-card block p-4 transition-colors hover:border-hair-2"
+      className="block min-w-0 p-5 transition-colors hover:bg-ink/[0.03] sm:p-6"
     >
       <div className="mb-2.5 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -88,7 +88,11 @@ export function TodaySummaries({
   // CASH excluded — it lives in the invested/cash split, not a holdings row).
   const held = heldByWeight(reconcileBook(positions, { investedPct }).rows).slice(0, 6);
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <section
+      data-brief-section="doorways"
+      aria-label="Brief destinations"
+      className="grid grid-cols-1 divide-y divide-hair sm:grid-cols-3 sm:divide-x sm:divide-y-0"
+    >
       {/* The read */}
       <Doorway
         title="The read"
@@ -140,6 +144,6 @@ export function TodaySummaries({
           </ul>
         )}
       </Doorway>
-    </div>
+    </section>
   );
 }

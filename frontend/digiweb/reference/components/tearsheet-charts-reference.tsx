@@ -1,20 +1,22 @@
 "use client";
 /**
  * Tearsheet charts — the print-grade tearsheet core: a 6-up KPI strip over
- * the tabbed SVG chart deck (candles with trade entry/exit markers + hover
- * cards, equity with a linear/log toggle, underwater drawdown, per-trade
- * P&L with the unrealized open leg, and the 3x3 returns matrix). All series
- * panes share ONE normalized ViewWindow — wheel-zoom or drag-pan any chart
- * and the others follow; lookback presets match back when a zoom lands on
- * one. The Download PDF button runs the real pipeline: flushSync re-renders
- * the same charts at full span, pins the light theme, and opens the system
- * print dialog — pure SVG is what makes the export crisp.
+ * a signed contribution stack with the exact portfolio-return line, then the
+ * tabbed SVG chart deck (candles with trade entry/exit markers + hover cards,
+ * equity with a linear/log toggle, underwater drawdown, per-trade P&L with
+ * the unrealized open leg, and the 3x3 returns matrix). All series panes share
+ * ONE normalized ViewWindow — wheel-zoom or drag-pan any chart and the others
+ * follow; lookback presets match back when a zoom lands on one. The Download
+ * PDF button runs the real pipeline: flushSync re-renders the same charts at
+ * full span, pins the light theme, and opens the system print dialog — pure
+ * SVG is what makes the export crisp.
  */
 import { useCallback, useMemo, useState } from "react";
 import {
   CandlestickChart,
   ChartLegend,
   ChartResetButton,
+  ContributionReturnChart,
   Kpi,
   KpiStrip,
   LOOKBACK_OPTIONS,
@@ -43,6 +45,15 @@ type ChartTab = "price" | "equity" | "drawdown" | "pnl" | "matrix";
 
 const CHART_H = 440;
 const D = TEARSHEET_DEMO;
+const CONTRIBUTION_POINTS = D.equity.slice(-18).map((point, index, points) => ({
+  t: point.t,
+  returnPct: (point.v / points[0].v - 1) * 100,
+  contributions: {
+    Quality: index * 0.16,
+    Momentum: index * 0.08 - (index > 11 ? (index - 11) * 0.13 : 0),
+    Hedges: index > 7 ? -(index - 7) * 0.06 : 0,
+  },
+}));
 
 function Toned({ v, children }: { v: number; children: React.ReactNode }) {
   const c = toneClass(v);
@@ -155,6 +166,23 @@ export function TearsheetChartsReference() {
         <Kpi label="Avg trade" value={<Toned v={kpis.avgTrade}>{fmtPct(kpis.avgTrade)}</Toned>} />
         <Kpi label="Trades / yr" value={fmtNum(kpis.tradesPerYear, 1)} />
       </KpiStrip>
+
+      <section className="ts-panel">
+        <div className="ts-panel-head">
+          <span className="ts-panel-label">Portfolio contribution</span>
+          <ChartLegend items={[{ kind: "line", label: "Portfolio return" }]} />
+        </div>
+        <div className="ts-chart" style={{ height: 360 }}>
+          <ContributionReturnChart
+            points={CONTRIBUTION_POINTS}
+            colors={{
+              Quality: "var(--accent)",
+              Momentum: "var(--warn)",
+              Hedges: "var(--down)",
+            }}
+          />
+        </div>
+      </section>
 
       <section className="ts-panel ts-tab-stack">
         <div className="ts-panel-head">

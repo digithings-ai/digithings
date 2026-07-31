@@ -10,10 +10,11 @@ reachable only via the service-role helpers here — never exposed to anon.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any  # noqa: ANN401 — JSONB payloads and driver rows are dynamic at the DB boundary
+from typing import (
+    Any,  # JSONB payloads and driver rows are dynamic at the DB boundary
+)
 
 import polars as pl
-
 from digibase.audit import redact_mapping
 
 from digiquant.data.prices._utils import call_with_retry as _call_with_retry

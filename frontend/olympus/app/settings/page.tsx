@@ -1,6 +1,6 @@
 'use client';
 
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { SettingsContent } from '@/components/settings-content';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useAppShell } from '@/components/app-shell-context';

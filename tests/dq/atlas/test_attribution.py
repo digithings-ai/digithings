@@ -9,7 +9,6 @@ priced).
 from __future__ import annotations
 
 import pytest
-
 from digiquant.olympus.atlas.attribution import (
     Holding,
     attribution_rows_to_records,

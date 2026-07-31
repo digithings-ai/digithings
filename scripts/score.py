@@ -116,8 +116,12 @@ PATTERNS: list[tuple[re.Pattern, str, str, bool]] = [
     ),
     # Quality
     (
-        re.compile(r"from typing import.*\bAny\b(?!.*# noqa)"),
-        "untyped Any without # noqa annotation",
+        # Deliberately NOT ruff's suppression marker. Ruff's RUF100 rule strips
+        # suppression directives that suppress nothing, which silently deleted
+        # this gate's markers (#1709). `score:allow` is this tool's own token,
+        # already used for the file-level pragmas documented above.
+        re.compile(r"from typing import.*\bAny\b(?!.*score:allow)"),
+        "untyped Any without # score:allow annotation",
         "quality",
         True,
     ),

@@ -2,112 +2,196 @@ import { describe, expect, it } from 'vitest';
 import { buildOlympusTearsheet } from './observability-queries';
 import type { TableRow } from './database.types';
 
-const navRow = (
+const position = (date: string, ticker: string, weight: number): TableRow<'positions'> =>
+  ({
+    id: `${date}-${ticker}`,
+    date,
+    ticker,
+    name: ticker,
+    category: 'equity_broad',
+    weight_pct: weight,
+    thesis_id: null,
+    rationale: null,
+    current_price: null,
+    entry_price: null,
+    entry_date: null,
+    pm_notes: null,
+  });
+
+const attribution = (
   date: string,
-  nav: number,
-  invested_pct: number | null = 75,
-): TableRow<'nav_history'> => ({
+  ticker: string,
+  contribution: number
+): TableRow<'position_attribution'> => ({
+  id: `${date}-${ticker}`,
   date,
-  nav,
-  cash_pct: invested_pct == null ? null : 100 - invested_pct,
-  invested_pct,
+  ticker,
+  sector_bucket: 'Technology',
+  weight_pct: 20,
+  position_return_pct: contribution / 0.2,
+  benchmark_return_pct: 2,
+  contribution_pct: contribution,
+  selection_effect_pct: contribution - 0.4,
+  allocation_effect_pct: 0,
+  total_attribution_pct: contribution - 0.4,
+  metrics_as_of: date,
+  created_at: null,
 });
 
-const dec = (
-  run_date: string,
-  ticker: string,
-  conviction: number | null,
-  status: string,
-  alpha: number | null,
-  actual_return: number | null,
-): TableRow<'decision_log'> => ({
-  id: `${ticker}-${run_date}`,
-  run_id: 'r1',
-  run_date,
+const metrics: TableRow<'portfolio_metrics'> = {
+  id: 'm',
+  date: '2026-07-17',
+  pnl_pct: 0.5,
+  sharpe: 1.2,
+  volatility: 10,
+  max_drawdown: -3,
+  alpha: 4,
+  net_return_pct: 12,
+  benchmark_return_pct: 8,
+  relative_return_pct: 4,
+  benchmark_ticker: 'SPY',
+  invested_pct: 80,
+  generated_at: '2026-07-17T22:00:00Z',
+  as_of_date: '2026-07-17',
+};
+
+const exitEvent = (date: string, ticker: string, realized: number): TableRow<'position_events'> => ({
+  id: `${date}-${ticker}-exit`,
+  date,
   ticker,
-  stance: 'buy',
-  conviction,
-  thesis: null,
-  benchmark: 'SPY',
-  holding_days: 10,
-  status: status as 'pending' | 'resolved',
-  actual_return,
-  alpha,
-  reflection: null,
-  resolved_at: null,
+  event: 'EXIT',
+  weight_pct: 0,
+  prev_weight_pct: 10,
+  cumulative_return_since_event_pct: realized,
+  price: 110,
+  thesis_id: null,
+  reason: null,
   created_at: null,
 });
 
 describe('buildOlympusTearsheet', () => {
-  it('single NAV point → navPoints 1, live track has 1 equity point, no drawdown blow-up', () => {
-    const t = buildOlympusTearsheet({
-      nav: [navRow('2026-06-23', 99.32)],
-      decisions: [],
-      metrics: null,
-      attribution: [],
-      now: new Date('2026-06-24T00:00:00Z'),
+  it('passes persisted headline returns through without deriving them from NAV', () => {
+    const result = buildOlympusTearsheet({
+      nav: [{ date: '2026-05-01', nav: 999, cash_pct: 20, invested_pct: 80 }],
+      positions: [position('2026-07-17', 'AAA', 20)],
+      metrics,
+      attribution: [attribution('2026-07-17', 'AAA', 1)],
+      events: [],
     });
-    expect(t.navPoints).toBe(1);
-    expect(t.live.engine).toBe('live');
-    expect(t.live.strategy).toBe('Olympus');
-    expect(t.live.symbol).toBe('AI-INTELLIGENCE');
-    expect(t.live.equity_curve).toHaveLength(1);
-    expect(t.inceptionDate).toBe('2026-06-23');
-    expect(t.latestNav).toBe(99.32);
+
+    expect(result.netReturnPct).toBe(12);
+    expect(result.benchmarkReturnPct).toBe(8);
+    expect(result.relativeReturnPct).toBe(4);
+    expect(result.returnsSource).toBe('persisted');
+    expect(result.inceptionDate).toBe('2026-05-01');
+    expect(result.currentNav).toBe(999);
   });
 
-  it('≥2 NAV points → equity + drawdown curves; sharpe from NAV-derived metrics', () => {
-    const t = buildOlympusTearsheet({
-      nav: [navRow('2026-06-23', 100), navRow('2026-06-24', 102), navRow('2026-06-25', 101)],
-      decisions: [],
-      metrics: null,
-      attribution: [],
-      now: new Date(),
-    });
-    expect(t.live.equity_curve).toHaveLength(3);
-    expect(t.live.drawdown_curve).toHaveLength(3);
-    // drawdown is ≤ 0 everywhere; trough after the 102 peak is (101-102)/102*100 ≈ -0.98
-    expect(t.live.drawdown_curve[2].v).toBeCloseTo(-0.9804, 3);
-    expect(t.live.max_drawdown_pct).toBeLessThan(0);
-  });
-
-  it('decisions split into resolved/pending; track-record from resolved only', () => {
-    const t = buildOlympusTearsheet({
-      nav: [navRow('2026-06-23', 100)],
-      decisions: [
-        dec('2026-06-23', 'IJR', 5, 'resolved', 0.04, 0.05),
-        dec('2026-06-23', 'EWT', 2, 'resolved', -0.01, 0.0),
-        dec('2026-06-23', 'QQQ', 3, 'pending', null, null),
+  it('builds exact base-zero portfolio return and weighted contribution points', () => {
+    const first = { ...position('2026-07-01', 'AAA', 20), current_price: 100 };
+    const latest = { ...position('2026-07-17', 'AAA', 20), current_price: 110 };
+    const result = buildOlympusTearsheet({
+      nav: [
+        { date: '2026-07-01', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
       ],
-      metrics: null,
+      positions: [first, latest],
+      metrics,
       attribution: [],
-      now: new Date(),
+      events: [],
     });
-    expect(t.nResolved).toBe(2);
-    expect(t.nPending).toBe(1);
-    expect(t.decision.n_trades).toBe(2); // only resolved feed the track record
-    expect(t.decision.hit_rate).toBe(0.5);
-    expect(t.decisionRows).toHaveLength(3); // all rows shown in the small table
+
+    expect(result.navSeries.map((point) => point.returnPct)).toEqual([0, 6]);
+    expect(result.contributionSeries.map((point) => point.returnPct)).toEqual([0, 6]);
+    expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([0, 2]);
   });
 
-  it('prefers persisted portfolio_metrics sharpe over NAV-derived', () => {
-    const t = buildOlympusTearsheet({
-      nav: [navRow('2026-06-23', 100), navRow('2026-06-24', 102)],
-      decisions: [],
+  it('derives only missing cumulative returns from the exact live history window', () => {
+    const result = buildOlympusTearsheet({
+      nav: [
+        { date: '2026-07-01', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [],
       metrics: {
-        id: 'm',
-        date: '2026-06-24',
-        pnl_pct: 2,
-        sharpe: 1.9,
-        volatility: 12,
-        max_drawdown: -3,
-        alpha: 0.5,
-        invested_pct: 75,
-        generated_at: null,
-      } as TableRow<'portfolio_metrics'>,
+        ...metrics,
+        net_return_pct: 7,
+        benchmark_return_pct: null,
+        relative_return_pct: null,
+      },
       attribution: [],
-      now: new Date(),
+      benchmarkPrices: [
+        { date: '2026-07-02', close: 500 },
+        { date: '2026-07-16', close: 510 },
+      ],
     });
-    expect(t.live.sharpe_ratio).toBe(1.9);
+
+    expect(result.netReturnPct).toBe(7);
+    expect(result.benchmarkReturnPct).toBe(2);
+    expect(result.relativeReturnPct).toBe(5);
+    expect(result.returnsSource).toBe('mixed');
+    expect(result.metricsAsOf).toBe('2026-07-17');
+  });
+
+  it('uses a clearly labeled live fallback when no persisted metrics row exists', () => {
+    const result = buildOlympusTearsheet({
+      nav: [
+        { date: '2026-07-01', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [],
+      metrics: null,
+      attribution: [],
+      benchmarkPrices: [
+        { date: '2026-07-02', close: 500 },
+        { date: '2026-07-16', close: 510 },
+      ],
+    });
+
+    expect(result.netReturnPct).toBe(6);
+    expect(result.benchmarkReturnPct).toBe(2);
+    expect(result.relativeReturnPct).toBe(4);
+    expect(result.returnsSource).toBe('derived');
+    expect(result.metricsAsOf).toBe('2026-07-17');
+  });
+
+  it('partitions full attribution history by the latest current book', () => {
+    const result = buildOlympusTearsheet({
+      nav: [],
+      positions: [position('2026-07-17', 'AAA', 20)],
+      metrics,
+      attribution: [
+        attribution('2026-07-17', 'AAA', 1),
+        attribution('2026-07-01', 'AAA', 0.5),
+        attribution('2026-06-20', 'OLD', -0.2),
+        attribution('2026-06-10', 'OLD', 0.1),
+      ],
+      events: [exitEvent('2026-06-21', 'OLD', -3.5)],
+    });
+
+    expect(result.currentHoldings.map((row) => row.ticker)).toEqual(['AAA']);
+    expect(result.currentHoldings[0].attributionDate).toBe('2026-07-17');
+    expect(result.historicalHoldings.map((row) => row.ticker)).toEqual(['OLD']);
+    expect(result.historicalHoldings[0].attributionDate).toBe('2026-06-21');
+    expect(result.historicalHoldings[0].realizedReturnPct).toBe(-3.5);
+  });
+
+  it('keeps current holdings visible when their attribution row is missing', () => {
+    const result = buildOlympusTearsheet({
+      nav: [],
+      positions: [position('2026-07-17', 'AAA', 20)],
+      metrics,
+      attribution: [],
+      events: [],
+    });
+
+    expect(result.currentHoldings).toHaveLength(1);
+    expect(result.currentHoldings[0]).toMatchObject({
+      ticker: 'AAA',
+      weightPct: 20,
+      unrealizedReturnPct: null,
+      realizedReturnPct: null,
+      attributionDate: null,
+    });
   });
 });

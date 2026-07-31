@@ -51,4 +51,11 @@ describe('TheReadBody', () => {
     expect(html).toContain('Institutional flows');
     expect(html).toContain('Thesis tracker');
   });
+
+  it('renders the research read as a flat hairline workspace', () => {
+    const html = renderToStaticMarkup(createElement(TheReadBody, { digest: digest() }));
+    expect(html).toContain('data-testid="why-read-workspace"');
+    expect(html).toContain('data-testid="why-read-disclosures"');
+    expect(html).not.toContain('glass-card');
+  });
 });

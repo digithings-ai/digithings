@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from copy import deepcopy
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
 
 from pydantic import BaseModel
 
@@ -40,6 +42,10 @@ def _assert_no_duplicate_set_paths(patch: DocumentPatch) -> None:
     seen: set[str] = set()
     for op in patch.ops:
         if op.op != "set":
+            continue
+        # ``/-`` is the RFC 6901 append position: repeated sets there are sequential
+        # appends, not conflicting writes on one element (#1641).
+        if op.path.split("/")[-1] == "-":
             continue
         if op.path in seen:
             msg = f"duplicate set on path {op.path!r} in one patch"

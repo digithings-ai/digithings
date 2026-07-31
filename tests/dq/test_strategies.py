@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from digiquant.backtest import run_backtest
 from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.strategies import get_strategy, list_strategies
+
 from tests.dq.conftest import SKIP_NATIVE_CRASH
 
 

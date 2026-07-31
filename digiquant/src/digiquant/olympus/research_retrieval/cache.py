@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
 
 
 @dataclass

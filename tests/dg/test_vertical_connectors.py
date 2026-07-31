@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from digigraph.connectors.digiquant import call_quant_workflow
 from digigraph.connectors.digisearch import call_research_turn
 

@@ -26,7 +26,7 @@ import pytest
 
 pytest.importorskip("mcp.server.fastmcp")
 
-from digiquant.mcp_server import create_mcp_server  # noqa: E402
+from digiquant.mcp_server import create_mcp_server
 
 _SCRIPTS = Path(__file__).resolve().parents[2] / "digiquant" / "scripts"
 if str(_SCRIPTS) not in sys.path:

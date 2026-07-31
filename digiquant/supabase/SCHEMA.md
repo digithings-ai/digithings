@@ -48,7 +48,7 @@ erDiagram
 |-------|----|---------|
 | `daily_snapshots` | `(date)` | One consolidated JSON snapshot per calendar day. Root of the daily pipeline. |
 | `positions` | `(date, ticker)` | Daily position book; one row per held ticker. |
-| `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds `confidence`, `validation_criteria`, `invalidation_criteria`, `horizon`, `thesis_kind` (`market` \| `vehicle`), `linked_market_thesis_id`. |
+| `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds daily thesis fields. Migration 056 adds stable `topic_key` and a partial unique `(date, topic_key)` index so only one nonterminal market opinion exists per topic/date. |
 | `position_events` | `(id uuid)` | Every open / close / rebalance against a position with reason tag. |
 | `documents` | `(date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. |
 | `nav_history` | `(date)` | Daily portfolio NAV. |

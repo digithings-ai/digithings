@@ -1,14 +1,15 @@
 const URL_PARSE_BASE = 'https://olympus.local';
 
 /**
- * Portfolio ("the book") tabs after the redesign: Holdings · Theses · Performance.
+ * Portfolio ("the book") in-shell tabs after the redesign: Holdings · Theses.
+ * Performance is now a dedicated route (/portfolio/performance).
  * Legacy values (allocations/activity/analysis/history/…) are remapped via
  * {@link mapPortfolioTabFromUrl} and canonicalized by
  * {@link canonicalizeLegacyPortfolioSearch} so old links keep working.
  */
-export type PortfolioTabId = 'holdings' | 'theses' | 'performance';
+export type PortfolioTabId = 'holdings' | 'theses';
 
-export const VALID_PORTFOLIO_TABS: readonly PortfolioTabId[] = ['holdings', 'theses', 'performance'];
+export const VALID_PORTFOLIO_TABS: readonly PortfolioTabId[] = ['holdings', 'theses'];
 
 /**
  * Legacy `?tab=` values that should be rewritten to a canonical tab.
@@ -37,7 +38,6 @@ export type PortfolioCanonicalTarget =
 export function mapPortfolioTabFromUrl(raw: string | null): PortfolioTabId {
   if (!raw) return 'holdings';
   const r = raw.toLowerCase();
-  if (r === 'performance') return 'performance';
   if (
     r === 'theses' ||
     r === 'thesis' ||
@@ -49,7 +49,7 @@ export function mapPortfolioTabFromUrl(raw: string | null): PortfolioTabId {
   ) {
     return 'theses';
   }
-  // allocations / summary / positions / activity / unknown → holdings
+  // allocations / summary / positions / activity / performance / unknown → holdings
   return VALID_PORTFOLIO_TABS.includes(r as PortfolioTabId) ? (r as PortfolioTabId) : 'holdings';
 }
 
@@ -58,10 +58,8 @@ export function hrefWithQuery(pathname: string, params: URLSearchParams): string
   return q ? `${pathname}?${q}` : pathname;
 }
 
-export function portfolioThesesPath(pathname: string): string {
-  const clean = pathname.replace(/\/+$/, '');
-  if (clean.endsWith('/portfolio/theses')) return clean;
-  if (clean.endsWith('/portfolio')) return `${clean}/theses`;
+export function portfolioThesesPath(_pathname: string): string {
+  // Path targets are consumed by Next's router, which applies basePath itself.
   return '/portfolio/theses';
 }
 
@@ -90,6 +88,12 @@ export function canonicalizeLegacyPortfolioSearch(
   opts: { defaultHistoryDate?: string | null; lastUpdated?: string | null; docDate?: string | null } = {}
 ): PortfolioCanonicalTarget | null {
   const raw = params.get('tab');
+
+  // Next's router applies the configured base path, so path targets stay app-relative.
+  if (raw === 'performance') {
+    return { kind: 'path', href: '/portfolio/performance' };
+  }
+
   if (!raw || VALID_PORTFOLIO_TABS.includes(raw as PortfolioTabId) || !LEGACY_PORTFOLIO_TAB_ALIASES.has(raw)) {
     return null;
   }

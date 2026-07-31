@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from digiquant.tradingview import (
     _ALIAS_MAP,
     _PARAM_DEFAULTS,
@@ -14,7 +13,6 @@ from digiquant.tradingview import (
     export_to_pine,
     import_from_pine,
 )
-
 
 # ---------------------------------------------------------------------------
 # Alias resolution

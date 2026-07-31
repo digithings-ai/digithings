@@ -13,7 +13,6 @@ from datetime import date, timedelta
 from typing import Any
 
 import pytest
-
 from digiquant.data.prices.calendar_sync import (
     ALL_VENUES,
     REASON_HOLIDAY,
@@ -35,7 +34,6 @@ from digiquant.data.prices.ticker_venues import (
     CORE_TICKER_VENUES,
     venue_for,
 )
-
 
 # ─── Fake exchange_calendars boundary ──────────────────────────────────────
 

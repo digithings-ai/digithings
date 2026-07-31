@@ -5,9 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-
-from digigraph.tools.analytics.load import load_dataset
 from digigraph.tools.analytics.analysis._helpers import _artifacts_dir, _next_filename
+from digigraph.tools.analytics.load import load_dataset
 
 
 def simple_regression(

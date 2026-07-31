@@ -60,26 +60,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
 
-      - name: Install DigiSearch (editable) + yaml
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install pyyaml
-          # Editable install of DigiSearch gives the script its parsers + chunkers.
-          # [ingestion] supplies the parser deps (base is light post-#633); the
-          # script talks to the running service over HTTP, so no [server] needed.
-          python -m pip install -e "digisearch[ingestion]"
+      # Installs from the committed uv.lock rather than resolving fresh (#1715).
+      # The workspace sync supersedes the hand-listed pyyaml + digisearch
+      # [ingestion] install: [ingestion] supplies the parser deps (base is light
+      # post-#633), and the script talks to the running service over HTTP, so no
+      # [server] runtime is required — both extras are in the lock either way.
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
 
       - name: Reindex (dry-run)
         env:
           DIGISEARCH_ALLOW_STUB: "1"
-        run: python scripts/reindex_digithings_guide.py
+        run: uv run --frozen --no-sync python scripts/reindex_digithings_guide.py
 
       - name: Reindex (apply — posts to DigiSearch HTTP API)
         if: env.DIGISEARCH_URL != ''
         env:
           DIGISEARCH_URL: ${{ secrets.DIGISEARCH_URL }}
-        run: python scripts/reindex_digithings_guide.py --apply
+        run: uv run --frozen --no-sync python scripts/reindex_digithings_guide.py --apply

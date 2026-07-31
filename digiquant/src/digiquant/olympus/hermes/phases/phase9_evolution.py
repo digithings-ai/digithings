@@ -21,16 +21,20 @@ at the fields the legacy system enforces.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Literal  # noqa: F401 — used for JSON-derived dict shape
+from typing import (  # score:allow untyped any — used for JSON-derived dict shape
+    Any,
+    Callable,
+    Literal,
+)
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field, model_validator
 
 from digiquant.olympus.atlas.decision_log import persist_pending
 from digiquant.olympus.atlas.phases._node_factory import _shared_context
-from digiquant.olympus.hermes.state import HermesState
+from digiquant.olympus.atlas.state import PhaseError
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
-
+from digiquant.olympus.hermes.state import HermesState
 
 # ─── 9A Sources Scorecard ──────────────────────────────────────────────────
 
@@ -178,13 +182,30 @@ def _phase9_node_factory(
             "bias_row": state.phase6_bias_row or {},
             "prior_snapshots": list(state.prior_context.last_snapshots),
         }
-        result = run_research_agent(
-            skill_text=skill_text,
-            phase_inputs=phase_inputs,
-            shared_context=_shared_context(state),
-            output_model=Phase9Artifacts,
-            phase_slug="phase9-evolution",
-        )
+        try:
+            result = run_research_agent(
+                skill_text=skill_text,
+                phase_inputs=phase_inputs,
+                shared_context=_shared_context(state),
+                output_model=Phase9Artifacts,
+                phase_slug="phase9-evolution",
+            )
+        except Exception as exc:  # LLM-output failure degrades phase 9, never the chain (#1665)
+            logging.getLogger(__name__).warning(
+                "phase9 evolution LLM failed (%s: %s); skipping evolution artifacts",
+                type(exc).__name__,
+                exc,
+            )
+            return {
+                "errors": [
+                    PhaseError(
+                        phase="phase9_evolution",
+                        node="evolution",
+                        message=f"evolution LLM failed: {exc}"[:500],
+                        retryable=False,
+                    )
+                ]
+            }
         return {"phase9_evolution": result.model_dump(mode="json")}
 
     return _node

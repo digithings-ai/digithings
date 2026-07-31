@@ -13,7 +13,6 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
-
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
 from digiquant.olympus.hermes.phases.phase7d_pm import _load_pm_skill, _pm_node
 from digiquant.olympus.hermes.skills import SkillNotFoundError

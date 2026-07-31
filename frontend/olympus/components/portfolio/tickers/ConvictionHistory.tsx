@@ -1,19 +1,27 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@digithings/web';
 import type { DecisionLogRow } from '@/lib/holdings-decisions';
 import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
 import { fmtPct, signColorClass } from '@/components/observability/shared';
 
+const DEFAULT_VISIBLE_ROWS = 6;
+
 /**
  * Signed-conviction timeline + resolved-calls table over `decision_log`, scoped
- * to one ticker (#1562 PR2). Reuses the decision-scorecard grammar
- * (`components/observability/DecisionScorecardTab.tsx`: same columns, same
- * `fmtPct`/`signColorClass` helpers) rather than re-deriving it.
+ * to one ticker (#1562 PR2, #1615 flat decision ledger). Reuses the decision-
+ * scorecard grammar (`components/observability/DecisionScorecardTab.tsx`: same
+ * columns, same `fmtPct`/`signColorClass` helpers) rather than re-deriving it.
+ *
+ * Flat full-width decision ledger (#1615): hairline structure, NOT glass-card.
  *
  * `status='pending'` rows carry `actual_return: null, alpha: null` — these
  * render as "open", never as a 0%/blank resolved call (#1562 §2 staleness
  * rule), so an in-flight call never reads as a wash.
+ *
+ * History is bounded to 6 recent rows by default with a "Show N older" / "Show fewer"
+ * toggle to reveal the full timeline (#1607).
  */
 
 function ReasoningExpander({ thesis, reflection }: { thesis: string | null; reflection: string | null }) {
@@ -61,25 +69,28 @@ function OutcomeCell({ status, value }: { status: string; value: number | null }
 }
 
 export default function ConvictionHistory({ decisions }: { decisions: DecisionLogRow[] }) {
+  const [showAll, setShowAll] = useState(false);
   const sorted = [...decisions].sort((a, b) => (b.run_date ?? '').localeCompare(a.run_date ?? ''));
 
   if (sorted.length === 0) {
     return (
-      <div className="glass-card space-y-2 p-5 md:p-6">
-        <h2 className="font-display text-lg text-ink">Conviction history</h2>
+      <div className="decision-ledger space-y-4 border-y border-hair bg-surface/[0.82] px-5 py-6 md:px-6">
+        <h2 className="font-display text-lg text-ink">Decision ledger</h2>
         <p className="text-sm text-ink-mute">No analyst decisions on record for this ticker yet.</p>
       </div>
     );
   }
 
   const oldestFirst = [...sorted].reverse();
+  const visibleRows = showAll ? sorted : sorted.slice(0, DEFAULT_VISIBLE_ROWS);
+  const hiddenCount = sorted.length - DEFAULT_VISIBLE_ROWS;
 
   return (
-    <div className="glass-card space-y-6 p-5 md:p-6">
-      <h2 className="font-display text-lg text-ink">Conviction history</h2>
+    <div className="decision-ledger space-y-6 border-y border-hair bg-surface/[0.82] px-5 py-6 md:px-6">
+      <h2 className="font-display text-lg text-ink">Decision ledger</h2>
 
       {/* Timeline — oldest to newest, left to right. */}
-      <div className="flex flex-wrap items-end gap-4 overflow-x-auto pb-1">
+      <div className="flex flex-wrap items-end gap-4 overflow-x-auto border-b border-hair pb-4">
         {oldestFirst.map((d) => (
           <div key={d.id} className="flex shrink-0 flex-col items-center gap-1">
             {d.conviction != null ? (
@@ -87,11 +98,11 @@ export default function ConvictionHistory({ decisions }: { decisions: DecisionLo
             ) : (
               <span className="text-xs text-ink-mute">—</span>
             )}
-            <span className="font-mono text-[10px] uppercase tracking-wider text-ink-mute">
+            <span className="text-xs uppercase tracking-wider text-ink-mute">
               {d.run_date ?? '—'}
             </span>
             {d.status === 'pending' ? (
-              <span className="text-[10px] italic text-ink-mute">open</span>
+              <span className="text-xs italic text-ink-mute">open</span>
             ) : null}
           </div>
         ))}
@@ -107,12 +118,12 @@ export default function ConvictionHistory({ decisions }: { decisions: DecisionLo
               <th className="py-2 pr-4 text-right font-medium">Conviction</th>
               <th className="py-2 pr-4 text-right font-medium">Return</th>
               <th className="py-2 pr-4 text-right font-medium">Alpha</th>
-              <th className="py-2 pr-4 text-right font-medium">Holding</th>
+              <th className="py-2 pr-4 text-right font-medium">Evaluation</th>
               <th className="py-2 font-medium">Reasoning</th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map((d) => (
+            {visibleRows.map((d) => (
               <tr key={d.id} className="border-b border-hair/50 align-top">
                 <td className="py-2 pr-4 text-xs text-ink-mute">{d.run_date ?? '—'}</td>
                 <td className="py-2 pr-4 capitalize text-ink-soft">{d.stance ?? '—'}</td>
@@ -136,6 +147,19 @@ export default function ConvictionHistory({ decisions }: { decisions: DecisionLo
           </tbody>
         </table>
       </div>
+
+      {hiddenCount > 0 && (
+        <div className="flex justify-center border-t border-hair pt-4">
+          <Button
+            dress="reference"
+            variant="quiet"
+            onClick={() => setShowAll(!showAll)}
+            aria-label={showAll ? 'Show fewer decisions' : `Show ${hiddenCount} older decisions`}
+          >
+            {showAll ? 'Show fewer' : `Show ${hiddenCount} older`}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

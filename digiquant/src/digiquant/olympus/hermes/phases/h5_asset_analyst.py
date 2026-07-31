@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Collection
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
+
 from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import PhaseHermesState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.edit_mode import artifact_document_key
 from digiquant.olympus.hermes.focus_roster import (
     focus_roster_tickers,
     ticker_in_focus_roster,
     with_fanout_ticker,
 )
-from digiquant.olympus.edit_mode import artifact_document_key
 from digiquant.olympus.hermes.phases.portfolio_common import (
     analyst_artifact_key,
     run_asset_analyst_llm,

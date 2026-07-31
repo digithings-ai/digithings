@@ -146,6 +146,7 @@ def test_llm_client_wires_digillm_usage_observer() -> None:
     without importing it — covering completions inside run_tools' loop too.
     """
     import digillm.client as _digillm_client
+
     from digigraph import usage
 
     assert _digillm_client._usage_observer is usage.record

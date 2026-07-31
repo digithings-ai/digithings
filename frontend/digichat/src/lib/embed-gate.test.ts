@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EMBED_FREE_TURN_LIMIT, emit, readTurns, resolveEmbedHost, writeTurns } from "./embed-gate";
+import {
+  EMBED_FREE_TURN_LIMIT,
+  emit,
+  readTrialUnlocked,
+  readTurns,
+  resolveEmbedHost,
+  writeTrialUnlocked,
+  writeTurns,
+} from "./embed-gate";
 
 type Store = Map<string, string>;
 
@@ -65,6 +73,51 @@ describe("embed-gate storage", () => {
     };
     expect(readTurns("x")).toBe(0);
     expect(() => writeTurns("x", 1)).not.toThrow();
+  });
+});
+
+describe("embed-gate trial-unlock persistence", () => {
+  beforeEach(() => {
+    installLocalStorage();
+  });
+
+  it("defaults to false when nothing is stored", () => {
+    expect(readTrialUnlocked("https://digithings.ai")).toBe(false);
+  });
+
+  it("round-trips the unlock flag and survives a simulated remount", () => {
+    writeTrialUnlocked("https://digithings.ai", true);
+    // A "remount" is just re-reading storage from scratch — there's no React
+    // state left over, exactly like a fresh page load after a reload.
+    expect(readTrialUnlocked("https://digithings.ai")).toBe(true);
+  });
+
+  it("clears on writeTrialUnlocked(host, false)", () => {
+    writeTrialUnlocked("https://digithings.ai", true);
+    writeTrialUnlocked("https://digithings.ai", false);
+    expect(readTrialUnlocked("https://digithings.ai")).toBe(false);
+  });
+
+  it("isolates the unlock flag per host origin", () => {
+    writeTrialUnlocked("https://digithings.ai", true);
+    expect(readTrialUnlocked("https://digiquant.io")).toBe(false);
+  });
+
+  it("swallows storage errors (private-mode safety)", () => {
+    // @ts-expect-error — deliberately broken storage
+    globalThis.localStorage = {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+      removeItem: () => {
+        throw new Error("blocked");
+      },
+    };
+    expect(readTrialUnlocked("x")).toBe(false);
+    expect(() => writeTrialUnlocked("x", true)).not.toThrow();
   });
 });
 

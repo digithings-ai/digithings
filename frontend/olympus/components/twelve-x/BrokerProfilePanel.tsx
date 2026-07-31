@@ -114,12 +114,12 @@ export default function BrokerProfilePanel({
                 {views.length} {views.length === 1 ? 'view' : 'views'}
               </span>
               {tally.bull > 0 ? (
-                <span className="flex items-center gap-1 text-up">
+                <span className="flex items-center gap-1 text-accent">
                   <span aria-hidden>▲</span> {tally.bull} bull
                 </span>
               ) : null}
               {tally.bear > 0 ? (
-                <span className="flex items-center gap-1 text-down">
+                <span className="flex items-center gap-1 text-warn">
                   <span aria-hidden>▼</span> {tally.bear} bear
                 </span>
               ) : null}

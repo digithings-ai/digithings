@@ -145,7 +145,7 @@ def _load_modes_yaml(path: str | Path | None) -> dict[str, str]:
         logger.warning("model modes file not found: %s", p)
         return {}
     try:
-        import yaml  # noqa: PLC0415 — lazy import; only the path branch needs PyYAML
+        import yaml  # lazy import; only the path branch needs PyYAML
     except ImportError as e:  # pragma: no cover - depends on optional extra
         raise RuntimeError(
             "resolve_model(path=...) requires PyYAML. Install with: pip install 'digillm[modes]'"

@@ -4,8 +4,9 @@ import { useMemo } from 'react';
 import { useDashboard } from '@/lib/dashboard-context';
 import type { BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
 import { DASHBOARD_BENCHMARK_TICKERS } from '@/lib/benchmark-tickers';
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
-import AtlasLoader from '@/components/AtlasLoader';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { EmptyState } from '@digithings/web';
+import PageSkeleton from '@/components/page-skeleton';
 import { MoveHero } from '@/components/today/move-hero';
 import { WhatToWatch } from '@/components/today/what-to-watch';
 import { BookStrip } from '@/components/today/book-strip';
@@ -56,25 +57,25 @@ export default function OverviewPage() {
     return inceptionVsBenchmark(data.portfolio.snapshots, data.benchmarks);
   }, [data]);
 
-  if (loading) return <AtlasLoader />;
+  if (loading) return <PageSkeleton />;
   if (error || !data)
     return (
       <div className={`${SUBPAGE_MAX} py-12`}>
-        <div className="glass-card mx-auto max-w-md px-6 py-8 text-center">
-          <h2 className="font-display text-2xl tracking-tight text-ink">
-            Couldn&rsquo;t load your dashboard
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed text-ink-mute">
-            {error || 'The latest data did not come through. This is usually temporary.'}
-          </p>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="mt-5 inline-flex items-center rounded-lg border border-hair px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-ink/[0.06]"
-          >
-            Try again
-          </button>
-        </div>
+        <EmptyState
+          variant="error"
+          className="mx-auto max-w-md"
+          title="Couldn’t load your dashboard"
+          body={error || 'The latest data did not come through. This is usually temporary.'}
+          action={
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-5 inline-flex items-center rounded-lg border border-hair px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-ink/[0.06]"
+            >
+              Try again
+            </button>
+          }
+        />
       </div>
     );
 
@@ -124,46 +125,52 @@ export default function OverviewPage() {
       : null;
 
   return (
-    <div className={`${SUBPAGE_MAX} space-y-5 py-4 md:py-7`}>
-      <MoveHero
-        regime={strategy.regime}
-        regimeLabel={regimeLabel}
-        headline={strategy.summary || null}
-        confidence={strategy.theses?.[0]?.confidence ?? null}
-        asOf={latestDate}
-        runType={runTypeLabel}
-        actions={rebalanceActions}
-        rationaleByTicker={rationaleByTicker}
-        nav={{
-          index: navIndex,
-          sincePct,
-          sinceDate,
-          dailyPct: dailyRet,
-          benchTicker: benchmarkBlurb?.ticker ?? null,
-          excessPct: benchmarkBlurb?.excessPct ?? null,
-          asOfDate: bookAsOf,
-        }}
-      />
+    <div className={`${SUBPAGE_MAX} py-4 md:py-7`}>
+      <section
+        data-testid="brief-workspace"
+        aria-label="Daily investment brief"
+        className="overflow-hidden border border-hair bg-surface"
+      >
+        <MoveHero
+          regime={strategy.regime}
+          regimeLabel={regimeLabel}
+          headline={strategy.summary || null}
+          confidence={strategy.theses?.[0]?.confidence ?? null}
+          asOf={latestDate}
+          runType={runTypeLabel}
+          actions={rebalanceActions}
+          rationaleByTicker={rationaleByTicker}
+          nav={{
+            index: navIndex,
+            sincePct,
+            sinceDate,
+            dailyPct: dailyRet,
+            benchTicker: benchmarkBlurb?.ticker ?? null,
+            excessPct: benchmarkBlurb?.excessPct ?? null,
+            asOfDate: bookAsOf,
+          }}
+        />
 
-      <WhatToWatch
-        actionables={strategy.actionableItems ?? []}
-        risks={strategy.riskItems ?? []}
-        asOfDate={latestDate}
-      />
+        <WhatToWatch
+          actionables={strategy.actionableItems ?? []}
+          risks={strategy.riskItems ?? []}
+          asOfDate={latestDate}
+        />
 
-      <BookStrip
-        positions={positions}
-        investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
-        asOfDate={bookAsOf}
-      />
+        <BookStrip
+          positions={positions}
+          investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
+          asOfDate={bookAsOf}
+        />
 
-      <TodaySummaries
-        positions={positions}
-        investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
-        theses={strategy.theses ?? []}
-        readSummary={strategy.summary ?? null}
-        asOfDate={latestDate}
-      />
+        <TodaySummaries
+          positions={positions}
+          investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
+          theses={strategy.theses ?? []}
+          readSummary={strategy.summary ?? null}
+          asOfDate={latestDate}
+        />
+      </section>
     </div>
   );
 }

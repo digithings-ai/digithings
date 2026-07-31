@@ -9,16 +9,17 @@ import type { TwelveXTab } from './context';
 /* ----------------------------------------------------------------------- */
 
 describe('TwelveXClient tab set', () => {
-  it('exposes exactly four tabs', () => {
-    expect(TWELVE_X_TABS).toHaveLength(4);
+  it('exposes exactly five tabs', () => {
+    expect(TWELVE_X_TABS).toHaveLength(5);
   });
 
-  it('is the canonical Today / Consensus / Matrix / Events set', () => {
+  it('is the canonical Today / Consensus / Matrix / Events / How-it-works set', () => {
     expect(TWELVE_X_TABS.map((t) => t.id)).toEqual([
       'today',
       'consensus',
       'matrix',
       'events',
+      'how-it-works',
     ]);
   });
 
@@ -34,6 +35,7 @@ describe('TwelveXClient tab set', () => {
       consensus: 'Consensus',
       matrix: 'Matrix',
       events: 'Events',
+      'how-it-works': 'How it works',
     });
   });
 });
@@ -43,11 +45,12 @@ describe('TwelveXClient tab set', () => {
 /* ----------------------------------------------------------------------- */
 
 describe('resolveTab', () => {
-  it('routes each of the four tab params to its tab', () => {
+  it('routes each of the five tab params to its tab', () => {
     expect(resolveTab('today')).toBe('today');
     expect(resolveTab('consensus')).toBe('consensus');
     expect(resolveTab('matrix')).toBe('matrix');
     expect(resolveTab('events')).toBe('events');
+    expect(resolveTab('how-it-works')).toBe('how-it-works');
   });
 
   it('redirects legacy intelligence param to consensus', () => {
@@ -66,11 +69,15 @@ describe('resolveTab', () => {
 });
 
 describe('TwelveXUnavailable', () => {
-  it('keeps the five-tab workspace visible when the feed fails', () => {
+  it('renders a flat error state inside the workspace chrome (tab bar stays with the parent)', () => {
     const html = renderToStaticMarkup(createElement(TwelveXUnavailable, { configured: true }));
     expect(html).toContain('FX research is temporarily unavailable');
     expect(html).toContain('Retry');
-    for (const { label } of TWELVE_X_TABS) expect(html).toContain(label);
+    // #1664: the parent workspace owns the command band + tab bar so
+    // How-it-works stays reachable while the feed is down; the unavailable
+    // state is content-only and flat.
+    expect(html).not.toContain('glass-card');
+    expect(html).toContain('border-hair');
   });
 
   it('uses presentation-safe copy when the feed is not configured', () => {
