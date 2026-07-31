@@ -32,7 +32,12 @@ import {
   writeTrialUnlocked,
   EMBED_FREE_TURN_LIMIT,
 } from "@/lib/embed-gate";
-import { buildGatedMessage, isUnlockedMessage } from "@/lib/embed-trial-messages";
+import {
+  buildGatedMessage,
+  isUnlockedMessage,
+  PARENT_GATE_TIMEOUT_MS,
+  resolveGateFallbackCard,
+} from "@/lib/embed-trial-messages";
 import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { readEmbedUiParams } from "@/lib/embed-ui-params";
 import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
@@ -262,6 +267,34 @@ function EmbedChat({
     window.parent.postMessage(payload, host);
   }, [trialLocked, isStandalone, host, gate.host, chat.messages, chat.busy]);
 
+  // Fallback for a parent that never answers the gated postMessage (design
+  // spec, "Error handling & fallbacks") — see PARENT_GATE_TIMEOUT_MS for the
+  // reasoning. "Armed" only when a gated message actually has a parent to
+  // reach (trialLocked && !noParentChannel); the standalone/no-host case
+  // already renders PaywallCard immediately via noParentChannel, no timer
+  // needed. Reset happens during render (same pattern as trialUnlockedFor
+  // above) rather than as a synchronous setState in the effect body, per
+  // react-hooks/set-state-in-effect. Since trialLocked's own definition
+  // (`!trialUnlocked && …`) already flips false the instant trialUnlocked
+  // becomes true, `armed` going false also covers the visitor unlocking — so
+  // an unlocked visitor can never see the fallback card afterwards.
+  const gateTimeoutArmed = trialLocked && !noParentChannel;
+  const [gateTimeoutState, setGateTimeoutState] = useState<{
+    armed: boolean;
+    parentUnresponsive: boolean;
+  }>(() => ({ armed: gateTimeoutArmed, parentUnresponsive: false }));
+  if (gateTimeoutState.armed !== gateTimeoutArmed) {
+    setGateTimeoutState({ armed: gateTimeoutArmed, parentUnresponsive: false });
+  }
+  const parentUnresponsive = gateTimeoutState.parentUnresponsive;
+  useEffect(() => {
+    if (!gateTimeoutArmed) return;
+    const timer = window.setTimeout(() => {
+      setGateTimeoutState((prev) => (prev.armed ? { ...prev, parentUnresponsive: true } : prev));
+    }, PARENT_GATE_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [gateTimeoutArmed]);
+
   useEffect(() => {
     if (!isTrialForm) return;
     const onMessage = (event: MessageEvent) => {
@@ -359,7 +392,7 @@ function EmbedChat({
       footerSlot={footerSlot}
       formReplacement={
         trialLocked ? (
-          noParentChannel ? (
+          resolveGateFallbackCard({ noParentChannel, parentUnresponsive }) === "paywall" ? (
             <PaywallCard lockedContact={tenantCfg.lockedContact} />
           ) : (
             <TrialGatePlaceholder />

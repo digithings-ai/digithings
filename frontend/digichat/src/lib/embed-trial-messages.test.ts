@@ -3,6 +3,8 @@ import {
   buildGatedMessage,
   isUnlockedMessage,
   MAX_GATED_QUESTION_CHARS,
+  PARENT_GATE_TIMEOUT_MS,
+  resolveGateFallbackCard,
   UNLOCKED_MESSAGE_TYPE,
 } from "@/lib/embed-trial-messages";
 
@@ -67,5 +69,35 @@ describe("buildGatedMessage", () => {
         msg("user", "q4"),
       ]).questions,
     ).toEqual(["q1", "q2", "q3"]);
+  });
+});
+
+describe("resolveGateFallbackCard", () => {
+  it("shows the placeholder when a parent channel exists and has answered in time", () => {
+    expect(
+      resolveGateFallbackCard({ noParentChannel: false, parentUnresponsive: false }),
+    ).toBe("placeholder");
+  });
+
+  it("shows the paywall contact card when there is no parent channel at all", () => {
+    expect(
+      resolveGateFallbackCard({ noParentChannel: true, parentUnresponsive: false }),
+    ).toBe("paywall");
+  });
+
+  it("shows the paywall contact card once the parent has gone unresponsive", () => {
+    expect(
+      resolveGateFallbackCard({ noParentChannel: false, parentUnresponsive: true }),
+    ).toBe("paywall");
+  });
+
+  it("still shows the paywall card if somehow both fallback reasons are true", () => {
+    expect(
+      resolveGateFallbackCard({ noParentChannel: true, parentUnresponsive: true }),
+    ).toBe("paywall");
+  });
+
+  it("uses an 8s timeout", () => {
+    expect(PARENT_GATE_TIMEOUT_MS).toBe(8000);
   });
 });

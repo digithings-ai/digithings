@@ -55,3 +55,41 @@ export function buildGatedMessage(
     ...(questions.length ? { questions } : {}),
   };
 }
+
+/**
+ * Fallback timeout (design spec, "Error handling & fallbacks"): once the embed
+ * has posted `datatap:gated` to a parent, a healthy parent immediately covers
+ * the whole iframe with its own full-bleed overlay (`position:absolute;
+ * inset:0; z-index:20`) and shows the trial form there. If no `datatap:unlocked`
+ * reply arrives within this window — parent on an old build, its JS threw, a
+ * CSP or extension blocked the listener — the embed swaps its own
+ * "complete the form" placeholder for the lockedContact mailto card so the
+ * visitor always has a way to reach out. 8s is long enough that ordinary slow
+ * parent JS never causes a visible flash of the fallback (the overlay would
+ * already be covering it), short enough that a genuinely unanswered visitor
+ * isn't left stuck for long.
+ */
+export const PARENT_GATE_TIMEOUT_MS = 8000;
+
+export type GateFallbackInputs = {
+  /** No channel to a parent exists at all (standalone, or embed missing `?host=`). */
+  noParentChannel: boolean;
+  /** PARENT_GATE_TIMEOUT_MS elapsed after posting `datatap:gated` with no unlock reply. */
+  parentUnresponsive: boolean;
+};
+
+export type GateFallbackCard = "paywall" | "placeholder";
+
+/**
+ * Which formReplacement card a locked trial-form embed should render.
+ * "paywall" is the lockedContact mailto card — a real, actionable fallback.
+ * "placeholder" is "complete the form to keep chatting", which is only safe
+ * to show when a working parent is guaranteed to cover it with its own
+ * overlay; either reason to distrust that guarantee routes to "paywall".
+ */
+export function resolveGateFallbackCard({
+  noParentChannel,
+  parentUnresponsive,
+}: GateFallbackInputs): GateFallbackCard {
+  return noParentChannel || parentUnresponsive ? "paywall" : "placeholder";
+}
