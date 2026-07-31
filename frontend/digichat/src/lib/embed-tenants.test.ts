@@ -204,6 +204,20 @@ describe("parseEmbedTenants", () => {
     ).toThrow(/token/);
   });
 
+  it("accepts trial_form as a gate mode", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "trial_form",
+          token: "t",
+        },
+      }),
+    );
+    expect(reg.get("example.com")?.gateMode).toBe("trial_form");
+  });
+
   it("throws on an invalid gateMode or theme", () => {
     expect(() =>
       parseEmbedTenants(

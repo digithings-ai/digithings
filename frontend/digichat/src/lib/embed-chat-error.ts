@@ -8,7 +8,10 @@ export function formatEmbedChatError(error: Error | undefined): string | null {
   try {
     const parsed = JSON.parse(raw) as { error?: string; message?: string };
     code = parsed.error;
-    if (parsed.message && (code === "embed_disabled" || code === "unauthorized")) {
+    if (
+      parsed.message &&
+      (code === "embed_disabled" || code === "unauthorized" || code === "trial_gate")
+    ) {
       return parsed.message;
     }
   } catch {
