@@ -39,19 +39,23 @@ jobs:
           # checked-out CODE is pinned to main. Releases flow develop -> main.
           ref: main
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            digibase/pyproject.toml
-            digigraph/pyproject.toml
-            digiquant/pyproject.toml
+          enable-cache: true
 
-      - name: Install digiquant (olympus.atlas imports + polars/supabase)
-        run: |
-          bash scripts/install-workspace.sh digiquant
-          pip install -e "./digiquant[atlas]"
+      # Installs from the uv.lock in the CHECKED-OUT tree, which is `main` above,
+      # not develop. That is why this conversion had to wait for the develop→main
+      # release (#1721): before it, main had no pyproject.toml or uv.lock and
+      # `--frozen` would have failed on the first line of a pipeline that touches
+      # live data (#1717).
+      #
+      # `--package digiquant --extra atlas` rather than the workspace-wide sync the
+      # test gates use: this reproduces exactly what `install-workspace.sh digiquant`
+      # plus `digiquant[atlas]` installed, and keeps NautilusTrader out of a job that
+      # never needs it. digibase and digikey arrive as declared dependencies of
+      # digiquant, so the hand-ordered install script is no longer needed here.
+      - name: Install from lockfile
+        run: uv sync --frozen --package digiquant --extra atlas
 
       - name: Refresh portfolio_metrics (Sharpe / vol / drawdown / NAV continuity)
         env:
@@ -64,9 +68,9 @@ jobs:
           RUN_DATE: ${{ inputs.date }}
         run: |
           if [ -n "$RUN_DATE" ]; then
-            python digiquant/scripts/atlas/refresh_performance_metrics.py --supabase --date "$RUN_DATE"
+            uv run --frozen --no-sync python digiquant/scripts/atlas/refresh_performance_metrics.py --supabase --date "$RUN_DATE"
           else
-            python digiquant/scripts/atlas/refresh_performance_metrics.py --supabase
+            uv run --frozen --no-sync python digiquant/scripts/atlas/refresh_performance_metrics.py --supabase
           fi
 
       - name: Refresh position_attribution (single-benchmark Brinson-lite)
@@ -81,7 +85,7 @@ jobs:
           RUN_DATE: ${{ inputs.date }}
         run: |
           if [ -n "$RUN_DATE" ]; then
-            python digiquant/scripts/atlas/refresh_attribution.py --date "$RUN_DATE"
+            uv run --frozen --no-sync python digiquant/scripts/atlas/refresh_attribution.py --date "$RUN_DATE"
           else
-            python digiquant/scripts/atlas/refresh_attribution.py
+            uv run --frozen --no-sync python digiquant/scripts/atlas/refresh_attribution.py
           fi

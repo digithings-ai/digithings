@@ -6,7 +6,7 @@ import { resolveEmbedHost } from "@/lib/embed-gate";
 
 export type EmbedTenantClientConfig = {
   slug: string;
-  gateMode: "turn_limited" | "ungated";
+  gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
   accent: { color: string; foreground: string } | null;
   attribution: boolean;
@@ -51,7 +51,9 @@ export function useEmbedTenantConfig(
         if (
           !cancelled &&
           json &&
-          (json.gateMode === "turn_limited" || json.gateMode === "ungated")
+          (json.gateMode === "turn_limited" ||
+            json.gateMode === "ungated" ||
+            json.gateMode === "trial_form")
         ) {
           setConfig(json);
         }

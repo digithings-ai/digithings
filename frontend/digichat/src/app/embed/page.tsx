@@ -11,7 +11,7 @@
  * Uses the shared @digithings/digichat-ui DigiChatSession widget.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DigiChatSession } from "@digithings/digichat-ui";
 import { Key, ExternalLink, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,12 +23,22 @@ import {
   validateBYOKModel,
   type BYOKProvider,
 } from "@/hooks/use-byok-key";
-import { useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
+import { readEmbedConversationId, useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
 import {
   emit,
+  readTrialUnlocked,
+  resolveEmbedHost,
   useEmbedGate,
+  writeTrialUnlocked,
   EMBED_FREE_TURN_LIMIT,
 } from "@/lib/embed-gate";
+import {
+  buildGatedMessage,
+  isUnlockedMessage,
+  PARENT_GATE_TIMEOUT_MS,
+  resolveGateFallbackCard,
+} from "@/lib/embed-trial-messages";
+import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { readEmbedUiParams } from "@/lib/embed-ui-params";
 import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
 import {
@@ -161,8 +171,70 @@ function EmbedChat({
   const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } =
     useBYOKKey();
   const ungated = tenantCfg.gateMode === "ungated";
-  const showByok = !ungated;
-  const gate = useEmbedGate(byokIsSet || ungated, host);
+  const isTrialForm = tenantCfg.gateMode === "trial_form";
+  const showByok = !ungated && !isTrialForm; // trial_form defers unlock to the parent form, not BYOK
+
+  // Mirrors useEmbedGate's own host resolution (resolveEmbedHost(host)) so the
+  // persisted trial-unlock flag is keyed identically to the persisted turn
+  // counter. Computed here rather than read off `gate.host` after the fact,
+  // because `gate` below needs `trialUnlocked` as an input — using `gate.host`
+  // would make the two hooks circularly dependent.
+  const resolvedHost = useMemo(() => resolveEmbedHost(host), [host]);
+
+  // trialUnlocked persists across reloads (localStorage, keyed by host) —
+  // mirrors how embed-gate.ts persists the turn counter (see readTrialUnlocked/
+  // writeTrialUnlocked). `host` arrives asynchronously (resolved from a
+  // searchParams Promise in the parent EmbedPage), so this can't be a one-shot
+  // lazy useState initializer: it must react to resolvedHost changing, exactly
+  // like useEmbedGate's own turnsFor pattern below. Adjusting state DURING
+  // RENDER (rather than in a useEffect) means the corrected value is already
+  // in place before the gated-postMessage effect ever runs — an effect-based
+  // fix would still let one wrong postMessage go out on the initial mount's
+  // effect flush, using the stale (false) value.
+  const [trialUnlockedFor, setTrialUnlockedFor] = useState<{ host: string; unlocked: boolean }>(
+    () => ({ host: resolvedHost, unlocked: readTrialUnlocked(resolvedHost) }),
+  );
+  if (trialUnlockedFor.host !== resolvedHost) {
+    setTrialUnlockedFor({ host: resolvedHost, unlocked: readTrialUnlocked(resolvedHost) });
+  }
+  const trialUnlocked = trialUnlockedFor.unlocked;
+  const unlockTrial = useCallback(() => {
+    setTrialUnlockedFor((prev) => {
+      writeTrialUnlocked(prev.host, true);
+      return { host: prev.host, unlocked: true };
+    });
+  }, []);
+
+  const [serverGated, setServerGated] = useState(false);
+
+  const gate = useEmbedGate(
+    byokIsSet || ungated || trialUnlocked,
+    host,
+    trialUnlocked ? EMBED_TRIAL_TURN_LIMIT : undefined, // undefined => EMBED_FREE_TURN_LIMIT default
+  );
+
+  // trial_form is locked when EITHER the client counter hit the free limit
+  // (normal path) OR the server reported a gate (localStorage-bypass path).
+  const trialLocked = isTrialForm && !trialUnlocked && (gate.locked || serverGated);
+
+  // Standalone (top-level, not embedded) => no parent will show a form. Fall back
+  // to the lockedContact card so a visitor is never dead-ended (design spec).
+  const isStandalone =
+    typeof window !== "undefined" && window.parent === window.self;
+
+  // A legacy iframe embed that omits `?host=` has no channel back to a parent
+  // either: the gated postMessage effect below is guarded on `host` and skips
+  // itself, and isUnlockedMessage(event, undefined) can never match, so no
+  // unlock could ever be honored. Treat that exactly like standalone — fall
+  // back to the lockedContact card rather than dead-ending on a form that will
+  // never appear.
+  const noParentChannel = isStandalone || !host;
+
+  // Stable identity — use-embed-digi-chat.ts's [error, onGated] effect would
+  // otherwise re-fire every render off a freshly-allocated arrow function.
+  const onGated = useCallback(() => {
+    setServerGated(true);
+  }, []);
 
   const chat = useEmbedDigiChat({
     accent,
@@ -172,7 +244,68 @@ function EmbedChat({
     byokKey: byokIsSet ? byokKey : undefined,
     byokProvider,
     byokModel,
+    trialUnlocked,
+    onGated: isTrialForm ? onGated : undefined,
   });
+
+  // The upstream conversation id is the useful handle (it maps to the real backend
+  // conversation); fall back to nothing rather than blocking the gate.
+  //
+  // chat.messages gets a new identity on every streaming chunk, and trialLocked
+  // flips true while the gating question's answer is still streaming — so guard on
+  // the payload itself, or the parent gets a repost per chunk (and an overlay the
+  // visitor dismissed would pop back open). `!chat.busy` additionally holds the
+  // post until the 3rd answer has fully streamed in, so the parent's full-bleed
+  // overlay doesn't cover the answer from its first token.
+  const lastGatedPost = useRef<string | null>(null);
+  useEffect(() => {
+    if (!trialLocked || isStandalone || !host || chat.busy) return;
+    const payload = buildGatedMessage(readEmbedConversationId(gate.host), chat.messages);
+    const key = JSON.stringify(payload);
+    if (lastGatedPost.current === key) return;
+    lastGatedPost.current = key;
+    window.parent.postMessage(payload, host);
+  }, [trialLocked, isStandalone, host, gate.host, chat.messages, chat.busy]);
+
+  // Fallback for a parent that never answers the gated postMessage (design
+  // spec, "Error handling & fallbacks") — see PARENT_GATE_TIMEOUT_MS for the
+  // reasoning. "Armed" only when a gated message actually has a parent to
+  // reach (trialLocked && !noParentChannel); the standalone/no-host case
+  // already renders PaywallCard immediately via noParentChannel, no timer
+  // needed. Reset happens during render (same pattern as trialUnlockedFor
+  // above) rather than as a synchronous setState in the effect body, per
+  // react-hooks/set-state-in-effect. Since trialLocked's own definition
+  // (`!trialUnlocked && …`) already flips false the instant trialUnlocked
+  // becomes true, `armed` going false also covers the visitor unlocking — so
+  // an unlocked visitor can never see the fallback card afterwards.
+  const gateTimeoutArmed = trialLocked && !noParentChannel;
+  const [gateTimeoutState, setGateTimeoutState] = useState<{
+    armed: boolean;
+    parentUnresponsive: boolean;
+  }>(() => ({ armed: gateTimeoutArmed, parentUnresponsive: false }));
+  if (gateTimeoutState.armed !== gateTimeoutArmed) {
+    setGateTimeoutState({ armed: gateTimeoutArmed, parentUnresponsive: false });
+  }
+  const parentUnresponsive = gateTimeoutState.parentUnresponsive;
+  useEffect(() => {
+    if (!gateTimeoutArmed) return;
+    const timer = window.setTimeout(() => {
+      setGateTimeoutState((prev) => (prev.armed ? { ...prev, parentUnresponsive: true } : prev));
+    }, PARENT_GATE_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [gateTimeoutArmed]);
+
+  useEffect(() => {
+    if (!isTrialForm) return;
+    const onMessage = (event: MessageEvent) => {
+      if (isUnlockedMessage(event, host)) {
+        unlockTrial();
+        setServerGated(false);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [isTrialForm, host, unlockTrial]);
 
   const uiParams = useMemo(() => {
     if (typeof window === "undefined") return {};
@@ -197,7 +330,7 @@ function EmbedChat({
 
   const wrappedSend = useCallback(
     (question: string) => {
-      if (gate.locked && !ungated) return;
+      if ((gate.locked || trialLocked) && !ungated) return;
       void chat.send(question);
       emit("embed_turn_submitted", {
         accent,
@@ -206,7 +339,7 @@ function EmbedChat({
       });
       if (!ungated) gate.increment();
     },
-    [chat, gate, ungated, accent, byokIsSet],
+    [chat, gate, trialLocked, ungated, accent, byokIsSet],
   );
 
   const headerSlot =
@@ -258,11 +391,17 @@ function EmbedChat({
       headerSlot={headerSlot}
       footerSlot={footerSlot}
       formReplacement={
-        gate.locked && !ungated ? (
+        trialLocked ? (
+          resolveGateFallbackCard({ noParentChannel, parentUnresponsive }) === "paywall" ? (
+            <PaywallCard lockedContact={tenantCfg.lockedContact} />
+          ) : (
+            <TrialGatePlaceholder />
+          )
+        ) : gate.locked && !ungated && !isTrialForm ? (
           <PaywallCard lockedContact={tenantCfg.lockedContact} />
         ) : undefined
       }
-      showIntro={!gate.locked}
+      showIntro={!gate.locked && !trialLocked}
       ariaLabel={headerTitle ?? "digichat embed"}
     />
   );
@@ -428,6 +567,18 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+function TrialGatePlaceholder() {
+  return (
+    <div className="border-t border-border bg-muted/40 p-4">
+      <p className="text-sm font-medium">Complete the form to keep chatting.</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions. Fill in the
+        short form to unlock more.
+      </p>
     </div>
   );
 }
