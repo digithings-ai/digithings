@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.4.1...digichat-v0.5.0) (2026-07-31)
+
+
+### Features
+
+* **digichat:** add trial_form gate mode and shared turn-limit constants ([4a6706c](https://github.com/digithings-ai/digithings/commit/4a6706c88a79353007b6eb1db7b327e82475eb7a))
+* **digichat:** carry chat session id and questions on datatap:gated ([f06cdf9](https://github.com/digithings-ai/digithings/commit/f06cdf97dee8f12a2f0523c0a4adea6315d1166b))
+* **digichat:** enforce trial_form gate in /api/chat (402, unlock flag, fail-open) ([fb58be2](https://github.com/digithings-ai/digithings/commit/fb58be21e0bf0de8bfa2448e81e5ff4d0d9a7912))
+* **digichat:** in-memory per-IP trial-turn quota ([f86a03a](https://github.com/digithings-ai/digithings/commit/f86a03ae5658bde13e8c51af160ff24f8916b2d8))
+* **digichat:** trial_form embed — postMessage gate/unlock handshake + unlock header ([6004410](https://github.com/digithings-ai/digithings/commit/60044101e4839ff239363d654f89aed580dd464e))
+* **digichat:** trial_form embed gate mode ([4fcf107](https://github.com/digithings-ai/digithings/commit/4fcf107d8b3d2633c992a6bc7e76e927bab8f41d))
+
+
+### Bug Fixes
+
+* **digichat:** fall back to the contact card when the parent never answers the gate ([e155c76](https://github.com/digithings-ai/digithings/commit/e155c768e27fe4e6277ac71061a9335b495bc0a2))
+* **digichat:** hold the server-side turn cap at the advertised 3 ([bde4bfd](https://github.com/digithings-ai/digithings/commit/bde4bfdac30282e9a65265c49997fc5b74272dec))
+* **digichat:** persist the trial unlock and harden the gate's failure modes ([110d74c](https://github.com/digithings-ai/digithings/commit/110d74ca25c93ab4e6bb9d966dd585aefed789be))
+* **digichat:** post datatap:gated once per payload, not per stream chunk ([6bb9d72](https://github.com/digithings-ai/digithings/commit/6bb9d72e1626d55b11f946d8914035b7b6c28cdb))
+
 ## [0.4.1](https://github.com/digithings-ai/digithings/compare/digichat-v0.4.0...digichat-v0.4.1) (2026-07-19)
 
 
