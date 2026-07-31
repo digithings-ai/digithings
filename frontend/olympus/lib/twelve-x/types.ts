@@ -123,8 +123,14 @@ export interface FxEventSnapshotRow {
 }
 
 /**
- * `fx_economic_calendar` (twelve-x migration 001/002) — upcoming macro catalysts.
+ * `economic_calendar` in the shared DigiQuant **core** project — upcoming macro catalysts.
  * Read for the next-14-day window, ordered by `event_datetime_utc`.
+ *
+ * Not a twelve-x table, despite living in this module. The calendar is shared, so #1066
+ * made `core` its single source and retired twelve-x's own `fx_economic_calendar`
+ * (no dual-write) — which is why `getUpcomingEvents` reads it through the MAIN Olympus
+ * client rather than `twelveXSupabase`. The `Fx` prefix on this interface is a naming
+ * leftover, not a claim of ownership.
  */
 export interface FxEconomicCalendarRow {
   id: number; // bigserial
