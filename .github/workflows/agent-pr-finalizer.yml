@@ -45,9 +45,11 @@ jobs:
           # Pass --cursor-only so finalize_agent_prs.py skips copilot/* branches
           # (those are now owned by the gh-aw lifecycle workflow).
           python3 scripts/finalize_agent_prs.py --repo "$REPO" --cursor-only --json > /tmp/pr-actions.json
-          echo "actions<<EOF" >> "$GITHUB_OUTPUT"
-          cat /tmp/pr-actions.json >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          {
+            echo "actions<<EOF"
+            cat /tmp/pr-actions.json
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
           python3 scripts/finalize_agent_prs.py --repo "$REPO" --cursor-only
 
       - name: Apply finalizer actions

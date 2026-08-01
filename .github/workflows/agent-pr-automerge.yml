@@ -40,9 +40,11 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-            echo "head_branch=$PR_HEAD_REF" >> "$GITHUB_OUTPUT"
-            echo "base_ref=${{ github.event.pull_request.base.ref }}" >> "$GITHUB_OUTPUT"
+            {
+              echo "pr_number=${{ github.event.pull_request.number }}"
+              echo "head_branch=$PR_HEAD_REF"
+              echo "base_ref=${{ github.event.pull_request.base.ref }}"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           BRANCH="$RUN_HEAD_BRANCH"
@@ -57,9 +59,11 @@ jobs:
             echo "pr_number=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "pr_number=$(echo "$PR" | jq -r '.number')" >> "$GITHUB_OUTPUT"
-          echo "head_branch=$BRANCH" >> "$GITHUB_OUTPUT"
-          echo "base_ref=$(echo "$PR" | jq -r '.baseRefName')" >> "$GITHUB_OUTPUT"
+          {
+            echo "pr_number=$(echo "$PR" | jq -r '.number')"
+            echo "head_branch=$BRANCH"
+            echo "base_ref=$(echo "$PR" | jq -r '.baseRefName')"
+          } >> "$GITHUB_OUTPUT"
 
   gate:
     needs: resolve-pr

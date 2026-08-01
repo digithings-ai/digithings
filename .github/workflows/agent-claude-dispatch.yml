@@ -71,9 +71,11 @@ jobs:
           BRANCH_SLUG=$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]' |
                         sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | cut -c1-40 | sed 's/-$//')
 
-          echo "component=$COMPONENT"                       >> "$GITHUB_OUTPUT"
-          echo "test_cmd=$TEST"                             >> "$GITHUB_OUTPUT"
-          echo "branch=task/${ISSUE_NUMBER}-${BRANCH_SLUG}" >> "$GITHUB_OUTPUT"
+          {
+            echo "component=$COMPONENT"
+            echo "test_cmd=$TEST"
+            echo "branch=task/${ISSUE_NUMBER}-${BRANCH_SLUG}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Post local-dispatch instructions
         env:

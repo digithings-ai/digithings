@@ -221,7 +221,7 @@ Per-component test workflows (`test-digibase.yml`, etc.) use `workflow_call` so 
 
 Then add the job with `needs: changes` and `if: needs.changes.outputs.<name> == 'true'`.
 
-A lane whose gate can silently narrow deserves an assertion about its own coverage — see the `Assert every workflow was linted` step in the `actionlint` job.
+A lane whose gate can silently narrow deserves an assertion about its own coverage — see the `Assert every workflow was linted` step in the `actionlint` job. Coverage is files; a gate can also narrow by *rule*, which that step would not catch — `Assert SC2129 is live` in the same job probes for that.
 
 ### 7. Concurrency
 
@@ -298,9 +298,14 @@ job and a bare local run. Two things to know before editing it:
   applied nothing. This is why the job pins `version: "1.7.12"` instead of
   tracking `latest` — an unpinned change could void every suppression, or add
   checks, under a previously green build. Bump it deliberately, in its own PR.
-- Suppress by SC code, with a written reason. The two current entries
-  (`SC2016` for jq/GraphQL `$var` in single quotes, `SC2129` for the
-  `echo "k=v" >> "$GITHUB_OUTPUT"` idiom) both carry one.
+- Suppress by SC code, with a written reason. The one current entry
+  (`SC2016`, for jq/GraphQL `$var` in single quotes) carries one.
+- `SC2129` was suppressed when this file was added and is no longer. Every
+  `run:` block that appended repeatedly to `$GITHUB_OUTPUT` was restructured
+  into a single `{ ... } >> "$GITHUB_OUTPUT"` group, so the rule is enforced
+  rather than waived. A new occurrence should be grouped, not re-suppressed —
+  the `Assert SC2129 is live` step fails the build if the ignore is re-added,
+  or if a shellcheck bump retires the check the way 0.11.0 retired SC2002.
 
 `*.lock.yml` is excluded wholesale: it is `gh aw compile` output, already
 guarded by the compile drift check in `ci-docs.yml`, and hand-edits there are
