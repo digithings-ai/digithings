@@ -7,6 +7,12 @@ import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@dig
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { p } from "@/lib/base-path";
 import { resolveEmbedHost } from "@/lib/embed-gate";
+import {
+  ACTIVITY_PART_TYPE,
+  sanitizeActivitySpan,
+  toDigiChatActivity,
+  type ActivitySpan,
+} from "@/lib/chat-activity";
 
 /** Read ?token= / ?host= at send time — useChat transport is frozen on first render (#1339). */
 function readEmbedUrlAuth(): { token?: string; host?: string } {
@@ -40,12 +46,12 @@ type TracePartData = {
   payload?: { label?: unknown; status?: unknown };
 };
 
-export function uiMessageToDigiChat(message: UIMessage): DigiChatMessage {
-  const text = message.parts
-    .filter((part): part is { type: "text"; text: string } => part.type === "text")
-    .map((part) => part.text)
-    .join("");
-
+/**
+ * Legacy path: providers emitted a single data-digigraphTrace{label,status} part
+ * before the activity protocol landed. Kept for one release so an iframe page a
+ * visitor cached across a deploy still renders its steps.
+ */
+function legacyTraceActivities(message: UIMessage): DigiChatActivity[] {
   const traces = message.parts.filter(
     (part): part is { type: "data-digigraphTrace"; data: TracePartData } =>
       part.type === "data-digigraphTrace",
@@ -64,11 +70,32 @@ export function uiMessageToDigiChat(message: UIMessage): DigiChatMessage {
     else byLabel.set(label, { label, done });
   }
 
-  const activities: DigiChatActivity[] = Array.from(byLabel.values(), (t) => ({
+  return Array.from(byLabel.values(), (t) => ({
     kind: "trace" as const,
     label: t.label,
     done: t.done,
   }));
+}
+
+export function uiMessageToDigiChat(message: UIMessage): DigiChatMessage {
+  const text = message.parts
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+
+  const spans = message.parts
+    .filter((part): part is { type: typeof ACTIVITY_PART_TYPE; data: unknown } =>
+      part.type === ACTIVITY_PART_TYPE
+    )
+    .map((part) => sanitizeActivitySpan(part.data))
+    .filter((span): span is ActivitySpan => span !== null);
+
+  // Activity parts win outright: during a deploy a single message could carry
+  // both shapes, and rendering both would double every step.
+  const hasActivityParts = message.parts.some((part) => part.type === ACTIVITY_PART_TYPE);
+  const activities = hasActivityParts
+    ? toDigiChatActivity(spans)
+    : legacyTraceActivities(message);
 
   return {
     role: message.role === "user" ? "user" : "assistant",
