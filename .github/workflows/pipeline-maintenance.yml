@@ -131,7 +131,11 @@ jobs:
           done < <(git branch -r | sed 's|origin/||' | tr -d ' ')
 
           echo "stale_branches<<EOF" >> "$GITHUB_OUTPUT"
-          printf "$STALE" >> "$GITHUB_OUTPUT"
+          # '%b' expands the literal \n separators STALE accumulates above while
+          # keeping the branch names as data — `printf "$STALE"` put them in the
+          # format string, where a branch named e.g. `fix/100%-cpu` is a bogus
+          # conversion spec and corrupts the list (SC2059).
+          printf '%b' "$STALE" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
           COUNT=0
           [[ -n "$STALE" ]] && COUNT=$(printf "%s" "$STALE" | grep -c .)
@@ -151,7 +155,7 @@ jobs:
             --search "stale merged branches in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
           [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
 
-          BRANCH_LIST=$(printf "$STALE" | sed 's/^/- /')
+          BRANCH_LIST=$(printf '%b' "$STALE" | sed 's/^/- /')
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
@@ -315,9 +319,12 @@ jobs:
           [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
 
           # >90d for normal issues, >7d for `blocked`-labeled. Export so
-          # the Python child process sees them via os.environ.
-          export CUTOFF_NORMAL=$(date -u -v-90d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 days ago' +%Y-%m-%dT%H:%M:%SZ)
-          export CUTOFF_BLOCKED=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          # the Python child process sees them via os.environ. Assign first —
+          # `export X=$(cmd)` masks the command's exit status from `set -e`
+          # (SC2155).
+          CUTOFF_NORMAL=$(date -u -v-90d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          CUTOFF_BLOCKED=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          export CUTOFF_NORMAL CUTOFF_BLOCKED
 
           python3 <<'PY'
           import json, os, subprocess
@@ -371,7 +378,9 @@ jobs:
           set -euo pipefail
           [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
 
-          export CUTOFF=$(date -u -v-14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          # Assign before exporting so `set -e` still sees date(1)'s status (SC2155).
+          CUTOFF=$(date -u -v-14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          export CUTOFF
 
           python3 <<'PY'
           import json, os, subprocess, re

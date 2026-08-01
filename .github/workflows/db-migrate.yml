@@ -51,7 +51,7 @@ jobs:
           psql "${DB_URI}" -v ON_ERROR_STOP=1 -c \
             "CREATE TABLE IF NOT EXISTS olympus_schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());"
 
-          mapfile -t FILES < <(ls digiquant/supabase/migrations/*.sql | sort)
+          mapfile -t FILES < <(find digiquant/supabase/migrations -maxdepth 1 -name '*.sql' | sort)
           echo "Found ${#FILES[@]} migration files; baseline through prefix ${BASELINE_THROUGH}."
 
           # Fail fast on duplicate numeric prefixes (version key is the full filename,

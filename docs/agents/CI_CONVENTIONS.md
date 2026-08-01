@@ -21,7 +21,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `project-stub-fields.yml` | Project: stub fields TSV | issues labeled | Appends inferred row to `scripts/project_fields.tsv` when `agent-task` or `phase-N` label applied | Working | none |
 | `agent-docs-automerge.yml` | Agent: doc auto-merge | PR events | Enable squash auto-merge for PRs with `automerge-docs` label after doc-only path verification | Working | none |
 | `agent-ci-failure-triage.yml` | Agent: CI failure triage | workflow_run (completed) | Create `copilot` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
-| `ci.yml` | CI | push (main/develop), PR | Orchestrator: per-component tests + score + e2e-contract + nautilus-smoke + atlas-graph + pip-audit + ruff/scripts/baseline/provider_review + compose-validate + `frontend-canon` (unconditional canon guard, #1434) | Working | none |
+| `ci.yml` | CI | push (main/develop), PR | Orchestrator: per-component tests + score + e2e-contract + nautilus-smoke + atlas-graph + pip-audit + ruff/scripts/baseline/provider_review + compose-validate + `actionlint` (repo-wide workflow lint) + `frontend-canon` (unconditional canon guard, #1434) | Working | none |
 | `test-e2e.yml` | Test: e2e stack | workflow_call, workflow_dispatch, push (develop) | PR gate: `e2e-contract` via `ci.yml`; compose `pytest -m e2e` on develop push/dispatch only (`continue-on-error`) | Working | `tests/test_e2e*.py`, compose |
 | `test-nautilus.yml` | Test: Nautilus smoke | workflow_call | Linux `digiquant[nautilus]` smoke subset | Working | `digiquant/**`, `tests/dq/**` |
 | `test-olympus.yml` | Test: olympus | workflow_call | Olympus lint + vitest + build | Working | `frontend/olympus/**`, design |
@@ -151,7 +151,7 @@ Pin GitHub-owned actions to the current major version tag (`@v4`, `@v5`). Use th
 | `actions/upload-pages-artifact` | `@v3` |
 | `actions/deploy-pages` | `@v4` |
 | `peter-evans/create-pull-request` | `@v6` |
-| `raven-actions/actionlint` | `@v2` |
+| `raven-actions/actionlint` | `@v2` (with `version: "1.7.12"` — see below) |
 | `anthropics/claude-code-action` | `@v1` |
 
 Third-party actions (non-GitHub-owned): pin to a full SHA for supply-chain integrity, or use a trusted major-version tag with a SHA comment. The `gitleaks` workflow demonstrates the preferred pattern for binary downloads: download from a pinned release URL and verify the SHA256 checksum.
@@ -213,6 +213,16 @@ Workflows that only apply to specific components must declare `paths:` under bot
 
 Per-component test workflows (`test-digibase.yml`, etc.) use `workflow_call` so `ci.yml` can invoke them unconditionally, while the direct push/PR triggers are path-filtered. This is the correct pattern.
 
+**Adding a lane to `ci.yml` is three edits, and the drift check only catches one of them.** `scripts/generate_ci_path_filters.py` rewrites *only* the block between the `CI_PATH_FILTERS` markers; the `changes:` job's `outputs:` map is hand-maintained. A filter added to `scripts/ci_paths.yaml` and regenerated, but never wired into `outputs:`, yields `needs.changes.outputs.<name> == ''` — the lane's `if:` is false on every run and it silently never fires, with `--check` green throughout.
+
+1. Add the filter to `scripts/ci_paths.yaml`.
+2. Run `python3 scripts/generate_ci_path_filters.py` (CI enforces `--check`).
+3. **By hand:** add `<name>: ${{ steps.filter.outputs.<name> }}` to the `changes` job's `outputs:` map.
+
+Then add the job with `needs: changes` and `if: needs.changes.outputs.<name> == 'true'`.
+
+A lane whose gate can silently narrow deserves an assertion about its own coverage — see the `Assert every workflow was linted` step in the `actionlint` job.
+
 ### 7. Concurrency
 
 Use `concurrency:` to cancel stale runs on rapid pushes:
@@ -257,7 +267,39 @@ Current watched workflows in `agent-ci-failure-triage.yml`:
 
 ---
 
+## Lint all workflows (actionlint)
+
+`ci.yml`'s `actionlint` job runs this on every PR touching `.github/workflows/**`
+(the `workflows` filter in `scripts/ci_paths.yaml`). Reproduce it locally with:
+
+```bash
+brew install actionlint shellcheck
+actionlint
+```
+
+Install `shellcheck` as well — actionlint runs it over every `run:` block and
+just skips those checks when the binary is missing, so a shellcheck-less run
+looks clean while covering far less.
+
+Suppressions live in `.github/actionlint.yaml`, auto-discovered by both the CI
+job and a bare local run. Two things to know before editing it:
+
+- **actionlint silently ignores config keys it does not recognise.** A typo'd
+  key, or a `paths:` section on a build predating that feature, exits 0 having
+  applied nothing. This is why the job pins `version: "1.7.12"` instead of
+  tracking `latest` — an unpinned change could void every suppression, or add
+  checks, under a previously green build. Bump it deliberately, in its own PR.
+- Suppress by SC code, with a written reason. The two current entries
+  (`SC2016` for jq/GraphQL `$var` in single quotes, `SC2129` for the
+  `echo "k=v" >> "$GITHUB_OUTPUT"` idiom) both carry one.
+
+`*.lock.yml` is excluded wholesale: it is `gh aw compile` output, already
+guarded by the compile drift check in `ci-docs.yml`, and hand-edits there are
+reverted by the next compile.
+
 ## Validate all workflow YAML
+
+Weaker than the above — a parse check only. Kept for quick offline use:
 
 ```bash
 python3 -c "

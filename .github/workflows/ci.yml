@@ -38,6 +38,7 @@ jobs:
       nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
       atlas_graph: ${{ steps.filter.outputs.atlas_graph }}
       ruff_and_scripts: ${{ steps.filter.outputs.ruff_and_scripts }}
+      workflows: ${{ steps.filter.outputs.workflows }}
       compose: ${{ steps.filter.outputs.compose }}
       pip_audit: ${{ steps.filter.outputs.pip_audit }}
     steps:
@@ -164,6 +165,9 @@ jobs:
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
               - '.github/workflows/pipeline-digiquant-prices.yml'
+            workflows:
+              - '.github/workflows/**'
+              - '.github/actionlint.yaml'
             compose:
               - 'docker-compose.yml'
               - '.env.example'
@@ -350,6 +354,58 @@ jobs:
         # the Polars-only rule. Left as-is here because fixing it is a digiquant
         # code change, not a dependency-management one — tracked separately.
         run: bash scripts/check_pandas_boundary.sh
+
+  # ── GitHub Actions workflow lint (repo-wide) ────────────────────────────────
+  # Gated on `.github/workflows/**`, so it fires on any workflow edit — including
+  # edits to ci.yml itself. The predecessor was a job inside test-atlas-graph.yml
+  # with `files: ".github/workflows/pipeline-olympus.yml"`, invoked only from the
+  # atlas_graph lane; a workflow-only PR skipped that lane entirely and got no
+  # actionlint at all. Suppressions live in .github/actionlint.yaml.
+  actionlint:
+    name: actionlint
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run actionlint
+        id: actionlint
+        uses: raven-actions/actionlint@v2
+        with:
+          # No `files:` input — actionlint with no path arguments discovers and
+          # lints every workflow under .github/workflows. Re-pinning it to a
+          # single file is what this job exists to undo.
+          #
+          # `version` is pinned rather than left at `latest` because actionlint
+          # SILENTLY IGNORES config keys it does not recognise: on a build
+          # without `paths:` support, .github/actionlint.yaml would be accepted
+          # and applied as nothing, and this job would go red with ~43 findings
+          # and no diagnostic. Bumping it is a deliberate PR, same rule as the
+          # ruff/mypy/pytest bounds in CLAUDE.md § "Dependency version bounds".
+          version: "1.7.12"
+          # shellcheck + pyflakes default to true; the action installs them if
+          # the runner lacks them. 39 of the 43 findings this job first surfaced
+          # came from the shellcheck integration, so it is load-bearing.
+
+      - name: Assert every workflow was linted
+        env:
+          LINTED: ${{ steps.actionlint.outputs.total-files }}
+        # Coverage guard. A lint that quietly narrows its own scope reads exactly
+        # like a passing one — which is how the single-file pin above survived.
+        # `total-files` is parsed by the action from actionlint's own verbose
+        # summary, so this compares what ran against what is on disk.
+        run: |
+          set -euo pipefail
+          ON_DISK=$(find .github/workflows -maxdepth 1 \( -name '*.yml' -o -name '*.yaml' \) | wc -l)
+          echo "actionlint linted ${LINTED:-0} file(s); ${ON_DISK} workflow file(s) on disk."
+          if [ "${LINTED:-0}" -lt "${ON_DISK}" ]; then
+            echo "::error::actionlint covered ${LINTED:-0} of ${ON_DISK} workflow files — scope regression."
+            exit 1
+          fi
 
   # ── Request Copilot PR review (Tier 1 primary reviewer) — REM-098 ───────────
   # Single PR review path: this job only (no copilot-pr-review.yml). Issue dispatch

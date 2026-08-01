@@ -59,8 +59,11 @@ jobs:
         run: |
           set -euo pipefail
           # Scheduled runs default to live; manual dispatch defaults to dry_run=true.
+          # `export` is what carries the override to the python3 heredoc below,
+          # which reads DRY_RUN from os.environ — the step-level `env:` value it
+          # would otherwise inherit is the un-overridden one.
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            DRY_RUN="false"
+            export DRY_RUN="false"
           fi
 
           python3 <<'PY'

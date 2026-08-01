@@ -151,6 +151,18 @@ ruff_and_scripts:
   # `github.event.schedule` literal disabling a job) is silent (#1775).
   - .github/workflows/pipeline-digiquant-prices.yml
 
+# Repo-wide actionlint. Deliberately the whole directory: before this filter the
+# only actionlint in CI was a job inside test-atlas-graph.yml pinned to
+# `files: .github/workflows/pipeline-olympus.yml`, reached only through the
+# atlas_graph lane — so a PR editing smoke-site.yml, a deploy workflow, or ci.yml
+# itself was never workflow-linted at all (observed on #1818, where atlas_graph
+# reported "skipping" over a diff of pure workflow YAML).
+# .github/actionlint.yaml is listed because it holds the suppression rules: a
+# change that widens or narrows them has to re-run the lint it governs.
+workflows:
+  - .github/workflows/**
+  - .github/actionlint.yaml
+
 compose:
   - docker-compose.yml
   - .env.example
