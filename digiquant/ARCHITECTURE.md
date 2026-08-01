@@ -1133,6 +1133,22 @@ has no anon policy — anon reads return an empty set (not a permission error) w
 role keeps full access (mirrors the `atlas_run_diagnostics` idiom, migration 033). Run
 `get_advisors(type="security")` after applying; expect zero `rls_disabled_in_public` findings.
 
+**Grants — RLS is no longer the only write gate (#1757).** Migration
+[`supabase/migrations/060_lock_public_write_grants.sql`](supabase/migrations/060_lock_public_write_grants.sql)
+revokes `INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER` from `PUBLIC`, `anon` and
+`authenticated` on **all tables in schema `public`** and narrows `ALTER DEFAULT PRIVILEGES`
+with the same list, so new relations inherit read-only instead of Supabase's bootstrap
+`GRANT ALL`. Before it, the *published* anon JWT held full DML on all 35 base tables plus
+two views, and RLS-with-no-write-policy was the single layer denying writes — one already
+exploitable: `atlas_run_health` (migration 041) is auto-updatable and deliberately
+`security_invoker = false`, so an unauthenticated `DELETE` through it ran as `postgres` and
+erased every `atlas_run_diagnostics` row. `service_role` is untouched — it is the only
+writer. When adding a public view, pair `GRANT SELECT` with an explicit `REVOKE` (050/052
+do; 041/018 did not) and never use `REVOKE ALL` in the default-privileges statement: it
+would strip `SELECT` and `safeSelect` renders a PostgREST 42501 as an empty panel, not an
+error. See [`supabase/SCHEMA.md`](supabase/SCHEMA.md) "Grants" for the residuals and for why
+the statement must not carry a `FOR ROLE` clause.
+
 **Live price fan-out + public portfolio surface (#1461/#1462).** Migration
 [`supabase/migrations/050_public_portfolio_views.sql`](supabase/migrations/050_public_portfolio_views.sql)
 adds digiquant.io's public read surface to this project's single migration chain: three
