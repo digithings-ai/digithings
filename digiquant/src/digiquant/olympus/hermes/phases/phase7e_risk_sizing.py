@@ -13,6 +13,7 @@ is present.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
@@ -22,6 +23,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digiquant.olympus.atlas.data.queries import get_return_correlations
 from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState, RebalancePayload
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.hermes.models.deliberation import is_unchallenged_carry
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
@@ -132,6 +134,46 @@ def _effective_inputs(
         convictions[ticker] = _clamp_conviction(base + delta)
         stances[ticker] = stance
     return convictions, stances
+
+
+def _cap_unchallenged_convictions(
+    convictions: Mapping[str, float],
+    debates: Mapping[str, Mapping[str, Any]],
+    *,
+    bar: float,
+) -> tuple[dict[str, float], list[str]]:
+    """Hold every crash-carried name at the entry ``bar``; return the book and those names.
+
+    H6 fails soft: when the deliberation LLM crashes it carries the analyst's own stance
+    forward, so a position that received **no** PM challenge could still be sized at top
+    conviction — 40% of the 2026-07-31 book, including all three new opens. Capping at
+    ``SizingCaps.min_conviction`` means an unchallenged name stays in the book but can never
+    outrank one that was actually debated.
+
+    Capping *at* the bar rather than scaling below it is deliberate. A name pushed under the
+    bar is dropped by the sizer's selection step and then re-added at its drifted weight by
+    the held-carry backstop — which can end up **larger** than applying no haircut at all.
+    Capping keeps the ticker present, so the backstop never fires for it.
+    """
+    out: dict[str, float] = {}
+    capped: list[str] = []
+    for ticker, conviction in convictions.items():
+        if conviction > bar and is_unchallenged_carry(debates.get(ticker) or {}):
+            out[ticker] = bar
+            capped.append(ticker)
+        else:
+            out[ticker] = conviction
+    return out, sorted(capped)
+
+
+def _unchallenged_note(unchallenged: list[str]) -> str:
+    """Book-note sentence naming the positions no PM challenge ever reached (#1742)."""
+    if not unchallenged:
+        return ""
+    return (
+        " Held at the conviction bar (H6 deliberation failed, no PM challenge): "
+        f"{', '.join(unchallenged)}."
+    )
 
 
 def _load_ticker_risk(
@@ -394,16 +436,31 @@ def _build_sized_book(
         logger.warning("phase7e: correlation read failed (%s); using full-correlation default", exc)
         corr_frame = None
 
+    unchallenged: list[str] = []
     try:
         analysts = analyst_payloads(state)
+        debates = deliberation_summaries(state)
         if memo is not None:
             convictions, stances = _memo_effective_inputs(memo, analysts, caps.min_conviction)
         else:
             convictions, stances = _effective_inputs(
                 pm_tickers,
                 analysts,
-                deliberation_summaries(state),
+                debates,
                 default_conviction=caps.min_conviction,
+            )
+        # Applied to BOTH branches on purpose. The memo branch is the live production path
+        # (H7 writes a memo every run), so a haircut wired only into the no-memo branch
+        # would be inert in production (#1742).
+        convictions, unchallenged = _cap_unchallenged_convictions(
+            convictions, debates, bar=caps.min_conviction
+        )
+        if unchallenged:
+            logger.warning(
+                "phase7e: %d position(s) held at the conviction bar — H6 deliberation "
+                "crashed, so no PM challenge ran (%s)",
+                len(unchallenged),
+                ", ".join(unchallenged),
             )
         risk = _load_ticker_risk(deps.client, pm_tickers, state.run_date)
         result = size_portfolio(
@@ -446,7 +503,7 @@ def _build_sized_book(
         ],
         "actions": _rebuild_actions(original_actions, pm_targets, sized, current_weights),
         "notes": (f"{prior_notes}\n\n" if prior_notes else "")
-        + f"Risk-sizing (H8): {result.explanation}{breaker_note}",
+        + f"Risk-sizing (H8): {result.explanation}{breaker_note}{_unchallenged_note(unchallenged)}",
     }
 
     logger.info(
