@@ -68,11 +68,18 @@ cp -r frontend/olympus/out/. dist/olympus/
 # 3. Custom domain marker.
 echo "digiquant.io" > dist/CNAME
 
+# 4. Deploy build stamp (#1759). Pages serves a frozen deploy with a 200 and no
+# `last-modified`, so without a stamp in the export every smoke probe passes
+# forever and a Pages project that stopped building is invisible from outside.
+echo "--- writing dist/build-info.json ---"
+bash scripts/write-build-info.sh dist/build-info.json digiquant.io
+
 # Sanity: landing, a subsystem page, the root _headers, and Olympus must exist.
 [ -f dist/index.html ] || { echo "ERROR: dist/index.html missing — digiquant-web did not export" >&2; exit 1; }
 [ -f dist/subsystems/atlas/index.html ] || { echo "ERROR: subsystem pages missing" >&2; exit 1; }
 [ -f dist/_headers ] || { echo "ERROR: dist/_headers missing — CSP would not apply" >&2; exit 1; }
 [ -f dist/olympus/index.html ] || { echo "ERROR: dist/olympus/index.html missing — Olympus did not export" >&2; exit 1; }
+[ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
 echo "--- dist/ contents ---"
 ls -la dist/

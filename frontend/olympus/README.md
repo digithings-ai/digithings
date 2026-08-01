@@ -134,6 +134,17 @@ would never apply in production (#674).
 The dashboard CSP is scoped to `/olympus*`; landing pages keep Google Fonts working.
 Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
 
+**Deploy freshness (#1759):** `scripts/write-build-info.sh` writes
+`dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) into the
+export root on every build. A Cloudflare Pages project that stops producing
+deployments keeps serving the last good build with a 200 and no `last-modified`
+header, so the asset probes in `smoke-site.yml` pass throughout a deploy freeze.
+The `freshness` job in that workflow reads the live stamp through
+`scripts/check_deploy_freshness.py` and fails when it is missing or older than 7
+days. Why the *cause* of a freeze is not detectable here: Pages' deployment list,
+build log, production branch and watch-path config are visible only in the
+Cloudflare dashboard.
+
 ## Running
 
 ```bash
@@ -176,6 +187,13 @@ dynamic segment or a path-form href comes back. The `?ticker=` dossier route
 Path-form URLs (`/portfolio/theses/<id>`) are no longer served; old bookmarks land
 on the Olympus 404. Every in-app link, the command palette, and the legacy
 `/strategy?thesis=` redirect all emit the query form.
+
+A failed `theses` fetch **throws** and aborts the build rather than exporting the
+fallback alone — silently shipping 404s for every live thesis link is the #674
+regression the throw exists to prevent. The PR build-check runs without Supabase
+env, so it takes the fallback branch and cannot reach that throw; the configured
+branch (pagination, dedupe, throw) is covered instead by
+`lib/thesis-static-params.test.ts` under `npm run test --workspace olympus`.
 
 ## Brief workspace
 
