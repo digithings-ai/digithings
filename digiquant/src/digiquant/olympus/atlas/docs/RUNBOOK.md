@@ -435,3 +435,40 @@ healthy day; the banner is now telling the truth.
 reported at all. Look for the rolling **`olympus-daily-cancelled`** issue; its **Chain
 outcome** line carries the last JSON summary found in `artifacts/run.log`, or
 `(no structured outcome recorded)` when the run died before printing one.
+<!-- #1766 -->
+## Known data gap: no portfolio book 2026-06-27 → 2026-07-16 (do not backfill)
+
+`positions`, `nav_history` and `portfolio_metrics` hold **zero rows** for all 20 calendar days in
+**2026-06-27 … 2026-07-16** (verified against the live `core` project 2026-08-01). Last pre-gap
+book 06-26; first post-gap book 07-17. Any performance series that spans those dates is
+**discontinuous by design** — that is expected, not a bug to be repaired.
+
+**Cause and fix.** H9 was failing its coherence check closed while runs still reported `ok`
+(#1555). 18 of the 22 `atlas_run_diagnostics` rows in the window say `status='ok'` and every one
+of them carries `hermes_h9_commit_run/hermes/portfolio/commit-run: held ticker <T> missing from
+book and not flat in H7`. Fixed **2026-07-17** (`40312d82`, PR #1565); `positions` resumes the
+same date. Full evidence and the post-fix `book_committed` reconciliation are in
+[`hermes/docs/ARCHITECTURE.md`](../../hermes/docs/ARCHITECTURE.md) under "The 2026-06-27 →
+2026-07-16 book gap is permanent and accepted".
+
+**Why there is no backfill script, and why `--fill-calendar-through` is not the answer.** Two
+independent blocks:
+
+1. A synthetic book for dates on which the PM made no decision fabricates an audit trail and
+   restates every published performance number computed over the series.
+2. `fill_calendar_through` **cannot reach the hole**. It starts from `max(positions.date)` and
+   advances forward only; a target before that date collapses to a single-day refresh. This is
+   the "Limitation" note in the *Daily portfolio continuity* section above — it applies with full
+   force here, because the gap sits far behind the latest snapshot.
+
+**If you are tempted to densify the calendar anyway:** the absence of `positions` rows is the
+data-level signal that a book failed to commit. Carrying the prior book forward across missing
+dates (what `carry_forward_positions` does) would erase that signal and make the next occurrence
+of this defect undetectable in the tables. Recurrence is meant to be caught by detection — a
+stale-book check in the metrics cron and a no-book run gate, both in flight as of 2026-08-01 —
+not by a dense calendar.
+
+Recovering a **single** missing day that is genuinely recoverable (prices exist, a book was
+committed, only the metrics row is absent) is still supported: `--date YYYY-MM-DD`. That is not
+this case — for 06-27 → 07-16 there is no committed book to compute from.
+
