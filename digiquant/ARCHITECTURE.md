@@ -1147,6 +1147,22 @@ quotes take the other lane — streamed client-side from Coinbase's public WebSo
 scheduling, and the one-time setup steps, and [`supabase/SCHEMA.md`](supabase/SCHEMA.md)
 for the view inventory.
 
+**Realtime authorization on `prices:live` (#1807).** The broadcast channel is **private**:
+both ends pass `config: { private: true }` (`functions/prices-live/index.ts` publishing,
+`frontend/digiquant-web/lib/live/useLivePrices.ts` subscribing) and
+[`supabase/migrations/062_realtime_broadcast_authorization.sql`](supabase/migrations/062_realtime_broadcast_authorization.sql)
+carries the paired RLS policies on `realtime.messages` — `anon`/`authenticated` may
+`SELECT` (receive) on that topic, only `service_role` may `INSERT` (broadcast). Realtime
+consults RLS **only** for private channels, so the flags and the policies are one
+indivisible mechanism: policies alone are inert, `private: true` alone refuses every join
+and takes the live feed dark (degrading to `public_price_latest` closes marked `stale`).
+While the channel was public, the anon key in the digiquant.io bundle could broadcast
+forged quotes straight onto the feed, bypassing the edge function and its invocation
+secret (#1756) entirely. Migration `062` is the one migration in this chain that
+`db-migrate.yml` cannot apply on its own — `realtime.messages` is owned by
+`supabase_realtime_admin`, not `postgres` — see the rollout runbook in
+[`supabase/README.md`](supabase/README.md).
+
 ## DigiSearch Integration (#199)
 
 Finalized Atlas research documents in Supabase `documents` are indexed

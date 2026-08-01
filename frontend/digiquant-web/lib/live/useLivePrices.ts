@@ -6,7 +6,8 @@
  *   (a) Coinbase public keyless WS  → crypto product_ids (reconnect w/ backoff,
  *       %chg from `open_24h`, ticks coalesced ~400ms, socket closed on unmount).
  *   (b) Supabase Realtime broadcast "prices:live" → equities (subscribe with the
- *       anon client, unsubscribe on unmount).
+ *       anon client on a PRIVATE channel, unsubscribe on unmount). Private is
+ *       the authorization boundary, not a nicety — see lane 2 and #1807.
  *   + a one-shot SEED from `public_price_latest` so values exist before the
  *     first tick and when a lane is dark (marked `stale`).
  *
@@ -75,10 +76,20 @@ export function useLivePrices(options: UseLivePricesOptions = {}): LivePriceMap 
   }, [client, symbolsKey, cryptoKey]);
 
   // Lane 2 — equity quotes over the Supabase Realtime broadcast.
+  //
+  // PRIVATE channel, and that is load-bearing (#1807). Realtime only consults the RLS
+  // policies on `realtime.messages` for channels joined with `private: true`; a public
+  // channel is unauthenticated pub/sub. Since `anon` holds INSERT on that table, a public
+  // `prices:live` let anyone holding the anon key from this bundle broadcast FORGED quotes
+  // that arrive here indistinguishable from Finnhub's. Migration 062 supplies the paired
+  // policies — anon may SELECT (receive) on this topic, only the service role may INSERT
+  // (publish). Do NOT drop this flag back to public without also dropping those policies,
+  // and do not ship it before they are applied: no policy + private = every join refused,
+  // and the feed silently falls back to stale daily closes.
   useEffect(() => {
     if (!client) return;
     const allowed = new Set<string>([...symbols, ...cryptoProductIds]);
-    const channel = client.channel(BROADCAST_CHANNEL);
+    const channel = client.channel(BROADCAST_CHANNEL, { config: { private: true } });
     channel
       .on("broadcast", { event: BROADCAST_EVENT }, (message: { payload?: unknown }) => {
         const incoming = parseBroadcastPayload(message.payload);

@@ -17,6 +17,7 @@ deploy`) — nothing auto-deploys.
 | `migrations/` | The numbered migration chain — source of truth for the schema |
 | `SCHEMA.md` | Hand-maintained inventory of live tables, views, and RLS conventions |
 | `migrations/050_public_portfolio_views.sql` | Three anon-readable views — the public portfolio read surface (#1461/#1462) |
+| `migrations/062_realtime_broadcast_authorization.sql` | RLS on `realtime.messages` — anon may receive on `prices:live`, only the service role may broadcast (#1807) |
 | `functions/prices-live/` | Deno edge function: polls Finnhub, broadcasts quotes on Realtime channel `prices:live` (#1461) |
 
 The rest of this README is the operational guide for the **live price feed** (#1461).
@@ -33,6 +34,14 @@ Prices therefore arrive in two lanes:
    secret, then fans out **one** message per run to the Realtime broadcast channel
    `prices:live`. Browsers subscribe with the anon key; the Finnhub key never leaves
    the function.
+
+`prices:live` is a **private** Realtime channel (#1807). Both ends set
+`config: { private: true }` and migration `062` supplies the paired RLS policies on
+`realtime.messages`: `anon`/`authenticated` may `SELECT` (receive) on that topic, only
+`service_role` may `INSERT` (broadcast). Before #1807 the channel was public, and because
+Supabase grants `anon` INSERT on `realtime.messages`, anyone reading the anon key out of
+the digiquant.io bundle could publish **forged quotes** onto the feed without touching the
+edge function at all. Do not make this channel public again.
 
 The symbol set per run = distinct tickers from `public_portfolio_positions` + a small
 curated majors list (SPY QQQ DIA IWM GLD TLT UUP EFA EEM HYG), capped at 40 symbols —
@@ -126,11 +135,14 @@ subscribers on `prices:live` receive the quotes message.
 
 ## How the frontend consumes it
 
-**Live quotes** — subscribe to the broadcast channel with the anon client:
+**Live quotes** — subscribe to the broadcast channel with the anon client. The
+`config: { private: true }` is **required**, not optional: without it the client joins the
+public topic, Realtime never consults RLS, and the channel is forgeable by anyone holding
+the anon key (#1807).
 
 ```ts
 supabase
-  .channel("prices:live")
+  .channel("prices:live", { config: { private: true } })
   .on("broadcast", { event: "quotes" }, ({ payload }) => {
     // payload = { type: "quotes", at: ISO8601,
     //             quotes: { SPY: { c, d, dp, t }, ... } }
@@ -140,6 +152,41 @@ supabase
 
 Fields per symbol mirror Finnhub's quote: `c` current price, `d` change, `dp` percent
 change, `t` quote unix time.
+
+### Rolling out Realtime authorization — policies FIRST, or the feed goes dark
+
+Migration `062` and the two `private: true` flags are one change in three files, and the
+order they reach production is load-bearing. A private join with no matching SELECT policy
+is **refused**, and `useLivePrices` then silently degrades to `public_price_latest` daily
+closes marked `stale` — a dark live feed with no error anywhere.
+
+1. **Apply migration `062` and verify it.** It must be applied by a role that **owns**
+   `realtime.messages` (`supabase_realtime_admin`, or a superuser such as
+   `supabase_admin`). `postgres` is *not* a member of that owner on this project, so
+   `CREATE POLICY` raises `42501 must be owner of table messages` — which also means
+   `db-migrate.yml` cannot apply this one unaided (it runs `--single-transaction`, so the
+   failure would roll back and block every later migration in that run). Either apply it as
+   an owner role, or have an admin run `GRANT supabase_realtime_admin TO postgres;` once
+   first. Confirm with:
+
+   ```sql
+   select policyname, cmd, roles from pg_policies where schemaname = 'realtime';
+   -- expect: prices_live_receive_broadcast (SELECT, {anon,authenticated})
+   --         prices_live_service_role_broadcast (INSERT, {service_role})
+   ```
+
+2. **Deploy the publisher.** `supabase functions deploy prices-live` — it now sends with
+   `private: true`.
+3. **Let the frontend reach production last.** digiquant.io builds from `main` via the
+   Cloudflare Pages git integration, so the client flag ships on a `develop` → `main`
+   promotion. Do not promote until step 1 is verified.
+
+Between steps 2 and 3 the publisher is private while browsers still join publicly (and
+vice versa if the order slips). Whether that window actually interrupts delivery depends on
+whether Realtime segregates public and private delivery for the same topic — untested here,
+which is exactly why both flags are set rather than one: they agree under either semantics.
+If quotes stop, the fallback is stale daily closes, not a blank UI; re-check step 1's query
+first.
 
 **Public views** (anon `SELECT` via PostgREST) — the column projection is the privacy
 allowlist (performance metrics only, never research notes — user ruling 2026-07-10,
