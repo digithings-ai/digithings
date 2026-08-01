@@ -762,6 +762,22 @@ Atlas migration (issue #176, ADR-0009) is the first consumer.
   as the "what to research" context and a Pydantic class as the "what shape
   to return." Stable blocks (shared context, skill, output schema) carry
   `cache_control: ephemeral` for Anthropic prompt caching.
+  - **Two request shapes, and the retry deliberately switches between them (#1739).**
+    Without `tools` the call is `completion_text(..., response_format=json_schema
+    strict)` — provider-side schema enforcement. With `tools` the first attempt is
+    `run_tools(...)` and carries **no** `response_format`, because `digillm`'s
+    `completion` drops that field whenever `tools` is set. So a chatty model can
+    answer a tool-grounded turn with a prose preamble that fails `json.loads` at
+    char 0.
+  - Therefore **every retry is tool-free and enforced**, never a second tool loop.
+    `digillm.run_tools` builds its tool-result conversation in a local copy and
+    returns only the final string, so re-running it would re-bill 2-6 completions to
+    rebuild grounding the caller cannot see — and still send no `response_format`.
+    The failing attempt's raw text is already in the conversation, so one tool-free
+    `completion_text` call asks the provider to re-emit it as schema-valid JSON.
+  - If the enforced retry itself fails at the provider, the **original** parse error
+    is re-raised, so downstream fail-soft handlers see the same exception shape they
+    saw before this behaviour existed.
 - `build_pipeline(state_cls, phases)` — compiles a `list[PipelinePhase]` into
   a LangGraph `StateGraph`. Phases run sequentially; nodes inside a phase
   run in parallel with synthetic fan-in barriers. The `__barrier__` prefix

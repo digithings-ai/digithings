@@ -1,25 +1,17 @@
-"""Non-gating diagnostics-breakdown contributors.
+"""Non-gating diagnostics-``breakdown`` contributors.
 
-``diagnostics.py`` derives ``atlas_run_diagnostics.breakdown`` from the run state. Some
-events are worth an operator's attention without being worth degrading a run over —
-``breakdown[phase]["circuit_breaker_skips"]`` and ``breakdown["master_digest_failed"]``
-are the existing precedents. This module holds the same kind of contributor for
-edit-mode merge fallbacks (#1741): pure ``state -> dict`` functions with no side
-effects, so they can be unit-tested and registered independently of the gate rules.
+``breakdown`` is the run's schema-free telemetry surface: adding a key needs no migration.
+Some events are worth an operator's attention without being worth degrading a run over —
+``breakdown[phase]["circuit_breaker_skips"]`` and ``breakdown["master_digest_failed"]`` are
+the existing precedents. This module holds that kind of contributor for edit-mode merge
+fallbacks (#1741): a pure ``state -> dict`` function with no side effects, wired through
+the ``register_breakdown_contributor`` seam (#1736) rather than by editing
+``diagnostics._segment_counts``.
 
-**Not yet registered, deliberately.** ``diagnostics.py`` is owned by an open PR that
-adds the ``_BREAKDOWN_CONTRIBUTORS`` registration seam, so this branch does not touch
-it. Once that seam lands, wiring is one line::
-
-    from digiquant.olympus.atlas.telemetry import merge_fallback_breakdown
-
-    _BREAKDOWN_CONTRIBUTORS = (
-        ...,
-        ("merge_fallback", merge_fallback_breakdown),
-    )
-
-Until then ``state.merge_fallbacks`` is populated on every run and is readable from the
-checkpointer and the node logs; only the jsonb projection is pending.
+Registration is an import-time side effect, so something on the run path has to import
+this module. ``phases/_node_factory.py`` does — it is the module that *writes*
+``state.merge_fallbacks``, and every phase module imports it, so any compiled graph has
+the contributor wired well before ``summarize_run`` is called.
 """
 
 from __future__ import annotations
@@ -28,11 +20,15 @@ from typing import (
     Any,  # score:allow untyped any — jsonb breakdown fragment shape
 )
 
+from digiquant.olympus.atlas.diagnostics import register_breakdown_contributor
 from digiquant.olympus.atlas.state import AtlasResearchState
 
-__all__ = ["merge_fallback_breakdown"]
+MERGE_FALLBACK_KEY = "merge_fallback"
+
+__all__ = ["MERGE_FALLBACK_KEY", "merge_fallback_breakdown"]
 
 
+@register_breakdown_contributor
 def merge_fallback_breakdown(state: AtlasResearchState) -> dict[str, Any]:
     """Count the segments whose edit patch failed to merge and were regenerated full.
 
@@ -40,17 +36,20 @@ def merge_fallback_breakdown(state: AtlasResearchState) -> dict[str, Any]:
     full-mode regeneration. That was the right health call — a successful full run is not
     a degraded run — but the ``PhaseError`` had been the *only* thing that ever put the
     event into ``breakdown['errors']``, so the fallbacks became invisible: production run
-    30636503352 (2026-07-31) logged three of them and recorded ``status='ok'`` with none
-    of the three in ``err_nodes``. Each one is a segment that paid for a patch call *and*
-    a full regeneration.
+    30636503352 (2026-07-31) logged three of them and recorded ``status='ok'`` with none of
+    the three in ``err_nodes``. Each one is a segment that paid for a patch call *and* a
+    full regeneration.
 
-    Returns ``{}`` when nothing fell back, so the caller can skip the key entirely rather
-    than write a zero into every row (matching ``circuit_breaker_skips``).
+    Returns ``{}`` when nothing fell back, so no key is written rather than a zero in every
+    row (matching ``circuit_breaker_skips``). Never gates: cost audits read this, not
+    ``status`` or ``retry_signal``.
     """
     fallbacks = getattr(state, "merge_fallbacks", None) or {}
     if not fallbacks:
         return {}
     return {
-        "count": len(fallbacks),
-        "segments": {slug: str(reason) for slug, reason in sorted(fallbacks.items())},
+        MERGE_FALLBACK_KEY: {
+            "count": len(fallbacks),
+            "segments": {slug: str(reason) for slug, reason in sorted(fallbacks.items())},
+        }
     }

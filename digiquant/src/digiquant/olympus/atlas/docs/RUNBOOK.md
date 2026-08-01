@@ -389,3 +389,36 @@ Re-run with `--force` to overwrite. Uses [`scripts/legacy_delta_to_ops.py`](scri
 
 **No-change days:** Prefer a **delta request** with empty `ops` (see [`templates/delta-request-schema.json`](templates/delta-request-schema.json)) and materialize as usual, **or** set `"no_change": true` on the digest snapshot (see [`templates/digest-snapshot-schema.json`](templates/digest-snapshot-schema.json)) after materialization so the day is still indexed in `daily_snapshots`.
 
+
+<!-- #1736 -->
+## Run status vs. retry-worthiness (#1736)
+
+`atlas_run_diagnostics.status` and the pipeline's exit code answer **different questions**,
+and since #1736 they legitimately disagree.
+
+- **`status`** — was the run healthy? Written by `diagnostics.summarize_run`. It flips to
+  `degraded` on **any** failed research segment, on a majority of dead Hermes deliberations,
+  on an H9 non-commit, and on "Atlas produced research but nothing committed". Read
+  `breakdown.degraded_reasons` for which rule tripped.
+- **`retry_signal`** (surfaced as `degraded` in `run.log`'s final JSON, and the process exit
+  code) — is re-running worth the money? Deliberately frozen at the pre-#1736 rules, so
+  honest reporting never triggers a retry storm. A day that lost 4 of 27 segments but
+  committed its book is `status=degraded, degraded=false` and CI does **not** retry it.
+
+**`ATLAS_DEGRADED_RUN_PCT` has narrowed in meaning.** It no longer influences `status` (the
+STRICT rule above supersedes it); it now controls only *how much segment damage justifies a
+CI retry*. Raise it to make retries rarer, not to make the dashboard greener.
+
+### "Last successful run" jumped backwards after this landed
+
+Expected. `freshness-banner.tsx`'s `isOk()` excludes `degraded`, and ~11 of the previous 34
+`ok` rows had at least one dead research segment. A day where 5 of 27 segments died is not a
+healthy day; the banner is now telling the truth.
+
+### A run that vanished (no failure issue, no diagnostics row)
+
+`Report pipeline outcome` now fires on `failure() || cancelled()`. A job that blows the
+240-minute `timeout-minutes` is *cancelled*, not failed, so before #1733/#1763 nothing was
+reported at all. Look for the rolling **`olympus-daily-cancelled`** issue; its **Chain
+outcome** line carries the last JSON summary found in `artifacts/run.log`, or
+`(no structured outcome recorded)` when the run died before printing one.

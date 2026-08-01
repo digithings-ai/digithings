@@ -32,6 +32,13 @@ from digiquant.olympus.atlas.state import (
     SegmentSlot,
     refresh_scope_forces_full,
 )
+
+# Imported for its registration side effect (#1741): ``telemetry`` registers the
+# merge-fallback ``breakdown`` contributor (#1736 seam) at import time. This module writes
+# ``state.merge_fallbacks`` and every phase module imports it, so the contributor is wired
+# on any compiled graph. Keep the import here rather than in ``diagnostics.py`` — the seam
+# exists so a new key costs one module plus one line, not an edit to the gate rules.
+from digiquant.olympus.atlas.telemetry import merge_fallback_breakdown  # noqa: F401
 from digiquant.olympus.atlas.triage import triage_decision_to_signal
 from digiquant.olympus.edit_mode import (
     DocumentPatch,
