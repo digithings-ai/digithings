@@ -42,6 +42,12 @@ on:
     #   * done before 22:00 UTC, because pipeline-atlas-metrics.yml's `0 22` cron
     #     documents that it must run after this ingest. Worst case at the 20-minute
     #     timeout is 21:45, leaving ~15 min of margin (was ~40 min).
+    # Disjoint MINUTES is not disjoint RUNS: the 21:30 / 21:45 intraday ticks now
+    # overlap this job, where before the widening nothing ran alongside the sector
+    # fetch. Accepted — the overlapping pull is the ~40 watchlist ETFs, small next to
+    # the 189 single names here. Deliberately NOT fixed by adding eod-macro to the
+    # `digiquant-prices-intraday` group: queuing behind a 20-minute intraday timeout
+    # would push this job into the 22:00 metrics cron it has to precede.
     - cron: '25 21 * * MON-FRI'
     # REM-102 (superseded by #1775): record position_events at the US cash open.
     # REM-102 chose a single `35 14` "EST-safe" because a pre-open run is the

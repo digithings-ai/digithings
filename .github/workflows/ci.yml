@@ -153,6 +153,7 @@ jobs:
               - 'agents/**'
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
+              - '.github/workflows/pipeline-digiquant-prices.yml'
             compose:
               - 'docker-compose.yml'
               - '.env.example'
