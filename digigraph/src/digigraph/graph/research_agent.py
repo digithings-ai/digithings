@@ -217,16 +217,42 @@ def run_research_agent(
         max_tokens: Maximum output tokens for the completion. None (default) lets
             the provider use its own limit — no cap is imposed on the response.
         tools: Optional function-tool definitions. When supplied with
-            ``execute_tool``, the agent runs a tool-calling loop
-            (``run_tools``) so it can ground itself on real data
-            before emitting the final JSON, which is still validated against
-            ``output_model``. ``response_format`` is not used on this path (tools
-            and json_schema are mutually exclusive in one API call).
+            ``execute_tool``, the *first* attempt runs a tool-calling loop
+            (``run_tools``) so it can ground itself on real data before emitting
+            the final JSON, which is still validated against ``output_model``.
+            ``response_format`` is not sent on that first attempt (tools and
+            json_schema are mutually exclusive in one API call — ``digillm``'s
+            ``completion`` drops ``response_format`` whenever ``tools`` is set).
+            Every *retry* after a parse/validation failure therefore drops the
+            tools and goes down the ``completion_text`` path **with**
+            ``response_format`` — see "Tool-path retry" below.
         execute_tool: Dispatcher ``(name, args) -> json_str`` bound to the tools.
             Required for the tool path; ignored when ``tools`` is empty.
         search_parameters: Optional xAI Live Search descriptor, forwarded via
             ``extra_body`` for xAI models (no-op otherwise). Applies on both the
             tool and the structured-output paths.
+
+    Tool-path retry (#1739):
+        A tool-grounded turn gets **no** provider-side schema enforcement, so a
+        chatty model can answer with a prose preamble and fail ``json.loads`` at
+        char 0 (observed 31/39 H6 deliberations on 2026-07-31). The retry is
+        therefore *tool-free and enforced* rather than a second tool loop:
+
+        - ``digillm.run_tools`` builds its tool-result conversation in a local
+          copy and returns only the final string, so the tool results never reach
+          ``messages`` here. Re-running the loop would re-bill 2-6 completions to
+          rebuild grounding this function cannot see, and would *still* carry no
+          ``response_format``.
+        - The failing attempt's raw text is already appended to ``messages`` below,
+          so a single tool-free ``completion_text`` call with ``response_format``
+          asks the provider to re-emit that same content as schema-valid JSON. One
+          completion instead of 2-6, and enforcement where there was none.
+
+        Narrow tradeoff, stated plainly: when the tool attempt returns an *empty*
+        body rather than prose there is no content to reformat, and the retry gives
+        up the chance to re-ground with real data in exchange for a much higher
+        chance of schema-valid output. The observed failure mode is prose, not
+        empty, and that case strictly improves.
 
     Provider notes:
         ``response_format=json_schema`` is passed to the API call so that providers
@@ -268,10 +294,11 @@ def run_research_agent(
     ]
 
     last_error: Exception | None = None
+    tool_grounded = bool(tools) and execute_tool is not None
     for attempt in range(max_retries + 1):
-        # Live Search is first-round-only *within* one tool loop; a validation retry
-        # re-runs the loop, so worst case is (max_retries + 1) searches per phase.
-        if tools and execute_tool is not None:
+        # Only the FIRST attempt runs the tool loop. Retries drop the tools so that
+        # ``response_format`` survives into the request (#1739) — see "Tool-path retry".
+        if tool_grounded and attempt == 0:
             raw = run_tools(
                 effective_model,
                 messages,
@@ -281,14 +308,34 @@ def run_research_agent(
                 search_parameters=search_parameters,
             )
         else:
-            raw = completion_text(
-                effective_model,
-                messages,
-                temperature=temperature,
-                response_format=response_format,
-                max_tokens=max_tokens,
-                search_parameters=search_parameters,
-            )
+            try:
+                raw = completion_text(
+                    effective_model,
+                    messages,
+                    temperature=temperature,
+                    response_format=response_format,
+                    max_tokens=max_tokens,
+                    search_parameters=search_parameters,
+                )
+            except Exception:
+                # Never-worse-than-today guarantee. ``last_error`` is set only on a retry,
+                # i.e. only once a prior attempt already produced an unusable body. If the
+                # enforced retry itself fails at the provider we surface that ORIGINAL parse
+                # error, so callers (Atlas/Hermes fail-soft, which key off the parse error)
+                # see exactly the exception they would have seen before this change. Bare
+                # ``Exception`` is deliberate: the guarantee is "any failure degrades to the
+                # prior error", which a narrower tuple would not deliver — an un-enumerated
+                # provider error would escape as a brand-new failure class. On attempt 0 of
+                # the tool-free path ``last_error`` is None and the error propagates as-is.
+                if last_error is None:
+                    raise
+                logger.warning(
+                    "research_agent enforced retry failed at the provider for %s; "
+                    "re-raising the original parse failure",
+                    schema_name,
+                    exc_info=True,
+                )
+                raise last_error from None
         try:
             # Guard empty/whitespace before json.loads: an empty body from the provider
             # (openrouter/auto under high cost_quality_tradeoff + 25-analyst fan-out) surfaces
