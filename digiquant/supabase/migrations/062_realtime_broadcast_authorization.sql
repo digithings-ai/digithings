@@ -62,6 +62,16 @@
 
 -- Preflight: fail loudly, with the remedy, if the executing role cannot create policies
 -- on realtime.messages.
+--
+-- `pg_has_role(current_user, owner_oid, 'USAGE')` is EXACTLY Postgres's own ownership test
+-- (`pg_class_ownercheck`), which is why it is the condition here rather than an approximation
+-- of it. It does NOT need a separate superuser branch: a superuser is implicitly a member of
+-- every role, so the check passes for one. Measured read-only on the live project (a review
+-- pass raised the opposite concern, so it is recorded here rather than argued):
+--     pg_has_role('supabase_admin','supabase_realtime_admin','USAGE') → TRUE   (rolsuper)
+--     pg_has_role('postgres',      'supabase_realtime_admin','USAGE') → FALSE  (not a member)
+-- Adding `OR rolsuper` would therefore be dead code, and hard-coding role NAMES here would
+-- make the guard drift from the privilege it is standing in for. Do not "fix" this.
 DO $$
 DECLARE
   owner_oid oid;
