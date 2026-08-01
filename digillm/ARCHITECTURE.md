@@ -233,12 +233,24 @@ claimed the top-level `tests` package name that the repo-root `tests/` directory
 already owns, so collection died with `No module named 'tests.test_digillm'` and
 took `make test-unit` down with it. Do not reintroduce that file.
 
-The lane deliberately does **not** filter on `-m unit`: no test in this suite
-carries the `unit` marker, so `pytest digillm/tests -m unit` selects zero of the
-57 and would report a green run that asserted nothing. That also means these
-tests do not yet contribute to `make test-unit` — adding a module-level
-`pytestmark = pytest.mark.unit` (the shape `digifetch/tests` uses) is the
-outstanding half, tracked in #1788.
+The suite is marked `unit` module-wide (`pytestmark = pytest.mark.unit`, the shape
+`digifetch/tests` uses), so it contributes to `make test-unit`. Until #1788 it
+carried no marker at all and `pytest digillm/tests -m unit` selected **zero** of
+its tests. Mark new tests by leaving that module-level assignment alone rather
+than decorating individually.
+
+Two config details that are easy to get wrong here:
+
+- The `unit` marker is registered in **`digillm/pyproject.toml`**, not only in the
+  repo-root `pytest.ini`. Because this package's `pyproject.toml` carries a
+  `[tool.pytest.ini_options]` section, `pytest digillm/tests` resolves rootdir to
+  `digillm/` and reads *that* file as its configfile — the root `pytest.ini`'s
+  `markers` never applies, and without the local registration every run prints
+  `PytestUnknownMarkWarning`. (`digifetch` needs no equivalent: it has no
+  `[tool.pytest.ini_options]`, so it falls through to the root config.)
+- The CI lane still runs unfiltered (`pytest digillm/tests`, no `-m unit`), so a
+  future test that somehow escapes the marker is still executed rather than
+  silently skipped by a green lane.
 
 ## Monorepo integration (follow-ups for the integrator)
 

@@ -20,6 +20,13 @@ from pydantic import BaseModel, ValidationError
 import digillm
 from digillm import client as client_mod
 
+# Every test here is offline — the OpenAI client is mocked throughout (see the module
+# docstring), so the whole file is `unit` by construction. Marking it module-wide rather
+# than per-test matches digifetch/tests and means a new test cannot forget the marker.
+# Until #1788 this file carried no marker at all, so `pytest -m unit` selected zero of its
+# tests and `make test-unit` covered none of them.
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture(autouse=True)
 def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -169,14 +176,6 @@ def test_register_provider(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ── Explicit request timeout (#1734) ─────────────────────────────────────────
-#
-# These carry ``@pytest.mark.unit`` where the rest of this file does not, as correct
-# labelling — but be clear-eyed that it does not yet buy CI coverage. Two pre-existing gaps,
-# neither this package's to fix: no workflow runs ``digillm/tests`` at all, and a combined
-# run errors at collection with ``No module named 'tests.test_digillm'`` because
-# ``digillm/tests/__init__.py`` claims the same ``tests`` package name as the repo root
-# (``pytest -m unit`` on unmodified develop already reports 13 such collection errors).
-# So today these run via ``pytest digillm/tests/test_digillm.py``. Tracked separately.
 
 
 def _capture_client_kwargs(build: Any) -> list[dict[str, Any]]:
@@ -192,7 +191,6 @@ def _capture_client_kwargs(build: Any) -> list[dict[str, Any]]:
     return made
 
 
-@pytest.mark.unit
 def test_default_timeout_matches_openai_sdk_default() -> None:
     """The explicit bound must equal the SDK default it replaces, or this "hardening"
     silently retunes every call. A bare float would widen connect from 5s to 600s."""
@@ -203,7 +201,6 @@ def test_default_timeout_matches_openai_sdk_default() -> None:
     assert client_mod._REQUEST_TIMEOUT.read == 600
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize(
     ("env", "build"),
     [
@@ -237,7 +234,6 @@ def test_clients_are_built_with_an_explicit_timeout(
     )
 
 
-@pytest.mark.unit
 def test_byok_clients_are_built_with_an_explicit_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
