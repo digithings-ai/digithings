@@ -1,10 +1,11 @@
 """Unit tests for scripts/write-build-info.sh and its build wiring (#1759).
 
-The digiquant.io export carried no build identity, so `smoke-site.yml` could not
+Neither static export carried a build identity, so `smoke-site.yml` could not
 tell a frozen Cloudflare Pages project from a healthy one. This writer emits the
-stamp the freshness probe reads. It runs inside the Pages build image, so it is
-bash-only (python3 is not guaranteed there) and it must never abort the build:
-every field degrades to "unknown" rather than failing.
+stamp the freshness probe reads, for digiquant.io and digithings.ai alike. It
+runs inside the Pages build image, so it is bash-only (python3 is not guaranteed
+there) and it must never abort the build: every field degrades to "unknown"
+rather than failing.
 """
 
 from __future__ import annotations
@@ -18,7 +19,14 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _WRITER = REPO_ROOT / "scripts" / "write-build-info.sh"
-_BUILD_SCRIPT = REPO_ROOT / "scripts" / "build-digiquant.sh"
+
+#: (deploy build script, the site name it must stamp), one per static site.
+_BUILD_SCRIPTS = [
+    pytest.param(REPO_ROOT / "scripts" / "build-digiquant.sh", "digiquant.io", id="digiquant.io"),
+    pytest.param(
+        REPO_ROOT / "scripts" / "build-digithings.sh", "digithings.ai", id="digithings.ai"
+    ),
+]
 
 pytestmark = pytest.mark.unit
 
@@ -134,16 +142,29 @@ class TestWriter:
         assert result.returncode != 0
 
 
+@pytest.mark.parametrize(("build_script", "site"), _BUILD_SCRIPTS)
 class TestBuildWiring:
-    """The stamp only reaches production if the deploy build script writes it."""
+    """The stamp only reaches production if the deploy build script writes it.
 
-    def test_build_digiquant_invokes_the_writer(self) -> None:
-        body = _BUILD_SCRIPT.read_text(encoding="utf-8")
-        assert "bash scripts/write-build-info.sh dist/build-info.json digiquant.io" in body
+    Both static sites deploy through the same Cloudflare Pages git integration,
+    so both need the stamp; digithings.ai had none at all until #1759's follow-up.
+    """
 
-    def test_build_digiquant_fails_when_the_stamp_is_absent(self) -> None:
-        body = _BUILD_SCRIPT.read_text(encoding="utf-8")
-        # Same shape as the existing dist/_headers and dist/olympus assertions:
-        # a silently unstamped export would make the daily probe useless.
+    def test_build_script_invokes_the_writer(self, build_script: Path, site: str) -> None:
+        body = build_script.read_text(encoding="utf-8")
+        assert f"bash scripts/write-build-info.sh dist/build-info.json {site}" in body
+
+    def test_build_script_fails_when_the_stamp_is_absent(
+        self, build_script: Path, site: str
+    ) -> None:
+        body = build_script.read_text(encoding="utf-8")
+        # Same shape as the existing dist/index.html assertions: a silently
+        # unstamped export would make the daily probe useless.
         assert "[ -f dist/build-info.json ]" in body
         assert "exit 1" in body.split("[ -f dist/build-info.json ]", 1)[1].split("\n", 1)[0]
+
+    def test_stamp_survives_the_dist_teardown(self, build_script: Path, site: str) -> None:
+        # build-digithings.sh does `rm -rf dist` *mid-script*, after the Next
+        # build — a stamp written before that point is silently deleted.
+        body = build_script.read_text(encoding="utf-8")
+        assert body.rindex("rm -rf dist") < body.index("scripts/write-build-info.sh")
