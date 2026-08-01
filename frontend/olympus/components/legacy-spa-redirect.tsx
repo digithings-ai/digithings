@@ -4,6 +4,7 @@ import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AtlasLoader from '@/components/AtlasLoader';
 import { buildPipelineHref, stageForDocumentKey } from '@/lib/pipeline-links';
+import { thesisDetailHref } from '@/lib/portfolio-url-state';
 
 function RedirectFallback() {
   return <AtlasLoader fullScreen={false} />;
@@ -45,7 +46,7 @@ function StrategyToAnalysisInner() {
   useEffect(() => {
     const thesis = searchParams.get('thesis');
     if (thesis) {
-      router.replace(`/portfolio/theses/${encodeURIComponent(thesis)}`);
+      router.replace(thesisDetailHref(thesis));
       return;
     }
     router.replace('/portfolio?tab=theses');

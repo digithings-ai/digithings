@@ -105,8 +105,11 @@ pieces, and add a one-line "enabled after <X>" note to each gated EmptyState.
    runs, older research dates silently show "No files" while still clickable in the MiniCalendar.
 4. **Regime color map covers 4 of 6 bias values** — `strong_bullish`/`strong_bearish`/`mixed` fall to
    neutral blue, so the highest-conviction days look neutral.
-5. **`fetchThesisStaticParams` no dedup/limit** — as `theses` grows, `generateStaticParams` truncates
-   at the PostgREST default → 404s on some `/portfolio/theses/{id}` pages in the static export.
+5. ~~**`fetchThesisStaticParams` no dedup/limit** — as `theses` grows, `generateStaticParams` truncates
+   at the PostgREST default → 404s on some `/portfolio/theses/{id}` pages in the static export.~~
+   **Resolved 2026-08-01 (#1760):** build-time enumeration is gone. Thesis detail is
+   `/portfolio/theses?thesis=<id>`, a single static page reading the id at runtime, so no
+   id can be missing from the export.
 6. **MacroSparklineRow fetched but never rendered** — `macro_series_preview` is queried on every
    Overview load (`queries.ts:803–836`) but the component isn't mounted → wasted round-trip.
 7. **Portfolio → Analysis tab empty in automated prod** — it filters for Track-B artifacts
