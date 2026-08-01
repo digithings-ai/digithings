@@ -129,6 +129,51 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
   `REVOKE ALL` + `GRANT SELECT TO anon, authenticated`. Supabase's advisor flags
   `security_definer_view`; expected and accepted for this pattern.
 
+## LangGraph checkpointer tables — retention added in migration 061 (#1758)
+
+Not part of the Atlas schema: `checkpoints`, `checkpoint_writes`, `checkpoint_blobs`
+and `checkpoint_migrations` are auto-created in `public` by the LangGraph Postgres
+checkpointer (#665, `DIGI_CHECKPOINTER=postgres`). They are internal orchestration
+state — no frontend and no pipeline query reads them. Migration 036 locked them down
+with RLS; migration 061 bounds their growth.
+
+They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
+~50-58 MB/day since 2026-07-21, with `thread_id` = `"<GITHUB_RUN_ID>::atlas"` /
+`"::hermes"` (never reused, so nothing ever became collectable).
+
+| pg_cron job | Schedule (UTC) | Does |
+|---|---|---|
+| `langgraph-checkpoint-prune` | `20 5 * * *` | `SELECT public.prune_langgraph_checkpoints(14)` — deletes every row of the three tables for threads whose **newest** checkpoint is >14 days old |
+| `langgraph-checkpoint-vacuum` | `50 5 * * *` | plain `VACUUM (ANALYZE)` over the three tables |
+
+- **Retention is 14 days** by user ruling (D6, 2026-08-01). It is also the cap on
+  `pipeline-olympus.yml`'s `resume_run_id` input — a run older than the window can no
+  longer be resumed from its checkpoint. `retain_days` is validated `>= 1`.
+- **Pruning is thread-scoped, not checkpoint-scoped.** `checkpoint_blobs` is keyed
+  `(thread_id, checkpoint_ns, channel, version)` with no `checkpoint_id`, so anything
+  narrower orphans blobs. Staleness uses `max((checkpoint->>'ts')::timestamptz)` per
+  thread, so an in-flight run is never eligible. `checkpoint_migrations` is untouched.
+- **Never `VACUUM FULL`** — ACCESS EXCLUSIVE lock, and these tables are insert-only
+  with no bloat to reclaim (886 MB live compressed vs 940 MB on disk). Plain VACUUM
+  returns the pruned space to the free space map for reuse, **not** to the OS, so
+  `pg_database_size` will not fall by the pruned amount. 061 caps growth
+  (~700-800 MB steady state); it is not a disk-reclaim migration.
+- The `prune_langgraph_checkpoints` function is `SECURITY DEFINER` with
+  `search_path = ''` and `EXECUTE` revoked from `PUBLIC`/`anon`/`authenticated`, so it
+  is not reachable as a PostgREST RPC.
+- **Pause:** `SELECT cron.unschedule('langgraph-checkpoint-prune');` /
+  `SELECT cron.unschedule('langgraph-checkpoint-vacuum');`
+- **Verify:** `SELECT jobname, username, database, schedule FROM cron.job WHERE jobname
+  LIKE 'langgraph-checkpoint%';` — expect two rows with `username = postgres`. The jobs
+  run as the role that applied the migration, and a non-owner both prunes 0 rows (RLS,
+  no policy) and skips the VACUUM, silently — so 061 asserts ownership at apply time.
+
+> **Still open:** 94% of the bytes are the `__pregel_tasks` channel — one full
+> `AtlasResearchState` copy per H5/H6 fan-out target (`hermes/focus_roster.py:29`),
+> which violates `digigraph/AGENTS.md` "State stays lean". Retention caps the
+> footprint but does not reduce the ~48 MB/day of write volume. Deferred from #1758
+> as a human-gated architecture change.
+
 ## Dead / deprecated
 
 - `sec_recent_filings` — dropped in migration 017.
