@@ -320,3 +320,51 @@ class TestMergeAppendTokenAndClamps:
                 {"headline": "x"},
                 _patch([{"op": "set", "path": "/headline/3", "value": "y"}]),
             )
+
+
+# ─── #1740: over-long `reason` must not discard the whole patch ────────
+
+
+@pytest.mark.unit
+def test_patch_op_truncates_over_long_reason_instead_of_raising() -> None:
+    """Regression for #1740.
+
+    `reason` carries a 240-char cap that no *-edit.md skill stated, so the model
+    overran it routinely — and because it was a hard schema constraint, one long
+    reason raised ValidationError and discarded the ENTIRE DocumentPatch. That
+    cost 1-4 researched segments per run and took out the master digest on
+    2026-07-28. It is informational prose; nothing downstream parses it.
+    """
+    op = PatchOp(op="set", path="/headline", value="x", reason="A" * 400)
+
+    assert op.reason is not None
+    assert len(op.reason) == 240
+    assert op.reason.endswith("...")
+    assert op.reason.startswith("AAA")
+
+
+@pytest.mark.unit
+def test_patch_op_leaves_short_reason_untouched() -> None:
+    op = PatchOp(op="set", path="/headline", value="x", reason="short and fine")
+    assert op.reason == "short and fine"
+    assert PatchOp(op="set", path="/h", value="x").reason is None
+
+
+@pytest.mark.unit
+def test_document_patch_survives_an_over_long_reason() -> None:
+    """The whole point: the patch validates instead of being thrown away."""
+    patch = DocumentPatch.model_validate(
+        {
+            "date": "2026-07-31",
+            "prior_date": "2026-07-30",
+            "target_document_key": "equity",
+            "status": "updated",
+            "ops": [
+                {"op": "set", "path": "/headline", "value": "a", "reason": "B" * 300},
+                {"op": "set", "path": "/bias", "value": "risk-on", "reason": "ok"},
+            ],
+        }
+    )
+    assert len(patch.ops) == 2
+    assert len(patch.ops[0].reason or "") == 240
+    assert patch.ops[1].reason == "ok"

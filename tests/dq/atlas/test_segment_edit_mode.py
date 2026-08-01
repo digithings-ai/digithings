@@ -424,3 +424,43 @@ class TestEditMergeFallback:
         slot = out["phase3_output"]
         assert isinstance(slot.payload, SegmentPayload)
         assert slot.payload.body["headline"] == "fresh full headline"
+
+
+# ─── #1740: schema limits must reach the model ─────────────────────────
+
+
+@pytest.mark.unit
+class TestEditSchemaConstraintsReachTheModel:
+    """Regression for #1740.
+
+    The 240-char `reason` cap was enforced by the schema but stated in none of
+    the 17 *-edit.md skills, so the model was never told the limit it kept
+    breaking. Appended at the single load chokepoint so it cannot drift between
+    17 heterogeneous files.
+    """
+
+    @pytest.mark.parametrize("slug", _ATLAS_EDIT_SKILL_SLUGS)
+    def test_every_atlas_edit_skill_states_the_limits(self, slug: str) -> None:
+        body = load_skill_edit(slug)
+        assert "240 characters maximum" in body
+        assert "Output constraints (schema-enforced)" in body
+        # The skill's own content must survive the append.
+        assert "DocumentPatch" in body
+
+    def test_hermes_edit_skills_get_them_too(self) -> None:
+        from digiquant.olympus.hermes.skills import load_skill_edit as hermes_load_edit
+
+        body = hermes_load_edit("asset-analyst")
+        assert "240 characters maximum" in body
+
+    def test_stated_cap_matches_the_schema(self) -> None:
+        """Drift guard: change PatchOp.reason's cap and this fails loudly."""
+        from annotated_types import MaxLen
+        from digiquant.olympus.atlas.skills import EDIT_SCHEMA_CONSTRAINTS
+        from digiquant.olympus.edit_mode.models import PatchOp
+
+        caps = [
+            m.max_length for m in PatchOp.model_fields["reason"].metadata if isinstance(m, MaxLen)
+        ]
+        assert caps == [240], f"unexpected schema cap: {caps}"
+        assert f"{caps[0]} characters maximum" in EDIT_SCHEMA_CONSTRAINTS
