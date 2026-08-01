@@ -229,3 +229,34 @@ and thesis context loads via preflight + on-demand `fetch_prior_document`.
 - [`AGENTS.md`](AGENTS.md) — extension checklist
 - [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) — historical Wave 2 spec (topology now shipped as H1–H9)
 - Atlas handoff: [`atlas/docs/agentic/ARCHITECTURE.md`](../../atlas/docs/agentic/ARCHITECTURE.md)
+
+---
+
+<!-- #1736 -->
+## Chain-level failure containment (#1736 / #1737 / #1733)
+
+`chain.run_atlas_then_hermes` writes the `atlas_run_diagnostics` row from a `finally` block,
+so anything that can reach that block with an error-free state becomes an invisible failure.
+Three holes are closed:
+
+1. **Beliefs distillation is fail-soft.** `_run_beliefs_fold` wraps both call sites (the
+   `refresh_scope="beliefs"` escape hatch and the post-publish automatic fold). Beliefs is an
+   optional on-demand backlog fold (spec §11.1), not a run deliverable — a failure there must
+   never kill a run that already committed a book. It records `("chain", "beliefs")` instead,
+   which degrades the run.
+2. **A terminating crash is recorded before the row is written.** `except BaseException:
+   _record_chain_error(state, "terminal", exc); raise` sits between the body and the
+   `finally`. This catches SystemExit / KeyboardInterrupt / a job timeout's SIGTERM — none of
+   which `_safe_invoke_graph`'s `except Exception` sees. The exception is re-raised untouched,
+   so the exit code and CI's view of the job are unchanged.
+3. **Hermes reasoning failures are counted, not just logged.** H6 degrades one ticker per
+   failure and carries the analyst stance forward, so 31 of 39 dead deliberations left every
+   segment "fresh" and the run "ok". `diagnostics._hermes_deliberation_health` counts errors
+   in the five Hermes phases (`phase_hermes`, `hermes_h6_deliberation`,
+   `hermes_h7_pm_direction`, `phase7d_pm`, `phase9_evolution`) over
+   `phase_hermes.deliberation_summaries`. `hermes_h9_commit_run` is **excluded** — it is
+   already gated by #1555 and must not be double-counted.
+
+**Adding a `breakdown` key?** Do not edit `diagnostics._segment_counts`. Write a contributor
+and pass it to `diagnostics.register_breakdown_contributor`; the `breakdown_contributor`
+fixture in `tests/dq/atlas/conftest.py` registers one for the duration of a test.
