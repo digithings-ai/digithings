@@ -133,6 +133,11 @@ ruff_and_scripts:
   - agents/**
   - .github/workflows/ci.yml
   - scripts/ci_paths.yaml
+  # tests/scripts/test_prices_cron_dst.py asserts DST invariants and cron<->`if:`
+  # linkage for this workflow. A cron edit that touches nothing else would
+  # otherwise skip this lane, and the failure it guards (a stale
+  # `github.event.schedule` literal disabling a job) is silent (#1775).
+  - .github/workflows/pipeline-digiquant-prices.yml
 
 compose:
   - docker-compose.yml
