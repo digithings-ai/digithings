@@ -18,6 +18,7 @@ import { lastUserMessageText } from "./external-relay-stream";
 import {
   ACTIVITY_PART_TYPE,
   applyActivityDetail,
+  sanitizeActivitySpan,
   type ActivityDetail,
   type ActivityDocument,
   type ActivitySpan,
@@ -50,6 +51,15 @@ type FoundryServerEvent =
   | { type: "activity"; span: ActivitySpan }
   | { type: "done" }
   | { type: "error"; message: string };
+
+/**
+ * Marks an error surfaced deliberately by Foundry's own `response.error`
+ * protocol event, as opposed to an unexpected SDK/network exception. The
+ * former is already a presentation-safe message meant to be shown; the
+ * latter can carry stack traces or internal hostnames and must be masked —
+ * see the catch block below.
+ */
+class FoundryProtocolError extends Error {}
 
 const FILE_SEARCH_LABEL = "Searching knowledge base…";
 
@@ -229,7 +239,15 @@ export async function createFoundryStreamResponse(opts: {
             openText();
             writer.write({ type: "text-delta", id: textId, delta: mapped.delta });
           } else if (mapped.type === "activity") {
-            const span = applyActivityDetail(mapped.span, opts.activityDetail);
+            // Foundry's own event carries unbounded upstream strings (a query
+            // list, citation titles/urls); the digigraph and relay providers
+            // cap theirs before writing (see chatActivitySpan) but this path
+            // built the span literal directly and never did. Route it through
+            // the same allowlist/cap the client applies on receipt, so an
+            // oversized or over-long upstream payload never reaches the wire
+            // in the first place.
+            const sanitized = sanitizeActivitySpan(mapped.span);
+            const span = sanitized && applyActivityDetail(sanitized, opts.activityDetail);
             if (span) {
               writer.write({
                 type: ACTIVITY_PART_TYPE,
@@ -238,7 +256,7 @@ export async function createFoundryStreamResponse(opts: {
               });
             }
           } else if (mapped.type === "error") {
-            throw new Error(mapped.message);
+            throw new FoundryProtocolError(mapped.message);
           } else if (mapped.type === "done") {
             break;
           }
@@ -246,11 +264,28 @@ export async function createFoundryStreamResponse(opts: {
       } catch (err) {
         if (opts.signal?.aborted) return;
         openText();
-        writer.write({
-          type: "text-delta",
-          id: textId,
-          delta: `Upstream error: ${err instanceof Error ? err.message : String(err)}`,
-        });
+        if (err instanceof FoundryProtocolError) {
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta: `Upstream error: ${err.message}`,
+          });
+        } else {
+          // An unexpected SDK/network exception, not Foundry's own protocol
+          // error — can carry stack traces or internal hostnames, and this
+          // response reaches anonymous embed visitors. Log it server-side;
+          // never stream it. Same pattern as stream-digigraph-trace.ts and
+          // external-relay-stream.ts.
+          console.error(
+            "[foundry] stream error",
+            err instanceof Error ? err.message : String(err)
+          );
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta: "The assistant is unavailable right now. Please try again shortly.",
+          });
+        }
       } finally {
         closeText();
       }

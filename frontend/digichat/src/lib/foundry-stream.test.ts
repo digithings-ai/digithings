@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import type { UIMessage } from "ai";
 import {
   mapFoundryEvent,
@@ -7,6 +7,8 @@ import {
   type FoundryStreamEvent,
 } from "./foundry-stream";
 import { toDigiChatActivity, type ActivitySpan } from "./chat-activity";
+
+afterEach(() => vi.restoreAllMocks());
 
 function userMessage(text: string): UIMessage {
   return { id: "u1", role: "user", parts: [{ type: "text", text }] } as UIMessage;
@@ -221,6 +223,43 @@ describe("createFoundryStreamResponse", () => {
     );
     expect(out).toContain("agent unavailable");
   });
+
+  // Distinct from the case above: this is an unexpected SDK/network exception
+  // (e.g. auth failure, DNS error), not a response.error event Foundry meant
+  // to be shown. It can carry stack traces or internal hostnames, and this
+  // response reaches anonymous embed visitors — it must never reach the wire.
+  it("masks a raw SDK/network exception instead of streaming its message", async () => {
+    const client: OpenAIResponsesClientLike = {
+      conversations: {
+        async create() {
+          return { id: "conv_x" };
+        },
+      },
+      responses: {
+        async create() {
+          throw new Error("ECONNREFUSED 10.0.0.5:443 internal-foundry.corp");
+        },
+      },
+    };
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("q")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "full",
+        openAIClientFactory: () => client,
+      })
+    );
+
+    expect(out).not.toContain("ECONNREFUSED");
+    expect(out).not.toContain("internal-foundry.corp");
+    expect(out).toMatch(/unavailable|try again/i);
+    expect(errorLog).toHaveBeenCalled();
+  });
 });
 
 describe("mapFoundryEvent activity spans", () => {
@@ -344,6 +383,43 @@ describe("createFoundryStreamResponse activity detail", () => {
     const body = await run("full");
     expect(body).toContain("data-digichatActivity");
     expect(body).toContain("https://x/a");
+  });
+
+  // Foundry builds its span literal directly from upstream annotations rather
+  // than going through the digigraph/relay chatActivitySpan helper, so it
+  // needs its own enforcement of the same server-side caps — otherwise an
+  // upstream response with many citations ships all of them over the wire
+  // before the client ever gets a chance to truncate at render.
+  it("caps an oversized citation list to MAX_DOCUMENTS before it reaches the stream", async () => {
+    const manyAnnotations = Array.from({ length: 20 }, (_, i) => ({
+      type: "url_citation" as const,
+      url: `https://x/doc-${i}`,
+      title: `Doc ${i}`,
+    }));
+    const { client } = fakeClient([
+      {
+        type: "response.output_item.done",
+        item: { type: "message", content: [{ annotations: manyAnnotations }] },
+      },
+      { type: "response.completed" },
+    ]);
+
+    const body = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://p",
+        agentName: "agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_1",
+        responseHeaders: {},
+        activityDetail: "full",
+        openAIClientFactory: () => client,
+      })
+    );
+
+    expect(body).toContain("https://x/doc-0");
+    expect(body).toContain("https://x/doc-7");
+    expect(body).not.toContain("https://x/doc-8");
+    expect(body).not.toContain("https://x/doc-19");
   });
 
   // The gate is server-side: a labels tenant must not receive the titles at all.

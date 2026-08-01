@@ -257,12 +257,26 @@ describe("toDigiChatActivity", () => {
     expect(
       toDigiChatActivity([{ operation: "chat", status: "failed", label: "Planning" }])
     ).toEqual([{ kind: "trace", label: "Planning", done: true }]);
+  });
+
+  // A failed search is neither "still running" nor "ran and found nothing" —
+  // rendering it as a zero-count tool_result (the no-hits case) would tell the
+  // user the search completed successfully. Regression: this exact case used
+  // to fall through to the no-hits branch because "completed" and "failed"
+  // were tracked identically.
+  it("renders a failed search as an honest failure, not a fabricated no-hits result", () => {
     expect(
       toDigiChatActivity([
         started("file_search"),
         { ...finished("file_search", "auth"), status: "failed" },
       ])
-    ).toEqual([{ kind: "tool_result", name: "file_search", query: "auth", hits: [], count: 0 }]);
+    ).toEqual([{ kind: "status", message: 'Search for "auth" failed.' }]);
+  });
+
+  it("renders a failed search with no known query using a generic message", () => {
+    expect(
+      toDigiChatActivity([{ operation: "execute_tool", toolName: "file_search", status: "failed", label: "x" }])
+    ).toEqual([{ kind: "status", message: "Search failed." }]);
   });
 
   it("renders citations with no preceding search step using an empty query", () => {

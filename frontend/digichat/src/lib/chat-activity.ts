@@ -167,6 +167,13 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
   const toolRows = new Map<string, number>();
   const traceRows = new Map<string, number>();
   const completedTools = new Set<string>();
+  // Keys whose terminal execute_tool span was "failed" rather than
+  // "completed" — checked by the trailing pass so an error renders as an
+  // honest failure row instead of the literal "no hits" a real empty search
+  // gets. Membership here does not imply the tool is still unresolved: a
+  // retrieve arriving afterwards overwrites the row before the trailing pass
+  // ever runs, and the pass only looks at rows still shaped like a tool_call.
+  const failedTools = new Set<string>();
   // Row index of the still-open ("started", not yet resolved by a matching
   // completed/failed/retrieve span) call for each tool name — regardless of
   // whether the started span itself carried a query. Cleared the instant a
@@ -212,9 +219,11 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
       }
 
       // "failed" is terminal too — a search that errored must not render as a
-      // tool call that never finishes.
+      // tool call that never finishes, and must not be mistaken for a real
+      // empty result either (see failedTools above).
       const key = toolKey(name, span.query ?? "");
       completedTools.add(key);
+      if (span.status === "failed") failedTools.add(key);
       const idx = pendingRow.get(name);
       pendingRow.delete(name);
 
@@ -293,11 +302,18 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
   }
 
   // A search that completed and never produced citations is a "no hits" answer,
-  // not a perpetually-pending tool call.
+  // not a perpetually-pending tool call. A search that errored is neither —
+  // rendering it as count: 0 would tell the user it ran and found nothing,
+  // when it never actually finished.
   for (const [key, idx] of toolRows) {
     const row = rows[idx];
     if (row.kind === "tool_call" && completedTools.has(key)) {
-      rows[idx] = { kind: "tool_result", name: row.name, query: row.query, hits: [], count: 0 };
+      rows[idx] = failedTools.has(key)
+        ? {
+            kind: "status",
+            message: row.query ? `Search for "${row.query}" failed.` : "Search failed.",
+          }
+        : { kind: "tool_result", name: row.name, query: row.query, hits: [], count: 0 };
     }
   }
 
