@@ -139,9 +139,14 @@ def test_prune_is_thread_scoped_across_all_three_tables(statements: str, table: 
 
 
 def test_checkpoint_migrations_is_never_touched(statements: str) -> None:
-    # LangGraph's own schema-version table (10 rows); deleting from it would make the
-    # checkpointer re-run its setup migrations.
-    assert "checkpoint_migrations" not in statements
+    """LangGraph's own schema-version table — emptying it re-runs its setup migrations.
+
+    Checked outside string literals so a future clarifying `COMMENT ON TABLE` body may
+    name the table without failing this test; what must never appear is a reference to
+    it in executable position.
+    """
+    outside_literals = "".join(statements.split("'")[::2])
+    assert "checkpoint_migrations" not in outside_literals
 
 
 def test_prune_is_not_exposed_to_anon(statements: str) -> None:
@@ -218,10 +223,21 @@ def test_tables_are_documented(statements: str) -> None:
 
 
 def test_documented_in_schema_and_architecture() -> None:
-    """The retention window and the pause commands must be findable by an operator."""
+    """An operator must be able to find the window, the job names and the pause commands.
+
+    Deliberately coupled: `digiquant/supabase/SCHEMA.md` is edited by several packages in
+    this wave, so a rebase that drops the retention section should fail loudly here rather
+    than leave a recurring production DELETE undocumented. Anchors are the unambiguous
+    identifiers, not the bare migration number.
+    """
     schema_md = (REPO_ROOT / "digiquant" / "supabase" / "SCHEMA.md").read_text(encoding="utf-8")
-    assert "langgraph-checkpoint-prune" in schema_md
-    assert "061" in schema_md
+    for anchor in (
+        "langgraph-checkpoint-prune",
+        "langgraph-checkpoint-vacuum",
+        "prune_langgraph_checkpoints",
+        "cron.unschedule",
+    ):
+        assert anchor in schema_md, f"SCHEMA.md lost the retention anchor {anchor!r}"
 
     arch_md = (REPO_ROOT / "digigraph" / "ARCHITECTURE.md").read_text(encoding="utf-8")
     assert "prune_langgraph_checkpoints" in arch_md
