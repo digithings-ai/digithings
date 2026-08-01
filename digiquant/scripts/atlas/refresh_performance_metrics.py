@@ -156,7 +156,10 @@ def resolve_scheduled_metrics_date(sb: Any, target: date) -> str:
             f"{(target - latest).days} day(s) before the target {target.isoformat()}. "
             "Refusing to re-stamp the older portfolio_metrics row — that silent rewrite is "
             "what hid 22 no-op runs behind a green cron (#1746). Repair the upstream Olympus "
-            f"book, then reprocess explicitly with --date {target.isoformat()}."
+            f"book for {target.isoformat()} and re-run; to recompute the last real book "
+            f"instead, pass --date {latest.isoformat()}. Do NOT pass "
+            f"--date {target.isoformat()} — that date has no book, so carry-forward would "
+            "clone the previous one and hide the gap."
         )
     return latest.isoformat()
 

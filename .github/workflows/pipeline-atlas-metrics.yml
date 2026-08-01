@@ -16,7 +16,11 @@ on:
   workflow_dispatch:
     inputs:
       date:
-        description: "Metrics/attribution date (YYYY-MM-DD). Empty = latest book / today UTC."
+        # Empty no longer means "latest existing book" for metrics (#1746): it means today
+        # UTC, and the metrics step exits 3 if today has no positions book. Dispatching
+        # empty before the 12:00 UTC Olympus book lands is therefore expected to go red —
+        # pass an explicit date whose book exists to recompute one.
+        description: "Metrics/attribution date (YYYY-MM-DD). Empty = today UTC (metrics exits 3 if today has no book)."
         required: false
         default: ""
 

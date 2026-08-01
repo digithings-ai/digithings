@@ -514,6 +514,29 @@ class TestResolveScheduledMetricsDate:
         sb = self._positions_on("2026-07-28", "2026-07-29", "2026-07-31")
         assert _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 31)) == "2026-07-31"
 
+    def test_returns_the_book_date_not_the_target_when_a_book_is_ahead(self) -> None:
+        """Pins the documented contract: the resolved date is ``max(positions.date)``.
+
+        Prod never books ahead of today UTC, so this branch is unreachable there — but it
+        is the only case where returning the book date differs observably from returning
+        the target, and the docstring promises "never earlier".
+        """
+        sb = self._positions_on("2026-07-31")
+        assert _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 30)) == "2026-07-31"
+
+    def test_stale_message_does_not_recommend_a_bookless_date(self) -> None:
+        """The remediation hint must not send an operator to ``--date <today>``.
+
+        ``--date`` runs ``carry_forward_positions`` first, so pointing at a date with no
+        book would clone the previous one — the densification this guard exists to avoid.
+        """
+        sb = self._positions_on("2026-07-29")
+        with pytest.raises(_mod.StaleBookError) as excinfo:
+            _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 30))
+        message = str(excinfo.value)
+        assert "--date 2026-07-29" in message
+        assert "Do NOT pass --date 2026-07-30" in message
+
     def test_raises_when_book_is_one_day_stale(self) -> None:
         # Prod run 30589621216 (2026-07-30): the Olympus run was cancelled after 4h so no
         # 07-30 book existed; the cron re-stamped 07-29 and exited 0 with two green ticks.
