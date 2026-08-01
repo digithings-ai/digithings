@@ -151,4 +151,22 @@ describe("uiMessageToDigiChat activity parts", () => {
       { kind: "trace", label: "New", done: true },
     ]);
   });
+
+  // Discriminating case: even when all activity spans are malformed, the presence of activity
+  // parts gates out the legacy trace. A count-based gate would incorrectly fall back to legacy.
+  it("ignores legacy trace even when all activity parts are malformed", () => {
+    const msg = {
+      id: "a5",
+      role: "assistant",
+      parts: [
+        { type: "text", text: "hi" },
+        activityPart({ operation: "exfiltrate" }),
+        {
+          type: "data-digigraphTrace",
+          data: { v: 1, type: "external_activity", payload: { label: "Legacy", status: "completed" } },
+        },
+      ],
+    } as unknown as UIMessage;
+    expect(uiMessageToDigiChat(msg).activities).toBeUndefined();
+  });
 });
