@@ -133,8 +133,14 @@ jobs:
           echo "stale_branches<<EOF" >> "$GITHUB_OUTPUT"
           printf "$STALE" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
+          # STALE accumulates literal backslash-n separators — `\n` inside a
+          # double-quoted assignment is two characters, not a newline — so
+          # `printf "%s"` emits the whole list on one line and `grep -c .`
+          # reports 1 however many branches are stale. '%b' expands them, which
+          # `count` needs because it is interpolated into the cleanup issue
+          # title, not just used as the boolean for the `if:` gate below.
           COUNT=0
-          [[ -n "$STALE" ]] && COUNT=$(printf "%s" "$STALE" | grep -c .)
+          [[ -n "$STALE" ]] && COUNT=$(printf '%b' "$STALE" | grep -c .)
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
 
       - name: Create cleanup issue if stale branches found
