@@ -162,11 +162,20 @@ builds (`CF_PAGES=1`) both vars are **required** — `scripts/build-digiquant.sh
 aborts rather than shipping a bundle whose every page shows the unconfigured
 error (#674).
 
-**Thesis detail routes:** `/portfolio/theses/[thesisId]` is statically exported, so
-only ids returned by `lib/thesis-static-params.ts` get HTML files. With Supabase env
-present at build time the real ids are fetched from the `theses` table; without it
-only the `_unlinked` fallback is exported. Theses created after a deploy 404 on
-direct load until the next deploy.
+**Thesis detail routes (#1760):** a thesis detail view is `/portfolio/theses?thesis=<id>`
+— one statically exported page that reads the id from the query string at runtime.
+It replaced a `[thesisId]` dynamic segment whose `generateStaticParams` enumerated
+the `theses` table at build time: under `output: 'export'` only enumerated ids get
+an HTML file, so every thesis the daily pipeline created after the last deploy
+hard-404ed (five live links on 2026-08-01). Build a thesis href with
+`thesisDetailHref()` from `lib/portfolio-url-state.ts`, never by interpolating a
+path segment — `lib/thesis-route-canon.test.ts` fails the build if either the
+dynamic segment or a path-form href comes back. The `?ticker=` dossier route
+(`app/portfolio/tickers/page.tsx`) is the same pattern for the same reason.
+
+Path-form URLs (`/portfolio/theses/<id>`) are no longer served; old bookmarks land
+on the Olympus 404. Every in-app link, the command palette, and the legacy
+`/strategy?thesis=` redirect all emit the query form.
 
 ## Brief workspace
 

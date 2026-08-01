@@ -5,6 +5,7 @@ import { ChevronRight, ArrowUpRight } from 'lucide-react';
 import type { ThesisStory } from '@/lib/thesis-story';
 import { decisionNodeFor } from '@/lib/holdings-decisions';
 import { buildPipelineHref } from '@/lib/pipeline-links';
+import { thesisDetailHref } from '@/lib/portfolio-url-state';
 import { ConvictionMeter } from '@/components/shared/conviction-meter';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { ThesisCriteriaColumns } from '@/components/portfolio/theses/ThesisCriteriaColumns';
@@ -140,7 +141,7 @@ export function ThesisStoryCard({
         </section>
 
         <Link
-          href={`/portfolio/theses/${encodeURIComponent(thesis.id)}`}
+          href={thesisDetailHref(thesis.id)}
           className="inline-flex items-center gap-1 text-xs text-accent hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
         >
           Open thesis detail <ArrowUpRight size={12} aria-hidden />

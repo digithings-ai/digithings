@@ -63,6 +63,23 @@ export function portfolioThesesPath(_pathname: string): string {
   return '/portfolio/theses';
 }
 
+/**
+ * Canonical href for one thesis detail view: `/portfolio/theses?thesis=<id>` (#1760).
+ *
+ * A `?thesis=` query on the single static `/portfolio/theses` route — **not** a
+ * `[thesisId]` dynamic segment. Under `output: 'export'` a dynamic segment only
+ * pre-builds the ids enumerated at build time and hard-404s every id created
+ * since the last deploy, which is what #1760 reported (5 of 32 live thesis links
+ * dead, systematically the newest research). Same reasoning and same shape as
+ * the ticker dossier route (`app/portfolio/tickers/page.tsx`).
+ *
+ * Every in-app link to a thesis detail must go through this helper; the
+ * path form is guarded against by `lib/thesis-route-canon.test.ts`.
+ */
+export function thesisDetailHref(thesisId: string): string {
+  return hrefWithQuery('/portfolio/theses', new URLSearchParams({ thesis: thesisId }));
+}
+
 export function replaceBrowserUrl(href: string): void {
   if (typeof window === 'undefined') return;
   window.history.replaceState(window.history.state, '', href);
@@ -99,7 +116,6 @@ export function canonicalizeLegacyPortfolioSearch(
   }
 
   const p = new URLSearchParams(params.toString());
-  const thesesPath = portfolioThesesPath(pathname);
 
   // → Holdings (the default book view): drop the tab + ancillary params.
   if (raw === 'summary' || raw === 'positions' || raw === 'allocations' || raw === 'activity') {
@@ -110,14 +126,19 @@ export function canonicalizeLegacyPortfolioSearch(
     return { kind: 'query', href: hrefWithQuery(pathname, p) };
   }
 
-  // Legacy thesis deep link → the thesis detail route (still a path).
+  // Legacy thesis deep link → the thesis detail route. Still `kind: 'path'`:
+  // the discriminant selects the *mechanism* (router.replace, which applies
+  // basePath) rather than the href shape, and the detail view now lives at
+  // `/portfolio/theses?thesis=<id>` on a different pathname, so it needs a real
+  // navigation — an in-place `replaceBrowserUrl` would rewrite the address bar
+  // while leaving the Portfolio shell mounted.
   if (raw === 'thesis') {
     const thesis = p.get('thesis');
     p.delete('tab');
     p.delete('date');
     p.delete('docKey');
     p.delete('thesis');
-    if (thesis) return { kind: 'path', href: `${thesesPath}/${encodeURIComponent(thesis)}` };
+    if (thesis) return { kind: 'path', href: thesisDetailHref(thesis) };
     p.set('tab', 'theses');
     return { kind: 'query', href: hrefWithQuery(pathname, p) };
   }
@@ -150,6 +171,7 @@ export function canonicalizeLegacyThesesSearch(
   p.delete('thesis');
   const thesesPath = portfolioThesesPath(pathname);
 
-  if (thesis) return { kind: 'path', href: `${thesesPath}/${encodeURIComponent(thesis)}` };
+  // Deep link → the query-param detail view (#1760); bare tab → the hub route.
+  if (thesis) return { kind: 'path', href: thesisDetailHref(thesis) };
   return { kind: 'query', href: hrefWithQuery(thesesPath, p) };
 }
