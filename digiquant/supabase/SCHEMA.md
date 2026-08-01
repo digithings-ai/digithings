@@ -101,7 +101,7 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
 |------|-----------|---------|
 | `public_portfolio_positions` | `positions` | Latest-date position book, performance columns only. **Excludes** `rationale`, `pm_notes`, `thesis_id`, `conviction`, `stop_loss_pct`, `target_pct_gain`, `horizon_days`. |
 | `public_nav_history` | `nav_history` | NAV series + cash/invested % + derived `day_return_pct`. |
-| `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback while `prices-live` is dormant / market closed. |
+| `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
 
 ## RLS (consistent across all tables above)
 

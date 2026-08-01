@@ -5,15 +5,21 @@
 // "prices:live". Crypto is NOT handled here — browsers stream crypto directly from
 // Coinbase's public keyless WebSocket (frontend lane).
 //
-// DORMANT BY DESIGN: the FINNHUB_API_KEY secret does not exist yet. Until
-// `supabase secrets set FINNHUB_API_KEY=...` is run, every invocation logs and
-// returns 200 {"dormant": true} — safe to schedule before the key exists.
+// LIVE since 2026-07-13: FINNHUB_API_KEY is set and both pg_cron jobs are active.
+// The function fetches on every scheduled invocation; it is NOT dormant.
 //
-// Outside extended US market hours (13:00–01:00 UTC, Mon–Fri) the function skips
-// fetching entirely and returns 200 {"market": "closed"}.
+// INVOCATION GATE (#1756): the caller must present the shared secret in the
+// `x-prices-live-secret` header, matched against the PRICES_LIVE_INVOKE_SECRET
+// secret. This gate runs FIRST, ahead of every other gate and any outbound fetch.
+// `verify_jwt` alone is not authorization — it proves the caller holds *a* project
+// key, and the anon key ships in every browser bundle.
 //
-// See digiquant/supabase/README.md for scheduling (pg_cron + pg_net) and frontend
-// consumption, and migration 050_public_portfolio_views.sql for the paired views.
+// Outside extended US market hours (13:00–01:00 UTC, Mon–Fri) an authorized caller
+// skips fetching and gets 200 {"market": "closed"}.
+//
+// See digiquant/supabase/README.md for scheduling (pg_cron + pg_net), the secret
+// rollout order, and frontend consumption, and migration
+// 050_public_portfolio_views.sql for the paired views.
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -28,6 +34,10 @@ const STAGGER_MS = 150;
 
 const CHANNEL = "prices:live";
 const BROADCAST_EVENT = "quotes";
+
+/** Shared secret the scheduler must present. Never the anon key — that one is public. */
+const INVOKE_SECRET_ENV = "PRICES_LIVE_INVOKE_SECRET";
+const INVOKE_SECRET_HEADER = "x-prices-live-secret";
 
 /** Finnhub /quote response (https://finnhub.io/docs/api/quote). */
 interface FinnhubQuote {
@@ -58,6 +68,27 @@ function json(body: Record<string, unknown>, status = 200): Response {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Constant-time secret comparison, via fixed-width SHA-256 digests.
+ *
+ * Digesting first means the byte loop always runs over 32 bytes regardless of input
+ * length, so neither the secret's length nor its first differing byte is observable in
+ * the response time. A bare `===` short-circuits on the first mismatched character and
+ * leaks length outright; do not "simplify" this back to one.
+ */
+export async function secretMatches(presented: string, expected: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(presented)),
+    crypto.subtle.digest("SHA-256", enc.encode(expected)),
+  ]);
+  const x = new Uint8Array(a);
+  const y = new Uint8Array(b);
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
+  return diff === 0;
 }
 
 /**
@@ -92,16 +123,45 @@ async function fetchQuote(symbol: string, apiKey: string): Promise<QuoteOut> {
 Deno.serve(async (req: Request): Promise<Response> => {
   const at = new Date();
 
-  // 1) Dormant gate — the key is a one-time human step (see digiquant/supabase/README.md).
+  // 0) INVOCATION GATE (#1756). Must stay first — ahead of the key gate, ahead of the
+  //    body parse, ahead of any outbound fetch. Two reasons, both load-bearing:
+  //
+  //    a) `verify_jwt` is not authorization. It proves the caller holds *a* project key,
+  //       and the anon key is published in every browser bundle. Before this gate, any
+  //       anon-key holder could POST `{}` during the ~60h/week market window and drive a
+  //       full Finnhub fetch plus a service-role-authored broadcast on `prices:live` —
+  //       exhausting the 60-calls/min free tier out from under the legitimate 60s cron.
+  //       `{"force": true}` merely widened that to 24/7; it was never the vulnerability,
+  //       so gating only `force` would have fixed nothing.
+  //    b) Ordering is the point. An unauthorized caller must not learn whether the
+  //       Finnhub key is set or whether the market window is open. Moving this below the
+  //       cheaper gates to "save work" reintroduces both an oracle and the fetch path.
+  //
+  //    Fail closed: with the secret unset every invocation is refused (503), never
+  //    allowed through. See README "Rolling out the invocation secret" for the ordering
+  //    that keeps the live feed up during rollout.
+  const expectedSecret = Deno.env.get(INVOKE_SECRET_ENV);
+  if (!expectedSecret) {
+    console.error(`prices-live: ${INVOKE_SECRET_ENV} unset — refusing all invocations`);
+    return json({ error: "invocation secret not configured" }, 503);
+  }
+  if (!(await secretMatches(req.headers.get(INVOKE_SECRET_HEADER) ?? "", expectedSecret))) {
+    console.warn("prices-live: rejected invocation — missing or incorrect invoke secret");
+    return json({ error: "unauthorized" }, 401);
+  }
+
+  // 1) Finnhub key gate. The key has been set since 2026-07-13, so this is now a
+  //    misconfiguration guard (a dropped secret), not the pre-launch idle state it
+  //    was originally written as.
   const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
   if (!finnhubKey) {
-    console.log("prices-live: FINNHUB_API_KEY not set — dormant, nothing fetched");
+    console.error("prices-live: FINNHUB_API_KEY not set — nothing fetched");
     return json({ dormant: true, at: at.toISOString() });
   }
 
   // 2) Market-hours gate — no point burning quota when US markets are shut.
-  //    `{"force": true}` overrides THIS gate only (ops smoke tests, see README);
-  //    it can never bypass the key. Costs one full fetch+broadcast cycle.
+  //    `{"force": true}` overrides THIS gate only (ops smoke tests, see README); it can
+  //    never bypass the key, and it is now reachable only past the invocation gate.
   const force = await req
     .json()
     .then((body: unknown) => (body as { force?: unknown } | null)?.force === true)
