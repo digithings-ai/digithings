@@ -285,8 +285,10 @@ describe('day grouping is viewer-local, not UTC (#1753)', () => {
           focus: null,
         }),
       );
-      expect(html).toContain('2026-07-31');
-      expect(html).not.toContain('2026-08-01');
+      // Scoped to the day header's own text node: the row's event_date is 2026-08-01, so
+      // a 2026-07-31 header can only have come from eventLocalDateKey.
+      expect(html).toContain('>2026-07-31<');
+      expect(html).not.toContain('>2026-08-01<');
     } finally {
       if (realTz === undefined) delete process.env.TZ;
       else process.env.TZ = realTz;
