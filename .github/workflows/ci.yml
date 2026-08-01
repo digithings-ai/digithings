@@ -369,8 +369,38 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+    env:
+      # actionlint shells out to shellcheck for every `run:` block, so shellcheck
+      # is half this gate's rule set and its version is part of the gate's
+      # contract. Left to the action, it takes whatever `apt-get install
+      # shellcheck` yields on the runner image — which is how this job first went
+      # red: the image's 0.9.x reported SC2002 + SC2015 ×4 that 0.11.0 dropped
+      # after upstream relaxed both. Unpinned tool, output gates CI, verdict
+      # changes under an unchanged tree: CLAUDE.md § "Dependency version bounds".
+      # 0.11.0 is also what `brew install shellcheck` gives, so local == CI.
+      # (Those 5 findings were fixed, not pinned away — see this PR's diff.)
+      SHELLCHECK_VERSION: "0.11.0"
+      # sha256 of shellcheck-v<version>.linux.x86_64.tar.xz. Recompute on bump.
+      SHELLCHECK_SHA256: "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
     steps:
       - uses: actions/checkout@v4
+
+      # Same pinned-tarball + checksum pattern as security-gitleaks.yml. Putting
+      # shellcheck on PATH here makes the action's own `which shellcheck` probe
+      # succeed, so it skips the apt install entirely.
+      - name: Install shellcheck (pinned release tarball)
+        run: |
+          set -euo pipefail
+          url="https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          curl -fsSL -o /tmp/shellcheck.tar.xz "$url"
+          actual="$(sha256sum /tmp/shellcheck.tar.xz | awk '{print $1}')"
+          if [ "$actual" != "$SHELLCHECK_SHA256" ]; then
+            echo "checksum mismatch: expected $SHELLCHECK_SHA256 got $actual" >&2
+            exit 1
+          fi
+          tar -xJf /tmp/shellcheck.tar.xz -C /tmp "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          sudo install -m 755 "/tmp/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version
 
       - name: Run actionlint
         id: actionlint
@@ -387,9 +417,9 @@ jobs:
           # and no diagnostic. Bumping it is a deliberate PR, same rule as the
           # ruff/mypy/pytest bounds in CLAUDE.md § "Dependency version bounds".
           version: "1.7.12"
-          # shellcheck + pyflakes default to true; the action installs them if
-          # the runner lacks them. 39 of the 43 findings this job first surfaced
-          # came from the shellcheck integration, so it is load-bearing.
+          # shellcheck + pyflakes default to true. 39 of the 43 findings this job
+          # first surfaced came from the shellcheck integration, so it is
+          # load-bearing — and the step above pins the binary it calls.
 
       - name: Assert every workflow was linted
         env:

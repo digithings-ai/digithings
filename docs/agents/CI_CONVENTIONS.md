@@ -151,7 +151,7 @@ Pin GitHub-owned actions to the current major version tag (`@v4`, `@v5`). Use th
 | `actions/upload-pages-artifact` | `@v3` |
 | `actions/deploy-pages` | `@v4` |
 | `peter-evans/create-pull-request` | `@v6` |
-| `raven-actions/actionlint` | `@v2` (with `version: "1.7.12"` — see below) |
+| `raven-actions/actionlint` | `@v2` (tool pinned: actionlint `1.7.12`, shellcheck `0.11.0` — see below) |
 | `anthropics/claude-code-action` | `@v1` |
 
 Third-party actions (non-GitHub-owned): pin to a full SHA for supply-chain integrity, or use a trusted major-version tag with a SHA comment. The `gitleaks` workflow demonstrates the preferred pattern for binary downloads: download from a pinned release URL and verify the SHA256 checksum.
@@ -279,7 +279,16 @@ actionlint
 
 Install `shellcheck` as well — actionlint runs it over every `run:` block and
 just skips those checks when the binary is missing, so a shellcheck-less run
-looks clean while covering far less.
+looks clean while covering far less. **Both versions are pinned** and `brew`
+currently matches CI: actionlint `1.7.12` (the action's `version:` input) and
+shellcheck `0.11.0` (a checksum-verified release tarball installed before the
+action runs, so its `which shellcheck` probe skips the apt install).
+
+Pinning shellcheck is not belt-and-braces. Left to apt, the runner image
+supplied 0.9.x, which reports `SC2002` and `SC2015` — both relaxed by upstream
+in 0.11.0. A contributor on brew saw a clean tree while CI went red, and a
+future image bump could flip the verdict again under unchanged code. Same class
+as #1701/#1705/#1711.
 
 Suppressions live in `.github/actionlint.yaml`, auto-discovered by both the CI
 job and a bare local run. Two things to know before editing it:

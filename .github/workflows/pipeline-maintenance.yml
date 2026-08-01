@@ -97,7 +97,12 @@ jobs:
           - [ ] \`make test-unit\` passes after bumps
           - [ ] PR opened and labelled \`security:finding\`")
           echo "Created: $URL"
-          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
 
   # ── 2. Stale branch cleanup ───────────────────────────────────────────────────
   stale-branches:
@@ -180,7 +185,12 @@ jobs:
           - [ ] No unmerged work lost (verify each branch is merged before deletion)
           - [ ] Comment on this issue with the list of branches deleted")
           echo "Created: $URL"
-          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
 
   # ── 3. Doc link check ─────────────────────────────────────────────────────────
   doc-links:
@@ -235,7 +245,12 @@ jobs:
           - [ ] \`make doc-check\` exits 0
           - [ ] No links removed that should be kept (prefer fixing paths over removal)")
           echo "Created: $URL"
-          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
 
   # ── 4. agents-init drift check ────────────────────────────────────────────────
   agents-drift:
@@ -297,7 +312,12 @@ jobs:
           - [ ] \`python3 scripts/agents_init.py --check\` exits 0
           - [ ] PR opened and merged to develop")
           echo "Created: $URL"
-          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
 
   # ── 5. Stale issue sweep ─────────────────────────────────────────────────────
   # Issues with no activity in >90 days get a comment + `stale` label.

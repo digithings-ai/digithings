@@ -151,7 +151,10 @@ Bare `actionlint` is the form CI runs and the one to trust before pushing — it
 picks up `.github/actionlint.yaml` (the suppression rules) automatically, so a
 local run and the `actionlint` job in `ci.yml` agree. Install `shellcheck` too:
 without it actionlint silently skips the `run:` block checks, which is where
-most real findings come from.
+most real findings come from. CI pins both (actionlint `1.7.12`, shellcheck
+`0.11.0`), and `brew` currently matches — see
+[CI_CONVENTIONS.md](../../../../../../docs/agents/CI_CONVENTIONS.md) for why the
+shellcheck version in particular is part of the gate's contract.
 
 CI runs it on every PR touching `.github/workflows/**`, via the `actionlint` job
 in `ci.yml` (gated by the `workflows` filter in `scripts/ci_paths.yaml`). It used
