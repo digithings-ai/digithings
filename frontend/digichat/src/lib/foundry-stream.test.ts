@@ -50,9 +50,13 @@ describe("mapFoundryEvent", () => {
 
   it("emits the searching trace on in_progress only, not on the duplicate .searching event", () => {
     expect(mapFoundryEvent({ type: "response.file_search_call.in_progress" })).toEqual({
-      type: "trace",
-      label: "Searching knowledge base…",
-      status: "in_progress",
+      type: "activity",
+      span: {
+        operation: "execute_tool",
+        toolName: "file_search",
+        status: "started",
+        label: "Searching knowledge base…",
+      },
     });
     expect(mapFoundryEvent({ type: "response.file_search_call.searching" })).toBeNull();
   });
@@ -75,7 +79,16 @@ describe("mapFoundryEvent", () => {
         type: "response.output_item.done",
         item: { type: "file_search_call", queries: ["auth flow"] },
       })
-    ).toEqual({ type: "trace", label: 'Searched for: "auth flow"', status: "completed" });
+    ).toEqual({
+      type: "activity",
+      span: {
+        operation: "execute_tool",
+        toolName: "file_search",
+        status: "completed",
+        query: "auth flow",
+        label: 'Searched for: "auth flow"',
+      },
+    });
   });
 
   it("maps a completed message output item with citations to a sources trace", () => {
@@ -87,7 +100,16 @@ describe("mapFoundryEvent", () => {
           content: [{ annotations: [{ filename: "auth.md" }, { filename: "auth.md" }] }],
         },
       })
-    ).toEqual({ type: "trace", label: "Sources: auth.md", status: "completed" });
+    ).toEqual({
+      type: "activity",
+      span: {
+        operation: "retrieve",
+        toolName: "file_search",
+        status: "completed",
+        label: "Sources",
+        documents: [{ title: "auth.md", path: "auth.md" }],
+      },
+    });
   });
 
   it("maps url_citation annotations (azure_ai_search tool) to a sources trace, title over url", () => {
@@ -108,9 +130,20 @@ describe("mapFoundryEvent", () => {
         },
       })
     ).toEqual({
-      type: "trace",
-      label: "Sources: Authentication, https://datatap.stream/docs/no-title",
-      status: "completed",
+      type: "activity",
+      span: {
+        operation: "retrieve",
+        toolName: "file_search",
+        status: "completed",
+        label: "Sources",
+        documents: [
+          { title: "Authentication", path: "https://datatap.stream/docs/auth" },
+          {
+            title: "https://datatap.stream/docs/no-title",
+            path: "https://datatap.stream/docs/no-title",
+          },
+        ],
+      },
     });
   });
 
@@ -136,6 +169,7 @@ describe("createFoundryStreamResponse", () => {
       messages: [userMessage("hello?")],
       conversationId: null,
       responseHeaders: { "X-Request-Id": "rid-1" },
+      activityDetail: "full",
       openAIClientFactory: () => client,
     });
     const out = await drain(res);
@@ -164,6 +198,7 @@ describe("createFoundryStreamResponse", () => {
         messages: [userMessage("again")],
         conversationId: "conv_existing",
         responseHeaders: {},
+        activityDetail: "full",
         openAIClientFactory: () => client,
       })
     );
@@ -179,9 +214,147 @@ describe("createFoundryStreamResponse", () => {
         messages: [userMessage("q")],
         conversationId: null,
         responseHeaders: {},
+        activityDetail: "full",
         openAIClientFactory: () => client,
       })
     );
     expect(out).toContain("agent unavailable");
+  });
+});
+
+describe("mapFoundryEvent activity spans", () => {
+  it("opens the search as a started execute_tool span", () => {
+    expect(mapFoundryEvent({ type: "response.file_search_call.in_progress" })).toEqual({
+      type: "activity",
+      span: {
+        operation: "execute_tool",
+        toolName: "file_search",
+        status: "started",
+        label: "Searching knowledge base…",
+      },
+    });
+  });
+
+  it("carries the real query on the completed search span", () => {
+    expect(
+      mapFoundryEvent({
+        type: "response.output_item.done",
+        item: { type: "file_search_call", queries: ["how does auth work"] },
+      })
+    ).toEqual({
+      type: "activity",
+      span: {
+        operation: "execute_tool",
+        toolName: "file_search",
+        status: "completed",
+        query: "how does auth work",
+        label: 'Searched for: "how does auth work"',
+      },
+    });
+  });
+
+  // azure_ai_search grounding: {type:"url_citation", url, title}. See 91caa0e0.
+  it("maps url_citation annotations to retrieved documents", () => {
+    expect(
+      mapFoundryEvent({
+        type: "response.output_item.done",
+        item: {
+          type: "message",
+          content: [
+            {
+              annotations: [
+                { type: "url_citation", url: "https://x/auth", title: "Auth guide" },
+                { type: "url_citation", url: "https://x/keys" },
+              ],
+            },
+          ],
+        },
+      })
+    ).toEqual({
+      type: "activity",
+      span: {
+        operation: "retrieve",
+        toolName: "file_search",
+        status: "completed",
+        label: "Sources",
+        documents: [
+          { title: "Auth guide", path: "https://x/auth" },
+          { title: "https://x/keys", path: "https://x/keys" },
+        ],
+      },
+    });
+  });
+
+  // Foundry's native file_search grounding: {filename}, no url at all.
+  it("maps filename annotations to retrieved documents", () => {
+    expect(
+      mapFoundryEvent({
+        type: "response.output_item.done",
+        item: { type: "message", content: [{ annotations: [{ filename: "auth.md" }] }] },
+      })
+    ).toEqual({
+      type: "activity",
+      span: {
+        operation: "retrieve",
+        toolName: "file_search",
+        status: "completed",
+        label: "Sources",
+        documents: [{ title: "auth.md", path: "auth.md" }],
+      },
+    });
+  });
+
+  it("emits nothing for a message with no annotations", () => {
+    expect(
+      mapFoundryEvent({ type: "response.output_item.done", item: { type: "message", content: [] } })
+    ).toBeNull();
+  });
+});
+
+describe("createFoundryStreamResponse activity detail", () => {
+  const searchEvents: FoundryStreamEvent[] = [
+    { type: "response.file_search_call.in_progress" },
+    {
+      type: "response.output_item.done",
+      item: {
+        type: "message",
+        content: [{ annotations: [{ type: "url_citation", url: "https://x/a", title: "A" }] }],
+      },
+    },
+    { type: "response.output_text.delta", delta: "done" },
+    { type: "response.completed" },
+  ];
+
+  async function run(activityDetail: "off" | "labels" | "full"): Promise<string> {
+    const { client } = fakeClient(searchEvents);
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://p",
+      agentName: "agent",
+      messages: [userMessage("hi")],
+      conversationId: "conv_1",
+      responseHeaders: {},
+      activityDetail,
+      openAIClientFactory: () => client,
+    });
+    return await drain(res);
+  }
+
+  it("streams documents at full", async () => {
+    const body = await run("full");
+    expect(body).toContain("data-digichatActivity");
+    expect(body).toContain("https://x/a");
+  });
+
+  // The gate is server-side: a labels tenant must not receive the titles at all.
+  it("withholds documents at labels", async () => {
+    const body = await run("labels");
+    expect(body).toContain("data-digichatActivity");
+    expect(body).not.toContain("https://x/a");
+  });
+
+  it("emits no activity parts at off", async () => {
+    const body = await run("off");
+    expect(body).not.toContain("data-digichatActivity");
+    expect(body).toContain("done");
   });
 });

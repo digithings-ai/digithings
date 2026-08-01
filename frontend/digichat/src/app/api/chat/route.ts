@@ -171,6 +171,7 @@ export async function POST(req: Request) {
       messages,
       conversationId: req.headers.get("x-external-conversation"),
       responseHeaders,
+      activityDetail: embedConfig.activityDetail,
       signal: req.signal,
     });
   }
