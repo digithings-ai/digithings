@@ -11,6 +11,11 @@ import {
   createUIMessageStreamResponse,
   type UIMessage,
 } from "ai";
+import {
+  ACTIVITY_PART_TYPE,
+  applyActivityDetail,
+  type ActivityDetail,
+} from "@/lib/chat-activity";
 
 export type RelayEvent = { event: string; data: Record<string, unknown> };
 
@@ -62,6 +67,7 @@ export async function createExternalRelayStreamResponse(opts: {
   messages: UIMessage[];
   conversationId: string | null;
   responseHeaders: Record<string, string>;
+  activityDetail: ActivityDetail;
   signal?: AbortSignal;
 }): Promise<Response> {
   const message = lastUserMessageText(opts.messages);
@@ -147,16 +153,21 @@ export async function createExternalRelayStreamResponse(opts: {
             writer.write({ type: "text-delta", id: textId, delta: data.delta });
             accumulatedText += data.delta;
           } else if (event === "trace") {
-            writer.write({
-              type: "data-digigraphTrace",
-              id: `relay-trace-${traceSeq++}`,
-              data: {
-                v: 1,
-                type: "external_activity",
-                service: "external",
-                payload: { label: data.label, status: data.status },
+            const span = applyActivityDetail(
+              {
+                operation: "chat",
+                status: data.status === "completed" ? "completed" : "started",
+                label: String(data.label ?? "activity"),
               },
-            });
+              opts.activityDetail
+            );
+            if (span) {
+              writer.write({
+                type: ACTIVITY_PART_TYPE,
+                id: `relay-activity-${traceSeq++}`,
+                data: span,
+              });
+            }
           } else if (event === "error") {
             // Drop any held snapshot so finally doesn't emit a duplicate ahead
             // of the error banner.

@@ -78,6 +78,7 @@ describe("createExternalRelayStreamResponse", () => {
       messages: [userMessage("hello?")],
       conversationId: null,
       responseHeaders: { "X-Request-Id": "rid-1" },
+      activityDetail: "full",
     });
     const out = await drain(res);
 
@@ -90,8 +91,9 @@ describe("createExternalRelayStreamResponse", () => {
     );
     expect(out).toContain('"type":"data-externalConversation"');
     expect(out).toContain('"conversationId":"conv_9"');
-    expect(out).toContain('"type":"data-digigraphTrace"');
-    expect(out).toContain('"external_activity"');
+    expect(out).toContain('"type":"data-digichatActivity"');
+    expect(out).toContain('"operation":"chat"');
+    expect(out).toContain('"label":"Searching…"');
     expect(out).toContain('"delta":"Hel"');
     expect(out).toContain('"delta":"lo"');
     expect(res.headers.get("X-Request-Id")).toBe("rid-1");
@@ -121,6 +123,7 @@ describe("createExternalRelayStreamResponse", () => {
         messages: [userMessage("hi")],
         conversationId: null,
         responseHeaders: {},
+        activityDetail: "full",
       })
     );
     expect(out).toContain('"delta":"Hi "');
@@ -155,6 +158,7 @@ describe("createExternalRelayStreamResponse", () => {
         messages: [userMessage("hi")],
         conversationId: null,
         responseHeaders: {},
+        activityDetail: "full",
       })
     );
     // Both "xyz" deltas must be forwarded — count, since .toContain can't tell
@@ -175,6 +179,7 @@ describe("createExternalRelayStreamResponse", () => {
         messages: [userMessage("again")],
         conversationId: "conv_9",
         responseHeaders: {},
+        activityDetail: "full",
       })
     ).body?.cancel();
     expect(fetchMock.mock.calls[0][1].body).toBe(
@@ -198,6 +203,7 @@ describe("createExternalRelayStreamResponse", () => {
         messages: [userMessage("q")],
         conversationId: null,
         responseHeaders: {},
+        activityDetail: "full",
       })
     );
     expect(out).toContain("agent unavailable");
@@ -215,6 +221,7 @@ describe("createExternalRelayStreamResponse", () => {
         messages: [userMessage("q")],
         conversationId: null,
         responseHeaders: {},
+        activityDetail: "full",
       })
     );
     expect(out).toContain("Upstream error: 503");
