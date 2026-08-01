@@ -1010,6 +1010,30 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   recomputes `price_technicals` from raw OHLCV in `price_history` (look-ahead-guarded,
   network-free, idempotent). Preflight may call this when stale (`ATLAS_REFRESH_ON_DEMAND`).
   The daily prices cron (`pipeline-digiquant-prices.yml`) is the primary freshness mechanism.
+  Three contracts the recompute must honour (#1752):
+  - **Read window ≠ write window.** The read spans `[write_start − warmup_days, as_of]`; only
+    rows on or after `write_start` are upserted. Every rolling indicator has a warm-up prefix
+    (`sma_200` / `zscore_200` need 200 bars) where the value is genuinely `NULL`, and
+    `upsert_price_technicals` is a coalesce-free PostgREST bulk upsert — writing a warm-up row
+    *replaces* a stored good value with `NULL`. Defaults: `WARMUP_CALENDAR_DAYS = 320`
+    (≈200 sessions), `DEFAULT_WRITE_WINDOW_DAYS = 30`. `since=` moves the write floor for a
+    repair. Residual, by design: a ticker whose inception falls inside the warm-up read window
+    has no 200 bars, so its leading rows carry `NULL` long-window values — first writes, not
+    clobbers.
+  - **The `price_history` read is paginated.** PostgREST caps a rangeless response at 1 000
+    rows, so one request over ~250 tickers × ~350 days returned ~4 bars per ticker — every one
+    below `MIN_BARS` — and the recompute silently processed nothing. Paging is ordered
+    `(ticker, date)`; a date-only order lets same-date rows shuffle between pages.
+  - **Non-session rows are dropped first**, against `trading_calendar` via
+    `_utils.fetch_trading_days` + `filter_rows_by_trading_days` (fail-soft: no calendar rows →
+    compute on all rows, with a warning). `price_history` carries weekend bars for some
+    tickers; without the filter they become technicals the cron path would never write.
+- **Technicals repair (#1752).** `python -m digiquant prices recompute-technicals` drives the
+  same core from the CLI: reads `price_history`, writes `price_technicals`, no network fetch and
+  no CSV cache. `--since` bounds the *write*, `--dry-run` computes and reports without writing.
+  Exposed as `mode: repair-technicals` on `pipeline-digiquant-backfill.yml`. This is the repair
+  path for the NULL long-window bands that `compute-technicals` wrote from its ephemeral 1-year
+  cache; `compute-technicals` itself keeps its cache-sourced contract and is unchanged.
 - **Fed rate-decision odds (#21).** `data/prices/fed_probabilities` ingests FOMC probabilities
   into `macro_series_observations`. Ingested by `.github/workflows/pipeline-olympus.yml` (daily,
   before research) via `python -m digiquant prices fetch-macro --sources fedprob`.
