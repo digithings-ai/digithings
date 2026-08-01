@@ -115,6 +115,17 @@ def _pandas_to_polars(pdf, ticker: str) -> pl.DataFrame:
     return pl.from_pandas(pdf)
 
 
+def _to_yahoo_symbol(ticker: str) -> str:
+    """Map a canonical ticker to the symbol Yahoo Finance expects.
+
+    Yahoo encodes share classes with a hyphen where the canonical/exchange form
+    uses a dot: ``BRK.B`` -> ``BRK-B``. Passing the dotted form returns no data
+    at all, so BRK.B never landed a single price row (#1754). Identity for every
+    ticker without a dot.
+    """
+    return ticker.replace(".", "-")
+
+
 def fetch_batch(
     tickers: list[str],
     *,
@@ -142,6 +153,12 @@ def fetch_batch(
     if dry_run:
         return FetchResult(frames={t: _synthetic_ohlcv(t, rows=5) for t in tickers}, errors={})
 
+    # Canonical symbols use '.' for share classes (BRK.B); Yahoo uses '-'
+    # (BRK-B). Without this, the download silently returns no_data forever
+    # (#1754). Frames stay keyed by the CANONICAL ticker so DB rows and the
+    # Atlas config agree.
+    yahoo_by_canon = {t: _to_yahoo_symbol(t) for t in tickers}
+
     # Lazy import — yfinance is an optional dep.
     try:
         import yfinance as yf  # type: ignore[import-not-found]
@@ -159,7 +176,7 @@ def fetch_batch(
         kwargs["period"] = period
 
     try:
-        raw = yf.download(tickers, **kwargs)
+        raw = yf.download([yahoo_by_canon[t] for t in tickers], **kwargs)
     except Exception as e:  # yfinance is brittle; treat transport errors as per-ticker
         return FetchResult(frames={}, errors={t: f"batch_download_failed: {e}" for t in tickers})
 
@@ -168,7 +185,7 @@ def fetch_batch(
     if isinstance(raw.columns, pd.MultiIndex):
         for ticker in tickers:
             try:
-                pdf = raw.xs(ticker, level=1, axis=1).dropna(how="all")
+                pdf = raw.xs(yahoo_by_canon[ticker], level=1, axis=1).dropna(how="all")
                 frames[ticker] = _pandas_to_polars(pdf, ticker)
             except KeyError:
                 errors[ticker] = "no_data"
