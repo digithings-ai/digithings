@@ -334,6 +334,64 @@ anchor is the book, not the NAV row.
 `atlas.supabase_io.query_price_deltas` is deliberately left alone: it is a one-trading-day
 triage signal shared with the rule evaluators, and every rule threshold is calibrated
 against that meaning.
+<!-- #1766 -->
+### The 2026-06-27 → 2026-07-16 book gap is permanent and accepted
+
+The #1555 freeze above left a hole in the book that will **not** be filled. Read this before
+proposing a backfill. Verified against the live `core` project on 2026-08-01:
+
+- `positions`, `nav_history` and `portfolio_metrics` each hold **zero rows** for every date in
+  `2026-06-27 … 2026-07-16` — 20 consecutive calendar days. Last pre-gap book: 06-26. First
+  post-gap book: 07-17.
+- 22 `atlas_run_diagnostics` rows cover that window and **18 of them report `status='ok'`**.
+  All 18 carry the H9 coherence check (1) failure in `error_summary`:
+  `hermes_h9_commit_run/hermes/portfolio/commit-run: held ticker <T> missing from book and not
+  flat in H7` (EWT on most dates; EWT, IJR, UUP and TLT by 07-16). Grep production for **that
+  message**, not for the word "coherence" — the literal string `coherence` appears in zero rows,
+  and no `error_summary` in the window comes close to the 2000-char cap, so nothing was
+  truncated. This is check (1) at the top of this section reporting a frozen commit under an
+  `ok` verdict, which is exactly the lie the degraded gate above now prevents.
+
+**Fixed 2026-07-17** by `40312d82` "restore Hermes H4–H9 commits" (PR #1565, branch
+`task/1555-hermes-restoration`), then hardened 07-22 by the memo-unaddressed held carry
+(`b84a4d73`) and the final-book continuity backstop (`1dc93db3`). `positions` resumes on
+2026-07-17, the same date. Of the 18 diagnostics rows from 07-17 onward that carry a **non-null**
+`book_committed`, `book_committed = true` holds exactly when `positions` has rows for that
+`run_date` — zero counterexamples in either direction, including the correctly-`false` 07-21,
+07-22 and 07-24 runs. (Three further 07-17 rows predate emission of the flag and carry `null`.
+Separately, 07-30 has no diagnostics row at all — a hole in the *detection* series, unrelated to
+this book gap.)
+
+**The gap is deliberately not backfilled**, for two independent reasons:
+
+1. **It would fabricate an audit trail.** Synthesising 20 days of book for dates on which the PM
+   demonstrably made no decision invents holdings that were never chosen, and it would silently
+   restate every published performance number — NAV, Sharpe, volatility, drawdown, alpha and
+   attribution are all computed over this series.
+2. **The only tool that could do it structurally cannot.**
+   `digiquant/scripts/atlas/refresh_performance_metrics.py`'s `fill_calendar_through`
+   (`:578-596`) resolves its start from `_max_positions_date` (`:580`, `:101-107`) and then walks
+   **forward only** (`:593-596`). A target date earlier than the latest snapshot degrades to a
+   single-day refresh (`:584-590`). It provably cannot reach a hole that sits *behind*
+   `max(positions.date)`, and `carry_forward_positions` (`:109-146`) is only ever called from
+   that forward walk. See the "Limitation" note in
+   [`atlas/docs/RUNBOOK.md`](../../atlas/docs/RUNBOOK.md), which has said so since before the gap.
+
+Two consequences a future reader must not "fix" by accident. First, the sparseness of
+`positions` / `nav_history` **is the signal** that a book failed to commit; densifying the
+calendar by carrying the prior book forward across missing dates would destroy the only
+data-level evidence of recurrence. Second, the gap is currently **invisible** in the UI rather
+than merely visible-and-empty, because the tearsheet contribution chart plots by array index, so
+the 20 absent dates are compressed away instead of rendering as a break. Annotating the chart is
+a separate, unfiled piece of work; it was considered and deliberately deferred.
+
+**#1766 needs no repair.** The production defect it reports was fixed 07-17, so there is nothing
+live left to fix and no data left to reconstruct; this section *is* the resolution. The remediation
+plan's disposition was to leave the issue **open with this evidence attached** rather than close it
+as fixed-by-code, so that the gap keeps a visible owner. The narrow residual — a run that produces research but commits no book while still
+reporting `ok` — is closed by detection rather than by a data repair, once the no-book gate in the
+`summarize_run` work lands (PR #1774, open as of 2026-08-01). If you are here because the gap
+looks unexplained, it is explained: read up, not sideways into a backfill.
 
 ---
 
