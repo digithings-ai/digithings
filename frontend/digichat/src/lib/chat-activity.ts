@@ -130,6 +130,16 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
   const toolRows = new Map<string, number>();
   const traceRows = new Map<string, number>();
   const completedTools = new Set<string>();
+  // Row index of the still-open ("started", query not yet known) call for each
+  // tool name. Cleared the instant a completed/failed span resolves it, so a
+  // later, unrelated "started" for the same tool can never be mistaken for a
+  // callback that belongs to an earlier, already-resolved invocation.
+  const pendingRow = new Map<string, number>();
+  // Placeholder rows whose invocation turned out to duplicate an already-
+  // tracked (toolName, query) call. Repeating an identical search is the same
+  // logical row in the UI, so its own placeholder is redundant and is dropped
+  // at the end rather than left behind as a phantom "Searching…" row.
+  const orphanedRows = new Set<number>();
   let pendingTool = "search";
   let pendingQuery = "";
   let reasoning = "";
@@ -145,33 +155,43 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
       pendingTool = name;
       if (span.query) pendingQuery = span.query;
 
-      const key = toolKey(name, span.query ?? "");
-      // "failed" is terminal too — a search that errored must not render as a
-      // tool call that never finishes.
-      if (span.status !== "started") completedTools.add(key);
-      if (toolRows.has(key)) continue;
-
-      // A "started" span has no query yet, so it keys on the empty string; the
-      // later "completed" span carries the query and upgrades that row in place
-      // rather than opening a second one for the same search.
-      const blank = toolKey(name, "");
-      const blankIdx = toolRows.get(blank);
-      if (blankIdx !== undefined && span.query) {
-        const row = rows[blankIdx];
-        if (row.kind === "tool_call") row.query = span.query;
-        toolRows.delete(blank);
-        toolRows.set(key, blankIdx);
-        completedTools.delete(blank);
+      if (span.status === "started") {
+        // Reuse the tool's still-open placeholder rather than opening a
+        // second one for the same in-flight (query not yet known) call.
+        if (!pendingRow.has(name)) {
+          rows.push({ kind: "tool_call", name, query: span.query ?? "" });
+          pendingRow.set(name, rows.length - 1);
+        }
         continue;
       }
 
-      rows.push({ kind: "tool_call", name, query: span.query ?? "" });
-      toolRows.set(key, rows.length - 1);
+      // "failed" is terminal too — a search that errored must not render as a
+      // tool call that never finishes.
+      const key = toolKey(name, span.query ?? "");
+      completedTools.add(key);
+      const idx = pendingRow.get(name);
+      pendingRow.delete(name);
+
+      if (toolRows.has(key)) {
+        // A repeat of an identical (tool, query) search — it already has a
+        // row. This invocation's own placeholder, if any, is now orphaned.
+        if (idx !== undefined) orphanedRows.add(idx);
+        continue;
+      }
+
+      if (idx !== undefined) {
+        const row = rows[idx];
+        if (row.kind === "tool_call") row.query = span.query ?? "";
+        toolRows.set(key, idx);
+      } else {
+        rows.push({ kind: "tool_call", name, query: span.query ?? "" });
+        toolRows.set(key, rows.length - 1);
+      }
       continue;
     }
 
     if (span.operation === "retrieve") {
-      const name = span.toolName ?? pendingTool ?? "search";
+      const name = span.toolName ?? pendingTool;
       const query = span.query ?? pendingQuery;
       const hits = span.documents ?? [];
       const key = toolKey(name, query);
@@ -217,5 +237,5 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
   }
 
   if (reasoning) rows.push({ kind: "reasoning", text: reasoning });
-  return rows;
+  return orphanedRows.size ? rows.filter((_, idx) => !orphanedRows.has(idx)) : rows;
 }

@@ -244,4 +244,44 @@ describe("toDigiChatActivity", () => {
       ])
     ).toEqual([{ kind: "tool_result", name: "search", query: "", hits: [{ title: "A", path: "a" }], count: 1 }]);
   });
+
+  // Regression: a repeated search for the same (toolName, query) must collapse
+  // onto its one existing row, not leave a second "started" placeholder behind
+  // once the blank-key slot it opened in is later reused by a fresh call.
+  it("does not leave a phantom tool_call row when the same search runs twice in a row", () => {
+    const rows = toDigiChatActivity([
+      started("file_search"),
+      finished("file_search", "auth"),
+      started("file_search"),
+      finished("file_search", "auth"),
+      retrieved("file_search", "auth", [{ title: "Auth", path: "https://x/auth" }]),
+    ]);
+    expect(rows).toEqual([
+      {
+        kind: "tool_result",
+        name: "file_search",
+        query: "auth",
+        hits: [{ title: "Auth", path: "https://x/auth" }],
+        count: 1,
+      },
+    ]);
+  });
+
+  // Guard against an over-eager fix: two genuinely different queries, each
+  // announced by its own "started" span, must still stay two separate rows.
+  it("keeps two different queries separate even when each is preceded by its own started span", () => {
+    const rows = toDigiChatActivity([
+      started("file_search"),
+      finished("file_search", "auth"),
+      retrieved("file_search", "auth", [{ title: "A", path: "a" }]),
+      started("file_search"),
+      finished("file_search", "billing"),
+      retrieved("file_search", "billing", [{ title: "B", path: "b" }]),
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => (r.kind === "tool_result" ? r.query : null))).toEqual([
+      "auth",
+      "billing",
+    ]);
+  });
 });
