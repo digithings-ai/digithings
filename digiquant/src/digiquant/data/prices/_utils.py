@@ -6,14 +6,18 @@ with no external callers.
 
 from __future__ import annotations
 
+import logging
 import math
 import time
 from collections.abc import Callable
+from datetime import date as dt_date
 from typing import Any, TypeVar  # score:allow untyped any — TypeVar bound for call_with_retry
 
 import polars as pl
 
 T = TypeVar("T")
+
+_logger = logging.getLogger(__name__)
 
 # Transient postgrest / supabase-py / network failures during chunked upserts.
 TRANSIENT_UPSERT_ERRORS: tuple[type[BaseException], ...] = (
@@ -55,6 +59,53 @@ def safe_int(v: Any) -> int | None:
     """
     f = safe_float(v, decimals=None)
     return int(f) if f is not None else None
+
+
+def fetch_trading_days(client: Any, venue: str, *, page_size: int = 1000) -> pl.Series | None:
+    """Fetch all trading days for ``venue`` from the ``trading_calendar`` table.
+
+    Returns a :class:`polars.Series` of :class:`datetime.date` values for rows
+    where ``is_trading_day=True``, or ``None`` on error.  Paginates automatically
+    so callers are not limited by Supabase's default 1 000-row cap.
+
+    ``page_size`` must be <= PostgREST's max-rows cap (1 000). A larger value
+    silently returns only the first 1 000 rows, so ``len(batch) < page_size``
+    is true on page 1 and pagination stops after one page — which previously
+    yielded only the *oldest* 1 000 days and dropped every recent session from
+    the technicals trading-day filter. ``.order("date")`` makes paging
+    deterministic.
+
+    Lives here rather than in ``cli/prices.py`` (its original home) because
+    :mod:`digiquant.data.prices.refresh` needs the same calendar to avoid
+    computing indicators on non-session bars (#1752).
+    """
+    all_dates: list[dt_date] = []
+    offset = 0
+    try:
+        while True:
+            resp = (
+                client.table("trading_calendar")
+                .select("date")
+                .eq("venue", venue)
+                .eq("is_trading_day", True)
+                .order("date")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            batch = resp.data or []
+            for row in batch:
+                raw = row.get("date")
+                if raw:
+                    all_dates.append(dt_date.fromisoformat(str(raw)[:10]))
+            if len(batch) < page_size:
+                break
+            offset += page_size
+    except Exception as exc:
+        _logger.warning("trading_calendar query failed for venue %s: %s", venue, exc)
+        return None
+    if not all_dates:
+        return None
+    return pl.Series("trading_days", all_dates)
 
 
 def filter_rows_by_trading_days(df: pl.DataFrame, trading_days: pl.Series) -> pl.DataFrame:
@@ -99,6 +150,7 @@ def call_with_retry(
 __all__ = [
     "TRANSIENT_UPSERT_ERRORS",
     "call_with_retry",
+    "fetch_trading_days",
     "filter_rows_by_trading_days",
     "safe_float",
     "safe_int",
