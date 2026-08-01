@@ -1034,6 +1034,17 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   Exposed as `mode: repair-technicals` on `pipeline-digiquant-backfill.yml`. This is the repair
   path for the NULL long-window bands that `compute-technicals` wrote from its ephemeral 1-year
   cache; `compute-technicals` itself keeps its cache-sourced contract and is unchanged.
+- **Market-clock schedules are DST-aware (#1775).** Every deadline in
+  `pipeline-digiquant-prices.yml` is an ET wall-clock event (09:30 open, 16:00 close) while
+  GitHub cron is fixed UTC, so each schedule is the **union** of the two ET offsets:
+  intraday `*/15 13-21`, EOD `25 21` (after the close in both, off the 15-minute grid so it
+  never shares a minute with an intraday tick, done before `pipeline-atlas-metrics.yml`'s
+  `0 22`). One-sided constraints are solved by the window alone; the two-sided at-open
+  constraint cannot be — the offsets differ by exactly one hour — so **both** `35 13` and
+  `35 14` ship and an `at-open-clock` gate job admits whichever is 09:35 ET. That gate is
+  inline in the YAML on purpose: these jobs check out `ref: main` (#1626), so a repo-side
+  helper would lag the schedule it guards by one promotion. Invariants are asserted in
+  `tests/scripts/test_prices_cron_dst.py` against derived ET times in both offsets.
 - **Fed rate-decision odds (#21).** `data/prices/fed_probabilities` ingests FOMC probabilities
   into `macro_series_observations`. Ingested by `.github/workflows/pipeline-olympus.yml` (daily,
   before research) via `python -m digiquant prices fetch-macro --sources fedprob`.
