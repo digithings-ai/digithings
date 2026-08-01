@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   sanitizeActivitySpan,
   applyActivityDetail,
+  toDigiChatActivity,
   MAX_LABEL_CHARS,
   MAX_DOCUMENTS,
   type ActivitySpan,
@@ -119,5 +120,128 @@ describe("applyActivityDetail", () => {
 
   it("passes everything through at full", () => {
     expect(applyActivityDetail(full, "full")).toEqual(full);
+  });
+});
+
+const started = (toolName: string, query?: string): ActivitySpan => ({
+  operation: "execute_tool",
+  toolName,
+  status: "started",
+  label: "Searching knowledge base…",
+  ...(query ? { query } : {}),
+});
+
+const finished = (toolName: string, query: string): ActivitySpan => ({
+  operation: "execute_tool",
+  toolName,
+  query,
+  status: "completed",
+  label: `Searched for: "${query}"`,
+});
+
+const retrieved = (
+  toolName: string,
+  query: string,
+  docs: { title: string; path: string }[]
+): ActivitySpan => ({
+  operation: "retrieve",
+  toolName,
+  query,
+  status: "completed",
+  label: "Sources",
+  documents: docs,
+});
+
+describe("toDigiChatActivity", () => {
+  it("returns no rows for no spans", () => {
+    expect(toDigiChatActivity([])).toEqual([]);
+  });
+
+  // The Foundry shape: three spans across two events collapse to one result row.
+  it("merges the search and its citations into a single tool_result", () => {
+    const rows = toDigiChatActivity([
+      started("file_search"),
+      finished("file_search", "auth"),
+      retrieved("file_search", "auth", [{ title: "Auth", path: "https://x/auth" }]),
+    ]);
+    expect(rows).toEqual([
+      {
+        kind: "tool_result",
+        name: "file_search",
+        query: "auth",
+        hits: [{ title: "Auth", path: "https://x/auth" }],
+        count: 1,
+      },
+    ]);
+  });
+
+  it("renders an in-flight search as a tool_call", () => {
+    expect(toDigiChatActivity([started("file_search")])).toEqual([
+      { kind: "tool_call", name: "file_search", query: "" },
+    ]);
+  });
+
+  it("renders a completed search with no citations as a no-hits result", () => {
+    expect(toDigiChatActivity([started("file_search"), finished("file_search", "auth")])).toEqual([
+      { kind: "tool_result", name: "file_search", query: "auth", hits: [], count: 0 },
+    ]);
+  });
+
+  it("keeps two different queries as separate rows", () => {
+    const rows = toDigiChatActivity([
+      finished("file_search", "auth"),
+      retrieved("file_search", "auth", [{ title: "A", path: "a" }]),
+      finished("file_search", "billing"),
+      retrieved("file_search", "billing", [{ title: "B", path: "b" }]),
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => (r.kind === "tool_result" ? r.query : null))).toEqual([
+      "auth",
+      "billing",
+    ]);
+  });
+
+  it("collapses repeated chat traces by label and ORs their done flag", () => {
+    const trace = (label: string, status: ActivitySpan["status"]): ActivitySpan => ({
+      operation: "chat",
+      status,
+      label,
+    });
+    expect(
+      toDigiChatActivity([trace("Planning", "started"), trace("Planning", "completed")])
+    ).toEqual([{ kind: "trace", label: "Planning", done: true }]);
+  });
+
+  it("accumulates reasoning deltas into one trailing block", () => {
+    const reason = (text: string): ActivitySpan => ({
+      operation: "chat",
+      status: "started",
+      label: "reasoning",
+      reasoningDelta: text,
+    });
+    expect(toDigiChatActivity([reason("one "), reason("two")])).toEqual([
+      { kind: "reasoning", text: "one two" },
+    ]);
+  });
+
+  // "failed" is terminal: the row must settle, not spin forever.
+  it("settles a failed step rather than leaving it pending", () => {
+    expect(
+      toDigiChatActivity([{ operation: "chat", status: "failed", label: "Planning" }])
+    ).toEqual([{ kind: "trace", label: "Planning", done: true }]);
+    expect(
+      toDigiChatActivity([
+        started("file_search"),
+        { ...finished("file_search", "auth"), status: "failed" },
+      ])
+    ).toEqual([{ kind: "tool_result", name: "file_search", query: "auth", hits: [], count: 0 }]);
+  });
+
+  it("renders citations with no preceding search step using an empty query", () => {
+    expect(
+      toDigiChatActivity([
+        { operation: "retrieve", status: "completed", label: "Sources", documents: [{ title: "A", path: "a" }] },
+      ])
+    ).toEqual([{ kind: "tool_result", name: "search", query: "", hits: [{ title: "A", path: "a" }], count: 1 }]);
   });
 });

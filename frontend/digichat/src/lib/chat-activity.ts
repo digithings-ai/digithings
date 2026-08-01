@@ -16,6 +16,8 @@
  * Spec: docs/superpowers/specs/2026-08-01-digichat-activity-protocol-design.md
  */
 
+import type { DigiChatActivity } from "@digithings/digichat-ui";
+
 export const ACTIVITY_PART_TYPE = "data-digichatActivity" as const;
 
 export const MAX_LABEL_CHARS = 200;
@@ -111,4 +113,109 @@ export function applyActivityDetail(
   void _documents;
   void _reasoning;
   return rest;
+}
+
+const KEY_SEP = "\x1f";
+const toolKey = (name: string, query: string) => `${name}${KEY_SEP}${query}`;
+
+/**
+ * Projects provider spans onto the union the shared UI renders.
+ *
+ * Called over the whole span list on each render (not incrementally), which is
+ * what lets the trailing pass rewrite a finished-but-empty search into a
+ * "no hits" row: whether citations followed is only knowable once the list ends.
+ */
+export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
+  const rows: DigiChatActivity[] = [];
+  const toolRows = new Map<string, number>();
+  const traceRows = new Map<string, number>();
+  const completedTools = new Set<string>();
+  let pendingTool = "search";
+  let pendingQuery = "";
+  let reasoning = "";
+
+  for (const span of spans) {
+    if (span.reasoningDelta) {
+      reasoning += span.reasoningDelta;
+      continue;
+    }
+
+    if (span.operation === "execute_tool") {
+      const name = span.toolName ?? "tool";
+      pendingTool = name;
+      if (span.query) pendingQuery = span.query;
+
+      const key = toolKey(name, span.query ?? "");
+      // "failed" is terminal too — a search that errored must not render as a
+      // tool call that never finishes.
+      if (span.status !== "started") completedTools.add(key);
+      if (toolRows.has(key)) continue;
+
+      // A "started" span has no query yet, so it keys on the empty string; the
+      // later "completed" span carries the query and upgrades that row in place
+      // rather than opening a second one for the same search.
+      const blank = toolKey(name, "");
+      const blankIdx = toolRows.get(blank);
+      if (blankIdx !== undefined && span.query) {
+        const row = rows[blankIdx];
+        if (row.kind === "tool_call") row.query = span.query;
+        toolRows.delete(blank);
+        toolRows.set(key, blankIdx);
+        completedTools.delete(blank);
+        continue;
+      }
+
+      rows.push({ kind: "tool_call", name, query: span.query ?? "" });
+      toolRows.set(key, rows.length - 1);
+      continue;
+    }
+
+    if (span.operation === "retrieve") {
+      const name = span.toolName ?? pendingTool ?? "search";
+      const query = span.query ?? pendingQuery;
+      const hits = span.documents ?? [];
+      const key = toolKey(name, query);
+      const result: DigiChatActivity = {
+        kind: "tool_result",
+        name,
+        query,
+        hits,
+        count: hits.length,
+      };
+      const idx = toolRows.get(key);
+      if (idx !== undefined) {
+        rows[idx] = result;
+      } else {
+        rows.push(result);
+        toolRows.set(key, rows.length - 1);
+      }
+      completedTools.delete(key);
+      continue;
+    }
+
+    // operation === "chat": an opaque upstream step. Collapse by label so a
+    // provider re-emitting the same step does not stack duplicate rows.
+    const key = span.label;
+    const done = span.status !== "started";
+    const idx = traceRows.get(key);
+    if (idx !== undefined) {
+      const row = rows[idx];
+      if (row.kind === "trace") row.done = row.done || done;
+      continue;
+    }
+    rows.push({ kind: "trace", label: span.label, done });
+    traceRows.set(key, rows.length - 1);
+  }
+
+  // A search that completed and never produced citations is a "no hits" answer,
+  // not a perpetually-pending tool call.
+  for (const [key, idx] of toolRows) {
+    const row = rows[idx];
+    if (row.kind === "tool_call" && completedTools.has(key)) {
+      rows[idx] = { kind: "tool_result", name: row.name, query: row.query, hits: [], count: 0 };
+    }
+  }
+
+  if (reasoning) rows.push({ kind: "reasoning", text: reasoning });
+  return rows;
 }
