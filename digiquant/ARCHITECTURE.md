@@ -1138,3 +1138,44 @@ either (a) call `ingest_atlas_document` directly at the end of
 `publish_phase`, or (b) push the natural keys onto a queue that
 `ingest_worker.py` (currently a placeholder per
 `digisearch/ARCHITECTURE.md`) drains.
+
+---
+
+<!-- #1736 -->
+## Run health telemetry — `atlas_run_diagnostics` (#1736)
+
+`digiquant/src/digiquant/olympus/atlas/diagnostics.py` derives **two** verdicts from a
+finished run's state, and they are deliberately not the same signal:
+
+| Field | Question | Consumers |
+|---|---|---|
+| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `frontend/olympus` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
+| `RunSummary.retry_signal` | Is re-running worth the money? | `chain._retry_worthy` → the process exit code → CI's outer-retry loop |
+
+`status` stays inside `ok | degraded | failed | cancelled` — there is no CHECK constraint on
+the column, but both frontend readers string-match, so a new value would silently fall
+through to "unknown". `retry_signal` is frozen at the pre-#1736 rules; `is_degraded()`
+returns it, which is why that function's name no longer matches the health verdict.
+
+**Escalation rules on `status`** (each records itself in `breakdown.degraded_reasons`):
+any failed research segment (STRICT — supersedes the `ATLAS_DEGRADED_RUN_PCT` share rule for
+health purposes), more than `_HERMES_DEGRADED_PCT_DEFAULT` of the run's Hermes deliberations
+failed, and `atlas_research_produced and not book_committed` (the no-book gate — closes the
+residual detection hole behind #1766, which the #1555 commit gate misses because it only
+fires once a book has *materialized*).
+
+### Extending `breakdown` — use the seam, not a new edit site
+
+`breakdown` is schema-free jsonb, so a new telemetry key needs no migration. Register a
+contributor rather than editing `summarize_run`:
+
+```python
+from digiquant.olympus.atlas.diagnostics import register_breakdown_contributor
+
+register_breakdown_contributor(lambda state: {"roster": _roster_tally(state)})
+```
+
+Contributors are pure, fail-soft (an exception is logged and swallowed), may not overwrite an
+existing key, and run **once per run** inside `_segment_counts`. Note the split:
+`_segment_totals` is the pure counter used by `atlas_research_produced`, which the chain calls
+*mid-run* to gate Hermes — contributors must never see that half-populated state.
