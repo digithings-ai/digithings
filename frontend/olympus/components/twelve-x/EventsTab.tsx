@@ -11,6 +11,18 @@ import type {
 import EventsTimeline, { eventsToTimeline } from './EventsTimeline';
 import EventDetailPanel from './EventDetailPanel';
 
+/**
+ * Empty-state copy, shared by both views so they cannot drift.
+ *
+ * Deliberately a statement about the FEED, not about the world: `economic_calendar` is
+ * written by the external twelve-x ingest, whose forward horizon is shorter than this
+ * surface's 14-day window (#1753), so an empty result means "nothing ingested for these
+ * days" — never "no macro releases are scheduled", which a real 14-day window never is.
+ */
+const EMPTY_COPY =
+  'No economic releases have been ingested for the next 14 days — the shared macro ' +
+  'calendar feed does not currently cover this window.';
+
 /** The two Events views; List is the default. */
 type EventsView = 'list' | 'timeline';
 const VIEWS: { key: EventsView; label: string }[] = [
@@ -499,9 +511,7 @@ export default function EventsTab({
             ))}
           </div>
         ) : (
-          <div className="glass-card p-10 text-center text-sm text-ink-mute">
-            No upcoming economic events in the next 14 days.
-          </div>
+          <div className="glass-card p-10 text-center text-sm text-ink-mute">{EMPTY_COPY}</div>
         )
       ) : null}
 
@@ -515,7 +525,7 @@ export default function EventsTab({
               onSelect={(id) => setSelected(events.find((e) => String(e.id) === id) ?? null)}
             />
           ) : (
-            <p className="text-sm text-ink-mute">No upcoming economic events in the next 14 days.</p>
+            <p className="text-sm text-ink-mute">{EMPTY_COPY}</p>
           )}
         </div>
       ) : null}
