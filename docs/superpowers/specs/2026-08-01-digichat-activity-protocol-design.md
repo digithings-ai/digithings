@@ -144,6 +144,14 @@ an OTLP exporter without a second sanitization pass.
 - `labels` — labels only; no `documents`. **Default** when unspecified.
 - `full` — the complete chain including retrieved documents.
 
+Stripping `documents` must not be confused with finding none. A retrieval whose
+documents were withheld and a retrieval that genuinely returned nothing arrive at
+the projector looking identical, and rendering the first as "no hits" tells the
+visitor something false. `applyActivityDetail` is the only place that knows which
+happened, so it marks the span; at `labels` a successful search renders an honest
+status row naming the query, while a genuinely empty search still renders as a
+zero-count result.
+
 The gate is applied **server-side in the projector**, so `off` and `labels` tenants
 never receive documents over the wire. This is not CSS hiding.
 
@@ -191,9 +199,32 @@ log carrying the detail.
 ## Client changes
 
 `uiMessageToDigiChat` reads `data-digichatActivity` and delegates to
-`toDigiChatActivity`. It keeps accepting `data-digigraphTrace` for one release —
-client and server ship in the same image, so this covers only iframe pages cached in
-a visitor's tab across a deploy.
+`toDigiChatActivity`. It keeps accepting `data-digigraphTrace` for one release. Note
+what that window actually covers: a *cached* client does not contain this code, so
+the fallback does nothing for it. What it protects is a rolling deploy in which a new
+client reaches an old revision.
+
+### The authenticated surface keeps the legacy part
+
+`stream-digigraph-trace.ts` is not embed-only — `chat-panel.tsx`, the authenticated
+in-app chat, renders `DigigraphTraceBlock` from `data-digigraphTrace`. Converting
+that provider to spans alone would blank that UI, and repointing it at the new part
+would not restore it: `rag_sources` carries source id, evidence tier, year, and
+snippet, and `graph_update` carries a research brief, none of which the flat `chat`
+span can express.
+
+So the digigraph provider **dual-emits**: the legacy part with its original full
+payload, plus the gated activity span. The legacy part is emitted **only on the
+authenticated path** — a request with no embed tenant config. Emitting it for embed
+tenants would ship the raw upstream payload to anonymous visitors and would silently
+defeat `activityDetail: "off"`, since the client falls back to the legacy branch
+whenever no activity part is present. The factory therefore takes a required
+`emitLegacyTracePart` flag rather than defaulting, so every caller must state which
+surface it serves.
+
+This is transitional. It is removed once `chat-panel.tsx` migrates, which needs the
+digigraph mapping to project `rag_sources` into `retrieve` + documents first — a
+Phase 2 concern, not this one.
 
 Today's by-label `Map` collapse moves into the projector and re-keys on
 `(toolName, query)`. Two different searches currently merge if their labels happen
