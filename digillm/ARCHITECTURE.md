@@ -200,6 +200,28 @@ digismith on the path) plus `LANGSMITH_API_KEY` to enable spans.
 | `DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY` | `completion` | Empty-response self-heal: retry count (default 2) + backoff seconds (default 2.0). |
 | `OPENROUTER_FALLBACK_MODELS` | `completion` | Comma-separated cheap models for OpenRouter provider-fallback routing on an empty retry. |
 
+## Tests and CI
+
+```bash
+pytest digillm/tests -q          # 57 tests, offline — every provider call is monkeypatched
+ruff check digillm/src digillm/tests && ruff format --check digillm/src digillm/tests
+```
+
+CI gate: [`.github/workflows/test-digillm.yml`](../.github/workflows/test-digillm.yml),
+wired into `ci.yml` behind the `digillm` path filter in `scripts/ci_paths.yaml`.
+Added in #1788 — before that this suite ran in **no** lane, and a combined
+`pytest` from the repo root could not even collect it: `digillm/tests/__init__.py`
+claimed the top-level `tests` package name that the repo-root `tests/` directory
+already owns, so collection died with `No module named 'tests.test_digillm'` and
+took `make test-unit` down with it. Do not reintroduce that file.
+
+The lane deliberately does **not** filter on `-m unit`: no test in this suite
+carries the `unit` marker, so `pytest digillm/tests -m unit` selects zero of the
+57 and would report a green run that asserted nothing. That also means these
+tests do not yet contribute to `make test-unit` — adding a module-level
+`pytestmark = pytest.mark.unit` (the shape `digifetch/tests` uses) is the
+outstanding half, tracked in #1788.
+
 ## Monorepo integration (follow-ups for the integrator)
 
 These are **outside this package** and intentionally **not** done here:
