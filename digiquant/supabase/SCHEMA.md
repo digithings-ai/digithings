@@ -125,9 +125,44 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
   [`README.md`](README.md), "What is public on purpose".
 - **Views (migrations 041, 050):** RLS does not apply to views; the curated public
   views are intentionally security-DEFINER (`security_invoker = false`) so the column
-  projection — not base-table policy — decides what anon sees, with explicit
-  `REVOKE ALL` + `GRANT SELECT TO anon, authenticated`. Supabase's advisor flags
-  `security_definer_view`; expected and accepted for this pattern.
+  projection — not base-table policy — decides what anon sees. Supabase's advisor flags
+  `security_definer_view`; expected and accepted for this pattern. Migrations **050 and
+  052** pair their `GRANT SELECT` with an explicit `REVOKE ALL`. Migrations 041 and 018
+  shipped no REVOKE at all and so left the platform-default DML grants standing — that
+  omission was #1757, closed by migration 060 (see "Grants" below).
+
+## Grants (migration 060, #1757)
+
+RLS is not the only layer, and before migration 060 it was. Supabase's project bootstrap
+grants `anon` and `authenticated` **full DML on every relation in `public`**, plus a
+matching `ALTER DEFAULT PRIVILEGES` so each new one inherits it. Because there is no
+non-`SELECT` policy anywhere (`pg_policies WHERE cmd <> 'SELECT'` → 0 rows), RLS alone
+stood between the *published* anon JWT and a write.
+
+- **What 060 does:** `REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL
+  TABLES IN SCHEMA public FROM PUBLIC, anon, authenticated`, the same list on `ALTER
+  DEFAULT PRIVILEGES … ON TABLES` so future relations inherit read-only, and an explicit
+  re-`GRANT SELECT` on the two views 041/018 had left on the platform default.
+- **`SELECT` is never revoked**, and no `REVOKE ALL` appears: taking reads away from a
+  curated view fails *silently* (the frontend's `safeSelect` turns PostgREST 42501 into an
+  empty panel, not an error). Any future lockdown must keep listing write privileges
+  explicitly.
+- **No `FOR ROLE` clause.** `pg_default_acl` carries two grantors for `public` —
+  `postgres` and `supabase_admin`. Every relation here is owned by `postgres` (the role the
+  migration chain runs as), so the implicit form is the effective one. `FOR ROLE
+  supabase_admin` raises *must be a member of role* and, under `psql
+  --single-transaction`, rolls the whole migration back.
+- **Why it mattered:** `atlas_run_health` is a single-table projection, so Postgres made it
+  auto-updatable, and `security_invoker = false` means writes through it run as `postgres`
+  and bypass `atlas_run_diagnostics`' RLS. With the standing anon DELETE grant, an
+  unauthenticated `DELETE /rest/v1/atlas_run_health` erased the whole run-telemetry
+  history. `price_history_tickers` carries `DISTINCT`, so it is not auto-updatable —
+  defense-in-depth only.
+- **Residuals:** the `supabase_admin` default-ACL entry (unreachable from `postgres`; only
+  applies to relations *it* creates), PG17's `MAINTAIN` (no matviews exist), and sequence
+  /function default grants. None is a data-write path once table INSERT is gone.
+- **`service_role` is untouched.** It is the only writer — all production workflows, every
+  Python connector, and the `prices-live` edge function.
 
 ## Dead / deprecated
 

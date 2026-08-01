@@ -167,3 +167,22 @@ The user resolved that split explicitly — both halves are deliberate, not over
   `positions`. Olympus is an open research project and its dashboard is itself an
   anon-key client of these tables. Do not "fix" this exposure; the curated views above
   exist to give digiquant.io a stable, minimal read surface, not to hide the research.
+
+**Public means readable, never writable (migration 060, #1757).** That ruling is about
+`SELECT`. Supabase's bootstrap also granted `anon`/`authenticated` full DML on every
+relation in `public`, and RLS with no write policy was the only thing stopping a write from
+the *published* anon key. Migration 060 revokes `INSERT, UPDATE, DELETE, TRUNCATE,
+REFERENCES, TRIGGER` schema-wide and narrows `ALTER DEFAULT PRIVILEGES` so new relations
+inherit read-only. Two consequences for anyone adding a table or view here:
+
+- Follow the 050/051/052 pattern — pair every `GRANT SELECT` with an explicit `REVOKE`.
+  Migrations 041 and 018 did not, which is how `atlas_run_health` (auto-updatable and
+  `security_invoker = false`, so writes through it run as `postgres` and bypass the base
+  table's RLS) ended up accepting an unauthenticated `DELETE` of the whole
+  `atlas_run_diagnostics` history.
+- Never widen the revoke to `REVOKE ALL` in the default-privileges statement. It would
+  strip `SELECT` from the next curated view, and `safeSelect` in the frontend turns the
+  resulting PostgREST 42501 into an empty panel rather than an error — a silent break.
+
+`service_role` is unaffected: it is the only writer (workflows, Python connectors, and the
+`prices-live` edge function all authenticate with it).
