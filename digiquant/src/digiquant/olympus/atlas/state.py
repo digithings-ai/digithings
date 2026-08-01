@@ -577,6 +577,19 @@ class AtlasResearchState(BaseModel):
             "document_key (§5.4). Populated by edit-mode nodes; consumed by publish."
         ),
     )
+    # Edit-mode merge fallbacks: segment slug → short reason (#1641/#1741). #1641 made a
+    # failed patch merge fall back to full regeneration with *no* PhaseError, which is the
+    # right call for run health but left the event completely unobservable — a segment that
+    # paid for a patch call AND a full regeneration is byte-identical in
+    # ``atlas_run_diagnostics`` to one that merged cleanly. Non-gating telemetry: written
+    # here, surfaced via ``atlas.telemetry.merge_fallback_breakdown``, never read by a gate.
+    # Right-wins reducer (like ``document_deltas``, not ``_merge_segment_dict``): parallel
+    # fan-out nodes each write their own slug, and a duplicate slug is not a wiring bug
+    # worth failing a run over.
+    merge_fallbacks: Annotated[dict[str, str], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="Segments whose edit patch failed to merge and were regenerated full.",
+    )
     published: list[PublishedArtifact] = Field(default_factory=list)
     # Append reducer (not last-writer-wins): parallel fan-out nodes each record
     # their own recoverable failure via ``{"errors": [PhaseError(...)]}``; the
