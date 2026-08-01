@@ -50,6 +50,7 @@ class _FakeQuery:
     canned: list[dict[str, Any]] = field(default_factory=list)
     _upsert_row: dict[str, Any] | None = None
     _update_row: dict[str, Any] | None = None
+    _delete: bool = False
     _filters: list[tuple[str, str, Any]] = field(default_factory=list)
     _order: tuple[str, bool] | None = None
     _limit: int | None = None
@@ -79,6 +80,11 @@ class _FakeQuery:
         self._filters.append(("in_", col, list(vals)))
         return self
 
+    def like(self, col: str, pattern: str) -> "_FakeQuery":
+        # PostgREST ``like``; only the trailing-``%`` prefix form is used in-repo.
+        self._filters.append(("like", col, pattern))
+        return self
+
     def order(self, col: str, desc: bool = False) -> "_FakeQuery":
         self._order = (col, desc)
         return self
@@ -96,12 +102,35 @@ class _FakeQuery:
         self._update_row = dict(payload)
         return self
 
+    def delete(self) -> "_FakeQuery":
+        # PostgREST ``delete().eq(...).execute()``; removes matching rows from the
+        # write-side ``store`` (reads come from ``canned``, so a test that exercises
+        # a delete seeds the row in both).
+        self._delete = True
+        return self
+
+    def _matches(self, row: dict[str, Any]) -> bool:
+        return all(
+            (op == "eq" and row.get(col) == val)
+            or (op == "lt" and str(row.get(col, "")) < str(val))
+            or (op == "lte" and str(row.get(col, "")) <= str(val))
+            or (op == "gte" and str(row.get(col, "")) >= str(val))
+            or (op == "in_" and row.get(col) in val)
+            or (op == "like" and str(row.get(col, "")).startswith(str(val).rstrip("%")))
+            for op, col, val in self._filters
+        )
+
     def execute(self) -> _FakeResponse:
         if self._upsert_row is not None:
             self.store.setdefault(self.table_name, []).append(self._upsert_row)
             return _FakeResponse(
                 data=[{**self._upsert_row, "id": f"row-{len(self.store[self.table_name])}"}]
             )
+        if self._delete is True:
+            rows = self.store.get(self.table_name, [])
+            removed = [r for r in rows if self._matches(r)]
+            self.store[self.table_name] = [r for r in rows if not self._matches(r)]
+            return _FakeResponse(data=removed)
         if self._update_row is not None:
             # Apply update to rows in store that match all eq filters. Mirrors
             # PostgREST's ``update().eq(...).execute()`` chain semantics so the
@@ -109,29 +138,11 @@ class _FakeQuery:
             # ``update_decision_resolution`` is exercised end-to-end.
             updated: list[dict[str, Any]] = []
             for row in self.store.get(self.table_name, []):
-                if all(
-                    (op == "eq" and row.get(col) == val)
-                    or (op == "lt" and str(row.get(col, "")) < str(val))
-                    or (op == "lte" and str(row.get(col, "")) <= str(val))
-                    or (op == "gte" and str(row.get(col, "")) >= str(val))
-                    or (op == "in_" and row.get(col) in val)
-                    for op, col, val in self._filters
-                ):
+                if self._matches(row):
                     row.update(self._update_row)
                     updated.append(row)
             return _FakeResponse(data=updated)
-        rows = list(self.canned)
-        for op, col, val in self._filters:
-            if op == "lt":
-                rows = [r for r in rows if str(r.get(col, "")) < str(val)]
-            elif op == "lte":
-                rows = [r for r in rows if str(r.get(col, "")) <= str(val)]
-            elif op == "gte":
-                rows = [r for r in rows if str(r.get(col, "")) >= str(val)]
-            elif op == "eq":
-                rows = [r for r in rows if r.get(col) == val]
-            elif op == "in_":
-                rows = [r for r in rows if r.get(col) in val]
+        rows = [r for r in self.canned if self._matches(r)]
         if self._order is not None:
             col, desc = self._order
             rows.sort(key=lambda r: r.get(col, ""), reverse=desc)

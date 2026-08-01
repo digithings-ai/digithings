@@ -16,7 +16,11 @@ from digiquant.olympus.atlas.state import (
 )
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps, build_commit_run_node
-from digiquant.olympus.hermes.writers.commit_io import _canonical_thesis_ids
+from digiquant.olympus.hermes.writers.commit_io import (
+    _canonical_thesis_ids,
+    load_commit_manifests,
+    resolve_prior_commit,
+)
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -45,6 +49,7 @@ def _state(
     analysts: dict | None = None,
     pm_memo: PMDirectionMemo | None = None,
     preferences: dict | None = None,
+    run_id: UUID = _SOURCE_RUN_ID,
 ) -> AtlasResearchState:
     # Prior-book holdings make a name "held" without putting it in the roster — the
     # real shape of a gated-out held position (held in the book, excluded from H5).
@@ -55,7 +60,7 @@ def _state(
         else PriorContext()
     )
     state = AtlasResearchState(
-        run_id=_SOURCE_RUN_ID,
+        run_id=run_id,
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=date(2026, 6, 9),
@@ -351,15 +356,94 @@ class TestCommitRunIdempotency:
         assert second_manifest.get("status") == "noop"
         assert pos_count_2 == pos_count_1
 
-    def test_same_source_run_id_conflicting_book_raises_phase_error(self) -> None:
+    def test_fresh_run_id_same_date_same_book_is_noop(self) -> None:
+        """#1744: the retry shape the old run_id-keyed guard structurally could not see.
+
+        ``AtlasResearchState.run_id`` defaults to ``uuid4()``, so CI's outer retry
+        always presents a new id. Keyed on run_id the guard never fired and the
+        second attempt re-booked the whole date; keyed on the date it is a no-op.
+        """
         client = FakeSupabaseClient()
         node = build_commit_run_node(CommitRunDeps(client=client))
-        node(_state(sized_book=_sized_book(100.0)))
-        conflict = node(_state(sized_book=_sized_book(80.0)))
-        assert conflict.get("errors")
-        err = conflict["errors"][0]
-        assert err.phase == "hermes_h9_commit_run"
-        assert "conflict" in err.message.lower() or "mismatch" in err.message.lower()
+        node(_state())
+        docs_after_first = len(client.store.get("documents", []))
+
+        retry = node(_state(run_id=UUID("11111111-2222-3333-4444-555555555555")))
+        manifest = (retry.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert manifest.get("status") == "noop", (
+            "a fresh run_id on the same date with the same book must not re-book"
+        )
+        assert len(client.store.get("documents", [])) == docs_after_first
+
+    def test_same_date_conflicting_book_supersedes_instead_of_failing(self) -> None:
+        """#1744: last-writer-wins, NOT a PhaseError.
+
+        Replaces the former ``…_raises_phase_error`` expectation deliberately. Prod
+        2026-06-24 carries three commit manifests with three *different*
+        ``weights_fingerprint`` values, so a hard idempotency conflict on a
+        run_date-keyed guard would fail the phase on a shape production already
+        produces — and, with the uncommitted-book gate, report a degraded run for a
+        book that did commit. Orphan pruning makes the re-commit converge on the
+        last writer's book, so reconciling is both safe and the only honest verdict.
+        """
+        client = FakeSupabaseClient()
+        node = build_commit_run_node(CommitRunDeps(client=client))
+        first = node(_state(sized_book=_sized_book(100.0)))
+        second = node(_state(sized_book=_sized_book(80.0)))
+
+        assert not second.get("errors"), second.get("errors")
+        first_manifest = (first.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        second_manifest = (second.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert second_manifest.get("status") == "committed"
+        assert second_manifest.get("commit_seq") == first_manifest["commit_seq"] + 1
+        assert second_manifest.get("supersedes") == [first_manifest["weights_fingerprint"]]
+
+    def test_ambiguous_prior_manifests_recommit_rather_than_claim_noop(self) -> None:
+        """Legacy manifests all read ``commit_seq`` 0, so "latest" is undecidable.
+
+        ``documents`` has no timestamp column. On a date carrying several pre-#1744
+        manifests (2026-06-24: three, fingerprints A/B/C) matching *any* of them by
+        fingerprint could report "already booked" while the rows on disk belong to a
+        different book, so the tie must resolve to a re-commit.
+        """
+        legacy = [
+            {"schema_version": "1.0", "status": "committed", "weights_fingerprint": fp}
+            for fp in ("fp-a", "fp-b", "fp-c")
+        ]
+        latest, next_seq = resolve_prior_commit(legacy)
+        assert latest is None, "an undecidable tie must not be treated as the last writer"
+        assert next_seq == 1
+
+        single = [{"commit_seq": 4, "weights_fingerprint": "fp-d"}, *legacy]
+        latest, next_seq = resolve_prior_commit(single)
+        assert latest is not None and latest["weights_fingerprint"] == "fp-d"
+        assert next_seq == 5
+
+    def test_manifests_are_loaded_by_date_across_run_ids(self) -> None:
+        """The PostgREST path filters ``document_key`` by prefix, not by run_id."""
+        client = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": RUN_DATE.isoformat(),
+                        "document_key": "commit-run/some-other-uuid",
+                        "payload": {"status": "committed", "weights_fingerprint": "fp-x"},
+                    },
+                    {
+                        "date": RUN_DATE.isoformat(),
+                        "document_key": "pm-rebalance",
+                        "payload": {"not": "a manifest"},
+                    },
+                    {
+                        "date": "2026-06-11",
+                        "document_key": "commit-run/yesterday",
+                        "payload": {"status": "committed", "weights_fingerprint": "fp-y"},
+                    },
+                ]
+            }
+        )
+        found = load_commit_manifests(client=client, run_date=RUN_DATE)
+        assert [m["weights_fingerprint"] for m in found] == ["fp-x"]
 
     def test_missing_sized_book_with_h7_memo_fails_closed(self) -> None:
         client = FakeSupabaseClient()
@@ -371,6 +455,131 @@ class TestCommitRunIdempotency:
         assert err.phase == "hermes_h9_commit_run"
         assert "sized_book" in err.message.lower()
         assert "positions" not in client.store
+
+
+class TestOrphanPositionPruning:
+    """#1744 — a same-date re-commit that drops a name must delete its row.
+
+    ``positions`` is upserted on ``(date, ticker)`` with no delete, so before this
+    fix a second commit for the same date that shrank the ticker set left the
+    dropped row behind at its old weight: the raw book then exceeds 100% of NAV,
+    ``refresh_performance_metrics`` sums the orphan into
+    ``portfolio_metrics.invested_pct``, and ``build_events_from_positions_book``
+    emits a phantom OPEN/TRIM/EXIT for a position no run intended to hold.
+
+    The fake client reads from ``canned_reads`` and writes to ``store``, so a row
+    that must be *seen and then deleted* is seeded into both.
+    """
+
+    @staticmethod
+    def _client_with_same_date_rows(rows: list[dict]) -> FakeSupabaseClient:
+        client = FakeSupabaseClient(canned_reads={"positions": list(rows)})
+        client.store["positions"] = [dict(r) for r in rows]
+        return client
+
+    def test_dropped_ticker_is_deleted_not_left_as_orphan(self) -> None:
+        # An earlier attempt on RUN_DATE booked XLF; this attempt's book is SPY only.
+        client = self._client_with_same_date_rows(
+            [{"date": RUN_DATE.isoformat(), "ticker": "XLF", "weight_pct": 5.0}]
+        )
+        out = _run(client, _state())
+
+        assert not out.get("errors"), out.get("errors")
+        tickers = {r["ticker"] for r in client.store["positions"]}
+        assert tickers == {"SPY"}, f"orphan row survived the re-commit: {tickers}"
+        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert manifest.get("pruned_tickers") == ["XLF"]
+
+    def test_stale_cash_row_is_deleted_when_re_commit_is_fully_invested(self) -> None:
+        # ``book_portfolio`` only appends CASH when cash_pct > 0.01, so a prior
+        # partially-invested attempt's CASH row would otherwise survive a
+        # fully-invested re-commit and contradict nav_history.cash_pct.
+        client = self._client_with_same_date_rows(
+            [{"date": RUN_DATE.isoformat(), "ticker": "CASH", "weight_pct": 20.0}]
+        )
+        _run(client, _state())  # default book: SPY 100% → cash_pct 0.0
+
+        assert "CASH" not in {r["ticker"] for r in client.store["positions"]}
+        nav_row = client.store["nav_history"][-1]
+        assert nav_row["cash_pct"] == 0.0
+        assert nav_row["invested_pct"] == 100.0
+
+    def test_book_with_cash_keeps_its_own_cash_row(self) -> None:
+        """The prune must never delete a CASH row the current book itself wrote."""
+        client = self._client_with_same_date_rows([])
+        _run(client, _state(sized_book=_sized_book(60.0)))
+        rows = {r["ticker"]: r for r in client.store["positions"]}
+        assert rows["CASH"]["weight_pct"] == 40.0
+        assert rows["SPY"]["weight_pct"] == 60.0
+
+
+class TestNavInterval:
+    """#1745 — manifest NAV is compounded over the interval since the prior book date.
+
+    ``nav_history`` is restated every evening by the metrics cron to "NAV as of this
+    date's close", so ``_prior_nav`` already embeds the move up to the prior book
+    date. The old ``query_price_deltas`` call applied the latest *one-day* delta on
+    top of that, which double-counts on a dense series and loses the whole interval
+    across a book gap.
+    """
+
+    @staticmethod
+    def _client(*, book_date: str, closes: dict[str, float]) -> FakeSupabaseClient:
+        return FakeSupabaseClient(
+            canned_reads={
+                "positions": [{"date": book_date, "ticker": "SPY", "weight_pct": 100.0}],
+                "nav_history": [{"date": book_date, "nav": 100.0}],
+                "price_history": [
+                    {"date": d, "ticker": "SPY", "close": c} for d, c in sorted(closes.items())
+                ],
+            }
+        )
+
+    def test_dense_series_does_not_double_count_the_prior_day_return(self) -> None:
+        """Prior book date == the last close before run_date → no further move.
+
+        The production shape (2026-07-28): prior book 07-27, last close before the
+        commit also 07-27. The old code applied the 07-24→07-27 return that
+        ``nav_history`` had already absorbed into the 07-27 NAV, inflating the
+        manifest by that return a second time.
+        """
+        client = self._client(
+            book_date="2026-06-11",
+            closes={"2026-06-10": 100.0, "2026-06-11": 110.0},
+        )
+        _run(client, _state())
+        # 110/100 - 1 = +10% is already inside prior_nav; re-applying it would give 110.0.
+        assert client.store["nav_history"][-1]["nav"] == pytest.approx(100.0, abs=1e-6)
+
+    def test_book_gap_return_spans_the_whole_interval(self) -> None:
+        """A 10-day book gap must record the interval return, not one day of it.
+
+        Prod 2026-06-26 → 07-17 (18 skipped days) recorded +0.03% for a book whose
+        actual weighted return over the interval was -0.37%.
+        """
+        client = self._client(
+            book_date="2026-06-01",
+            closes={"2026-06-01": 100.0, "2026-06-10": 89.0, "2026-06-11": 90.0},
+        )
+        _run(client, _state())
+        # Interval 06-01 → 06-11 = -10%. The last one-day delta (89 → 90) is +1.12%.
+        assert client.store["nav_history"][-1]["nav"] == pytest.approx(90.0, abs=1e-6)
+
+    def test_ticker_with_no_close_at_the_interval_start_is_dropped(self) -> None:
+        """Conservative-drop contract: a name we cannot price must not move the index."""
+        client = self._client(
+            book_date="2026-06-01",
+            closes={"2026-06-11": 90.0},  # no close at or before the 06-01 anchor
+        )
+        _run(client, _state())
+        assert client.store["nav_history"][-1]["nav"] == pytest.approx(100.0, abs=1e-6)
+
+    def test_first_ever_run_seeds_the_index_at_100(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={"positions": [], "nav_history": [], "price_history": []}
+        )
+        _run(client, _state())
+        assert client.store["nav_history"][-1]["nav"] == 100.0
 
 
 class TestCanonicalThesisIds:
