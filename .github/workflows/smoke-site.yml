@@ -13,11 +13,13 @@ name: "Smoke: site"
 #   404 / 5xx                    -> FAIL
 #   403 / 429                    -> warn only (Cloudflare bot challenge; inconclusive from CI IPs)
 #
-# The `freshness` job answers a question the asset probes structurally cannot: a
+# The freshness jobs answer a question the asset probes structurally cannot: a
 # Cloudflare Pages project that has stopped producing deployments keeps serving
 # the last good build with a 200 and no `last-modified` header, so every probe
-# above passes forever (#1759). It reads the build stamp that
-# scripts/write-build-info.sh puts in the export root.
+# above passes forever (#1759). They read the build stamp that
+# scripts/write-build-info.sh puts in each export root — `freshness` for
+# digiquant.io, `freshness-digithings` for digithings.ai. One job per site so a
+# stale site cannot cancel or mask the other; see the comment on the second job.
 
 on:
   schedule:
@@ -139,4 +141,63 @@ jobs:
             gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
           else
             gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label "component:digiquant-web" --body "$BODY"
+          fi
+
+  # digithings.ai gets its own job rather than a matrix over the two sites. A
+  # matrix defaults to `fail-fast: true`, so the first stale site would cancel
+  # the other's job — and a cancelled job never runs its `if: failure()` issue
+  # step, i.e. one stale site would mask the other. That is one YAML line away
+  # from regressing. The issue title, body and `component:` label also differ
+  # per site. Job keys are asymmetric (`freshness` predates this one) to keep
+  # the working digiquant.io detector untouched; read the `name:` for the site.
+  freshness-digithings:
+    name: digithings.ai deploy freshness
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch build stamp
+        id: stamp
+        run: |
+          set -uo pipefail
+          # Always create the file: curl leaves it absent when it never connects,
+          # and the evaluator must see an empty body rather than crash.
+          : >/tmp/build-info.json
+          status=$(curl -sL --max-time 20 \
+            -A "digithings-site-smoke/1.0 (+https://github.com/digithings-ai/digithings)" \
+            -o /tmp/build-info.json -w "%{http_code}" \
+            "https://digithings.ai/build-info.json" || echo "000")
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "HTTP $status from https://digithings.ai/build-info.json"
+
+      - name: Evaluate freshness
+        env:
+          # Via env, not direct ${{ }} interpolation into the script body.
+          STATUS: ${{ steps.stamp.outputs.status }}
+        run: |
+          python3 scripts/check_deploy_freshness.py \
+            --url https://digithings.ai/build-info.json \
+            --status "$STATUS" \
+            --body-file /tmp/build-info.json \
+            --max-age-hours 168
+
+      - name: Open issue on stale deploy
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Same reasoning as the digiquant.io job: the remedy for a frozen
+          # deploy is a Cloudflare Pages dashboard action, not a code change, so
+          # this issue is deliberately not dispatched to an agent the way the
+          # asset probe's issue above is.
+          TITLE="[site-smoke] digithings.ai deploy is stale or unstamped"
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title $TITLE" --json number --jq '.[0].number // empty')
+          BODY="The daily freshness probe could not confirm a recent digithings.ai deploy. See run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID for the verdict. Either the live build stamp is older than the 7-day limit (Cloudflare Pages has stopped producing deployments) or the deploy predates \`build-info.json\` entirely. Check the Pages project's deployment list, build log, production branch and watch paths — cf. #1759. **UNSTAMPED right after the stamp shipped is expected, not an alarm:** digithings.ai only carries \`build-info.json\` once Cloudflare Pages next rebuilds it, so until then this verdict means 'not yet observable'. Trigger a Pages rebuild and re-run this workflow; if it still reports UNSTAMPED afterwards, the deploy really is frozen."
+          if [[ -n "$EXISTING" ]]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label "component:website" --body "$BODY"
           fi

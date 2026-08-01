@@ -1,12 +1,14 @@
 """Unit tests for scripts/check_deploy_freshness.py and its workflow wiring (#1759).
 
-digiquant.io is a Cloudflare Pages static export, and a Pages project that stops
-producing deployments keeps serving the last good build with a 200 and no
-``last-modified`` header (verified against the live site 2026-08-01). Every probe
-in ``smoke-site.yml`` therefore passed throughout a multi-week deploy freeze. The
-checker turns the build stamp written by ``scripts/write-build-info.sh`` into a
-pass/fail verdict; these tests pin every branch of that verdict offline, plus the
-two workflow call sites, since a probe that is never invoked detects nothing.
+digiquant.io and digithings.ai are both Cloudflare Pages static exports, and a
+Pages project that stops producing deployments keeps serving the last good build
+with a 200 and no ``last-modified`` header (verified against the live site
+2026-08-01). Every probe in ``smoke-site.yml`` therefore passed throughout a
+multi-week deploy freeze. The checker turns the build stamp written by
+``scripts/write-build-info.sh`` into a pass/fail verdict; these tests pin every
+branch of that verdict offline, plus each workflow call site — one freshness job
+and one build check per site — since a probe that is never invoked detects
+nothing, and a probe that names the wrong site misdirects the operator.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any  # score:allow untyped any — dynamically loaded module
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
@@ -24,7 +27,28 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = REPO_ROOT / "scripts" / "check_deploy_freshness.py"
 _SMOKE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "smoke-site.yml"
-_BUILD_CHECK_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "deploy-digiquant-cloudflare.yml"
+_BUILD_CHECK_WORKFLOWS = [
+    REPO_ROOT / ".github" / "workflows" / "deploy-digiquant-cloudflare.yml",
+    REPO_ROOT / ".github" / "workflows" / "deploy-digithings-cloudflare.yml",
+]
+
+#: One ``smoke-site.yml`` job per site: (job key, probed URL, issue label).
+#: Both static sites deploy through the same Cloudflare Pages git integration
+#: and share the blind spot, so both are pinned here (#1759).
+FRESHNESS_JOBS = [
+    pytest.param(
+        "freshness",
+        "https://digiquant.io/build-info.json",
+        "component:digiquant-web",
+        id="digiquant.io",
+    ),
+    pytest.param(
+        "freshness-digithings",
+        "https://digithings.ai/build-info.json",
+        "component:website",
+        id="digithings.ai",
+    ),
+]
 
 NOW = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
 URL = "https://digiquant.io/build-info.json"
@@ -64,13 +88,13 @@ def _workflow(path: Path) -> dict[str, Any]:
     return parsed
 
 
-def _run_blocks(workflow: dict[str, Any]) -> list[str]:
-    return [
-        step["run"]
-        for job in workflow["jobs"].values()
-        for step in job.get("steps", [])
-        if isinstance(step.get("run"), str)
-    ]
+def _run_blocks(job: dict[str, Any]) -> list[str]:
+    return [step["run"] for step in job.get("steps", []) if isinstance(step.get("run"), str)]
+
+
+def _site_of(url: str) -> str:
+    """``https://digithings.ai/build-info.json`` -> ``digithings.ai``."""
+    return urlsplit(url).netloc
 
 
 class TestEvaluate:
@@ -195,18 +219,25 @@ class TestCli:
         assert cdf.main(["--url", URL, "--status", "000"]) == 0
 
 
+@pytest.mark.parametrize(("job_key", "live_url", "label"), FRESHNESS_JOBS)
 class TestWorkflowWiring:
-    """A freshness probe nobody calls detects nothing — pin both call sites."""
+    """A freshness probe nobody calls detects nothing — pin every call site."""
 
-    def test_smoke_site_runs_the_freshness_check(self) -> None:
+    def test_smoke_site_runs_the_freshness_check(
+        self, job_key: str, live_url: str, label: str
+    ) -> None:
         workflow = _workflow(_SMOKE_WORKFLOW)
-        assert "freshness" in workflow["jobs"], "smoke-site.yml lost the freshness job"
-        runs = "\n".join(_run_blocks(workflow))
+        assert job_key in workflow["jobs"], f"smoke-site.yml lost the {job_key} job"
+        runs = "\n".join(_run_blocks(workflow["jobs"][job_key]))
         assert "scripts/check_deploy_freshness.py" in runs
-        assert "https://digiquant.io/build-info.json" in runs
+        # Per-job, not workflow-wide: each site must probe its own URL, so one
+        # job cannot satisfy the assertion on behalf of the other.
+        assert live_url in runs
 
-    def test_freshness_job_can_check_out_and_file_an_issue(self) -> None:
-        job = _workflow(_SMOKE_WORKFLOW)["jobs"]["freshness"]
+    def test_freshness_job_can_check_out_and_file_an_issue(
+        self, job_key: str, live_url: str, label: str
+    ) -> None:
+        job = _workflow(_SMOKE_WORKFLOW)["jobs"][job_key]
         # Declaring any `permissions` block zeroes the rest, so contents:read is
         # required for actions/checkout to fetch the script at all.
         assert job["permissions"]["contents"] == "read"
@@ -215,18 +246,48 @@ class TestWorkflowWiring:
             str(step.get("uses", "")).startswith("actions/checkout") for step in job["steps"]
         )
 
-    def test_stale_deploy_issue_is_not_labelled_as_agent_work(self) -> None:
-        job = _workflow(_SMOKE_WORKFLOW)["jobs"]["freshness"]
+    def test_stale_deploy_issue_is_not_labelled_as_agent_work(
+        self, job_key: str, live_url: str, label: str
+    ) -> None:
+        job = _workflow(_SMOKE_WORKFLOW)["jobs"][job_key]
         creates = "\n".join(
             step["run"] for step in job["steps"] if "gh issue create" in str(step.get("run", ""))
         )
-        assert creates, "the freshness job no longer files an issue"
+        assert creates, f"the {job_key} job no longer files an issue"
         # The remedy is a Cloudflare dashboard action, not a code change, so this
         # must not be dispatched to an agent the way the asset probe's issue is.
         assert "agent-task" not in creates
-        assert "component:digiquant-web" in creates
+        # A shared issue naming the wrong site is worse than no issue: it sends
+        # the operator to the wrong Pages project.
+        assert label in creates
+        assert _site_of(live_url) in creates
 
-    def test_build_check_validates_the_stamp_it_just_wrote(self) -> None:
-        runs = "\n".join(_run_blocks(_workflow(_BUILD_CHECK_WORKFLOW)))
-        assert "dist/build-info.json" in runs
-        assert "scripts/check_deploy_freshness.py" in runs
+
+class TestPerSiteIsolation:
+    """One stale site must not mask, cancel, or misattribute the other."""
+
+    def test_each_site_has_its_own_job(self) -> None:
+        jobs = _workflow(_SMOKE_WORKFLOW)["jobs"]
+        keys = {job_key for job_key, _, _ in (p.values for p in FRESHNESS_JOBS)}
+        assert keys <= set(jobs)
+        # A matrix would default to fail-fast, cancelling the sibling site's job
+        # before its `if: failure()` issue step could run.
+        assert not any("matrix" in str(jobs[key].get("strategy", "")) for key in keys)
+
+    def test_first_run_unstamped_reads_as_a_diagnostic_not_an_alarm(self) -> None:
+        # digithings.ai cannot serve a stamp until Cloudflare Pages next builds
+        # it, so the first probe after this shipped is expected to be UNSTAMPED.
+        job = _workflow(_SMOKE_WORKFLOW)["jobs"]["freshness-digithings"]
+        bodies = "\n".join(
+            step["run"] for step in job["steps"] if "gh issue create" in str(step.get("run", ""))
+        )
+        assert "not yet observable" in bodies
+
+
+@pytest.mark.parametrize("workflow_path", _BUILD_CHECK_WORKFLOWS, ids=lambda p: p.name)
+def test_build_check_validates_the_stamp_it_just_wrote(workflow_path: Path) -> None:
+    runs = "\n".join(
+        run for job in _workflow(workflow_path)["jobs"].values() for run in _run_blocks(job)
+    )
+    assert "dist/build-info.json" in runs
+    assert "scripts/check_deploy_freshness.py" in runs

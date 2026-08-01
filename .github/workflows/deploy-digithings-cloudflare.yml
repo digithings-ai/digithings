@@ -48,3 +48,16 @@ jobs:
           grep -q digithings.ai dist/CNAME
           # fonts self-hosted; no Google Fonts references in the export
           ! grep -rq "fonts.googleapis.com" dist
+
+      # The daily freshness probe in smoke-site.yml reads this stamp off the live
+      # site (#1759). Validate the stamp the build just wrote with the same
+      # evaluator, so a regression in either half fails here rather than turning
+      # every production probe into a false UNSTAMPED.
+      - name: Assert deploy build stamp
+        run: |
+          test -f dist/build-info.json
+          python3 scripts/check_deploy_freshness.py \
+            --url dist/build-info.json \
+            --status 200 \
+            --body-file dist/build-info.json \
+            --max-age-hours 1
