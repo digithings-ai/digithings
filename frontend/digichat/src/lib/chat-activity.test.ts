@@ -91,6 +91,19 @@ describe("sanitizeActivitySpan", () => {
     expect(out).not.toBeNull();
     expect("documents" in out!).toBe(false);
   });
+
+  // documentsWithheld is a derived boolean applyActivityDetail sets, not
+  // upstream data — but it still has to round-trip once the client re-parses
+  // the span off the wire, so the allowlist must carry it.
+  it("keeps documentsWithheld when true but drops it when absent or false", () => {
+    expect(sanitizeActivitySpan(span({ documentsWithheld: true }))?.documentsWithheld).toBe(true);
+    expect(sanitizeActivitySpan(span({ documentsWithheld: false }))).not.toHaveProperty(
+      "documentsWithheld"
+    );
+    expect(sanitizeActivitySpan(span({ documentsWithheld: "true" }))).not.toHaveProperty(
+      "documentsWithheld"
+    );
+  });
 });
 
 describe("applyActivityDetail", () => {
@@ -118,8 +131,23 @@ describe("applyActivityDetail", () => {
     expect(out.query).toBe("auth");
   });
 
+  // The signal the projector needs to tell "results withheld" apart from
+  // "genuinely no results" (see toDigiChatActivity below).
+  it("flags documentsWithheld at labels only when real documents were stripped", () => {
+    expect(applyActivityDetail(full, "labels")!.documentsWithheld).toBe(true);
+    const noDocs: ActivitySpan = { ...full, documents: undefined };
+    expect(applyActivityDetail(noDocs, "labels")!.documentsWithheld).toBeUndefined();
+    const emptyDocs: ActivitySpan = { ...full, documents: [] };
+    expect(applyActivityDetail(emptyDocs, "labels")!.documentsWithheld).toBeUndefined();
+  });
+
   it("passes everything through at full", () => {
     expect(applyActivityDetail(full, "full")).toEqual(full);
+  });
+
+  // Full detail must stay byte-for-byte unaffected by the new flag's plumbing.
+  it("never sets documentsWithheld at full", () => {
+    expect(applyActivityDetail(full, "full")!.documentsWithheld).toBeUndefined();
   });
 });
 
@@ -282,6 +310,83 @@ describe("toDigiChatActivity", () => {
     expect(rows.map((r) => (r.kind === "tool_result" ? r.query : null))).toEqual([
       "auth",
       "billing",
+    ]);
+  });
+
+  // Regression: a `retrieve` span following a `started` span with no
+  // intervening execute_tool completion — exactly the shape
+  // foundry-stream.test.ts's own `searchEvents` fixture produces (Foundry
+  // citations arrive straight off the message, with no file_search_call
+  // output_item.done in between) — must resolve the pending placeholder
+  // rather than leave it as an orphaned, never-settling tool_call row.
+  it("resolves a still-open started row directly from retrieve when no execute_tool completion arrives", () => {
+    const rows = toDigiChatActivity([
+      started("file_search"),
+      {
+        operation: "retrieve",
+        toolName: "file_search",
+        status: "completed",
+        label: "Sources",
+        documents: [{ title: "Auth", path: "https://x/auth" }],
+      },
+    ]);
+    expect(rows).toEqual([
+      {
+        kind: "tool_result",
+        name: "file_search",
+        query: "",
+        hits: [{ title: "Auth", path: "https://x/auth" }],
+        count: 1,
+      },
+    ]);
+  });
+});
+
+describe("toDigiChatActivity — documentsWithheld (labels detail)", () => {
+  // The bug: a `labels` tenant stripped of documents by applyActivityDetail
+  // must not have a real search result rendered as the literal "no hits"
+  // string the shared UI produces for count === 0.
+  it("renders an honest status row instead of a fabricated no-hits result when documents were withheld", () => {
+    const rows = toDigiChatActivity([
+      started("file_search"),
+      finished("file_search", "auth"),
+      {
+        operation: "retrieve",
+        toolName: "file_search",
+        query: "auth",
+        status: "completed",
+        label: "Sources",
+        documentsWithheld: true,
+      },
+    ]);
+    expect(rows).toEqual([{ kind: "status", message: 'Found results for "auth".' }]);
+    expect(rows).not.toContainEqual(expect.objectContaining({ kind: "tool_result", count: 0 }));
+  });
+
+  // A genuinely empty search never produces a retrieve span at all (no
+  // provider emits one with zero documents), so it must still fall through
+  // to the existing trailing no-hits pass and read sensibly.
+  it("still renders a sensible no-hits result for a genuinely empty search", () => {
+    const rows = toDigiChatActivity([started("file_search"), finished("file_search", "auth")]);
+    expect(rows).toEqual([
+      { kind: "tool_result", name: "file_search", query: "auth", hits: [], count: 0 },
+    ]);
+  });
+
+  it("leaves full detail unchanged: a retrieve span without documentsWithheld renders the real hits and count", () => {
+    const rows = toDigiChatActivity([
+      started("file_search"),
+      finished("file_search", "auth"),
+      retrieved("file_search", "auth", [{ title: "Auth", path: "https://x/auth" }]),
+    ]);
+    expect(rows).toEqual([
+      {
+        kind: "tool_result",
+        name: "file_search",
+        query: "auth",
+        hits: [{ title: "Auth", path: "https://x/auth" }],
+        count: 1,
+      },
     ]);
   });
 });

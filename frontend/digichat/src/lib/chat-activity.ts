@@ -41,6 +41,15 @@ export type ActivitySpan = {
   label: string;
   documents?: ActivityDocument[];
   reasoningDelta?: string;
+  /**
+   * Set by applyActivityDetail (never by a provider) when this span originally
+   * carried documents that the `labels` gate stripped. Carries no upstream
+   * data — it is a derived boolean, not a disclosure — but lets the projector
+   * tell "the search really found nothing" apart from "results exist but this
+   * tenant's detail level withholds them," so it does not misreport a real
+   * hit as a no-hits result.
+   */
+  documentsWithheld?: boolean;
 };
 
 const OPERATIONS = ["execute_tool", "retrieve", "chat"] as const;
@@ -51,6 +60,10 @@ function str(value: unknown, max: number): string | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
   return trimmed.slice(0, max);
+}
+
+function bool(value: unknown): true | undefined {
+  return value === true ? true : undefined;
 }
 
 function documents(value: unknown): ActivityDocument[] | undefined {
@@ -96,6 +109,9 @@ export function sanitizeActivitySpan(input: unknown): ActivitySpan | null {
   const reasoningDelta = str(record.reasoningDelta, MAX_REASONING_CHARS);
   if (reasoningDelta) span.reasoningDelta = reasoningDelta;
 
+  const documentsWithheld = bool(record.documentsWithheld);
+  if (documentsWithheld) span.documentsWithheld = documentsWithheld;
+
   return span;
 }
 
@@ -109,10 +125,31 @@ export function applyActivityDetail(
 ): ActivitySpan | null {
   if (detail === "off") return null;
   if (detail === "full") return span;
-  const { documents: _documents, reasoningDelta: _reasoning, ...rest } = span;
-  void _documents;
+  const { documents, reasoningDelta: _reasoning, ...rest } = span;
   void _reasoning;
-  return rest;
+  // A retrieve span only ever carries documents when the search genuinely
+  // found something (see the providers). Flag that this rest object had real
+  // hits stripped, so the projector can render an honest "search happened"
+  // row instead of a fabricated zero count (see toDigiChatActivity).
+  return documents && documents.length > 0 ? { ...rest, documentsWithheld: true } : rest;
+}
+
+/**
+ * Builds a `chat`-operation span from a raw upstream label/status pair,
+ * capping the label to MAX_LABEL_CHARS before it ever reaches the stream —
+ * the client only truncates at render, so without this an unbounded upstream
+ * label would reach the browser verbatim — then runs it through the detail
+ * gate. Both SSE providers (digigraph, external relay) otherwise build
+ * near-identical spans from a raw label + status; this keeps that
+ * construction, and its cap, in one place.
+ */
+export function chatActivitySpan(
+  label: unknown,
+  status: ActivitySpan["status"],
+  detail: ActivityDetail
+): ActivitySpan | null {
+  const safeLabel = str(label, MAX_LABEL_CHARS) ?? "activity";
+  return applyActivityDetail({ operation: "chat", status, label: safeLabel }, detail);
 }
 
 const KEY_SEP = "\x1f";
@@ -130,9 +167,11 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
   const toolRows = new Map<string, number>();
   const traceRows = new Map<string, number>();
   const completedTools = new Set<string>();
-  // Row index of the still-open ("started", query not yet known) call for each
-  // tool name. Cleared the instant a completed/failed span resolves it, so a
-  // later, unrelated "started" for the same tool can never be mistaken for a
+  // Row index of the still-open ("started", not yet resolved by a matching
+  // completed/failed/retrieve span) call for each tool name — regardless of
+  // whether the started span itself carried a query. Cleared the instant a
+  // completed/failed span OR a retrieve span resolves it, so a later,
+  // unrelated "started" for the same tool can never be mistaken for a
   // callback that belongs to an earlier, already-resolved invocation.
   const pendingRow = new Map<string, number>();
   // Placeholder rows whose invocation turned out to duplicate an already-
@@ -147,6 +186,13 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
   for (const span of spans) {
     if (span.reasoningDelta) {
       reasoning += span.reasoningDelta;
+      // CONSTRAINT: this returns before any other field on the span is read.
+      // A span carrying BOTH reasoningDelta and, say, documents/query would
+      // silently lose those other fields — only the reasoning text survives.
+      // No Phase 1 provider emits such a span, but Phase 2's digivault
+      // streams reasoning deltas and could. If a future provider needs both
+      // on one logical step, emit two spans rather than teaching this branch
+      // to fall through.
       continue;
     }
 
@@ -195,19 +241,38 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
       const query = span.query ?? pendingQuery;
       const hits = span.documents ?? [];
       const key = toolKey(name, query);
-      const result: DigiChatActivity = {
-        kind: "tool_result",
-        name,
-        query,
-        hits,
-        count: hits.length,
-      };
+      // `labels` detail: applyActivityDetail already stripped the documents
+      // server-side, but a retrieve span is only ever emitted when the search
+      // genuinely found something (see the providers) — so hits: [] here
+      // would misreport a real result as "no hits" (the shared UI renders
+      // count === 0 as the literal string `no hits for "…"`). Render an
+      // honest "search happened" status row instead of a fabricated count.
+      const result: DigiChatActivity = span.documentsWithheld
+        ? {
+            kind: "status",
+            message: query ? `Found results for "${query}".` : "Search completed.",
+          }
+        : { kind: "tool_result", name, query, hits, count: hits.length };
       const idx = toolRows.get(key);
       if (idx !== undefined) {
         rows[idx] = result;
       } else {
-        rows.push(result);
-        toolRows.set(key, rows.length - 1);
+        // No existing row for this (tool, query) — but a still-open "started"
+        // placeholder for this tool name (an execute_tool span that never got
+        // a matching completed/failed event, e.g. Foundry citations arriving
+        // straight off the message with no intervening file_search_call
+        // completion) is this same call settling via retrieve directly.
+        // Resolve it in place rather than pushing a second row and leaving
+        // the placeholder to spin forever.
+        const pending = pendingRow.get(name);
+        if (pending !== undefined) {
+          rows[pending] = result;
+          pendingRow.delete(name);
+          toolRows.set(key, pending);
+        } else {
+          rows.push(result);
+          toolRows.set(key, rows.length - 1);
+        }
       }
       completedTools.delete(key);
       continue;

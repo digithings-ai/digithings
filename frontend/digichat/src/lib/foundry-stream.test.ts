@@ -6,6 +6,7 @@ import {
   type OpenAIResponsesClientLike,
   type FoundryStreamEvent,
 } from "./foundry-stream";
+import { toDigiChatActivity, type ActivitySpan } from "./chat-activity";
 
 function userMessage(text: string): UIMessage {
   return { id: "u1", role: "user", parts: [{ type: "text", text }] } as UIMessage;
@@ -356,5 +357,31 @@ describe("createFoundryStreamResponse activity detail", () => {
     const body = await run("off");
     expect(body).not.toContain("data-digichatActivity");
     expect(body).toContain("done");
+  });
+
+  // Regression: this exact fixture — file_search_call.in_progress (a "started"
+  // execute_tool span with no query) followed by a message with url_citation
+  // annotations and NO intervening file_search_call output_item.done — used to
+  // produce a phantom, never-settling tool_call row alongside the tool_result
+  // (chat-activity.ts's retrieve branch never consulted pendingRow). Only
+  // asserting on raw stream bytes, as the tests above do, missed that: the
+  // projected rows are what the UI actually renders, so assert those directly.
+  it("projects this fixture to a single settled tool_result, not an orphaned tool_call", () => {
+    const spans = searchEvents
+      .map((event) => mapFoundryEvent(event))
+      .filter((mapped): mapped is { type: "activity"; span: ActivitySpan } => mapped?.type === "activity")
+      .map((mapped) => mapped.span);
+
+    const rows = toDigiChatActivity(spans);
+
+    expect(rows).toEqual([
+      {
+        kind: "tool_result",
+        name: "file_search",
+        query: "",
+        hits: [{ title: "A", path: "https://x/a" }],
+        count: 1,
+      },
+    ]);
   });
 });
