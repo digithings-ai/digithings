@@ -377,7 +377,12 @@ def _prune_orphan_positions(*, client: SupabaseClient, date_str: str, keep: set[
 
     Deliberately **not** fail-soft: a silently-surviving orphan is the defect this
     closes, and it corrupts a published performance series rather than degrading an
-    advisory field. The two sibling scripts that already implement this pattern
+    advisory field. The cost is honest — a raise here lands *after* the book is written
+    and *before* ``save_commit_manifest``, leaving a booked-but-unmanifested date. That
+    gap already existed; what the date-keyed guard adds is that the next attempt
+    re-commits and re-prunes instead of stacking a second book on top.
+
+    The two sibling scripts that already implement this pattern
     (``sync_positions_from_rebalance.py``, ``materialize_snapshot.py``) issue one
     DELETE per orphan; this issues a single ``in_`` delete instead — same effect,
     one round trip.

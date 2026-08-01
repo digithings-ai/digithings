@@ -220,9 +220,14 @@ Re-booking is safe only because `commit_io._prune_orphan_positions` deletes same
 re-commit left the dropped name at its old weight: the raw book exceeds 100% of NAV,
 `refresh_performance_metrics` sums the orphan into `portfolio_metrics.invested_pct`, and
 `execute_at_open.build_events_from_positions_book` emits a phantom Activity-feed event.
-The prune is deliberately **not** fail-soft. It also closes the non-transactional gap
-between booking and `save_commit_manifest`: a crash between them leaves a
-booked-but-unmanifested date, and the next attempt now converges instead of stacking.
+The prune is deliberately **not** fail-soft. That trade is worth naming precisely: the
+non-transactional gap between `book_portfolio` and `save_commit_manifest` is **not
+closed** — a raise from the prune (or any failure between the two calls) still leaves a
+booked-but-unmanifested date, and the prune itself is one more thing that can raise
+there. What changes is that re-attempts now **converge across** the gap instead of
+stacking: the date-keyed guard sees no manifest, re-commits, and re-prunes to the last
+writer's book. Making the prune fail-soft would trade a loud, self-healing gap for a
+silent orphan in a published performance series, which is the defect this closes.
 
 ### `nav_history` ownership contract (#1745)
 
