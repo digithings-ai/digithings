@@ -139,9 +139,10 @@ Consequences of `llm_failure`, all downstream of the flag:
 - **Sizing.** H8 caps the name's conviction at `SizingCaps.min_conviction`
   (`phase7e._cap_unchallenged_convictions`) — applied to **both** the memo and the legacy
   branch, since H7 writes a memo on every production run. Capping *at* the bar, not below
-  it, is deliberate: a name pushed under the bar is dropped by the sizer and then re-added
-  at its drifted weight by the #1649 held-carry backstop, which can size it *larger*.
-  The book note names every capped position.
+  it, is deliberate: a name pushed under the bar is dropped by the sizer's selection step
+  and then re-added at its drifted weight by the #1649 held-carry backstop, which can size
+  it *larger*. Correlation de-dup can still drop a capped leg in favour of a challenged one
+  — intended. The book note names every capped position.
 
 The `PhaseError` shape (`phase="hermes_h6_deliberation"`, message prefix `deliberation LLM
 failed`) is unchanged — Atlas's Hermes-density degraded gate counts phases, not messages.

@@ -151,9 +151,12 @@ def _cap_unchallenged_convictions(
     outrank one that was actually debated.
 
     Capping *at* the bar rather than scaling below it is deliberate. A name pushed under the
-    bar is dropped by the sizer's selection step and then re-added at its drifted weight by
-    the held-carry backstop — which can end up **larger** than applying no haircut at all.
-    Capping keeps the ticker present, so the backstop never fires for it.
+    bar is dropped by the sizer's **selection** step and then re-added at its drifted weight
+    by the #1649 held-carry backstop — which can end up **larger** than applying no haircut
+    at all. Capping at the bar clears `_select`'s ``>=`` so selection never drops it.
+    Correlation de-dup can still drop a capped leg in favour of a challenged one
+    (``sizing._corr_dedup`` drops the lower-conviction side of a >0.80 pair); that is the
+    intended outcome, not an escape hatch.
     """
     out: dict[str, float] = {}
     capped: list[str] = []
