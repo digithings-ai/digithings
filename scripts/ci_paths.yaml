@@ -43,6 +43,18 @@ digigraph:
   - tests/dg/**
   - .github/workflows/test-digigraph.yml
 
+# digillm and digifetch each keep their tests inside the component (digillm/tests,
+# digifetch/tests) rather than under the repo-root tests/ tree. So neither has a
+# tests/<abbrev>/** entry to list, the way digibase has tests/db/** — the
+# component glob (digillm/**, digifetch/**) already covers its own suite (#1788).
+digillm:
+  - digillm/**
+  - .github/workflows/test-digillm.yml
+
+digifetch:
+  - digifetch/**
+  - .github/workflows/test-digifetch.yml
+
 digichat:
   - frontend/digichat/**
   - frontend/digiweb/design/**

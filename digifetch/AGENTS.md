@@ -127,8 +127,16 @@ pip install -e digifetch/ --dry-run
 ```
 
 > Note: `digifetch/tests` is on the root `pytest.ini` `pythonpath`/`testpaths`
-> (same precedent as `digillm`), so `make test-unit` and CI discover these tests
-> without an editable install.
+> (same precedent as `digillm`), so `make test-unit` discovers these tests
+> without an editable install. **This did not work until #1788** — the directory
+> carried a `tests/__init__.py` that claimed the repo-root `tests` package name,
+> so a combined run died at collection with `No module named 'tests.test_browser'`
+> and `make test-unit` aborted outright. Do not reintroduce that file.
+>
+> CI gate: [`.github/workflows/test-digifetch.yml`](../.github/workflows/test-digifetch.yml),
+> wired into `ci.yml` behind the `digifetch` path filter in `scripts/ci_paths.yaml`.
+> It runs `ruff check` + `ruff format --check` + the full suite — deliberately not
+> `-m unit`, so a future test that forgets `pytestmark` still runs.
 
 ---
 
