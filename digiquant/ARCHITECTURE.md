@@ -1058,8 +1058,12 @@ curated anon-readable views — `public_portfolio_positions`, `public_nav_histor
 `public_price_latest` — exposing performance metrics only (never
 `rationale`/`pm_notes`/risk parameters; user ruling 2026-07-10, #1462). They pair with
 the `supabase/functions/prices-live/` Deno edge function, which polls Finnhub
-server-side (key held as a Supabase secret, dormant until `FINNHUB_API_KEY` is set) and
-fans quotes out to browsers on the Realtime broadcast channel `prices:live`. Crypto
+server-side (key held as a Supabase secret; **live since 2026-07-13** on a 60s pg_cron
+schedule) and fans quotes out to browsers on the Realtime broadcast channel
+`prices:live`. Invocation is authorized by the `x-prices-live-secret` shared-secret
+header, checked ahead of every other gate and fail-closed when
+`PRICES_LIVE_INVOKE_SECRET` is unset (#1756) — `verify_jwt` alone is not authorization,
+because the anon key ships in every browser bundle. Crypto
 quotes take the other lane — streamed client-side from Coinbase's public WebSocket. See
 [`supabase/README.md`](supabase/README.md) for the two-lane design, pg_cron + pg_net
 scheduling, and the one-time setup steps, and [`supabase/SCHEMA.md`](supabase/SCHEMA.md)

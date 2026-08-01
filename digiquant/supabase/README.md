@@ -38,27 +38,62 @@ The symbol set per run = distinct tickers from `public_portfolio_positions` + a 
 curated majors list (SPY QQQ DIA IWM GLD TLT UUP EFA EEM HYG), capped at 40 symbols —
 well under the 60/min limit even at a 60s schedule.
 
-## Dormant until the key exists
+## Live since 2026-07-13 — and gated (#1756)
 
-The Finnhub key **does not exist yet**. The function is designed to be deployed and
-scheduled **before** the key is created: when the `FINNHUB_API_KEY` secret is unset,
-every invocation logs and returns `200 {"dormant": true}` without fetching anything.
-Similarly, outside extended US market hours (13:00–01:00 UTC, Mon–Fri) it returns
-`200 {"market": "closed"}` without burning quota. Both gates exit 200 so schedulers
-never see failures for expected idle states.
+The feed is **live**: `FINNHUB_API_KEY` is set, both pg_cron jobs are `active`, and the
+function fetches on every scheduled invocation. It is **not** dormant. (Evidence:
+`net._http_response` id 1360, 2026-08-01T00:59Z — `{"market":"open","forced":false,
+"symbols":17,"quoted":17,"failed":0,"broadcast":"ok"}`, one of ~10,800 succeeded cron
+runs since 2026-07-13.)
 
-Until the key is set (and outside market hours), the frontend values positions from
-the `public_price_latest` view — the latest daily close per ticker from
-`price_history`, which the `pipeline-digiquant-prices.yml` job keeps fed.
+Because it is live, invocation is **authorized by a shared secret**, not by JWT alone:
 
-## One-time human steps (post-merge)
+- The caller must send `x-prices-live-secret: <PRICES_LIVE_INVOKE_SECRET>`. Without it
+  the function returns `401` and fetches nothing.
+- This gate runs **before** the key gate, the body parse, and the market-hours gate, so
+  an unauthorized caller learns nothing about the feed's state and triggers no outbound
+  request.
+- It **fails closed**: if `PRICES_LIVE_INVOKE_SECRET` is unset, every invocation is
+  refused with `503`. There is no fall-open path.
+
+The anon key alone is **not** sufficient and never was. `verify_jwt` proves the caller
+holds *a* project key; the anon key is published in every browser bundle, so it proves
+nothing about *who* is calling. Keep `verify_jwt` on — it is a useful outer layer — but
+the invoke secret is what actually distinguishes the scheduler from the internet.
+
+Outside extended US market hours (13:00–01:00 UTC, Mon–Fri) an authorized caller gets
+`200 {"market": "closed"}` without burning quota; if the Finnhub key were ever unset it
+gets `200 {"dormant": true}`. Both exit 200 so schedulers never see failures for
+expected idle states. In those windows the frontend values positions from the
+`public_price_latest` view — the latest daily close per ticker from `price_history`,
+which the `pipeline-digiquant-prices.yml` job keeps fed.
+
+## Rolling out the invocation secret
+
+**Order matters — reversing steps 1 and 3 takes the live feed dark.** A deployed
+function that predates the gate simply ignores an unexpected header, so setting the
+secret and re-issuing the crons first is a no-op against the running version; deploying
+first would 401 the existing header-less crons for as long as the rollout takes.
+
+1. `supabase secrets set PRICES_LIVE_INVOKE_SECRET=<generated>` — generate with
+   `openssl rand -hex 32`. Ignored by the currently deployed version.
+2. Re-issue **both** cron jobs with the header added (SQL below). pg_cron upserts by
+   jobname, so this updates in place rather than creating duplicates. This is a manual
+   SQL-editor step — the schedule is deliberately **not** a checked-in migration (see
+   below), so it will not happen on its own.
+3. `supabase functions deploy prices-live` — the gate goes live and the crons already
+   carry the header.
+
+Confirm with `select status_code, content from net._http_response order by id desc
+limit 3;` — still `200 {"market":...}`, not `401`.
+
+## Historical: one-time setup steps (all completed)
 
 1. Apply migration `050` (MCP `apply_migration`, SQL editor, or `supabase db push`).
 2. Deploy the function: `supabase functions deploy prices-live` (keep JWT verification
-   **on** — the scheduler passes the anon key, see below).
+   **on** — necessary but not sufficient; see the invoke secret above).
 3. Create a free API key at [finnhub.io](https://finnhub.io) (Dashboard → API Keys).
-4. `supabase secrets set FINNHUB_API_KEY=<key>` — the function wakes up on its next
-   invocation; no redeploy needed.
+4. `supabase secrets set FINNHUB_API_KEY=<key>` — no redeploy needed.
 
 ## Scheduling: pg_cron + pg_net, every 60s during market hours
 
@@ -76,8 +111,9 @@ select cron.schedule(
   select net.http_post(
     url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/prices-live',
     headers := jsonb_build_object(
-      'Content-Type',  'application/json',
-      'Authorization', 'Bearer <SUPABASE_ANON_KEY>'
+      'Content-Type',          'application/json',
+      'Authorization',         'Bearer <SUPABASE_ANON_KEY>',
+      'x-prices-live-secret',  '<PRICES_LIVE_INVOKE_SECRET>'
     ),
     body    := '{}'::jsonb
   );
@@ -92,8 +128,9 @@ select cron.schedule(
   select net.http_post(
     url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/prices-live',
     headers := jsonb_build_object(
-      'Content-Type',  'application/json',
-      'Authorization', 'Bearer <SUPABASE_ANON_KEY>'
+      'Content-Type',          'application/json',
+      'Authorization',         'Bearer <SUPABASE_ANON_KEY>',
+      'x-prices-live-secret',  '<PRICES_LIVE_INVOKE_SECRET>'
     ),
     body    := '{}'::jsonb
   );
@@ -105,21 +142,35 @@ select cron.schedule(
 -- select cron.unschedule('prices-live-late');
 ```
 
-The anon key is safe to embed here (it ships in every browser bundle anyway); it only
-authenticates the function invocation past JWT verification. Requires the `pg_cron`
-and `pg_net` extensions (Dashboard → Database → Extensions).
+The anon key is safe to embed here (it ships in every browser bundle anyway) — and that
+is exactly why it cannot be the authorization: it gets the request past `verify_jwt` and
+nothing more. The `x-prices-live-secret` header is the part that identifies the caller as
+the scheduler. Requires the `pg_cron` and `pg_net` extensions (Dashboard → Database →
+Extensions).
+
+**Where the invoke secret lives, honestly.** Embedding it in the cron `command` puts it
+in plaintext in `cron.job`, readable by anyone who can `select` there. That is a real
+property to know about, not a hidden one — but it is a strictly smaller surface than
+today's: reading `cron.job` needs database access, whereas the anon key needs only
+`view-source`. The secret is never served to a browser and never leaves the project.
+Rotate by re-running steps 1–2 of the rollout (the function reads the secret per
+invocation, so no redeploy is needed).
 
 ### Smoke testing outside market hours
 
-Pass `{"force": true}` to override the market-hours gate (never the key gate) — one
-full fetch + broadcast cycle on demand, so the end-to-end path can be proven on a
-weekend instead of waiting for Monday's open:
+Pass `{"force": true}` to override the market-hours gate (never the key gate, and never
+the invocation gate) — one full fetch + broadcast cycle on demand, so the end-to-end path
+can be proven on a weekend instead of waiting for Monday's open:
 
 ```bash
 curl -s -X POST 'https://<PROJECT_REF>.supabase.co/functions/v1/prices-live' \
   -H 'Authorization: Bearer <SUPABASE_ANON_KEY>' \
+  -H 'x-prices-live-secret: <PRICES_LIVE_INVOKE_SECRET>' \
   -H 'Content-Type: application/json' -d '{"force": true}'
 ```
+
+Omitting the secret header returns `401` and fetches nothing — that is the cheapest way
+to confirm the gate is actually deployed.
 
 The response reports `forced: true`, per-symbol failures, and the broadcast result;
 subscribers on `prices:live` receive the quotes message.
@@ -149,7 +200,7 @@ allowlist (performance metrics only, never research notes — user ruling 2026-0
 |---|---|
 | `public_portfolio_positions` | Latest-date positions: ticker, name, category, sector, weight, entry/current price, day/unrealized/since-entry returns. **Excludes** rationale, PM notes, thesis id, conviction, stops/targets/horizon. |
 | `public_nav_history` | NAV series + cash/invested % + derived daily return. |
-| `public_price_latest` | Latest daily close per ticker — the valuation fallback while `prices-live` is dormant or the market is closed. |
+| `public_price_latest` | Latest daily close per ticker — the valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
 
 ## What is public on purpose, what is locked (#1462 rulings, 2026-07-10)
 
