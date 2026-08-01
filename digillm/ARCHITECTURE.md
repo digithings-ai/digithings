@@ -129,6 +129,22 @@ A missing required provider key raises `RuntimeError` (no silent fallback), so
 misconfiguration surfaces immediately rather than masquerading as a default-model
 call.
 
+Every client — cached, provider, and both uncached BYOK paths — is constructed with
+an **explicit** `timeout=` (#1734). The value is `httpx.Timeout(600, connect=5.0)`,
+byte-identical to the OpenAI SDK default it replaces, so this states the existing
+bound rather than changing it: previously the bound lived only in the SDK's
+constants module, invisible from this repo and free to move on a dependency bump.
+Override with `DIGILLM_REQUEST_TIMEOUT_SECONDS` / `DIGILLM_CONNECT_TIMEOUT_SECONDS`.
+
+Both are read **once at import**, not per call, because `_client_cache` is keyed on
+`(api_key, base_url)` only — a call-time env read would hand a cached client its
+stale timeout and falsify the cache's "recreated when env changes" contract.
+
+The silence budget for one `completion` is the product of three layers, not this
+value alone: the SDK's own `max_retries=2` (3 HTTP attempts) x `_create_with_retry`'s
+12 attempts, each attempt bounded by the read timeout. Lowering
+`DIGILLM_REQUEST_TIMEOUT_SECONDS` is the only single-knob way to shrink that product.
+
 ## Per-request override contract (contextvars)
 
 This is the contract **digigraph** will use after migration (follow-up #12). The
@@ -195,6 +211,8 @@ digismith on the path) plus `LANGSMITH_API_KEY` to enable spans.
 | `OPENAI_API_KEY` / `OPENAI_API_BASE` | default client | Endpoint + key for non-prefixed models (LiteLLM / Ollama / OpenRouter / OpenAI). |
 | `LITELLM_PROXY_API_KEY` | default client | Proxy bearer key (below per-request override, above `OPENAI_API_KEY`). |
 | `XAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` | provider clients | Keys for the corresponding `provider/` prefixes. |
+| `DIGILLM_REQUEST_TIMEOUT_SECONDS` | all clients | Read/write/pool timeout per HTTP attempt (default 600, = the OpenAI SDK default). Read once at import. |
+| `DIGILLM_CONNECT_TIMEOUT_SECONDS` | all clients | Connect timeout (default 5, = the OpenAI SDK default). Separate from the above so a wider read timeout cannot silently widen connect. |
 | `DIGI_LLM_CACHE_TTL_SECONDS` | response cache | Response-cache TTL (default 3600). |
 | `DIGI_TOOL_MESSAGE_MAX_CHARS` | tool loop | Cap on tool-result text injected into the next turn (default 12000). |
 | `DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY` | `completion` | Empty-response self-heal: retry count (default 2) + backoff seconds (default 2.0). |

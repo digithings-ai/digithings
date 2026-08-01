@@ -362,6 +362,22 @@ Three properties that any other Postgres-checkpointer deployment should copy:
 - **Retention is a resume ceiling.** Any resume-from-checkpoint feature (here, `pipeline-olympus.yml`'s `resume_run_id`) can only reach back as far as the retention window, so the window can never be zero.
 
 **The real cost driver is upstream of retention.** 94% of the bytes sit on the `__pregel_tasks` channel: `FanOutPhase` dispatches one `Send` per item and `pipeline_builder.py:57-58` hands each worker a **full copy of the live state**, so one H6 superstep persisted 52 complete `AtlasResearchState` copies (a single 48 MB row was measured). That is `O(fan-out width x state size)` per superstep and it contradicts `AGENTS.md`'s "State stays lean … no large DataFrames in state or LangGraph checkpoints" as well as [`docs/LANGGRAPH_REVIEW.md`](docs/LANGGRAPH_REVIEW.md). Shrinking the `Send` payload to a cursor is a ~20x lever; it changes `FanOutPhase`'s state-copy contract in this shared library and is therefore deferred as a human-gated architecture change (follow-up to #1758). Retention caps the footprint; it does not reduce the write volume.
+#### 5.5.3 Postgres connection bounds — #1734
+
+`PostgresSaver.from_conn_string` forwards its argument straight to `psycopg.Connection.connect`, which applies **no** connect timeout and **no** TCP keepalives, and exposes no kwarg for either. An established connection to a peer that disappears without sending an RST therefore stays in `ESTABLISHED` indefinitely, and a checkpoint read/write blocks with nothing but the caller's own job timeout as a backstop — the shape of the 2026-07-30 Olympus stall (210 minutes of silence inside a 240-minute job, beginning at a checkpoint-write boundary).
+
+`_bounded_conn_string()` closes that by merging the bounds into the conninfo itself, which libpq accepts as ordinary connection parameters:
+
+| Parameter | Value | Bounds |
+|---|---|---|
+| `connect_timeout` | `10` | establishing a connection |
+| `keepalives` / `keepalives_idle` / `keepalives_interval` / `keepalives_count` | `1` / `30` / `10` / `5` | an established-but-dead connection (~80s to detect) |
+
+It accepts either libpq spelling (`postgresql://` URI or `host=… dbname=…` keyword/value) via `psycopg.conninfo.make_conninfo`, and **any parameter already present in `DIGI_CHECKPOINTER_POSTGRES_URI` wins** — that env var is the override path. Missing psycopg or an unparseable conninfo returns the string unchanged with a warning: bounding a connection must never itself be why a process fails to start.
+
+`statement_timeout` is deliberately **not** set. It is enforced server-side, so it cannot help when the network path is gone, and it risks aborting a legitimately slow write against a checkpoint table already at ~950 MB in production (#1758).
+
+Timing is the only thing that changes: an unreachable Postgres already raised `psycopg.OperationalError` out of `get_checkpointer()` (via `cm.__enter__()`), so no new failure *mode* is introduced — it now surfaces in ~10s instead of hanging on the OS TCP timeout. On the Olympus path `hermes/chain.py::_acquire_checkpointer` catches `Exception` and degrades to an uncheckpointed run.
 
 ### 5.6 Streaming SSE Architecture
 
