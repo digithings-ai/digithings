@@ -424,3 +424,38 @@ class TestEditMergeFallback:
         slot = out["phase3_output"]
         assert isinstance(slot.payload, SegmentPayload)
         assert slot.payload.body["headline"] == "fresh full headline"
+
+        # #1741 — non-gating, but no longer invisible: the segment paid for a patch call
+        # AND a full regeneration, and nothing else in the run record says so.
+        fallbacks = out.get("merge_fallbacks")
+        assert fallbacks is not None, "the fallback must be recorded, not just logged"
+        assert set(fallbacks) == {"macro"}
+        assert "MergeError" in fallbacks["macro"]
+        assert len(fallbacks["macro"]) <= 300, "reason must stay jsonb-sized"
+
+    def test_successful_merge_records_no_fallback(self) -> None:
+        """The counter must stay empty on the happy path, or every row reads as degraded."""
+        state = _macro_state_with_prior(triage_decision="regenerate")
+        spec = SegmentNodeSpec(
+            segment_slug="macro",
+            skill_slug="macro",
+            output_model=MacroRegimeReport,
+            phase_outputs_field="phase3_output",
+        )
+        node = build_segment_node(spec, write_adapter=scalar_slot_write_adapter)
+        good_patch = DocumentPatch(
+            schema_version="1.0",
+            date=date(2026, 4, 27),
+            prior_date=date(2026, 4, 26),
+            target_document_key="macro",
+            status="updated",
+            ops=[PatchOp(op="set", path="/regime_label", value="Edited", reason="shift")],
+        )
+
+        with patch(
+            "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+            return_value=good_patch,
+        ):
+            out = node(state)
+
+        assert not out.get("merge_fallbacks")

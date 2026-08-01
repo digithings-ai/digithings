@@ -732,7 +732,20 @@ DigiQuant ships two sibling sub-graphs that compose end-to-end on **one daily to
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
   appends) and fail-soft list indices (past-end set → append; OOR remove → no-op),
   and a segment whose patch cannot merge falls back to full-mode regeneration
-  instead of carrying + degrading the run (#1641).
+  instead of carrying + degrading the run (#1641). That fallback is **counted, not
+  silent** (#1741): the node records `state.merge_fallbacks[segment] = reason` and
+  `atlas.telemetry.merge_fallback_breakdown` projects it into the diagnostics
+  `breakdown` as a non-gating key, the same shape as `circuit_breaker_skips`. Run
+  status is unchanged — a fallback that then succeeds in full mode is still `ok` —
+  but a segment that paid for a patch call *and* a full regeneration is now visible
+  to a cost audit. The dominant cause was unguarded `Literal[...]` axes, so
+  `SegmentReport` normalizes LLM synonyms for **every** Literal field of every
+  subclass generically (`_normalize_literal_axes`): an unrecognized value degrades to
+  `None` on an Optional axis and is still rejected on a required one (`growth` /
+  `inflation` have no non-directional member, so coercing them would invent a macro
+  call that Phases 4–7 consume as fact). A field that declares its own
+  `mode="before"` validator (`bias`, `data_quality`, `flow_direction`) keeps
+  ownership of its vocabulary and is skipped by the generic pass.
 - **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — thesis-aware portfolio loop.
   **H1–H9:** market thesis review → exploration → vehicle map → opportunity screener →
   unified asset analyst (×N) → PM↔analyst deliberation (×N) → PM direction memo →

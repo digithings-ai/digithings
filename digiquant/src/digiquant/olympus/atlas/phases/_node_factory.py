@@ -15,6 +15,7 @@ from typing import (  # score:allow untyped any — heterogeneous node-update di
     Any,
     Callable,
     Literal,
+    NamedTuple,
 )
 
 from digigraph.graph.research_agent import run_research_agent
@@ -674,6 +675,26 @@ def _edit_phase_inputs(
     }
 
 
+class EditSegmentResult(NamedTuple):
+    """Outcome of one edit-mode segment attempt.
+
+    ``slot is None`` ⇒ the patch could not be merged and the caller must regenerate in
+    full mode (#1641). ``merge_fallback_reason`` carries the *why* for the non-gating
+    telemetry that #1641 omitted (#1741) and is set only in that case.
+    """
+
+    slot: SegmentSlot | None
+    errors: list[PhaseError]
+    delta: DocumentPatch | None
+    merge_fallback_reason: str | None = None
+
+
+# Cap on the stored merge-failure reason. A Pydantic ValidationError message carries the
+# full offending body; ``atlas_run_diagnostics.breakdown`` is an operator-facing jsonb
+# column, not a log sink, and the same cap is applied to ``master_digest_failed``.
+_MERGE_FALLBACK_REASON_MAX = 300
+
+
 def _run_edit_segment(
     *,
     state: AtlasResearchState,
@@ -686,7 +707,7 @@ def _run_edit_segment(
     tools: list[dict[str, Any]] | None,
     execute_tool: Callable[[str, dict[str, Any]], str] | None,
     model: str | None,
-) -> tuple[SegmentSlot | None, list[PhaseError], DocumentPatch | None]:
+) -> EditSegmentResult:
     """Run one segment in edit mode. A ``None`` slot means the patch merge failed and
     the caller must fall back to full-mode regeneration (#1641)."""
     skill_text = load_skill_edit(spec.skill_slug)
@@ -720,11 +741,11 @@ def _run_edit_segment(
         baseline_date=prior.date,
     )
     if errors:
-        return patch_slot, errors, None
+        return EditSegmentResult(patch_slot, errors, None)
 
     payload = patch_slot.payload
     if not isinstance(payload, SegmentPayload):
-        return patch_slot, errors, None
+        return EditSegmentResult(patch_slot, errors, None)
     patch_model = DocumentPatch.model_validate(payload.body)
 
     try:
@@ -739,13 +760,13 @@ def _run_edit_segment(
         # can't be researched today. Mirrors the digest edit path's fallback. No
         # PhaseError here — a successful full run must not leave the run degraded;
         # the full path's own fail-soft covers a second failure.
+        reason = f"{type(exc).__name__}: {exc}"
         logger.warning(
-            "edit-mode merge failed for segment %r (%s: %s); falling back to full generation",
+            "edit-mode merge failed for segment %r (%s); falling back to full generation",
             spec.segment_slug,
-            type(exc).__name__,
-            exc,
+            reason,
         )
-        return None, [], None
+        return EditSegmentResult(None, [], None, reason[:_MERGE_FALLBACK_REASON_MAX].strip())
 
     merged_body = dict(merge_result.materialized)
     merged_body.setdefault("segment", spec.segment_slug)
@@ -757,7 +778,7 @@ def _run_edit_segment(
             as_of=state.run_date,
         )
     )
-    return slot, [], merge_result.delta
+    return EditSegmentResult(slot, [], merge_result.delta)
 
 
 def build_segment_node(
@@ -772,6 +793,9 @@ def build_segment_node(
 
     def _node(state: AtlasResearchState) -> dict[str, Any]:
         carried: Carried | None = None
+        # Non-gating: an edit→full fallback that then succeeds must still leave the run
+        # `ok`, but it must stop being invisible (#1741).
+        merge_fallbacks: dict[str, str] = {}
         if triage_gate is not None:
             carried = triage_gate(state, spec.segment_slug)
         else:
@@ -818,7 +842,7 @@ def build_segment_node(
             if prior is None:
                 edit_mode = "full"
             else:
-                slot, errors, delta = _run_edit_segment(
+                slot, errors, delta, fallback_reason = _run_edit_segment(
                     state=state,
                     spec=spec,
                     inputs=inputs,
@@ -841,6 +865,8 @@ def build_segment_node(
                     return update
                 # slot is None ⇒ patch merge failed (#1641) — regenerate from scratch
                 # via the full path below rather than carrying + degrading the run.
+                # Record it so a cost audit can count the segments that paid twice.
+                merge_fallbacks = {spec.segment_slug: fallback_reason or "merge_failed"}
 
         skill_text = load_skill(spec.skill_slug)
 
@@ -867,6 +893,8 @@ def build_segment_node(
         update = write_adapter(spec, slot)
         if errors:
             update["errors"] = errors
+        if merge_fallbacks:
+            update["merge_fallbacks"] = merge_fallbacks
         return update
 
     return _node
@@ -874,6 +902,7 @@ def build_segment_node(
 
 __all__ = [
     "DataLayerScope",
+    "EditSegmentResult",
     "InputsBuilder",
     "SegmentNodeSpec",
     "WriteAdapter",
