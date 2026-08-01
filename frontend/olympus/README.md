@@ -188,13 +188,6 @@ Path-form URLs (`/portfolio/theses/<id>`) are no longer served; old bookmarks la
 on the Olympus 404. Every in-app link, the command palette, and the legacy
 `/strategy?thesis=` redirect all emit the query form.
 
-A failed `theses` fetch **throws** and aborts the build rather than exporting the
-fallback alone — silently shipping 404s for every live thesis link is the #674
-regression the throw exists to prevent. The PR build-check runs without Supabase
-env, so it takes the fallback branch and cannot reach that throw; the configured
-branch (pagination, dedupe, throw) is covered instead by
-`lib/thesis-static-params.test.ts` under `npm run test --workspace olympus`.
-
 ## Brief workspace
 
 `app/page.tsx` is the daily decision workspace. It owns benchmark alignment,
