@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install qr-logo up-observability down-observability atlas-validate
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install qr-logo up-observability down-observability atlas-validate supabase-migrations-check
 
 build:
 	docker compose build
@@ -145,6 +145,12 @@ agents-init:
 #        make atlas-validate SKIP=--skip-llm   (env + DB + dry-run only)
 atlas-validate:
 	python3 digiquant/scripts/atlas/validate-providers.py $(SKIP)
+
+# Guard the `core` Supabase migration chain: config.toml present, every file named
+# NNN_name.sql, no duplicate numeric prefix. Pure bash, no deps — the same check
+# test-digiquant.yml runs as its first step. Run before adding a migration.
+supabase-migrations-check:
+	bash digiquant/scripts/atlas/verify-supabase-migrations.sh
 
 # Self-score staged changes against 4-dimension rubrics (Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9)
 score:
