@@ -48,8 +48,14 @@ type TracePartData = {
 
 /**
  * Legacy path: providers emitted a single data-digigraphTrace{label,status} part
- * before the activity protocol landed. Kept for one release so an iframe page a
- * visitor cached across a deploy still renders its steps.
+ * before the activity protocol landed. A visitor's browser caching an OLD client
+ * bundle isn't what this covers — that old bundle doesn't contain this function
+ * at all, so no branch here could help it. What it actually covers is the
+ * reverse: during a rolling deploy, a visitor who has already loaded this NEW
+ * client bundle can still be routed to an OLD server revision that hasn't
+ * picked up the activity protocol yet and only emits data-digigraphTrace. This
+ * fallback keeps that visitor's steps rendering until the rollout finishes.
+ * TODO(next release): remove once no server revision can emit the legacy part.
  */
 function legacyTraceActivities(message: UIMessage): DigiChatActivity[] {
   const traces = message.parts.filter(

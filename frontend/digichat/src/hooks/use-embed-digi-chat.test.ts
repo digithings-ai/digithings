@@ -152,6 +152,29 @@ describe("uiMessageToDigiChat activity parts", () => {
     ]);
   });
 
+  // stream-digigraph-trace.ts dual-emits both parts for every trace (see
+  // item 1 of the fix wave): the legacy data-digigraphTrace part (ungated,
+  // for chat-panel.tsx) and the new data-digichatActivity span (gated, for
+  // the embed) describing the SAME upstream step. The embed hook must render
+  // that step once, not twice.
+  it("renders a step once, not twice, when the same step arrives as both a legacy and an activity part", () => {
+    const msg = {
+      id: "a6",
+      role: "assistant",
+      parts: [
+        { type: "text", text: "hi" },
+        activityPart({ operation: "chat", status: "completed", label: "Searching…" }),
+        {
+          type: "data-digigraphTrace",
+          data: { v: 1, type: "external_activity", payload: { label: "Searching…", status: "completed" } },
+        },
+      ],
+    } as unknown as UIMessage;
+    const { activities } = uiMessageToDigiChat(msg);
+    expect(activities).toEqual([{ kind: "trace", label: "Searching…", done: true }]);
+    expect(activities).toHaveLength(1);
+  });
+
   // Discriminating case: even when all activity spans are malformed, the presence of activity
   // parts gates out the legacy trace. A count-based gate would incorrectly fall back to legacy.
   it("ignores legacy trace even when all activity parts are malformed", () => {

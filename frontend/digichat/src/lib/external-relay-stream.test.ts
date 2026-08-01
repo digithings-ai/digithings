@@ -210,11 +210,18 @@ describe("createExternalRelayStreamResponse", () => {
     expect(out).toContain('"type":"error"');
   });
 
-  it("reports a non-200 relay response as readable text", async () => {
+  // This path is anonymous-embed-only by construction, so every caller is an
+  // untrusted visitor — the raw relay body (which can carry stack traces,
+  // internal hostnames, or prompt echoes) must never reach the browser. Same
+  // disclosure fix already applied to stream-digigraph-trace.ts, kept
+  // consistent here down to the exact user-facing string.
+  it("reports a non-200 relay response with a generic message, never the raw body", async () => {
+    const secret = "boom: psycopg2 connect to db.internal:5432 failed";
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(new Response("boom", { status: 503, statusText: "Service Unavailable" }))
+      vi.fn().mockResolvedValue(new Response(secret, { status: 503, statusText: "Service Unavailable" }))
     );
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
     const out = await drain(
       await createExternalRelayStreamResponse({
         relayUrl: "https://relay.example.com/api/digichat",
@@ -224,6 +231,11 @@ describe("createExternalRelayStreamResponse", () => {
         activityDetail: "full",
       })
     );
-    expect(out).toContain("Upstream error: 503");
+    expect(out).not.toContain(secret);
+    expect(out).not.toContain("db.internal");
+    expect(out).not.toContain("Upstream error");
+    expect(out).toContain("The assistant is unavailable right now. Please try again shortly.");
+    expect(errorLog).toHaveBeenCalled();
+    errorLog.mockRestore();
   });
 });

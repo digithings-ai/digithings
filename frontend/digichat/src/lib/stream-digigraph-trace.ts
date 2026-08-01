@@ -12,7 +12,7 @@ import {
 import { coreMessagesToDigigraphOpenAi } from "@/lib/digigraph-messages";
 import {
   ACTIVITY_PART_TYPE,
-  applyActivityDetail,
+  chatActivitySpan,
   type ActivityDetail,
 } from "@/lib/chat-activity";
 
@@ -83,6 +83,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
       const textId = "assistant-main";
       writer.write({ type: "text-start", id: textId });
       let traceSeq = 0;
+      let activitySeq = 0;
       const bodyPayload: Record<string, unknown> = {
         model,
         messages: coreMessagesToDigigraphOpenAi(coreMessages),
@@ -134,19 +135,33 @@ export async function createDigigraphTraceStreamResponse(opts: {
         const tr = delta.digigraph_trace;
         if (tr && typeof tr === "object") {
           const payload = tr as DigigraphTracePayload;
-          const label = String(payload.payload?.label ?? payload.type ?? "activity");
-          const span = applyActivityDetail(
-            {
-              operation: "chat",
-              status: payload.payload?.status === "completed" ? "completed" : "started",
-              label,
-            },
+
+          // Legacy part: emitted UNGATED, with the verbatim upstream payload.
+          // This is the pre-existing authenticated-path behaviour that
+          // chat-panel.tsx's rich renderers (RagSourcesTrace,
+          // ResearchBriefTrace) depend on for their full payload, so it must
+          // NOT be routed through applyActivityDetail like the span below —
+          // chat-panel.tsx has no notion of activity detail levels, only the
+          // embed surface does. Remove this block (and the resulting
+          // dual-emit) once chat-panel.tsx migrates to rendering
+          // ACTIVITY_PART_TYPE directly.
+          writer.write({
+            type: "data-digigraphTrace",
+            id: `dg-trace-${traceSeq++}`,
+            data: payload,
+          });
+
+          // New part: gated by this tenant's activityDetail, same as every
+          // other provider.
+          const span = chatActivitySpan(
+            payload.payload?.label ?? payload.type,
+            payload.payload?.status === "completed" ? "completed" : "started",
             opts.activityDetail
           );
           if (span) {
             writer.write({
               type: ACTIVITY_PART_TYPE,
-              id: `dg-activity-${traceSeq++}`,
+              id: `dg-activity-${activitySeq++}`,
               data: span,
             });
           }

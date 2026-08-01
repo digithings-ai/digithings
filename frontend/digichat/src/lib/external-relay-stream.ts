@@ -13,7 +13,7 @@ import {
 } from "ai";
 import {
   ACTIVITY_PART_TYPE,
-  applyActivityDetail,
+  chatActivitySpan,
   type ActivityDetail,
 } from "@/lib/chat-activity";
 
@@ -108,14 +108,21 @@ export async function createExternalRelayStreamResponse(opts: {
       });
 
       if (!res.ok || !res.body) {
+        // Log the upstream detail server-side; never stream it. This path is
+        // anonymous-embed-only by construction, so every caller is an
+        // untrusted visitor — a non-200 body can carry stack traces, internal
+        // hostnames, and prompt echoes (same disclosure bug already fixed in
+        // stream-digigraph-trace.ts; kept consistent here).
         const detail = res.body ? (await res.text().catch(() => "")).trim() : "";
+        console.error(
+          `[relay] upstream ${res.status} ${res.statusText}`,
+          detail.length > 1500 ? `${detail.slice(0, 1500)}…` : detail
+        );
         openText();
         writer.write({
           type: "text-delta",
           id: textId,
-          delta: `Upstream error: ${res.status} ${res.statusText}${
-            detail ? `\n${detail.slice(0, 500)}` : ""
-          }`,
+          delta: "The assistant is unavailable right now. Please try again shortly.",
         });
         closeText();
         return;
@@ -153,12 +160,9 @@ export async function createExternalRelayStreamResponse(opts: {
             writer.write({ type: "text-delta", id: textId, delta: data.delta });
             accumulatedText += data.delta;
           } else if (event === "trace") {
-            const span = applyActivityDetail(
-              {
-                operation: "chat",
-                status: data.status === "completed" ? "completed" : "started",
-                label: String(data.label ?? "activity"),
-              },
+            const span = chatActivitySpan(
+              data.label,
+              data.status === "completed" ? "completed" : "started",
               opts.activityDetail
             );
             if (span) {
