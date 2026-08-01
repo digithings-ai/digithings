@@ -97,7 +97,12 @@ jobs:
           - [ ] \`make test-unit\` passes after bumps
           - [ ] PR opened and labelled \`security:finding\`")
           echo "Created: $URL"
-          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
 
   # ── 2. Stale branch cleanup ───────────────────────────────────────────────────
   stale-branches:
@@ -131,7 +136,11 @@ jobs:
           done < <(git branch -r | sed 's|origin/||' | tr -d ' ')
 
           echo "stale_branches<<EOF" >> "$GITHUB_OUTPUT"
-          printf "$STALE" >> "$GITHUB_OUTPUT"
+          # '%b' expands the literal \n separators STALE accumulates above while
+          # keeping the branch names as data — `printf "$STALE"` put them in the
+          # format string, where a branch named e.g. `fix/100%-cpu` is a bogus
+          # conversion spec and corrupts the list (SC2059).
+          printf '%b' "$STALE" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
           COUNT=0
           [[ -n "$STALE" ]] && COUNT=$(printf "%s" "$STALE" | grep -c .)
@@ -151,7 +160,7 @@ jobs:
             --search "stale merged branches in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
           [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
 
-          BRANCH_LIST=$(printf "$STALE" | sed 's/^/- /')
+          BRANCH_LIST=$(printf '%b' "$STALE" | sed 's/^/- /')
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
@@ -176,7 +185,12 @@ jobs:
           - [ ] No unmerged work lost (verify each branch is merged before deletion)
           - [ ] Comment on this issue with the list of branches deleted")
           echo "Created: $URL"
-          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
 
   # ── 3. Doc link check ─────────────────────────────────────────────────────────
   doc-links:
@@ -231,7 +245,12 @@ jobs:
           - [ ] \`make doc-check\` exits 0
           - [ ] No links removed that should be kept (prefer fixing paths over removal)")
           echo "Created: $URL"
-          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
 
   # ── 4. agents-init drift check ────────────────────────────────────────────────
   agents-drift:
@@ -293,7 +312,12 @@ jobs:
           - [ ] \`python3 scripts/agents_init.py --check\` exits 0
           - [ ] PR opened and merged to develop")
           echo "Created: $URL"
-          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
 
   # ── 5. Stale issue sweep ─────────────────────────────────────────────────────
   # Issues with no activity in >90 days get a comment + `stale` label.
@@ -315,9 +339,12 @@ jobs:
           [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
 
           # >90d for normal issues, >7d for `blocked`-labeled. Export so
-          # the Python child process sees them via os.environ.
-          export CUTOFF_NORMAL=$(date -u -v-90d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 days ago' +%Y-%m-%dT%H:%M:%SZ)
-          export CUTOFF_BLOCKED=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          # the Python child process sees them via os.environ. Assign first —
+          # `export X=$(cmd)` masks the command's exit status from `set -e`
+          # (SC2155).
+          CUTOFF_NORMAL=$(date -u -v-90d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          CUTOFF_BLOCKED=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          export CUTOFF_NORMAL CUTOFF_BLOCKED
 
           python3 <<'PY'
           import json, os, subprocess
@@ -371,7 +398,9 @@ jobs:
           set -euo pipefail
           [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
 
-          export CUTOFF=$(date -u -v-14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          # Assign before exporting so `set -e` still sees date(1)'s status (SC2155).
+          CUTOFF=$(date -u -v-14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          export CUTOFF
 
           python3 <<'PY'
           import json, os, subprocess, re
