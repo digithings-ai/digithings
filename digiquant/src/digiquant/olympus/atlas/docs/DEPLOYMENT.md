@@ -31,7 +31,7 @@ into `$GITHUB_ENV` by the "Load pipeline configuration" step.
 | `OLYMPUS_MODEL_TIER` | `balanced` | Routes LLM nodes via `config/olympus_models.yaml` (`cheap` \| `balanced` \| `quality`) — **sole cost lever** |
 | `OLYMPUS_STALE_FULL_DAYS` | `7` | Prior gap > N calendar days → `full` rewrite instead of `edit` |
 | `OLYMPUS_BELIEFS_BACKLOG` | `20` | Auto-trigger beliefs distillation when unresolved `decision_log` rows exceed threshold |
-| `ATLAS_MAX_ANALYSTS` | (see pipeline YAML) | Caps H4/H5 fan-out width; held tickers always survive (#936) |
+| `ATLAS_MAX_ANALYSTS` | `30` (`.github/olympus-pipeline.yml`) | Caps H4/H5/H6 fan-out width — enforced for the first time by #1767. Held tickers always survive (#936) and are the only sanctioned overshoot; thesis vehicles are prioritised *within* the cap, not exempt from it. `0` = uncapped |
 
 Operator full refresh: `workflow_dispatch` with `refresh_scope=all` or CLI
 `--refresh-scope all` — not a separate graph or cron.

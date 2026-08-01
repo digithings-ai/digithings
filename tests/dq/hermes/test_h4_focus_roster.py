@@ -73,9 +73,11 @@ class TestH4FocusRosterHeldInvariant:
         tickers = {e.ticker for e in roster}
         # All held survive even though they exceed the cap (#936).
         assert _HELD.issubset(tickers)
-        # At least 1 new candidate is also reserved (#950).
-        non_held = [e for e in roster if e.roster_reason != "held"]
-        assert len(non_held) >= 1
+        # #1767: and NOTHING else — the book is the only sanctioned overshoot. #950's
+        # new-candidate reservation used to expand the cap here, which is precisely how
+        # ATLAS_MAX_ANALYSTS stopped being a ceiling.
+        assert len(roster) <= max(2, len(_HELD))
+        assert [e for e in roster if e.roster_reason != "held"] == []
 
     def test_roster_preserves_watchlist_order_among_survivors(
         self, monkeypatch: pytest.MonkeyPatch
@@ -185,20 +187,27 @@ class TestNewCandidateReservation:
             f"no new candidates survived cap; roster={[e.ticker for e in roster]}"
         )
 
-    def test_new_candidate_slot_reserved_when_held_fills_cap(
+    def test_new_candidate_slot_not_reserved_when_held_fills_cap(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Cap=4, 4 held + 3 new candidates — cap should expand to fit >=1 new."""
+        """Cap=4, 4 held + 3 new candidates — the cap must NOT expand to fit a new one.
+
+        This reverses the pre-#1767 expectation ("cap should expand to fit >=1 new").
+        #950's anti-freeze guarantee is preserved *within* the cap — whenever the book
+        leaves any budget at all, that whole budget goes to non-held candidates (see
+        :meth:`test_new_candidate_survives_tight_cap`) — but it is surrendered once the
+        book alone fills the ceiling, because a ceiling another rule can lift is not one.
+        The operator's lever is ATLAS_MAX_ANALYSTS.
+        """
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "4")
+        held = {"H1", "H2", "H3", "H4"}
         roster = compute_focus_roster(
             watchlist=["H1", "H2", "H3", "H4", "NEW1", "NEW2", "NEW3"],
-            held={"H1", "H2", "H3", "H4"},
+            held=held,
             run_date=date(2026, 6, 20),
         )
-        non_held = [e for e in roster if e.roster_reason != "held"]
-        assert len(non_held) >= 1, (
-            f"new candidates squeezed out; roster={[e.ticker for e in roster]}"
-        )
+        assert {e.ticker for e in roster} == held
+        assert [e for e in roster if e.roster_reason != "held"] == []
 
     def test_no_new_candidates_available_does_not_crash(
         self, monkeypatch: pytest.MonkeyPatch

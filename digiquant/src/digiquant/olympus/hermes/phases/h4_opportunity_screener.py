@@ -11,6 +11,7 @@ import logging
 import os
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import date
+from itertools import zip_longest
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
 )
@@ -21,7 +22,7 @@ from digiquant.olympus.atlas.state import ExcludedTicker, FocusRosterEntry
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.budget_controller import assess_budget
 from digiquant.olympus.hermes.candidates import select_focus_tickers
-from digiquant.olympus.hermes.roster_cap import capped_tickers
+from digiquant.olympus.hermes.roster_cap import capped_tickers, configured_max_analysts
 from digiquant.olympus.hermes.state import HermesState
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,35 @@ def extract_thesis_mappings(vehicle_map: dict[str, Any] | None) -> list[tuple[st
             if ticker:
                 triples.append((thesis_id, ticker, rationale))
     return triples
+
+
+def thesis_priority_order(thesis_mappings: Iterable[tuple[str, str, str]]) -> list[str]:
+    """Breadth-first round-robin over theses: every thesis's rank-1 vehicle, then rank-2, …
+
+    H3 emits each thesis's ``candidate_tickers`` in within-thesis rank order, and
+    nothing in the vehicle map carries a *conviction* signal — ``candidate_rank`` is a
+    position inside the mapping, not a score — so "prioritise the thesis map" (#1767)
+    can only mean **breadth**: cover as many theses as the budget allows before
+    deepening any one of them. Flat truncation would hand the whole budget to the first
+    two or three theses and leave the rest with no coverage at all. The absence of a
+    conviction signal is a known limitation, recorded in ``hermes/docs/ARCHITECTURE.md``.
+    """
+    by_thesis: dict[str, list[str]] = {}
+    for thesis_id, ticker, _rationale in thesis_mappings:
+        normalized = ticker.strip().upper()
+        if not normalized:
+            continue
+        bucket = by_thesis.setdefault(thesis_id, [])
+        if normalized not in bucket:
+            bucket.append(normalized)
+    order: list[str] = []
+    seen: set[str] = set()
+    for tier in zip_longest(*by_thesis.values()):
+        for ticker in tier:
+            if ticker and ticker not in seen:
+                seen.add(ticker)
+                order.append(ticker)
+    return order
 
 
 def compute_focus_roster(
@@ -184,13 +214,20 @@ def compute_focus_roster(
         if ticker not in ordered_tickers:
             ordered_tickers.append(ticker)
 
+    # #1767: ``held`` is the prior book ONLY. It used to be unioned with every ticker in
+    # the H3 thesis-vehicle map, which pushed the protected set past the cap on every day
+    # the map was populated (40 tickers on 2026-07-31 against a cap of 25), drove
+    # ``capped_tickers`` into its over-budget #936 branch, and so bypassed the cap by
+    # construction. Thesis vehicles are now *prioritised inside* the budget instead of
+    # being exempt from it: protection is for positions we own, priority is for
+    # conviction we have expressed.
     active_held = held_set - gated_out_held
-    protected = active_held | {ticker for _, ticker, _ in thesis_mappings}
     capped = capped_tickers(
         ordered_tickers,
-        held=protected,
+        held=active_held,
         min_new=min_new_candidates,
         adaptive_max_analysts=adaptive_max_analysts,
+        candidate_priority=thesis_priority_order(thesis_mappings),
     )
     return [entry_by_ticker[t] for t in capped]
 
@@ -200,22 +237,35 @@ def compute_focus_roster_excluded(
     roster: list[FocusRosterEntry],
     *,
     held: Collection[str],
+    thesis_mapped: Collection[str] = (),
 ) -> list[ExcludedTicker]:
     """Return exclusion ledger entries for tickers NOT in the focus roster.
 
-    Considers the union of the watchlist and *held* — a prior-book holding is not
-    necessarily on today's watchlist (the watchlist is the research universe; the
-    book is what we own), yet a quiet held name gated out of the roster must still
-    be recorded so commit-run can carry it instead of failing closed (#1030).
+    Considers the union of the watchlist, *held*, and *thesis_mapped* — a prior-book
+    holding is not necessarily on today's watchlist (the watchlist is the research
+    universe; the book is what we own), yet a quiet held name gated out of the roster
+    must still be recorded so commit-run can carry it instead of failing closed (#1030).
+    Thesis vehicles are likewise not necessarily on the watchlist, and since #1767 they
+    can be dropped by the analyst cap, so they need a ledger row of their own.
 
     For each candidate ticker absent from *roster*:
     - If the ticker is in *held*: reason = "held, no material change (below staleness threshold)".
+    - Else if the ticker is in *thesis_mapped*: reason names the analyst cap, because
+      "not thesis-mapped and below technical screen" would be a false statement about a
+      ticker H3 explicitly nominated — the roster width is what excluded it.
     - Otherwise: reason = "not thesis-mapped and below technical screen".
+
+    Note the ledger is *not* a carry authorisation for these rows: ``commit_io``
+    intersects it with held names (``gated_out_tickers``), so a dropped thesis vehicle
+    still fails closed if it somehow reaches the book with a weight.
     """
     rostered = {e.ticker for e in roster}
     held_upper = {str(t).strip().upper() for t in held if str(t).strip()}
+    thesis_upper = {str(t).strip().upper() for t in thesis_mapped if str(t).strip()}
     candidates = [str(raw).strip().upper() for raw in watchlist]
-    candidates += sorted(held_upper)  # held names not on the watchlist (deduped below)
+    # Held / thesis names absent from the watchlist (deduped below); sorted for a
+    # deterministic ledger order.
+    candidates += sorted(held_upper) + sorted(thesis_upper)
     excluded: list[ExcludedTicker] = []
     seen: set[str] = set()
     for ticker in candidates:
@@ -224,6 +274,8 @@ def compute_focus_roster_excluded(
         seen.add(ticker)
         if ticker in held_upper:
             reason = "held, no material change (below staleness threshold)"
+        elif ticker in thesis_upper:
+            reason = "thesis-mapped vehicle beyond the analyst cap (ATLAS_MAX_ANALYSTS)"
         else:
             reason = "not thesis-mapped and below technical screen"
         excluded.append(ExcludedTicker(ticker=ticker, reason=reason))
@@ -249,7 +301,7 @@ def _h4_node_factory(client: SupabaseClient | None):
         watchlist = list(state.config.watchlist)
         held = holdings_from_state(state)
         mappings = extract_thesis_mappings(state.phase_hermes.thesis_vehicle_map)
-        static_cap = int(os.environ.get("ATLAS_MAX_ANALYSTS", "0") or "0")
+        static_cap = configured_max_analysts()
         budget, explore_floor, assessment = assess_budget(state, client, static_cap=static_cap)
         roster = compute_focus_roster(
             watchlist=watchlist,
@@ -261,10 +313,21 @@ def _h4_node_factory(client: SupabaseClient | None):
             adaptive_max_analysts=budget,
             min_new_candidates=explore_floor,
         )
-        excluded = compute_focus_roster_excluded(watchlist, roster, held=held)
+        excluded = compute_focus_roster_excluded(
+            watchlist,
+            roster,
+            held=held,
+            thesis_mapped={ticker for _, ticker, _ in mappings},
+        )
+        # Roster width is the dominant cost driver of the whole run (#1767: width 8 → 39
+        # tracked $0.86 → $4.00) and until the width breakdown reaches
+        # ``atlas_run_diagnostics`` this log line is the only record of it.
         logger.info(
-            "H4 focus roster (%d, regime=%s): %s",
+            "H4 focus roster (%d, cap=%d, budget=%d, theses=%d, regime=%s): %s",
             len(roster),
+            static_cap,
+            budget,
+            len({thesis_id for thesis_id, _, _ in mappings}),
             assessment.regime if assessment else "static",
             ", ".join(f"{e.ticker}:{e.roster_reason}" for e in roster),
         )
