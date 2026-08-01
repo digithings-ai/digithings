@@ -51,11 +51,11 @@ narrative string.
 **Cascade (all one bug):**
 | Surface | Symptom |
 |---------|---------|
-| Overview → **Today's Actions** | always "No rebalance proposed" (even when `pm-rebalance` has live actions) |
-| Portfolio → **Allocations** | no target-vs-actual; `AllocationsPositionsTable` doesn't even render a Target column |
-| Overview/Portfolio → **rebalance_actions** | empty everywhere |
-| `StrategyThesisPanel` | "Proposed positions" + "Rebalance actions" tables permanently empty |
-| Overview → **Regime Hero `<h2>`** | renders a multi-sentence paragraph at 4xl-bold (no short regime token); colors fall to neutral |
+| Brief → **Today's Actions** | always "No rebalance proposed" (even when `pm-rebalance` has live actions) |
+| Portfolio → **Holdings** | no target-vs-actual; `AllocationsPositionsTable` doesn't even render a Target column |
+| Brief/Portfolio → **rebalance_actions** | empty everywhere |
+| ~~`StrategyThesisPanel`~~ | ~~"Proposed positions" + "Rebalance actions" tables permanently empty~~ — **obsolete 2026-08-01:** the component was deleted in the redesign; this surface no longer exists. |
+| ~~Brief → **Regime Hero `<h2>`**~~ | ~~renders a multi-sentence paragraph at 4xl-bold (no short regime token)~~ — **obsolete 2026-08-01:** `MoveHero` replaced this element and `app/page.tsx` now reads the short `regime_label` token. The regime color-map gap is tracked separately as bug #4. |
 
 **Fix:** rebind the decision surfaces to the data that *is* published — `pipeline_observability.pm_rebalance`
 (`recommended_portfolio` + `actions`, already fetched from the `pm-rebalance` document) and/or the
@@ -66,8 +66,8 @@ as the hero title and keep `market_regime_snapshot` as the body). **Highest-valu
 `calculated.{sharpe,volatility,max_drawdown,alpha}` and `portfolio_pnl` default to **literal `0`**
 when `portfolio_metrics` is empty (`queries.ts` ~909–921), which it always is in automated prod
 (`refresh_performance_metrics.py` has no cron — Step-1 gap). The Performance tab, `server-metrics-strip`,
-`advanced-stats-panel`, and the Overview P&L tile show `0.00` indistinguishable from a real flat day.
-*(Overview Sharpe is safe — it's derived from `nav_history` via `computeRiskRatiosFromNavSnaps`.)*
+`advanced-stats-panel`, and the Brief P&L tile show `0.00` indistinguishable from a real flat day.
+*(Brief Sharpe is safe — it's derived from `nav_history` via `computeRiskRatiosFromNavSnaps`.)*
 **Fix:** schedule the refresh script (backend) **and** null-guard the UI (`server_portfolio_metrics === null` → render "—").
 
 ### C. Library / thesis doc-key drift
@@ -111,11 +111,15 @@ pieces, and add a one-line "enabled after <X>" note to each gated EmptyState.
    `/portfolio/theses?thesis=<id>`, a single static page reading the id at runtime, so no
    id can be missing from the export.
 6. **MacroSparklineRow fetched but never rendered** — `macro_series_preview` is queried on every
-   Overview load (`queries.ts:803–836`) but the component isn't mounted → wasted round-trip.
-7. **Portfolio → Analysis tab empty in automated prod** — it filters for Track-B artifacts
+   Brief load (`queries.ts:803–836`) but the component isn't mounted → wasted round-trip.
+7. ~~**Portfolio → Analysis tab empty in automated prod** — it filters for Track-B artifacts
    (`market-thesis-exploration`, `thesis-vehicle-map`, `pm-allocation-memo`, `asset-recommendations`,
    `deliberation-transcript`) that the automated pipeline never writes; the automated `pm-rebalance` /
-   `risk-debate` / `deliberation/{ticker}` docs (which *are* written) aren't surfaced here.
+   `risk-debate` / `deliberation/{ticker}` docs (which *are* written) aren't surfaced here.~~
+   **Obsolete 2026-08-01:** there is no Analysis tab to replace this with — the redesign reduced
+   Portfolio to Holdings · Theses · Performance · Attribution (`PortfolioSectionNav.tsx`), `analysis`
+   survives only as a legacy URL alias redirecting to `theses`, and no Track-B artifact filtering
+   remains anywhere in `frontend/olympus`.
 8. *(minor)* `PerformanceToPortfolioRedirectPage` lacks the Suspense boundary its siblings have;
    `NEXT_PUBLIC_OLYMPUS_VERSION` defaults to `"v0.1 · dev"` in chrome if unset; command-palette digest
    path filter checks `d.path === 'digest'`.
@@ -137,7 +141,8 @@ The pipeline *does* publish the rich material (12 segment reports, the digest, p
   Library) read segment reports and the bull/bear debate (in markdown).
 - ❌ A PM **cannot see the recommended trades** (root cause A), **cannot trust the metrics** (B), sees
   the **best artifacts downgraded to markdown** (C), and **cannot read the agent's per-decision
-  reflection/calibration** (bug #1–2). The **Analysis tab** is keyed to artifacts that don't exist (#7).
+  reflection/calibration** (bug #1–2). ~~The **Analysis tab** is keyed to artifacts that don't exist (#7).~~
+  *(#7 obsolete 2026-08-01 — the Analysis tab no longer exists.)*
 
 The fixes are concentrated: A + C + bugs #1–2 are pure frontend rebindings; B + D are the Step-1
 backend scheduling/flag/migration items plus UI null-guards.
@@ -148,7 +153,7 @@ backend scheduling/flag/migration items plus UI null-guards.
 
 | # | Fix | Type | Impact |
 |---|-----|------|--------|
-| 1 | Rebind Today's Actions / Allocations target / rebalance to `pipeline_observability.pm_rebalance` + add a short regime label | frontend | unblocks the entire decision spine |
+| 1 | Rebind Today's Actions / Holdings target / rebalance to `pipeline_observability.pm_rebalance` + add a short regime label | frontend | unblocks the entire decision spine |
 | 2 | Null-guard metrics in the UI (show "—" not `0.00`) **and** schedule `refresh_performance_metrics` | FE + backend cron | honest performance surface |
 | 3 | Add `pm-rebalance` + `deliberation/{ticker}` to `resolveLibraryDocumentView` + `collectThesisRelatedDocLinks`; widen `RebalanceDocumentView` to the `actions` shape | frontend | structured under-the-hood views |
 | 4 | Fix Decision Scorecard conviction range to `[-5,+5]`; add a per-decision drill-down rendering `reflection` + `thesis` | frontend | working calibration + agent-reasoning review |
