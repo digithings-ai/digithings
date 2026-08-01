@@ -55,10 +55,12 @@ jobs:
           except:
               print(0)
           " 2>/dev/null || echo "0")
-          echo "vuln_count=$COUNT" >> "$GITHUB_OUTPUT"
-          echo "output<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          {
+            echo "vuln_count=$COUNT"
+            echo "output<<EOF"
+            echo "$OUTPUT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create CVE issue if findings
         if: steps.audit.outputs.vuln_count != '0'
@@ -135,22 +137,24 @@ jobs:
             fi
           done < <(git branch -r | sed 's|origin/||' | tr -d ' ')
 
-          echo "stale_branches<<EOF" >> "$GITHUB_OUTPUT"
-          # '%b' expands the literal \n separators STALE accumulates above while
-          # keeping the branch names as data — `printf "$STALE"` put them in the
-          # format string, where a branch named e.g. `fix/100%-cpu` is a bogus
-          # conversion spec and corrupts the list (SC2059).
-          printf '%b' "$STALE" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-          # STALE accumulates literal backslash-n separators — `\n` inside a
-          # double-quoted assignment is two characters, not a newline — so
-          # `printf "%s"` emits the whole list on one line and `grep -c .`
-          # reports 1 however many branches are stale. '%b' expands them, which
-          # `count` needs because it is interpolated into the cleanup issue
-          # title, not just used as the boolean for the `if:` gate below.
+          # Both reads below use '%b' to expand the literal \n separators STALE
+          # accumulates above while keeping the branch names as data. `printf
+          # "$STALE"` would put them in the format string, where a branch named
+          # e.g. `fix/100%-cpu` is a bogus conversion spec (SC2059); `printf
+          # "%s"` would not expand the separators at all, collapsing the list to
+          # one line so `grep -c .` reports 1 however many branches are stale.
+          # `count` is interpolated into the cleanup issue title, not just used
+          # as the boolean for the `if:` gate below, so the number has to be right.
           COUNT=0
           [[ -n "$STALE" ]] && COUNT=$(printf '%b' "$STALE" | grep -c .)
-          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+          # Computed before the append group so all four writes stay contiguous.
+          {
+            echo "stale_branches<<EOF"
+            printf '%b' "$STALE"
+            echo "EOF"
+            echo "count=$COUNT"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create cleanup issue if stale branches found
         if: steps.stale.outputs.count != '0'
@@ -211,10 +215,12 @@ jobs:
           set +e
           OUTPUT=$(python3 scripts/check_doc_links.py 2>&1)
           EXIT=$?
-          echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
-          echo "output<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          {
+            echo "exit_code=$EXIT"
+            echo "output<<EOF"
+            echo "$OUTPUT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create issue if broken links
         if: steps.doccheck.outputs.exit_code != '0'

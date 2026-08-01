@@ -33,8 +33,10 @@ paths:
       # jq/GraphQL variable syntax and MUST stay unexpanded by the shell.
       # Double-quoting them, as the check suggests, is the actual bug.
       - 'shellcheck reported issue in this script: SC2016:'
-      # SC2129 — "Consider using { cmd1; cmd2; } >> file". The repeated
-      # `echo "key=value" >> "$GITHUB_OUTPUT"` form is the idiom GitHub's own
-      # docs prescribe for step outputs; a brace group buys nothing here and
-      # makes the append target harder to see at a glance.
-      - 'shellcheck reported issue in this script: SC2129:'
+      # SC2129 was suppressed here when this file was added, on the grounds that
+      # the repeated `echo "k=v" >> "$GITHUB_OUTPUT"` form is the idiom GitHub's
+      # own docs prescribe. That ignore is gone: every run: block that appended
+      # repeatedly was restructured into a `{ ... } >> "$GITHUB_OUTPUT"` group,
+      # so the rule now has nothing outstanding to flag and is enforced rather
+      # than waived. Do not re-add the ignore to silence a new occurrence —
+      # group the appends instead.

@@ -437,6 +437,41 @@ jobs:
             exit 1
           fi
 
+      - name: Assert SC2129 is live
+        # The step above counts files, not rules. SC2129 was un-suppressed once
+        # every repeated `>> "$GITHUB_OUTPUT"` was grouped, so it is now the only
+        # thing keeping that convention — and a rule that stops firing leaves a
+        # green build indistinguishable from one that checked. Two ways it can go
+        # dormant, one probe each. Same coverage-guard reasoning as above.
+        run: |
+          set -euo pipefail
+
+          # 1. Does the pinned shellcheck still emit SC2129? Upstream has relaxed
+          #    checks before — 0.11.0 dropped the SC2002/SC2015 this job first
+          #    went red on — so a bump could silently retire this one too.
+          printf '%s\n' \
+            '#!/usr/bin/env bash' \
+            'echo a >> /tmp/sc2129-target' \
+            'echo b >> /tmp/sc2129-target' \
+            'echo c >> /tmp/sc2129-target' > /tmp/sc2129-canary.sh
+          # Capture before grepping: shellcheck exits non-zero *because* it found
+          # the finding, and under `pipefail` that failure would propagate out of
+          # `shellcheck | grep` and read as "rule dormant" on a healthy rule.
+          CANARY_OUT=$(shellcheck -f gcc /tmp/sc2129-canary.sh 2>&1 || true)
+          if ! grep -q SC2129 <<<"$CANARY_OUT"; then
+            echo "::error::shellcheck ${SHELLCHECK_VERSION} no longer reports SC2129 — the rule is dormant and the grouping convention is unenforced. Re-check it before accepting the bump."
+            exit 1
+          fi
+          echo "shellcheck ${SHELLCHECK_VERSION} reports SC2129 on the canary — rule is live."
+
+          # 2. Has the ignore been re-added? Prose mentioning SC2129 is fine; an
+          #    actual list entry is not.
+          if grep -Eq "^[[:space:]]*-[[:space:]]*'shellcheck reported issue in this script: SC2129:" .github/actionlint.yaml; then
+            echo "::error::SC2129 is suppressed again in .github/actionlint.yaml. Group the appends into a single { ... } >> \"\$GITHUB_OUTPUT\" block instead of re-adding the ignore."
+            exit 1
+          fi
+          echo "no SC2129 entry in .github/actionlint.yaml — rule is enforced."
+
   # ── Request Copilot PR review (Tier 1 primary reviewer) — REM-098 ───────────
   # Single PR review path: this job only (no copilot-pr-review.yml). Issue dispatch
   # uses copilot-issue-dispatch.lock.yml (gh-aw) + copilot-quota-gate.yml — see EXECUTION_TIERS.md.
