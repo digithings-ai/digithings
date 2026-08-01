@@ -123,6 +123,17 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
   (`documents`, `theses`, `decision_log`, `deliberation_*`, `positions` incl.
   `rationale`/`pm_notes`) stay anon-readable **by design** — see
   [`README.md`](README.md), "What is public on purpose".
+- **Outside `public` — `realtime.messages` (migration 062, #1807):** the one RLS surface
+  in this chain that is not an Atlas table. Two topic-scoped policies authorize the
+  `prices:live` broadcast channel: `prices_live_receive_broadcast`
+  (`SELECT TO anon, authenticated`) and `prices_live_service_role_broadcast`
+  (`INSERT TO service_role`). The **absence** of an anon INSERT policy is the control —
+  it is what stops the public anon key from broadcasting forged quotes. These policies are
+  live only for clients that join with `config: { private: true }`; the anon
+  INSERT/UPDATE *grants* on that table are Supabase platform-managed and deliberately
+  untouched. `realtime.messages` is owned by `supabase_realtime_admin`, so unlike every
+  other migration here `062` cannot be applied as `postgres` — see
+  [`README.md`](README.md), "Rolling out Realtime authorization".
 - **Views (migrations 041, 050):** RLS does not apply to views; the curated public
   views are intentionally security-DEFINER (`security_invoker = false`) so the column
   projection — not base-table policy — decides what anon sees. Supabase's advisor flags
