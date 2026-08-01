@@ -3,13 +3,36 @@
 The single Supabase CLI project dir for the suite-wide **`core`** backend (Olympus/Atlas
 portfolio, market data, strategy store — see
 [ADR 0021](../../docs/adr/0021-digiquant-supabase-project-topology.md)). There is exactly
-**one** migration chain: the numbered files under [`migrations/`](migrations/)
-(`001`–`050`, checked by `digiquant/scripts/atlas/verify-supabase-migrations.sh`).
-[`SCHEMA.md`](SCHEMA.md) inventories the live tables and views.
+**one** migration chain: the numbered files under [`migrations/`](migrations/) —
+`001`–`062` at time of writing, with `037`, `038` and `059` never used; new work
+appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
+tables and views.
 
-Everything here is checked in for review and applied to the live project **manually
-post-merge** (via MCP, the SQL editor, or `supabase db push` / `supabase functions
-deploy`) — nothing auto-deploys.
+`digiquant/scripts/atlas/verify-supabase-migrations.sh` guards the chain's shape:
+`config.toml` is present, every file matches `NNN_name.sql`, and no two files share
+a numeric prefix. It runs as the first step of `test-digiquant.yml` (the
+`digiquant/**` path filter covers this directory) and locally via `make
+supabase-migrations-check`. It does **not** check ordering, and it does not compare
+against the live schema — `olympus_schema_migrations` is what records what prod has
+actually applied.
+
+**The one grandfathered collision: `025`.** `025_thesis_daily_fields.sql` and
+`025_trading_calendar.sql` both exist and were both applied on 2026-06-26.
+`db-migrate.yml` keys the ledger on the *full filename*, so renumbering either one
+mints a new ledger key for a file prod already ran. They are exempted by exact
+basename in the guard's `GRANDFATHERED_DUPES`; a third `025` still fails. Don't add
+to that list — take the next free prefix instead.
+
+**Migrations auto-deploy; edge functions do not.** A merge to `main` that touches
+`migrations/**` triggers [`db-migrate.yml`](../../.github/workflows/db-migrate.yml),
+which applies every pending file to the live project within seconds — no manual step,
+no `supabase db push`. (2026-08-01: PR #1809's promotion merged at 20:47:38Z and
+`057`/`058`/`060`/`061` were live by 20:48:20Z.) Since 2026-08-01T20:50Z the run waits
+on a required reviewer via the `production` environment (#1768); before that it was
+ungated entirely. Treat a migration reaching `main` as a production schema change.
+
+Edge functions and the pg_cron schedules below really are manual — `supabase functions
+deploy`, or the SQL editor.
 
 | Path | What it is |
 |---|---|
