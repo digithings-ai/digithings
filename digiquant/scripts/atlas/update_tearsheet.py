@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import math
 import os
 import sys
 import logging
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
+from typing import NamedTuple
 
 # --- Optional heavy dependencies (graceful fallback for CI / sandbox) ---------
 try:
@@ -207,6 +210,70 @@ def compute_technicals_for_tickers(tickers: list) -> dict:
             logger.warning("technical snapshot skipped for %s: %s", ticker, e)
 
     return result
+
+
+class NavRiskMetrics(NamedTuple):
+    """Risk metrics derived from a NAV series, in the units ``portfolio_metrics`` stores."""
+
+    sharpe: float
+    """Annualized Sharpe ratio at a 0% risk-free rate. Unitless — a ratio, not a percent."""
+
+    volatility_pct: float
+    """Annualized standard deviation of daily returns, in **percent** (18.4 == 18.4%)."""
+
+    max_drawdown_pct: float
+    """Worst peak-to-trough NAV decline, in **percent** and non-positive (-12.5 == -12.5%)."""
+
+
+def compute_nav_risk_metrics(navs: Sequence[float]) -> NavRiskMetrics:
+    """Sharpe, annualized volatility and max drawdown from a NAV series.
+
+    Volatility and drawdown are returned in **percent**, matching the single scale
+    ``portfolio_metrics`` has carried since migration 058 (#1748). Before that this
+    computation emitted fractions while the other two writers of the same two columns
+    emitted percent, so the column was mixed-unit and every reader that renames the
+    fields (``portfolio-risk-metrics.ts:93-94`` → ``annVolPct`` / ``maxDrawdownPct``)
+    mis-scaled tearsheet-written rows by 100x.
+
+    Sharpe is deliberately computed against the *fraction*-scale volatility so the scale
+    unification leaves it numerically unchanged — dividing an annualized mean return by a
+    percent would shrink every Sharpe by 100x.
+
+    Standard deviation is the sample (ddof=1) estimator, preserving the ``pandas``
+    ``Series.std()`` default this replaced. Extracted to module scope so it is testable
+    without ``pandas``/``numpy``/``yfinance``, none of which the unit lanes install.
+
+    Degenerate inputs return zeros rather than raising or propagating ``inf``/``nan``:
+    this is a manual recovery script and a zero NAV in a parsed digest must not abort it.
+    """
+    returns = [
+        (navs[i] - navs[i - 1]) / navs[i - 1] for i in range(1, len(navs)) if navs[i - 1] > 0
+    ]
+    returns = [r for r in returns if math.isfinite(r)]
+
+    sharpe = 0.0
+    volatility = 0.0  # fraction scale; converted on the way out
+    if len(returns) >= 2:
+        mean_r = sum(returns) / len(returns)
+        var_r = sum((r - mean_r) ** 2 for r in returns) / (len(returns) - 1)
+        volatility = math.sqrt(var_r) * math.sqrt(252)
+        if volatility > 0:
+            risk_free = 0.0
+            sharpe = (mean_r * 252 - risk_free) / volatility
+
+    peak = 0.0
+    worst_dd = 0.0
+    for nav in navs:
+        if nav > peak:
+            peak = nav
+        if peak > 0:
+            worst_dd = min(worst_dd, (nav - peak) / peak)
+
+    return NavRiskMetrics(
+        sharpe=round(sharpe, 6),
+        volatility_pct=round(volatility * 100.0, 6),
+        max_drawdown_pct=round(worst_dd * 100.0, 6),
+    )
 
 
 def simulate_portfolio(digests):
@@ -874,22 +941,10 @@ def main():
     else:
         cash_pct = cash_found
 
-    # Advanced performance metrics (yfinance-dependent)
+    # Advanced performance metrics. `volatility` and `max_dd` are PERCENT (#1748) —
+    # the scale every portfolio_metrics writer shares since migration 058.
     if _HAS_YFINANCE and len(history) > 1:
-        navs = pd.Series([h["nav"] for h in history])
-        returns = navs.pct_change().dropna()
-        if not returns.empty and returns.std() != 0:
-            vol = float(returns.std() * np.sqrt(252))
-            volatility = vol if not np.isnan(vol) else 0.0
-
-            risk_free = 0.00  # Default to 0 for simplicity
-            sh = float((returns.mean() * 252 - risk_free) / volatility)
-            sharpe = sh if not np.isnan(sh) else 0.0
-
-        cum_max = navs.cummax()
-        drawdowns = (navs - cum_max) / cum_max
-        m_dd = float(drawdowns.min())
-        max_dd = m_dd if not np.isnan(m_dd) else 0.0
+        sharpe, volatility, max_dd = compute_nav_risk_metrics([h["nav"] for h in history])
 
     performance_returns = calculate_performance_returns(
         nav_values=[float(row["nav"]) for row in history],

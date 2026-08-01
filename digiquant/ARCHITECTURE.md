@@ -871,6 +871,30 @@ as inception-to-date contribution. Its cumulative contribution chart instead app
 position snapshot's prior weight to the next interval's price return and overlays the exact
 NAV-rebased portfolio return.
 
+##### Risk-metric scale contract (#1748, migration 058)
+
+`portfolio_metrics.volatility` and `.max_drawdown` are **percent**, like every other
+`_pct`-shaped column on the table: `18.4` is 18.4% annualized volatility and `-12.5` is a
+12.5% peak-to-trough decline. All three writers now agree —
+`hermes/portfolio_materialize.py` (phase 9d) and `scripts/atlas/refresh_performance_metrics.py`
+already multiplied by 100, and `scripts/atlas/update_tearsheet.py` does so via
+`compute_nav_risk_metrics`, which is the only place that arithmetic lives in that script.
+`sharpe` is a ratio, computed against the fraction-scale volatility, and is unaffected.
+
+Migration 058 widens the two CHECK constraints to match (`volatility` 0–1000,
+`max_drawdown` -100–0). The pre-058 bounds were fraction-scaled (`<= 10`, `>= -1`), which
+the two percent writers could not satisfy: both are gated on `nav_history` reaching
+`_MIN_NAV_HISTORY_ROWS = 20`, and the first running drawdown they compute (~-1.31%) raises
+PostgREST `APIError 23514` — permanently, since running max drawdown is monotonically
+non-increasing. New writers of these columns must emit percent; readers may take the stored
+value directly (`frontend/olympus/lib/portfolio-risk-metrics.ts` maps them onto
+`annVolPct` / `maxDrawdownPct` unchanged).
+
+Known wart, deliberately not changed here: `computed_from` carries
+`DEFAULT 'tearsheet'` (migration 012) and phase 9d upserts without setting it, so a phase-9d
+row inserted before any `refresh_script` row for that date is labelled `tearsheet`. That
+label also suppresses the `refresh_performance_metrics.py` overwrite guard.
+
 #### Canonical market-thesis identity (#1615)
 
 `theses.topic_key` identifies one durable market opinion independently of its daily title,
