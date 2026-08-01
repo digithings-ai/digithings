@@ -8,6 +8,8 @@
  * so the env var must be present AT BUILD as well as at runtime.
  */
 
+import type { ActivityDetail } from "@/lib/chat-activity";
+
 export type EmbedBackendConfig =
   | { type: "digigraph" }
   | { type: "external-relay"; url: string }
@@ -36,6 +38,14 @@ export type EmbedTenantConfig = {
    * rather route capped visitors to sales than offer BYOK.
    */
   lockedContact?: string;
+  /**
+   * How much of the agent's thinking chain this tenant's visitors see.
+   * "off" emits nothing, "labels" emits step labels only, "full" adds the
+   * retrieved document titles. Gated server-side, so lower levels never put
+   * documents on the wire. Defaults to "labels" — a tenant nobody configured
+   * should not stream retrieved titles to anonymous visitors.
+   */
+  activityDetail: ActivityDetail;
   /**
    * Per-tenant secret. Knowing a tenant's host string is public (it's the
    * tenant's own domain) so registry membership alone must never grant
@@ -169,6 +179,15 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: lockedContact must be a string`);
   }
 
+  if (
+    v.activityDetail !== undefined &&
+    v.activityDetail !== "off" &&
+    v.activityDetail !== "labels" &&
+    v.activityDetail !== "full"
+  ) {
+    throw new Error(`${ctx}: activityDetail must be "off", "labels", or "full"`);
+  }
+
   return {
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
@@ -183,6 +202,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     suggestions,
     placeholder: typeof v.placeholder === "string" ? v.placeholder : undefined,
     lockedContact: typeof v.lockedContact === "string" ? v.lockedContact : undefined,
+    activityDetail: (v.activityDetail as ActivityDetail | undefined) ?? "labels",
   };
 }
 
