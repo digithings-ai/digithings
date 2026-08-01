@@ -347,6 +347,38 @@ DIGI_CHECKPOINTER_POSTGRES_URI=postgresql://...
 
 A `threading.Lock` (`_checkpointer_lock`) guards lazy initialization. Context managers for SQLite and Postgres are stored in `_cm_holders` to prevent garbage collection — this is a manual resource management pattern that will leak if the process forks.
 
+#### 5.5.2 Postgres retention — the checkpointer does not prune itself (#1758)
+
+`PostgresSaver` never deletes thread state. Nothing in `langgraph-checkpoint-postgres` expires a `thread_id`, so **any deployment using `DIGI_CHECKPOINTER=postgres` with non-reusable thread ids grows without bound** and the operator owns retention.
+
+Olympus is the load-bearing case: `hermes/chain.py:125` derives `thread_id` as `"<GITHUB_RUN_ID>::atlas"` / `"::hermes"`, which is never reused, so no row ever became collectable. By 2026-08-01 the four checkpointer tables held 952 MB of a 1263 MB database (75%) and were growing ~50-58 MB/day.
+
+Retention is enforced **in the database, not in DigiGraph** — the pruner must not depend on a Python process being alive, and DigiGraph has no scheduler. `digiquant/supabase/migrations/061_checkpointer_retention.sql` installs `public.prune_langgraph_checkpoints(retain_days integer DEFAULT 14)` plus two daily pg_cron jobs (prune at 05:20 UTC, plain `VACUUM (ANALYZE)` at 05:50 UTC). See [`digiquant/supabase/SCHEMA.md`](../digiquant/supabase/SCHEMA.md) for the operator view (pause, verify, ownership requirement).
+
+Three properties that any other Postgres-checkpointer deployment should copy:
+
+- **Prune by `thread_id`, not by checkpoint.** `checkpoint_blobs` is keyed `(thread_id, checkpoint_ns, channel, version)` with **no `checkpoint_id`** column, so a per-checkpoint delete leaves unreachable blobs behind — and blobs are where the bytes are.
+- **Key staleness on `max((checkpoint->>'ts')::timestamptz)` per thread.** Per-row it is a reliable ISO 8601 timestamp; taking the max means an in-flight or freshly-resumed thread can never be eligible, and an unparsable/absent `ts` yields `NULL`, fails the comparison, and is retained.
+- **Retention is a resume ceiling.** Any resume-from-checkpoint feature (here, `pipeline-olympus.yml`'s `resume_run_id`) can only reach back as far as the retention window, so the window can never be zero.
+
+**The real cost driver is upstream of retention.** 94% of the bytes sit on the `__pregel_tasks` channel: `FanOutPhase` dispatches one `Send` per item and `pipeline_builder.py:57-58` hands each worker a **full copy of the live state**, so one H6 superstep persisted 52 complete `AtlasResearchState` copies (a single 48 MB row was measured). That is `O(fan-out width x state size)` per superstep and it contradicts `AGENTS.md`'s "State stays lean … no large DataFrames in state or LangGraph checkpoints" as well as [`docs/LANGGRAPH_REVIEW.md`](docs/LANGGRAPH_REVIEW.md). Shrinking the `Send` payload to a cursor is a ~20x lever; it changes `FanOutPhase`'s state-copy contract in this shared library and is therefore deferred as a human-gated architecture change (follow-up to #1758). Retention caps the footprint; it does not reduce the write volume.
+#### 5.5.3 Postgres connection bounds — #1734
+
+`PostgresSaver.from_conn_string` forwards its argument straight to `psycopg.Connection.connect`, which applies **no** connect timeout and **no** TCP keepalives, and exposes no kwarg for either. An established connection to a peer that disappears without sending an RST therefore stays in `ESTABLISHED` indefinitely, and a checkpoint read/write blocks with nothing but the caller's own job timeout as a backstop — the shape of the 2026-07-30 Olympus stall (210 minutes of silence inside a 240-minute job, beginning at a checkpoint-write boundary).
+
+`_bounded_conn_string()` closes that by merging the bounds into the conninfo itself, which libpq accepts as ordinary connection parameters:
+
+| Parameter | Value | Bounds |
+|---|---|---|
+| `connect_timeout` | `10` | establishing a connection |
+| `keepalives` / `keepalives_idle` / `keepalives_interval` / `keepalives_count` | `1` / `30` / `10` / `5` | an established-but-dead connection (~80s to detect) |
+
+It accepts either libpq spelling (`postgresql://` URI or `host=… dbname=…` keyword/value) via `psycopg.conninfo.make_conninfo`, and **any parameter already present in `DIGI_CHECKPOINTER_POSTGRES_URI` wins** — that env var is the override path. Missing psycopg or an unparseable conninfo returns the string unchanged with a warning: bounding a connection must never itself be why a process fails to start.
+
+`statement_timeout` is deliberately **not** set. It is enforced server-side, so it cannot help when the network path is gone, and it risks aborting a legitimately slow write against a checkpoint table already at ~950 MB in production (#1758).
+
+Timing is the only thing that changes: an unreachable Postgres already raised `psycopg.OperationalError` out of `get_checkpointer()` (via `cm.__enter__()`), so no new failure *mode* is introduced — it now surfaces in ~10s instead of hanging on the OS TCP timeout. On the Olympus path `hermes/chain.py::_acquire_checkpointer` catches `Exception` and degrades to an uncheckpointed run.
+
 ### 5.6 Streaming SSE Architecture
 
 ```
@@ -762,6 +794,22 @@ Atlas migration (issue #176, ADR-0009) is the first consumer.
   as the "what to research" context and a Pydantic class as the "what shape
   to return." Stable blocks (shared context, skill, output schema) carry
   `cache_control: ephemeral` for Anthropic prompt caching.
+  - **Two request shapes, and the retry deliberately switches between them (#1739).**
+    Without `tools` the call is `completion_text(..., response_format=json_schema
+    strict)` — provider-side schema enforcement. With `tools` the first attempt is
+    `run_tools(...)` and carries **no** `response_format`, because `digillm`'s
+    `completion` drops that field whenever `tools` is set. So a chatty model can
+    answer a tool-grounded turn with a prose preamble that fails `json.loads` at
+    char 0.
+  - Therefore **every retry is tool-free and enforced**, never a second tool loop.
+    `digillm.run_tools` builds its tool-result conversation in a local copy and
+    returns only the final string, so re-running it would re-bill 2-6 completions to
+    rebuild grounding the caller cannot see — and still send no `response_format`.
+    The failing attempt's raw text is already in the conversation, so one tool-free
+    `completion_text` call asks the provider to re-emit it as schema-valid JSON.
+  - If the enforced retry itself fails at the provider, the **original** parse error
+    is re-raised, so downstream fail-soft handlers see the same exception shape they
+    saw before this behaviour existed.
 - `build_pipeline(state_cls, phases)` — compiles a `list[PipelinePhase]` into
   a LangGraph `StateGraph`. Phases run sequentially; nodes inside a phase
   run in parallel with synthetic fan-in barriers. The `__barrier__` prefix

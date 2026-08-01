@@ -49,6 +49,27 @@ def _skill_edit_path(slug: str) -> Path:
     return _atlas_data_root() / "skills" / slug / f"{slug}-edit.md"
 
 
+# Limits the DocumentPatch schema enforces but that none of the 17 *-edit.md
+# skills stated (#1740). The model overran the 240-char `reason` cap regularly,
+# and because it is a hard schema constraint a single long reason raised
+# ValidationError and discarded the WHOLE patch — costing 1-4 researched
+# segments per run, and the master digest itself on 2026-07-28.
+#
+# Appended at the single load chokepoint rather than copied into 17 heterogeneous
+# files, so it cannot drift between them. Keep the numbers in sync with
+# digiquant.olympus.edit_mode.models.PatchOp / DocumentPatch — there is a test
+# asserting they match.
+EDIT_SCHEMA_CONSTRAINTS = """## Output constraints (schema-enforced)
+
+These are hard limits. Exceeding one previously discarded the entire patch:
+
+- `ops[].reason` — **240 characters maximum**. One short sentence. Over-long
+  values are now truncated rather than rejected, so anything past 240 chars is
+  silently lost; keep it brief instead.
+- `ops[].path` — 512 characters maximum; an RFC 6901 JSON Pointer starting `/`.
+- `one_line_summary` — 400 characters maximum."""
+
+
 class MalformedFrontmatterError(ValueError):
     """Raised when a SKILL.md starts with ``---`` but has a broken YAML block."""
 
@@ -98,13 +119,15 @@ def load_skill_edit(slug: str) -> str:
 
     Used by Atlas edit-mode nodes (spec §5.6). Separate cache from
     :func:`load_skill` so full and edit variants can coexist.
+
+    :data:`EDIT_SCHEMA_CONSTRAINTS` is appended to every edit skill (#1740).
     """
     path = _skill_edit_path(slug)
     if not path.is_file():
         raise SkillNotFoundError(f"edit skill not found: {slug!r} (expected at {path})")
     raw = path.read_text(encoding="utf-8")
     _, body = _split_frontmatter(raw)
-    return body.strip()
+    return f"{body.strip()}\n\n{EDIT_SCHEMA_CONSTRAINTS}"
 
 
 def load_skill_with_frontmatter(slug: str) -> tuple[dict[str, object], str]:

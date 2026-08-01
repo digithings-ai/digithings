@@ -129,6 +129,22 @@ A missing required provider key raises `RuntimeError` (no silent fallback), so
 misconfiguration surfaces immediately rather than masquerading as a default-model
 call.
 
+Every client — cached, provider, and both uncached BYOK paths — is constructed with
+an **explicit** `timeout=` (#1734). The value is `httpx.Timeout(600, connect=5.0)`,
+byte-identical to the OpenAI SDK default it replaces, so this states the existing
+bound rather than changing it: previously the bound lived only in the SDK's
+constants module, invisible from this repo and free to move on a dependency bump.
+Override with `DIGILLM_REQUEST_TIMEOUT_SECONDS` / `DIGILLM_CONNECT_TIMEOUT_SECONDS`.
+
+Both are read **once at import**, not per call, because `_client_cache` is keyed on
+`(api_key, base_url)` only — a call-time env read would hand a cached client its
+stale timeout and falsify the cache's "recreated when env changes" contract.
+
+The silence budget for one `completion` is the product of three layers, not this
+value alone: the SDK's own `max_retries=2` (3 HTTP attempts) x `_create_with_retry`'s
+12 attempts, each attempt bounded by the read timeout. Lowering
+`DIGILLM_REQUEST_TIMEOUT_SECONDS` is the only single-knob way to shrink that product.
+
 ## Per-request override contract (contextvars)
 
 This is the contract **digigraph** will use after migration (follow-up #12). The
@@ -195,10 +211,46 @@ digismith on the path) plus `LANGSMITH_API_KEY` to enable spans.
 | `OPENAI_API_KEY` / `OPENAI_API_BASE` | default client | Endpoint + key for non-prefixed models (LiteLLM / Ollama / OpenRouter / OpenAI). |
 | `LITELLM_PROXY_API_KEY` | default client | Proxy bearer key (below per-request override, above `OPENAI_API_KEY`). |
 | `XAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` | provider clients | Keys for the corresponding `provider/` prefixes. |
+| `DIGILLM_REQUEST_TIMEOUT_SECONDS` | all clients | Read/write/pool timeout per HTTP attempt (default 600, = the OpenAI SDK default). Read once at import. |
+| `DIGILLM_CONNECT_TIMEOUT_SECONDS` | all clients | Connect timeout (default 5, = the OpenAI SDK default). Separate from the above so a wider read timeout cannot silently widen connect. |
 | `DIGI_LLM_CACHE_TTL_SECONDS` | response cache | Response-cache TTL (default 3600). |
 | `DIGI_TOOL_MESSAGE_MAX_CHARS` | tool loop | Cap on tool-result text injected into the next turn (default 12000). |
 | `DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY` | `completion` | Empty-response self-heal: retry count (default 2) + backoff seconds (default 2.0). |
 | `OPENROUTER_FALLBACK_MODELS` | `completion` | Comma-separated cheap models for OpenRouter provider-fallback routing on an empty retry. |
+
+## Tests and CI
+
+```bash
+pytest digillm/tests -q          # 57 tests, offline — every provider call is monkeypatched
+ruff check digillm/src digillm/tests && ruff format --check digillm/src digillm/tests
+```
+
+CI gate: [`.github/workflows/test-digillm.yml`](../.github/workflows/test-digillm.yml),
+wired into `ci.yml` behind the `digillm` path filter in `scripts/ci_paths.yaml`.
+Added in #1788 — before that this suite ran in **no** lane, and a combined
+`pytest` from the repo root could not even collect it: `digillm/tests/__init__.py`
+claimed the top-level `tests` package name that the repo-root `tests/` directory
+already owns, so collection died with `No module named 'tests.test_digillm'` and
+took `make test-unit` down with it. Do not reintroduce that file.
+
+The suite is marked `unit` module-wide (`pytestmark = pytest.mark.unit`, the shape
+`digifetch/tests` uses), so it contributes to `make test-unit`. Until #1788 it
+carried no marker at all and `pytest digillm/tests -m unit` selected **zero** of
+its tests. Mark new tests by leaving that module-level assignment alone rather
+than decorating individually.
+
+Two config details that are easy to get wrong here:
+
+- The `unit` marker is registered in **`digillm/pyproject.toml`**, not only in the
+  repo-root `pytest.ini`. Because this package's `pyproject.toml` carries a
+  `[tool.pytest.ini_options]` section, `pytest digillm/tests` resolves rootdir to
+  `digillm/` and reads *that* file as its configfile — the root `pytest.ini`'s
+  `markers` never applies, and without the local registration every run prints
+  `PytestUnknownMarkWarning`. (`digifetch` needs no equivalent: it has no
+  `[tool.pytest.ini_options]`, so it falls through to the root config.)
+- The CI lane still runs unfiltered (`pytest digillm/tests`, no `-m unit`), so a
+  future test that somehow escapes the marker is still executed rather than
+  silently skipped by a green lane.
 
 ## Monorepo integration (follow-ups for the integrator)
 

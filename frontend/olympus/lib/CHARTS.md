@@ -26,11 +26,18 @@ ticker/bucket/leg, stacked composition, trivial sparklines) stays on recharts.
 
 ### Migrated to lightweight-charts
 
-| File | Chart(s) | Why it is time-series |
-|---|---|---|
-| `components/portfolio/performance-chart-workspace.tsx` | `NavComparableChart` (indexed NAV area + dashed comparable overlays), `DailyReturnsComboChart` (daily-% histogram + NAV-index line), drawdown view = shared `<SyncedTearsheet/>` (`@digithings/web`, #1548: one instance, NAV pane over underwater pane, shared axis/crosshair/zoom) | The canonical equity-curve surface: daily NAV vs benchmark tickers; daily returns are per-trading-day values on the same axis. |
-| `components/portfolio/performance-rolling-chart.tsx` | Rolling Sharpe + rolling ann. vol (dual price scale) | Rolling risk metrics over a trading-day window. |
-| `components/portfolio/PositionDrilldown.tsx` | Weight-% area + close-$ line (dual scale) with event dots; cumulative-ppt mini pane | Both panes are daily series over the drilldown window. |
+**None today.** The three migrated surfaces — `performance-chart-workspace.tsx`
+(`NavComparableChart` + `DailyReturnsComboChart` + the `<SyncedTearsheet/>`
+drawdown view), `performance-rolling-chart.tsx` (rolling Sharpe / ann. vol) and
+`PositionDrilldown.tsx` (weight-% area + close-$ line) — all belonged to the
+orphaned Portfolio→Performance tab and were **deleted in #1747**: that tab had
+had zero importers since 2026-07-19 (`PortfolioTabId` is `'holdings' | 'theses'`).
+
+The scaffold stays. `lib/lw-chart.tsx` is unchanged and remains the sanctioned
+entry point for the next time-series chart (see "Grammar for new charts"), and
+`lib/lw-chart-canon.test.ts` now **derives** the migrated set by scanning
+`components/` for `lightweight-charts` imports rather than naming files, so the
+canon binds the next such chart automatically.
 
 The standalone `components/portfolio/performance-drawdown-chart.tsx`
 (underwater BaselineSeries mirroring `drawdown-plot-reference.tsx`) was
@@ -65,6 +72,11 @@ ruling lives in `frontend/digiweb/CHARTS.md`.
 Where a shared primitive could not express shipped behavior, the rich path
 stayed local and the gap is recorded here as the promotion spec (MIGRATION.md
 "Promotion playbook v2": never force a primitive; ledger the gap).
+
+> **Historical as of #1747.** Every consuming surface below lived on the
+> Performance tab and is deleted. These entries are **kept deliberately**: they
+> are the promotion specs digiweb would need to close the gaps, and the record a
+> revival would start from. Read them in the past tense.
 
 - **`<SyncedTearsheet/>` vs the NAV-comparables view** (SCOPED adoption).
   The primitive hosts the workspace's Drawdown view only. The NAV view

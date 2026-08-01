@@ -11,6 +11,12 @@ and swallowed; :func:`is_degraded` lets the CLI decide whether a run was bad eno
 exit non-zero (so CI's outer retry fires) WITHOUT coupling that decision to the write
 succeeding.
 
+**Health and retry-worthiness are two questions** (#1736). :attr:`RunSummary.status` is the
+health verdict — tightened so that nothing which goes wrong after the research segments can
+hide behind a green row. :attr:`RunSummary.retry_signal` is the CI gate and is frozen at the
+pre-#1736 rules, so making the report honest never costs a retry storm. New ``breakdown``
+keys go through :func:`register_breakdown_contributor` rather than editing this module.
+
 Segment accounting reads the discriminated ``SegmentSlot`` payloads: ``today`` = freshly
 generated, ``carried`` = fell back to the baseline. A carry whose reason is
 :data:`~digiquant.olympus.atlas.phases.fail_soft.NODE_FAILED_REASON` is a *node failure*
@@ -20,7 +26,7 @@ generated, ``carried`` = fell back to the baseline. A carry whose reason is
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
@@ -56,9 +62,76 @@ _HERMES_COMMIT_PHASE = "hermes_h9_commit_run"
 _MASTER_DIGEST_PHASE = "phase7_synthesis"
 _MASTER_DIGEST_NODE = "master-digest"
 
+# Hermes portfolio/thesis phases whose PhaseErrors mean "a piece of the book's reasoning
+# died" (#1742). Deliberately an explicit allow-list of the five literals actually emitted
+# (``h6_deliberation.PHASE_NAME``, ``h7_pm_direction.PHASE_NAME``, the ``phase_hermes``
+# marker shared by ``portfolio_common`` / ``thesis_common``, ``phase7d_pm``,
+# ``phase9_evolution``) rather than a ``hermes_*`` prefix match: a prefix would also swallow
+# H1-H5 bookkeeping errors and ``hermes_h9_commit_run``, which is already gated separately
+# (#1555) and must NOT be double-counted here.
+_HERMES_FAILURE_PHASES = frozenset(
+    {
+        "phase_hermes",
+        "hermes_h6_deliberation",
+        "hermes_h7_pm_direction",
+        "phase7d_pm",
+        "phase9_evolution",
+    }
+)
+
 # Default share of failed segments above which a run is "degraded" (CLI may exit non-zero).
 _DEGRADED_PCT_DEFAULT = 50.0
+# Default share of Hermes deliberations that may fail before the run is degraded (#1742).
+# Calibrated against production: 2026-07-31 (31 of 39 deliberations dead → 79%) and 07-29
+# (33 of 40 → 83%) must flip; the 07-26 baseline (1 of 50 → 2%) and 06-24 (9 of ~40 → 23%,
+# mostly benign ``max_rounds`` caps) must not. H6 emits the *same* ``(phase, node)`` for an
+# LLM crash and a benign cap, and discriminating them would mean parsing message text — so
+# both are counted and the threshold is set wide enough that routine caps never trip it.
+_HERMES_DEGRADED_PCT_DEFAULT = 50.0
 _ERROR_SUMMARY_MAX = 2000
+
+# ── breakdown extension seam (#1736) ────────────────────────────────────────────────────
+#
+# ``breakdown`` is the run's schema-free telemetry surface: adding a key needs no migration.
+# Several packages contribute one key each (roster tallies, merge-fallback counters, spend,
+# content-change signals). Registering a contributor here keeps those changes to *one new
+# module plus one registration line* instead of seven concurrent edits to ``_segment_counts``.
+#
+# Contract for a contributor:
+#   * pure — read ``state``, return ``{key: json_serialisable}``; never mutate state
+#   * fail-soft — an exception is logged and swallowed (telemetry must never crash a run)
+#   * it must not reuse a key another contributor or ``summarize_run`` already owns; a
+#     collision is logged and the *existing* value wins
+#   * it runs once per run, at ``summarize_run`` time — never mid-run (see ``_segment_counts``)
+_BREAKDOWN_CONTRIBUTORS: list[Callable[[AtlasResearchState], dict[str, Any]]] = []
+
+
+def register_breakdown_contributor(
+    fn: Callable[[AtlasResearchState], dict[str, Any]],
+) -> Callable[[AtlasResearchState], dict[str, Any]]:
+    """Register ``fn`` as a ``breakdown`` contributor. Returns ``fn`` (usable as a decorator)."""
+    _BREAKDOWN_CONTRIBUTORS.append(fn)
+    return fn
+
+
+def _apply_breakdown_contributors(state: AtlasResearchState, breakdown: dict[str, Any]) -> None:
+    """Fold every registered contributor's keys into ``breakdown`` in place (fail-soft)."""
+    for fn in _BREAKDOWN_CONTRIBUTORS:
+        try:
+            extra = fn(state) or {}
+        except Exception as exc:  # a broken contributor must never gate a run
+            logger.warning("diagnostics: breakdown contributor %r failed (%s)", fn, exc)
+            continue
+        for key, value in extra.items():
+            if key in breakdown:
+                logger.warning(
+                    "diagnostics: contributor %r tried to overwrite breakdown[%r]; keeping "
+                    "the existing value",
+                    fn,
+                    key,
+                )
+                continue
+            breakdown[key] = value
 
 
 @dataclass(frozen=True)
@@ -79,6 +152,13 @@ class RunSummary:
     # the diagnostics breakdown so it survives the ``error_summary`` truncation cap.
     book_materialized: bool = False
     book_committed: bool = False
+    # Whether CI's outer retry should fire (#1736). DELIBERATELY NOT ``status in
+    # ("degraded", "failed")`` any more: ``status`` answers "was this run healthy?" and is
+    # tightened by the rules below, while ``retry_signal`` answers "is re-running worth the
+    # money?" and is frozen at the pre-#1736 gate. A day that lost 4 of 27 research segments
+    # but committed a good book is honestly ``degraded`` — and re-running it would burn three
+    # attempts plus ~20 min of backoff sleeps on work that already landed (#809).
+    retry_signal: bool = False
 
 
 def _tally_slot(slot: Any, counts: list[int]) -> None:
@@ -113,10 +193,14 @@ def _breaker_skips(slots: Mapping[str, Any]) -> dict[str, str]:
     return skips
 
 
-def _segment_counts(state: AtlasResearchState) -> tuple[int, int, int, int, dict[str, Any]]:
+def _segment_totals(state: AtlasResearchState) -> tuple[int, int, int, int, dict[str, Any]]:
     """(total, ok, carried, failed, per-phase breakdown) over the research segment slots.
 
     Covers the four dict-backed phases AND the single macro slot (``phase3_output``).
+
+    Pure counting only — no registered contributors. :func:`atlas_research_produced` calls
+    this **mid-run** (``chain`` uses it to gate Hermes), and a contributor must never see a
+    half-populated state. :func:`_segment_counts` is the end-of-run wrapper that adds them.
     """
     ok = carried = failed = 0
     breakdown: dict[str, Any] = {}
@@ -146,6 +230,17 @@ def _segment_counts(state: AtlasResearchState) -> tuple[int, int, int, int, dict
         carried += counts[1]
         failed += counts[2]
     return ok + carried, ok, carried, failed, breakdown
+
+
+def _segment_counts(state: AtlasResearchState) -> tuple[int, int, int, int, dict[str, Any]]:
+    """:func:`_segment_totals` plus every registered ``breakdown`` contributor.
+
+    **This is the extension seam** (#1736). Call it once, at the end of a run
+    (:func:`summarize_run`) — never on the mid-run gating path.
+    """
+    total, ok, carried, failed, breakdown = _segment_totals(state)
+    _apply_breakdown_contributors(state, breakdown)
+    return total, ok, carried, failed, breakdown
 
 
 def _snapshot_published(state: AtlasResearchState) -> bool:
@@ -186,14 +281,40 @@ def book_committed(state: AtlasResearchState) -> bool:
     return _book_status(state)[1]
 
 
+def _hermes_deliberation_health(state: AtlasResearchState, errors: list[Any]) -> tuple[int, int]:
+    """``(deliberations, hermes_failures)`` — the density of dead Hermes reasoning (#1742).
+
+    On 2026-07-31 the H6 deliberation LLM failed for 31 of 39 tickers and the run still
+    reported ``ok``: each failure is a *node-level* PhaseError, so it never reached the
+    chain-error gate, and it carries the analyst stance forward so no segment is marked
+    failed either. The whole portfolio was then sized off carried stances.
+
+    The denominator is ``phase_hermes.deliberation_summaries`` — the number of tickers the
+    portfolio path actually deliberated on, i.e. the best available measure of Hermes fan-out
+    width (the roster width itself is not in state at this point). The numerator counts every
+    :data:`_HERMES_FAILURE_PHASES` error, caps and crashes alike, because H6 emits an
+    identical ``(phase, node)`` for both and telling them apart would mean parsing message
+    text — brittle, and it would silently stop counting the moment a message is reworded.
+    """
+    phase_hermes = getattr(state, "phase_hermes", None)
+    summaries = getattr(phase_hermes, "deliberation_summaries", None) or {}
+    failures = sum(1 for e in errors if getattr(e, "phase", None) in _HERMES_FAILURE_PHASES)
+    return len(summaries), failures
+
+
 def summarize_run(
     state: AtlasResearchState,
     *,
     degraded_pct: float = _DEGRADED_PCT_DEFAULT,
+    hermes_degraded_pct: float = _HERMES_DEGRADED_PCT_DEFAULT,
 ) -> RunSummary:
-    """Pure: derive segment counts, an error summary, and an overall status from state.
+    """Pure: derive segment counts, an error summary, a status and a retry signal from state.
 
-    Status values (in precedence order):
+    Two verdicts come out of the same facts and deliberately diverge (#1736). Everything that
+    went wrong *after* the research segments used to be invisible: eight separate issues
+    (#1736 #1732 #1735 #1738 #1737 #1733 #1763 #1742) are one defect wearing eight hats.
+
+    ``status`` — the health verdict the dashboard and ``atlas_run_diagnostics`` read:
 
     - ``"failed"`` — nothing fresh was produced AND no snapshot was published; or a
       core research engine (atlas/hermes) crashed at the chain level.
@@ -201,9 +322,15 @@ def summarize_run(
       run still published a useful book and must not be reported as failed. The snapshot
       check prevents a SIGINT-at-startup (no book produced) from being mislabelled as
       "cancelled" (#814).
-    - ``"degraded"`` — failed-segment share exceeds ``degraded_pct`` OR any non-core
-      chain-level phase crashed (publish/materialize/risk-sizing).
+    - ``"degraded"`` — any non-core chain-level crash (publish/materialize/risk-sizing/
+      beliefs/terminal), a master-digest synthesis failure, **any** failed research segment,
+      a majority of Hermes deliberations dead, an H9 non-commit (#1555), or Atlas research
+      with no committed book at all.
     - ``"ok"`` — all other cases.
+
+    ``retry_signal`` — whether CI's outer retry should fire. Frozen at the pre-#1736 gate
+    (see :class:`RunSummary`): the new rules make the *report* honest without making CI
+    re-run days whose book already committed.
 
     ``segments_failed`` counts node-failure carries (not deliberate carries); chain-level
     crashes are recorded by ``chain._record_chain_error`` with ``phase == "chain"`` so
@@ -212,6 +339,9 @@ def summarize_run(
     total, ok, carried, failed, breakdown = _segment_counts(state)
     errors = list(getattr(state, "errors", []) or [])
     book_materialized, book_committed_ = _book_status(state)
+    # Same predicate the chain uses to decide whether to run Hermes at all — reused here so
+    # the no-book gate below cannot fire on a run where Hermes was legitimately never reached.
+    atlas_produced = total > 0 and not _atlas_chain_crashed(errors)
     # Every H9 non-commit outcome, unified: (1) a book that materialized but never persisted
     # (coherence fail-closed / idempotency conflict / no-manifest skip), OR (2) any
     # ``hermes_h9_commit_run`` PhaseError — which also covers the memo-present-but-no-book
@@ -260,13 +390,26 @@ def summarize_run(
             :_ERROR_SUMMARY_MAX
         ]
 
+    # Hermes reasoning density (#1742) — recorded unconditionally so the row is auditable
+    # even on runs the gate does not trip, and so it survives the error_summary cap.
+    hermes_total, hermes_failed = _hermes_deliberation_health(state, errors)
+    if hermes_total or hermes_failed:
+        breakdown["hermes_deliberation"] = {"total": hermes_total, "failed": hermes_failed}
+
     chain_errors = [e for e in errors if getattr(e, "phase", None) == _CHAIN_ERROR_PHASE]
     core_engine_down = any(getattr(e, "node", None) in _CORE_ENGINES for e in chain_errors)
 
-    # A run that published a snapshot before SIGINT / ctrl-C did useful work —
-    # promote from "failed" to "cancelled" so the dashboard reflects what happened.
-    # Requiring _snapshot_published guards against a SIGINT-at-startup (no book
-    # produced) being mislabelled as "cancelled" (#814).
+    # ── legacy verdict → retry_signal ────────────────────────────────────────────────────
+    # Deliberately unchanged from the pre-#1736 gate, because this is what decides whether
+    # CI spends another two attempts plus ~20 min of backoff (#726/#809/#1555). The
+    # ``degraded_pct`` share rule lives HERE and nowhere else now: with the STRICT rule below,
+    # it no longer has any influence on ``status`` — ``ATLAS_DEGRADED_RUN_PCT`` has narrowed
+    # from "how much damage is unhealthy" to "how much damage is worth re-running".
+    #
+    # A run that published a snapshot before SIGINT / ctrl-C did useful work — promote from
+    # "failed" to "cancelled" so the dashboard reflects what happened. Requiring
+    # _snapshot_published guards against a SIGINT-at-startup (no book produced) being
+    # mislabelled as "cancelled" (#814).
     nothing_fresh = total == 0 or ok == 0
     if nothing_fresh or core_engine_down:
         if _snapshot_published(state) and not core_engine_down:
@@ -287,6 +430,31 @@ def summarize_run(
     if commit_failed and status in ("ok", "cancelled"):
         status = "degraded"
 
+    retry_signal = status in ("degraded", "failed")
+
+    # ── health verdict → status (#1736) ──────────────────────────────────────────────────
+    # These rules only ever escalate "ok". "failed"/"cancelled" already say more than
+    # "degraded" would, and escalating them would lose information.
+    if status == "ok":
+        for reason, tripped in (
+            # STRICT (D1): one dead research segment is not a rounding error. Under the old
+            # 50%-share rule 2026-07-29 lost 5 of 27 segments and still reported "ok".
+            ("failed_segments", failed > 0),
+            # A majority of the book's deliberations dead — see _hermes_deliberation_health.
+            (
+                "hermes_deliberations",
+                hermes_total > 0 and (hermes_failed / hermes_total) * 100.0 > hermes_degraded_pct,
+            ),
+            # No-book gate: Atlas produced research, Hermes was therefore run by the chain,
+            # and yet nothing committed. Closes the residual detection hole behind #1766 —
+            # ``commit_failed`` above only fires when a book *materialized* first or H9 raised,
+            # so a silent "H9 produced nothing at all" day still reported "ok".
+            ("no_committed_book", atlas_produced and not book_committed_),
+        ):
+            if tripped:
+                status = "degraded"
+                breakdown.setdefault("degraded_reasons", []).append(reason)
+
     return RunSummary(
         segments_total=total,
         segments_ok=ok,
@@ -297,17 +465,32 @@ def summarize_run(
         breakdown=breakdown,
         book_materialized=book_materialized,
         book_committed=book_committed_,
+        retry_signal=retry_signal,
     )
 
 
 def is_degraded(state: AtlasResearchState, *, degraded_pct: float = _DEGRADED_PCT_DEFAULT) -> bool:
-    """True when the run is degraded/failed enough to warrant a non-zero CLI exit (CI retry).
+    """True when the run is bad enough to warrant a non-zero CLI exit (CI retry).
+
+    This is :attr:`RunSummary.retry_signal`, **not** ``status in ("degraded", "failed")``.
+    Since #1736 the two differ: ``status`` was tightened (any failed segment, dead Hermes
+    deliberations, no committed book) while the retry gate was deliberately left frozen, so
+    an honest ``degraded`` on a day whose book committed does not cost three more CI attempts.
+    Read ``summarize_run(state).status`` for health; call this only for the exit code.
 
     ``"cancelled"`` is excluded: a cancelled run that already published a book is
     not worth retrying — the book is on disk and the next scheduled run will pick
     up from there (#814).
     """
-    return summarize_run(state, degraded_pct=degraded_pct).status in ("degraded", "failed")
+    return summarize_run(state, degraded_pct=degraded_pct).retry_signal
+
+
+def _atlas_chain_crashed(errors: list[Any]) -> bool:
+    """True when Atlas crashed at the chain level (``phase="chain"``, ``node="atlas"``)."""
+    return any(
+        getattr(e, "phase", None) == _CHAIN_ERROR_PHASE and getattr(e, "node", None) == "atlas"
+        for e in errors
+    )
 
 
 def atlas_research_produced(state: AtlasResearchState) -> bool:
@@ -319,14 +502,12 @@ def atlas_research_produced(state: AtlasResearchState) -> bool:
     incident where Atlas returned empty LLM responses yet a pm-rebalance was still written
     on 2-day-stale prices (#944). A fully-carried quiet delta (segments carried from the
     baseline, none fresh) still counts as produced — the carried research is valid.
+
+    Uses :func:`_segment_totals`, not :func:`_segment_counts`: the chain calls this mid-run,
+    where registered ``breakdown`` contributors must not be invoked.
     """
-    errors = list(getattr(state, "errors", []) or [])
-    atlas_crashed = any(
-        getattr(e, "phase", None) == _CHAIN_ERROR_PHASE and getattr(e, "node", None) == "atlas"
-        for e in errors
-    )
-    total, *_rest = _segment_counts(state)
-    return not atlas_crashed and total > 0
+    total, *_rest = _segment_totals(state)
+    return total > 0 and not _atlas_chain_crashed(list(getattr(state, "errors", []) or []))
 
 
 def _row(
@@ -440,6 +621,7 @@ __all__ = [
     "atlas_research_produced",
     "book_committed",
     "is_degraded",
+    "register_breakdown_contributor",
     "summarize_run",
     "write_row",
 ]

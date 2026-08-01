@@ -44,7 +44,18 @@ def _trading_day_only(d: str) -> bool:
 
 
 def _prior_trading_date(execution_date: str) -> Optional[str]:
-    """Previous calendar date that falls on Mon–Fri (US equity session proxy)."""
+    """Previous calendar date that falls on Mon–Fri (US equity session proxy).
+
+    **For `documents.date` walks only** — "the PM decision published the prior
+    session" (Fri decision → Mon open). `resolve_rebalance_payload_fallback` and
+    `main`'s ``--prior-trading-day-rebalance`` use it that way, as does
+    ``backfill_position_event_reasons._resolve_rebalance_doc_date``.
+
+    Do **not** use it to pick the book to diff a new book against: `positions` is
+    not written every weekday, so the calendar proxy resolves to a date with no
+    rows and every held name then looks like a fresh OPEN (#1743). Positions
+    comparisons use :func:`_prior_book_date`.
+    """
     try:
         cur = datetime.fromisoformat(execution_date).date()
     except (TypeError, ValueError):
@@ -54,6 +65,59 @@ def _prior_trading_date(execution_date: str) -> Optional[str]:
         if cur.weekday() < 5:
             return cur.isoformat()
     return None
+
+
+def _prior_book_date(sb, execution_date: str) -> Optional[str]:
+    """Latest `positions` date strictly before ``execution_date`` that holds a book.
+
+    The comparison basis for the event ledger is the previous *committed book*, not
+    the previous calendar weekday. The pipeline skips days (07-21, 07-22, 07-24 and
+    07-30 have no `positions` rows), so the weekday proxy made EXIT unreachable —
+    a dropped ticker never entered the diff — and classified every survivor as an
+    OPEN with a null prior weight (#1743).
+
+    Returns ``None`` when no earlier book exists at all (the first book ever
+    committed, or an unparseable ``execution_date``). Callers must read that as
+    "empty prior book" — every held name is then a genuine OPEN — and not as an
+    error, which is why the old ``if not prior_d: return None`` guards are gone.
+    """
+    try:
+        dt_date.fromisoformat(execution_date)
+    except (TypeError, ValueError):
+        return None
+    res = (
+        sb.table("positions")
+        .select("date")
+        .lt("date", execution_date)
+        .neq("ticker", "CASH")
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(res, "data", None) or []
+    if not rows:
+        return None
+    d = rows[0].get("date")
+    return str(d)[:10] if d else None
+
+
+def _book_weights(sb, book_date: Optional[str]) -> Dict[str, float]:
+    """Non-CASH ``TICKER -> weight_pct`` for one `positions` date ({} when absent)."""
+    if not book_date:
+        return {}
+    res = sb.table("positions").select("ticker,weight_pct").eq("date", book_date).execute()
+    out: Dict[str, float] = {}
+    for row in getattr(res, "data", None) or []:
+        if not isinstance(row, dict):
+            continue
+        tk = row.get("ticker")
+        if not tk or str(tk).upper() == "CASH":
+            continue
+        try:
+            out[str(tk).upper()] = float(row.get("weight_pct") or 0)
+        except (TypeError, ValueError):
+            continue
+    return out
 
 
 def _parse_pct(value: Any) -> Optional[float]:
@@ -196,7 +260,7 @@ def _hold_events_for_positions_not_in_rebalance(
         .execute()
     )
     rows = getattr(res, "data", None) or []
-    prior_d = _prior_trading_date(execution_date)
+    prior_d = _prior_book_date(sb, execution_date)
     out: List[Dict[str, Any]] = []
     for row in rows:
         if not isinstance(row, dict):
@@ -239,8 +303,9 @@ def _hold_events_for_positions_not_in_rebalance(
 def build_events_from_digest_snapshot(sb, execution_d: str) -> Optional[List[Dict[str, Any]]]:
     """
     When `rebalance-decision.json` is not published for this date, derive OPEN/TRIM/ADD/HOLD/EXIT
-    from `daily_snapshots.snapshot.portfolio.proposed_positions` (post-trade targets) vs prior
-    session `positions` weights (prior trading day), using market-open prices for execution_d.
+    from `daily_snapshots.snapshot.portfolio.proposed_positions` (post-trade targets) vs the
+    weights of the prior *committed book* (:func:`_prior_book_date`), using market-open prices
+    for execution_d.
     """
     res = sb.table("daily_snapshots").select("snapshot").eq("date", execution_d).limit(1).execute()
     rows = getattr(res, "data", None) or []
@@ -271,24 +336,12 @@ def build_events_from_digest_snapshot(sb, execution_d: str) -> Optional[List[Dic
             targets[str(t).upper()] = float(row.get("weight_pct") or 0)
         except (TypeError, ValueError):
             continue
-    prior_d = _prior_trading_date(execution_d)
-    if not prior_d:
-        return None
-    pw_res = sb.table("positions").select("ticker,weight_pct").eq("date", prior_d).execute()
-    prior_w: Dict[str, float] = {}
-    for row in getattr(pw_res, "data", None) or []:
-        if not isinstance(row, dict):
-            continue
-        tk = row.get("ticker")
-        if not tk or tk == "CASH":
-            continue
-        try:
-            prior_w[str(tk).upper()] = float(row.get("weight_pct") or 0)
-        except (TypeError, ValueError):
-            continue
+    prior_d = _prior_book_date(sb, execution_d)
+    prior_w = _book_weights(sb, prior_d)
     all_tickers = set(prior_w) | set(targets)
     out: List[Dict[str, Any]] = []
     eps = 0.0001
+    basis = f"prior committed book {prior_d}" if prior_d else "no prior committed book"
     for t in sorted(all_tickers):
         prev = prior_w.get(t, 0.0)
         rec = targets.get(t, 0.0)
@@ -313,7 +366,7 @@ def build_events_from_digest_snapshot(sb, execution_d: str) -> Optional[List[Dic
                 "prev_weight_pct": prev if prev > eps else None,
                 "price": price,
                 "reason": (
-                    "Derived from digest snapshot proposed_positions vs prior session positions "
+                    f"Derived from digest snapshot proposed_positions vs {basis} "
                     "(no rebalance_decision.json for this date)."
                 ),
                 "thesis_id": None,
@@ -325,7 +378,9 @@ def build_events_from_digest_snapshot(sb, execution_d: str) -> Optional[List[Dic
 def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict[str, Any]]]:
     """
     When digest `proposed_positions` is absent, infer OPEN/TRIM/ADD/HOLD/EXIT from the book
-    recorded in `positions` on execution_d vs the prior trading day's `positions`.
+    recorded in `positions` on execution_d vs the prior *committed book*
+    (:func:`_prior_book_date`) — the last date that actually has `positions` rows, which is
+    not necessarily the prior weekday.
     """
     res = sb.table("positions").select("ticker,weight_pct,thesis_id").eq("date", execution_d).execute()
     rows = getattr(res, "data", None) or []
@@ -345,24 +400,12 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
         thesis[str(t).upper()] = str(tid) if tid else None
     if not targets:
         return None
-    prior_d = _prior_trading_date(execution_d)
-    if not prior_d:
-        return None
-    pw_res = sb.table("positions").select("ticker,weight_pct").eq("date", prior_d).execute()
-    prior_w: Dict[str, float] = {}
-    for row in getattr(pw_res, "data", None) or []:
-        if not isinstance(row, dict):
-            continue
-        tk = row.get("ticker")
-        if not tk or tk == "CASH":
-            continue
-        try:
-            prior_w[str(tk).upper()] = float(row.get("weight_pct") or 0)
-        except (TypeError, ValueError):
-            continue
+    prior_d = _prior_book_date(sb, execution_d)
+    prior_w = _book_weights(sb, prior_d)
     all_tickers = set(prior_w) | set(targets)
     out: List[Dict[str, Any]] = []
     eps = 0.0001
+    basis = f"prior committed book {prior_d}" if prior_d else "no prior committed book"
     for t in sorted(all_tickers):
         prev = prior_w.get(t, 0.0)
         rec = targets.get(t, 0.0)
@@ -387,7 +430,7 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
                 "prev_weight_pct": prev if prev > eps else None,
                 "price": price,
                 "reason": (
-                    "Derived from positions book vs prior session positions "
+                    f"Derived from positions book vs {basis} "
                     "(digest proposed_positions unavailable; no rebalance_decision.json for this date)."
                 ),
                 "thesis_id": thesis.get(t),

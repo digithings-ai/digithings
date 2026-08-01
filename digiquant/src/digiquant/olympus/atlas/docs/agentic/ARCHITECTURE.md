@@ -647,7 +647,12 @@ Phase 7C spawns one LLM node per ticker in the watchlist (up to 98). The `ATLAS_
 | Value | Behaviour |
 |-------|-----------|
 | `0` (default) | No cap — full watchlist |
-| `25` (CI default) | Capped at 25 tickers; logged at INFO level |
+| `30` (CI default) | Capped at 30 tickers; logged at INFO level |
+
+On the live thesis-first path the cap is applied once, in H4 (`roster_cap.capped_tickers`),
+and since #1767 it is actually enforced — the prior book is the only sanctioned overshoot
+and thesis vehicles are prioritised within it. See
+`hermes/docs/ARCHITECTURE.md` § "Roster cap enforcement (#1767)".
 
 This bounds the per-run OpenRouter call volume (and spend) during scheduled CI runs. Production / local runs can set `ATLAS_MAX_ANALYSTS=0` to use the full watchlist.
 
@@ -683,7 +688,7 @@ Tier-wide changes belong in `config/olympus_models.yaml` (capability pools per t
 |----------|---------|-----------|
 | `OPENROUTER_API_KEY` | All phase LLM calls + web grounding | GitHub secret + local `.env` |
 | `OLYMPUS_MODEL_TIER` | Tier select (`cheap` default / `balanced` / `quality`) | Optional; workflow env or shell |
-| `ATLAS_MAX_ANALYSTS` | 7C fan-out cap | CI workflow env: `"25"` |
+| `ATLAS_MAX_ANALYSTS` | H4/H5/H6 roster fan-out cap (#1767) | CI workflow env: `"30"` |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Publishing + diagnostics | GitHub secret + local `.env` |
 
 `OPENROUTER_ALLOWED_MODELS` and `OPENROUTER_COST_QUALITY_TRADEOFF` are **not** set by hand — `apply_olympus_openrouter_env()` derives them from the active tier at chain startup. Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test the configured providers.

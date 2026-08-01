@@ -319,31 +319,86 @@ export async function getIntelligence(
   return rows ?? [];
 }
 
+/** Forward horizon, in days, of the "upcoming macro catalysts" window. */
+const CALENDAR_HORIZON_DAYS = 14;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The four YYYY-MM-DD bounds of one calendar read — see {@link calendarWindow}. */
+export interface CalendarWindow {
+  queryStart: string;
+  queryEnd: string;
+  localStart: string;
+  localEnd: string;
+}
+
 /**
- * Upcoming macro catalysts from the shared `economic_calendar` (core): today → +14 days,
- * ordered by the absolute UTC release instant (NULL release times — all-day rows —
- * sort last, then by event_date). Returns `[]` when unconfigured or none exist.
+ * PURE — the calendar window for the `economic_calendar` read, as YYYY-MM-DD keys.
+ *
+ * `local*` are the LOCAL bounds the surface promises ("the next 14 days", in the
+ * viewer's zone). `query*` are the PostgREST bounds and are padded one day on BOTH
+ * sides, because `event_date` is the feed's wall-clock day while every consumer keys
+ * off `eventLocalDateKey` (the release *instant* rendered in the viewer's zone) — the
+ * two disagree by up to a day in either direction (a 22:00Z release is local-yesterday
+ * in the Americas; an 01:00Z one is local-tomorrow in Auckland). Callers re-apply the
+ * exact local bounds after the query. `timeZone` defaults to the viewer's.
+ *
+ * The horizon end can land a day either side across a DST transition (adding 14×24h to
+ * a local wall clock near midnight shifts the hour); the padded query bound absorbs it.
  */
-export async function getUpcomingEvents(): Promise<FxEconomicCalendarRow[]> {
+export function calendarWindow(now: Date, timeZone?: string): CalendarWindow {
+  const at = (offsetDays: number): string =>
+    localDateKey(new Date(now.getTime() + offsetDays * DAY_MS), timeZone);
+  return {
+    queryStart: at(-1),
+    queryEnd: at(CALENDAR_HORIZON_DAYS + 1),
+    localStart: at(0),
+    localEnd: at(CALENDAR_HORIZON_DAYS),
+  };
+}
+
+/**
+ * The raw `economic_calendar` rows over the PADDED window, ordered by the absolute UTC
+ * release instant (NULL release times — all-day rows — sort last, then by event_date).
+ * Shared by `getUpcomingEvents` and `getTodayEvents` so both see the same row set and
+ * only their LOCAL narrowing differs. `[]` when unconfigured or empty.
+ */
+async function fetchCalendarWindow({
+  queryStart,
+  queryEnd,
+}: CalendarWindow): Promise<FxEconomicCalendarRow[]> {
   // #1066: the calendar lives in the shared `core` project now, so it is read via the
   // MAIN Olympus client (not `twelveXSupabase`), from `economic_calendar`.
   if (!isSupabaseConfigured() || !supabase) return [];
-  const today = new Date();
-  const start = today.toISOString().slice(0, 10);
-  const horizon = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
-  const end = horizon.toISOString().slice(0, 10);
   const rows = await queryMainSupabase<FxEconomicCalendarRow[]>((sb) =>
     sb
       .from('economic_calendar')
       .select(
         'id, external_id, event_date, event_time, country, event_name, category, impact, actual, forecast, prior, event_datetime_utc'
       )
-      .gte('event_date', start)
-      .lte('event_date', end)
+      .gte('event_date', queryStart)
+      .lte('event_date', queryEnd)
       .order('event_datetime_utc', { ascending: true, nullsFirst: false })
       .order('event_date', { ascending: true })
   );
   return rows ?? [];
+}
+
+/**
+ * Upcoming macro catalysts from the shared `economic_calendar` (core): the viewer's
+ * local today → +14 days. The padded query window is trimmed back to those exact local
+ * bounds here, so a row that is local-yesterday (or a day past the horizon) never
+ * renders under "upcoming" — `EventsTab` groups by the same `eventLocalDateKey`, so the
+ * day headers and the "next 14 days" copy agree with what is returned.
+ */
+export async function getUpcomingEvents(): Promise<FxEconomicCalendarRow[]> {
+  const bounds = calendarWindow(new Date());
+  const { localStart, localEnd } = bounds;
+  const rows = await fetchCalendarWindow(bounds);
+  return rows.filter((e) => {
+    const key = eventLocalDateKey(e);
+    // YYYY-MM-DD sorts lexicographically, so plain string compares are date compares.
+    return key >= localStart && key <= localEnd;
+  });
 }
 
 /**
@@ -498,11 +553,17 @@ export function filterEventsToDay(
   return events.filter((e) => eventLocalDateKey(e) === todayKey);
 }
 
-/** Upcoming macro events narrowed to the viewer-local "today". */
+/**
+ * Upcoming macro events narrowed to the viewer-local "today".
+ *
+ * Reads the padded window directly rather than going through `getUpcomingEvents`: the
+ * viewer's local today can be the day *before* the UTC date, and a PostgREST predicate
+ * built from the UTC date drops exactly those rows before this filter can keep them.
+ */
 export async function getTodayEvents(): Promise<FxEconomicCalendarRow[]> {
-  const all = await getUpcomingEvents();
-  const todayKey = eventLocalDateKey({ event_datetime_utc: new Date().toISOString(), event_date: '' });
-  return filterEventsToDay(all, todayKey);
+  const now = new Date();
+  const rows = await fetchCalendarWindow(calendarWindow(now));
+  return filterEventsToDay(rows, localDateKey(now));
 }
 
 // The extended leg-validity set: the 8 matrix columns + NOK/SEK. A pair is a
@@ -884,6 +945,22 @@ export function hasResolvedTime(row: { event_datetime_utc: string | null }): boo
 }
 
 /**
+ * PURE — the YYYY-MM-DD calendar day an instant falls on in `timeZone`, defaulting to
+ * the viewer's zone. 'en-CA' is the locale whose short date format IS YYYY-MM-DD, so
+ * the key is directly string-comparable. Every local-day decision in this module goes
+ * through here, so a query bound and the key it is compared against cannot drift apart
+ * (the #1753 defect: one side was the UTC date, the other the viewer's).
+ */
+export function localDateKey(d: Date, timeZone?: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
+  }).format(d);
+}
+
+/**
  * PURE — the LOCAL calendar day an event falls on. When an absolute instant is
  * present, its local YYYY-MM-DD; otherwise the feed's wall-clock `event_date`.
  */
@@ -893,9 +970,5 @@ export function eventLocalDateKey(row: {
 }): string {
   const inst = eventInstant(row);
   if (!inst) return row.event_date;
-  return new Intl.DateTimeFormat('en-CA', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(inst);
+  return localDateKey(inst);
 }

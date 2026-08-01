@@ -7,6 +7,7 @@ from typing import (
 )
 
 from digiquant.olympus.atlas.state import RebalancePayload
+from digiquant.olympus.hermes.models.deliberation import is_unchallenged_carry
 from digiquant.olympus.hermes.state import HermesState
 
 
@@ -43,12 +44,18 @@ def deliberation_summaries(state: HermesState) -> dict[str, dict[str, Any]]:
     ``deliberation/{ticker}`` document records whether a debate actually converged, was
     carried, or hit the max-rounds cap. The Jun-2026 audit found these stripped before the
     write, leaving zero observability into the deliberation (#945).
+
+    ``carry_reason`` rides along so a consumer can tell a benign quiet-ticker carry from a
+    crashed deliberation, and a crash carry publishes **no** ``bear_thesis``: falling both
+    sides back to the same ``conclusion`` produced two byte-identical theses and made a
+    debate that never happened look two-sided (#1742).
     """
     out: dict[str, dict[str, Any]] = {}
     for ticker, summary in state.phase_hermes.deliberation_summaries.items():
         if not isinstance(summary, dict):
             continue
         rounds = summary.get("transcript", summary.get("rounds", []))
+        unchallenged = is_unchallenged_carry(summary)
         out[ticker] = {
             "ticker": ticker,
             "converged": summary.get("converged", True),
@@ -56,11 +63,16 @@ def deliberation_summaries(state: HermesState) -> dict[str, dict[str, Any]]:
             "rounds": rounds,
             "rounds_count": _deliberation_rounds_count(rounds),
             "bull_thesis": summary.get("bull_thesis") or summary.get("conclusion", ""),
-            "bear_thesis": summary.get("bear_thesis") or summary.get("conclusion", ""),
+            "bear_thesis": (
+                ""
+                if unchallenged
+                else (summary.get("bear_thesis") or summary.get("conclusion", ""))
+            ),
             "bear_case": summary.get("bear_case") or summary.get("bear_thesis"),
             "net_stance": summary.get("net_stance", "neutral"),
             "conviction_delta": summary.get("conviction_delta", 0),
             "carried": summary.get("carried", False),
+            "carry_reason": summary.get("carry_reason"),
             "escalated": summary.get("escalated", False),
             "cap_reason": summary.get("cap_reason"),
         }

@@ -6,21 +6,28 @@ This is the **single authoritative** run instruction for digiquant-atlas.
 
 | Layer | When | What runs | Supabase impact |
 |--------|------|-----------|-----------------|
-| **GitHub — Daily Price Update** | Weekdays **00:00 UTC** (~**8:00 PM Eastern** during EDT, ~**7:00 PM Eastern** during EST; after NYSE close; GitHub cron is UTC-only) | [`preload-history.py`](scripts/preload-history.py) (stale refresh) → [`compute-technicals.py`](scripts/compute-technicals.py) → macro ingest ([`ingest_fred.py`](scripts/ingest_fred.py), [`ingest_fx_frankfurter.py`](scripts/ingest_fx_frankfurter.py), [`ingest_crypto_fng.py`](scripts/ingest_crypto_fng.py), [`ingest_treasury_curve.py`](scripts/ingest_treasury_curve.py)) → [`refresh_performance_metrics.py`](scripts/refresh_performance_metrics.py) `--fill-calendar-through` **UTC today** | `price_history`, `price_technicals`, **`macro_series_observations`**, plus **`positions`** performance columns, **`nav_history`**, **`portfolio_metrics`** (script rows), **`position_events`** cumulative-return fields — **no** digest, no agent research |
+| **GitHub — Daily Price Update** | Weekdays **00:00 UTC** (~**8:00 PM Eastern** during EDT, ~**7:00 PM Eastern** during EST; after NYSE close; GitHub cron is UTC-only) | [`preload-history.py`](scripts/preload-history.py) (stale refresh) → [`compute-technicals.py`](scripts/compute-technicals.py) → macro ingest ([`ingest_fred.py`](scripts/ingest_fred.py), [`ingest_fx_frankfurter.py`](scripts/ingest_fx_frankfurter.py), [`ingest_crypto_fng.py`](scripts/ingest_crypto_fng.py), [`ingest_treasury_curve.py`](scripts/ingest_treasury_curve.py)) | `price_history`, `price_technicals`, **`macro_series_observations`** — **no** digest, no agent research |
+| **GitHub — Atlas metrics refresh** (`.github/workflows/pipeline-atlas-metrics.yml`) | **22:00 UTC, MON-SAT** — after the 21:00 EOD price ingest and the 12:00 Olympus book | [`refresh_performance_metrics.py`](scripts/refresh_performance_metrics.py) `--supabase` (**no** `--fill-calendar-through`; see below) → [`refresh_attribution.py`](scripts/refresh_attribution.py) | **`positions`** performance columns, **`nav_history`**, **`portfolio_metrics`** (script rows), **`position_events`** cumulative-return fields, **`position_attribution`** |
 | **Co-work / operator — research & portfolio** | Typically **pre-market** (e.g. 8:00 AM local) or per [`config/schedule.json`](config/schedule.json) | Agent validates + publishes JSON to Supabase (`materialize_snapshot.py`, `publish_document.py`, …) → operator runs [`run_db_first.py`](scripts/run_db_first.py) (optional disk checks → metrics → `execute_at_open.py` → [`validate_db_first.py`](scripts/validate_db_first.py)) | `daily_snapshots`, `documents`, `positions`, `theses`, `position_events`, etc. |
 
 ### Daily portfolio continuity (post-close)
 
-The weekday GitHub job runs [`refresh_performance_metrics.py --fill-calendar-through`](scripts/refresh_performance_metrics.py) to **today (UTC)** so you get a **dense calendar** in Supabase even when no digest ran:
+The scheduled GitHub job (`pipeline-atlas-metrics.yml`, 22:00 UTC MON-SAT) runs [`refresh_performance_metrics.py --supabase`](scripts/refresh_performance_metrics.py) with **no date flags**. It targets **today (UTC)** only:
 
-1. Refreshes performance columns on the **latest** existing `positions` date (same weights; closes from `price_history`).
-2. For each **calendar day** after that through the target date: if `positions` has no rows for that date, **clones** the prior day (carry-forward), then updates per-position metrics, `nav_history`, and **`portfolio_metrics`** with `computed_from='refresh_script'`.
-3. **Does not overwrite** `portfolio_metrics` rows written by `update_tearsheet.py` (`computed_from='tearsheet'`). Sharpe / vol / drawdown / alpha on script-written days are **carried forward** from the previous metrics row until the next tearsheet recompute.
+1. Refreshes performance columns on **today's** `positions` book (same weights; closes from `price_history`), then updates `nav_history` and **`portfolio_metrics`** with `computed_from='refresh_script'` (or `refresh_script_insufficient_history` while `nav_history` has < 20 rows).
+2. **Does not overwrite** `portfolio_metrics` rows written by `update_tearsheet.py` (`computed_from='tearsheet'`); those get only their cumulative-return fields backfilled.
+3. **Stale-book guard (#1746).** If `max(positions.date)` is *before* today UTC, the Olympus book never materialized and there is nothing new to compute — the script prints the two dates and **exits 3**, writing nothing. It does **not** fall back to the latest existing date. That fallback was the original defect: `portfolio_metrics` is upserted `on_conflict='date'`, so 22 of 33 green runs (2026-06-22..07-31) silently re-stamped an older row's `generated_at` while its `as_of_date` never moved, and the dashboard served 2026-06-26 numbers for twenty days behind a 10/10-green cron. **A red metrics run with exit 3 is a correct upstream-book alarm, not a flake** — repair the Olympus run, then reprocess with `--date YYYY-MM-DD`.
 
-**Manual backfill** (e.g. fill gaps after prices exist):  
+**The daily cron deliberately does *not* pass `--fill-calendar-through`, and must not be changed to.** No workflow has ever passed it (this RUNBOOK previously claimed the price job did — it never did). Carry-forward would clone the prior book into every date where the book never materialized, which is precisely the absent-`positions` signal a missing-book detector reads; densifying it would make the failure undetectable rather than fixing it.
+
+**Manual densification / backfill** (operator only — also what [`run_db_first.py`](scripts/run_db_first.py) invokes):  
 `python3 scripts/refresh_performance_metrics.py --supabase --fill-calendar-through YYYY-MM-DD`
 
-**Limitation:** `--fill-calendar-through` advances from the **latest** `positions` snapshot date forward only; it does not scan for **holes** on earlier dates. For a missing day *before* your latest snapshot, run once with `--date YYYY-MM-DD` (after `price_history` has that day).
+For each **calendar day** after the latest snapshot through the target date: if `positions` has no rows for that date, **clones** the prior day (carry-forward), then updates per-position metrics, `nav_history`, and `portfolio_metrics`.
+
+**Limitation:** `--fill-calendar-through` advances from the **latest** `positions` snapshot date forward only; it does not scan for **holes** on earlier dates, so it cannot repair a historical gap. For a missing day *before* your latest snapshot, run once with `--date YYYY-MM-DD` (after `price_history` has that day). `--date` is unguarded by design — it is the explicit reprocess path.
+
+**Attribution runs *after* metrics, deliberately.** `pnl_pct` prefers `SUM(position_attribution.contribution_pct)` and falls back to the one-day `nav_history` return, but `refresh_attribution.py` computes a **21-day trailing window** (`--window-days`, default 21) — so that sum is a 21-day contribution, ~5-10x the daily move and frequently the opposite sign. Metrics-first means today's attribution rows do not exist yet and `pnl_pct` takes the correct one-day path. Do not reorder the two steps.
 
 **GitHub — manual “Daily Price Update”:** Uses the same steps as the weekday schedule — **`preload-history.py --supabase --supabase-sync`** (per ticker: gap-fill from latest `price_history` date through UTC today; tickers with no rows get a full-history pull, default **`--new-ticker-period max`**). No workflow inputs. For a one-off local run without Actions: `python3 scripts/preload-history.py --supabase --supabase-sync`.
 
@@ -175,7 +182,13 @@ unchanged keys, so the diet does **not** disturb the stable→volatile prompt-ca
 ordering in `digigraph.graph.research_agent._format_scope_block` (#935).
 
 Deliberately **not** used (they reduce capability): higher triage carry
-thresholds, lower `max_search_results`, blanket fan-out caps. The remaining
+thresholds, lower `max_search_results`. A **blanket** fan-out cap is still
+rejected, but `ATLAS_MAX_ANALYSTS` is not blanket and since #1767 it is
+genuinely enforced: the prior book is exempt (#936) and thesis vehicles are
+prioritised round-robin *within* the cap, so the reduction falls on the
+lowest-ranked unlinked candidates rather than uniformly. It had never bound at
+all before #1767 — 39 analysts against a configured 25 — so this is enforcement
+of a stated policy, not a new reduction. The remaining
 search-cost work is structural — free-source ingestion replacing paid agentic
 searches — not narrowing. That program is **Phase D**: see
 [`PHASE-D.md`](PHASE-D.md) for the full architecture, PR sequence, and the
@@ -388,4 +401,74 @@ Re-run with `--force` to overwrite. Uses [`scripts/legacy_delta_to_ops.py`](scri
 - **`pm`:** `full` plus a `rebalance_decision` document for `date` (portfolio layer present).
 
 **No-change days:** Prefer a **delta request** with empty `ops` (see [`templates/delta-request-schema.json`](templates/delta-request-schema.json)) and materialize as usual, **or** set `"no_change": true` on the digest snapshot (see [`templates/digest-snapshot-schema.json`](templates/digest-snapshot-schema.json)) after materialization so the day is still indexed in `daily_snapshots`.
+
+
+<!-- #1736 -->
+## Run status vs. retry-worthiness (#1736)
+
+`atlas_run_diagnostics.status` and the pipeline's exit code answer **different questions**,
+and since #1736 they legitimately disagree.
+
+- **`status`** — was the run healthy? Written by `diagnostics.summarize_run`. It flips to
+  `degraded` on **any** failed research segment, on a majority of dead Hermes deliberations,
+  on an H9 non-commit, and on "Atlas produced research but nothing committed". Read
+  `breakdown.degraded_reasons` for which rule tripped.
+- **`retry_signal`** (surfaced as `degraded` in `run.log`'s final JSON, and the process exit
+  code) — is re-running worth the money? Deliberately frozen at the pre-#1736 rules, so
+  honest reporting never triggers a retry storm. A day that lost 4 of 27 segments but
+  committed its book is `status=degraded, degraded=false` and CI does **not** retry it.
+
+**`ATLAS_DEGRADED_RUN_PCT` has narrowed in meaning.** It no longer influences `status` (the
+STRICT rule above supersedes it); it now controls only *how much segment damage justifies a
+CI retry*. Raise it to make retries rarer, not to make the dashboard greener.
+
+### "Last successful run" jumped backwards after this landed
+
+Expected. `freshness-banner.tsx`'s `isOk()` excludes `degraded`, and ~11 of the previous 34
+`ok` rows had at least one dead research segment. A day where 5 of 27 segments died is not a
+healthy day; the banner is now telling the truth.
+
+### A run that vanished (no failure issue, no diagnostics row)
+
+`Report pipeline outcome` now fires on `failure() || cancelled()`. A job that blows the
+240-minute `timeout-minutes` is *cancelled*, not failed, so before #1733/#1763 nothing was
+reported at all. Look for the rolling **`olympus-daily-cancelled`** issue; its **Chain
+outcome** line carries the last JSON summary found in `artifacts/run.log`, or
+`(no structured outcome recorded)` when the run died before printing one.
+<!-- #1766 -->
+## Known data gap: no portfolio book 2026-06-27 → 2026-07-16 (do not backfill)
+
+`positions`, `nav_history` and `portfolio_metrics` hold **zero rows** for all 20 calendar days in
+**2026-06-27 … 2026-07-16** (verified against the live `core` project 2026-08-01). Last pre-gap
+book 06-26; first post-gap book 07-17. Any performance series that spans those dates is
+**discontinuous by design** — that is expected, not a bug to be repaired.
+
+**Cause and fix.** H9 was failing its coherence check closed while runs still reported `ok`
+(#1555). 18 of the 22 `atlas_run_diagnostics` rows in the window say `status='ok'` and every one
+of them carries `hermes_h9_commit_run/hermes/portfolio/commit-run: held ticker <T> missing from
+book and not flat in H7`. Fixed **2026-07-17** (`40312d82`, PR #1565); `positions` resumes the
+same date. Full evidence and the post-fix `book_committed` reconciliation are in
+[`hermes/docs/ARCHITECTURE.md`](../../hermes/docs/ARCHITECTURE.md) under "The 2026-06-27 →
+2026-07-16 book gap is permanent and accepted".
+
+**Why there is no backfill script, and why `--fill-calendar-through` is not the answer.** Two
+independent blocks:
+
+1. A synthetic book for dates on which the PM made no decision fabricates an audit trail and
+   restates every published performance number computed over the series.
+2. `fill_calendar_through` **cannot reach the hole**. It starts from `max(positions.date)` and
+   advances forward only; a target before that date collapses to a single-day refresh. This is
+   the "Limitation" note in the *Daily portfolio continuity* section above — it applies with full
+   force here, because the gap sits far behind the latest snapshot.
+
+**If you are tempted to densify the calendar anyway:** the absence of `positions` rows is the
+data-level signal that a book failed to commit. Carrying the prior book forward across missing
+dates (what `carry_forward_positions` does) would erase that signal and make the next occurrence
+of this defect undetectable in the tables. Recurrence is meant to be caught by detection — a
+stale-book check in the metrics cron and a no-book run gate, both in flight as of 2026-08-01 —
+not by a dense calendar.
+
+Recovering a **single** missing day that is genuinely recoverable (prices exist, a book was
+committed, only the metrics row is absent) is still supported: `--date YYYY-MM-DD`. That is not
+this case — for 06-27 → 07-16 there is no committed book to compute from.
 

@@ -732,13 +732,36 @@ DigiQuant ships two sibling sub-graphs that compose end-to-end on **one daily to
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
   appends) and fail-soft list indices (past-end set → append; OOR remove → no-op),
   and a segment whose patch cannot merge falls back to full-mode regeneration
-  instead of carrying + degrading the run (#1641).
+  instead of carrying + degrading the run (#1641). That fallback is **counted, not
+  silent** (#1741): the node records `state.merge_fallbacks[segment] = reason` and
+  `atlas.telemetry.merge_fallback_breakdown` — registered through the #1736
+  `register_breakdown_contributor` seam — projects it into the diagnostics
+  `breakdown` as a non-gating `merge_fallback` key, the same shape as
+  `circuit_breaker_skips`. Run
+  status is unchanged — a fallback that then succeeds in full mode is still `ok` —
+  but a segment that paid for a patch call *and* a full regeneration is now visible
+  to a cost audit. The dominant cause was unguarded `Literal[...]` axes, so
+  `SegmentReport` normalizes LLM synonyms for **every** Literal field of every
+  subclass generically (`_normalize_literal_axes`): an unrecognized value degrades to
+  `None` on an Optional axis and is still rejected on a required one (`growth` /
+  `inflation` have no non-directional member, so coercing them would invent a macro
+  call that Phases 4–7 consume as fact). A field that declares its own
+  `mode="before"` validator (`bias`, `data_quality`, `flow_direction`) keeps
+  ownership of its vocabulary and is skipped by the generic pass.
 - **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — thesis-aware portfolio loop.
   **H1–H9:** market thesis review → exploration → vehicle map → opportunity screener →
   unified asset analyst (×N) → PM↔analyst deliberation (×N) → PM direction memo →
   deterministic risk sizing (H8 / legacy 7E) → `commit_run` terminal booking.
   Split from Atlas in epic #471 per [ADR-0015](../docs/adr/0015-atlas-vs-hermes.md);
   topology canonical in [ADR-0020](../docs/adr/0020-olympus-mvp-daily-delta.md).
+  **H4 is the sole fan-out cap chokepoint** — `roster_cap.capped_tickers` bounds the
+  H5/H6 roster width to `max(ATLAS_MAX_ANALYSTS, len(prior_book))`; the prior book is
+  the only sanctioned overshoot (#936) and thesis vehicles are prioritised within the
+  cap rather than exempt from it (#1767). The `build_h5_asset_analyst` /
+  `build_h6_deliberation` compile-time builders also call it, but are test-only —
+  `graph.py` wires the runtime `build_h5_from_state` / `build_h6_from_state` fan-outs.
+  Roster width lands in `atlas_run_diagnostics.breakdown` via
+  `hermes/roster_diagnostics.roster_breakdown`.
 
 The handoff seam is `digiquant.olympus.atlas.snapshot.DigestPayload` — the only symbol
 Hermes imports from Atlas runtime.
@@ -871,6 +894,30 @@ as inception-to-date contribution. Its cumulative contribution chart instead app
 position snapshot's prior weight to the next interval's price return and overlays the exact
 NAV-rebased portfolio return.
 
+##### Risk-metric scale contract (#1748, migration 058)
+
+`portfolio_metrics.volatility` and `.max_drawdown` are **percent**, like every other
+`_pct`-shaped column on the table: `18.4` is 18.4% annualized volatility and `-12.5` is a
+12.5% peak-to-trough decline. All three writers now agree —
+`hermes/portfolio_materialize.py` (phase 9d) and `scripts/atlas/refresh_performance_metrics.py`
+already multiplied by 100, and `scripts/atlas/update_tearsheet.py` does so via
+`compute_nav_risk_metrics`, which is the only place that arithmetic lives in that script.
+`sharpe` is a ratio, computed against the fraction-scale volatility, and is unaffected.
+
+Migration 058 widens the two CHECK constraints to match (`volatility` 0–1000,
+`max_drawdown` -100–0). The pre-058 bounds were fraction-scaled (`<= 10`, `>= -1`), which
+the two percent writers could not satisfy: both are gated on `nav_history` reaching
+`_MIN_NAV_HISTORY_ROWS = 20`, and the first running drawdown they compute (~-1.31%) raises
+PostgREST `APIError 23514` — permanently, since running max drawdown is monotonically
+non-increasing. New writers of these columns must emit percent; readers may take the stored
+value directly (`frontend/olympus/lib/portfolio-risk-metrics.ts` maps them onto
+`annVolPct` / `maxDrawdownPct` unchanged).
+
+Known wart, deliberately not changed here: `computed_from` carries
+`DEFAULT 'tearsheet'` (migration 012) and phase 9d upserts without setting it, so a phase-9d
+row inserted before any `refresh_script` row for that date is labelled `tearsheet`. That
+label also suppresses the `refresh_performance_metrics.py` overwrite guard.
+
 #### Canonical market-thesis identity (#1615)
 
 `theses.topic_key` identifies one durable market opinion independently of its daily title,
@@ -986,6 +1033,41 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   recomputes `price_technicals` from raw OHLCV in `price_history` (look-ahead-guarded,
   network-free, idempotent). Preflight may call this when stale (`ATLAS_REFRESH_ON_DEMAND`).
   The daily prices cron (`pipeline-digiquant-prices.yml`) is the primary freshness mechanism.
+  Three contracts the recompute must honour (#1752):
+  - **Read window ≠ write window.** The read spans `[write_start − warmup_days, as_of]`; only
+    rows on or after `write_start` are upserted. Every rolling indicator has a warm-up prefix
+    (`sma_200` / `zscore_200` need 200 bars) where the value is genuinely `NULL`, and
+    `upsert_price_technicals` is a coalesce-free PostgREST bulk upsert — writing a warm-up row
+    *replaces* a stored good value with `NULL`. Defaults: `WARMUP_CALENDAR_DAYS = 320`
+    (≈200 sessions), `DEFAULT_WRITE_WINDOW_DAYS = 30`. `since=` moves the write floor for a
+    repair. Residual, by design: a ticker whose inception falls inside the warm-up read window
+    has no 200 bars, so its leading rows carry `NULL` long-window values — first writes, not
+    clobbers.
+  - **The `price_history` read is paginated.** PostgREST caps a rangeless response at 1 000
+    rows, so one request over ~250 tickers × ~350 days returned ~4 bars per ticker — every one
+    below `MIN_BARS` — and the recompute silently processed nothing. Paging is ordered
+    `(ticker, date)`; a date-only order lets same-date rows shuffle between pages.
+  - **Non-session rows are dropped first**, against `trading_calendar` via
+    `_utils.fetch_trading_days` + `filter_rows_by_trading_days` (fail-soft: no calendar rows →
+    compute on all rows, with a warning). `price_history` carries weekend bars for some
+    tickers; without the filter they become technicals the cron path would never write.
+- **Technicals repair (#1752).** `python -m digiquant prices recompute-technicals` drives the
+  same core from the CLI: reads `price_history`, writes `price_technicals`, no network fetch and
+  no CSV cache. `--since` bounds the *write*, `--dry-run` computes and reports without writing.
+  Exposed as `mode: repair-technicals` on `pipeline-digiquant-backfill.yml`. This is the repair
+  path for the NULL long-window bands that `compute-technicals` wrote from its ephemeral 1-year
+  cache; `compute-technicals` itself keeps its cache-sourced contract and is unchanged.
+- **Market-clock schedules are DST-aware (#1775).** Every deadline in
+  `pipeline-digiquant-prices.yml` is an ET wall-clock event (09:30 open, 16:00 close) while
+  GitHub cron is fixed UTC, so each schedule is the **union** of the two ET offsets:
+  intraday `*/15 13-21`, EOD `25 21` (after the close in both, off the 15-minute grid so it
+  never shares a minute with an intraday tick, done before `pipeline-atlas-metrics.yml`'s
+  `0 22`). One-sided constraints are solved by the window alone; the two-sided at-open
+  constraint cannot be — the offsets differ by exactly one hour — so **both** `35 13` and
+  `35 14` ship and an `at-open-clock` gate job admits whichever is 09:35 ET. That gate is
+  inline in the YAML on purpose: these jobs check out `ref: main` (#1626), so a repo-side
+  helper would lag the schedule it guards by one promotion. Invariants are asserted in
+  `tests/scripts/test_prices_cron_dst.py` against derived ET times in both offsets.
 - **Fed rate-decision odds (#21).** `data/prices/fed_probabilities` ingests FOMC probabilities
   into `macro_series_observations`. Ingested by `.github/workflows/pipeline-olympus.yml` (daily,
   before research) via `python -m digiquant prices fetch-macro --sources fedprob`.
@@ -1051,6 +1133,22 @@ has no anon policy — anon reads return an empty set (not a permission error) w
 role keeps full access (mirrors the `atlas_run_diagnostics` idiom, migration 033). Run
 `get_advisors(type="security")` after applying; expect zero `rls_disabled_in_public` findings.
 
+**Grants — RLS is no longer the only write gate (#1757).** Migration
+[`supabase/migrations/060_lock_public_write_grants.sql`](supabase/migrations/060_lock_public_write_grants.sql)
+revokes `INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER` from `PUBLIC`, `anon` and
+`authenticated` on **all tables in schema `public`** and narrows `ALTER DEFAULT PRIVILEGES`
+with the same list, so new relations inherit read-only instead of Supabase's bootstrap
+`GRANT ALL`. Before it, the *published* anon JWT held full DML on all 35 base tables plus
+two views, and RLS-with-no-write-policy was the single layer denying writes — one already
+exploitable: `atlas_run_health` (migration 041) is auto-updatable and deliberately
+`security_invoker = false`, so an unauthenticated `DELETE` through it ran as `postgres` and
+erased every `atlas_run_diagnostics` row. `service_role` is untouched — it is the only
+writer. When adding a public view, pair `GRANT SELECT` with an explicit `REVOKE` (050/052
+do; 041/018 did not) and never use `REVOKE ALL` in the default-privileges statement: it
+would strip `SELECT` and `safeSelect` renders a PostgREST 42501 as an empty panel, not an
+error. See [`supabase/SCHEMA.md`](supabase/SCHEMA.md) "Grants" for the residuals and for why
+the statement must not carry a `FOR ROLE` clause.
+
 **Live price fan-out + public portfolio surface (#1461/#1462).** Migration
 [`supabase/migrations/050_public_portfolio_views.sql`](supabase/migrations/050_public_portfolio_views.sql)
 adds digiquant.io's public read surface to this project's single migration chain: three
@@ -1058,8 +1156,12 @@ curated anon-readable views — `public_portfolio_positions`, `public_nav_histor
 `public_price_latest` — exposing performance metrics only (never
 `rationale`/`pm_notes`/risk parameters; user ruling 2026-07-10, #1462). They pair with
 the `supabase/functions/prices-live/` Deno edge function, which polls Finnhub
-server-side (key held as a Supabase secret, dormant until `FINNHUB_API_KEY` is set) and
-fans quotes out to browsers on the Realtime broadcast channel `prices:live`. Crypto
+server-side (key held as a Supabase secret; **live since 2026-07-13** on a 60s pg_cron
+schedule) and fans quotes out to browsers on the Realtime broadcast channel
+`prices:live`. Invocation is authorized by the `x-prices-live-secret` shared-secret
+header, checked ahead of every other gate and fail-closed when
+`PRICES_LIVE_INVOKE_SECRET` is unset (#1756) — `verify_jwt` alone is not authorization,
+because the anon key ships in every browser bundle. Crypto
 quotes take the other lane — streamed client-side from Coinbase's public WebSocket. See
 [`supabase/README.md`](supabase/README.md) for the two-lane design, pg_cron + pg_net
 scheduling, and the one-time setup steps, and [`supabase/SCHEMA.md`](supabase/SCHEMA.md)
@@ -1138,3 +1240,44 @@ either (a) call `ingest_atlas_document` directly at the end of
 `publish_phase`, or (b) push the natural keys onto a queue that
 `ingest_worker.py` (currently a placeholder per
 `digisearch/ARCHITECTURE.md`) drains.
+
+---
+
+<!-- #1736 -->
+## Run health telemetry — `atlas_run_diagnostics` (#1736)
+
+`digiquant/src/digiquant/olympus/atlas/diagnostics.py` derives **two** verdicts from a
+finished run's state, and they are deliberately not the same signal:
+
+| Field | Question | Consumers |
+|---|---|---|
+| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `frontend/olympus` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
+| `RunSummary.retry_signal` | Is re-running worth the money? | `chain._retry_worthy` → the process exit code → CI's outer-retry loop |
+
+`status` stays inside `ok | degraded | failed | cancelled` — there is no CHECK constraint on
+the column, but both frontend readers string-match, so a new value would silently fall
+through to "unknown". `retry_signal` is frozen at the pre-#1736 rules; `is_degraded()`
+returns it, which is why that function's name no longer matches the health verdict.
+
+**Escalation rules on `status`** (each records itself in `breakdown.degraded_reasons`):
+any failed research segment (STRICT — supersedes the `ATLAS_DEGRADED_RUN_PCT` share rule for
+health purposes), more than `_HERMES_DEGRADED_PCT_DEFAULT` of the run's Hermes deliberations
+failed, and `atlas_research_produced and not book_committed` (the no-book gate — closes the
+residual detection hole behind #1766, which the #1555 commit gate misses because it only
+fires once a book has *materialized*).
+
+### Extending `breakdown` — use the seam, not a new edit site
+
+`breakdown` is schema-free jsonb, so a new telemetry key needs no migration. Register a
+contributor rather than editing `summarize_run`:
+
+```python
+from digiquant.olympus.atlas.diagnostics import register_breakdown_contributor
+
+register_breakdown_contributor(lambda state: {"roster": _roster_tally(state)})
+```
+
+Contributors are pure, fail-soft (an exception is logged and swallowed), may not overwrite an
+existing key, and run **once per run** inside `_segment_counts`. Note the split:
+`_segment_totals` is the pure counter used by `atlas_research_produced`, which the chain calls
+*mid-run* to gate Hermes — contributors must never see that half-populated state.

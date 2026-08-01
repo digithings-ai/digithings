@@ -27,6 +27,68 @@ _cm_holders: list[object] = []
 
 WORKFLOW_PROFILES = frozenset({"full_stack", "research_rag", "quant_backtest", "plan_execute"})
 
+# libpq connection bounds for the Postgres checkpointer (#1734).
+#
+# ``PostgresSaver.from_conn_string`` forwards the string straight to
+# ``psycopg.Connection.connect``, which applies no timeout and no TCP keepalives of its
+# own, and exposes no kwarg for either. A peer that disappears mid-session without sending
+# an RST therefore leaves the socket in ESTABLISHED indefinitely and the only bound left is
+# the 240-minute CI job timeout — the shape of the 2026-07-30 Olympus stall, where a
+# checkpoint-write boundary was followed by 210 minutes of total silence. libpq accepts all
+# of these as ordinary connection parameters, so they can be merged into the conninfo
+# without a kwarg ``from_conn_string`` does not have.
+#
+# ``connect_timeout`` bounds *establishing* a connection; the keepalive trio bounds an
+# *established but dead* one (30s idle + 5 probes x 10s ~= 80s to detect). The keepalives
+# are the load-bearing half — the observed stall began after connection setup.
+#
+# Deliberately absent: ``statement_timeout``. It is enforced server-side, so it cannot help
+# when the network path is gone (the client never hears the cancellation either), and it
+# risks aborting a legitimately slow write against a checkpoint table that is already
+# ~950 MB in production (#1758).
+_CHECKPOINTER_CONN_BOUNDS: dict[str, int] = {
+    "connect_timeout": 10,
+    "keepalives": 1,
+    "keepalives_idle": 30,
+    "keepalives_interval": 10,
+    "keepalives_count": 5,
+}
+
+
+def _bounded_conn_string(conn_string: str) -> str:
+    """Return ``conn_string`` with connect-timeout and TCP-keepalive params filled in.
+
+    Accepts either libpq spelling — a ``postgresql://`` URI or ``host=... dbname=...``
+    keyword/value — because ``psycopg.conninfo.make_conninfo`` normalizes both and
+    round-trips percent-escaped credentials that manual URL surgery mangles. Any parameter
+    the operator already set in ``DIGI_CHECKPOINTER_POSTGRES_URI`` wins, so the env var
+    remains the override path.
+
+    Best-effort by design: if psycopg is absent or the string does not parse, it is
+    returned unchanged. Bounding a connection must never itself be why a run fails to
+    start. Never log the conninfo — it carries the database password.
+    """
+    try:
+        from psycopg import ProgrammingError
+        from psycopg.conninfo import conninfo_to_dict, make_conninfo
+    except ImportError:  # psycopg arrives with digigraph[checkpoint-postgres]
+        return conn_string
+    try:
+        preset = conninfo_to_dict(conn_string)
+        missing = {k: v for k, v in _CHECKPOINTER_CONN_BOUNDS.items() if k not in preset}
+        if not missing:
+            return conn_string
+        return make_conninfo(conn_string, **missing)
+    except ProgrammingError as exc:
+        import logging as _logging
+
+        _logging.getLogger(__name__).warning(
+            "DIGI_CHECKPOINTER_POSTGRES_URI is not parseable (%s); connecting without "
+            "explicit connect-timeout/keepalive bounds",
+            exc,
+        )
+        return conn_string
+
 
 def get_checkpointer():
     """
@@ -40,7 +102,9 @@ def get_checkpointer():
 
     For sqlite: DIGI_CHECKPOINTER_SQLITE_URI (default ~/.digigraph/checkpoints.sqlite).
     For postgres: DIGI_CHECKPOINTER_POSTGRES_URI (required for HA / multi-replica; see
-    digigraph/ARCHITECTURE.md §5.5.1 — REM-099).
+    digigraph/ARCHITECTURE.md §5.5.1 — REM-099). Its conninfo is passed through
+    :func:`_bounded_conn_string`, which fills in connect-timeout and TCP-keepalive
+    parameters so a vanished peer cannot stall the process indefinitely (#1734).
     """
     global _checkpointer_instance, _cm_holders
     raw = (os.environ.get("DIGI_CHECKPOINTER") or "").strip().lower()
@@ -92,7 +156,7 @@ def get_checkpointer():
 
                 conn_string = os.environ.get("DIGI_CHECKPOINTER_POSTGRES_URI", "").strip()
                 if conn_string:
-                    cm = PostgresSaver.from_conn_string(conn_string)
+                    cm = PostgresSaver.from_conn_string(_bounded_conn_string(conn_string))
                     _cm_holders.append(cm)
                     _checkpointer_instance = cm.__enter__()
                     _checkpointer_instance.setup()

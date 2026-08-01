@@ -42,7 +42,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `test-digiclaw.yml` | Test: digiclaw | workflow_call | digiclaw unit tests | Working | `digiclaw/**`, `tests/dc/**` |
 | `test-digigraph.yml` | Test: digigraph | workflow_call | digigraph unit tests | Working | `digigraph/**`, `tests/dg/**` |
 | `test-digikey.yml` | Test: digikey | workflow_call | digikey unit tests | Working | `digikey/**`, `tests/dk/**` |
-| `pipeline-digiquant-prices.yml` | Pipeline: DigiQuant prices | schedule (intraday: */15 13-20 weekdays; EOD: 21:00 weekdays), dispatch | Price + technicals ingest; guarded by `SUPABASE_URL` | Working | none |
+| `pipeline-digiquant-prices.yml` | Pipeline: DigiQuant prices | schedule (intraday: */15 13-21 weekdays; at-open: 13:35 **and** 14:35, DST-gated to one; EOD: 21:25 weekdays), dispatch | Price + technicals ingest; guarded by `SUPABASE_URL`. Schedules are the UTC union of both ET offsets — see the DST note in the workflow header (#1775) | Working | none |
 | `pipeline-digiquant-tearsheets.yml` | Pipeline: DigiQuant tearsheets | schedule (daily 00:00 UTC), dispatch | Daily Slapper tearsheet regen for digiquant.io: backtest with Supabase calibrations, commit `frontend/digiquant-web/public/strategies/*.json`, upsert `strategy_tearsheets` (#1068) | Working | none |
 | `test-digiquant.yml` | Test: digiquant | workflow_call | digiquant unit tests | Working | `digiquant/**`, `tests/dq/**` |
 | `test-digisearch.yml` | Test: digisearch | workflow_call | digisearch unit tests | Working | `digisearch/**`, `tests/ds/**` |
@@ -61,7 +61,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `smoke-stack.yml` | Smoke: stack | schedule (daily 07:00 UTC), dispatch | `docker compose up --wait` + `/healthz` on digikey/digigraph/digiquant/digisearch/digismith | Working | none |
 | `ci-type-check.yml` | CI: type check | push (main/develop), PR | mypy type checking for digibase + digikey | Working | `digibase/**`, `digikey/**`, `mypy.ini` |
 | `test-digivault.yml` | Test: digivault | workflow_call | digivault unit tests | Working | `digivault/**`, `tests/dv/**` |
-| `smoke-site.yml` | Smoke: site | schedule (daily 06:17), dispatch | Post-deploy probe of digithings.ai + digiquant.io: homepages, prerendered `/modules/digigraph/`, stable `/design/assets/og.png` canary (SPA-fallback MIME masking, #671) | Working | none |
+| `smoke-site.yml` | Smoke: site | schedule (daily 06:17), dispatch | Post-deploy probe of digithings.ai + digiquant.io: homepages, prerendered `/docs/`, stable `/design/assets/og.png` canary (SPA-fallback MIME masking, #671); second job checks the digiquant.io deploy build stamp so a frozen Pages project is detected rather than discovered (#1759) | Working | none |
 | `smoke-langsmith.yml` | Smoke: LangSmith | dispatch only | Readiness check (#687): `LANGSMITH_API_KEY` auth + `@traceable` nesting before enabling tracing on atlas workflows | Working | none |
 | `pipeline-atlas-metrics.yml` | Pipeline: Atlas metrics refresh | schedule (daily, post-EOD), dispatch | Deterministic Polars/SQL recompute of `portfolio_metrics` + `position_attribution` the Olympus dashboard reads; zero LLM cost; runs after EOD price ingest | Working | none |
 | `pipeline-digiquant-backfill.yml` | Pipeline: DigiQuant backfill | dispatch only | One-shot full-history (≤40y) price + technicals + macro backfill into Supabase `price_history` | Working (on-demand) | none |

@@ -26,9 +26,11 @@ Cron entry point: **`python -m digiquant.olympus.hermes.chain --run-type {baseli
 | `delta` | `atlas-delta.yml` — `Mon–Fri 12:00 UTC` | same + a triage phase after preflight |
 | `monthly` | `atlas-monthly.yml` — month-end `14:00` | preflight → monthly-synthesis only (no Hermes, no book) |
 
-Data ingestion cron (separate): `digiquant-prices.yml` — intraday `*/15 13–20 Mon–Fri`
-(fetch-quotes + compute-technicals), EOD `21:00` (sync-calendar + fetch-macro), and `14:35`
-(`execute_at_open.py --prior-trading-day-rebalance`).
+Data ingestion cron (separate): `digiquant-prices.yml` — intraday `*/15 13–21 Mon–Fri`
+(fetch-quotes + compute-technicals), EOD `21:25` (sync-calendar + fetch-macro + the sector
+single names), and `13:35`/`14:35` (`execute_at_open.py --prior-trading-day-rebalance`).
+These are UTC but every deadline they serve is ET wall-clock, so the windows are the union
+of both offsets and the at-open pair is narrowed to one run by an ET gate job (#1775).
 
 There is also a standalone Atlas CLI (`python -m digiquant.olympus.atlas.graph`) that runs
 research-only and publishes — used by tests/dry-runs; production uses the chain.
@@ -157,7 +159,7 @@ These populate the tables the tools read.
 | `nav_history` | materialize | frontend, breaker, backtest | ✅ |
 | `theses` / `thesis_vehicles` | materialize | frontend (2×) | ✅ |
 | `decision_log` | phase9 persist; resolved by preflight_reflect | frontend (1×), scorecard | ✅ (resolves in-graph) |
-| `position_events` | **`execute_at_open.py`** (price cron 14:35) — sole recurring writer (not materialize) | frontend (3×) | ✅ |
+| `position_events` | **`execute_at_open.py`** (price cron 13:35/14:35, ET-gated to 09:35 ET) — sole recurring writer (not materialize) | frontend (3×) | ✅ |
 | **`portfolio_metrics`** | `refresh_performance_metrics.py` | frontend (1×) | ⚠️ **EMPTY — no cron** |
 | **`position_attribution`** | `refresh_attribution.py` | frontend (1×) | ⚠️ **EMPTY — no cron** (migration 040) |
 | `atlas_run_diagnostics` | diagnostics.write_row (every run) | `atlas_run_health` view | ✅ writes; view = migration 041 (held human gate) |

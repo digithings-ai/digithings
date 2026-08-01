@@ -1,9 +1,12 @@
 # Branching model
 
-This repository enforces a specific branch taxonomy client-side (via
-`scripts/hooks/pre-push.sh`) and server-side (via a GitHub ruleset on
-`origin`). Pushes of branches whose names don't match the taxonomy are
-rejected before they leave your machine.
+This repository enforces a specific branch taxonomy **client-side only**, via
+`scripts/hooks/pre-push.sh` (installed by `make hooks-install`). Pushes of
+branches whose names don't match the taxonomy are rejected before they leave
+your machine — but a clone that never ran `make hooks-install` has no name
+enforcement at all. There is no branch-naming ruleset on `origin`: its three
+rulesets are `module-branch-protection` (on `module/**`) and two Copilot-review
+rulesets (on the default branch, which is `develop`).
 
 ## Three-tier branching model
 
@@ -13,25 +16,31 @@ main  ←  develop  ←  module/<component>  ←  task/<N>-<slug>
 
 - **`task/<N>-<slug>`** branches from its module branch (auto-detected from issue's `component:` label by `make task ISSUE=N`). PRs target the module branch.
 - **`module/<component>`** accumulates task PRs for a sprint, then PRs into `develop` as one batch. Use `make module-pr MODULE=<component>`.
-- **`develop`** is the integration branch. Holds cross-cutting work (component:root, component:website) and module-sprint merges.
-- Cross-cutting tasks (component:root/website) skip the module tier and branch directly from `develop`.
+- **`develop`** is the integration branch. Holds cross-cutting work and module-sprint merges.
+- Some components skip the module tier and branch directly from `develop`. `scripts/project_routing.json` is the source of truth for which — read its `branches` map rather than trusting a list in prose (as of 2026-08-01: `component:root`, `component:digivault`, `component:website`, `component:digiquant-web`, `component:design-system`, and the `default` fallback).
 
 **Session start:** `make module-switch MODULE=<component>` then `make task ISSUE=N`.
 **Sprint end:** `make module-pr MODULE=<component>` → PR review → merge to develop.
-**Sync:** `make module-sync` keeps all module branches up to date with develop.
+**Sync:** `make module-sync` fast-forwards your **local** `module/*` refs to `develop`. It does not push, so `origin/module/*` is unchanged — and it cannot, because `module-branch-protection` requires a PR and blocks force-push. Refreshing a *remote* module branch means opening a PR into `base=module/<component>`. Check staleness before you branch off one:
+
+```bash
+git rev-list --count origin/module/<component>..origin/develop   # 0 = current; >0 = stale
+```
 
 ## Long-lived branches
 
 | Branch | Purpose | Protection |
 |--------|---------|------------|
-| `main` | What is actually deployed / released. | PR required, linear history, no force-push, no deletion. |
-| `develop` | Integration branch — merge target for module sprints and cross-cutting work. | PR required, no force-push, no deletion. |
-| `module/<component>` | Per-module integration branch. One per DigiThings module. PRs into develop. | No force-push. |
+| `main` | What is actually deployed / released. | PR required (1 approval), no force-push, no deletion. Linear history is **not** enforced. |
+| `develop` | Integration branch — merge target for module sprints and cross-cutting work. Also the repo's **default branch**. | PR required (0 approvals), no force-push, no deletion. |
+| `module/<component>` | Per-module integration branch. One per DigiThings module. PRs into develop. | No force-push, no deletion, PR required (0 approvals) — the `module-branch-protection` ruleset on `refs/heads/module/**`. |
 
 Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
 (belt-and-suspenders on top of the PR gate).
 
-**Module branches:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith`, `module/digiclaw`, `module/digibase`.
+**Module branches managed by the tooling:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith`, `module/digiclaw`, `module/digibase` — this is the `MODULES` array in `scripts/module_branches.sh`, so `make module-status`/`-sync`/`-switch`/`-pr` only know these eight.
+
+Four more `module/*` branches exist on `origin` outside that set and are not managed by any command here: `module/website`, `module/olympus`, `module/digiskills`, `module/digiquant-atlas`. Treat any module branch as dead until you check it — several have not moved since 2026-04 and sit >1700 commits behind `develop`, and `module/digiquant-atlas` predates the `apps/digiquant-atlas` → `digiquant/src/digiquant/olympus` migration entirely.
 
 ## Short-lived branches
 
@@ -59,9 +68,11 @@ new contributor:
 
 1. Edit `scripts/hooks/pre-push.sh` and add the handle to `CONTRIBUTOR_HANDLES`
    (pipe-separated: `chrizefan|alice|bob`).
-2. Update the branch-naming ruleset on `origin` (see `scripts/github-ruleset.json`
-   or the GitHub UI under **Settings → Rules → Rulesets**).
-3. Re-run `make hooks-install` in every developer's clone so the new regex lands.
+2. Re-run `make hooks-install` in every developer's clone so the new regex lands.
+
+There is no server-side counterpart to update. `scripts/github-ruleset.json`,
+which this section used to point at, does not exist in the repo, and `origin`
+has no branch-naming ruleset to edit.
 
 ## Cutting a release
 
@@ -91,12 +102,26 @@ git push origin --delete <branch>
 git branch -d <branch>                          # local
 ```
 
-`main`, `develop`, and any `release/v*` are protected server-side against
-deletion.
+`main` and `develop` are protected server-side against deletion. `release/v*` is
+**not** — see the gap note below.
 
 ## What is not allowed
 
-- Branch names outside the taxonomy — rejected by the client pre-push hook and
-  by the server ruleset.
-- Force-pushes to `main`, `develop`, or any `release/v*` — blocked server-side.
-- PRs without at least one passing CI check — blocked on `main`.
+- Branch names outside the taxonomy — rejected by the client pre-push hook.
+  Nothing enforces this server-side.
+- Force-pushes to `main` or `develop` — blocked server-side.
+- Force-pushes to, or deletion of, `module/**` — blocked by the
+  `module-branch-protection` ruleset.
+
+## Enforcement gaps (verified 2026-08-01)
+
+Two protections this document previously asserted are not actually configured.
+Both are a human call to close — changing branch protection is a settings
+change, not a docs change:
+
+- **`release/v*` has no protection rule.** Only the `main` and `develop`
+  patterns exist, so a release branch can be force-pushed or deleted by anyone
+  with write access.
+- **`main` requires no status checks.** `required_status_checks` is empty and
+  neither ruleset adds any, so a PR into `main` can merge with CI red. The one
+  required approval is the only gate.

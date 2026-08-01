@@ -4,6 +4,8 @@ import {
   canonicalizeLegacyPortfolioSearch,
   canonicalizeLegacyThesesSearch,
   mapPortfolioTabFromUrl,
+  searchParamsFromHref,
+  thesisDetailHref,
 } from './portfolio-url-state';
 
 describe('portfolio-url-state', () => {
@@ -45,19 +47,42 @@ describe('portfolio-url-state', () => {
     expect(target).toEqual({ kind: 'path', href: '/portfolio/performance' });
   });
 
-  it('canonicalizes legacy thesis deep links to the thesis route', () => {
+  it('canonicalizes legacy thesis deep links to the query-param thesis route (#1760)', () => {
     const target = canonicalizeLegacyPortfolioSearch(
       '/olympus/portfolio',
       new URLSearchParams('tab=thesis&thesis=SHY&date=2026-06-17')
     );
 
-    expect(target).toEqual({ kind: 'path', href: '/portfolio/theses/SHY' });
+    // `kind: 'path'` selects router.replace (which applies basePath) — the
+    // detail view sits on another pathname, so it needs a real navigation.
+    expect(target).toEqual({ kind: 'path', href: '/portfolio/theses?thesis=SHY' });
+  });
+
+  it('builds every thesis detail href as a query on the static theses route (#1760)', () => {
+    // A dynamic `[thesisId]` segment under `output: 'export'` 404s on any id the
+    // build did not enumerate; the query form serves ids created after a deploy.
+    expect(thesisDetailHref('tariff-oil-stagflation-risk')).toBe(
+      '/portfolio/theses?thesis=tariff-oil-stagflation-risk'
+    );
+    expect(thesisDetailHref('_unlinked')).toBe('/portfolio/theses?thesis=_unlinked');
+  });
+
+  it('encodes ids that would otherwise break the query string', () => {
+    expect(thesisDetailHref('a&b=c')).toBe('/portfolio/theses?thesis=a%26b%3Dc');
+    expect(searchParamsFromHref(thesisDetailHref('a&b=c')).get('thesis')).toBe('a&b=c');
+    expect(searchParamsFromHref(thesisDetailHref('semis / AI')).get('thesis')).toBe('semis / AI');
   });
 
   it('canonicalizes legacy theses tab once on the theses page', () => {
     const target = canonicalizeLegacyThesesSearch(new URLSearchParams('tab=theses&date=2026-06-17'));
 
     expect(target).toEqual({ kind: 'query', href: '/portfolio/theses?date=2026-06-17' });
+  });
+
+  it('canonicalizes a ?tab=thesis deep link on the theses page to the query form (#1760)', () => {
+    const target = canonicalizeLegacyThesesSearch(new URLSearchParams('tab=thesis&thesis=MT1'));
+
+    expect(target).toEqual({ kind: 'path', href: '/portfolio/theses?thesis=MT1' });
   });
 
   it('rewrites the historical alias to the Theses tab, seeding the date', () => {

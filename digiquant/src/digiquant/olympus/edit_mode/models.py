@@ -8,7 +8,7 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
     Literal,
 )
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 PatchOpType = Literal["set", "append", "remove"]
 EditMode = Literal["full", "edit", "skip"]
@@ -23,6 +23,27 @@ class PatchOp(BaseModel):
     path: str = Field(max_length=512, description="JSON Pointer, RFC 6901")
     value: Any | None = None
     reason: str | None = Field(default=None, max_length=240)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _truncate_reason(cls, v: object) -> object:
+        """Truncate an over-long ``reason`` instead of rejecting the patch (#1740).
+
+        ``reason`` is free prose the model writes to explain one op, and nothing
+        downstream parses it. But the 240-char cap is stated in none of the 17
+        ``*-edit.md`` skills, so the model overruns it by a handful of characters
+        on a regular basis — and because the cap is enforced as a hard schema
+        constraint, a single long ``reason`` raised ValidationError and discarded
+        the ENTIRE DocumentPatch. That cost 1-4 successfully-researched segments
+        per run, and on 2026-07-28 it took out the master digest itself.
+
+        Fail-soft, matching the ``flow_direction`` idiom in
+        ``phase2_institutional.py``: an informational field must never fail a
+        merge.
+        """
+        if isinstance(v, str) and len(v) > 240:
+            return v[:237] + "..."
+        return v
 
 
 class DocumentPatch(BaseModel):

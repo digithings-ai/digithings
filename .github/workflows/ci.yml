@@ -26,6 +26,10 @@ jobs:
       digiquant: ${{ steps.filter.outputs.digiquant }}
       digisearch: ${{ steps.filter.outputs.digisearch }}
       digigraph: ${{ steps.filter.outputs.digigraph }}
+      # Added by hand (#1788): generate_ci_path_filters.py only rewrites the
+      # block between the CI_PATH_FILTERS markers below, not this outputs map.
+      digillm: ${{ steps.filter.outputs.digillm }}
+      digifetch: ${{ steps.filter.outputs.digifetch }}
       digichat: ${{ steps.filter.outputs.digichat }}
       olympus: ${{ steps.filter.outputs.olympus }}
       web: ${{ steps.filter.outputs.web }}
@@ -75,6 +79,12 @@ jobs:
               - 'digigraph/**'
               - 'tests/dg/**'
               - '.github/workflows/test-digigraph.yml'
+            digillm:
+              - 'digillm/**'
+              - '.github/workflows/test-digillm.yml'
+            digifetch:
+              - 'digifetch/**'
+              - '.github/workflows/test-digifetch.yml'
             digichat:
               - 'frontend/digichat/**'
               - 'frontend/digiweb/design/**'
@@ -153,6 +163,7 @@ jobs:
               - 'agents/**'
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
+              - '.github/workflows/pipeline-digiquant-prices.yml'
             compose:
               - 'docker-compose.yml'
               - '.env.example'
@@ -224,6 +235,20 @@ jobs:
     needs: changes
     if: needs.changes.outputs.digigraph == 'true'
     uses: ./.github/workflows/test-digigraph.yml
+
+  # digillm and digifetch (#1788). Both suites ran in no lane before this — and
+  # a combined `pytest` could not even collect them, because their tests/
+  # directories carried an __init__.py that claimed the repo-root `tests` package
+  # name. The __init__.py files are gone; these two jobs are the CI half.
+  digillm:
+    needs: changes
+    if: needs.changes.outputs.digillm == 'true'
+    uses: ./.github/workflows/test-digillm.yml
+
+  digifetch:
+    needs: changes
+    if: needs.changes.outputs.digifetch == 'true'
+    uses: ./.github/workflows/test-digifetch.yml
 
   digichat:
     needs: changes

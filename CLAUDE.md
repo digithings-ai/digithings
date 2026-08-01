@@ -90,7 +90,13 @@ main ← develop ← module/<component> ← task/<N>-slug
 
 Use `make task ISSUE=N` to create a `task/N-slug` branch from the right module branch. Task branches PR into their module branch; module branches PR into develop. Never do module-specific work on `develop` directly.
 
-**Frontend is one-hop (#1310).** `component:website`, `component:digiquant-web`, and `component:design-system` route **straight to `develop`** (see `scripts/project_routing.json`), skipping the `module/website` hop — frontend/marketing has no auth/live-trading surface to isolate, and the module hop was the source of the redesign epic's sync/conflict churn. Task branches for these still PR into `develop` directly. The two-hop model still applies to backend modules (`module/digiquant`, `module/digikey`, `module/digigraph`, etc.).
+**Not every component is two-hop.** `scripts/project_routing.json` maps each `component:` label to its base branch, and five route **straight to `develop`**, skipping the module tier (as does the `default` fallback):
+
+- `component:root` — repo-level files, including this one. A change to `CLAUDE.md`, `Makefile`, or `.github/` has no module hop to make.
+- `component:digivault` — routed to `develop` despite being a backend service.
+- `component:website`, `component:digiquant-web`, `component:design-system` — frontend is one-hop (#1310): it has no auth/live-trading surface to isolate, and the `module/website` hop was the source of the redesign epic's sync/conflict churn.
+
+Task branches for these PR into `develop` directly. The two-hop model applies to the remaining backend modules (`module/digiquant`, `module/digikey`, `module/digigraph`, etc.).
 
 **Sync the module branch with develop *before* you branch off it.** Module branches drift behind `develop` fast because we iterate on develop constantly — and a task branch cut from a stale module branch edits dead code. (Real incident, 2026-06-17: `module/digiquant` was ~2 months / ~400 commits behind, predating the `apps/digiquant-atlas → digiquant/src/digiquant/olympus` migration; backend PRs cut from it touched files that no longer exist on develop.) `make task ISSUE=N` does **not** sync for you — check first:
 
@@ -101,9 +107,18 @@ git rev-list --count origin/module/<component>..origin/develop   # 0 = current; 
 
 Don't re-run the full review pipeline at every hop — see [AGENT_WORKFLOW.md §9](docs/agents/AGENT_WORKFLOW.md) for which stage gets the full review vs. a diff-scoped check.
 
-Module branches are guarded by the `module-branch-protection` ruleset: **no force-push, no deletion, PR required (0 approvals)**. So you cannot `git push --force` to refresh a stale module branch. To sync one, open a normal PR into `base=module/<component>` — either `head=develop`, or a `chore/sync-*` branch whose tree equals develop (a `-s ours` merge with the index reset to develop's tree preserves the module branch's prior history) — and merge it (no approval needed). Branch names must match `{feat,fix,docs,chore}/<slug>` or `task/<N>-slug`.
+Module branches are guarded by the `module-branch-protection` ruleset: **no force-push, no deletion, PR required (0 approvals)**. So you cannot `git push --force` to refresh a stale module branch. To sync one, open a normal PR into `base=module/<component>` — either `head=develop`, or a `chore/sync-*` branch whose tree equals develop (a `-s ours` merge with the index reset to develop's tree preserves the module branch's prior history) — and merge it (no approval needed).
 
-The **Check linkage** CI gate (the `Require Fixes` check) is separate from the branch-name rule: it only auto-links a PR via a `task/<N>-slug` branch **or** a `Fixes/Closes/Resolves #N` keyword in the body. A `feat|fix|docs|chore/<slug>` branch passes the name rule but still **fails linkage** unless the body says `Fixes #N` — so prefer `task/<N>-slug` for issue-linked work (and never `Closes #N` against an umbrella tracking issue you don't want auto-closed).
+Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced by the `scripts/hooks/pre-push.sh` hook (`make hooks-install`): `main`, `develop`, `module/<component>`, `release/vX.Y.Z`, `task/<N>-slug`, `{feat,fix,docs,chore}/<slug>`, `{claude,codex,cursor,copilot}/<slug>` for agent-driven work outside the task system, and `<handle>/<slug>` for a named human contributor. Agent session branches are valid names — `claude/<slug>` pushes fine; it is *linkage*, below, that it does not satisfy.
+
+The **Check linkage** CI gate (the `Require Fixes` check) is separate from the branch-name rule. It passes on any one of these, in the order `.github/workflows/ci-pr-hygiene.yml` tests them:
+
+1. Head branch is `module/*` — umbrella PR; the underlying task PRs already carried linkage.
+2. Head branch is `docs/*` or `chore/*` — **bypassed outright**, no issue required. A `CLAUDE.md` tweak or a CI dedupe does not need a backlog item.
+3. Head branch is `task/<N>-slug` — implicit link to issue #N.
+4. A `Fixes/Closes/Resolves #N` keyword appears in the PR **body or title** (either one).
+
+So `feat/<slug>` and `fix/<slug>` are the only name-rule-valid patterns that still need an explicit keyword — as are the agent namespaces (`claude/<slug>` et al.), which no rule bypasses. Prefer `task/<N>-slug` for issue-linked work, and never `Closes #N` against an umbrella tracking issue you don't want auto-closed — use `Refs #N` when the PR should not close the issue, which satisfies no gate on its own and so pairs with a `docs/`, `chore/`, or `task/` branch.
 
 ## Liveness vs status
 
@@ -113,10 +128,10 @@ The **Check linkage** CI gate (the `Require Fixes` check) is separate from the b
 ## Deployments (static sites)
 
 - **digithings.ai** — Cloudflare Pages via `scripts/build-digithings.sh`. The legacy `static.yml` GitHub Pages workflow was **removed** in the 2026-06 workflow cleanup; do not use GitHub Pages for this domain.
-- **digiquant.io** — Cloudflare Pages (`scripts/build-digiquant.sh`) and/or split-repo publish per [docs/adr/0012-digiquant-io-split-repo.md](docs/adr/0012-digiquant-io-split-repo.md). There is no `deploy-digiquant.yml` in this monorepo; see `.github/workflows/deploy-digiquant-cloudflare.yml` when present.
+- **digiquant.io** — Cloudflare Pages git-integration on this monorepo, building `dist/` via `scripts/build-digiquant.sh` from `main` (per `deploy-digiquant-cloudflare.yml`'s header; the Cloudflare dashboard is authoritative). That is the sole delivery path — the split publish repo in [docs/adr/0012-digiquant-io-split-repo.md](docs/adr/0012-digiquant-io-split-repo.md) was never created, and `.github/workflows/deploy-digiquant-cloudflare.yml` is a PR build check, not the deploy.
 
 ## Agent surface
 
 Skills, subagents, and slash commands under `.claude/` are generated from `agents/sources/` by `make agents-init`. Never hand-edit `.claude/agents/`, `.claude/skills/`, or `.claude/commands/` — edit the sources and run `make agents-init`. CI enforces idempotence.
 
-Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`
+Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.

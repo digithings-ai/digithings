@@ -23,9 +23,13 @@ mount by the first column (or `defaultSort`) unconditionally.
 
 | File | Surface | Why it keeps local code |
 |---|---|---|
-| `components/portfolio/AllocationsPositionsTable.tsx` | Allocations tab positions table | Sector **group header rows** (`colSpan` subtotal rows interleaved with position rows) are the primary structure — a flat sort by any column would tear the grouping apart, and the shipped order (conviction-desc within sector, sectors by weight) is deliberately fixed, not user-sortable. Rows **click-to-expand** into a `PositionDrilldown` `<tr colSpan>`; cells are ReactNode (ConvictionMeter, RiskEnvelopeCell, weight bar scaled to the max weight, `SignedConvictionBadge` deep-link with `stopPropagation`) where the primitive's `format` returns strings; Target/Δ columns are conditional (`hasTargets`); 9 columns hide responsively (`hidden md/lg/xl:table-cell`). |
-| `components/portfolio/position-pnl-table.tsx` | Performance tab P&L table | Same row **drilldown** — and it is always live: the only call site (`PerformanceTab`) always derives `priceChartAnchorDate` (last snap date, else `meta.last_updated`). P&L % wears **per-cell sign-dependent** `text-up`/`text-down` (the primitive's `tone` is column-scoped); 3 columns hide responsively; and the primitive's unconditional initial sort would reorder rows away from today's API order (including the CASH row's position). |
-| `components/portfolio/advanced-stats-panel.tsx` | Performance tab advanced statistics | **Not a table at all** — a `MetricCard` KPI grid (`grid grid-cols-2 md:grid-cols-4`) over locally computed stats. There is no column/sort grammar to re-back. |
+| `components/portfolio/AllocationsPositionsTable.tsx` | Allocations tab positions table | Sector **group header rows** (`colSpan` subtotal rows interleaved with position rows) are the primary structure — a flat sort by any column would tear the grouping apart, and the shipped order (conviction-desc within sector, sectors by weight) is deliberately fixed, not user-sortable. Cells are ReactNode (ConvictionMeter, RiskEnvelopeCell, weight bar scaled to the max weight, `SignedConvictionBadge` deep-link with `stopPropagation`) where the primitive's `format` returns strings; Target/Δ columns are conditional (`hasTargets`); 9 columns hide responsively (`hidden md/lg/xl:table-cell`). |
+
+The Performance tab's two batch-D rows — `position-pnl-table.tsx` (P&L table,
+same row-drilldown grammar) and `advanced-stats-panel.tsx` (a `MetricCard` KPI
+grid, never a table) — were **deleted in #1747** along with the rest of the
+orphaned tab, as was the `PositionDrilldown` row-expansion this section's
+Allocations row used to share with them.
 
 ## Per-file inventory (F5 twelve-x targets, #1450 F5 tables)
 

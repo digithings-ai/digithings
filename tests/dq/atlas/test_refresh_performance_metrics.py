@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -490,3 +491,117 @@ class TestRefreshPositionsMetrics:
         assert n == 0
         # No update should have been applied to the CASH row
         assert sb.store["positions"][0]["current_price"] is None
+
+
+# ---------------------------------------------------------------------------
+# #1746: the scheduled (flagless) run must not silently re-process an older date
+# ---------------------------------------------------------------------------
+
+
+class TestResolveScheduledMetricsDate:
+    """The flagless cron path resolves *today UTC*, never ``max(positions.date)``.
+
+    Falling back to the latest existing book let ``portfolio_metrics``' upsert
+    ``on_conflict='date'`` rewrite an older row: 22 of 33 green prod runs advanced no
+    date, and 2026-06-26's row was re-stamped on 2026-07-16.
+    """
+
+    @staticmethod
+    def _positions_on(*dates: str) -> FakeSupabaseClient:
+        return _fake_with({"positions": [{"date": d, "ticker": "SPY"} for d in dates]})
+
+    def test_returns_todays_book_when_it_exists(self) -> None:
+        sb = self._positions_on("2026-07-28", "2026-07-29", "2026-07-31")
+        assert _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 31)) == "2026-07-31"
+
+    def test_returns_the_book_date_not_the_target_when_a_book_is_ahead(self) -> None:
+        """Pins the documented contract: the resolved date is ``max(positions.date)``.
+
+        Prod never books ahead of today UTC, so this branch is unreachable there — but it
+        is the only case where returning the book date differs observably from returning
+        the target, and the docstring promises "never earlier".
+        """
+        sb = self._positions_on("2026-07-31")
+        assert _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 30)) == "2026-07-31"
+
+    def test_stale_message_does_not_recommend_a_bookless_date(self) -> None:
+        """The remediation hint must not send an operator to ``--date <today>``.
+
+        ``--date`` runs ``carry_forward_positions`` first, so pointing at a date with no
+        book would clone the previous one — the densification this guard exists to avoid.
+        """
+        sb = self._positions_on("2026-07-29")
+        with pytest.raises(_mod.StaleBookError) as excinfo:
+            _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 30))
+        message = str(excinfo.value)
+        assert "--date 2026-07-29" in message
+        assert "Do NOT pass --date 2026-07-30" in message
+
+    def test_raises_when_book_is_one_day_stale(self) -> None:
+        # Prod run 30589621216 (2026-07-30): the Olympus run was cancelled after 4h so no
+        # 07-30 book existed; the cron re-stamped 07-29 and exited 0 with two green ticks.
+        sb = self._positions_on("2026-07-28", "2026-07-29")
+        with pytest.raises(_mod.StaleBookError) as excinfo:
+            _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 30))
+        message = str(excinfo.value)
+        assert "2026-07-29" in message and "2026-07-30" in message
+        assert "1 day(s)" in message
+
+    def test_raises_across_the_twenty_day_blackout(self) -> None:
+        # 2026-06-27..07-16: 17 consecutive green runs all stamped 2026-06-26.
+        sb = self._positions_on("2026-06-26")
+        with pytest.raises(_mod.StaleBookError) as excinfo:
+            _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 16))
+        assert "20 day(s)" in str(excinfo.value)
+
+    def test_raises_when_no_positions_exist_at_all(self) -> None:
+        sb = self._positions_on()
+        with pytest.raises(_mod.StaleBookError):
+            _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 31))
+
+    def test_stale_book_writes_nothing(self) -> None:
+        """The guard runs *before* any upsert — a stale run leaves the DB untouched."""
+        sb = self._positions_on("2026-07-29")
+        with pytest.raises(_mod.StaleBookError):
+            _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 30))
+        assert sb.store == {}
+
+    def test_exit_code_is_distinct_from_hard_failure(self) -> None:
+        # The wrapper maps any other exception to 1; a stale book must be tellable apart.
+        assert _mod._EXIT_STALE_BOOK == 3
+
+
+class TestMetricsWorkflowStepOrder:
+    """Pins metrics BEFORE attribution in ``pipeline-atlas-metrics.yml``.
+
+    ``upsert_portfolio_metrics_daily`` prefers ``SUM(position_attribution.
+    contribution_pct)`` for ``pnl_pct`` and falls back to the one-day ``nav_history``
+    return, but ``refresh_attribution.py`` computes a **21-day trailing window**
+    (``_DEFAULT_WINDOW_DAYS = 21``). The two are different quantities — prod 2026-07-29
+    has an attribution sum of +0.98% against a nav day return of -0.42%, opposite signs.
+    Metrics-first means today's attribution rows do not exist yet and ``pnl_pct`` takes
+    the correct one-day path, so this order is load-bearing until the horizon mismatch
+    itself is fixed.
+    """
+
+    @staticmethod
+    def _step_names() -> list[str]:
+        import yaml
+
+        workflow = (
+            Path(__file__).resolve().parents[3]
+            / ".github"
+            / "workflows"
+            / "pipeline-atlas-metrics.yml"
+        )
+        spec = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+        return [str(step.get("name", "")) for step in spec["jobs"]["refresh"]["steps"]]
+
+    def test_metrics_step_precedes_attribution_step(self) -> None:
+        names = self._step_names()
+        metrics = next(i for i, n in enumerate(names) if "portfolio_metrics" in n)
+        attribution = next(i for i, n in enumerate(names) if "position_attribution" in n)
+        assert metrics < attribution, (
+            "metrics must run before attribution — reordering puts a 21-day window "
+            "contribution into the daily pnl_pct column on every row (#1746)"
+        )
