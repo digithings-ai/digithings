@@ -754,6 +754,14 @@ DigiQuant ships two sibling sub-graphs that compose end-to-end on **one daily to
   deterministic risk sizing (H8 / legacy 7E) → `commit_run` terminal booking.
   Split from Atlas in epic #471 per [ADR-0015](../docs/adr/0015-atlas-vs-hermes.md);
   topology canonical in [ADR-0020](../docs/adr/0020-olympus-mvp-daily-delta.md).
+  **H4 is the sole fan-out cap chokepoint** — `roster_cap.capped_tickers` bounds the
+  H5/H6 roster width to `max(ATLAS_MAX_ANALYSTS, len(prior_book))`; the prior book is
+  the only sanctioned overshoot (#936) and thesis vehicles are prioritised within the
+  cap rather than exempt from it (#1767). The `build_h5_asset_analyst` /
+  `build_h6_deliberation` compile-time builders also call it, but are test-only —
+  `graph.py` wires the runtime `build_h5_from_state` / `build_h6_from_state` fan-outs.
+  Roster width lands in `atlas_run_diagnostics.breakdown` via
+  `hermes/roster_diagnostics.roster_breakdown`.
 
 The handoff seam is `digiquant.olympus.atlas.snapshot.DigestPayload` — the only symbol
 Hermes imports from Atlas runtime.

@@ -182,7 +182,13 @@ unchanged keys, so the diet does **not** disturb the stable→volatile prompt-ca
 ordering in `digigraph.graph.research_agent._format_scope_block` (#935).
 
 Deliberately **not** used (they reduce capability): higher triage carry
-thresholds, lower `max_search_results`, blanket fan-out caps. The remaining
+thresholds, lower `max_search_results`. A **blanket** fan-out cap is still
+rejected, but `ATLAS_MAX_ANALYSTS` is not blanket and since #1767 it is
+genuinely enforced: the prior book is exempt (#936) and thesis vehicles are
+prioritised round-robin *within* the cap, so the reduction falls on the
+lowest-ranked unlinked candidates rather than uniformly. It had never bound at
+all before #1767 — 39 analysts against a configured 25 — so this is enforcement
+of a stated policy, not a new reduction. The remaining
 search-cost work is structural — free-source ingestion replacing paid agentic
 searches — not narrowing. That program is **Phase D**: see
 [`PHASE-D.md`](PHASE-D.md) for the full architecture, PR sequence, and the

@@ -93,10 +93,52 @@ The result feeds `compute_focus_roster(..., adaptive_max_analysts=budget, min_ne
 → `roster_cap.capped_tickers`. **Invariants:** *cost-safe* — `budget ≤ ATLAS_MAX_ANALYSTS`
 always (the adaptive budget only tightens, never increases spend); *fail-soft* — any missing
 signal, absent client, or reader error degrades to the static cap and logs (never raises).
-Env knobs: `ATLAS_MAX_ANALYSTS` (the cap/baseline), `ATLAS_BUDGET_STRESS_FLOOR` (default 3),
+Env knobs: `ATLAS_MAX_ANALYSTS` (the cap/baseline, read only through
+`roster_cap.configured_max_analysts()`), `ATLAS_BUDGET_STRESS_FLOOR` (default 3),
 `ATLAS_BUDGET_DISPERSION_HI` (default 0.015). Deferred (cost-/measurement-gated): budget > cap
 in dispersion regimes, a dedicated cross-asset dispersion metric, and the `dispatch_outcomes`
 feedback table (Stage 4).
+
+### Roster cap enforcement (#1767)
+
+The cost-safe invariant above held for `budget`, but not for the roster: from the day H3
+started emitting a vehicle map until #1767, `compute_focus_roster` passed
+`active_held ∪ every thesis-map ticker` as `capped_tickers(held=…)`. Held tickers are
+exempt from the cap by #936, so a populated map (40 tickers on 2026-07-31, 46 on 07-29)
+pushed the protected set past the cap on every such day, `capped_tickers` took its
+over-budget branch, and **`ATLAS_MAX_ANALYSTS` never capped anything** — 39 analysts
+dispatched against a configured 25, and roster width tracked spend 1:1 ($0.86 at width 8,
+$4.00 at width 39).
+
+The enforced contract is now one invariant:
+
+> **`len(focus_roster) ≤ max(cap, len(active_held))`.** The prior book is the *only*
+> sanctioned overshoot. Nothing else may widen the roster.
+
+Two consequences, both deliberate:
+
+- **Thesis vehicles are prioritised, not exempt.** `held=` is the prior book only;
+  thesis-mapped tickers go in as `candidate_priority`, a **round-robin across theses by
+  within-thesis rank** (`h4_opportunity_screener.thesis_priority_order`). Output order
+  still follows the watchlist — priority decides *which* candidates survive, not the
+  dispatch order. A vehicle the cap drops gets a `focus_roster_excluded` row naming the
+  cap, so the drop is recorded rather than silent.
+- **`min_new` / `explore_floor` is a floor, not a licence.** It is clamped to the slots
+  left after the book instead of expanding the cap. Whenever the book leaves any budget,
+  that whole budget goes to non-held candidates, so #950's anti-freeze guarantee survives
+  within the cap; it is surrendered only when the book alone fills the ceiling.
+
+**Known limitation.** There is **no conviction signal anywhere in the H3 output** —
+`candidate_rank` is a position inside the mapping, not a score, and `ThesisVehicleMapping`
+has no score field — so "prioritise the thesis map" can only mean *breadth*: cover as many
+theses as the budget allows before deepening any one. At `ATLAS_MAX_ANALYSTS=30`, roughly
+7 of 27 theses get no vehicle analysed on a wide day (25 would leave 12). The cap and the
+thesis map are sized for different worlds; this makes the cap real without resolving that.
+
+Width is recorded in the `atlas_run_diagnostics.breakdown` jsonb (no migration) by
+`hermes/roster_diagnostics.roster_breakdown` — `width`, `by_reason`, `theses_covered`,
+`excluded`, `max_analysts`, `over_cap`. Its absence is why the breach went unnoticed for
+the pipeline's whole observed lifetime.
 
 ---
 

@@ -135,6 +135,11 @@ def budget_for(assessment: RegimeAssessment, *, static_cap: int) -> tuple[int, i
     - When static_cap <= 0 (no cap), return (0, explore_floor) for
       uncapped roster; explore_floor still follows the regime.
 
+    Since #1767 ``explore_floor`` is a floor *within* the budget, not a licence to
+    exceed it: ``roster_cap.capped_tickers`` clamps it to the slots left after the
+    prior book. A dispersion-regime floor of 8 against a 30 cap therefore tightens
+    what fills the budget, and never widens the budget itself.
+
     Returns (budget, explore_floor).
     """
     regime = assessment.regime
