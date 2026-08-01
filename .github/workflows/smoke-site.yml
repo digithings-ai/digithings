@@ -12,6 +12,12 @@ name: "Smoke: site"
 #   200 + text/html              -> FAIL (SPA fallback is masking a missing asset)
 #   404 / 5xx                    -> FAIL
 #   403 / 429                    -> warn only (Cloudflare bot challenge; inconclusive from CI IPs)
+#
+# The `freshness` job answers a question the asset probes structurally cannot: a
+# Cloudflare Pages project that has stopped producing deployments keeps serving
+# the last good build with a 200 and no `last-modified` header, so every probe
+# above passes forever (#1759). It reads the build stamp that
+# scripts/write-build-info.sh puts in the export root.
 
 on:
   schedule:
@@ -82,4 +88,55 @@ jobs:
             gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
           else
             gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label agent-task --label "component:website" --body "$BODY"
+          fi
+
+  freshness:
+    name: digiquant.io deploy freshness
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch build stamp
+        id: stamp
+        run: |
+          set -uo pipefail
+          # Always create the file: curl leaves it absent when it never connects,
+          # and the evaluator must see an empty body rather than crash.
+          : >/tmp/build-info.json
+          status=$(curl -sL --max-time 20 \
+            -A "digithings-site-smoke/1.0 (+https://github.com/digithings-ai/digithings)" \
+            -o /tmp/build-info.json -w "%{http_code}" \
+            "https://digiquant.io/build-info.json" || echo "000")
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "HTTP $status from https://digiquant.io/build-info.json"
+
+      - name: Evaluate freshness
+        env:
+          # Via env, not direct ${{ }} interpolation into the script body.
+          STATUS: ${{ steps.stamp.outputs.status }}
+        run: |
+          python3 scripts/check_deploy_freshness.py \
+            --url https://digiquant.io/build-info.json \
+            --status "$STATUS" \
+            --body-file /tmp/build-info.json \
+            --max-age-hours 168
+
+      - name: Open issue on stale deploy
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Deliberately a different title and label set from the asset probe
+          # above: the remedy for a frozen deploy lives in the Cloudflare Pages
+          # dashboard, not in this repository, so this is not an agent task.
+          TITLE="[site-smoke] digiquant.io deploy is stale or unstamped"
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title $TITLE" --json number --jq '.[0].number // empty')
+          BODY="The daily freshness probe could not confirm a recent digiquant.io deploy. See run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID for the verdict. Either the live build stamp is older than the 7-day limit (Cloudflare Pages has stopped producing deployments) or the deploy predates \`build-info.json\` entirely. Check the Pages project's deployment list, build log, production branch and watch paths — cf. #1759."
+          if [[ -n "$EXISTING" ]]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label "component:digiquant-web" --body "$BODY"
           fi
