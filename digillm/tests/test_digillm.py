@@ -11,6 +11,7 @@ from typing import Any  # score:allow untyped any — fake OpenAI client dict sh
 from unittest.mock import MagicMock, patch
 
 import pytest
+from openai import Timeout
 from openai.types.chat import ChatCompletion
 from openai.types.chat import ChatCompletionMessage as OpenAIMessage
 from openai.types.chat.chat_completion import Choice
@@ -165,6 +166,98 @@ def test_register_provider(monkeypatch: pytest.MonkeyPatch) -> None:
         assert made["api_key"] == "ak-1"
     finally:
         client_mod._EXTERNAL_PROVIDERS.pop("acme", None)
+
+
+# ── Explicit request timeout (#1734) ─────────────────────────────────────────
+#
+# These carry ``@pytest.mark.unit`` where the rest of this file does not, as correct
+# labelling — but be clear-eyed that it does not yet buy CI coverage. Two pre-existing gaps,
+# neither this package's to fix: no workflow runs ``digillm/tests`` at all, and a combined
+# run errors at collection with ``No module named 'tests.test_digillm'`` because
+# ``digillm/tests/__init__.py`` claims the same ``tests`` package name as the repo root
+# (``pytest -m unit`` on unmodified develop already reports 13 such collection errors).
+# So today these run via ``pytest digillm/tests/test_digillm.py``. Tracked separately.
+
+
+def _capture_client_kwargs(build: Any) -> list[dict[str, Any]]:
+    """Run ``build()`` with ``OpenAI`` patched; return the kwargs of every construction."""
+    made: list[dict[str, Any]] = []
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.append(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        build()
+    return made
+
+
+@pytest.mark.unit
+def test_default_timeout_matches_openai_sdk_default() -> None:
+    """The explicit bound must equal the SDK default it replaces, or this "hardening"
+    silently retunes every call. A bare float would widen connect from 5s to 600s."""
+    from openai._constants import DEFAULT_TIMEOUT
+
+    assert client_mod._REQUEST_TIMEOUT == DEFAULT_TIMEOUT
+    assert client_mod._REQUEST_TIMEOUT.connect == 5.0
+    assert client_mod._REQUEST_TIMEOUT.read == 600
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("env", "build"),
+    [
+        pytest.param(
+            {"OPENAI_API_KEY": "sk-default"},
+            lambda: digillm.get_client_for_model("gpt-4o-mini"),
+            id="default-client",
+        ),
+        pytest.param(
+            {"OPENROUTER_API_KEY": "or-test"},
+            lambda: digillm.get_client_for_model("openrouter/mistral/mistral-7b"),
+            id="provider-client",
+        ),
+    ],
+)
+def test_clients_are_built_with_an_explicit_timeout(
+    monkeypatch: pytest.MonkeyPatch, env: dict[str, str], build: Any
+) -> None:
+    """Every client construction threads ``timeout=``. Without it the bound exists only
+    inside the OpenAI SDK's constants module: invisible here and free to change on a bump."""
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    sentinel = Timeout(123.0, connect=4.0)
+    # raising=False so this fails on the missing ``timeout`` kwarg (the actual defect)
+    # rather than on the missing constant, which would prove nothing about behavior.
+    monkeypatch.setattr(client_mod, "_REQUEST_TIMEOUT", sentinel, raising=False)
+    made = _capture_client_kwargs(build)
+    assert made, "expected exactly one client construction"
+    assert all(kw.get("timeout") is sentinel for kw in made), (
+        f"expected timeout={sentinel!r} on every client, got {[kw.get('timeout') for kw in made]}"
+    )
+
+
+@pytest.mark.unit
+def test_byok_clients_are_built_with_an_explicit_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The two uncached BYOK paths bypass the ``_client_cache`` branches above, so they
+    need their own coverage — a user-key client that can hang forever is the same bug."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    sentinel = Timeout(123.0, connect=4.0)
+    monkeypatch.setattr(client_mod, "_REQUEST_TIMEOUT", sentinel, raising=False)
+
+    def build() -> None:
+        with digillm.byok("sk-or-user", "https://openrouter.ai/api/v1"):
+            digillm.get_client_for_model("openrouter/openai/gpt-4o-mini")  # provider BYOK
+            digillm.get_client_for_model("gpt-4o-mini")  # default-path BYOK
+
+    made = _capture_client_kwargs(build)
+    assert len(made) == 2
+    assert all(kw.get("timeout") is sentinel for kw in made), (
+        f"expected timeout={sentinel!r} on both BYOK clients, "
+        f"got {[kw.get('timeout') for kw in made]}"
+    )
 
 
 # ── chat_completion ─────────────────────────────────────────────────────────
