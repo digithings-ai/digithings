@@ -120,6 +120,7 @@ One public domain is in use for DigiChat; see [docs/adr/0018-digichat-path-routi
 - **Deployment:** **Cloudflare Pages** via `scripts/build-digithings.sh` (CI: Cloudflare Pages project `digithings-ai`).
 - **Legacy:** the `static.yml` GitHub Pages workflow and the pre-migration `frontend/digithings/` static HTML tree were both **removed** — the former in the 2026-06 workflow cleanup, the latter in #1240 once `frontend/digithings-web` (Next.js) fully replaced it as the build source; do not use GitHub Pages for this domain.
 - **Nav link:** the landing page links to `/chat` (path-routed to the DigiChat container per ADR-0018, not a subdomain).
+- **Deploy freshness (#1759):** `scripts/build-digithings.sh` writes `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) via `scripts/write-build-info.sh`, and hard-fails the build if it is absent. A Pages project that stops producing deployments keeps serving the last good build with a `200` and no `last-modified` header, so the asset probes below pass throughout a freeze; the `freshness-digithings` job in `smoke-site.yml` reads the live stamp through `scripts/check_deploy_freshness.py` and fails when it is missing or older than 7 days. This is **detection only** — *why* a Pages project stopped building is visible only in the Cloudflare dashboard (deployment list, build log, production branch, watch paths).
 
 To update the landing page: edit `frontend/digithings-web/`, run the build script locally, and let Cloudflare Pages deploy from the connected branch.
 
@@ -161,14 +162,19 @@ curl -sSfI https://digithings.ai/ -o /dev/null
 # 2. Homepage: 200 + text/html
 curl -sL -o /dev/null -w 'home %{http_code} %{content_type}\n' https://digithings.ai/
 
-# 3. Prerendered module route: 200 + text/html
-curl -sL -o /dev/null -w 'module %{http_code} %{content_type}\n' https://digithings.ai/modules/digigraph/
+# 3. Prerendered route: 200 + text/html (/modules/* was folded into the
+#    home-page terminal manifest in #1414 — /docs/ is what smoke-site.yml probes)
+curl -sL -o /dev/null -w 'docs %{http_code} %{content_type}\n' https://digithings.ai/docs/
 
 # 4. Stable design asset: 200 + image/png (the #671 SPA-fallback canary)
 curl -sL -o /dev/null -w 'og %{http_code} %{content_type}\n' https://digithings.ai/design/assets/og.png
+
+# 5. Deploy freshness (#1759): the build stamp must be JSON, and `built_at`
+#    must be the deploy you just shipped — a frozen Pages project passes 1–4.
+curl -sL --max-time 20 https://digithings.ai/build-info.json
 ```
 
-Expected: `home` and `module` return `200` with a `text/html` content-type; `og` returns `200` with `image/png`. A `200 text/html` on `og` means the SPA fallback is masking a missing asset (**fail**, cf. #671); any `404`/`5xx` is a **fail**; `curl -sSfI` exits `0`. A `403`/`429` is an inconclusive Cloudflare bot challenge (warn, not fail).
+Expected: `home` and `docs` return `200` with a `text/html` content-type; `og` returns `200` with `image/png`. A `200 text/html` on `og` means the SPA fallback is masking a missing asset (**fail**, cf. #671); any `404`/`5xx` is a **fail**; `curl -sSfI` exits `0`. A `403`/`429` is an inconclusive Cloudflare bot challenge (warn, not fail). Check 5 should print a JSON object whose `built_at` matches this deploy; a `404` or an HTML body means the live deploy predates the stamp (the daily probe reports that as `UNSTAMPED`).
 
 ### digithings.ai/chat — DigiChat production
 

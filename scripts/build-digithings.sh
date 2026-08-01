@@ -37,12 +37,21 @@ mkdir -p dist
 cp -r frontend/digithings-web/out/. dist/
 echo "digithings.ai" > dist/CNAME
 
+# Deploy build stamp (#1759). Cloudflare Pages serves a frozen deploy with a 200
+# and no `last-modified`, so without a stamp in the export every smoke probe
+# passes forever and a Pages project that stopped building is invisible from
+# outside — exactly how digiquant.io went nine days unnoticed. Written after
+# dist/ is assembled because the `rm -rf dist` above would delete it.
+echo "--- writing dist/build-info.json ---"
+bash scripts/write-build-info.sh dist/build-info.json digithings.ai
+
 # Sanity: landing must exist and carry the module manifest (the per-module pages
 # were folded into the home-page terminal manifest, so /modules/* no longer exists).
 # Match the aria-label, not an implementation class — the pane is the shared
 # <TerminalManifest> primitive since #1416 (was app-local .dt-manifest markup).
 [ -f dist/index.html ] || { echo "ERROR: dist/index.html missing — build did not export" >&2; exit 1; }
 grep -q 'aria-label="digithings module manifest"' dist/index.html || { echo "ERROR: module manifest missing from home page" >&2; exit 1; }
+[ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
 # Cloudflare Pages Functions live at the PROJECT ROOT (this script's CWD = repo root),
 # NOT inside the static output dir. The /api/chat docs-assistant Function is authored
