@@ -66,6 +66,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
   responseHeaders: Record<string, string>;
   upstreamBearer: string;
   activityDetail: ActivityDetail;
+  emitLegacyTracePart: boolean;
 }) {
   const openwebui = digigraphOpenWebUIFormat();
   const stripped = opts.messages.map((m) => {
@@ -136,20 +137,22 @@ export async function createDigigraphTraceStreamResponse(opts: {
         if (tr && typeof tr === "object") {
           const payload = tr as DigigraphTracePayload;
 
-          // Legacy part: emitted UNGATED, with the verbatim upstream payload.
-          // This is the pre-existing authenticated-path behaviour that
-          // chat-panel.tsx's rich renderers (RagSourcesTrace,
+          // Legacy part: authenticated-path-only, emitted with the verbatim
+          // upstream payload. This is the pre-existing authenticated-path
+          // behaviour that chat-panel.tsx's rich renderers (RagSourcesTrace,
           // ResearchBriefTrace) depend on for their full payload, so it must
           // NOT be routed through applyActivityDetail like the span below —
           // chat-panel.tsx has no notion of activity detail levels, only the
-          // embed surface does. Remove this block (and the resulting
-          // dual-emit) once chat-panel.tsx migrates to rendering
-          // ACTIVITY_PART_TYPE directly.
-          writer.write({
-            type: "data-digigraphTrace",
-            id: `dg-trace-${traceSeq++}`,
-            data: payload,
-          });
+          // embed surface does. Embed paths get the gated activity span alone.
+          // Remove this block (and the resulting dual-emit) once chat-panel.tsx
+          // migrates to rendering ACTIVITY_PART_TYPE directly.
+          if (opts.emitLegacyTracePart) {
+            writer.write({
+              type: "data-digigraphTrace",
+              id: `dg-trace-${traceSeq++}`,
+              data: payload,
+            });
+          }
 
           // New part: gated by this tenant's activityDetail, same as every
           // other provider.

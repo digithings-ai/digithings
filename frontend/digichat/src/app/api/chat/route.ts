@@ -254,6 +254,7 @@ export async function POST(req: Request) {
       responseHeaders,
       upstreamBearer,
       activityDetail: embedConfig?.activityDetail ?? "full",
+      emitLegacyTracePart: !embedConfig,
     });
   }
 
