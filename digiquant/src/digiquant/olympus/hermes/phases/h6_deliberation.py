@@ -25,6 +25,8 @@ from digiquant.olympus.hermes.focus_roster import (
     with_fanout_ticker,
 )
 from digiquant.olympus.hermes.models.deliberation import (
+    CARRY_FINGERPRINT_SKIP,
+    CARRY_LLM_FAILURE,
     DeliberationAnalystTurn,
     DeliberationPmTurn,
     DeliberationSummary,
@@ -294,6 +296,8 @@ def _h6_node_factory(ticker: str):
                     conviction_delta=int(prior.get("conviction_delta") or 0),
                     transcript=[],
                     carried=True,
+                    # Benign: nothing moved, so the prior debate still stands (#925).
+                    carry_reason=CARRY_FINGERPRINT_SKIP,
                 )
                 return {
                     "phase_hermes": PhaseHermesState(
@@ -313,12 +317,16 @@ def _h6_node_factory(ticker: str):
             )
             fallback = DeliberationSummary(
                 ticker=ticker,
-                converged=True,
+                # NOT converged: no PM challenge ran, so there is no debate to converge.
+                # Reporting ``converged=True`` here is what let a crashed deliberation reach
+                # H7/H8 and the published document as a settled two-sided debate (#1742).
+                converged=False,
                 conclusion=str(analyst.get("thesis") or f"carried analyst stance: {stance}"),
                 net_stance=stance_map.get(stance, "neutral"),  # type: ignore[arg-type]
                 conviction_delta=0,
                 transcript=[],
                 carried=True,
+                carry_reason=CARRY_LLM_FAILURE,
             )
             return {
                 "phase_hermes": PhaseHermesState(

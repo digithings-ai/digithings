@@ -161,6 +161,36 @@ Termination when either side sets `converged=true` (no product round cap; infra 
 only). On fingerprint quiet (#925): `skip` — carry prior deliberation summary into H7;
 fresh `deliberation_transcript` row only when the loop runs.
 
+### Carry provenance — `carry_reason` (#1742)
+
+`DeliberationSummary.carried` is set by **two** unrelated paths, and until #1742 they were
+indistinguishable: on 2026-07-31, 31 crashed debates and 4 intentional skips published the
+same `carried=true, converged=true`. `carry_reason` names which one happened:
+
+| `carry_reason` | Path | `converged` | Meaning |
+|---|---|---|---|
+| `fingerprint_skip` | quiet ticker (#925) | `true` | a real prior debate still stands |
+| `llm_failure` | fail-soft catch (#1665) | **`false`** | no PM challenge ever ran |
+
+Consequences of `llm_failure`, all downstream of the flag:
+
+- **State.** `converged=false` — there is no debate to converge, so H7's `debate_summaries`
+  and the published `deliberation/{ticker}` document stop claiming one.
+- **Document.** `payloads.deliberation_summaries` publishes **no** `bear_thesis`; mirroring
+  the bull side off the same `conclusion` produced two byte-identical theses.
+- **Sizing.** H8 caps the name's conviction at `SizingCaps.min_conviction`
+  (`phase7e._cap_unchallenged_convictions`) — applied to **both** the memo and the legacy
+  branch, since H7 writes a memo on every production run. Capping *at* the bar, not below
+  it, is deliberate: a name pushed under the bar is dropped by the sizer's selection step
+  and then re-added at its drifted weight by the #1649 held-carry backstop, which can size
+  it *larger*. Correlation de-dup can still drop a capped leg in favour of a challenged one
+  — intended. The book note names every capped position.
+
+The `PhaseError` shape (`phase="hermes_h6_deliberation"`, message prefix `deliberation LLM
+failed`) is unchanged — Atlas's Hermes-density degraded gate counts phases, not messages.
+Not yet propagated: `supabase_io._slim_deliberation_summary` drops `carry_reason`, so a
+crash carry looks benign to the *next* day's fingerprint-skip carry.
+
 ---
 
 ## LLM-node fail-soft (#1665)
