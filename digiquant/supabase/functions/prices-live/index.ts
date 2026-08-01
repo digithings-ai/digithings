@@ -223,7 +223,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
   let broadcast: string = "skipped (no quotes)";
   const quoted = Object.keys(quotes).length;
   if (quoted > 0) {
-    const channel = supabase.channel(CHANNEL);
+    // PRIVATE channel (#1807). `channel.send()` on an unsubscribed channel posts to
+    // /realtime/v1/api/broadcast with `private: this.private` in the body
+    // (@supabase/realtime-js 2.104.0, RealtimeChannel.js:430/512) — so the publisher and
+    // the subscriber must agree on this flag. useLivePrices.ts now joins privately, and
+    // migration 062 authorizes that topic: service_role may INSERT (this send), anon may
+    // only SELECT. Sending publicly while subscribers listen privately risks a silent
+    // dark feed, so this flag ships with theirs.
+    const channel = supabase.channel(CHANNEL, { config: { private: true } });
     try {
       broadcast = await channel.send({
         type: "broadcast",
