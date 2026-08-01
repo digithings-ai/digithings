@@ -188,6 +188,81 @@ H9 `PhaseError` can't trigger on its own. Both flags are emitted structurally in
 the 2000-char cap. `chain._retry_worthy` keys the #809 good-book guard on `book_committed`
 (not mere materialization), so an uncommitted book retries while a committed one does not.
 
+### Same-date idempotency and orphan pruning (#1744)
+
+**The idempotency key is the run *date*, never `run_id`.** `AtlasResearchState.run_id`
+is `Field(default_factory=uuid4)` — a fresh UUID per process — so CI's outer retry always
+presents a new id and a `run_id`-keyed manifest lookup structurally *cannot* see what an
+earlier attempt on the same date wrote. Prod 2026-06-24 carries **three** `commit-run/`
+manifests with three different `weights_fingerprint` values as the proof. Migration 044
+re-keyed `decision_log` from `(run_id, ticker)` to `(run_date, ticker)` for the identical
+reason (#947); this closes the same hole in the commit manifest.
+
+Two things stay separate:
+
+- the manifest **document** remains per-run (`commit-run/{source_run_id}`), so every
+  attempt keeps its own audit artefact;
+- the **guard** is date-scoped: `commit_io.load_commit_manifests` returns every manifest
+  for the date and `commit_io.resolve_prior_commit` picks the last writer.
+
+**Reconciliation is last-writer-wins, not fail-closed.** A same-date commit whose
+fingerprint differs from the prior one re-books and records `supersedes`; it does *not*
+raise. A hard conflict error would fail the phase on the 06-24 shape production already
+produces, and with the uncommitted-book gate above that reports `degraded` for a book that
+did commit. Ordering comes from `commit_seq` inside the manifest payload because
+`documents` has no `created_at` column; pre-#1744 manifests read 0, so a date carrying
+several of them is an undecidable tie and `resolve_prior_commit` returns `None` (re-commit)
+rather than guess.
+
+Re-booking is safe only because `commit_io._prune_orphan_positions` deletes same-date
+`positions` rows absent from the book just written — including a stale `CASH` row, which
+`book_portfolio` only writes when `cash_pct > 0.01`. Without the prune a shrinking
+re-commit left the dropped name at its old weight: the raw book exceeds 100% of NAV,
+`refresh_performance_metrics` sums the orphan into `portfolio_metrics.invested_pct`, and
+`execute_at_open.build_events_from_positions_book` emits a phantom Activity-feed event.
+The prune is deliberately **not** fail-soft. That trade is worth naming precisely: the
+non-transactional gap between `book_portfolio` and `save_commit_manifest` is **not
+closed** — a raise from the prune (or any failure between the two calls) still leaves a
+booked-but-unmanifested date, and the prune itself is one more thing that can raise
+there. What changes is that re-attempts now **converge across** the gap instead of
+stacking: the date-keyed guard sees no manifest, re-commits, and re-prunes to the last
+writer's book. Making the prune fail-soft would trade a loud, self-healing gap for a
+silent orphan in a published performance series, which is the defect this closes.
+
+### `nav_history` ownership contract (#1745)
+
+`nav_history` has **two writers**, and they are not peers:
+
+| Writer | When | Owns |
+|---|---|---|
+| H9 `commit_io.book_portfolio` | commit time, ~12:00–14:00 UTC | the **provisional** row: NAV as of the latest close available *before* `run_date`, plus `cash_pct` / `invested_pct`, which H9 alone owns |
+| `scripts/atlas/refresh_performance_metrics.py` | evening cron, ~22:00–23:00 UTC | the **authoritative** NAV: restated against that date's settled close |
+
+**The evening restatement is a correction, not corruption.** Reading a manifest NAV and a
+`nav_history` NAV that differ for the same date is expected: the manifest is a commit-time
+artefact whose only structural job is the `weights_fingerprint` idempotency check, and
+`nav_history` is the published series (`public_nav_history`). Do not "fix" the divergence
+by having H9 write the later value — at commit time that close does not exist yet.
+
+What H9 *must* get right is its anchor. Because the cron restates row `D` to "NAV as of
+D's close", `_prior_nav` already embeds the move up to the prior book date. So the return
+H9 applies is measured **over the interval from the prior book date to the last close
+before `run_date`** (`commit_io._interval_price_returns`), not over the latest pair of
+trading days. Applying a one-day delta on top of a restated anchor double-counts it
+(2026-07-28: the manifest re-applied the 07-24→07-27 return already inside the 07-27 NAV)
+and, across a book gap, records almost none of the move (2026-06-26 → 07-17 recorded
++0.03% for a book that actually returned −0.37%).
+
+The interval start comes from the `date` column of the rows `load_prior_book` returned, so
+the weights and the window are the same row set by construction. Anchoring on
+`nav_history`'s own latest date would desynchronize the moment the cron extends the series
+to a **bookless** date — which is exactly what `--fill-calendar-through` does, and why the
+anchor is the book, not the NAV row.
+
+`atlas.supabase_io.query_price_deltas` is deliberately left alone: it is a one-trading-day
+triage signal shared with the rule evaluators, and every rule threshold is calibrated
+against that meaning.
+
 ---
 
 ## Boundary diagram
