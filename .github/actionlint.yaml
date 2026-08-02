@@ -1,0 +1,42 @@
+# actionlint configuration — https://github.com/rhysd/actionlint/blob/main/docs/config.md
+#
+# Read by the `actionlint` lane in ci.yml (gated on the `workflows` path filter
+# in scripts/ci_paths.yaml) and by a bare `actionlint` run locally. Both pick
+# this file up automatically; keep them in agreement by editing only here.
+#
+# CAUTION: actionlint SILENTLY IGNORES config keys it does not recognise — a
+# typo'd `ignoree:` or a `paths:` section on a version that predates the feature
+# exits 0 and lints with no suppressions at all. That is why ci.yml pins the
+# actionlint `version:` input rather than tracking `latest`: an unpinned upgrade
+# (or downgrade) could drop every rule below without a single error message.
+# Same reasoning as the tool bounds in CLAUDE.md § "Dependency version bounds".
+#
+# Suppress by SC code with a written reason. Do not add a blanket ignore for a
+# whole rule class without one — a finding nobody can explain is a finding
+# somebody should fix.
+
+paths:
+  # gh-aw generated lock files — output of `gh aw compile`, whose fidelity is
+  # already enforced by the `gh aw compile --trial` drift check in ci-docs.yml.
+  # Hand-edits here get reverted by the next compile, so there is nothing we can
+  # act on: the findings are `queue:` under `concurrency:` (a GitHub feature
+  # newer than actionlint's schema), plus SC2016/SC2086 inside generated shell.
+  # Fixes belong upstream in github/gh-aw, not in this repo.
+  .github/workflows/*.lock.yml:
+    ignore:
+      - '.*'
+
+  .github/workflows/**:
+    ignore:
+      # SC2016 — "Expressions don't expand in single quotes". Every occurrence is
+      # a `jq` filter or a GraphQL document passed to `gh api`, where `$foo` is
+      # jq/GraphQL variable syntax and MUST stay unexpanded by the shell.
+      # Double-quoting them, as the check suggests, is the actual bug.
+      - 'shellcheck reported issue in this script: SC2016:'
+      # SC2129 was suppressed here when this file was added, on the grounds that
+      # the repeated `echo "k=v" >> "$GITHUB_OUTPUT"` form is the idiom GitHub's
+      # own docs prescribe. That ignore is gone: every run: block that appended
+      # repeatedly was restructured into a `{ ... } >> "$GITHUB_OUTPUT"` group,
+      # so the rule now has nothing outstanding to flag and is enforced rather
+      # than waived. Do not re-add the ignore to silence a new occurrence —
+      # group the appends instead.

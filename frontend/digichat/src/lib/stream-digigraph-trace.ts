@@ -10,6 +10,11 @@ import {
   digigraphOpenWebUIFormat,
 } from "@/lib/digigraph";
 import { coreMessagesToDigigraphOpenAi } from "@/lib/digigraph-messages";
+import {
+  ACTIVITY_PART_TYPE,
+  chatActivitySpan,
+  type ActivityDetail,
+} from "@/lib/chat-activity";
 
 export type DigigraphTracePayload = {
   v?: number;
@@ -60,6 +65,8 @@ export async function createDigigraphTraceStreamResponse(opts: {
   upstreamHeaders: Record<string, string>;
   responseHeaders: Record<string, string>;
   upstreamBearer: string;
+  activityDetail: ActivityDetail;
+  emitLegacyTracePart: boolean;
 }) {
   const openwebui = digigraphOpenWebUIFormat();
   const stripped = opts.messages.map((m) => {
@@ -77,6 +84,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
       const textId = "assistant-main";
       writer.write({ type: "text-start", id: textId });
       let traceSeq = 0;
+      let activitySeq = 0;
       const bodyPayload: Record<string, unknown> = {
         model,
         messages: coreMessagesToDigigraphOpenAi(coreMessages),
@@ -94,24 +102,28 @@ export async function createDigigraphTraceStreamResponse(opts: {
         body: JSON.stringify(bodyPayload),
       });
       if (!res.ok) {
+        // Log the upstream detail server-side; never stream it. A 500 body can
+        // carry stack traces, internal hostnames, and prompt echoes, and this
+        // response goes to anonymous embed visitors.
         const detail = (await res.text().catch(() => "")).trim();
-        const brief =
-          detail.length > 1500 ? `${detail.slice(0, 1500)}…` : detail;
+        console.error(
+          `[digigraph] upstream ${res.status} ${res.statusText}`,
+          detail.length > 1500 ? `${detail.slice(0, 1500)}…` : detail
+        );
         writer.write({
           type: "text-delta",
           id: textId,
-          delta: brief
-            ? `Upstream error: ${res.status} ${res.statusText}\n${brief}`
-            : `Upstream error: ${res.status} ${res.statusText}`,
+          delta: "The assistant is unavailable right now. Please try again shortly.",
         });
         writer.write({ type: "text-end", id: textId });
         return;
       }
       if (!res.body) {
+        console.error(`[digigraph] upstream ${res.status} returned an empty body`);
         writer.write({
           type: "text-delta",
           id: textId,
-          delta: `Upstream error: ${res.status} empty response body`,
+          delta: "The assistant is unavailable right now. Please try again shortly.",
         });
         writer.write({ type: "text-end", id: textId });
         return;
@@ -123,11 +135,39 @@ export async function createDigigraphTraceStreamResponse(opts: {
         }
         const tr = delta.digigraph_trace;
         if (tr && typeof tr === "object") {
-          writer.write({
-            type: "data-digigraphTrace",
-            id: `dg-trace-${traceSeq++}`,
-            data: tr as DigigraphTracePayload,
-          });
+          const payload = tr as DigigraphTracePayload;
+
+          // Legacy part: authenticated-path-only, emitted with the verbatim
+          // upstream payload. This is the pre-existing authenticated-path
+          // behaviour that chat-panel.tsx's rich renderers (RagSourcesTrace,
+          // ResearchBriefTrace) depend on for their full payload, so it must
+          // NOT be routed through applyActivityDetail like the span below —
+          // chat-panel.tsx has no notion of activity detail levels, only the
+          // embed surface does. Embed paths get the gated activity span alone.
+          // Remove this block (and the resulting dual-emit) once chat-panel.tsx
+          // migrates to rendering ACTIVITY_PART_TYPE directly.
+          if (opts.emitLegacyTracePart) {
+            writer.write({
+              type: "data-digigraphTrace",
+              id: `dg-trace-${traceSeq++}`,
+              data: payload,
+            });
+          }
+
+          // New part: gated by this tenant's activityDetail, same as every
+          // other provider.
+          const span = chatActivitySpan(
+            payload.payload?.label ?? payload.type,
+            payload.payload?.status === "completed" ? "completed" : "started",
+            opts.activityDetail
+          );
+          if (span) {
+            writer.write({
+              type: ACTIVITY_PART_TYPE,
+              id: `dg-activity-${activitySeq++}`,
+              data: span,
+            });
+          }
         }
       }
       writer.write({ type: "text-end", id: textId });

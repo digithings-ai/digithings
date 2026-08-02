@@ -5,9 +5,10 @@
  *
  *   (a) Coinbase public keyless WS  → crypto product_ids (reconnect w/ backoff,
  *       %chg from `open_24h`, ticks coalesced ~400ms, socket closed on unmount).
- *   (b) Supabase Realtime broadcast "prices:live" → equities (subscribe with the
- *       anon client on a PRIVATE channel, unsubscribe on unmount). Private is
- *       the authorization boundary, not a nicety — see lane 2 and #1807.
+ *   (b) Supabase Realtime `postgres_changes` on `public.prices_live` → equities
+ *       (subscribe with the anon client, unsubscribe on unmount). A TABLE, not a
+ *       broadcast channel, and that is the security boundary — see lane 2 and
+ *       #1807 before touching it.
  *   + a one-shot SEED from `public_price_latest` so values exist before the
  *     first tick and when a lane is dark (marked `stale`).
  *
@@ -20,23 +21,46 @@
  * `stale` to `false`; seeds keep it `true`. Consumers that value or badge
  * "live" must gate on `!stale`, not on mere presence.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { supabase } from "./supabaseClient";
 import type { LivePriceMap, LiveQuote, UseLivePricesOptions } from "./types";
 import {
   applyQuotes,
-  broadcastQuoteToLive,
   coinbaseTickerToLive,
   normalizeSymbols,
-  parseBroadcastPayload,
+  priceRowToLive,
   seedRowToLive,
   type CoinbaseTicker,
 } from "./quote-transforms";
 
 const COINBASE_WS_URL = "wss://ws-feed.exchange.coinbase.com";
-const BROADCAST_CHANNEL = "prices:live";
-const BROADCAST_EVENT = "quotes";
-/** Coalesce Coinbase ticks into at most one state update per window. */
+/**
+ * Topic PREFIX for the equity lane — a per-hook-instance suffix is appended below.
+ *
+ * Purely a client-side label; it names no database object (the table below is what is
+ * actually subscribed). Deliberately NOT the retired `prices:live`, so the two designs
+ * cannot collide on one topic while old bundles are still cached in the wild.
+ *
+ * The per-instance suffix is load-bearing — do NOT collapse this back to a bare constant.
+ * Two `useLivePrices` instances mount on the landing page (`LiveTickerRow` directly, and
+ * `OlympusPortfolioPanel` via `useLivePortfolio`) against the same singleton client, and
+ * `RealtimeClient.channel()` DEDUPES BY TOPIC (realtime-js 2.104.0, RealtimeClient.js:305-316)
+ * — it returns the existing channel rather than creating a second one. Both instances would
+ * then `.on()` the same channel, but only the first `.subscribe()` does anything
+ * (RealtimeChannel.js:120 gates on `isClosed()`), so the join payload carries ONE
+ * postgres_changes filter while the client holds TWO bindings. The server's `ok` reply is
+ * then index-matched against those bindings, the second finds no counterpart, and
+ * `_updatePostgresBindings` (RealtimeChannel.js:181-185) calls `unsubscribe()` and marks the
+ * channel `errored` — killing the equity lane for BOTH consumers, silently: no exception,
+ * no console error, just a tape frozen on lane 1's daily closes.
+ *
+ * This trap is specific to postgres_changes. The retired broadcast path had no id-matching,
+ * so a shared topic was harmless there — which is exactly why it survived review as a
+ * module constant until now.
+ */
+const PRICES_CHANNEL_PREFIX = "prices-live-db";
+const PRICES_TABLE = "prices_live";
+/** Coalesce inbound ticks into at most one state update per window (lanes 2+3). */
 const FLUSH_MS = 400;
 const BACKOFF_BASE_MS = 1_000;
 const BACKOFF_MAX_MS = 30_000;
@@ -47,6 +71,10 @@ export function useLivePrices(options: UseLivePricesOptions = {}): LivePriceMap 
   const symbolsKey = symbols.join(",");
   const cryptoKey = cryptoProductIds.join(",");
   const client = "client" in options ? options.client ?? null : supabase;
+  // Stable per-instance Realtime topic — see PRICES_CHANNEL_PREFIX for why sharing one
+  // topic between hook instances silently kills the lane. `useId` is hydration-safe under
+  // `output: "export"` and constant across re-renders and effect re-runs.
+  const instanceId = useId();
 
   const [quotes, setQuotes] = useState<LivePriceMap>({});
 
@@ -75,39 +103,83 @@ export function useLivePrices(options: UseLivePricesOptions = {}): LivePriceMap 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keys track array content
   }, [client, symbolsKey, cryptoKey]);
 
-  // Lane 2 — equity quotes over the Supabase Realtime broadcast.
+  // Lane 2 — equity quotes as `postgres_changes` on `public.prices_live` (#1807).
   //
-  // PRIVATE channel, and that is load-bearing (#1807). Realtime only consults the RLS
-  // policies on `realtime.messages` for channels joined with `private: true`; a public
-  // channel is unauthenticated pub/sub. Since `anon` holds INSERT on that table, a public
-  // `prices:live` let anyone holding the anon key from this bundle broadcast FORGED quotes
-  // that arrive here indistinguishable from Finnhub's. Migration 062 supplies the paired
-  // policies — anon may SELECT (receive) on this topic, only the service role may INSERT
-  // (publish). Do NOT drop this flag back to public without also dropping those policies,
-  // and do not ship it before they are applied: no policy + private = every join refused,
-  // and the feed silently falls back to stale daily closes.
+  // THIS IS A SECURITY BOUNDARY, NOT A TRANSPORT PREFERENCE. Do not "simplify" it back
+  // onto a Realtime broadcast channel. It used to be one — `prices:live` — and that was
+  // forgeable: broadcast messages are client-authored, delivery is a bare INSERT into
+  // `realtime.messages`, `anon` holds INSERT on that table, and the anon key ships in
+  // plaintext in this very bundle. Anyone could publish quotes that arrived here
+  // indistinguishable from Finnhub's. The intended patch was RLS on `realtime.messages`;
+  // it is UNIMPLEMENTABLE — that table is owned by `supabase_realtime_admin`, a role with
+  // no members that we cannot join, so `CREATE POLICY` returns 42501 for us forever.
+  //
+  // Moving the feed onto a table we DO own closes it structurally instead:
+  //   - `public.prices_live` has RLS enabled and exactly one policy, `FOR SELECT`. The
+  //     ABSENCE of any insert/update/delete policy is the fix — with RLS on, no policy
+  //     means no write is permitted, so `anon` cannot author a row at all. Adding a write
+  //     policy "for convenience" would reopen the hole this lane exists to close.
+  //   - postgres_changes events are replayed from the WAL, i.e. they are a consequence of
+  //     a committed write. There is no client-side path to inject one, forged or otherwise.
+  //     Only `service_role` (rolbypassrls, held by the edge function) can write the table.
+  //
+  // NO `private: true` here, deliberately. That flag routes authorization back through RLS
+  // on `realtime.messages` — the table we just established we can never police. Re-adding
+  // it does not fail loudly; it makes every join refused and the tape silently decays to
+  // lane-1 daily closes. Every failure mode on this lane is silent, which is exactly why
+  // it is written out at this length.
+  //
+  // Cadence note: broadcast delivered ONE message carrying every symbol, so one state
+  // update per publisher run. postgres_changes delivers ONE EVENT PER ROW — up to ~40 per
+  // pg_cron minute — so this lane needs lane 3's coalescing buffer or it would re-render
+  // the whole landing page 40 times a minute (React does not batch across WS frames).
   useEffect(() => {
     if (!client) return;
     const allowed = new Set<string>([...symbols, ...cryptoProductIds]);
-    const channel = client.channel(BROADCAST_CHANNEL, { config: { private: true } });
-    channel
-      .on("broadcast", { event: BROADCAST_EVENT }, (message: { payload?: unknown }) => {
-        const incoming = parseBroadcastPayload(message.payload);
-        const now = Date.now();
-        const batch: LiveQuote[] = [];
-        for (const [sym, q] of Object.entries(incoming)) {
-          const upper = sym.toUpperCase();
-          if (allowed.size > 0 && !allowed.has(upper)) continue;
-          batch.push(broadcastQuoteToLive(upper, q, now));
-        }
-        if (batch.length) setQuotes((prev) => applyQuotes(prev, batch));
-      })
+
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const buffer: Record<string, LiveQuote> = {};
+    const flush = () => {
+      flushTimer = null;
+      const batch = Object.values(buffer);
+      for (const k of Object.keys(buffer)) delete buffer[k];
+      if (batch.length) setQuotes((prev) => applyQuotes(prev, batch));
+    };
+    const scheduleFlush = () => {
+      if (flushTimer === null) flushTimer = setTimeout(flush, FLUSH_MS);
+    };
+
+    const channel = client
+      .channel(`${PRICES_CHANNEL_PREFIX}-${instanceId}`)
+      .on<Record<string, unknown>>(
+        "postgres_changes",
+        { event: "*", schema: "public", table: PRICES_TABLE },
+        (payload) => {
+          // The publisher upserts, so this is INSERT on first sight of a ticker and
+          // UPDATE thereafter; `*` covers both without caring which. DELETE carries an
+          // empty `new` and priceRowToLive rejects it (no ticker) — filtering stays in
+          // the transform rather than on an eventType check here.
+          const q = priceRowToLive(payload.new);
+          if (!q) return;
+          // Same bound as before: the union of both symbol lists, empty = accept all.
+          if (allowed.size > 0 && !allowed.has(q.symbol)) return;
+          buffer[q.symbol] = q; // last-write-wins per symbol = free dedupe
+          scheduleFlush();
+        },
+      )
       .subscribe();
+
     return () => {
+      // Dropping a pending flush discards whatever is buffered. This effect re-runs when
+      // the symbol list resolves (`symbolsKey` "" → "SPY,QQQ,…"), so a batch landing in
+      // that window is lost — 400ms of data under lane 3, but up to a full minute here,
+      // since the next pg_cron run is the next chance. Acceptable: lane 1's seed already
+      // holds a value for every symbol, so the tape shows a close, not a blank.
+      if (flushTimer) clearTimeout(flushTimer);
       void client.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keys track array content
-  }, [client, symbolsKey, cryptoKey]);
+  }, [client, symbolsKey, cryptoKey, instanceId]);
 
   // Lane 3 — crypto over Coinbase's public WS (keyless, backoff, coalesced).
   useEffect(() => {

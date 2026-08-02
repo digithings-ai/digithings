@@ -25,8 +25,10 @@
  *   - weight_pct / cash_pct / invested_pct are 0–100; every *_pct return is in
  *     percent points; metrics_as_of is a YYYY-MM-DD string.
  *   - Today's book is macro ETFs (no crypto legs), so the live lane ticks only
- *     during US market hours via the equity broadcast; otherwise every leg
- *     falls back to its last close (isLive=false) and the book reads flat.
+ *     during US market hours, via Realtime postgres_changes on
+ *     public.prices_live (#1807 moved it off the anon-forgeable "prices:live"
+ *     broadcast topic); otherwise every leg falls back to its last close
+ *     (isLive=false) and the book reads flat.
  *
  * Liveness is gated on the feed, never on mere presence: the surface LiveBadge
  * shows when the feed is configured, per-leg "live" tone only when that leg has

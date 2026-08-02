@@ -14,7 +14,8 @@ executes the unified Atlas+Hermes pipeline via
 | --- | --- | --- | --- |
 | `pipeline-olympus.yml` | `cron '0 12 * * *'` (daily UTC) | Sunday → `all`; else `none` | 240 min |
 | `pipeline-olympus.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `hermes` \| `digest` \| `beliefs` | 240 min |
-| `test-atlas-graph.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/olympus/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, or `pipeline-olympus.yml` | unit tests + ruff + `actionlint` | 15 min |
+| `test-atlas-graph.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/olympus/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, or `pipeline-olympus.yml` | unit tests + ruff | 15 min |
+| `ci.yml` → `actionlint` job | `push` / `pull_request` touching `.github/workflows/**` | `actionlint` over **every** workflow | 5 min |
 
 **Removed (historical):** separate `atlas-baseline.yml` / `atlas-delta.yml` /
 `atlas-monthly.yml` and `run_type=baseline|delta|monthly` cron semantics — superseded by
@@ -141,12 +142,25 @@ act -W .github/workflows/pipeline-olympus.yml \
 ### `actionlint` (static check, pre-push)
 
 ```bash
-brew install actionlint
-actionlint .github/workflows/pipeline-olympus.yml
+brew install actionlint shellcheck
+actionlint                                    # every workflow, repo-wide
+actionlint .github/workflows/pipeline-olympus.yml   # just this one
 ```
 
-CI also runs `actionlint` on every PR that touches the Olympus workflow (see
-`test-atlas-graph.yml`).
+Bare `actionlint` is the form CI runs and the one to trust before pushing — it
+picks up `.github/actionlint.yaml` (the suppression rules) automatically, so a
+local run and the `actionlint` job in `ci.yml` agree. Install `shellcheck` too:
+without it actionlint silently skips the `run:` block checks, which is where
+most real findings come from. CI pins both (actionlint `1.7.12`, shellcheck
+`0.11.0`), and `brew` currently matches — see
+[CI_CONVENTIONS.md](../../../../../../docs/agents/CI_CONVENTIONS.md) for why the
+shellcheck version in particular is part of the gate's contract.
+
+CI runs it on every PR touching `.github/workflows/**`, via the `actionlint` job
+in `ci.yml` (gated by the `workflows` filter in `scripts/ci_paths.yaml`). It used
+to live in `test-atlas-graph.yml` pinned to `pipeline-olympus.yml` alone; that
+job is gone, since it left every other workflow unlinted and was itself skipped
+on workflow-only PRs.
 
 ## Rollback plan
 

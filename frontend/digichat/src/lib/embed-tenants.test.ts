@@ -272,6 +272,39 @@ describe("parseEmbedTenants", () => {
     resetEmbedTenantRegistryForTests();
     expect(resolveEmbedTenantByHost("example.com")?.lockedContact).toBe("info@example.com");
   });
+
+  describe("activityDetail", () => {
+    const entry = (extra: Record<string, unknown> = {}) =>
+      JSON.stringify({
+        "tenant.example": {
+          slug: "tenant",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "tok",
+          ...extra,
+        },
+      });
+
+    // Conservative by construction: a tenant nobody configured must not stream
+    // retrieved document titles to anonymous visitors.
+    it("defaults to labels when unspecified", () => {
+      const cfg = parseEmbedTenants(entry()).get("tenant.example")!;
+      expect(cfg.activityDetail).toBe("labels");
+    });
+
+    it("accepts each valid level", () => {
+      for (const level of ["off", "labels", "full"] as const) {
+        const cfg = parseEmbedTenants(entry({ activityDetail: level })).get("tenant.example")!;
+        expect(cfg.activityDetail).toBe(level);
+      }
+    });
+
+    it("rejects an unknown level at startup rather than silently downgrading", () => {
+      expect(() => parseEmbedTenants(entry({ activityDetail: "verbose" }))).toThrow(
+        /activityDetail must be/
+      );
+    });
+  });
 });
 
 describe("resolveEmbedTenantByHost", () => {

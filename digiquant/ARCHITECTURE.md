@@ -1157,31 +1157,55 @@ curated anon-readable views — `public_portfolio_positions`, `public_nav_histor
 `rationale`/`pm_notes`/risk parameters; user ruling 2026-07-10, #1462). They pair with
 the `supabase/functions/prices-live/` Deno edge function, which polls Finnhub
 server-side (key held as a Supabase secret; **live since 2026-07-13** on a 60s pg_cron
-schedule) and fans quotes out to browsers on the Realtime broadcast channel
-`prices:live`. Invocation is authorized by the `x-prices-live-secret` shared-secret
+schedule) and upserts one row per ticker into `public.prices_live` (migration `063`),
+which browsers read over Realtime `postgres_changes`. Invocation is authorized by the
+`x-prices-live-secret` shared-secret
 header, checked ahead of every other gate and fail-closed when
 `PRICES_LIVE_INVOKE_SECRET` is unset (#1756) — `verify_jwt` alone is not authorization,
 because the anon key ships in every browser bundle. Crypto
 quotes take the other lane — streamed client-side from Coinbase's public WebSocket. See
 [`supabase/README.md`](supabase/README.md) for the two-lane design, pg_cron + pg_net
 scheduling, and the one-time setup steps, and [`supabase/SCHEMA.md`](supabase/SCHEMA.md)
-for the view inventory.
+for the view and table inventory.
 
-**Realtime authorization on `prices:live` (#1807).** The broadcast channel is **private**:
-both ends pass `config: { private: true }` (`functions/prices-live/index.ts` publishing,
-`frontend/digiquant-web/lib/live/useLivePrices.ts` subscribing) and
-[`supabase/migrations/062_realtime_broadcast_authorization.sql`](supabase/migrations/062_realtime_broadcast_authorization.sql)
-carries the paired RLS policies on `realtime.messages` — `anon`/`authenticated` may
-`SELECT` (receive) on that topic, only `service_role` may `INSERT` (broadcast). Realtime
-consults RLS **only** for private channels, so the flags and the policies are one
-indivisible mechanism: policies alone are inert, `private: true` alone refuses every join
-and takes the live feed dark (degrading to `public_price_latest` closes marked `stale`).
-While the channel was public, the anon key in the digiquant.io bundle could broadcast
-forged quotes straight onto the feed, bypassing the edge function and its invocation
-secret (#1756) entirely. Migration `062` is the one migration in this chain that
-`db-migrate.yml` cannot apply on its own — `realtime.messages` is owned by
-`supabase_realtime_admin`, not `postgres` — see the rollout runbook in
-[`supabase/README.md`](supabase/README.md).
+**The live equity transport is a table, not a broadcast channel (#1807).** The feed used to
+ride the Realtime *broadcast* topic `prices:live`, and that was forgeable: broadcast
+messages are client-authored, delivery is a bare INSERT into `realtime.messages`, Supabase
+grants `anon` INSERT on that table, and the anon key ships in plaintext in every
+digiquant.io bundle — so anyone could publish forged quotes straight onto the feed,
+bypassing the edge function and its invocation secret (#1756) entirely.
+[`supabase/migrations/063_prices_live_table.sql`](supabase/migrations/063_prices_live_table.sql)
+moves the transport onto `public.prices_live`: the publisher upserts one row per ticker
+(`functions/prices-live/index.ts`) and the browser subscribes to `postgres_changes` on that
+table (`frontend/digiquant-web/lib/live/useLivePrices.ts`). **Neither end passes
+`config: { private: true }` any more, deliberately** — that flag routes authorization back
+through RLS on `realtime.messages`, which we can never police.
+
+*Why the textbook fix was withdrawn.* The obvious patch — RLS policies on
+`realtime.messages` plus private channels on both ends — was written as migration `062`, then
+proved **impossible to apply**. It never reached production (no `olympus_schema_migrations`
+row; two `db-migrate` runs failed on it), so it was deleted and the number burned. `realtime.messages` is
+owned by `supabase_realtime_admin`, a role with zero members over which zero roles hold
+admin option; our connection is `postgres` (`rolsuper = false`, not a member), and on
+PostgreSQL 17.6 `CREATEROLE` no longer implies admin over pre-existing roles. `CREATE
+POLICY` requires ownership, so it raises `42501` for us permanently — including from the
+dashboard SQL editor, which runs as the same role. Verified read-only against the live
+project on 2026-08-01. The `supabase_realtime` publication and every `public` table *are*
+owned by `postgres`, which is exactly why `063` is appliable and `062` was not.
+
+*Security posture, stated precisely.* The forgery hole is **abandoned, not policed**.
+`prices:live` remains an open, anon-writable broadcast topic on this project permanently —
+`anon`'s INSERT grant on `realtime.messages` is platform-managed and cannot be revoked. It
+is harmless only because **nothing subscribes to it any more**. The control is
+`public.prices_live`: RLS enabled with exactly one policy (`FOR SELECT TO anon,
+authenticated USING (true)`), **no** write policy for any role (absent policy = deny), and
+the write grants revoked from `PUBLIC`/`anon`/`authenticated` with `service_role` the sole
+writer. Because `postgres_changes` events originate from the WAL, a client cannot inject
+one at all — forgery becomes impossible rather than merely disallowed. See
+[`supabase/README.md`](supabase/README.md) for the migration-first rollout runbook and the
+subscribe snippet (the topic must be unique per hook instance — `RealtimeClient.channel()`
+dedupes by topic, and a shared one silently kills the lane for every consumer), and
+[`supabase/SCHEMA.md`](supabase/SCHEMA.md) for the table inventory.
 
 ## DigiSearch Integration (#199)
 

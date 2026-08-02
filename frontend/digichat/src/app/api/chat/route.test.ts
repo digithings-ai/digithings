@@ -255,6 +255,7 @@ describe("POST /api/chat", () => {
         attribution: false,
         token: "tok",
         backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
+        activityDetail: "labels",
       },
     };
 
