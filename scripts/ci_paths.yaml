@@ -32,6 +32,13 @@ digiquant:
   - digiquant/**
   - tests/dq/**
   - .github/workflows/test-digiquant.yml
+  # The browser half of the live price feed is guarded from Python, because
+  # frontend/digiquant-web has no test runner at all (#1807). Without this entry a
+  # frontend-only edit to useLivePrices.ts fires the `web` lane (eslint + build) and
+  # never runs tests/dq/test_prices_live_subscriber.py — the exact change class that
+  # guard exists to catch. eslint does not flag re-adding `private: true`, collapsing
+  # the per-instance Realtime topic, or reinstating a broadcast subscription.
+  - frontend/digiquant-web/lib/live/**
 
 digisearch:
   - digisearch/**

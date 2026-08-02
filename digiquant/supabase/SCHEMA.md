@@ -103,6 +103,35 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
 | `public_nav_history` | `nav_history` | NAV series + cash/invested % + derived `day_return_pct`. |
 | `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
 
+### Live quote transport — new in migration 063 (#1807)
+
+The only **table** in the digiquant.io public read surface (the 050 trio are views), and the
+only table this migration chain adds to the `supabase_realtime` publication — `063` holds
+the chain's sole `ALTER PUBLICATION`. Written once a minute by the `functions/prices-live/`
+edge function under pg_cron; browsers subscribe to `postgres_changes` on it rather than to
+the retired `prices:live` broadcast channel.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `prices_live` | `(ticker)` | Latest intraday quote per symbol, upserted in place: `price` (Finnhub `c`, NOT NULL, may legitimately be `0` for a halted symbol), `change` (`d`), `change_pct` (`dp`, percent **points**), `quoted_at` (exchange clock — Finnhub's unix **seconds** `t`, converted), `updated_at` (our write clock). |
+
+- **RLS enabled, exactly one policy** — `prices_live_public_read`, `FOR SELECT TO anon,
+  authenticated USING (true)`. **Zero write policies**, and that absence is the whole
+  security model (see RLS below). `service_role` is the only writer.
+- **`REPLICA IDENTITY DEFAULT`**, set explicitly. Realtime's `walrus` decoder re-evaluates
+  the SELECT policy against the *live* row keyed by the replicated identity, so only the key
+  must survive replication. `FULL` would be needed only for a policy reading a non-key
+  column or a consumer needing non-key columns out of a DELETE — neither exists.
+- **Member of the `supabase_realtime` publication**, added under a guarded `DO` block
+  (`ALTER PUBLICATION … ADD TABLE` raises 42710 on re-run, which would roll the whole
+  migration back). Without publication membership the table is written and no browser ever
+  sees an update.
+- **No CHECK constraints and no secondary index**, both argued rather than accidental: this
+  is a ≤40-row throwaway cache refreshed every 60s and it should degrade, not abort — a
+  ticker-casing CHECK would turn a publisher bug into a 23514 that fails the whole minute's
+  upsert (the `documents` doc_type/category churn, #628/#1005/#1383), and a `price > 0`
+  CHECK would reject Finnhub's legitimate zero for a halted symbol.
+
 ## RLS (consistent across all tables above)
 
 - Every table has `ENABLE ROW LEVEL SECURITY`.
@@ -123,17 +152,27 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
   (`documents`, `theses`, `decision_log`, `deliberation_*`, `positions` incl.
   `rationale`/`pm_notes`) stay anon-readable **by design** — see
   [`README.md`](README.md), "What is public on purpose".
-- **Outside `public` — `realtime.messages` (migration 062, #1807):** the one RLS surface
-  in this chain that is not an Atlas table. Two topic-scoped policies authorize the
-  `prices:live` broadcast channel: `prices_live_receive_broadcast`
-  (`SELECT TO anon, authenticated`) and `prices_live_service_role_broadcast`
-  (`INSERT TO service_role`). The **absence** of an anon INSERT policy is the control —
-  it is what stops the public anon key from broadcasting forged quotes. These policies are
-  live only for clients that join with `config: { private: true }`; the anon
-  INSERT/UPDATE *grants* on that table are Supabase platform-managed and deliberately
-  untouched. `realtime.messages` is owned by `supabase_realtime_admin`, so unlike every
-  other migration here `062` cannot be applied as `postgres` — see
-  [`README.md`](README.md), "Rolling out Realtime authorization".
+- **Exception — `prices_live` (migration 063, #1807):** RLS enabled with exactly **one**
+  policy, `prices_live_public_read` (`SELECT TO anon, authenticated USING (true)`), and
+  **no** INSERT/UPDATE/DELETE policy for any role. Under RLS, absent policy = deny, so the
+  omission *is* the security control and must not be "completed". `service_role` is the
+  sole writer, and its `SELECT, INSERT, UPDATE` grant is stated explicitly in the migration
+  rather than inherited from the platform ACL. See the transport note below.
+- **Not an RLS surface — `realtime.messages` is unreachable, and `prices:live` is abandoned
+  rather than policed (#1807).** The `prices:live` Realtime *broadcast* topic used to carry
+  this feed and was forgeable: `anon` holds a platform-managed INSERT grant on
+  `realtime.messages`, `pg_policies WHERE schemaname = 'realtime'` returns **zero** rows,
+  and the anon key ships in every digiquant.io bundle. Migration `062` proposed the
+  textbook fix — topic-scoped policies on `realtime.messages` plus
+  `config: { private: true }` on both ends. Those policies **were never created and never
+  can be**: that table is owned by `supabase_realtime_admin`, a role with zero members over
+  which zero roles hold admin option, so `CREATE POLICY` raises 42501 for `postgres`
+  permanently (verified 2026-08-01). `062` was withdrawn and deleted; `063` moved the
+  transport onto `public.prices_live` instead. **`prices:live` therefore remains an open,
+  anon-writable broadcast topic on this project forever** — the INSERT grant cannot be
+  revoked. It is harmless only because nothing subscribes to it any more; a message pushed
+  there lands in an empty room. Adding any broadcast subscriber to this project re-opens the
+  hole in full. See [`README.md`](README.md), "The transport is a table we own".
 - **Views (migrations 041, 050):** RLS does not apply to views; the curated public
   views are intentionally security-DEFINER (`security_invoker = false`) so the column
   projection — not base-table policy — decides what anon sees. Supabase's advisor flags
@@ -224,6 +263,21 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
 
 - `sec_recent_filings` — dropped in migration 017.
 - `'Portfolio Recommendation'` doc_type — removed by migration 021.
+- **Migration `062` (`062_realtime_broadcast_authorization.sql`) — withdrawn and deleted,
+  and the number is burned.** It could never be applied (see the `realtime.messages` note
+  under RLS), so it never reached `olympus_schema_migrations` and left no orphan ledger row
+  to reconcile. Migration `063` supersedes it. Do not reuse `062`: unlike the never-written
+  `037`/`038`/`059` it already denotes a specific abandoned approach in the git history and
+  in PR #1813. Nothing in the repo enforces this — see [`README.md`](README.md), "`062` is
+  burned".
+- **The `prices:live` broadcast channel** — retired by migration 063; the feed now rides
+  `postgres_changes` on `public.prices_live`. One **applied** migration still describes it:
+  `052_public_price_latest_day_change.sql:9,13` ("the intraday broadcast was idle", "when
+  the `prices:live` broadcast is flowing"). That comment is deliberately **not** edited —
+  `db-migrate.yml` keys its ledger on the filename, so a rewrite would never re-run, and
+  editing applied history is not a thing we do. Read it as historical: the mechanism is now
+  the `prices_live` upsert stream; the behaviour it documents (a live tick overwriting the
+  daily-close seed) is unchanged. The supersession is recorded here and in `063`'s header.
 - Partitioned children (`daily_snapshots_y2025`, `documents_y2026`, …) are
   implementation details of the partition strategy and are not inventoried
   here. See migration 004 and 006.

@@ -4,8 +4,8 @@ The single Supabase CLI project dir for the suite-wide **`core`** backend (Olymp
 portfolio, market data, strategy store — see
 [ADR 0021](../../docs/adr/0021-digiquant-supabase-project-topology.md)). There is exactly
 **one** migration chain: the numbered files under [`migrations/`](migrations/) —
-`001`–`062` at time of writing, with `037`, `038` and `059` never used; new work
-appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
+`001`–`063` at time of writing, with `037`, `038` and `059` never used and `062`
+**burned — see below, do not reuse it**; new work appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
 tables and views.
 
 `digiquant/scripts/atlas/verify-supabase-migrations.sh` guards the chain's shape:
@@ -22,6 +22,22 @@ actually applied.
 mints a new ledger key for a file prod already ran. They are exempted by exact
 basename in the guard's `GRANDFATHERED_DUPES`; a third `025` still fails. Don't add
 to that list — take the next free prefix instead.
+
+**`062` is burned, not merely free (#1807).** `037`, `038` and `059` were never written.
+`062` was. `062_realtime_broadcast_authorization.sql` tried to add RLS policies to
+`realtime.messages`; that table is owned by `supabase_realtime_admin`, a role with **zero**
+members over which **zero** roles hold admin option, so nobody reachable from here can join
+or grant it — `CREATE POLICY` raises `42501 must be owner of table messages` as `postgres`
+and always will (verified read-only against the live project, 2026-08-01; PostgreSQL 17.6
+no longer lets `CREATEROLE` imply admin over pre-existing roles, and the dashboard SQL
+editor runs as the same `postgres`). The file could never be applied, so it never got an
+`olympus_schema_migrations` row and was deleted outright — a clean withdrawal, no orphan
+ledger row, no tombstone. Migration `063` supersedes it. **Nothing in this repo enforces
+that.** The verifier checks filename shape and prefix uniqueness only; nothing hashes
+migration contents and there is no contiguity check, so `062` now looks merely "free" to
+every tool here — this README is the only place the burn is recorded. Do not reuse the
+number: "migration 062" already denotes the abandoned `realtime.messages` approach in the
+git history, in PR #1813, and in the docs of that era.
 
 **Migrations auto-deploy; edge functions do not.** A merge to `main` that touches
 `migrations/**` triggers [`db-migrate.yml`](../../.github/workflows/db-migrate.yml),
@@ -40,8 +56,8 @@ deploy`, or the SQL editor.
 | `migrations/` | The numbered migration chain — source of truth for the schema |
 | `SCHEMA.md` | Hand-maintained inventory of live tables, views, and RLS conventions |
 | `migrations/050_public_portfolio_views.sql` | Three anon-readable views — the public portfolio read surface (#1461/#1462) |
-| `migrations/062_realtime_broadcast_authorization.sql` | RLS on `realtime.messages` — anon may receive on `prices:live`, only the service role may broadcast (#1807) |
-| `functions/prices-live/` | Deno edge function: polls Finnhub, broadcasts quotes on Realtime channel `prices:live` (#1461) |
+| `migrations/063_prices_live_table.sql` | `public.prices_live` — the quote table Realtime streams as `postgres_changes`; RLS on, one SELECT policy, no write policy, `service_role` the sole writer (#1807) |
+| `functions/prices-live/` | Deno edge function: polls Finnhub, upserts one row per ticker into `public.prices_live` (#1461, #1807) |
 
 The rest of this README is the operational guide for the **live price feed** (#1461).
 
@@ -54,17 +70,42 @@ Prices therefore arrive in two lanes:
    keyless WebSocket. No server involved; not in this directory.
 2. **Equities/ETFs (server lane, this directory)** — the `prices-live` edge function
    polls Finnhub's free REST tier (60 calls/min) with the API key held as a Supabase
-   secret, then fans out **one** message per run to the Realtime broadcast channel
-   `prices:live`. Browsers subscribe with the anon key; the Finnhub key never leaves
-   the function.
+   secret, then **upserts one row per ticker** into `public.prices_live` (migration
+   `063`). Browsers subscribe to Realtime `postgres_changes` on that table with the anon
+   key; the Finnhub key never leaves the function.
 
-`prices:live` is a **private** Realtime channel (#1807). Both ends set
-`config: { private: true }` and migration `062` supplies the paired RLS policies on
-`realtime.messages`: `anon`/`authenticated` may `SELECT` (receive) on that topic, only
-`service_role` may `INSERT` (broadcast). Before #1807 the channel was public, and because
-Supabase grants `anon` INSERT on `realtime.messages`, anyone reading the anon key out of
-the digiquant.io bundle could publish **forged quotes** onto the feed without touching the
-edge function at all. Do not make this channel public again.
+### The transport is a table we own — that is the security control (#1807)
+
+Until 2026-08-01 the server lane fanned **one** message per run out to the Realtime
+*broadcast* channel `prices:live`. Broadcast messages are client-authored: delivery is a
+bare INSERT into `realtime.messages`, Supabase grants `anon` INSERT on that table, and the
+anon key ships in plaintext in every digiquant.io bundle. Anyone could POST **forged
+quotes** onto the feed and every open tab would render them as live Finnhub data — the edge
+function and its invocation secret (#1756) bypassed entirely.
+
+The textbook Supabase answer — RLS on `realtime.messages` plus `config: { private: true }`
+on both ends — is **unreachable on this project** and was withdrawn with migration `062`
+(see "`062` is burned" above). The feed moved instead. State the resulting posture
+precisely — the old hole is *abandoned*, and a different object is what protects the feed:
+
+- **`prices:live` is abandoned, not policed.** It remains an open, anon-writable broadcast
+  topic on this project, permanently. `anon`'s INSERT grant on `realtime.messages` is
+  platform-managed — unsupported to revoke and reverted by the platform — and we cannot add
+  a policy to that table. The topic is harmless *only* because **nothing subscribes to it
+  any more**: an attacker can still publish there and the message lands in an empty room.
+  The exposure was never the INSERT grant alone, it was the grant plus a listener. Anything
+  added later that subscribes to a broadcast topic on this project re-opens the hole in
+  full, and inherits every constraint above.
+- **The control is `public.prices_live`.** RLS is enabled with exactly **one** policy —
+  `FOR SELECT TO anon, authenticated USING (true)` — and **no** INSERT, UPDATE or DELETE
+  policy for any role. Under RLS, absent policy = deny; the omission *is* the fix, so do not
+  "complete" the policy set. The six write privileges are additionally revoked from
+  `PUBLIC`/`anon`/`authenticated` (the 050/052/060 convention), and `service_role` is the
+  sole writer.
+- **Forgery is now impossible rather than disallowed.** A `postgres_changes` event is
+  generated by Realtime from the WAL, so it is a consequence of a committed write. There is
+  no client-supplied path into the WAL: to put a fake quote on this feed you must first
+  write the row, and no anon-reachable credential can.
 
 The symbol set per run = distinct tickers from `public_portfolio_positions` + a small
 curated majors list (SPY QQQ DIA IWM GLD TLT UUP EFA EEM HYG), capped at 40 symbols —
@@ -76,7 +117,10 @@ The feed is **live**: `FINNHUB_API_KEY` is set, both pg_cron jobs are `active`, 
 function fetches on every scheduled invocation. It is **not** dormant. (Evidence:
 `net._http_response` id 1360, 2026-08-01T00:59Z — `{"market":"open","forced":false,
 "symbols":17,"quoted":17,"failed":0,"broadcast":"ok"}`, one of ~10,800 succeeded cron
-runs since 2026-07-13.)
+runs since 2026-07-13.) That capture predates #1807: the publish-result field was renamed
+`broadcast` → `published` when the transport moved onto `public.prices_live`, and it now
+carries the upsert result. A healthy run today ends `…,"failed":0,"published":"ok"}` —
+grep the cron log for `published`, not `broadcast`.
 
 Because it is live, invocation is **authorized by a shared secret**, not by JWT alone:
 
@@ -191,7 +235,7 @@ invocation, so no redeploy is needed).
 ### Smoke testing outside market hours
 
 Pass `{"force": true}` to override the market-hours gate (never the key gate, and never
-the invocation gate) — one full fetch + broadcast cycle on demand, so the end-to-end path
+the invocation gate) — one full fetch + publish cycle on demand, so the end-to-end path
 can be proven on a weekend instead of waiting for Monday's open:
 
 ```bash
@@ -204,63 +248,101 @@ curl -s -X POST 'https://<PROJECT_REF>.supabase.co/functions/v1/prices-live' \
 Omitting the secret header returns `401` and fetches nothing — that is the cheapest way
 to confirm the gate is actually deployed.
 
-The response reports `forced: true`, per-symbol failures, and the broadcast result;
-subscribers on `prices:live` receive the quotes message.
+The response reports `forced: true`, per-symbol failures, and `published` — the
+`public.prices_live` upsert result: `"ok"`, or the PostgREST error verbatim (a scheduled
+run has no other diagnostic surface). Subscribers then receive **one `postgres_changes`
+event per upserted row**, not one message per run.
 
 ## How the frontend consumes it
 
-**Live quotes** — subscribe to the broadcast channel with the anon client. The
-`config: { private: true }` is **required**, not optional: without it the client joins the
-public topic, Realtime never consults RLS, and the channel is forgeable by anyone holding
-the anon key (#1807).
+**Live quotes** — subscribe to Realtime `postgres_changes` on `public.prices_live` with the
+anon client. This is the live shape from
+[`frontend/digiquant-web/lib/live/useLivePrices.ts`](../../frontend/digiquant-web/lib/live/useLivePrices.ts),
+which is the reference implementation; read the two warnings under it before adapting.
 
 ```ts
+const instanceId = useId(); // one Realtime topic PER HOOK INSTANCE — see below
+
 supabase
-  .channel("prices:live", { config: { private: true } })
-  .on("broadcast", { event: "quotes" }, ({ payload }) => {
-    // payload = { type: "quotes", at: ISO8601,
-    //             quotes: { SPY: { c, d, dp, t }, ... } }
-  })
+  .channel(`prices-live-db-${instanceId}`)
+  .on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "prices_live" },
+    ({ new: row }) => {
+      // row = { ticker, price, change, change_pct, quoted_at, updated_at }
+    },
+  )
   .subscribe();
 ```
 
-Fields per symbol mirror Finnhub's quote: `c` current price, `d` change, `dp` percent
-change, `t` quote unix time.
+**No `config: { private: true }`, deliberately.** That flag routes authorization through RLS
+on `realtime.messages`, the table we can never police (#1807) — every join would be refused
+and the tape would silently decay to daily closes. Security here comes from the table's
+missing write policy, not from a private channel.
 
-### Rolling out Realtime authorization — policies FIRST, or the feed goes dark
+**The topic must be unique per subscribing component.** `RealtimeClient.channel()` dedupes
+by topic, so two components sharing one topic string get one channel with two
+`postgres_changes` bindings against a single server-side filter; the reply is index-matched,
+the second binding finds no counterpart, and realtime-js calls `unsubscribe()` — killing the
+lane for **both** consumers with no exception and no console error. A bare constant is
+enough to trigger it; the trap does not exist on broadcast, which is why the retired code
+could get away with one.
 
-Migration `062` and the two `private: true` flags are one change in three files, and the
-order they reach production is load-bearing. A private join with no matching SELECT policy
-is **refused**, and `useLivePrices` then silently degrades to `public_price_latest` daily
-closes marked `stale` — a dark live feed with no error anywhere.
+Row fields are the table's columns, not Finnhub's: `price` (Finnhub `c`), `change` (`d`,
+nullable), `change_pct` (`dp`, nullable, percent **points** — `1.24` means +1.24%),
+`quoted_at` (a `timestamptz` converted from Finnhub's unix **seconds** `t` — the exchange's
+clock, what staleness should be judged on), and `updated_at` (our write clock, which keeps
+advancing when the market is quiet). `DELETE` events carry only the primary key under
+`REPLICA IDENTITY DEFAULT`; the publisher never deletes, so drop them.
 
-1. **Apply migration `062` and verify it.** It must be applied by a role that **owns**
-   `realtime.messages` (`supabase_realtime_admin`, or a superuser such as
-   `supabase_admin`). `postgres` is *not* a member of that owner on this project, so
-   `CREATE POLICY` raises `42501 must be owner of table messages` — which also means
-   `db-migrate.yml` cannot apply this one unaided (it runs `--single-transaction`, so the
-   failure would roll back and block every later migration in that run). Either apply it as
-   an owner role, or have an admin run `GRANT supabase_realtime_admin TO postgres;` once
-   first. Confirm with:
+### Rolling out the table transport — migration FIRST, or the feed goes dark
+
+Migration `063`, the publisher and the subscriber are one change in three files, and the
+order they reach production is load-bearing. A browser subscribing to `postgres_changes` on
+a table the project does not yet carry simply receives **no events** — there is no error
+`useLivePrices` can surface, so the tape silently degrades to `public_price_latest` daily
+closes marked `stale`. A dark live feed with nothing logged anywhere.
+
+1. **Apply migration `063` and verify it.** Unlike the withdrawn `062`, this one applies as
+   `postgres`: `public.prices_live` and the `supabase_realtime` publication are both owned
+   by `postgres`, which is the whole reason this design is reachable and that one was not.
+   A merge to `main` touching `migrations/**` runs `db-migrate.yml` automatically — but
+   **the run now pauses for a required reviewer** on the `production` environment (#1768,
+   live since 2026-08-01T20:50Z). Approve it, or the migration sits unapplied and the
+   "within seconds" behaviour described above no longer holds. Then confirm all three
+   properties before going anywhere near step 3:
 
    ```sql
-   select policyname, cmd, roles from pg_policies where schemaname = 'realtime';
-   -- expect: prices_live_receive_broadcast (SELECT, {anon,authenticated})
-   --         prices_live_service_role_broadcast (INSERT, {service_role})
+   -- (a) exactly one policy, SELECT only. Any write policy here is a regression.
+   select policyname, cmd, roles
+     from pg_policies
+    where schemaname = 'public' and tablename = 'prices_live';
+   -- expect exactly one row: prices_live_public_read | SELECT | {anon,authenticated}
+
+   -- (b) RLS actually enabled — without it the missing write policy denies nothing
+   select relrowsecurity from pg_class where oid = 'public.prices_live'::regclass;
+   -- expect: t
+
+   -- (c) the table is in the publication, or Realtime emits nothing at all
+   select schemaname, tablename
+     from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'prices_live';
+   -- expect one row
    ```
 
-2. **Deploy the publisher.** `supabase functions deploy prices-live` — it now sends with
-   `private: true`.
+2. **Deploy the publisher.** `supabase functions deploy prices-live` — it now upserts the
+   table instead of broadcasting. Deploying it ahead of step 1 is safe and self-diagnosing:
+   `published` comes back `PGRST205 Could not find the table 'public.prices_live' in the
+   schema cache`, which is the entire diagnosis.
 3. **Let the frontend reach production last.** digiquant.io builds from `main` via the
-   Cloudflare Pages git integration, so the client flag ships on a `develop` → `main`
-   promotion. Do not promote until step 1 is verified.
+   Cloudflare Pages git integration, so the subscriber ships on a `develop` → `main`
+   promotion. Do not promote until step 1 verifies.
 
-Between steps 2 and 3 the publisher is private while browsers still join publicly (and
-vice versa if the order slips). Whether that window actually interrupts delivery depends on
-whether Realtime segregates public and private delivery for the same topic — untested here,
-which is exactly why both flags are set rather than one: they agree under either semantics.
-If quotes stop, the fallback is stale daily closes, not a blank UI; re-check step 1's query
-first.
+The in-between windows are benign in this order: an old cached bundle still listening on
+`prices:live` hears nothing, and a new bundle pointed at a table that exists but is not yet
+being written shows the lane-1 seed until the next pg_cron minute. Both fall back to stale
+daily closes, never a blank UI. Reversing 1 and 3 is the case that goes dark — re-run step
+1's queries first if quotes stop.
 
 **Public views** (anon `SELECT` via PostgREST) — the column projection is the privacy
 allowlist (performance metrics only, never research notes — user ruling 2026-07-10,

@@ -9,7 +9,7 @@ export { useLivePortfolio } from "./useLivePortfolio";
 export {
   computeLiveTotal,
   coinbaseTickerToLive,
-  broadcastQuoteToLive,
+  priceRowToLive,
   seedRowToLive,
   applyQuotes,
   normalizeSymbols,
