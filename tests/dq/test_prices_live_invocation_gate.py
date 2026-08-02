@@ -101,7 +101,14 @@ def test_gate_precedes_every_other_gate_and_the_fetch_loop() -> None:
         "market-hours gate": code.index("isExtendedUsMarketHours(at)"),
         "Finnhub fetch loop": code.index("fetchQuote("),
         "service-role client": code.index("createClient("),
-        "Realtime broadcast": code.index("channel.send("),
+        # Retargeted, not relaxed (#1807). This entry used to anchor on `channel.send(`.
+        # The publish path is now an upsert into `public.prices_live` — the broadcast topic
+        # was forgeable by any anon-key holder and migration 062 could not fix it. The
+        # ordering claim is unchanged and if anything stronger: `service_role` bypasses RLS,
+        # so this gate is all that stands between an unauthorized caller and a write to a
+        # table the whole site reads. A stale anchor here would raise ValueError from
+        # `.index`, not fail an assertion — retarget it, never drop it.
+        "prices_live upsert": code.index(".upsert("),
     }
     for name, position in later.items():
         assert gate < position, f"invocation gate runs AFTER the {name} — reorder it first"

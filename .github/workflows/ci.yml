@@ -71,6 +71,7 @@ jobs:
               - 'digiquant/**'
               - 'tests/dq/**'
               - '.github/workflows/test-digiquant.yml'
+              - 'frontend/digiquant-web/lib/live/**'
             digisearch:
               - 'digisearch/**'
               - 'tests/ds/**'
