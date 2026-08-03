@@ -157,6 +157,12 @@ ruff_and_scripts:
   # otherwise skip this lane, and the failure it guards (a stale
   # `github.event.schedule` literal disabling a job) is silent (#1775).
   - .github/workflows/pipeline-digiquant-prices.yml
+  # tests/scripts/test_db_migrate_ledger_gate.py asserts that the ledger lookup is the ONLY
+  # thing that can skip a migration (#1814 deleted a BASELINE_THROUGH branch that silently
+  # recorded new low-numbered files as applied without running their DDL). Without this entry a
+  # PR editing only db-migrate.yml fires actionlint but NOT that guard — silent on exactly the
+  # edit it exists to catch. Same shape as the prices-cron entry above.
+  - .github/workflows/db-migrate.yml
 
 # Repo-wide actionlint. Deliberately the whole directory: before this filter the
 # only actionlint in CI was a job inside test-atlas-graph.yml pinned to
