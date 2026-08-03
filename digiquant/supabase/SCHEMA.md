@@ -132,6 +132,41 @@ the retired `prices:live` broadcast channel.
   upsert (the `documents` doc_type/category churn, #628/#1005/#1383), and a `price > 0`
   CHECK would reject Finnhub's legitimate zero for a halted symbol.
 
+### Refresh rate lease — new in migration 064 (replaces the #1756 invocation secret)
+
+The rate guard on the `prices-live` publisher. Finnhub's free tier is 60 calls/min, and
+`verify_jwt: true` never protected it — the anon key ships in every digiquant.io bundle, so
+anyone can invoke the function. `064` bounds the **rate** instead of the caller's identity:
+every invocation must first win an atomic claim on this table, so at most one refresh happens
+per 50s window no matter how many callers arrive together. Unauthorized callers are not
+blocked; they are made pointless (`200 {"skipped": "not claimed"}`, nothing fetched).
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `prices_live_lease` | `(id smallint)` | Singleton lease — exactly one row, pinned by `PRIMARY KEY` **plus** `CHECK (id = 1)`. `claimed_at timestamptz NOT NULL DEFAULT '-infinity'` records when the refresh window was last claimed. |
+
+- **One row is a correctness requirement, not tidiness.** The guard's whole argument is that
+  concurrent callers contend for *the same row*; two rows would be two independent windows and
+  two simultaneous winners. Hence PK and CHECK on the same column.
+- **`claimed_at` defaults to `'-infinity'`** so the first claim after a fresh apply or a
+  restore wins immediately. `NULL` would make the age predicate NULL — never true, i.e. a
+  permanently dead feed with no error anywhere — and `now()` would blank the feed for the first
+  window after every restore. Re-seeding is `ON CONFLICT (id) DO NOTHING`, so replaying the
+  migration during market hours cannot reset a live lease.
+- **`claim_prices_live_refresh(min_age_seconds integer) → boolean`** is the only path that
+  touches it: ONE conditional `UPDATE … WHERE id = 1 AND claimed_at < clock_timestamp() -
+  make_interval(secs => min_age_seconds)`, returning `FOUND`. Concurrent callers block on the
+  row lock, re-evaluate the WHERE clause against the committed new value under READ COMMITTED,
+  and match zero rows. It raises if `min_age_seconds` is NULL or `< 1` — a `0` would let every
+  caller win and disable the guard silently. See the RLS and SECURITY DEFINER notes below.
+- **Never replace the claim with a freshness `SELECT` on `prices_live.updated_at`.** That
+  timestamp is written ~6s *after* a fetch starts (40 symbols × 150 ms stagger), so every
+  concurrent caller would read the same stale value and all would fetch — zero protection
+  against parallel callers, and a sequential test of it passes perfectly. Advisory locks cannot
+  substitute either: PostgREST hands out a fresh pooled session per RPC call, so the lock
+  releases long before the fetch it was meant to cover. Full argument, with measurements, in
+  `migrations/064_prices_live_lease.sql`.
+
 ## RLS (consistent across all tables above)
 
 - Every table has `ENABLE ROW LEVEL SECURITY`.
@@ -158,6 +193,35 @@ the retired `prices:live` broadcast channel.
   omission *is* the security control and must not be "completed". `service_role` is the
   sole writer, and its `SELECT, INSERT, UPDATE` grant is stated explicitly in the migration
   rather than inherited from the platform ACL. See the transport note below.
+- **Exception — `prices_live_lease` (migration 064): RLS enabled with ZERO policies for any
+  role, *and* every table grant revoked.** Stronger than the `strategy_calibrations` idiom
+  above, which keeps RLS with no *anon* policy: here there is no policy at all, so of the roles
+  that could otherwise reach a row only `rolbypassrls` holders (`postgres`, the owner, and
+  `service_role`) get past row security — and `REVOKE ALL … FROM PUBLIC, anon, authenticated`
+  means anon and authenticated never even reach RLS. Note the order of the two controls,
+  because it decides which error a misconfiguration produces: **table privileges are checked
+  before row security**, so a role with no grant gets a loud `42501 permission denied for
+  table` rather than a silent empty set. `rolbypassrls` waives row security, not privilege —
+  which is why `SET ROLE service_role; SELECT … FROM public.prices_live_lease` is *denied*
+  despite that role's BYPASSRLS, while its call to `claim_prices_live_refresh` succeeds. There
+  is no paired `GRANT SELECT` (unlike every other table here) and the migration grants
+  `service_role` nothing on the table either: the SECURITY DEFINER function is the single
+  audited path, and it needs the caller to hold no table privilege at all. Do not "complete"
+  the policy set — no client has any business reading, let alone advancing, the lease.
+- **Exception — `claim_prices_live_refresh(integer)` (migration 064): the SECOND `SECURITY
+  DEFINER` function in this schema**, the other being `prune_langgraph_checkpoints` (migration
+  061, see below). Same hardening: `SET search_path = ''`, `EXECUTE` revoked from
+  `PUBLIC`/`anon`/`authenticated` so PostgREST does not publish it as an anon-callable RPC.
+  It differs in one way worth stating — it is `VOLATILE` *explicitly* rather than by default,
+  because marked `STABLE` PostgREST would serve it over `GET` in a read-only transaction and
+  the UPDATE would raise `25006`. **EXECUTE is `service_role`-only in both directions.** The
+  obvious direction is that anon must not refresh. The one that bites: anon must not be able to
+  **burn** the lease. Every winning call advances `claimed_at`, so a caller hitting the RPC
+  directly — no edge function, therefore no Finnhub call and no upstream cost at all — could
+  win every window and leave the cron nothing to claim. The feed then stops updating with
+  nothing logged: a denial of *freshness*, cheaper for an attacker than the quota exhaustion
+  the lease exists to prevent. The REVOKE is half the control, not tidiness around a definer
+  function.
 - **Not an RLS surface — `realtime.messages` is unreachable, and `prices:live` is abandoned
   rather than policed (#1807).** The `prices:live` Realtime *broadcast* topic used to carry
   this feed and was forgeable: `anon` holds a platform-managed INSERT grant on
@@ -245,7 +309,9 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
   (~700-800 MB steady state); it is not a disk-reclaim migration.
 - The `prune_langgraph_checkpoints` function is `SECURITY DEFINER` with
   `search_path = ''` and `EXECUTE` revoked from `PUBLIC`/`anon`/`authenticated`, so it
-  is not reachable as a PostgREST RPC.
+  is not reachable as a PostgREST RPC. It is one of **two** SECURITY DEFINER functions in this
+  schema; the other is `claim_prices_live_refresh(integer)` (migration 064, the `prices-live`
+  rate lease), which follows the same pattern and adds an explicit `service_role` GRANT.
 - **Pause:** `SELECT cron.unschedule('langgraph-checkpoint-prune');` /
   `SELECT cron.unschedule('langgraph-checkpoint-vacuum');`
 - **Verify:** `SELECT jobname, username, database, schedule FROM cron.job WHERE jobname

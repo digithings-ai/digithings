@@ -4,7 +4,7 @@ The single Supabase CLI project dir for the suite-wide **`core`** backend (Olymp
 portfolio, market data, strategy store — see
 [ADR 0021](../../docs/adr/0021-digiquant-supabase-project-topology.md)). There is exactly
 **one** migration chain: the numbered files under [`migrations/`](migrations/) —
-`001`–`063` at time of writing, with `037`, `038` and `059` never used and `062`
+`001`–`064` at time of writing, with `037`, `038` and `059` never used and `062`
 **burned — see below, do not reuse it**; new work appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
 tables and views.
 
@@ -57,6 +57,7 @@ deploy`, or the SQL editor.
 | `SCHEMA.md` | Hand-maintained inventory of live tables, views, and RLS conventions |
 | `migrations/050_public_portfolio_views.sql` | Three anon-readable views — the public portfolio read surface (#1461/#1462) |
 | `migrations/063_prices_live_table.sql` | `public.prices_live` — the quote table Realtime streams as `postgres_changes`; RLS on, one SELECT policy, no write policy, `service_role` the sole writer (#1807) |
+| `migrations/064_prices_live_lease.sql` | `public.prices_live_lease` + `claim_prices_live_refresh(integer)` — the single-row lease and the atomic claim that bound the Finnhub refresh **rate**; replaced the #1756 invocation secret |
 | `functions/prices-live/` | Deno edge function: polls Finnhub, upserts one row per ticker into `public.prices_live` (#1461, #1807) |
 
 The rest of this README is the operational guide for the **live price feed** (#1461).
@@ -80,8 +81,8 @@ Until 2026-08-01 the server lane fanned **one** message per run out to the Realt
 *broadcast* channel `prices:live`. Broadcast messages are client-authored: delivery is a
 bare INSERT into `realtime.messages`, Supabase grants `anon` INSERT on that table, and the
 anon key ships in plaintext in every digiquant.io bundle. Anyone could POST **forged
-quotes** onto the feed and every open tab would render them as live Finnhub data — the edge
-function and its invocation secret (#1756) bypassed entirely.
+quotes** onto the feed and every open tab would render them as live Finnhub data — bypassing
+the edge function, and whatever gate it carried, entirely.
 
 The textbook Supabase answer — RLS on `realtime.messages` plus `config: { private: true }`
 on both ends — is **unreachable on this project** and was withdrawn with migration `062`
@@ -111,7 +112,7 @@ The symbol set per run = distinct tickers from `public_portfolio_positions` + a 
 curated majors list (SPY QQQ DIA IWM GLD TLT UUP EFA EEM HYG), capped at 40 symbols —
 well under the 60/min limit even at a 60s schedule.
 
-## Live since 2026-07-13 — and gated (#1756)
+## Live since 2026-07-13 — and rate-limited (#1807, superseding #1756)
 
 The feed is **live**: `FINNHUB_API_KEY` is set, both pg_cron jobs are `active`, and the
 function fetches on every scheduled invocation. It is **not** dormant. (Evidence:
@@ -122,52 +123,132 @@ runs since 2026-07-13.) That capture predates #1807: the publish-result field wa
 carries the upsert result. A healthy run today ends `…,"failed":0,"published":"ok"}` —
 grep the cron log for `published`, not `broadcast`.
 
-Because it is live, invocation is **authorized by a shared secret**, not by JWT alone:
+### Anyone may invoke it; nobody may exceed the refresh rate (migration 064)
 
-- The caller must send `x-prices-live-secret: <PRICES_LIVE_INVOKE_SECRET>`. Without it
-  the function returns `401` and fetches nothing.
-- This gate runs **before** the key gate, the body parse, and the market-hours gate, so
-  an unauthorized caller learns nothing about the feed's state and triggers no outbound
-  request.
-- It **fails closed**: if `PRICES_LIVE_INVOKE_SECRET` is unset, every invocation is
-  refused with `503`. There is no fall-open path.
+Because it is live, invocation is **rate-limited by an atomic lease**, not authorized by a
+secret. Be precise about what that does and does not buy, because the two are easy to
+conflate:
 
-The anon key alone is **not** sufficient and never was. `verify_jwt` proves the caller
-holds *a* project key; the anon key is published in every browser bundle, so it proves
-nothing about *who* is calling. Keep `verify_jwt` on — it is a useful outer layer — but
-the invoke secret is what actually distinguishes the scheduler from the internet.
+- **It does not block unauthorized callers.** They still reach the function and still get a
+  `200`. `verify_jwt: true` was never authorization — it proves the caller holds *a* project
+  key, and the anon key ships in plaintext in every digiquant.io bundle, so it says nothing
+  about *who* is calling. **Keep `verify_jwt` on** anyway; it is a cheap outer layer, and
+  nothing below replaces it.
+- **It does bound the metered resource.** Finnhub's free tier is 60 calls/min, and that quota
+  — not identity — was always the thing at risk: hammer the endpoint and the cron's own
+  fetches start failing, so the feed goes stale for every real visitor. Every invocation now
+  calls `public.claim_prices_live_refresh(50)` (migration `064`) before it looks at a single
+  symbol. That function is **one conditional `UPDATE`** of the single-row
+  `public.prices_live_lease`, so concurrent callers block on that row, re-check the committed
+  `claimed_at` under READ COMMITTED, and match zero rows. **Exactly one winner per 50s
+  window, whatever the arrival pattern.** Losers return `200 {"skipped": "not claimed"}` and
+  fetch nothing.
+- **So an attacker gains nothing worth having.** A caller who *wins* a claim causes a real
+  Finnhub fetch and a real upsert — the same correct prices the cron would have written, at
+  the same bounded rate. There is no forged-data path (see the transport section above) and
+  no way to push the rate past one refresh per 50s.
+- **What it deliberately does not protect: invocation volume itself.** Nothing here stops
+  someone calling the function ten thousand times a minute; they will simply get ten thousand
+  `skipped` responses. Each one still costs a Supabase edge-function invocation and a
+  round-trip to the claim RPC, and the only thing bounding *that* is Supabase's own platform
+  rate limiting. This design bounds the **Finnhub** spend, which is the metered resource we
+  pay for and the one that goes dark when exhausted.
 
-Outside extended US market hours (13:00–01:00 UTC, Mon–Fri) an authorized caller gets
+**Why the #1756 shared secret was withdrawn.** It worked, and it answered the wrong question.
+`x-prices-live-secret` / `PRICES_LIVE_INVOKE_SECRET` bounded *who* could invoke, when the
+constraint is *how often anyone* may cause a fetch — and it cost a real credential to
+generate, store, embed in the pg_cron `command` (i.e. in plaintext in `cron.job`), rotate, and
+lose. The lease answers the rate question directly, with no credential to carry. `verify_jwt`
+stays; the secret is gone.
+
+**Do not "simplify" the claim into a freshness `SELECT`.** The obvious version —
+`select max(updated_at) from prices_live`, skip if young — is read-then-act and protects
+nothing. `updated_at` is written by the upsert **after** the whole fetch loop (40 symbols ×
+150 ms ≈ 6 seconds), so for those ~6s every concurrent caller reads the same stale timestamp,
+all pass, and all fetch: ten parallel requests become ~400 Finnhub calls. A sequential test of
+that design passes perfectly, which is why it survives review. An advisory lock is not a
+substitute either — PostgREST hands out a fresh pooled session per RPC call, so the lock is
+gone long before the 6-second fetch it was meant to cover. The long argument, with the
+measurements, is in
+[`migrations/064_prices_live_lease.sql`](migrations/064_prices_live_lease.sql).
+
+**EXECUTE on the claim is `service_role`-only, in both directions.** `anon` must not be able
+to refresh — and, the half that actually bites, `anon` must not be able to **burn** the lease:
+every winning call advances `claimed_at`, so an attacker calling the RPC *directly* (no edge
+function, therefore no Finnhub call at all) could win every window and leave the cron nothing
+to claim. That is a denial of *freshness*, cheaper than the quota attack it replaced. `064`
+revokes EXECUTE from `PUBLIC`/`anon`/`authenticated`; do not grant it back, and do not expose
+lease state through a convenience view or wrapper.
+
+Outside extended US market hours (13:00–01:00 UTC, Mon–Fri) a caller gets
 `200 {"market": "closed"}` without burning quota; if the Finnhub key were ever unset it
-gets `200 {"dormant": true}`. Both exit 200 so schedulers never see failures for
-expected idle states. In those windows the frontend values positions from the
+gets `200 {"dormant": true}`; and a caller that loses the claim gets
+`200 {"skipped": "not claimed"}`. All three exit 200 so schedulers never see failures for
+expected idle states. In the market-closed windows the frontend values positions from the
 `public_price_latest` view — the latest daily close per ticker from `price_history`,
 which the `pipeline-digiquant-prices.yml` job keeps fed.
 
-## Rolling out the invocation secret
+**`skipped` is a signal in the cron log.** pg_cron fires every 60s against a 50s window, so a
+legitimate scheduled run always claims: in cron-only steady state `net._http_response` should
+contain **no** `skipped` bodies at all. One that shows up means something *else* invoked the
+function inside the same window — a forced smoke test, a second scheduler, or an unwanted
+caller. The 10s of slack is jitter margin, not headroom for a second caller.
 
-**Order matters — reversing steps 1 and 3 takes the live feed dark.** A deployed
-function that predates the gate simply ignores an unexpected header, so setting the
-secret and re-issuing the crons first is a no-op against the running version; deploying
-first would 401 the existing header-less crons for as long as the rollout takes.
+## Rolling out the rate lease — migration FIRST, secret deleted LAST
 
-1. `supabase secrets set PRICES_LIVE_INVOKE_SECRET=<generated>` — generate with
-   `openssl rand -hex 32`. Ignored by the currently deployed version.
-2. Re-issue **both** cron jobs with the header added (SQL below). pg_cron upserts by
-   jobname, so this updates in place rather than creating duplicates. This is a manual
-   SQL-editor step — the schedule is deliberately **not** a checked-in migration (see
-   below), so it will not happen on its own.
-3. `supabase functions deploy prices-live` — the gate goes live and the crons already
-   carry the header.
+**Both ends of the order are load-bearing, for different reasons.**
 
-Confirm with `select status_code, content from net._http_response order by id desc
-limit 3;` — still `200 {"market":...}`, not `401`.
+1. **Apply migration `064`.** The function **fails closed**: an RPC error, a thrown exception,
+   or any `data` that is not exactly `true` all mean *not claimed*, so a version deployed
+   before `064` exists fetches **nothing** (PostgREST answers `PGRST202 Could not find the
+   function public.claim_prices_live_refresh`). That is the safe direction to be wrong in — a
+   briefly dark feed rather than an unguarded one — but it is still dark, so land the migration
+   first. A merge to `main` touching `migrations/**` runs `db-migrate.yml`, which **pauses for
+   a required reviewer** on the `production` environment (#1768); approve it, then confirm:
+
+   ```sql
+   -- the lease exists and is claimable (exactly one row, seeded at -infinity)
+   select id, claimed_at from public.prices_live_lease;
+
+   -- EXECUTE is service_role-only — anon must be absent from this ACL
+   select proacl from pg_proc
+    where oid = 'public.claim_prices_live_refresh(integer)'::regprocedure;
+   -- expect {postgres=X/postgres,service_role=X/postgres} — no anon, no PUBLIC entry
+   ```
+
+2. **`supabase functions deploy prices-live`.** The claim goes live. Confirm with
+   `select status_code, content from net._http_response order by id desc limit 3;` — still
+   `200 {"market":...}` with `"published":"ok"`, and **not** `{"skipped":"not claimed"}` on
+   consecutive scheduled runs (see the signal note above).
+
+3. **The pg_cron jobs need NO change — verified, not assumed.** Checked read-only against the
+   live project on 2026-08-03: there are four cron jobs, and **neither `prices-live` job carries
+   `x-prices-live-secret`**. Both are `active`, on the schedules below (`* 13-23 * * 1-5` and
+   `* 0 * * 2-6`), and send exactly `Content-Type` + `Authorization` — which is precisely the
+   correct body for this design. So this step is genuinely a no-op here. Confirm for yourself:
+
+   ```sql
+   select jobname, schedule, active, command from cron.job where jobname like 'prices-live%';
+   ```
+
+   If a job on some other environment *does* carry the header, re-issue it with the sample SQL
+   below (`cron.schedule` upserts by jobname, updating in place). Do not skip that on the theory
+   that an extra header is harmless: it is harmless to the *function*, but it leaves the retired
+   secret sitting in plaintext in `cron.job.command`, and re-issuing is how the credential
+   retirement actually completes. `supabase secrets unset` does not reach into `cron.job`.
+
+4. **`PRICES_LIVE_INVOKE_SECRET` is now UNUSED and may be deleted from the project secrets** —
+   and **delete it last**. The currently deployed pre-`064` function returns `503` to *every*
+   invocation when that secret is unset (it fails closed on a missing secret), so removing it
+   before step 2 takes the feed dark for the length of the rollout. After step 2 nothing reads
+   it: `supabase secrets unset PRICES_LIVE_INVOKE_SECRET`. Reversing this step and step 2 is
+   the one ordering that causes an outage.
 
 ## Historical: one-time setup steps (all completed)
 
 1. Apply migration `050` (MCP `apply_migration`, SQL editor, or `supabase db push`).
 2. Deploy the function: `supabase functions deploy prices-live` (keep JWT verification
-   **on** — necessary but not sufficient; see the invoke secret above).
+   **on** — a useful outer layer, but never authorization; see the rate lease above).
 3. Create a free API key at [finnhub.io](https://finnhub.io) (Dashboard → API Keys).
 4. `supabase secrets set FINNHUB_API_KEY=<key>` — no redeploy needed.
 
@@ -187,9 +268,8 @@ select cron.schedule(
   select net.http_post(
     url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/prices-live',
     headers := jsonb_build_object(
-      'Content-Type',          'application/json',
-      'Authorization',         'Bearer <SUPABASE_ANON_KEY>',
-      'x-prices-live-secret',  '<PRICES_LIVE_INVOKE_SECRET>'
+      'Content-Type',   'application/json',
+      'Authorization',  'Bearer <SUPABASE_ANON_KEY>'
     ),
     body    := '{}'::jsonb
   );
@@ -204,9 +284,8 @@ select cron.schedule(
   select net.http_post(
     url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/prices-live',
     headers := jsonb_build_object(
-      'Content-Type',          'application/json',
-      'Authorization',         'Bearer <SUPABASE_ANON_KEY>',
-      'x-prices-live-secret',  '<PRICES_LIVE_INVOKE_SECRET>'
+      'Content-Type',   'application/json',
+      'Authorization',  'Bearer <SUPABASE_ANON_KEY>'
     ),
     body    := '{}'::jsonb
   );
@@ -220,33 +299,42 @@ select cron.schedule(
 
 The anon key is safe to embed here (it ships in every browser bundle anyway) — and that
 is exactly why it cannot be the authorization: it gets the request past `verify_jwt` and
-nothing more. The `x-prices-live-secret` header is the part that identifies the caller as
-the scheduler. Requires the `pg_cron` and `pg_net` extensions (Dashboard → Database →
+nothing more. Requires the `pg_cron` and `pg_net` extensions (Dashboard → Database →
 Extensions).
 
-**Where the invoke secret lives, honestly.** Embedding it in the cron `command` puts it
-in plaintext in `cron.job`, readable by anyone who can `select` there. That is a real
-property to know about, not a hidden one — but it is a strictly smaller surface than
-today's: reading `cron.job` needs database access, whereas the anon key needs only
-`view-source`. The secret is never served to a browser and never leaves the project.
-Rotate by re-running steps 1–2 of the rollout (the function reads the secret per
-invocation, so no redeploy is needed).
+**Nothing in this job body identifies the caller, and that is the design.** There is no
+secret to embed here any more (#1756 withdrawn), so there is no credential sitting in
+plaintext in `cron.job` and nothing to rotate. The scheduler is not distinguished from the
+internet at all — it is distinguished only by *arriving first in a 50s window*, which is all
+the guard needs, because a caller who wins the claim performs the same legitimate refresh the
+cron would have. An over-generous schedule stays harmless for the same reason it always was:
+the function self-gates on market hours, and now also on the lease.
 
 ### Smoke testing outside market hours
 
-Pass `{"force": true}` to override the market-hours gate (never the key gate, and never
-the invocation gate) — one full fetch + publish cycle on demand, so the end-to-end path
+Pass `{"force": true}` to override the market-hours gate (never the key gate, and **never
+the refresh claim**) — one full fetch + publish cycle on demand, so the end-to-end path
 can be proven on a weekend instead of waiting for Monday's open:
 
 ```bash
 curl -s -X POST 'https://<PROJECT_REF>.supabase.co/functions/v1/prices-live' \
   -H 'Authorization: Bearer <SUPABASE_ANON_KEY>' \
-  -H 'x-prices-live-secret: <PRICES_LIVE_INVOKE_SECRET>' \
   -H 'Content-Type: application/json' -d '{"force": true}'
 ```
 
-Omitting the secret header returns `401` and fetches nothing — that is the cheapest way
-to confirm the gate is actually deployed.
+**`force` is weaker than it was, precisely and no more than that.** It cannot bypass the
+claim — a `force` that skipped the lease would hand every anon-key holder the unbounded-fetch
+path back, which is the whole hole this design closes. That is the accepted trade, not an
+oversight to fix later. What it costs in practice is narrow:
+
+- **Weekends and overnight (the usual smoke-test window): no impact.** The crons only fire
+  13:00–01:00 UTC Mon–Fri, so the lease is long stale and the first forced call claims and
+  fetches normally.
+- **A *second* forced call within 50s returns `{"skipped": "not claimed"}`** and fetches
+  nothing. Wait out the window and retry; that response is the guard working, not a failure.
+- **During market hours a forced call may lose to the cron**, and a forced call that *wins*
+  consumes that minute's window — harmless, because it publishes the same real Finnhub prices
+  the cron would have.
 
 The response reports `forced: true`, per-symbol failures, and `published` — the
 `public.prices_live` upsert result: `"ok"`, or the PostgREST error verbatim (a scheduled

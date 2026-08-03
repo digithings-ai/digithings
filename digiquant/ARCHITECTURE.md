@@ -1158,22 +1158,64 @@ curated anon-readable views — `public_portfolio_positions`, `public_nav_histor
 the `supabase/functions/prices-live/` Deno edge function, which polls Finnhub
 server-side (key held as a Supabase secret; **live since 2026-07-13** on a 60s pg_cron
 schedule) and upserts one row per ticker into `public.prices_live` (migration `063`),
-which browsers read over Realtime `postgres_changes`. Invocation is authorized by the
-`x-prices-live-secret` shared-secret
-header, checked ahead of every other gate and fail-closed when
-`PRICES_LIVE_INVOKE_SECRET` is unset (#1756) — `verify_jwt` alone is not authorization,
-because the anon key ships in every browser bundle. Crypto
+which browsers read over Realtime `postgres_changes`. Crypto
 quotes take the other lane — streamed client-side from Coinbase's public WebSocket. See
 [`supabase/README.md`](supabase/README.md) for the two-lane design, pg_cron + pg_net
 scheduling, and the one-time setup steps, and [`supabase/SCHEMA.md`](supabase/SCHEMA.md)
 for the view and table inventory.
+
+**Invocation is rate-limited, not authorized — the shared secret was withdrawn (migration
+`064`, superseding #1756).** `verify_jwt: true` was never authorization: it proves the caller
+holds *a* project key, and the anon key ships in plaintext in every digiquant.io bundle. So
+anyone can invoke `prices-live`, and the harm available to them is to exhaust Finnhub's free
+tier (60 calls/min) out from under the 60s cron — the feed then goes stale for every real
+visitor. That is a **rate** problem, not an **identity** problem, and #1756's
+`x-prices-live-secret` / `PRICES_LIVE_INVOKE_SECRET` header answered the wrong one at the cost
+of a real operational credential to store, embed in `cron.job`, rotate and lose. It is gone.
+[`supabase/migrations/064_prices_live_lease.sql`](supabase/migrations/064_prices_live_lease.sql)
+replaces it with an **atomic claim**: every invocation calls
+`public.claim_prices_live_refresh(50)` before touching a symbol, which is ONE conditional
+`UPDATE` of the single-row `public.prices_live_lease` (`WHERE id = 1 AND claimed_at <
+clock_timestamp() - <min_age>`, returning `FOUND`). Concurrent callers block on that row, then
+re-evaluate the predicate against the committed new value under READ COMMITTED and match zero
+rows — exactly one winner per window, for any arrival pattern. Losers get `200
+{"skipped": "not claimed"}` and fetch nothing. The caller **fails closed**: an RPC error, a
+thrown exception, or any `data` that is not exactly `true` all mean not-claimed, so deploying
+the function ahead of the migration fetches nothing rather than everything. `MAX_SYMBOLS = 40`
+at one fetch per 50s is 48 Finnhub calls/min against the 60/min tier (a rate over the claim
+window, not a cap on an arbitrary sliding minute); raising `MAX_SYMBOLS` or lowering
+`MIN_REFRESH_SECONDS` breaks that and a test asserts the product.
+
+*The rejected design, because it is the one a reader will propose.* A freshness check —
+`select max(updated_at) from prices_live`, skip if young — is **read-then-act and protects
+nothing**. `updated_at` is written by the upsert *after* the whole fetch loop (40 symbols ×
+150 ms ≈ 6 seconds), so for those ~6s every concurrent invocation reads the same stale
+timestamp, all pass the check, and all fetch: ten parallel requests become ~400 Finnhub calls.
+It is not a narrow race a tighter threshold would shrink, and a sequential test of it passes
+perfectly — which is why the design survives review. Advisory locks cannot substitute either:
+the protected region is a ~6s fetch in Deno that outlives the RPC, and PostgREST returns the
+pooled session at commit. Test-and-consume in one statement or there is no guard.
+
+*What the rate guard does and does not cover.* Unauthorized callers are **not blocked** — they reach
+the function and get a `200`. What they cannot do is exceed the legitimate refresh rate, so
+invoking the endpoint gains an attacker nothing beyond a Supabase function invocation: a caller
+who *wins* a claim causes the same real Finnhub fetch and the same correct upsert the cron
+would have. `verify_jwt` stays **on** as a cheap outer layer. Two things this deliberately does
+not cover. (1) **Invocation volume itself is unprotected** — ten thousand calls a minute yield
+ten thousand `skipped` responses, each still costing an edge-function invocation and a claim
+round-trip, and only Supabase's platform rate limiting bounds that; what is bounded here is the
+metered Finnhub spend. (2) **Direct RPC access would starve the feed**, which is why `064`
+revokes `EXECUTE` from `PUBLIC`/`anon`/`authenticated` and grants it to `service_role` only:
+every winning call advances `claimed_at`, so a caller hitting the RPC directly — no edge
+function, no Finnhub call, no cost — could win every window and leave the cron nothing to
+claim, a denial of *freshness* cheaper than the quota attack. The REVOKE is half the control.
 
 **The live equity transport is a table, not a broadcast channel (#1807).** The feed used to
 ride the Realtime *broadcast* topic `prices:live`, and that was forgeable: broadcast
 messages are client-authored, delivery is a bare INSERT into `realtime.messages`, Supabase
 grants `anon` INSERT on that table, and the anon key ships in plaintext in every
 digiquant.io bundle — so anyone could publish forged quotes straight onto the feed,
-bypassing the edge function and its invocation secret (#1756) entirely.
+bypassing the edge function, and whatever gate it carried, entirely.
 [`supabase/migrations/063_prices_live_table.sql`](supabase/migrations/063_prices_live_table.sql)
 moves the transport onto `public.prices_live`: the publisher upserts one row per ticker
 (`functions/prices-live/index.ts`) and the browser subscribes to `postgres_changes` on that
