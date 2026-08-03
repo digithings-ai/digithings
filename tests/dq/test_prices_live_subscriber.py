@@ -27,7 +27,7 @@ Why assert on source text from pytest: ``frontend/digiquant-web`` has NO test ru
 ``test_migration_062.py`` held ``test_subscriber_joins_a_private_channel`` — the only
 assertion anywhere in this repo about ``useLivePrices.ts``. This module replaces that
 coverage in the same style as ``test_prices_live_publish.py`` and
-``test_prices_live_invocation_gate.py``: read the TypeScript, assert on its structure.
+``test_prices_live_rate_guard.py``: read the TypeScript, assert on its structure.
 
 Every failure this file guards is SILENT. Nothing throws, nothing logs, and the tape keeps
 rendering lane 1's stale daily closes — which look like prices. There is no runtime signal to

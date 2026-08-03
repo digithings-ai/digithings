@@ -22,7 +22,7 @@ Why assert on source text at all: there is no ``deno`` in CI and no Deno lane in
 ``.github/workflows/``, so nothing anywhere type-checks, lints or executes this file. A
 misspelled column, a swapped ``q.d``/``q.dp``, or a broadcast quietly restored by a future
 editor would all ship green. This module audits the source the way
-``test_prices_live_invocation_gate.py`` audits the gate: structurally, on the properties
+``test_prices_live_rate_guard.py`` audits the rate guard: structurally, on the properties
 that make the fix load-bearing rather than merely present.
 
 Every negative assertion runs against comment-stripped source. The file's header comment is
@@ -73,10 +73,10 @@ def _source() -> str:
 def _strip_comments(text: str) -> str:
     """Drop `/* */` blocks and `//` line comments so prose is never read as code.
 
-    Duplicated from `test_prices_live_invocation_gate.py` rather than imported: nothing in
-    this repo imports across test modules, and doing so would make these assertions depend on
-    rootdir/pythonpath resolution. Note the block pass, which that module does not need and
-    this one does — the JSDoc on `quotedAtIso` discusses the old broadcast path by name.
+    Duplicated in `test_prices_live_rate_guard.py` rather than shared: nothing in this repo
+    imports across test modules, and doing so would make these assertions depend on
+    rootdir/pythonpath resolution. The block pass is not optional here — the JSDoc on
+    `quotedAtIso` discusses the old broadcast path by name.
     """
     without_blocks = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
     return "\n".join(re.sub(r"//.*$", "", line) for line in without_blocks.splitlines())
@@ -176,22 +176,30 @@ def test_a_missing_quote_timestamp_cannot_abort_the_run() -> None:
     assert "fallback" in body, "quotedAtIso has no fallback for a missing `t`"
 
 
-def test_the_invocation_gate_still_precedes_the_write() -> None:
-    """`service_role` bypasses RLS, so the gate is the only thing guarding the table.
+def test_the_refresh_claim_still_precedes_the_write() -> None:
+    """`service_role` bypasses RLS, so the guard on this handler is the guard on the table.
 
-    The no-write-policy design stops *clients* forging quotes; it does nothing about a caller
-    who can make this function write on their behalf. An unauthorized invocation must return
-    before the upsert — an index comparison, because "the gate exists somewhere in the file"
-    is not the property that matters.
+    Retargeted, not relaxed. This used to anchor on `INVOKE_SECRET_HEADER`, the #1756 shared
+    secret. That secret is gone: `verify_jwt` was never authorization, the anon key is public,
+    and what was actually unbounded was the *rate*, not the caller set. The guard is now the
+    atomic lease claim of migration 064 (see `test_prices_live_rate_guard.py` for its own
+    properties). The ordering claim here is unchanged and still load-bearing: the no-write-policy
+    design stops *clients* forging quotes, and says nothing about a caller who makes this
+    function write on their behalf — so a caller who does not hold the lease must return before
+    the upsert. An index comparison, because "the claim exists somewhere in the file" is not the
+    property that matters. A stale anchor here would raise ValueError from `.index`, not fail an
+    assertion — retarget it, never drop it.
     """
     source = _source()
     code = _strip_comments(source[source.index("Deno.serve(") :])
-    assert code.count("INVOKE_SECRET_HEADER") == 1, (
-        "expected exactly one header read for the invoke secret"
+    claims = list(re.finditer(r"\.rpc\(\s*[\"']claim_prices_live_refresh[\"']", code))
+    assert len(claims) == 1, (
+        f"expected exactly one refresh claim in the handler, found {len(claims)}"
     )
-    assert code.index("INVOKE_SECRET_HEADER") < code.index(".upsert("), (
-        "the invocation gate runs AFTER the prices_live upsert — an unauthorized caller can "
-        "drive a service-role write to the table the whole site reads"
+    assert claims[0].start() < code.index(".upsert("), (
+        "the refresh claim runs AFTER the prices_live upsert — every invocation would then "
+        "drive a service-role write to the table the whole site reads, which is the unbounded "
+        "path the claim exists to close"
     )
 
 
