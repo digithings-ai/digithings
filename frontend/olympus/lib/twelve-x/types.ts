@@ -384,3 +384,27 @@ export interface FxTradeIdeaRow {
   citations: unknown[]; // jsonb array of TradeIdeaCitation
   as_of: string; // timestamptz (ISO)
 }
+
+/**
+ * Assembled twelve-x consensus × PMT Smart Bias join for one G10 currency (P5).
+ * Produced only by `assembleConsensusDivergence` / `getConsensusDivergence` — never
+ * as a standalone smart-bias row (spec D6).
+ */
+export interface FxConsensusDivergence {
+  currency: string;
+  /** Canonical medium/weighted street score ∈ [−2, +2]. */
+  consensusScore: number;
+  consensusTilt: number;
+  consensusAsOf: string;
+  pmtSentiment: string;
+  /** Mapped Overall_Sentiment on the shared −2…+2 scale. */
+  pmtScore: number;
+  /** ISO week anchor from `fx_smart_bias.week_first_date`. */
+  pmtAsOf: string;
+  gap: number;
+  isDivergent: boolean;
+  snapshotId: string | null;
+  rawSnapshot: unknown | null;
+  streetStatement: string;
+  pmtStatement: string;
+}
