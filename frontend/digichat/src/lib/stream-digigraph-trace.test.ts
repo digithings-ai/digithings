@@ -179,3 +179,51 @@ it("emits the activity span but not the legacy part on the embed path with activ
   expect(body).not.toContain('"type":"data-digigraphTrace"');
   expect(body).not.toContain('"workflow_id"');
 });
+
+it("emits rich retrieve activity for rag_sources on the gated path", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "rag_sources",
+                  payload: {
+                    sources: [
+                      {
+                        source_id: "doc-1",
+                        snippet: "hello",
+                        metadata: { title: "Auth", evidence_tier: "tier_a", publication_year: 2023 },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+    emitLegacyTracePart: false,
+  });
+  const body = await new Response(res.body).text();
+  expect(body).toContain('"type":"data-digichatActivity"');
+  expect(body).toContain('"operation":"retrieve"');
+  expect(body).toContain('"tier":"tier_a"');
+  expect(body).toContain('"year":2023');
+  expect(body).not.toContain('"type":"data-digigraphTrace"');
+});

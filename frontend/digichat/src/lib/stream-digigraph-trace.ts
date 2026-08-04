@@ -12,9 +12,9 @@ import {
 import { coreMessagesToDigigraphOpenAi } from "@/lib/digigraph-messages";
 import {
   ACTIVITY_PART_TYPE,
-  chatActivitySpan,
   type ActivityDetail,
 } from "@/lib/chat-activity";
+import { mapDigigraphTraceToSpans } from "@/lib/digigraph-activity-map";
 
 export type DigigraphTracePayload = {
   v?: number;
@@ -154,14 +154,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
             });
           }
 
-          // New part: gated by this tenant's activityDetail, same as every
-          // other provider.
-          const span = chatActivitySpan(
-            payload.payload?.label ?? payload.type,
-            payload.payload?.status === "completed" ? "completed" : "started",
-            opts.activityDetail
-          );
-          if (span) {
+          for (const span of mapDigigraphTraceToSpans(payload, opts.activityDetail)) {
             writer.write({
               type: ACTIVITY_PART_TYPE,
               id: `dg-activity-${activitySeq++}`,
