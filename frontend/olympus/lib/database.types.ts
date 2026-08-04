@@ -202,6 +202,36 @@ export interface Database {
         Insert: Database['public']['Tables']['price_technicals']['Row'];
         Update: Partial<Database['public']['Tables']['price_technicals']['Row']>;
       };
+      prices_live: {
+        // Latest intraday quote per ticker (migration 063) — ONE row per symbol, upserted
+        // every ~60s during extended US hours by the `prices-live` edge function. This is
+        // the DISPLAY lane (#1833) and it is READ-ONLY from the browser: RLS is enabled
+        // with exactly one `FOR SELECT` policy, and "the absent write policy IS the
+        // security control" (063) — `service_role` is the only writer. `Insert`/`Update`
+        // are declared for shape parity with the other tables here; no client code may
+        // use them, and a live price must never be written back into
+        // `positions.current_price`, which is the nightly CLOSE the performance batch
+        // reads (that is the invariant #1833 exists to protect).
+        //
+        // Coverage is NOT guaranteed per held ticker: the publisher caps at 25 symbols
+        // (a curated MAJORS list plus portfolio tickers), so a holding may be absent —
+        // consumers fall back to the close. See lib/live-valuation.ts.
+        Row: {
+          ticker: string;
+          /** Finnhub `c`. NOT NULL, but may legitimately be 0 for a halted symbol. */
+          price: number;
+          /** Finnhub `d` — absolute change vs prior close. Carried, unused by the UI. */
+          change: number | null;
+          /** Finnhub `dp` — percent POINTS vs prior close: 1.24 means +1.24%, not 0.0124. */
+          change_pct: number | null;
+          /** EXCHANGE tick time — the freshness a staleness check must read. */
+          quoted_at: string;
+          /** OUR write clock; advances even when the quote has not moved. Not "as of". */
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['prices_live']['Row'], 'updated_at'> & { updated_at?: string };
+        Update: Partial<Database['public']['Tables']['prices_live']['Insert']>;
+      };
       macro_series_observations: {
         Row: {
           source: string;
