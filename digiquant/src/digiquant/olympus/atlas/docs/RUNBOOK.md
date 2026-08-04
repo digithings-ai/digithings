@@ -201,6 +201,24 @@ FRED vol complex (VIX/VIX3M/VXN/GVZ/OVX, in `config/macro_series.yaml`) via
 54 rows, so a day's total needs `sum(est_cost_usd) … GROUP BY run_date`, not one row); verify
 after changes.
 
+**Dated findings (#1750).** `Finding.as_of` carries the ISO date of the DATA a figure describes,
+and `skills.QUANTITATIVE_FINDING_RULES` — appended to every skill, full and edit, at the loader
+chokepoint — instructs the model to set it whenever a finding quotes a number. This exists
+because the `sector-healthcare` document served "XLV is at $162.16, up 5.46% from its 50-day SMA"
+on seven publication dates with no cue that the figure was old.
+
+Two things it deliberately does not do. It is **optional and lenient** by necessity: edit-mode
+re-validates bodies derived from prior published rows, so a required field would raise on all
+~660 existing rows and #1641 would turn each into a full regeneration; and a hard constraint on
+an informational field is what discarded whole patches in #1740. A loose value like `Jul 24` is
+normalized to ISO, and one that will not parse is kept verbatim rather than rejected — so treat a
+non-ISO `as_of` as human-readable only.
+
+And it **cannot detect a fabricated number.** `$162.16` was never an XLV close or intraday print
+on 2026-07-23 when it first appeared, and the payload attributed it to `price_technicals:XLV`.
+Dating a wrong number makes it auditable, not true. Grounding needs a numeric-fidelity validator
+cross-checking prose against `price_technicals`; that is not built.
+
 **Spend alert (#1764).** `ATLAS_SPEND_ALERT_USD` (default **$10**) is a warning threshold on a
 single chain invocation. Breaching it writes `breakdown.spend_alert`
 (`{threshold_usd, est_cost_usd, scope}`), logs a warning, and raises a GitHub Actions

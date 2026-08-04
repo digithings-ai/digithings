@@ -989,6 +989,16 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
 - Skills under `digiquant/src/digiquant/olympus/atlas/skills/` (alt-data, institutional,
   macro, asset-class, equity, sector-research, digest, …).
   Loaded via `digiquant.olympus.atlas.skills.load_skill`.
+  **Two shared instruction blocks are appended at the loader, not copied into the ~20 SKILL.md
+  files** — a single chokepoint cannot drift between them. `EDIT_SCHEMA_CONSTRAINTS` (#1740) goes
+  on edit skills only; `QUANTITATIVE_FINDING_RULES` (#1750) goes on **both** variants, because
+  the undated-number defect it addresses appeared on the FULL path (the frozen XLV block came
+  from a baseline run, which forces `resolve_edit_mode → full`). `Finding.as_of` is the field
+  those rules target: optional and lenient by necessity — edit-mode re-validates bodies derived
+  from prior published rows, so a required field would raise on all ~660 existing rows and #1641
+  would convert each into a full regeneration, and #1740 showed a strict constraint on an
+  informational field discards the whole patch. It makes a quoted figure auditable; it cannot
+  tell whether the figure is real.
 - Standalone CLI: `python -m digiquant.olympus.atlas.graph` — research-only consumers.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end (Atlas artifacts).
