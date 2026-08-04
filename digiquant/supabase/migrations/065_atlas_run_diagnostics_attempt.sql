@@ -60,8 +60,9 @@
 -- partial failure is a no-op rather than an error.
 
 -- 1. The attempt column. NOT NULL with the legacy sentinel as its default, so existing rows
---    are stamped 0 in the same statement and no separate UPDATE is needed. New rows always
---    receive an explicit value from diagnostics._row(), so the default never applies to them.
+--    read 0 via the attribute default — PG 11+ makes this metadata-only, so the 54 extant rows
+--    are not rewritten and no separate UPDATE is needed. New rows always receive an explicit
+--    value from diagnostics._row(), so the default never applies to them.
 ALTER TABLE public.atlas_run_diagnostics
     ADD COLUMN IF NOT EXISTS attempt integer NOT NULL DEFAULT 0;
 

@@ -125,7 +125,12 @@ class TestTheKeyIsPerAttempt:
             "the diagnostics upsert must conflict on (run_id, attempt); on run_id alone the "
             "last retry overwrites the earlier attempts (#1762)"
         )
-        assert 'on_conflict="run_id"' not in text, "the run_id-only conflict key must be gone"
+        # Word-boundary regex, not a substring: `on_conflict="run_id"` is not a substring of
+        # `on_conflict="run_id,attempt"` only because of the closing quote, and a reviewer
+        # writing `"run_id, attempt"` with a space would slip past a naive check.
+        assert not re.search(r'on_conflict="run_id"\s*\)', text), (
+            "the run_id-only conflict key must be gone"
+        )
 
     def test_created_at_is_still_omitted_from_the_row(self) -> None:
         """Deliberately unchanged. ``_row()`` omitting ``created_at`` is what made the old
