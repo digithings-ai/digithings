@@ -465,7 +465,10 @@ def test_write_row_upserts_with_usage_and_counts() -> None:
     assert len(rows) == 1
     row = rows[0]
     assert row["run_id"] == "baseline-2026-06-12-local"
-    assert row["_on_conflict"] == "run_id"
+    # Per-ATTEMPT since #1762: pipeline-olympus.yml retries the chain inside one job, so
+    # run_id alone let the last retry overwrite the expensive attempt's tokens and cost.
+    assert row["_on_conflict"] == "run_id,attempt"
+    assert row["attempt"] == 1  # no OLYMPUS_ATTEMPT in the environment → first attempt
     assert row["llm_calls"] == 12
     assert row["total_tokens"] == 4200
     assert row["segments_ok"] == 1

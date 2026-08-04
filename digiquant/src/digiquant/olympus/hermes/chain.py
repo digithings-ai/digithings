@@ -82,6 +82,42 @@ class DiagnosticsDeps:
     client: Any
     run_id: str
     model: str | None = None
+    # Outer-retry attempt number (#1762). ``pipeline-olympus.yml`` retries the chain up to 3
+    # times inside ONE job, so ``GITHUB_RUN_ID`` — and therefore ``run_id`` — is identical
+    # across attempts. Before this was part of the diagnostics key, the last attempt's upsert
+    # replaced the previous attempt's tokens and cost, which is why 28 of 54 production rows
+    # carry a ``created_at`` that predates their own ``started_at``. Defaults to 1 so a local
+    # run without the env var is a plausible first attempt rather than the legacy 0 sentinel.
+    attempt: int = 1
+
+
+OUTER_ATTEMPT_ENV = "OLYMPUS_ATTEMPT"
+
+
+def _outer_attempt() -> int:
+    """The CI outer-retry attempt number, from ``OLYMPUS_ATTEMPT``.
+
+    ``pipeline-olympus.yml``'s retry loop exports it per attempt (#1762). Falls back to 1 —
+    a local or single-shot run genuinely is the first attempt, and 1 keeps it distinct from
+    the ``0`` sentinel migration 065 stamped on rows written before per-attempt keying.
+
+    Tolerant of a malformed value on purpose: this feeds telemetry, and a bad env var must
+    never be the reason a research run dies. A non-numeric or non-positive value is logged
+    and treated as attempt 1, which at worst re-collides two attempts the way the pre-#1762
+    code always did.
+    """
+    raw = os.environ.get(OUTER_ATTEMPT_ENV)
+    if raw is None or not raw.strip():
+        return 1
+    try:
+        attempt = int(raw)
+    except ValueError:
+        _logger.warning("%s=%r is not an integer; recording attempt 1", OUTER_ATTEMPT_ENV, raw)
+        return 1
+    if attempt < 1:
+        _logger.warning("%s=%r is not >= 1; recording attempt 1", OUTER_ATTEMPT_ENV, raw)
+        return 1
+    return attempt
 
 
 def _coerce_atlas_state(result: Any) -> AtlasResearchState:
@@ -353,6 +389,7 @@ def run_atlas_then_hermes(
                 deps.diagnostics.client,
                 state=state,
                 run_id=deps.diagnostics.run_id,
+                attempt=deps.diagnostics.attempt,
                 run_type=_legacy_run_type(atlas_input.refresh_scope),
                 run_date=atlas_input.run_date,
                 model=deps.diagnostics.model,
@@ -512,7 +549,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         atlas=atlas_deps,
         hermes=hermes_deps,
         publish=PublishDeps(client=client),
-        diagnostics=DiagnosticsDeps(client=client, run_id=run_id),
+        diagnostics=DiagnosticsDeps(client=client, run_id=run_id, attempt=_outer_attempt()),
     )
     # Checkpoint/resume (#665): durable per-graph threads when DIGI_CHECKPOINTER is set
     # (DIGI_CHECKPOINTER=postgres + DIGI_CHECKPOINTER_POSTGRES_URI in prod). thread_base is

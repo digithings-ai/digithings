@@ -1052,7 +1052,8 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
 #### Run robustness + telemetry (Pillar 1B)
 
 - `digiquant.olympus.atlas.diagnostics` — writes one `atlas_run_diagnostics` row per run
-  (`write_row`, keyed on `run_id`, fail-soft): fresh/carried/failed segment counts from
+  **attempt** (`write_row`, keyed on `(run_id, attempt)`, fail-soft): fresh/carried/failed
+  segment counts from
   state + the `digigraph.usage` LLM snapshot (calls/tokens/sources). `summarize_run` derives
   a `status` (`ok`/`degraded`/`failed`); a carry with reason `NODE_FAILED_REASON` counts as a
   failure, a deliberate carry does not.
@@ -1373,6 +1374,36 @@ finished run's state, and they are deliberately not the same signal:
 the column, but both frontend readers string-match, so a new value would silently fall
 through to "unknown". `retry_signal` is frozen at the pre-#1736 rules; `is_degraded()`
 returns it, which is why that function's name no longer matches the health verdict.
+
+### One row per retry ATTEMPT, not per workflow run (#1762)
+
+`pipeline-olympus.yml` retries the chain up to `MAX_OUTER_ATTEMPTS=3` times **inside one job**,
+so every attempt sees the same `GITHUB_RUN_ID`. That was the entire upsert key, so the last
+attempt — usually the cheap checkpoint-resumed one — replaced the expensive attempt's tokens,
+cost, `status` and `error_summary`. 28 of 54 production rows were affected.
+
+The forensic tell is `created_at`: `_row()` omits it, so `ON CONFLICT DO UPDATE` preserved the
+*first* insert's value while replacing everything else, leaving rows whose creation predates
+their own `started_at`. **Keep omitting it** — that asymmetry is what made the corruption
+detectable and is the only way a future collision would be visible.
+
+- The attempt number reaches Python through exactly one channel: `OLYMPUS_ATTEMPT`, exported
+  per attempt by the workflow's retry loop and read by `chain._outer_attempt()` (defaults to 1,
+  tolerant of a malformed value — telemetry must never kill a run). Guarded by
+  `tests/scripts/test_pipeline_olympus_attempt.py`, because dropping the export restores the
+  defect with no error anywhere and no symptom but a cost figure that is quietly a floor.
+- `run_id` is **unchanged** and still the resume handle — `chain._thread_base = resume_run_id or
+  run_id` builds the LangGraph checkpoint thread from it, and `--resume-run-id` takes a bare
+  `GITHUB_RUN_ID`. The attempt is a separate column precisely so the telemetry key and the
+  resume key cannot drift apart.
+- Migration `065` swaps the primary key to `(run_id, attempt)` and appends `attempt` to the
+  `atlas_run_health` view — appended **last**, since `CREATE OR REPLACE VIEW` can only add
+  columns. Pre-existing rows carry the sentinel `0`, never `1`: backfilling 1 would assert 28
+  provably-collapsed rows are first attempts, which is the fabrication the change exists to end.
+- `frontend/olympus/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the
+  `recovered` outcome were built on the assumption that attempts are distinct rows. It orders by
+  `attempt` where usable and falls back to `created_at` for `0`-sentinel rows.
+  `RUN_DIAGNOSTICS_LIMIT` rose 30 → 90 because a retried date now consumes several slots.
 
 **Escalation rules on `status`** (each records itself in `breakdown.degraded_reasons`):
 any failed research segment (STRICT — supersedes the `ATLAS_DEGRADED_RUN_PCT` share rule for

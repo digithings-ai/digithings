@@ -323,6 +323,10 @@ export interface Database {
       atlas_run_diagnostics: {
         Row: {
           run_id: string;
+          // Outer-retry attempt within one workflow run, 1-based; part of the primary key with
+          // run_id since migration 065 (#1762). `0` means the row predates per-attempt keying
+          // and may be a collapsed multi-attempt row — never read 0 as "first attempt".
+          attempt: number;
           run_type: string | null;
           run_date: string | null;
           model: string | null;
@@ -376,7 +380,9 @@ export interface Database {
         };
       };
       // Curated, anon-readable run health (migration 041): status / segment counts / model /
-      // timing ONLY — spend telemetry (cost, tokens, error_summary, breakdown) is excluded.
+      // timing / retry attempt ONLY — spend telemetry (cost, tokens, error_summary, breakdown)
+      // is excluded. ONE ROW PER RETRY ATTEMPT since 065 (#1762): a date that took three
+      // attempts has three rows, which is what groupRunEpisodes was built to read.
       atlas_run_health: {
         Row: {
           run_id: string;
@@ -392,6 +398,9 @@ export interface Database {
           segments_carried: number | null;
           segments_failed: number | null;
           created_at: string | null;
+          // Last in the SELECT list, mirroring the view: CREATE OR REPLACE VIEW can only
+          // append columns, so 065 could not slot `attempt` next to `run_id`.
+          attempt: number;
         };
       };
     };
