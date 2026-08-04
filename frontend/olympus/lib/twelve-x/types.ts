@@ -368,6 +368,37 @@ export interface IntelligenceWhy {
   items: IntelligenceWhyItem[];
 }
 
+export type FxLevelProvenance =
+  | 'broker_quoted'
+  | 'pmt_bank_trade'
+  | 'pmt_seasonality_target'
+  | 'pmt_position_cluster'
+  | 'computed';
+
+export interface FxTradeLevel {
+  value: string;
+  provenance: FxLevelProvenance;
+  source_ref: string;
+}
+
+export interface FxTradeLevels {
+  entry_low: FxTradeLevel | null;
+  entry_high: FxTradeLevel | null;
+  stop: FxTradeLevel | null;
+  targets: FxTradeLevel[];
+  risk_reward: number | null;
+  status: 'complete' | 'partial' | 'incomplete';
+}
+
+export interface FxMarketEvidence {
+  source_slug: string;
+  instrument: string;
+  as_of: string;
+  statement: string;
+  stance: 'supports' | 'contradicts' | 'context';
+  snapshot_id: string;
+}
+
 /**
  * `fx_trade_ideas_snapshot` (twelve-x migration 012) — the curated, synthesized
  * actionable trade ideas for a run. PRIMARY KEY (run_date, rank). anon-readable.
@@ -383,4 +414,6 @@ export interface FxTradeIdeaRow {
   levels: unknown[]; // jsonb array of broker levels/targets
   citations: unknown[]; // jsonb array of TradeIdeaCitation
   as_of: string; // timestamptz (ISO)
+  trade_levels?: FxTradeLevels | Record<string, unknown> | null;
+  evidence?: FxMarketEvidence[] | unknown[] | null;
 }
