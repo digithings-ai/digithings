@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { G10_CURRENCIES } from '@/lib/twelve-x/types';
-import type { ConsensusDeltaSet, FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
+import type { ConsensusDeltaSet, FxConsensusDivergence, FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
 import { ConsensusDataTable, passesFilter, type RowFilter } from './ConsensusDataTable';
 import { LEAN_BAND, STRONG_BAND } from '@/lib/twelve-x/consensus-bar';
 import { deriveConsensusRows } from '@/lib/twelve-x/consensus-view';
@@ -75,9 +75,16 @@ function render(
   latest: FxConsensusSnapshotRow[],
   deltas: ConsensusDeltaSet = EMPTY_DELTAS,
   initialFilter?: RowFilter,
+  divergenceByCurrency: Record<string, FxConsensusDivergence> = {},
 ): string {
   return renderToStaticMarkup(
-    createElement(ConsensusDataTable, { series, latest, deltas, initialFilter }),
+    createElement(ConsensusDataTable, {
+      series,
+      latest,
+      deltas,
+      initialFilter,
+      divergenceByCurrency,
+    }),
   );
 }
 
@@ -163,5 +170,30 @@ describe('ConsensusDataTable component', () => {
     const rows = renderedCcys(html);
     expect(rows[0]).toBe('USD');
     expect(rows[1]).toBe('EUR');
+  });
+
+  it('renders a divergence chip when the currency is divergent', () => {
+    const series = tenCurrencySeries();
+    const latest = latestFrom(series);
+    const eurLatest = latest.find((r) => r.currency === 'EUR')!;
+    const html = render(series, latest, EMPTY_DELTAS, undefined, {
+      EUR: {
+        currency: 'EUR',
+        consensusScore: eurLatest.score,
+        consensusTilt: eurLatest.tilt,
+        consensusAsOf: eurLatest.as_of,
+        pmtSentiment: 'bearish',
+        pmtScore: -1.25,
+        pmtAsOf: '2026-06-15',
+        gap: 2,
+        isDivergent: true,
+        snapshotId: 'snap-1',
+        rawSnapshot: { data: [] },
+        streetStatement: 'Street score +1.00',
+        pmtStatement: 'PMT Smart Bias Overall_Sentiment=bearish',
+      },
+    });
+    expect(html).toContain('data-divergence-chip="true"');
+    expect(html).toContain('Δ2.00');
   });
 });
