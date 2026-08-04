@@ -39,7 +39,9 @@ import {
   resolveGateFallbackCard,
 } from "@/lib/embed-trial-messages";
 import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
-import { readEmbedUiParams } from "@/lib/embed-ui-params";
+import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
+import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
+import type { EmbedUiParams } from "@/lib/embed-ui-params";
 import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
 import {
   useEmbedTenantConfig,
@@ -128,30 +130,35 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
   // channel it already uses for welcome/placeholder. A validated URL color
   // wins over the tenant-registry accent; both are inline `--accent` so they
   // override the preset `.accent-*` class either way.
-  const urlColors = useMemo(() => {
-    if (typeof window === "undefined") return {} as { accent?: string; accentForeground?: string };
-    const { accent: c, accentForeground: fg } = readEmbedUiParams(window.location.search);
-    return { accent: c, accentForeground: fg };
-  }, []);
-
-  const accentColor = urlColors.accent ?? tenantCfg.accent?.color;
-  const accentForeground = urlColors.accentForeground ?? tenantCfg.accent?.foreground;
-  const accentStyle = accentColor
-    ? ({
-        "--accent": accentColor,
-        ...(accentForeground ? { "--accent-foreground": accentForeground } : {}),
-      } as React.CSSProperties)
-    : undefined;
+  //
+  // Read via useEmbedUiParams (post-mount), not useMemo+window — the latter
+  // left style=null after SSR/hydration while location.search still had the hex
+  // (DataTap terracotta #b5562b regression).
+  const urlColors = useEmbedUiParams();
+  const accentStyle = buildEmbedAccentStyle(
+    urlColors.accent ?? tenantCfg.accent?.color,
+    urlColors.accentForeground ?? tenantCfg.accent?.foreground,
+  );
+  // When a brand hex is active, drop the named `.accent-*` class — ACCENT_CSS
+  // paints `.accent-digichat { --accent: #1f1f1f }`, which is exactly the
+  // wrong color observers saw when the inline style failed to attach.
+  const brandAccentActive = accentStyle != null;
 
   return (
     <>
       <style>{ACCENT_CSS}</style>
       <div className="dc-grain" aria-hidden />
       <div
-        className={`${tenantCfg.theme === "light" ? "light" : "dark"} accent-${accent} relative z-10 flex min-h-0 flex-1 flex-col bg-background text-foreground`}
+        className={`${tenantCfg.theme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col bg-background text-foreground`}
         style={accentStyle}
       >
-        <EmbedChat accent={accent} tenantCfg={tenantCfg} token={token} host={host} />
+        <EmbedChat
+          accent={accent}
+          tenantCfg={tenantCfg}
+          token={token}
+          host={host}
+          uiParams={urlColors}
+        />
       </div>
     </>
   );
@@ -162,11 +169,13 @@ function EmbedChat({
   tenantCfg,
   token,
   host,
+  uiParams,
 }: {
   accent: Accent;
   tenantCfg: EmbedTenantClientConfig;
   token?: string;
   host?: string;
+  uiParams: EmbedUiParams;
 }) {
   const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } =
     useBYOKKey();
@@ -306,11 +315,6 @@ function EmbedChat({
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [isTrialForm, host, unlockTrial]);
-
-  const uiParams = useMemo(() => {
-    if (typeof window === "undefined") return {};
-    return readEmbedUiParams(window.location.search);
-  }, []);
 
   const welcomeIntro = useMemo(() => {
     if (uiParams.welcome) return uiParams.welcome;
