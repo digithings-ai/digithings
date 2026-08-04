@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Read embed UI overrides from the iframe URL after mount.
+ * Read embed UI overrides from the iframe URL.
  *
  * Why not `useMemo(() => readEmbedUiParams(window.location.search), [])`?
  * That factory returns `{}` during SSR (`window` missing). On the client,
@@ -13,23 +13,39 @@
  * re-render — but if the live registry omits `accent` (or the URL is the
  * only source), terracotta never applies.
  *
- * useState + useEffect matches the post-mount read pattern already used for
- * embed auth (`readEmbedUrlAuth` in use-embed-digi-chat.ts): first paint is
- * empty on both server and client (no hydration mismatch), then one effect
- * applies URL overrides.
+ * useSyncExternalStore is the React-recommended browser-API read: server
+ * snapshot is empty (no hydration mismatch), client snapshot reads
+ * location.search. Avoids `setState` inside `useEffect`
+ * (`react-hooks/set-state-in-effect`). Snapshot is cached by search string
+ * so Object.is stays stable across renders.
  */
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { readEmbedUiParams, type EmbedUiParams } from "@/lib/embed-ui-params";
 
 const EMPTY: EmbedUiParams = {};
 
+let cachedSearch: string | null = null;
+let cachedParams: EmbedUiParams = EMPTY;
+
+function subscribe(onStoreChange: () => void): () => void {
+  window.addEventListener("popstate", onStoreChange);
+  return () => window.removeEventListener("popstate", onStoreChange);
+}
+
+function getSnapshot(): EmbedUiParams {
+  const search = window.location.search;
+  if (search !== cachedSearch) {
+    cachedSearch = search;
+    cachedParams = readEmbedUiParams(search);
+  }
+  return cachedParams;
+}
+
+function getServerSnapshot(): EmbedUiParams {
+  return EMPTY;
+}
+
 export function useEmbedUiParams(): EmbedUiParams {
-  const [params, setParams] = useState<EmbedUiParams>(EMPTY);
-
-  useEffect(() => {
-    setParams(readEmbedUiParams(window.location.search));
-  }, []);
-
-  return params;
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
