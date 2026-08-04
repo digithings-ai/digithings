@@ -23,11 +23,15 @@ export const metadata: Metadata = {
   title: "digiquant — a quant hedge fund, in a box you own",
   description:
     "The research-to-execution stack an institutional desk would build — Atlas researches, Hermes sizes the risk, Kairos executes. Open-source and self-hosted, so a fund that once needed a team now runs for one.",
+  // Scheme-aware favicon tiles: the light tile on dark browser chrome and vice
+  // versa. The `d` + block-cursor reduction, not the full `digi` lockup — five
+  // character cells are illegible at 16px. Deliberately NOT an app/icon.svg:
+  // that file convention would override this block and drop the media queries.
   icons: {
     icon: [
-      { url: "/favicon-qr-light.svg", media: "(prefers-color-scheme: dark)" },
-      { url: "/favicon-qr.svg", media: "(prefers-color-scheme: light)" },
-      { url: "/favicon-qr.svg" },
+      { url: "/favicon-dg-light.svg", media: "(prefers-color-scheme: dark)" },
+      { url: "/favicon-dg.svg", media: "(prefers-color-scheme: light)" },
+      { url: "/favicon-dg.svg" },
     ],
   },
   openGraph: {

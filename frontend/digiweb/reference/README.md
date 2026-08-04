@@ -35,7 +35,7 @@ is the only shared chrome.
 | `/chrome`          | Chrome      | announcement bar, command palette, tabs (sliding indicator), toast stack, scroll-aware nav, colophon footer with glow sweep |
 | `/terminal`        | Terminal    | diegetic CLI session + budget, streaming chat transcript |
 | `/chatbot`         | Chatbot     | digichat as a terminal CLI (mono scrollback, `>` prompt) — thinking chain, collapsible tool-call chain, composer, markdown, inline chart, inline route graph, custom action widgets embedded in the terminal |
-| `/symbols`         | Symbols     | module emblems, wordmarks, QR marks, vendor logos, utility glyphs |
+| `/symbols`         | Symbols     | module emblems, brand marks, favicon tiles, vendor logos, utility glyphs |
 | `/account`         | Account     | login, sign-up, payment, settings, profile templates |
 
 ## Conventions

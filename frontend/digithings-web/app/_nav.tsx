@@ -5,17 +5,21 @@
  *  Cross-domain: the header links out to digiquant.io (the quant product);
  *  digiquant.io intentionally does not link back in its header.
  */
-import { type NavLink } from "@digithings/web";
+import { TerminalMark, type NavLink } from "@digithings/web";
 
 export const DT_CONTACT_EMAIL = "contact@digithings.ai";
 
-// Transparent, theme-inverted QR mark: near-black modules in light mode,
-// white modules in dark mode (no tile/background). CSS shows the one matching
-// [data-theme]; two <img>s avoid the Lightning-CSS mask-image drop.
+// The terminal lockup: `d` + block cursor, then the wordmark. One inline SVG in
+// currentColor, so it follows ink through [data-theme] — this replaces the two
+// theme-swapped QR <img>s (a single recolorable mark was unreliable there because
+// Lightning CSS drops mask-image; currentColor has no such problem).
+//
+// `variant="compact"` deliberately: the full `digi` lockup is five character
+// cells wide and closes up below ~64px, well above nav height. NavShell already
+// wraps this in <a aria-label="digithings home">, so the mark stays decorative.
 export const Brand = () => (
   <>
-    <img src="/favicon-qr-mark-light.svg" alt="" className="brand-mark brand-mark-light" width={26} height={26} aria-hidden="true" />
-    <img src="/favicon-qr-mark-dark.svg" alt="" className="brand-mark brand-mark-dark" width={26} height={26} aria-hidden="true" />
+    <TerminalMark size={26} variant="compact" />
     <span className="brand-word">digithings</span>
   </>
 );

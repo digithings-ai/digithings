@@ -22,6 +22,7 @@ import {
   PRINT_FULL_VIEW,
   ReturnsMatrix,
   SegToggle,
+  TerminalMark,
   TimeSeries,
   TradeLogTable,
   TradeReturnChart,
@@ -344,7 +345,10 @@ export function TearsheetView({ slug }: { slug: string }) {
   return (
     <div className="ts-print-root">
       <div className="ts-print-brand" aria-hidden="true">
-        <img src="/favicon-qr-mark-dark.svg" alt="" width={22} height={22} className="ts-print-brand-mark" />
+        {/* The mark, not an <img>: the old QR tile was hardcoded to the dark
+            variant with no theme switch, so it printed a black square. In
+            currentColor it follows the print ink like the word beside it. */}
+        <TerminalMark size={22} variant="compact" className="ts-print-brand-mark" />
         <span className="ts-print-brand-word">digiquant</span>
         <a className="ts-print-brand-link" href="https://digiquant.io">digiquant.io</a>
       </div>
