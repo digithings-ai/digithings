@@ -4,6 +4,7 @@
 import type {
   FxLevelProvenance,
   FxMarketEvidence,
+  FxTradeIdeaRow,
   FxTradeLevel,
   FxTradeLevels,
 } from './types';
@@ -185,6 +186,91 @@ export function formatLevelValue(value: string): string {
   const trimmed = value.trim();
   if (!trimmed.includes('.')) return trimmed;
   return trimmed.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
+export interface IdeaDetailLevelRow {
+  label: string;
+  value: string;
+  chip: string;
+}
+
+export interface IdeaDetailEvidenceRow {
+  statement: string;
+  stance: FxMarketEvidence['stance'];
+  className: string;
+}
+
+export interface IdeaDetailModel {
+  status: FxTradeLevels['status'] | null;
+  riskReward: number | null;
+  levelRows: IdeaDetailLevelRow[];
+  evidenceRows: IdeaDetailEvidenceRow[];
+}
+
+function entryLevelRow(
+  entry_low: FxTradeLevel | null,
+  entry_high: FxTradeLevel | null,
+): IdeaDetailLevelRow | null {
+  if (!entry_low && !entry_high) return null;
+
+  if (entry_low && entry_high) {
+    const chipLow = provenanceChipLabel(entry_low);
+    const chipHigh = provenanceChipLabel(entry_high);
+    const chip = chipLow === chipHigh ? chipLow : `${chipLow} · ${chipHigh}`;
+    return {
+      label: 'Entry',
+      value: `${formatLevelValue(entry_low.value)}–${formatLevelValue(entry_high.value)}`,
+      chip,
+    };
+  }
+
+  const level = entry_low ?? entry_high;
+  if (!level) return null;
+  return {
+    label: 'Entry',
+    value: formatLevelValue(level.value),
+    chip: provenanceChipLabel(level),
+  };
+}
+
+/** Pure view-model for IdeaDetail levels + evidence blocks. */
+export function buildIdeaDetailModel(idea: FxTradeIdeaRow): IdeaDetailModel {
+  const tradeLevels = parseTradeLevels(idea.trade_levels);
+  const levelRows: IdeaDetailLevelRow[] = [];
+
+  if (hasTradeLevels(tradeLevels)) {
+    const entry = entryLevelRow(tradeLevels!.entry_low, tradeLevels!.entry_high);
+    if (entry) levelRows.push(entry);
+
+    if (tradeLevels!.stop) {
+      levelRows.push({
+        label: 'Stop',
+        value: formatLevelValue(tradeLevels!.stop.value),
+        chip: provenanceChipLabel(tradeLevels!.stop),
+      });
+    }
+
+    tradeLevels!.targets.forEach((target, index) => {
+      levelRows.push({
+        label: index === 0 ? 'Target' : `Target ${index + 1}`,
+        value: formatLevelValue(target.value),
+        chip: provenanceChipLabel(target),
+      });
+    });
+  }
+
+  const evidenceRows = parseEvidence(idea.evidence).map((row) => ({
+    statement: row.statement,
+    stance: row.stance,
+    className: evidenceStanceClass(row.stance),
+  }));
+
+  return {
+    status: tradeLevels?.status ?? null,
+    riskReward: tradeLevels?.risk_reward ?? null,
+    levelRows,
+    evidenceRows,
+  };
 }
 
 /** Tailwind text color class for an evidence stance. */
