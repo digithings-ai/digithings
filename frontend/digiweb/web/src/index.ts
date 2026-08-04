@@ -322,3 +322,8 @@ export {
   type TerminalWordmarkProps,
   type HairlineWordmarkProps,
 } from "./components/symbols/terminal-marks";
+export {
+  AnimatedLockup,
+  MODULE_SUFFIXES,
+  type AnimatedLockupProps,
+} from "./components/symbols/terminal-lockup";

@@ -53,10 +53,23 @@ a { color: inherit; text-decoration: none; }
 .wrap { width: 100%; max-width: var(--wrap); margin-inline: auto; padding-inline: var(--gutter); position: relative; z-index: 1; }
 
 /* ── brand mark + theme toggle (nav shell lives in React DigiNav/DqNav) ─ */
-.brand { display: inline-flex; align-items: center; gap: 0.6rem; font-weight: 600; letter-spacing: -0.02em; }
+/* Brand lockup. The wordmark is MONO at 400, matching the terminal mark it
+   alternates with — it used to inherit body's sans at .brand's weight 600, which
+   put a Geist Sans 600 word 0.6rem from a Geist Mono 400 mark: two typefaces and
+   a 200-weight gap side by side.
+
+   The two never render together. Above the nav's 880px breakpoint the WORDMARK
+   carries the brand; at or below it the MARK does, alone — a lockup plus a word
+   is the first thing worth dropping when the hamburger appears. */
+.brand { display: inline-flex; align-items: center; gap: 0.6rem; font-weight: 400; letter-spacing: -0.02em; }
 .brand-mark { width: 26px; height: 26px; border-radius: 7px; }
-.brand-word { font-size: 1.05rem; }
-.brand-word b { color: var(--accent); font-weight: 600; }
+.brand-word { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 400; letter-spacing: 0; }
+.brand-word b { color: var(--accent); font-weight: 400; }
+.brand .terminal-mark { display: none; }
+@media (max-width: 880px) {
+  .brand .terminal-mark { display: block; }
+  .brand-word { display: none; }
+}
 
 .theme-toggle { display: inline-grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--hair); border-radius: 10px; background: var(--surface); color: var(--ink-soft); cursor: pointer; transition: color 0.18s var(--ease), border-color 0.18s var(--ease), transform 0.18s var(--ease); }
 .theme-toggle:hover { color: var(--ink); border-color: var(--hair-2); transform: translateY(-1px); }

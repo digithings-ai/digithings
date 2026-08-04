@@ -10,6 +10,9 @@
  *   reduction — use it below ~64px, where the full lockup's five character
  *   cells close up. This artwork is also the favicon source.
  * - TerminalWordmark: the default wordmark, plain mono text at tracking 0.
+ * - AnimatedLockup: the identity as a live prompt — `digi` plus a cursor that
+ *   types each module in the registry. Pure CSS, no JS; reduced-motion renders
+ *   the settled state.
  * - HairlineWordmark: the display cut replicating the footer colophon
  *   (`.colo-word`) — 0.538%-of-em stroke, ink 30%. FULL-BLEED ONLY: the floor is
  *   on the em (~173px), which for `digithings` is a ~1036px rendered width
@@ -21,6 +24,7 @@
  * marks.tsx would silently rename that entry away from OlympusMark.
  */
 import {
+  AnimatedLockup as SharedAnimatedLockup,
   HairlineWordmark as SharedHairlineWordmark,
   TerminalMark as SharedTerminalMark,
   TerminalWordmark as SharedTerminalWordmark,
@@ -31,3 +35,4 @@ import {
 export const TerminalMark = SharedTerminalMark;
 export const TerminalWordmark = SharedTerminalWordmark;
 export const HairlineWordmark = SharedHairlineWordmark;
+export const AnimatedLockup = SharedAnimatedLockup;

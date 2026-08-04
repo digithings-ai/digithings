@@ -1,4 +1,5 @@
 import {
+  AnimatedLockup,
   Colophon,
   Footer,
   Marquee,
@@ -133,6 +134,9 @@ export default function Home() {
           <div className="wrap">
             <Reveal className="section-head center">
               <span className="kicker">{"// the architecture"}</span>
+              {/* The identity as a live prompt, typing each module in the
+                  registry below it — the one motion moment on this section. */}
+              <AnimatedLockup className="block text-[clamp(2rem,6.5vw,4rem)] text-ink" />
               <h2>Ten modules, wired into one.</h2>
               <p>
                 A supervisor at the centre routes every request to the right module — chat, quant
