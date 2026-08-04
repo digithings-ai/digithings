@@ -25,10 +25,27 @@ export const MAX_QUERY_CHARS = 200;
 export const MAX_DOCUMENTS = 8;
 export const MAX_DOC_FIELD_CHARS = 300;
 export const MAX_REASONING_CHARS = 4000;
+export const MAX_SNIPPET_CHARS = 280;
+export const MAX_BRIEF_THEMES = 8;
+export const MAX_BRIEF_QUESTIONS = 12;
+export const MAX_BRIEF_THEME_LABEL = 120;
+export const MAX_BRIEF_THEME_SUMMARY = 220;
+export const MAX_BRIEF_QUESTION_CHARS = 200;
 
 export type ActivityDetail = "off" | "labels" | "full";
 
-export type ActivityDocument = { title: string; path: string };
+export type ActivityDocument = {
+  title: string;
+  path: string;
+  tier?: string;
+  year?: number;
+  snippet?: string;
+};
+
+export type ActivityBrief = {
+  themes: { label: string; summary: string }[];
+  questions?: string[];
+};
 
 export type ActivitySpan = {
   /** gen_ai.operation.name */
@@ -50,6 +67,7 @@ export type ActivitySpan = {
    * hit as a no-hits result.
    */
   documentsWithheld?: boolean;
+  brief?: ActivityBrief;
 };
 
 const OPERATIONS = ["execute_tool", "retrieve", "chat"] as const;
@@ -75,10 +93,47 @@ function documents(value: unknown): ActivityDocument[] | undefined {
     const title = str(record.title, MAX_DOC_FIELD_CHARS);
     const path = str(record.path, MAX_DOC_FIELD_CHARS);
     if (!title || !path) continue;
-    out.push({ title, path });
+    const doc: ActivityDocument = { title, path };
+    const tier = str(record.tier, MAX_DOC_FIELD_CHARS);
+    if (tier) doc.tier = tier;
+    if (typeof record.year === "number" && Number.isFinite(record.year)) {
+      doc.year = Math.trunc(record.year);
+    }
+    const snippet = str(record.snippet, MAX_SNIPPET_CHARS);
+    if (snippet) doc.snippet = snippet;
+    out.push(doc);
     if (out.length === MAX_DOCUMENTS) break;
   }
   return out.length ? out : undefined;
+}
+
+function brief(value: unknown): ActivityBrief | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.themes)) return undefined;
+  const themes: { label: string; summary: string }[] = [];
+  for (const entry of record.themes) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const t = entry as Record<string, unknown>;
+    const label = str(t.label, MAX_BRIEF_THEME_LABEL);
+    const summary = str(t.summary, MAX_BRIEF_THEME_SUMMARY);
+    if (!label || !summary) continue;
+    themes.push({ label, summary });
+    if (themes.length === MAX_BRIEF_THEMES) break;
+  }
+  if (!themes.length) return undefined;
+  const out: ActivityBrief = { themes };
+  if (Array.isArray(record.questions)) {
+    const questions: string[] = [];
+    for (const q of record.questions) {
+      const s = str(q, MAX_BRIEF_QUESTION_CHARS);
+      if (!s) continue;
+      questions.push(s);
+      if (questions.length === MAX_BRIEF_QUESTIONS) break;
+    }
+    if (questions.length) out.questions = questions;
+  }
+  return out;
 }
 
 /**
@@ -109,6 +164,9 @@ export function sanitizeActivitySpan(input: unknown): ActivitySpan | null {
   const reasoningDelta = str(record.reasoningDelta, MAX_REASONING_CHARS);
   if (reasoningDelta) span.reasoningDelta = reasoningDelta;
 
+  const briefVal = brief(record.brief);
+  if (briefVal) span.brief = briefVal;
+
   const documentsWithheld = bool(record.documentsWithheld);
   if (documentsWithheld) span.documentsWithheld = documentsWithheld;
 
@@ -125,8 +183,9 @@ export function applyActivityDetail(
 ): ActivitySpan | null {
   if (detail === "off") return null;
   if (detail === "full") return span;
-  const { documents, reasoningDelta: _reasoning, ...rest } = span;
+  const { documents, reasoningDelta: _reasoning, brief: _brief, ...rest } = span;
   void _reasoning;
+  void _brief;
   // A retrieve span only ever carries documents when the search genuinely
   // found something (see the providers). Flag that this rest object had real
   // hits stripped, so the projector can render an honest "search happened"

@@ -5,6 +5,9 @@ import {
   toDigiChatActivity,
   MAX_LABEL_CHARS,
   MAX_DOCUMENTS,
+  MAX_SNIPPET_CHARS,
+  MAX_BRIEF_THEMES,
+  MAX_BRIEF_QUESTIONS,
   type ActivitySpan,
 } from "./chat-activity";
 
@@ -402,5 +405,121 @@ describe("toDigiChatActivity — documentsWithheld (labels detail)", () => {
         count: 1,
       },
     ]);
+  });
+});
+
+describe("Phase 2 document fields + brief allowlist", () => {
+  it("keeps tier, year, snippet on documents and drops undeclared doc keys", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "retrieve",
+        status: "completed",
+        documents: [
+          {
+            title: "Auth",
+            path: "https://x/auth",
+            tier: "peer_reviewed",
+            year: 2024,
+            snippet: "hello",
+            source_id: "leak",
+            score: 0.99,
+            body_markdown: "# secret",
+          },
+        ],
+      }),
+    );
+    expect(out!.documents).toEqual([
+      {
+        title: "Auth",
+        path: "https://x/auth",
+        tier: "peer_reviewed",
+        year: 2024,
+        snippet: "hello",
+      },
+    ]);
+  });
+
+  it("caps snippet length", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "retrieve",
+        status: "completed",
+        documents: [
+          {
+            title: "T",
+            path: "p",
+            snippet: "s".repeat(MAX_SNIPPET_CHARS + 40),
+          },
+        ],
+      }),
+    );
+    expect(out!.documents![0].snippet).toHaveLength(MAX_SNIPPET_CHARS);
+  });
+
+  it("rejects non-finite year and non-string tier/snippet without dropping the doc", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "retrieve",
+        status: "completed",
+        documents: [{ title: "T", path: "p", tier: 1, year: "2024", snippet: 9 }],
+      }),
+    );
+    expect(out!.documents).toEqual([{ title: "T", path: "p" }]);
+  });
+
+  it("allowlists brief themes/questions and drops undeclared brief keys", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "chat",
+        status: "completed",
+        brief: {
+          themes: [
+            { label: "Auth", summary: "RS256", internal: true },
+            ...Array.from({ length: MAX_BRIEF_THEMES + 3 }, (_, i) => ({
+              label: `t${i}`,
+              summary: `s${i}`,
+            })),
+          ],
+          questions: Array.from({ length: MAX_BRIEF_QUESTIONS + 2 }, (_, i) => `q${i}`),
+          model: "gpt",
+        },
+      }),
+    );
+    expect(out!.brief!.themes).toHaveLength(MAX_BRIEF_THEMES);
+    expect(out!.brief!.questions).toHaveLength(MAX_BRIEF_QUESTIONS);
+    expect(Object.keys(out!.brief!).sort()).toEqual(["questions", "themes"]);
+    expect(Object.keys(out!.brief!.themes[0]).sort()).toEqual(["label", "summary"]);
+  });
+
+  it("strips documents and brief at labels; preserves documentsWithheld honesty", () => {
+    const full: ActivitySpan = {
+      operation: "retrieve",
+      status: "completed",
+      label: "Sources",
+      documents: [{ title: "A", path: "p", tier: "t", year: 2020, snippet: "x" }],
+      brief: { themes: [{ label: "T", summary: "S" }], questions: ["Q"] },
+      reasoningDelta: "think",
+    };
+    const out = applyActivityDetail(full, "labels")!;
+    expect(out.documents).toBeUndefined();
+    expect(out.brief).toBeUndefined();
+    expect(out.reasoningDelta).toBeUndefined();
+    expect(out.documentsWithheld).toBe(true);
+    expect("briefWithheld" in out).toBe(false);
+  });
+
+  it("brief-only span at labels becomes label row without themes", () => {
+    const full: ActivitySpan = {
+      operation: "chat",
+      status: "completed",
+      label: "Research brief",
+      brief: { themes: [{ label: "T", summary: "S" }] },
+    };
+    const out = applyActivityDetail(full, "labels")!;
+    expect(out).toEqual({
+      operation: "chat",
+      status: "completed",
+      label: "Research brief",
+    });
   });
 });
