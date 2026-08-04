@@ -310,3 +310,15 @@ export {
   type CommandPaletteItem,
 } from "./components/command-palette";
 export { OlympusMark, Wordmark, type OlympusMarkProps, type WordmarkProps } from "./components/symbols/marks";
+// Terminal identity — the `digi` + block-cursor lockup and the hairline display
+// cut. Supersedes `Wordmark` for new work; `Wordmark`/`Colophon` stay for the
+// surfaces already using them.
+export {
+  TerminalMark,
+  TerminalWordmark,
+  HairlineWordmark,
+  TERMINAL_CURSOR,
+  type TerminalMarkProps,
+  type TerminalWordmarkProps,
+  type HairlineWordmarkProps,
+} from "./components/symbols/terminal-marks";

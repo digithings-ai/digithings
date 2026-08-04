@@ -136,6 +136,52 @@ the family a component is imported into, and the `summary` from the leading
 `/** … */` docblock. Components without a docblock appear with `summary: null` —
 the generator prints the coverage so gaps are visible and easy to backfill.
 
+## Brand identity — the terminal marks
+
+`@digithings/web` `components/symbols/terminal-marks.tsx` is the canonical
+identity; `reference/components/symbols/terminal-marks.tsx` re-exports it as the
+specimen. Three components, each matching the weight of the surface it imitates:
+
+| export | form | weight | use |
+|--------|------|--------|-----|
+| `TerminalMark` | outlined SVG paths + a `<rect>` cursor | 400 | the mark. `variant="full"` is `digi` + cursor; `variant="compact"` is the `d` reduction |
+| `TerminalWordmark` | text, token-backed utilities | 400 | the default wordmark |
+| `HairlineWordmark` | outlined SVG, stroked | 500 | display only, replicating the footer colophon |
+
+Three constraints that fail silently if broken:
+
+- **The mark and hairline are outlined paths, not text.** The mark because the
+  same artwork is the favicon source and must not depend on a loaded font; the
+  hairline because its overlapping contours are the design. `TerminalWordmark`
+  is deliberately text — it is plain mono at tracking 0 with nothing to preserve,
+  so outlining would ship ~9 KB of path data for a glyph-identical result.
+- **The hairline's contours are left overlapping and un-booleaned**, outlined
+  from the *variable* font. Stroked, those overlaps give the `t` its crossing
+  grid and the `d`/`i` their stem spurs. Never run a boolean union, a "remove
+  overlap", or an SVG "simplify paths" pass over that data, and never regenerate
+  it from a static cut — a static `t` has one merged contour where the variable
+  font has two, and the crossings vanish with no error.
+- **Each register has a floor.** `variant="full"` closes up below ~64px, so
+  chrome uses `compact`. The hairline's stroke scales with the art, so its floor
+  is on the em (~173px): for `digithings` that is a ~1036px rendered width before
+  the stroke reaches one device pixel. Below that use `TerminalWordmark`; do not
+  shrink the hairline to fit.
+
+Weight 400 is not a style choice — `.term-body`, `.term-title`, `.cmdline` and
+`.app-input-field` set no `font-weight` and inherit `body { font-weight: 400 }`
+(`design/site/site.css`), so 400 *is* terminal text. The hairline sits at 500
+because `.colo-word` does.
+
+Favicons are the `compact` mark baked into a tile with its own background — the
+one place a mark cannot inherit ink — wired through `metadata.icons` with
+`prefers-color-scheme` queries. Neither marketing site uses an `app/icon.svg`:
+that Next.js file convention overrides `metadata.icons` and would drop the
+queries silently.
+
+The older text `Wordmark` (`symbols/marks.tsx`) and `Colophon`
+(`components/chrome.tsx`) are superseded for new work but not retired — the
+surfaces already using them still do.
+
 ## The `digiweb` skill — the routing contract
 
 `agents/sources/skills/digiweb/SKILL.md` (generated to `.claude/skills/` by

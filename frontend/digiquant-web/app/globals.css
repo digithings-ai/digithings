@@ -38,6 +38,7 @@
 @source "../../digiweb/web/src/components/deck";
 @source "../../digiweb/web/src/components/finance-tearsheet";
 @source "../../digiweb/web/src/components/finance-composites";
+@source "../../digiweb/web/src/components/symbols";
 
 :root[data-theme] {
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
@@ -143,13 +144,12 @@ html {
 .dq-sub { color: var(--ink-soft); margin-top: 0.8rem; max-width: 60ch; line-height: 1.6; }
 
 /* ---- nav dress (the bar itself is the shared NavShell — see SiteNav.tsx) ----
-   brand QR: transparent marks (no opaque tile, no glow). Show the variant that
-   matches the active theme — dark modules on light, light modules on dark.
+   The brand mark needs no dress: it is one inline SVG in currentColor
+   (TerminalMark, _nav.tsx), so it follows ink through [data-theme] without a
+   theme-swapped pair. The old .brand-mark / .brand-mark-{dark,light} trio went
+   with the QR marks.
    @layer components so token utilities in TSX can locally re-dress them. */
 @layer components {
-  .brand-mark { display: inline-block; width: 24px; height: 24px; }
-  [data-theme="light"] .brand-mark-dark { display: none; }
-  [data-theme="dark"] .brand-mark-light { display: none; }
   /* icon-only buttons (nav GitHub, tearsheet download): square, glyph centred */
   .btn-icon { padding-inline: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
   .btn-icon svg { display: block; }

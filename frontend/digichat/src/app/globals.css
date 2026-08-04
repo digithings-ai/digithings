@@ -164,6 +164,12 @@
   --text-secondary: var(--ink-soft);
   --border-color: var(--hair);
   --fg: var(--ink);
+  /* The colours above were re-pointed; the legacy font token was missed.
+     tokens.css:56 names JetBrains Mono / Fira Code / Space Mono — none of which
+     is loaded anywhere (no @font-face in frontend, no next/font import), so the
+     app-shell chrome and .dc-term-* fell through to the OS default mono while
+     the <pre> blocks beside them got Geist Mono. Same fix as olympus:101. */
+  --font-family-mono: var(--font-mono);
 }
 
 /*
