@@ -1412,6 +1412,32 @@ failed, and `atlas_research_produced and not book_committed` (the no-book gate �
 residual detection hole behind #1766, which the #1555 commit gate misses because it only
 fires once a book has *materialized*).
 
+### Spend alert — the one breakdown key that is NOT a contributor (#1764)
+
+`ATLAS_SPEND_ALERT_USD` (default $10) is a warning threshold on one chain invocation. Over it,
+`breakdown.spend_alert` is written, a warning is logged, and `_emit_ci_warning` raises a GitHub
+Actions `::warning::` annotation — the annotation is the part that makes this an alert rather
+than a record, since a jsonb key and a log line are both passive.
+
+**Alert only, by the owner's explicit decision.** Nothing in this path touches `status`,
+`retry_signal`, or the exit code. A mid-run abort would leave a partially-published run, and
+#1749/#1751 established that partial states are where the silent-staleness defects live. There
+are tests pinning the negative property; do not relax them into a ceiling without a new decision.
+
+It is computed in `_row` rather than through `register_breakdown_contributor` because **that seam
+is `state -> dict` and spend does not live in state** — it arrives in the `digigraph.usage`
+snapshot, which is only in scope at that call site. `models`, `by_kind` and `cached_tokens` set
+the precedent for a usage-derived breakdown key. Widening `summarize_run` to carry usage was
+considered and rejected: two of its three callers want only `retry_signal` and have no usage to
+pass. `diagnostics` imports `telemetry` lazily inside `_row` because `telemetry` imports
+`register_breakdown_contributor` from `diagnostics` — a module-level import is a cycle.
+
+Scope limit to state honestly when reading the key: the threshold is **per invocation, not per
+day**. `digigraph.usage` is process-global and `chain` calls `start()` once per process, so three
+outer-retry attempts at $6 each do not trip a $10 threshold on an $18 day. Since #1762 the day's
+true total *is* recoverable (`sum(est_cost_usd) … GROUP BY run_date` now sums across attempts),
+but that needs a query, so a daily aggregate belongs in a separate check.
+
 ### Extending `breakdown` — use the seam, not a new edit site
 
 `breakdown` is schema-free jsonb, so a new telemetry key needs no migration. Register a

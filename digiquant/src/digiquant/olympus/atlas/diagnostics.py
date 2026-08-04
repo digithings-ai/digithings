@@ -26,6 +26,7 @@ generated, ``carried`` = fell back to the baseline. A carry whose reason is
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -510,6 +511,25 @@ def atlas_research_produced(state: AtlasResearchState) -> bool:
     return total > 0 and not _atlas_chain_crashed(list(getattr(state, "errors", []) or []))
 
 
+def _emit_ci_warning(message: str) -> None:
+    """Raise a GitHub Actions warning annotation, when running under Actions.
+
+    A ``breakdown`` key and a log line are both passive — someone has to go looking. An
+    ``::warning::`` annotation appears on the run's summary page without anyone querying
+    anything, which is what makes "alert only" (#1764) an actual alert rather than a record.
+
+    Guarded on ``GITHUB_ACTIONS`` so a local run just gets the ordinary log line and no stray
+    workflow-command text on stdout. Never raises: this is decoration on a fail-soft path.
+    """
+    if not os.environ.get("GITHUB_ACTIONS"):
+        return
+    try:
+        # Newlines would terminate the workflow command and leak the rest as plain output.
+        print(f"::warning::{message}".replace("\n", " "), flush=True)
+    except Exception as exc:  # pragma: no cover — stdout is closed/broken
+        logger.debug("could not emit CI warning annotation (%s)", exc)
+
+
 def _row(
     *,
     run_id: str,
@@ -539,6 +559,33 @@ def _row(
         breakdown["by_kind"] = usage["by_kind"]
     if usage.get("cached_tokens") is not None:  # include an explicit 0 (distinct from absent)
         breakdown["cached_tokens"] = usage["cached_tokens"]
+    # Spend alert (#1764). Computed HERE rather than through the ``register_breakdown_contributor``
+    # seam because that seam is ``state -> dict`` and spend does not live in state — it comes
+    # from the ``digigraph.usage`` snapshot, which is only in scope at this call site. ``models``,
+    # ``by_kind`` and ``cached_tokens`` above set the precedent for a usage-derived breakdown key.
+    # Alert only, per the owner's decision: nothing below this line touches ``status``,
+    # ``retry_signal``, or the exit code.
+    #
+    # Deferred import, not module-level: ``telemetry`` imports ``register_breakdown_contributor``
+    # from THIS module, so a top-level import here is a cycle. ``_row`` runs once per run, so the
+    # cached-module lookup costs nothing measurable.
+    from digiquant.olympus.atlas import telemetry as _telemetry
+
+    alert = _telemetry.spend_alert(usage.get("cost_usd"))
+    if alert is not None:
+        breakdown[_telemetry.SPEND_ALERT_KEY] = alert
+        logger.warning(
+            "spend alert: this invocation cost $%.4f, above the $%.2f %s threshold "
+            "(alert only — the run is unaffected)",
+            alert["est_cost_usd"],
+            alert["threshold_usd"],
+            _telemetry.SPEND_ALERT_ENV,
+        )
+        _emit_ci_warning(
+            f"Olympus spend alert: ${alert['est_cost_usd']:.4f} this invocation, "
+            f"above the ${alert['threshold_usd']:.2f} threshold "
+            f"({_telemetry.SPEND_ALERT_ENV}). Alert only; the run was not blocked."
+        )
     # Keep the `model` column a single stable slug for GROUP BY (the full per-run set lives in
     # breakdown["models"]). When the router serves several models we record the first; callers
     # wanting the complete list read the breakdown.

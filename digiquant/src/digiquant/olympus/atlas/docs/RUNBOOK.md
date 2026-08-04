@@ -196,7 +196,26 @@ retained paid fallbacks. PR-1 converts `alt-options-derivatives` to read the
 FRED vol complex (VIX/VIX3M/VXN/GVZ/OVX, in `config/macro_series.yaml`) via
 `get_macro_series` instead of a paid `web_search` (#708).
 
-`atlas_run_diagnostics.est_cost_usd` tracks each run; verify after changes.
+`atlas_run_diagnostics.est_cost_usd` tracks each run **attempt** (per-attempt keying since
+#1762 — before that the last outer-retry attempt overwrote the expensive one's cost on 28 of
+54 rows, so a day's total needs `sum(est_cost_usd) … GROUP BY run_date`, not one row); verify
+after changes.
+
+**Spend alert (#1764).** `ATLAS_SPEND_ALERT_USD` (default **$10**) is a warning threshold on a
+single chain invocation. Breaching it writes `breakdown.spend_alert`
+(`{threshold_usd, est_cost_usd, scope}`), logs a warning, and raises a GitHub Actions
+`::warning::` annotation on the run summary. It is **alert only** — by the owner's explicit
+decision it never aborts a run, never refuses a segment, and never touches `status`,
+`retry_signal`, or the exit code. Set it to `0` to silence the alert during a deliberately
+expensive backfill; a malformed value falls back to the default rather than disabling, because
+failing open on a typo would silently remove the alert.
+
+Two limits worth knowing before you rely on it. The threshold is **per invocation, not per
+day**: `digigraph.usage` accumulates in process-global state and the chain calls `start()` once
+per process, so three outer-retry attempts at $6 each will not trip a $10 threshold even though
+the day cost $18. And $10 is calibrated on observed runs ($4.00 on 07-31, $4.70 on 07-26,
+~$1.55 mean, against the $11.95 Jun 19 outlier below) — re-calibrate it if the model roster
+changes.
 
 ### OpenRouter model tiers (`config/olympus_models.yaml`)
 

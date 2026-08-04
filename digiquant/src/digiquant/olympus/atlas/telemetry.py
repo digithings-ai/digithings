@@ -16,6 +16,9 @@ the contributor wired well before ``summarize_run`` is called.
 
 from __future__ import annotations
 
+import logging
+import math
+import os
 from typing import (
     Any,  # score:allow untyped any — jsonb breakdown fragment shape
 )
@@ -23,14 +26,41 @@ from typing import (
 from digiquant.olympus.atlas.diagnostics import register_breakdown_contributor
 from digiquant.olympus.atlas.state import AtlasResearchState
 
+logger = logging.getLogger(__name__)
+
 MERGE_FALLBACK_KEY = "merge_fallback"
 CONTENT_FREEZE_KEY = "content_freeze"
+SPEND_ALERT_KEY = "spend_alert"
+
+# ── spend alert (#1764) ──────────────────────────────────────────────────────────────────
+#
+# Before this, the only bound on a day's LLM spend was the job's 240-minute
+# ``timeout-minutes``. The owner's decision (2026-08-04) is **alert only, never block**: record
+# the breach and surface it, but never abort a run and never refuse a segment. A mid-run abort
+# would leave a partially-published run, and #1749/#1751 established that partial states are
+# exactly where the silent-staleness defects live.
+#
+# So this is a WARNING threshold, not a ceiling. Nothing here can change ``status``,
+# ``retry_signal``, or the process exit code.
+SPEND_ALERT_ENV = "ATLAS_SPEND_ALERT_USD"
+
+# Calibrated against observed production runs: 2026-07-31 $4.00 / 292 calls, 07-26 $4.70 / 349
+# calls, and a ~$1.55 mean across the 22 rows whose telemetry was never overwritten. The known
+# outlier is the Jun 19 delta run at $11.95 / 147 calls (RUNBOOK's own cost-governance example).
+# 10.0 sits above every normal day and below that outlier, so it fires on the anomaly rather
+# than on Tuesday.
+SPEND_ALERT_DEFAULT_USD = 10.0
 
 __all__ = [
     "CONTENT_FREEZE_KEY",
     "MERGE_FALLBACK_KEY",
+    "SPEND_ALERT_DEFAULT_USD",
+    "SPEND_ALERT_ENV",
+    "SPEND_ALERT_KEY",
     "content_freeze_breakdown",
     "merge_fallback_breakdown",
+    "spend_alert",
+    "spend_alert_threshold_usd",
 ]
 
 
@@ -94,4 +124,62 @@ def content_freeze_breakdown(state: AtlasResearchState) -> dict[str, Any]:
             "count": len(freezes),
             "segments": {slug: str(since) for slug, since in sorted(freezes.items())},
         }
+    }
+
+
+def spend_alert_threshold_usd() -> float | None:
+    """The per-invocation USD alert threshold, or ``None`` when alerting is off.
+
+    ``ATLAS_SPEND_ALERT_USD`` overrides :data:`SPEND_ALERT_DEFAULT_USD`. A value of ``0`` or
+    below **disables** the alert — an explicit off switch matters because this fires on a
+    heuristic, and an operator running a deliberately expensive backfill should be able to
+    silence it without editing code.
+
+    A malformed value falls back to the default rather than disabling: failing open on a typo
+    would silently remove the alert, which is the failure mode the alert exists to prevent.
+    """
+    raw = os.environ.get(SPEND_ALERT_ENV)
+    if raw is None or not raw.strip():
+        return SPEND_ALERT_DEFAULT_USD
+    try:
+        threshold = float(raw)
+    except ValueError:
+        logger.warning(
+            "%s=%r is not a number; using the default $%.2f",
+            SPEND_ALERT_ENV,
+            raw,
+            SPEND_ALERT_DEFAULT_USD,
+        )
+        return SPEND_ALERT_DEFAULT_USD
+    return threshold if threshold > 0 else None
+
+
+def spend_alert(cost_usd: object) -> dict[str, Any] | None:
+    """The ``breakdown[spend_alert]`` fragment when *cost_usd* breached the threshold, else None.
+
+    Pure — the caller does the logging and the GitHub annotation, so this stays trivially
+    testable. Returns ``None`` rather than a zero/false record, matching ``merge_fallback``,
+    ``content_freeze`` and ``circuit_breaker_skips``: the key's presence IS the signal, so a
+    row without it is unambiguous.
+
+    **Scope, stated plainly: this is per chain INVOCATION, not per day.**
+    ``digigraph.usage`` accumulates in process-global state and ``chain`` calls ``start()`` once
+    per process, so on a day that takes three outer-retry attempts each attempt measures only
+    its own spend. Three attempts at $6 each would not trip a $10 threshold even though the day
+    cost $18. Since #1762 the day's true total IS recoverable —
+    ``SELECT sum(est_cost_usd) … GROUP BY run_date`` now sums across attempts instead of reading
+    one surviving row — but that needs a query, not in-process state, so a daily aggregate
+    belongs in a separate check rather than here.
+    """
+    threshold = spend_alert_threshold_usd()
+    if threshold is None:
+        return None
+    if not isinstance(cost_usd, (int, float)) or isinstance(cost_usd, bool):
+        return None
+    if not math.isfinite(cost_usd) or cost_usd <= threshold:
+        return None
+    return {
+        "threshold_usd": threshold,
+        "est_cost_usd": round(float(cost_usd), 6),
+        "scope": "invocation",
     }
