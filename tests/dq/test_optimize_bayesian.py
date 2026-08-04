@@ -11,6 +11,7 @@ from digiquant.models import BacktestResult, OptimizationConstraints, OptimizeRe
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _bt(sharpe=1.0, ret=5.0, pnl=5000.0, trades=20, dd=10.0) -> BacktestResult:
     return BacktestResult(
         run_id="bt-test",
@@ -30,9 +31,12 @@ def _bt(sharpe=1.0, ret=5.0, pnl=5000.0, trades=20, dd=10.0) -> BacktestResult:
 # run_optimize_bayesian
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestRunOptimizeBayesian:
-    def _run(self, n_trials=3, objective="sharpe", constraints=None, base_params=None, bt_return=None):
+    def _run(
+        self, n_trials=3, objective="sharpe", constraints=None, base_params=None, bt_return=None
+    ):
         """Helper: patches optuna + run_backtest and calls run_optimize_bayesian."""
         try:
             import optuna  # noqa: F401 — skip if optuna not installed
@@ -44,11 +48,16 @@ class TestRunOptimizeBayesian:
 
         from digiquant.optimize_bayesian import run_optimize_bayesian
 
-        with patch("digiquant.optimize_bayesian.run_backtest", return_value=bt_return) as mock_bt, \
-             patch("digiquant.optimize_bayesian.get_search_space_for_optuna", return_value={
-                 "fast_period": ("int", 5, 20, 1),
-                 "slow_period": ("int", 20, 60, 1),
-             }):
+        with (
+            patch("digiquant.optimize_bayesian.run_backtest", return_value=bt_return) as mock_bt,
+            patch(
+                "digiquant.optimize_bayesian.get_search_space_for_optuna",
+                return_value={
+                    "fast_period": ("int", 5, 20, 1),
+                    "slow_period": ("int", 20, 60, 1),
+                },
+            ),
+        ):
             result = run_optimize_bayesian(
                 strategy_name="sma_cross",
                 symbols=["AAPL"],
@@ -81,7 +90,11 @@ class TestRunOptimizeBayesian:
     def test_best_params_contains_search_space_keys(self) -> None:
         result, _ = self._run()
         # best_params should include the keys from our mocked search space
-        assert "fast_period" in result.best_params or "slow_period" in result.best_params or result.best_params == {}
+        assert (
+            "fast_period" in result.best_params
+            or "slow_period" in result.best_params
+            or result.best_params == {}
+        )
 
     def test_objective_return_uses_total_return_pct(self) -> None:
         """When objective='return', bt.total_return_pct is used as the objective value."""
@@ -98,8 +111,10 @@ class TestRunOptimizeBayesian:
 
         from digiquant.optimize_bayesian import run_optimize_bayesian
 
-        with patch("digiquant.optimize_bayesian.run_backtest", return_value=_bt()), \
-             patch("digiquant.optimize_bayesian.get_search_space_for_optuna", return_value={}):
+        with (
+            patch("digiquant.optimize_bayesian.run_backtest", return_value=_bt()),
+            patch("digiquant.optimize_bayesian.get_search_space_for_optuna", return_value={}),
+        ):
             result = run_optimize_bayesian(
                 strategy_name="sma_cross",
                 symbols=["AAPL"],
@@ -117,10 +132,15 @@ class TestRunOptimizeBayesian:
 
         from digiquant.optimize_bayesian import run_optimize_bayesian
 
-        with patch("digiquant.optimize_bayesian.run_backtest", return_value=_bt()), \
-             patch("digiquant.optimize_bayesian.get_search_space_for_optuna", return_value={
-                 "fast_period": ("int", 5, 20, 1),
-             }):
+        with (
+            patch("digiquant.optimize_bayesian.run_backtest", return_value=_bt()),
+            patch(
+                "digiquant.optimize_bayesian.get_search_space_for_optuna",
+                return_value={
+                    "fast_period": ("int", 5, 20, 1),
+                },
+            ),
+        ):
             result = run_optimize_bayesian(
                 strategy_name="sma_cross",
                 symbols=["AAPL"],
@@ -142,10 +162,15 @@ class TestRunOptimizeBayesian:
 
         constraints = OptimizationConstraints(min_trades=100)
 
-        with patch("digiquant.optimize_bayesian.run_backtest", return_value=bad_bt), \
-             patch("digiquant.optimize_bayesian.get_search_space_for_optuna", return_value={
-                 "fast_period": ("int", 5, 10, 1),
-             }):
+        with (
+            patch("digiquant.optimize_bayesian.run_backtest", return_value=bad_bt),
+            patch(
+                "digiquant.optimize_bayesian.get_search_space_for_optuna",
+                return_value={
+                    "fast_period": ("int", 5, 10, 1),
+                },
+            ),
+        ):
             result = run_optimize_bayesian(
                 strategy_name="sma_cross",
                 symbols=["AAPL"],

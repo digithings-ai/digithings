@@ -71,6 +71,15 @@ class MergeStats(BaseModel):
 
     ops_applied: int = 0
     paths_touched: list[str] = Field(default_factory=list)
+    content_changed: bool = Field(
+        default=True,
+        description=(
+            "Whether the merge actually altered the prior body's content (#1749/#1751). "
+            "``ops_applied`` counts ops SUBMITTED, so a patch can report six applied ops "
+            "and change nothing — 54 of 69 frozen production rows were exactly that. "
+            "Defaults True so an unset value never mislabels a real edit as frozen."
+        ),
+    )
 
 
 class MergeResult(BaseModel):
@@ -87,6 +96,16 @@ class PriorPublished(BaseModel):
     date: date
     document_key: str
     payload: dict[str, Any]
+    content_date: date | None = Field(
+        default=None,
+        description=(
+            "The date this payload's content last materially changed, from its "
+            "``unchanged_since`` marker (#1749). ``None`` when the row carries no marker — "
+            "every row published before the marker existed, and every row whose content "
+            "changed on its own publish date. ``resolve_edit_mode`` measures ``gap_days`` "
+            "from this when present so a no-op republish cannot reset the staleness clock."
+        ),
+    )
 
 
 class TriageSignal(BaseModel):
