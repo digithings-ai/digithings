@@ -511,6 +511,40 @@ def atlas_research_produced(state: AtlasResearchState) -> bool:
     return total > 0 and not _atlas_chain_crashed(list(getattr(state, "errors", []) or []))
 
 
+def _announce_spend_alert(row: Mapping[str, Any]) -> None:
+    """Log + annotate the spend alert already recorded in *row*'s breakdown (#1764).
+
+    Called from ``write_row`` AFTER the upsert succeeds, and outside its ``try``: ``_row`` runs
+    inside that ``try``, so anything raised while announcing an alert would be swallowed by the
+    fail-soft handler and the diagnostics row would never be written. An alert must never cost
+    the row it annotates.
+
+    Guarded end-to-end anyway — this is decoration, and no shape of ``row`` should reach the
+    caller as an exception.
+    """
+    from digiquant.olympus.atlas import telemetry as _telemetry
+
+    try:
+        breakdown = row.get("breakdown") or {}
+        alert = breakdown.get(_telemetry.SPEND_ALERT_KEY) if isinstance(breakdown, dict) else None
+        if not isinstance(alert, dict):
+            return
+        logger.warning(
+            "spend alert: this invocation cost $%.4f, above the $%.2f %s threshold "
+            "(alert only — the run is unaffected)",
+            alert["est_cost_usd"],
+            alert["threshold_usd"],
+            _telemetry.SPEND_ALERT_ENV,
+        )
+        _emit_ci_warning(
+            f"Olympus spend alert: ${alert['est_cost_usd']:.4f} this invocation, "
+            f"above the ${alert['threshold_usd']:.2f} threshold "
+            f"({_telemetry.SPEND_ALERT_ENV}). Alert only; the run was not blocked."
+        )
+    except Exception as exc:  # announcing must never raise
+        logger.debug("could not announce the spend alert (%s)", exc)
+
+
 def _emit_ci_warning(message: str) -> None:
     """Raise a GitHub Actions warning annotation, when running under Actions.
 
@@ -571,21 +605,14 @@ def _row(
     # cached-module lookup costs nothing measurable.
     from digiquant.olympus.atlas import telemetry as _telemetry
 
+    # Only the breakdown key is written here. The log line and the CI annotation are side effects
+    # and fire from ``write_row`` AFTER the upsert succeeds — ``_row`` runs inside ``write_row``'s
+    # fail-soft ``try``, so an exception raised while announcing an alert would be swallowed by
+    # that handler and the diagnostics row would never be written. An alert must never cost the
+    # row it annotates. See :func:`_announce_spend_alert`.
     alert = _telemetry.spend_alert(usage.get("cost_usd"))
     if alert is not None:
         breakdown[_telemetry.SPEND_ALERT_KEY] = alert
-        logger.warning(
-            "spend alert: this invocation cost $%.4f, above the $%.2f %s threshold "
-            "(alert only — the run is unaffected)",
-            alert["est_cost_usd"],
-            alert["threshold_usd"],
-            _telemetry.SPEND_ALERT_ENV,
-        )
-        _emit_ci_warning(
-            f"Olympus spend alert: ${alert['est_cost_usd']:.4f} this invocation, "
-            f"above the ${alert['threshold_usd']:.2f} threshold "
-            f"({_telemetry.SPEND_ALERT_ENV}). Alert only; the run was not blocked."
-        )
     # Keep the `model` column a single stable slug for GROUP BY (the full per-run set lives in
     # breakdown["models"]). When the router serves several models we record the first; callers
     # wanting the complete list read the breakdown.
@@ -676,6 +703,7 @@ def write_row(
         summary.segments_carried,
         summary.segments_failed,
     )
+    _announce_spend_alert(row)
     return summary
 
 

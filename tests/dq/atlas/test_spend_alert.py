@@ -41,6 +41,12 @@ def _no_inherited_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
 
 class TestThreshold:
     def test_default_sits_between_a_normal_day_and_the_known_outlier(self) -> None:
+        """A deliberate tripwire on re-calibration, not an arbitrary range check.
+
+        If the model roster is re-tiered and normal runs move to $12, this fails — and the right
+        response is to re-derive the threshold from the new observed spend and update BOTH the
+        constant and these bounds, not to widen the bounds until it goes green.
+        """
         assert 4.70 < SPEND_ALERT_DEFAULT_USD < 11.95
         assert spend_alert_threshold_usd() == SPEND_ALERT_DEFAULT_USD
 
@@ -181,30 +187,90 @@ class TestTheCIAnnotation:
     """A breakdown key and a log line are both passive. The annotation is what makes this an
     alert rather than a record — it shows on the run's summary page with nobody querying."""
 
-    def _emit(self, monkeypatch: pytest.MonkeyPatch, *, in_ci: bool, message: str) -> str:
+    def _emit(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        *,
+        in_ci: bool,
+        message: str,
+    ) -> str:
+        """Capture REAL stdout rather than patching ``print``.
+
+        Patching ``builtins.print`` would only verify the test double. GitHub ignores a workflow
+        command that is not line-initial, so what matters is the bytes that actually reach
+        stdout — a stray prefix or leading whitespace is invisible to a mock.
+        """
         from digiquant.olympus.atlas import diagnostics
 
-        printed: list[str] = []
         if in_ci:
             monkeypatch.setenv("GITHUB_ACTIONS", "true")
         else:
             monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-        monkeypatch.setattr("builtins.print", lambda *a, **k: printed.append(str(a[0])))
+        capsys.readouterr()  # drop anything emitted during setup
         diagnostics._emit_ci_warning(message)
-        return "".join(printed)
+        return capsys.readouterr().out
 
-    def test_emits_a_workflow_command_under_actions(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        assert self._emit(monkeypatch, in_ci=True, message="over budget").startswith(
-            "::warning::over budget"
+    def test_the_workflow_command_starts_its_own_line(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        out = self._emit(monkeypatch, capsys, in_ci=True, message="over budget")
+        assert out.startswith("::warning::over budget")
+        assert out.splitlines()[0].startswith("::warning::")
+        assert out.endswith("\n")
+
+    def test_silent_outside_actions(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A local run gets the ordinary log line and no stray workflow-command text on stdout.
+
+        Also keeps `chain.py`'s `--dry-run` JSON-to-stdout clean — though that path returns
+        before any diagnostics write, so it cannot reach here today.
+        """
+        assert self._emit(monkeypatch, capsys, in_ci=False, message="over budget") == ""
+
+    def test_newlines_are_flattened_into_one_line(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A newline terminates the workflow command: the annotation would truncate to its first
+        line and the remainder would leak into the log as plain output."""
+        out = self._emit(monkeypatch, capsys, in_ci=True, message="line one\nline two")
+        assert out.count("\n") == 1  # the trailing one only
+        assert "line two" in out.splitlines()[0]
+
+
+class TestAnnouncingNeverCostsTheRow:
+    """`_row` runs inside `write_row`'s fail-soft `try`. Announcing the alert therefore happens
+    after the upsert and outside that block, so nothing raised while announcing can swallow the
+    diagnostics write — an alert must never cost the row it annotates."""
+
+    def test_announce_runs_after_the_upsert(self) -> None:
+        import inspect
+
+        from digiquant.olympus.atlas import diagnostics
+
+        body = inspect.getsource(diagnostics.write_row)
+        assert body.index(".upsert(") < body.index("_announce_spend_alert(")
+
+    @pytest.mark.parametrize(
+        "bad",
+        [{}, {"breakdown": None}, {"breakdown": "nope"}, {"breakdown": {"spend_alert": 1}}],
+    )
+    def test_announce_swallows_a_malformed_row(self, bad: dict[str, object]) -> None:
+        from digiquant.olympus.atlas import diagnostics
+
+        diagnostics._announce_spend_alert(bad)  # must not raise
+
+    def test_announce_emits_for_a_well_formed_alert(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from digiquant.olympus.atlas import diagnostics
+
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        capsys.readouterr()
+        diagnostics._announce_spend_alert(
+            {"breakdown": {SPEND_ALERT_KEY: {"est_cost_usd": 18.42, "threshold_usd": 10.0}}}
         )
-
-    def test_silent_outside_actions(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A local run should get the ordinary log line, not stray workflow-command text."""
-        assert self._emit(monkeypatch, in_ci=False, message="over budget") == ""
-
-    def test_newlines_are_flattened(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A newline terminates the workflow command, leaking the remainder as plain output and
-        truncating the annotation to its first line."""
-        out = self._emit(monkeypatch, in_ci=True, message="line one\nline two")
-        assert "\n" not in out
-        assert "line two" in out
+        out = capsys.readouterr().out
+        assert out.startswith("::warning::")
+        assert "18.42" in out and "10.00" in out
