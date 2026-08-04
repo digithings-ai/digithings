@@ -19,8 +19,8 @@ export const DT_CONTACT_EMAIL = "contact@digithings.ai";
 // wraps this in <a aria-label="digithings home">, so the mark stays decorative.
 export const Brand = () => (
   <>
-    <TerminalMark size={26} variant="compact" />
-    <span className="brand-word">digithings</span>
+    <TerminalMark size={26} variant="compact" className="hidden max-[880px]:block" />
+    <span className="brand-word max-[880px]:hidden">digithings</span>
   </>
 );
 

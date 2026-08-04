@@ -19,6 +19,7 @@ const REGISTRY_STACK: StackItem[] = [
   { name: "Next.js", icon: "nextdotjs" },
   { name: "OpenAI", icon: "openai" },
   { name: "OpenTelemetry", icon: "opentelemetry" },
+  { name: "Optuna", icon: "optuna" },
   { name: "Polars", icon: "polars" },
   { name: "PostgreSQL", icon: "postgresql" },
   { name: "Prometheus", icon: "prometheus" },
@@ -34,7 +35,6 @@ const REGISTRY_STACK: StackItem[] = [
 const FALLBACK_STACK: StackItem[] = [
   { name: "NautilusTrader", icon: null, mono: "NT" },
   { name: "LiteLLM", icon: null, mono: "LL" },
-  { name: "Optuna", icon: null, mono: "Op" },
 ];
 
 /* Brand favicon tiles. One artwork — the compact `d` + block cursor — in the two

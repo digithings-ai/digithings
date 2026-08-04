@@ -1,5 +1,4 @@
 import {
-  AnimatedLockup,
   Colophon,
   Footer,
   Marquee,
@@ -134,13 +133,12 @@ export default function Home() {
           <div className="wrap">
             <Reveal className="section-head center">
               <span className="kicker">{"// the architecture"}</span>
-              {/* The identity as a live prompt, typing each module in the
-                  registry below it — the one motion moment on this section. */}
-              <AnimatedLockup className="block text-[clamp(2rem,6.5vw,4rem)] text-ink" />
-              <h2>Ten modules, wired into one.</h2>
+              {/* nowrap from md up so the claim holds one line; it still wraps on
+                  phones, where forcing one line would shrink it to nothing. */}
+              <h2 className="md:whitespace-nowrap">Ten modules. One toolkit.</h2>
               <p>
-                A supervisor at the centre routes every request to the right module — chat, quant
-                research, or retrieval. Each one self-hosted, audited, and swappable.
+                Each runs standalone or composes with the rest — retrieval, quant research and
+                chat, plus the auth, tracing and audit any deployment needs.
               </p>
             </Reveal>
             <ModuleManifest />
