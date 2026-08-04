@@ -99,7 +99,14 @@ describe('RiskEnvelopeCell', () => {
     const html = cell({
       stopLossPct: -10,
       targetPctGain: 30,
-      valuation: { source: 'unavailable', price: null, unrealizedPct: null, asOf: null },
+      valuation: {
+        source: 'unavailable',
+        price: null,
+        unrealizedPct: null,
+        asOf: null,
+        isFresh: false,
+        ageMs: null,
+      },
     });
     expect(html).not.toContain('data-live-mark');
     expect(html).not.toContain('left:50%');

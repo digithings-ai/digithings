@@ -131,6 +131,12 @@ atlas_graph:
   - digiquant/scripts/atlas/**
   - digiquant/supabase/**
   - tests/dq/atlas/**
+  # tests/dq/atlas/test_segment_edit_mode.py drives the segment edit path end-to-end, so it is
+  # a guard on edit_mode/ — but edit_mode/ was not listed, and this lane's pytest selector is
+  # `tests/dq/atlas tests/dq/hermes tests/dq/learning`. An edit_mode-only change therefore
+  # skipped the one suite that exercises it in a compiled graph. Content identity now lives in
+  # edit_mode/content_identity.py and is consumed by three atlas modules (#1749).
+  - digiquant/src/digiquant/olympus/edit_mode/**
   - digiquant/src/digiquant/olympus/hermes/**
   - digiquant/src/digiquant/olympus/learning/**
   - tests/dq/hermes/**

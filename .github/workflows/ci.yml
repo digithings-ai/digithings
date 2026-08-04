@@ -145,6 +145,7 @@ jobs:
               - 'digiquant/scripts/atlas/**'
               - 'digiquant/supabase/**'
               - 'tests/dq/atlas/**'
+              - 'digiquant/src/digiquant/olympus/edit_mode/**'
               - 'digiquant/src/digiquant/olympus/hermes/**'
               - 'digiquant/src/digiquant/olympus/learning/**'
               - 'tests/dq/hermes/**'
