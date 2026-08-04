@@ -47,24 +47,31 @@ import {
  * (Same trap as frontend/digiquant-web/lib/live/useLivePrices.ts, which documents the
  * realtime-js line numbers.)
  *
- * PER-INSTANCE IS NECESSARY BUT NOT SUFFICIENT — hence {@link channelSeq}, appended after the
- * instance id. `useId` is constant for the life of a hook instance, so it distinguishes two
- * MOUNTED consumers but NOT two SUCCESSIVE subscriptions of the SAME instance. Those overlap,
- * because `removeChannel()` IS NOT SYNCHRONOUS: it calls `channel.unsubscribe()`, phoenix sets
- * the channel's state to `leaving` and waits for the server's reply (or a 10s timeout), and the
- * client's `_remove` runs only from that channel's `_onClose`. Until then the channel is STILL
- * IN `client.channels`. An effect re-run inside that window therefore gets the DYING channel
- * back from `channel()`; `.on()` appends a SECOND postgres_changes binding to it; `.subscribe()`
- * no-ops, because realtime-js wraps the join in `if (channelAdapter.isClosed())` and `leaving`
- * is not `closed`; then the pending leave reply closes it. The realtime lane is dead for the
- * rest of that mount, and silently — no exception, no console error, no subscribe-status
- * callback. Only the seed still resolves, so the table goes on showing a figure sourced from a
- * quote that will never advance again.
+ * {@link channelSeq} appends a per-SUBSCRIPTION counter after the instance id. Read the next
+ * paragraph before deciding it is load-bearing, because an earlier revision of this comment
+ * claimed it was and that claim was FALSE.
  *
- * That window is one click wide: components/portfolio/tabs/AllocationsTab.tsx toggles
- * positions↔activity, and PortfolioShellInner remounts the holdings tab on tab navigation.
- * Verified against the installed @supabase/realtime-js 2.104.0 — DO NOT "simplify" either half
- * of the topic away.
+ * NOT REQUIRED BY realtime-js 2.104.0 / @supabase/phoenix 0.4.0 — kept as cheap insurance.
+ * The reasoning it was added for was that two successive subscriptions of one instance could
+ * overlap, on the theory that `removeChannel()` is async and leaves the dying channel in
+ * `client.channels` until a server leave-reply or a 10s timeout. That does not happen here, and
+ * it was MEASURED rather than argued: phoenix `channel.js:242` sets `state = leaving` BEFORE
+ * `:251` consults `canPush()`, and `canPush()` (`:188`) requires `isJoined()` — which `leaving`
+ * fails. So `leavePush.trigger("ok", {})` fires SYNCHRONOUSLY, `onClose` runs, and both
+ * `socket.remove()` and realtime-js's `_onClose` → `socket._remove()` complete inside
+ * `unsubscribe()`'s promise executor, i.e. before `removeChannel()` reaches its first `await`.
+ * Probed in the production steady state (socket connected, channel `joined`, leave ack withheld):
+ * `client.channels` went 1 → 0 and `state` joined → closed synchronously. A control run reusing
+ * one per-instance topic re-subscribed onto a FRESH channel with exactly one postgres_changes
+ * binding — the lane was alive without this counter.
+ *
+ * It stays because synchronous leave is a library implementation detail, not a documented
+ * contract: one upstream change to that `canPush()` ordering reintroduces the overlap, and the
+ * failure mode is silent (no exception, no console error, no subscribe-status callback — only the
+ * seed resolves, so the table keeps showing a quote that never advances). A counter is one
+ * integer against that. What is genuinely load-bearing is the per-INSTANCE half above, which was
+ * measured to fail: two consumers on a shared constant topic hit `channel()`'s dedupe and lose
+ * the lane for both. Do not remove that.
  */
 const CHANNEL_PREFIX = "olympus-prices-live";
 /**

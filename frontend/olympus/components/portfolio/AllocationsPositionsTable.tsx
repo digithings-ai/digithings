@@ -191,8 +191,12 @@ const CLOCK_TICK_MS = 30_000;
  * quote arrives, so nothing would re-render and the last labels would sit there overnight.
  *
  * WHY NOT `Date.now()` IN THE RENDER BODY: `react-hooks/purity` is an error in this config, and
- * rightly — an impure render read is unstable across re-renders. The clock is read inside an
- * effect callback instead, which is a legal place for it, and enters render as state.
+ * rightly — an impure render read is unstable across re-renders. The clock is read in a
+ * `useState` LAZY INITIALIZER for the first sample and in the interval's effect callback for every
+ * one after; both are legal places for it, and the value enters render only as state. (An earlier
+ * revision of this comment said "inside an effect callback" alone, which understated the
+ * initializer — mentioning it matters, because moving that read into the render body to "simplify"
+ * is exactly what the lint rule forbids.)
  *
  * `CLOCK_TICK_MS` is 30s against a five-minute threshold, so a label is at most 30s late, and
  * the cost is one state update per 30s for the whole table. The lazy initial value differs
