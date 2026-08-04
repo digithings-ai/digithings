@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatQuoteAge,
+  isQuoteFresh,
   liveQuoteFromRow,
+  LIVE_QUOTE_FRESH_MS,
   mergeQuotes,
   normalizeTimestamptz,
+  quoteAgeMs,
   valuePosition,
   type LiveQuote,
   type LiveQuoteMap,
@@ -11,6 +15,13 @@ import {
 
 const QUOTED_AT = '2026-08-03T18:23:00.000Z';
 const METRICS_AS_OF = '2026-07-31T20:00:00.000Z';
+
+/**
+ * The reference instant every test passes explicitly — one minute after {@link QUOTED_AT}, so
+ * the quote is comfortably fresh. `valuePosition` reads no clock, so nothing in this file
+ * depends on when it runs: the freshness assertions below move `nowMs`, never the system time.
+ */
+const NOW = Date.parse(QUOTED_AT) + 60_000;
 
 /** A held row with both layers populated: nightly close metrics AND a valid basis. */
 const position = (over: Partial<ValuablePosition> = {}): ValuablePosition => ({
@@ -31,7 +42,7 @@ const quote = (over: Partial<LiveQuote> = {}): LiveQuote => ({
 
 describe('valuePosition — fallback order (#1833)', () => {
   it('live wins over close: the live price and quoted_at, not the stored close', () => {
-    const v = valuePosition(position(), quote());
+    const v = valuePosition(position(), quote(), NOW);
     expect(v.source).toBe('live');
     expect(v.price).toBe(120);
     expect(v.asOf).toBe(QUOTED_AT);
@@ -40,7 +51,7 @@ describe('valuePosition — fallback order (#1833)', () => {
   });
 
   it('close is used when there is no live row, labelled as a close', () => {
-    const v = valuePosition(position(), undefined);
+    const v = valuePosition(position(), undefined, NOW);
     expect(v.source).toBe('close');
     expect(v.price).toBe(110);
     expect(v.asOf).toBe(METRICS_AS_OF);
@@ -49,31 +60,38 @@ describe('valuePosition — fallback order (#1833)', () => {
   it('close prefers the STORED unrealized_pnl_pct over recomputing (it is the record)', () => {
     // Recomputing 100 → 110 would give 10.0; the record says 9.87 (the batch resolved its
     // own basis). The persisted series wins so the overlay cannot disagree with it.
-    const v = valuePosition(position({ unrealized_pnl_pct: 9.87 }), null);
+    const v = valuePosition(position({ unrealized_pnl_pct: 9.87 }), null, NOW);
     expect(v.source).toBe('close');
     expect(v.unrealizedPct).toBe(9.87);
   });
 
   it('close recomputes only when the record carries no percentage', () => {
-    const v = valuePosition(position({ unrealized_pnl_pct: null }), null);
+    const v = valuePosition(position({ unrealized_pnl_pct: null }), null, NOW);
     expect(v.source).toBe('close');
     expect(v.unrealizedPct).toBeCloseTo(10, 10);
   });
 
   it('unavailable when neither lane has anything — never 0, never a midpoint', () => {
-    const v = valuePosition(position({ current_price: null, metrics_as_of: null }), undefined);
-    expect(v).toEqual({ source: 'unavailable', price: null, unrealizedPct: null, asOf: null });
+    const v = valuePosition(position({ current_price: null, metrics_as_of: null }), undefined, NOW);
+    expect(v).toEqual({
+      source: 'unavailable',
+      price: null,
+      unrealizedPct: null,
+      asOf: null,
+      isFresh: false,
+      ageMs: null,
+    });
   });
 
   it('unavailable when the close has a price but no metrics_as_of (an unattributed close)', () => {
-    const v = valuePosition(position({ metrics_as_of: null }), undefined);
+    const v = valuePosition(position({ metrics_as_of: null }), undefined, NOW);
     expect(v.source).toBe('unavailable');
   });
 
   it('a non-positive live mark (halted symbol) falls through to the close, not to −100%', () => {
     // Migration 063 declined a `price > 0` CHECK because Finnhub returns 0 for a halted or
     // unrecognised symbol and leaves consumers to gate on the value.
-    const v = valuePosition(position(), quote({ price: 0 }));
+    const v = valuePosition(position(), quote({ price: 0 }), NOW);
     expect(v.source).toBe('close');
     expect(v.unrealizedPct).toBe(10);
   });
@@ -82,8 +100,8 @@ describe('valuePosition — fallback order (#1833)', () => {
 describe('valuePosition — entry basis guard (no Infinity, no NaN)', () => {
   for (const entry of [null, 0, -12.5] as const) {
     it(`unavailable when entry_price is ${String(entry)}`, () => {
-      const withLive = valuePosition(position({ entry_price: entry }), quote());
-      const withCloseOnly = valuePosition(position({ entry_price: entry }), undefined);
+      const withLive = valuePosition(position({ entry_price: entry }), quote(), NOW);
+      const withCloseOnly = valuePosition(position({ entry_price: entry }), undefined, NOW);
       expect(withLive.source).toBe('unavailable');
       expect(withLive.unrealizedPct).toBeNull();
       expect(withCloseOnly.source).toBe('unavailable');
@@ -100,25 +118,25 @@ describe('valuePosition — entry basis guard (no Infinity, no NaN)', () => {
       unrealized_pnl_pct: null,
       metrics_as_of: METRICS_AS_OF,
     };
-    expect(valuePosition(cash, undefined).source).toBe('unavailable');
+    expect(valuePosition(cash, undefined, NOW).source).toBe('unavailable');
     // Explicit even if the sleeve were ever handed a price and a basis: it is a NAV split
     // line, not an instrument.
-    expect(valuePosition({ ...cash, entry_price: 1, current_price: 1 }, quote()).source).toBe(
+    expect(valuePosition({ ...cash, entry_price: 1, current_price: 1 }, quote(), NOW).source).toBe(
       'unavailable'
     );
-    expect(valuePosition({ ...cash, ticker: ' cash ' }, undefined).source).toBe('unavailable');
+    expect(valuePosition({ ...cash, ticker: ' cash ' }, undefined, NOW).source).toBe('unavailable');
   });
 });
 
 describe('valuePosition — scale and immutability', () => {
   it('unrealizedPct is in PERCENT POINTS: 1.24, not 0.0124 (matches change_pct)', () => {
-    const v = valuePosition(position({ entry_price: 100 }), quote({ price: 101.24 }));
+    const v = valuePosition(position({ entry_price: 100 }), quote({ price: 101.24 }), NOW);
     expect(v.unrealizedPct).toBeCloseTo(1.24, 10);
     expect(v.unrealizedPct).not.toBeCloseTo(0.0124, 6);
   });
 
   it('a negative move is a negative percentage, not an absolute one', () => {
-    const v = valuePosition(position({ entry_price: 200 }), quote({ price: 150 }));
+    const v = valuePosition(position({ entry_price: 200 }), quote({ price: 150 }), NOW);
     expect(v.unrealizedPct).toBeCloseTo(-25, 10);
   });
 
@@ -130,7 +148,7 @@ describe('valuePosition — scale and immutability', () => {
     const before = { ...p };
     const q = quote();
     const qBefore = { ...q };
-    const v = valuePosition(p, q);
+    const v = valuePosition(p, q, NOW);
 
     expect(p).toEqual(before);
     expect(p.current_price).toBe(110);
@@ -143,8 +161,8 @@ describe('valuePosition — scale and immutability', () => {
   });
 
   it('two unavailable results are distinct objects (no shared mutable sentinel)', () => {
-    const a = valuePosition(position({ entry_price: null }), undefined);
-    const b = valuePosition(position({ entry_price: null }), undefined);
+    const a = valuePosition(position({ entry_price: null }), undefined, NOW);
+    const b = valuePosition(position({ entry_price: null }), undefined, NOW);
     expect(a).toEqual(b);
     expect(a).not.toBe(b);
   });
@@ -250,5 +268,130 @@ describe('normalizeTimestamptz — both lanes render quoted_at differently', () 
     expect(normalizeTimestamptz(1_767_000_000)).toBeNull();
     expect(normalizeTimestamptz('   ')).toBeNull();
     expect(normalizeTimestamptz('not a timestamp')).toBe('not a timestamp');
+  });
+});
+
+describe('freshness primitives — quoted_at is the only recency source (#1833/#1834)', () => {
+  it('pins the threshold to the publisher cadence: five 60s cycles', () => {
+    // pg_cron drives `prices-live` once every 60s behind a 50s lease (migration 064). If that
+    // cadence ever changes, this assertion is the reminder that the threshold derives from it.
+    expect(LIVE_QUOTE_FRESH_MS).toBe(5 * 60 * 1000);
+  });
+
+  it('quoteAgeMs measures against the SUPPLIED instant, never a real clock', () => {
+    expect(quoteAgeMs(QUOTED_AT, Date.parse(QUOTED_AT) + 90_000)).toBe(90_000);
+    // The same stamp with a different reference instant gives a different age — proof the
+    // function has no hidden clock of its own.
+    expect(quoteAgeMs(QUOTED_AT, Date.parse(QUOTED_AT) + 7_200_000)).toBe(7_200_000);
+  });
+
+  it('quoteAgeMs clamps a future stamp to 0 (exchange clock vs browser clock skew)', () => {
+    expect(quoteAgeMs(QUOTED_AT, Date.parse(QUOTED_AT) - 3_000)).toBe(0);
+  });
+
+  it('quoteAgeMs returns null when there is nothing comparable', () => {
+    expect(quoteAgeMs(null, NOW)).toBeNull();
+    expect(quoteAgeMs(undefined, NOW)).toBeNull();
+    expect(quoteAgeMs('', NOW)).toBeNull();
+    expect(quoteAgeMs('not a timestamp', NOW)).toBeNull();
+    expect(quoteAgeMs(QUOTED_AT, Number.NaN)).toBeNull();
+  });
+
+  it('isQuoteFresh is inclusive AT the threshold and stale one millisecond past it', () => {
+    expect(isQuoteFresh(LIVE_QUOTE_FRESH_MS)).toBe(true);
+    expect(isQuoteFresh(LIVE_QUOTE_FRESH_MS + 1)).toBe(false);
+    expect(isQuoteFresh(0)).toBe(true);
+  });
+
+  it('isQuoteFresh treats an UNKNOWN age as not fresh (fail loud)', () => {
+    expect(isQuoteFresh(null)).toBe(false);
+  });
+
+  it('formatQuoteAge is coarse and never negative', () => {
+    expect(formatQuoteAge(0)).toBe('0s');
+    expect(formatQuoteAge(45_000)).toBe('45s');
+    expect(formatQuoteAge(12 * 60_000)).toBe('12m');
+    expect(formatQuoteAge(3 * 3_600_000)).toBe('3h');
+    expect(formatQuoteAge(18.63 * 3_600_000)).toBe('18h'); // the age measured in production
+    expect(formatQuoteAge(3 * 86_400_000)).toBe('3d');
+    expect(formatQuoteAge(null)).toBeNull();
+  });
+});
+
+describe('valuePosition — provenance and freshness are separate claims', () => {
+  const AGE = (ms: number) => Date.parse(QUOTED_AT) + ms;
+
+  it('a quote inside the window is live AND fresh, with its age', () => {
+    const v = valuePosition(position(), quote(), AGE(60_000));
+    expect(v.source).toBe('live');
+    expect(v.isFresh).toBe(true);
+    expect(v.ageMs).toBe(60_000);
+  });
+
+  it('an 18-hour-old quote keeps source live (provenance) but is NOT fresh', () => {
+    // The production reading on 2026-08-04: rows present, `quoted_at` 18.6h old, and the table
+    // rendering them as "live". `source` still says where the mark came from — that is a fact —
+    // and `isFresh` is what withholds the word.
+    const stale = valuePosition(position(), quote(), AGE(18.63 * 3_600_000));
+    expect(stale.source).toBe('live');
+    expect(stale.isFresh).toBe(false);
+    expect(formatQuoteAge(stale.ageMs)).toBe('18h');
+  });
+
+  it('the VALUE is identical fresh or stale — only the label moves', () => {
+    const fresh = valuePosition(position(), quote(), AGE(1_000));
+    const stale = valuePosition(position(), quote(), AGE(9 * 3_600_000));
+    expect(stale.price).toBe(fresh.price);
+    expect(stale.unrealizedPct).toBe(fresh.unrealizedPct);
+    expect(stale.asOf).toBe(fresh.asOf);
+    expect(stale.source).toBe(fresh.source);
+    expect(stale.isFresh).not.toBe(fresh.isFresh);
+  });
+
+  it('is fresh EXACTLY at the threshold and stale one millisecond later', () => {
+    expect(valuePosition(position(), quote(), AGE(LIVE_QUOTE_FRESH_MS)).isFresh).toBe(true);
+    expect(valuePosition(position(), quote(), AGE(LIVE_QUOTE_FRESH_MS + 1)).isFresh).toBe(false);
+  });
+
+  it('a quote stamped slightly ahead of the reader clock is fresh, not negatively aged', () => {
+    const v = valuePosition(position(), quote(), AGE(-5_000));
+    expect(v.isFresh).toBe(true);
+    expect(v.ageMs).toBe(0);
+  });
+
+  it('an unparseable quoted_at yields an unknown age and therefore no freshness claim', () => {
+    const v = valuePosition(position(), quote({ quotedAt: 'not a timestamp' }), NOW);
+    expect(v.source).toBe('live'); // the mark is still the quote's
+    expect(v.price).toBe(120);
+    expect(v.ageMs).toBeNull();
+    expect(v.isFresh).toBe(false);
+  });
+
+  it('freshness is PER TICKER: one frozen symbol, one ticking, same reference instant', () => {
+    // No global "is the market open?" test could tell these apart — both rows exist, both are
+    // mid-session, and only their own `quoted_at` distinguishes them.
+    const at = Date.parse('2026-08-04T20:00:00.000Z');
+    const ticking = valuePosition(position({ ticker: 'XLE' }), quote({ quotedAt: '2026-08-04T19:59:30.000Z' }), at);
+    const frozen = valuePosition(position({ ticker: 'TLT' }), quote({ quotedAt: '2026-08-04T15:08:00.000Z' }), at);
+    expect(ticking.isFresh).toBe(true);
+    expect(frozen.isFresh).toBe(false);
+    expect(frozen.source).toBe('live');
+    expect(formatQuoteAge(frozen.ageMs)).toBe('4h');
+  });
+
+  it('a close is never fresh, whatever the instant — and !isFresh alone cannot mean "stale quote"', () => {
+    const v = valuePosition(position(), undefined, Date.parse(METRICS_AS_OF) + 1_000);
+    expect(v.source).toBe('close');
+    // Even one second after the batch wrote it. A close is dated by its day and labelled a
+    // close; `isFresh` is a claim only a live quote can earn, so a consumer must gate on
+    // `source === 'live' && isFresh` rather than on `!isFresh`.
+    expect(v.isFresh).toBe(false);
+    expect(v.ageMs).toBe(1_000);
+  });
+
+  it('an unavailable valuation carries no freshness and no age', () => {
+    const v = valuePosition(position({ entry_price: null }), quote(), NOW);
+    expect(v.isFresh).toBe(false);
+    expect(v.ageMs).toBeNull();
   });
 });

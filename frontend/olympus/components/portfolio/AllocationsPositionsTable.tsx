@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { pnlColor } from '@/components/ui';
 import type { BookReconciliation } from '@/lib/book-reconciliation';
-import { valuePosition, type Valuation } from '@/lib/live-valuation';
+import { formatQuoteAge, valuePosition, type Valuation } from '@/lib/live-valuation';
 import { useLivePrices } from '@/lib/hooks/use-live-prices';
 import RiskEnvelopeCell from '@/components/portfolio/RiskEnvelopeCell';
 import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
@@ -32,6 +32,11 @@ import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-an
  */
 export default function AllocationsPositionsTable(props: {
   reconciliation: BookReconciliation;
+  /**
+   * Reference instant for the freshness gate. Omit it in the app — the ticking clock below
+   * supplies it. Tests pass a fixed value so a label assertion is not a clock assertion.
+   */
+  nowMs?: number;
 }) {
   const { reconciliation } = props;
   const searchParams = useSearchParams();
@@ -53,6 +58,12 @@ export default function AllocationsPositionsTable(props: {
   // back through valuePosition rather than being blanked.
   const tickers = useMemo(() => sorted.map((p) => p.ticker.toUpperCase()), [sorted]);
   const quotes = useLivePrices(tickers);
+
+  // THE ONLY CLOCK IN THIS FEATURE. lib/live-valuation.ts stays pure and takes the instant as
+  // an argument; the default is read here, at the boundary, and once per render so every row is
+  // judged against the same instant.
+  const ticking = useNowMs();
+  const nowMs = props.nowMs ?? ticking;
 
   return (
     <div
@@ -89,8 +100,9 @@ export default function AllocationsPositionsTable(props: {
             {sorted.map((p) => {
                   const tickerKey = p.ticker.toUpperCase();
                   const isSelected = selectedTicker === tickerKey;
-                  // live quote → close → nothing. Never a 0, never a midpoint.
-                  const valuation = valuePosition(p, quotes[tickerKey]);
+                  // live quote → close → nothing. Never a 0, never a midpoint. `nowMs` decides
+                  // only the LABEL (`isFresh`), never which mark is used or what it computes to.
+                  const valuation = valuePosition(p, quotes[tickerKey], nowMs);
                   return (
                       <tr key={p.ticker}
                         ref={(el) => {
@@ -165,6 +177,38 @@ export default function AllocationsPositionsTable(props: {
   );
 }
 
+/** How often the freshness clock advances. See {@link useNowMs}. */
+const CLOCK_TICK_MS = 30_000;
+
+/**
+ * A wall clock that advances on its own, for the freshness labels to age against.
+ *
+ * WHY IT HAS TO TICK, rather than being sampled once. A label derived from a clock read at
+ * mount would never go stale: a ticker that freezes AFTER mount keeps a `quoted_at` newer than
+ * the sampled instant, so its age stays 0 and it reads "live" for as long as the tab is open —
+ * which is exactly the per-ticker mid-session freeze this gate exists for. Realtime re-renders
+ * do not cover it either: when the whole feed goes quiet (at the close, or when it breaks) no
+ * quote arrives, so nothing would re-render and the last labels would sit there overnight.
+ *
+ * WHY NOT `Date.now()` IN THE RENDER BODY: `react-hooks/purity` is an error in this config, and
+ * rightly — an impure render read is unstable across re-renders. The clock is read inside an
+ * effect callback instead, which is a legal place for it, and enters render as state.
+ *
+ * `CLOCK_TICK_MS` is 30s against a five-minute threshold, so a label is at most 30s late, and
+ * the cost is one state update per 30s for the whole table. The lazy initial value differs
+ * between the static prerender and hydration, which is safe here and not by luck: the first
+ * render on both sides has an EMPTY quote map, so no row takes the live branch and no
+ * clock-derived text is in either output (the close branch is dated by day, never by age).
+ */
+function useNowMs(intervalMs = CLOCK_TICK_MS): number {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return nowMs;
+}
+
 /**
  * The since-entry return at the current moment, with the provenance that makes it readable.
  *
@@ -175,6 +219,13 @@ export default function AllocationsPositionsTable(props: {
  * timestamp sits in the tooltip for mouse users, and the whole sentence is in an sr-only span
  * for assistive tech. Colour (via `pnlColor`) only ever repeats the sign, which the leading
  * `+`/`−` already carries.
+ *
+ * THREE LABELS, NOT TWO, because "a `prices_live` row exists" and "this number is current" are
+ * different facts and the word "live" is a claim about the second. A quote past
+ * `LIVE_QUOTE_FRESH_MS` still supplies the figure — it is the best mark available and dropping
+ * it would show LESS — but it loses the word and gets its age and instant instead. Whichever of
+ * the three it is, the value is identical; only the label moves. The gate is
+ * `source === 'live' && isFresh`: `!isFresh` alone is true of every close as well.
  *
  * `unavailable` renders the table's em-dash convention. NOT 0% — a fabricated zero reads as a
  * real "flat" — and not a blank cell either.
@@ -190,12 +241,23 @@ function MarkFigure({ ticker, valuation }: { ticker: string; valuation: Valuatio
     );
   }
   const signed = `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
-  const isLive = valuation.source === 'live';
+  const fromQuote = valuation.source === 'live';
+  const isCurrent = fromQuote && valuation.isFresh;
+  const age = formatQuoteAge(valuation.ageMs);
   const detail = attributionDetail(valuation);
+  // The visible marker is a word (or a word plus an age) in every branch — never a colour, and
+  // never the bare "live" on a quote that stopped advancing.
+  const badge = isCurrent ? 'live' : fromQuote ? (age ? `stale ${age}` : 'stale') : 'close';
+  const lead = isCurrent ? 'Live' : fromQuote ? 'Stale quote' : 'Last close';
+  const provenance = isCurrent
+    ? 'from a live quote'
+    : fromQuote
+      ? `from a quote that has not advanced${age ? ` in ${age}` : ''}`
+      : 'from the last official close';
   return (
     <span
       className="flex items-baseline gap-1"
-      title={`${isLive ? 'Live' : 'Last close'} · ${signed} since entry · ${detail}`}
+      title={`${lead} · ${signed} since entry · ${detail}`}
     >
       <span
         className={`font-mono text-[11px] font-medium tabular-nums ${pnlColor(pct)}`}
@@ -207,17 +269,18 @@ function MarkFigure({ ticker, valuation }: { ticker: string; valuation: Valuatio
         className="font-mono text-[0.55rem] uppercase tracking-[0.12em] text-ink-mute"
         aria-hidden
       >
-        {isLive ? 'live' : 'close'}
+        {badge}
       </span>
       <span className="sr-only">
-        {`${ticker}: ${signed} since entry, ${isLive ? 'from a live quote' : 'from the last official close'}, ${detail}.`}
+        {`${ticker}: ${signed} since entry, ${provenance}, ${detail}.`}
       </span>
     </span>
   );
 }
 
 /**
- * The as-of phrase for a valuation, formatted from the ISO string ONLY.
+ * The as-of phrase for a valuation, formatted from the ISO string ONLY. It is what a stale
+ * quote gets INSTEAD of the word "live" — the instant, stated exactly, rather than a claim.
  *
  * Deliberately not `toLocale*`: this table is prerendered by the static export (`output:
  * "export"`) and then hydrated in a browser on some other timezone, so a locale-formatted

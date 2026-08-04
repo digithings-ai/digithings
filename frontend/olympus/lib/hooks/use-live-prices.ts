@@ -15,7 +15,11 @@
  *
  * A row's mere PRESENCE is not "live enough" on its own — `quoted_at` stops advancing when
  * the market closes, so anything rendering a freshness badge must read that timestamp
- * ({@link LiveQuote.quotedAt}) rather than infer recency from the key existing.
+ * ({@link LiveQuote.quotedAt}) rather than infer recency from the key existing. That gate is
+ * not in this file, by design: the hook reports the table honestly, and `valuePosition`
+ * (lib/live-valuation.ts) turns `quoted_at` into `Valuation.isFresh` by testing its age
+ * against `LIVE_QUOTE_FRESH_MS`. Presence still decides `source: 'live'`, which is PROVENANCE;
+ * `isFresh` is the separate claim, and it is the only thing that may license the word "live".
  */
 
 import { useEffect, useId, useState } from "react";
@@ -42,8 +46,48 @@ import {
  * error, just quotes that never arrive. Deriving the topic per instance is what prevents it.
  * (Same trap as frontend/digiquant-web/lib/live/useLivePrices.ts, which documents the
  * realtime-js line numbers.)
+ *
+ * PER-INSTANCE IS NECESSARY BUT NOT SUFFICIENT — hence {@link channelSeq}, appended after the
+ * instance id. `useId` is constant for the life of a hook instance, so it distinguishes two
+ * MOUNTED consumers but NOT two SUCCESSIVE subscriptions of the SAME instance. Those overlap,
+ * because `removeChannel()` IS NOT SYNCHRONOUS: it calls `channel.unsubscribe()`, phoenix sets
+ * the channel's state to `leaving` and waits for the server's reply (or a 10s timeout), and the
+ * client's `_remove` runs only from that channel's `_onClose`. Until then the channel is STILL
+ * IN `client.channels`. An effect re-run inside that window therefore gets the DYING channel
+ * back from `channel()`; `.on()` appends a SECOND postgres_changes binding to it; `.subscribe()`
+ * no-ops, because realtime-js wraps the join in `if (channelAdapter.isClosed())` and `leaving`
+ * is not `closed`; then the pending leave reply closes it. The realtime lane is dead for the
+ * rest of that mount, and silently — no exception, no console error, no subscribe-status
+ * callback. Only the seed still resolves, so the table goes on showing a figure sourced from a
+ * quote that will never advance again.
+ *
+ * That window is one click wide: components/portfolio/tabs/AllocationsTab.tsx toggles
+ * positions↔activity, and PortfolioShellInner remounts the holdings tab on tab navigation.
+ * Verified against the installed @supabase/realtime-js 2.104.0 — DO NOT "simplify" either half
+ * of the topic away.
  */
 const CHANNEL_PREFIX = "olympus-prices-live";
+/**
+ * Monotonic per-SUBSCRIPTION discriminator. Incremented in the effect BODY, never during
+ * render: a render-phase mutation is not idempotent, and React would double-fire it under
+ * StrictMode. Module scope (not a ref) is deliberate — uniqueness must hold across every
+ * consumer sharing the one `RealtimeClient`, which is what dedupes by topic.
+ */
+let channelSeq = 0;
+
+/**
+ * The topic for ONE subscription: prefix + hook instance + counter. CALL IT FROM AN EFFECT,
+ * never from render — it mutates {@link channelSeq}.
+ *
+ * Exported so the contract that matters ("no two subscriptions ever share a topic, not even
+ * two subscriptions of the same hook instance") is testable in a node environment, without a
+ * DOM or a renderer to drive the effect. It is the whole fix for a silent dead lane; see
+ * {@link CHANNEL_PREFIX} for the mechanism and why nothing surfaces when it regresses.
+ */
+export function nextChannelTopic(instanceId: string): string {
+  return `${CHANNEL_PREFIX}-${instanceId}-${channelSeq++}`;
+}
+
 const TABLE = "prices_live" as const;
 /**
  * `postgres_changes` fires ONE EVENT PER ROW — up to ~25 per publisher minute, not one per
@@ -151,8 +195,12 @@ export function useLivePrices(
       setQuotes((prev) => mergeQuotes(prev, batch));
     };
 
+    // Topic = prefix + instance + subscription, minted HERE in the effect body. See
+    // CHANNEL_PREFIX: the instance id keeps two mounted consumers apart, and the counter keeps
+    // THIS consumer's next subscription off the still-dying channel its previous one left
+    // behind in `client.channels`.
     const channel = client
-      .channel(`${CHANNEL_PREFIX}-${instanceId}`)
+      .channel(nextChannelTopic(instanceId))
       .on<Record<string, unknown>>(
         "postgres_changes",
         { event: "*", schema: "public", table: TABLE },

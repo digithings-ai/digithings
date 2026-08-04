@@ -1,6 +1,6 @@
 'use client';
 
-import type { Valuation } from '@/lib/live-valuation';
+import { formatQuoteAge, type Valuation } from '@/lib/live-valuation';
 
 /**
  * Advisory risk envelope (relocated from System's PositionRiskTab). stop_loss_pct is a
@@ -39,6 +39,10 @@ export default function RiskEnvelopeCell({
    * Where the position is trading now, in percent points vs entry, with its provenance.
    * Omitted, null, or `source: 'unavailable'` hides the marker — a marker parked at the
    * midpoint is indistinguishable from a real reading and is worse than none.
+   *
+   * A STALE quote (`source: 'live'`, `isFresh: false`) still gets its marker drawn: it is the
+   * best mark available and hiding it would show less than the truth. What changes is the
+   * spoken label, which states the quote's age instead of calling it live.
    */
   valuation?: Valuation | null;
 }) {
@@ -164,7 +168,18 @@ function positionMark(
           ? 'through the stop'
           : 'below the plotted range'
         : 'inside the stop-to-target range';
-  const basis = valuation.source === 'live' ? 'live' : 'at the last close';
+  // THE GATE IS `source === 'live' && isFresh`, both halves. `source` alone would call a quote
+  // that stopped advancing 18 hours ago "live"; `isFresh` alone is false on every close too, so
+  // it would describe an ordinary close as a stale quote. Neither claim is the other's.
+  const age = formatQuoteAge(valuation.ageMs);
+  const basis =
+    valuation.source !== 'live'
+      ? 'at the last close'
+      : valuation.isFresh
+        ? 'live'
+        : age
+          ? `on a quote ${age} old`
+          : 'on a quote of unknown age';
   return {
     leftPct,
     pinned,

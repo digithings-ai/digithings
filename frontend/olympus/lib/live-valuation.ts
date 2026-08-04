@@ -27,6 +27,21 @@
  * current from stale. So every result carries the `source` that produced it and the `asOf`
  * that source stamps — `quoted_at` for live, `metrics_as_of` for a close — and callers are
  * expected to label them differently.
+ *
+ * PROVENANCE AND FRESHNESS ARE TWO DIFFERENT CLAIMS, and conflating them reproduces the very
+ * ambiguity above. `source: 'live'` says only WHERE the mark came from: a `prices_live` row
+ * supplied it. It does NOT say the mark is current, because rows in that table persist
+ * indefinitely — the publisher only upserts (migration 063 defines no DELETE path) and is
+ * idle outside 13:00–01:00 UTC Mon–Fri — so a row is present all night, all weekend, and
+ * right through a per-ticker feed freeze. Measured in production on 2026-08-04: 20 rows whose
+ * `quoted_at` ranged from 13.8 to 18.6 hours old, and, within one session, two tickers five
+ * hours apart. Hence {@link Valuation.isFresh}, the separate age test against
+ * {@link LIVE_QUOTE_FRESH_MS}: `source` licenses the ATTRIBUTION, `isFresh` licenses the WORD
+ * "live". The value never changes — only the label.
+ *
+ * The reference instant is a PARAMETER ({@link valuePosition}'s `nowMs`), never a clock read
+ * in here. This module has no default for it: freshness has to be deterministic under test,
+ * and the only place allowed to reach for a real clock is the component boundary.
  */
 
 /** A usable quote from `public.prices_live`, keyed by ticker in {@link LiveQuoteMap}. */
@@ -50,7 +65,10 @@ export interface LiveQuote {
 /** Live quotes keyed by UPPERCASE ticker. Absent key = no live coverage for that symbol. */
 export type LiveQuoteMap = Readonly<Record<string, LiveQuote>>;
 
-/** Which layer produced a {@link Valuation}. `unavailable` renders nothing — never a 0. */
+/**
+ * Which layer produced a {@link Valuation} — PROVENANCE, not recency. `unavailable` renders
+ * nothing — never a 0. Whether a `live` mark may be CALLED live is {@link Valuation.isFresh}.
+ */
 export type ValuationSource = 'live' | 'close' | 'unavailable';
 
 export interface Valuation {
@@ -61,7 +79,44 @@ export interface Valuation {
   unrealizedPct: number | null;
   /** `quoted_at` for `live`, `metrics_as_of` for `close`, null when unavailable. */
   asOf: string | null;
+  /**
+   * Whether `asOf` is recent enough for the figure to be presented as CURRENT — the freshness
+   * claim `source` deliberately does not make (see the header). True only for a `live` mark
+   * whose `quoted_at` is within {@link LIVE_QUOTE_FRESH_MS} of the caller's `nowMs`.
+   *
+   * FALSE on every `close` and `unavailable` result, so a UI branch must gate on
+   * `source === 'live' && isFresh`. Branching on `!isFresh` ALONE mislabels a perfectly
+   * ordinary close as a stale quote — the mistake RiskEnvelopeCell's `basis` line invites.
+   */
+  isFresh: boolean;
+  /**
+   * Age of `asOf` at the caller's `nowMs`, in milliseconds; null when it cannot be computed.
+   * Populated for a `close` too (the field means "age of `asOf`", uniformly), but nothing
+   * renders it there: a close is dated by its DAY, and a clock-derived age on the close branch
+   * would differ between the static prerender and hydration.
+   */
+  ageMs: number | null;
 }
+
+/**
+ * How recent `quoted_at` must be for a live mark to be called CURRENT, in milliseconds.
+ *
+ * Taken from the publisher's real cadence, not picked for roundness: pg_cron invokes the
+ * `prices-live` edge function ONCE EVERY 60s during extended US market hours, behind a
+ * 50-second refresh lease (migration 064, lines 9-11 and 136-139). So a covered ticker's
+ * `quoted_at` advances about once a minute while the feed is ticking, and five minutes is FIVE
+ * CONSECUTIVE MISSED CYCLES — well past cron jitter, an edge-function cold start, or a single
+ * retry, and therefore unambiguous evidence that the feed is not currently ticking FOR THAT
+ * TICKER. A tighter bound (one or two cycles) would flap on ordinary jitter.
+ *
+ * Erring tight is deliberate and cheap. `quoted_at` is the EXCHANGE tick time, so a thinly
+ * traded symbol can genuinely sit still for minutes with the market wide open, and this
+ * threshold then declines to call it live. That is the honest outcome, because the figure is
+ * still rendered either way — it remains the best mark available — and only the CLAIM changes,
+ * from the word "live" to the instant it was actually quoted at. The failure being prevented
+ * is the asymmetric one: a number labelled "live" whose quote last moved 18 hours ago.
+ */
+export const LIVE_QUOTE_FRESH_MS = 5 * 60 * 1000;
 
 /**
  * The fields {@link valuePosition} reads. A structural subset satisfied by both the
@@ -208,9 +263,67 @@ export function mergeQuotes(
   return changed ? next : prev;
 }
 
+/**
+ * Age of an `asOf` stamp at `nowMs`, in milliseconds — null when there is nothing comparable
+ * (absent, or a value {@link normalizeTimestamptz} had to pass through verbatim).
+ *
+ * A NEGATIVE age is clamped to 0 rather than reported. `quoted_at` is stamped by the exchange
+ * and `nowMs` is read from the reader's machine, so a quote a few seconds "in the future" is
+ * ordinary clock skew, not a stale quote — it must count as fresh and must never render as
+ * "-3s old".
+ */
+export function quoteAgeMs(asOf: string | null | undefined, nowMs: number): number | null {
+  if (!asOf || !Number.isFinite(nowMs)) return null;
+  const ts = Date.parse(asOf);
+  if (!Number.isFinite(ts)) return null;
+  return Math.max(0, nowMs - ts);
+}
+
+/**
+ * Is a quote of this age recent enough to be CALLED live?
+ *
+ * Inclusive at the bound (`<=`): a quote exactly {@link LIVE_QUOTE_FRESH_MS} old is fresh, one
+ * millisecond older is not. A boundary has to fall on one side, and the threshold is already
+ * five times the publisher's period, so the inclusive side is the one that does not clip a
+ * quote that landed exactly on the last legitimate cycle.
+ *
+ * An UNKNOWN age (null — missing or unparseable stamp) is NOT fresh. Same direction
+ * lib/snapshot-staleness.ts fails: an unattributable figure must never be claimed as current.
+ */
+export function isQuoteFresh(ageMs: number | null, thresholdMs = LIVE_QUOTE_FRESH_MS): boolean {
+  return ageMs != null && ageMs <= thresholdMs;
+}
+
+/**
+ * A compact age for the not-current label — `45s`, `12m`, `3h`, `2d`. Null when unknown, and
+ * the caller then says so rather than printing a fabricated number.
+ *
+ * Deliberately COARSE: the exact instant is rendered beside it (see the table's
+ * `attributionDetail`), and a seconds-precision string would imply the figure is updating that
+ * often, which — for a quote this function is only asked about because it stopped advancing —
+ * is exactly the wrong impression.
+ */
+export function formatQuoteAge(ageMs: number | null): string | null {
+  if (ageMs == null || !Number.isFinite(ageMs)) return null;
+  const seconds = Math.max(0, Math.floor(ageMs / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
 /** Nothing to show. A fresh object each call, so no caller can alias a shared result. */
 function unavailable(): Valuation {
-  return { source: 'unavailable', price: null, unrealizedPct: null, asOf: null };
+  return {
+    source: 'unavailable',
+    price: null,
+    unrealizedPct: null,
+    asOf: null,
+    isFresh: false,
+    ageMs: null,
+  };
 }
 
 /**
@@ -227,8 +340,17 @@ function unavailable(): Valuation {
  * branch. The unit of meaning here is unrealized performance versus entry, so a mark with
  * no basis is not a partial valuation — and it is the guard that keeps a null or
  * non-positive `entry_price` from producing `Infinity`/`NaN` instead of a blank.
+ *
+ * `nowMs` is REQUIRED, and no clock is read in this module — see the header. It only ever
+ * affects {@link Valuation.isFresh} and {@link Valuation.ageMs}, i.e. the LABEL; the fallback
+ * order above, the chosen mark and `unrealizedPct` are identical whatever instant is passed. A
+ * quote that has gone stale is still the best mark available, so it is still the one returned.
  */
-export function valuePosition(position: ValuablePosition, quote?: LiveQuote | null): Valuation {
+export function valuePosition(
+  position: ValuablePosition,
+  quote: LiveQuote | null | undefined,
+  nowMs: number
+): Valuation {
   // Belt and braces: a CASH sleeve is a NAV split line, not an instrument. It has no basis
   // so the guard below would already catch it, but any price on it would be spurious and
   // 0% would read as "flat" rather than "not applicable".
@@ -241,11 +363,18 @@ export function valuePosition(position: ValuablePosition, quote?: LiveQuote | nu
   // it falls through to the close rather than rendering the position down ~100%.
   const livePrice = quote ? finiteNum(quote.price) : null;
   if (livePrice != null && livePrice > 0) {
+    const asOf = quote?.quotedAt || null;
+    // PER TICKER, from this row's own `quoted_at` — never from a global "is the market open?"
+    // test, which is precisely what misses the case that was measured: one ticker frozen at
+    // 15:08 UTC while its neighbours advanced to 20:00, all mid-session.
+    const ageMs = quoteAgeMs(asOf, nowMs);
     return {
       source: 'live',
       price: livePrice,
       unrealizedPct: ((livePrice - entry) / entry) * 100,
-      asOf: quote?.quotedAt || null,
+      asOf,
+      isFresh: isQuoteFresh(ageMs),
+      ageMs,
     };
   }
 
@@ -262,6 +391,10 @@ export function valuePosition(position: ValuablePosition, quote?: LiveQuote | nu
       price: closePrice,
       unrealizedPct: stored ?? ((closePrice - entry) / entry) * 100,
       asOf: closeAsOf,
+      // A close is NEVER fresh — that is what makes it a close, and it is labelled as one. The
+      // age is filled in for uniformity but is not rendered on this branch (see `ageMs`).
+      isFresh: false,
+      ageMs: quoteAgeMs(closeAsOf, nowMs),
     };
   }
 
