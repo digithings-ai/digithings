@@ -989,6 +989,16 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
 - Skills under `digiquant/src/digiquant/olympus/atlas/skills/` (alt-data, institutional,
   macro, asset-class, equity, sector-research, digest, …).
   Loaded via `digiquant.olympus.atlas.skills.load_skill`.
+  **Two shared instruction blocks are appended at the loader, not copied into the ~20 SKILL.md
+  files** — a single chokepoint cannot drift between them. `EDIT_SCHEMA_CONSTRAINTS` (#1740) goes
+  on edit skills only; `QUANTITATIVE_FINDING_RULES` (#1750) goes on **both** variants, because
+  the undated-number defect it addresses appeared on the FULL path (the frozen XLV block came
+  from a baseline run, which forces `resolve_edit_mode → full`). `Finding.as_of` is the field
+  those rules target: optional and lenient by necessity — edit-mode re-validates bodies derived
+  from prior published rows, so a required field would raise on all ~660 existing rows and #1641
+  would convert each into a full regeneration, and #1740 showed a strict constraint on an
+  informational field discards the whole patch. It makes a quoted figure auditable; it cannot
+  tell whether the figure is real.
 - Standalone CLI: `python -m digiquant.olympus.atlas.graph` — research-only consumers.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end (Atlas artifacts).
@@ -1411,6 +1421,32 @@ health purposes), more than `_HERMES_DEGRADED_PCT_DEFAULT` of the run's Hermes d
 failed, and `atlas_research_produced and not book_committed` (the no-book gate — closes the
 residual detection hole behind #1766, which the #1555 commit gate misses because it only
 fires once a book has *materialized*).
+
+### Spend alert — the one breakdown key that is NOT a contributor (#1764)
+
+`ATLAS_SPEND_ALERT_USD` (default $10) is a warning threshold on one chain invocation. Over it,
+`breakdown.spend_alert` is written, a warning is logged, and `_emit_ci_warning` raises a GitHub
+Actions `::warning::` annotation — the annotation is the part that makes this an alert rather
+than a record, since a jsonb key and a log line are both passive.
+
+**Alert only, by the owner's explicit decision.** Nothing in this path touches `status`,
+`retry_signal`, or the exit code. A mid-run abort would leave a partially-published run, and
+#1749/#1751 established that partial states are where the silent-staleness defects live. There
+are tests pinning the negative property; do not relax them into a ceiling without a new decision.
+
+It is computed in `_row` rather than through `register_breakdown_contributor` because **that seam
+is `state -> dict` and spend does not live in state** — it arrives in the `digigraph.usage`
+snapshot, which is only in scope at that call site. `models`, `by_kind` and `cached_tokens` set
+the precedent for a usage-derived breakdown key. Widening `summarize_run` to carry usage was
+considered and rejected: two of its three callers want only `retry_signal` and have no usage to
+pass. `diagnostics` imports `telemetry` lazily inside `_row` because `telemetry` imports
+`register_breakdown_contributor` from `diagnostics` — a module-level import is a cycle.
+
+Scope limit to state honestly when reading the key: the threshold is **per invocation, not per
+day**. `digigraph.usage` is process-global and `chain` calls `start()` once per process, so three
+outer-retry attempts at $6 each do not trip a $10 threshold on an $18 day. Since #1762 the day's
+true total *is* recoverable (`sum(est_cost_usd) … GROUP BY run_date` now sums across attempts),
+but that needs a query, so a daily aggregate belongs in a separate check.
 
 ### Extending `breakdown` — use the seam, not a new edit site
 

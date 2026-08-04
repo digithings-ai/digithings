@@ -196,7 +196,44 @@ retained paid fallbacks. PR-1 converts `alt-options-derivatives` to read the
 FRED vol complex (VIX/VIX3M/VXN/GVZ/OVX, in `config/macro_series.yaml`) via
 `get_macro_series` instead of a paid `web_search` (#708).
 
-`atlas_run_diagnostics.est_cost_usd` tracks each run; verify after changes.
+`atlas_run_diagnostics.est_cost_usd` tracks each run **attempt** (per-attempt keying since
+#1762 — before that the last outer-retry attempt overwrote the expensive one's cost on 28 of
+54 rows, so a day's total needs `sum(est_cost_usd) … GROUP BY run_date`, not one row); verify
+after changes.
+
+**Dated findings (#1750).** `Finding.as_of` carries the ISO date of the DATA a figure describes,
+and `skills.QUANTITATIVE_FINDING_RULES` — appended to every skill, full and edit, at the loader
+chokepoint — instructs the model to set it whenever a finding quotes a number. This exists
+because the `sector-healthcare` document served "XLV is at $162.16, up 5.46% from its 50-day SMA"
+on seven publication dates with no cue that the figure was old.
+
+Two things it deliberately does not do. It is **optional and lenient** by necessity: edit-mode
+re-validates bodies derived from prior published rows, so a required field would raise on all
+~660 existing rows and #1641 would turn each into a full regeneration; and a hard constraint on
+an informational field is what discarded whole patches in #1740. A loose value like `Jul 24` is
+normalized to ISO, and one that will not parse is kept verbatim rather than rejected — so treat a
+non-ISO `as_of` as human-readable only.
+
+And it **cannot detect a fabricated number.** `$162.16` was never an XLV close or intraday print
+on 2026-07-23 when it first appeared, and the payload attributed it to `price_technicals:XLV`.
+Dating a wrong number makes it auditable, not true. Grounding needs a numeric-fidelity validator
+cross-checking prose against `price_technicals`; that is not built.
+
+**Spend alert (#1764).** `ATLAS_SPEND_ALERT_USD` (default **$10**) is a warning threshold on a
+single chain invocation. Breaching it writes `breakdown.spend_alert`
+(`{threshold_usd, est_cost_usd, scope}`), logs a warning, and raises a GitHub Actions
+`::warning::` annotation on the run summary. It is **alert only** — by the owner's explicit
+decision it never aborts a run, never refuses a segment, and never touches `status`,
+`retry_signal`, or the exit code. Set it to `0` to silence the alert during a deliberately
+expensive backfill; a malformed value falls back to the default rather than disabling, because
+failing open on a typo would silently remove the alert.
+
+Two limits worth knowing before you rely on it. The threshold is **per invocation, not per
+day**: `digigraph.usage` accumulates in process-global state and the chain calls `start()` once
+per process, so three outer-retry attempts at $6 each will not trip a $10 threshold even though
+the day cost $18. And $10 is calibrated on observed runs ($4.00 on 07-31, $4.70 on 07-26,
+~$1.55 mean, against the $11.95 Jun 19 outlier below) — re-calibrate it if the model roster
+changes.
 
 ### OpenRouter model tiers (`config/olympus_models.yaml`)
 
