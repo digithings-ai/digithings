@@ -169,6 +169,13 @@ ruff_and_scripts:
   # PR editing only db-migrate.yml fires actionlint but NOT that guard — silent on exactly the
   # edit it exists to catch. Same shape as the prices-cron entry above.
   - .github/workflows/db-migrate.yml
+  # tests/scripts/test_pipeline_olympus_attempt.py asserts the outer-retry loop exports
+  # OLYMPUS_ATTEMPT, which is the only channel carrying the attempt number into the diagnostics
+  # key (#1762). This file IS listed under atlas_graph, but that lane's selector is
+  # `tests/dq/atlas tests/dq/hermes tests/dq/learning` — it never runs tests/scripts/. Drop the
+  # export and every attempt collides on (run_id, 1) again with no error anywhere; the only
+  # symptom is a cost figure that is quietly a floor.
+  - .github/workflows/pipeline-olympus.yml
 
 # Repo-wide actionlint. Deliberately the whole directory: before this filter the
 # only actionlint in CI was a job inside test-atlas-graph.yml pinned to

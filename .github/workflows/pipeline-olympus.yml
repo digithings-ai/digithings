@@ -186,6 +186,12 @@ jobs:
           while : ; do
             sleep "${OUTER_BACKOFF[$((attempt-1))]}"
             echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} (daily refresh_scope=${REFRESH_SCOPE}) ──"
+            # Thread the loop counter into the process so each attempt's diagnostics row is
+            # keyed per-attempt instead of overwriting the previous one (#1762). GITHUB_RUN_ID
+            # is identical across these attempts and stays the resume handle, so the attempt
+            # number is the only thing that can distinguish them. Exported (not an assignment
+            # prefix on CMD) because CMD is invoked through a pipe into `tee`.
+            export OLYMPUS_ATTEMPT="${attempt}"
             CMD=(uv run --frozen --no-sync python -m digiquant.olympus.hermes.chain
                  --cadence daily
                  --run-date "${RUN_DATE}"

@@ -81,7 +81,12 @@ export async function fetchObservabilityData(): Promise<ObservabilityData> {
   return { decisions: decisionsRes.rows };
 }
 
-const RUN_DIAGNOSTICS_LIMIT = 30;
+// Raised from 30 with migration 065 (#1762). The view now returns ONE ROW PER RETRY ATTEMPT,
+// so a date that took three attempts consumes three slots instead of one. At 30 the timeline
+// would show proportionally fewer distinct dates the moment retries became visible — and
+// retries are not rare: 28 of the 54 rows extant at migration time were collapsed multi-attempt
+// writes. 90 preserves ~30 distinct dates even if every one of them exhausts MAX_OUTER_ATTEMPTS.
+const RUN_DIAGNOSTICS_LIMIT = 90;
 
 /**
  * Read run health from the anon-readable `atlas_run_health` view (migration 041).
@@ -99,6 +104,10 @@ export async function fetchAtlasRunDiagnostics(): Promise<AtlasRunDiagnostics[]>
   );
   return res.rows.map((r) => ({
     run_id: r.run_id,
+    // `?? null` rather than `?? 1`: a row written before migration 065 carries 0, and a row
+    // read from an un-migrated view carries undefined. Both mean "unknown", and defaulting
+    // either to 1 would fabricate the provenance #1762 exists to stop fabricating.
+    attempt: r.attempt ?? null,
     run_type: r.run_type,
     run_date: r.run_date,
     model: r.model,
