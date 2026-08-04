@@ -20,10 +20,21 @@ export const metadata: Metadata = {
 // "eight shipping … plus two more marked roadmap" rather than the flat "ten"
 // the homepage uses. A page whose thesis is that every claim is checkable
 // cannot fold two unbuilt modules into a headline count), the
-// single compose file (root docker-compose.yml), per-request provider keys, and
-// the traceability surfaces (X-Request-ID middleware in digibase.http, the
-// JSONL audit trail in digibase.audit, DigiSmith spans). No adjectives standing
-// in for evidence — where a boundary exists, /security states it.
+// single compose file (root docker-compose.yml), provider credentials the stack
+// does not persist, and the traceability surfaces (X-Request-ID middleware in
+// digibase.http, the JSONL audit trail written by each service's audit_log() and
+// redacted through digibase.audit, DigiSmith spans). No adjectives standing in
+// for evidence — where a boundary exists, /security states it.
+//
+// "Bring your own tokens" says the stack PERSISTS no provider credentials, and
+// that they are "supplied per request or read from your own environment". It
+// deliberately does NOT say every provider key you hand it is forwarded on the
+// request, because that is not true today: digigraph/llm_auth.py's
+// push_byok_header() wires X-BYOK-Key through to the client for provider
+// "openai" and "openrouter" only. With provider "anthropic" the key is accepted,
+// parked on a contextvar, and the call still runs on the env-configured
+// credentials (llm_auth.py:92-96 — no set_byok branch). Fixing that path is
+// tracked on its own branch; until it lands, this copy must not promise it.
 // Page grammar is the site's own: .section / .wrap / .section-head / .kicker,
 // DtNav + Footer, no new CSS families.
 
@@ -47,15 +58,16 @@ const POSITION: { title: string; body: string }[] = [
   {
     title: "Bring your own tokens",
     body:
-      "Anthropic, OpenAI, or anything LiteLLM speaks. Keys are forwarded per request and not " +
-      "persisted by the stack; the model provider, the budget, and the data boundary stay yours.",
+      "Anthropic, OpenAI, or anything LiteLLM speaks. The stack persists no provider credentials — " +
+      "they are supplied per request or read from your own environment — so the model provider, the " +
+      "budget, and the data boundary stay yours.",
   },
   {
     title: "A glass box, not a black box",
     body:
-      "A correlation ID enters at the edge and rides every hop; workflow steps land in an " +
-      "append-only JSONL audit trail and in DigiSmith spans. You can read what the system did, " +
-      "step by step, after the fact.",
+      "A correlation ID enters at the edge and rides every hop; workflow steps land in a local " +
+      "JSONL audit trail — appended, never rewritten — and in DigiSmith spans. You can read what " +
+      "the system did, step by step, after the fact.",
   },
 ];
 
@@ -87,8 +99,9 @@ export default function AboutPage() {
           }
         >
           DigiThings is an open-source, modular AI infrastructure repository. Eight shipping modules
-          — orchestration, quant research, retrieval, chat, auth, tracing — plus two more marked
-          roadmap in the registry rather than quietly counted as built. You run them on your own
+          — orchestration, quant research, retrieval, chat, auth, tracing, heartbeat and audit, and
+          the shared library the rest sit on — plus two more marked roadmap in the registry rather
+          than quietly counted as built. You run them on your own
           hardware, against your own provider keys, with every step of every run readable
           afterwards. It is a set of parts you assemble, not a platform you move into.
         </PageHead>

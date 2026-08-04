@@ -46,6 +46,35 @@ export function PageHead({
   );
 }
 
+/** A warn-toned aside for copy that is not final.
+ *
+ *  Same frame as the legal skeletons' <DraftBanner> — role="note" so assistive
+ *  tech announces it as an aside, a warn hairline, a surface fill — generalised
+ *  so a non-legal page can carry a visible caveat. It exists because the
+ *  alternative failed a review: /services' unapproved engagement copy was
+ *  hedged only in a source comment, where no visitor looks, while the legal
+ *  pages (which invent far less) carried a banner. A caveat the reader cannot
+ *  see is not a caveat.
+ *
+ *  DraftBanner is deliberately NOT refactored to call this: its rendered output
+ *  on the three legal pages is verified, and re-plumbing it buys nothing here. */
+export function Notice({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div
+      role="note"
+      aria-label={label}
+      className="rounded-[12px] border border-warn bg-surface p-[1.1rem_1.2rem]"
+    >
+      <span className="block font-mono text-[0.68rem] uppercase tracking-[0.16em] text-warn">
+        {label}
+      </span>
+      <div className="mt-[0.5rem] max-w-[70ch] text-[0.9rem] leading-[1.65] text-ink-soft">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /** A hairline-ruled definition row — the shape used for control lists,
  *  residual-risk lists and gate lists. `term` is mono (it names a file, an
  *  env var or a rule); the body is sans. */

@@ -2,15 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Footer, Reveal } from "@digithings/web";
 import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "../_nav";
-import { PageHead, RuledList, RuledRow } from "../_company/prose";
+import { Notice, PageHead, RuledList, RuledRow } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
   title: "services — advisory, implementation, and support",
   description:
     "The stack is MIT-licensed and free to self-host. We also work directly with teams: " +
-    "architecture advisory, integration builds on top of DigiThings, and retained support for " +
-    "teams running it in production.",
+    "architecture advisory, integration builds on top of DigiThings, and continuing support for " +
+    "teams running it in production. Indicative scope — every engagement is scoped in writing.",
 };
 
 // /services — the commercial surface. Structured as three named engagements so
@@ -25,6 +25,20 @@ export const metadata: Metadata = {
 // >>> their bullet lists are a reasonable decomposition of that sentence, not
 // >>> an offering anyone has signed off. Read each `for` and `includes` line as
 // >>> a proposal.
+//
+// That caveat is RENDERED, not just commented. A <Notice label="Indicative
+// scope"> sits above the engagement cards, because hedging unapproved
+// commercial copy in a source comment hedges nothing — the visitor never reads
+// it. The legal skeletons, which invent far less than this page, carry a visible
+// banner; this page has less standing to hide its caveat, not more. If the owner
+// signs the copy off, remove the Notice in the same change that does it — and
+// only then.
+//
+// Keep the engagement copy descriptive rather than promissory for the same
+// reason ("Hands-on delivery: standing the stack up …", not "We stand the stack
+// up …"). And keep the voice honest about size: the roster on /team has one
+// entry, so nothing here may imply a bench. "the person who wrote the code",
+// singular.
 //
 // Deliberately absent, and it should stay that way until the owner says
 // otherwise:
@@ -73,9 +87,9 @@ const ENGAGEMENTS: Engagement[] = [
       "For a team that wants the stack wired into what they already run, or an application built " +
       "on top of it, and would rather not spend a quarter learning the internals first.",
     summary:
-      "Hands-on delivery. We stand the stack up in your environment, connect it to your identity " +
-      "provider, your data and your provider keys, and build the modules or the application layer " +
-      "you actually need on top.",
+      "Hands-on delivery: standing the stack up in your environment, connecting it to your identity " +
+      "provider, your data and your provider keys, and building the modules or the application " +
+      "layer you need on top.",
     includes: [
       "Self-hosted deployment in your environment — your hardware, your network, your keys",
       "Integration with your identity provider, data stores and existing services",
@@ -92,12 +106,12 @@ const ENGAGEMENTS: Engagement[] = [
       "upgrades and a direct line when something is unclear.",
     summary:
       "A continuing relationship rather than a project. The point is that upgrades stop being a " +
-      "research task and that your questions reach the people who wrote the code.",
+      "research task and that your questions reach the person who wrote the code.",
     includes: [
       "Upgrade planning and assistance as the stack moves — including breaking-change guidance",
       "A direct channel for questions and triage",
       "Review of changes your team makes against the same security and quality rubrics",
-      "Input into the roadmap, so the work you depend on is work we know about",
+      "Your priorities raised as issues in the public repository, so what you depend on is tracked where you can read it",
     ],
   },
 ];
@@ -160,7 +174,15 @@ export default function ServicesPage() {
                 whether you need a decision, a build, or a continuing relationship.
               </p>
             </Reveal>
-            <div className="grid gap-[1.1rem] md:grid-cols-3">
+            <Notice label="Indicative scope">
+              <p>
+                The three engagements below describe the <em>shape</em> of the work. They are not a
+                published offering with fixed contents, and nothing on this page is a quote, a
+                commitment, or a service level. What an engagement actually covers is agreed in
+                writing, per engagement, before anything starts.
+              </p>
+            </Notice>
+            <div className="mt-[1.4rem] grid gap-[1.1rem] md:grid-cols-3">
               {ENGAGEMENTS.map((e) => (
                 <Reveal key={e.name} className="mod-card">
                   <div className="mod-card-top">

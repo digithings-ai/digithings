@@ -63,9 +63,8 @@ const MEMBERS: Member[] = [
     blurb:
       "Sets the direction of the stack and writes most of it in public. The decisions that shape " +
       "DigiThings are visible in the repository rather than in a pitch: MIT from the first commit, " +
-      "self-hosting as the default rather than an enterprise tier, provider keys forwarded per " +
-      "request instead of stored, and a threat model that publishes its residual risks alongside " +
-      "its controls.",
+      "self-hosting as the default rather than an enterprise tier, provider credentials the stack " +
+      "never persists, and a threat model that publishes its residual risks alongside its controls.",
     avatar: "/team/chris.png",
     avatarSize: 460,
     github: "https://github.com/chrizefan",
@@ -87,8 +86,8 @@ export default function TeamPage() {
             </>
           }
         >
-          A small team, and a repository anyone can read. The work is public commit by commit, so
-          the most useful introduction to whoever builds this is the history itself.
+          One name on the roster today, and a repository anyone can read. The work is public commit
+          by commit, so the most useful introduction to whoever builds this is the history itself.
         </PageHead>
 
         <section className="section">

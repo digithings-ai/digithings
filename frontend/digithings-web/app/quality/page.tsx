@@ -33,19 +33,25 @@ export const metadata: Metadata = {
 // things, and conflating them would be a lie of omission.
 //   1. scripts/score.py — a stdlib-only regex heuristic. It runs in CI as the
 //      `score` job against the PR diff and exits non-zero below threshold, so
-//      it really does block. Its own docstring says it is "NOT a full static
-//      analyzer" and to "treat results as a checklist aide".
+//      it really does block. Its own docstring (scripts/score.py:14-15) says it
+//      is "NOT a full static analyzer" and to "Treat results as a checklist
+//      aide, not a gate" — quote that clause WHOLE. Lifting the first half while
+//      asserting the script blocks is exactly the selective move this page
+//      spends four paragraphs claiming not to make, so the page prints the
+//      disclaimer verbatim and then reconciles it against the workflow.
 //   2. docs/scoring/*.md — four ten-criterion rubrics the PR author self-scores
 //      in the pull-request template. Judgement, recorded; not machine-checked.
 // frontend/** is excluded from the score job (the rubrics are Python-oriented
 // and misfire on JS/CSS), as are the hook scripts that DEFINE the live-trading
 // detection regex and would otherwise self-match.
 //
-// Note also: the rubric files' own headers say "< 7 blocks merge" while
-// docs/scoring/README.md's table says merge is blocked below the target. That
-// is an internal inconsistency in the repo, so this page cites only the
-// thresholds both agree on — 8 / 8 / 7 / 9, which is also what score.py's
-// THRESHOLDS dict and CLAUDE.md carry.
+// Note also: the rubric files' own headers say "< 7 blocks merge" (SECURITY,
+// QUALITY), "< 8" (ACCURACY), "< 6" (OPTIMIZATION), while docs/scoring/README.md
+// and score.py's THRESHOLDS dict block below the target itself. The page links
+// docs/scoring/, so a reader who follows the link meets that disagreement — it
+// is therefore NAMED on the page rather than quietly omitted, and the page cites
+// the stricter 8 / 8 / 7 / 9 that score.py, the README and CLAUDE.md agree on.
+// The doc fix belongs in a docs change; do not silently paper over it here.
 
 const COUNTED_AT = "4 August 2026";
 
@@ -109,9 +115,10 @@ const LANES: { term: string; body: string }[] = [
   {
     term: "Per-component test lanes",
     body:
-      "Seventeen test workflows, one per component, fired by a path filter so a change to DigiKey " +
-      "does not wait on the quant suite. Adding a component means wiring its lane; the filter is " +
-      "explicit rather than inferred.",
+      "Seventeen test workflows, most of them one per component, fired by a path filter so a change " +
+      "to DigiKey does not wait on the quant suite. Four of the seventeen are cross-cutting instead: " +
+      "end-to-end, the scoring job, the isolated Nautilus run, and the Atlas graph spec. Adding a " +
+      "component means wiring its lane; the filter is explicit rather than inferred.",
   },
   {
     term: "An isolated Nautilus lane",
@@ -124,9 +131,11 @@ const LANES: { term: string; body: string }[] = [
   {
     term: "Type checking",
     body:
-      "A dedicated type-check workflow, plus tsc --noEmit across the frontend apps and the shared " +
-      "design packages. Strict typing is a rubric criterion as well, so an untyped signature is " +
-      "both a lint failure and a score deduction.",
+      "A dedicated mypy workflow over the shared Python libraries — DigiBase and DigiKey — on every " +
+      "pull request that touches them. The frontend apps have no type-check lane of their own: they " +
+      "are type-checked by the production build, which CI runs as a deploy check on any pull request " +
+      "touching an app or the shared design packages, and which fails on a type error. Strict typing " +
+      "is a rubric criterion too, so an untyped signature also costs a score point.",
   },
   {
     term: "The frontend canon guard",
@@ -180,8 +189,11 @@ const LIMITS: { term: string; body: string }[] = [
     term: "Frontend is scored differently",
     body:
       "The score job excludes frontend/** entirely: the rubrics are Python-oriented and misfire on " +
-      "JS and CSS. Presentation work is gated instead by secret scanning, type checking, the " +
-      "canon guard, the frontend test suites and an app build — a narrower net, honestly narrower.",
+      "JS and CSS. Presentation work is gated instead by secret scanning, the canon guard, lint, and " +
+      "a production build that fails on a type error. Only two of the front ends — the chat UI and " +
+      "the Olympus dashboard — run their test suites in CI; the marketing sites and the shared " +
+      "component package have no CI test lane, so their tests are a local discipline. A narrower " +
+      "net, honestly narrower.",
   },
   {
     term: "Test count is not coverage",
@@ -269,9 +281,14 @@ export default function QualityPage() {
                   <Mono>scripts/score.py</Mono>{" "}
                   runs as a CI job against the pull request&rsquo;s
                   diff and exits non-zero when any dimension is under threshold, so the check goes
-                  red and the merge waits. It is a regex scanner over changed lines — fast,
-                  dependency-free, and deliberately described in its own header as a checklist aide
-                  rather than a static analyser.
+                  red and the merge waits. Its own header is blunter than that:{" "}
+                  <em>
+                    &ldquo;a heuristic scanner — it flags known anti-patterns by regex&hellip; It is
+                    NOT a full static analyzer. Treat results as a checklist aide, not a gate.&rdquo;
+                  </em>{" "}
+                  Both halves are true and worth stating together: the script disclaims being a gate
+                  because a regex cannot judge a novel anti-pattern, and the workflow uses it as one
+                  anyway because a known anti-pattern should not need a reviewer to catch it.
                 </p>
               </Reveal>
               <Reveal className="mod-card">
@@ -288,9 +305,11 @@ export default function QualityPage() {
               </Reveal>
             </div>
             <p className="mt-[1.8rem] max-w-[64ch] text-[0.95rem] leading-[1.7] text-ink-soft">
-              Thresholds are Security 8, Quality 8, Optimization 7, Accuracy 9 — held in three
-              places that have to agree: the scanner&rsquo;s own table, the rubric index, and the
-              repository&rsquo;s contributor rules.
+              Thresholds are Security 8, Quality 8, Optimization 7, Accuracy 9 — the figures the
+              scanner&rsquo;s own table, the rubric index and the repository&rsquo;s contributor rules
+              all carry. The individual rubric files disagree: each one&rsquo;s header adds a second,
+              lower number below which merge is blocked. That contradiction is in the repository, not
+              resolved by this page, and the stricter reading is the one quoted here.
             </p>
           </div>
         </section>

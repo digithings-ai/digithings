@@ -24,16 +24,29 @@ export const metadata: Metadata = {
 //     names* — the four substrings "password", "api_key", "token", "secret",
 //     recursively over a mapping. It is not a PII detector and it does not
 //     inspect values. Describing it as "PII redaction" would overstate it, so
-//     this page states what redact_mapping() actually does.
+//     this page states what redact_mapping() actually does. Note also that
+//     digibase.audit is ONLY that function — 38 lines, no file I/O. The JSONL
+//     writer is audit_log() in digigraph/src/digigraph/audit.py and in the
+//     digiclaw and digiquant copies of the same module. On a page telling
+//     readers to open the source, naming digibase.audit as the writer would
+//     send them to the one file that does not contain it.
 //  2. Revocation. SECURITY.md still lists JWT revocation as a roadmap item,
 //     but the Redis-backed jti blocklist landed (ADR-0007) and
 //     digikey/integrations/service_middleware.py checks it. It is opt-in:
 //     with DIGIKEY_BLOCKLIST_REDIS_URL unset, is_blocked() returns False and
 //     revocation only takes effect at token expiry. Both halves are stated.
 //
-// The limits section is not a hedge — it is the residual-risk column of
-// SECURITY.md's STRIDE table, published deliberately. A security page that
-// names its boundaries is worth more than one that implies there are none.
+// The limits section is not a hedge — it is a SELECTION from the residual-risk
+// column of SECURITY.md's STRIDE table, published deliberately. The table has
+// eighteen rows and LIMITS below has twelve, so the page says "a selection"
+// rather than claiming to reproduce the column: asserting completeness while
+// dropping rows is the same defect as overclaiming a control. If you add a row
+// to the STRIDE table, decide deliberately whether it belongs here.
+//
+// One residual risk gets stated TWICE on purpose: the absence of any Node
+// dependency audit appears in PIPELINE as well as in LIMITS, because the
+// pipeline section is where a reader forms the belief that dependency auditing
+// is a merge gate, and a correction four sections later does not reach them.
 
 // The identity layer — DigiKey (digikey/src, 18 modules).
 const IDENTITY: { term: string; body: string }[] = [
@@ -64,7 +77,10 @@ const IDENTITY: { term: string; body: string }[] = [
       "Revoking a key marks it revoked and pushes its live token ids to a Redis jti blocklist that " +
       "the auth middleware checks on every request; a Redis outage returns 503 rather than " +
       "failing open. With no Redis URL configured the blocklist is a no-op and already-issued " +
-      "tokens stay valid until they expire — keep TTLs short if you run it that way.",
+      "tokens stay valid until they expire — keep TTLs short if you run it that way. One " +
+      "disagreement to flag before you find it yourself: SECURITY.md's revocation section predates " +
+      "the blocklist and still calls revocation a roadmap item. This description is the one that " +
+      "matches the code.",
   },
   {
     term: "Brute force costs something",
@@ -86,11 +102,13 @@ const TRACEABILITY: { term: string; body: string }[] = [
       "response header. One id, one run, end to end.",
   },
   {
-    term: "digibase.audit",
+    term: "audit_log(), per service",
     body:
       "Workflow events append to a JSONL audit log — timestamp, event type, agent id, payload, " +
-      "with optional key prefix, tenant and jti — after passing through redact_mapping(). The " +
-      "file lives on your host.",
+      "with optional key prefix, tenant and jti. The writer is audit_log() in digigraph.audit, and " +
+      "in the digiclaw and digiquant copies of the same module; digibase.audit is not the writer, " +
+      "it supplies the redact_mapping() every writer passes its payload through. The file lives on " +
+      "your host.",
   },
   {
     term: "Bounded outbound HTTP",
@@ -123,9 +141,13 @@ const PIPELINE: { term: string; body: string }[] = [
     term: "pip-audit",
     body:
       "Every Python component is resolved with its dev extras and audited against the OSV " +
-      "database on every pull request, every push to develop and main, and weekly. HIGH and " +
+      "database weekly, and whenever a change to a dependency manifest lands — in a pull request, or " +
+      "in a push to develop or main. HIGH and " +
       "CRITICAL findings block the merge; MEDIUM and LOW are warn-only annotations. Accepting a " +
-      "CVE requires an entry with a rationale and a re-evaluation trigger.",
+      "CVE requires an entry with a rationale and a re-evaluation trigger. Two boundaries on that: " +
+      "a pull request that adds Python code without touching a manifest does not trigger the audit, " +
+      "and the scope is Python only — there is no Node or JavaScript dependency audit in CI at all, " +
+      "so the frontend and DigiChat dependency trees are unaudited.",
   },
   {
     term: "Loopback by default",
@@ -203,6 +225,40 @@ const LIMITS: { term: string; body: string }[] = [
       "Verifiers cache the JWKS document for five minutes, so a signing-key rotation takes up to " +
       "that long to propagate to every verifier.",
   },
+  {
+    term: "Dependency auditing stops at Python",
+    body:
+      "There is no Node or JavaScript dependency audit anywhere in CI, so the frontend and DigiChat " +
+      "dependency trees are not scanned for CVEs at all — it is written down as a follow-up, not " +
+      "shipped. On the Python side, MEDIUM and LOW findings are warn-only, and a pull request that " +
+      "adds code without touching a dependency manifest does not trigger the audit.",
+  },
+  {
+    term: "Not every Action is pinned to a SHA",
+    body:
+      "The secret scanner is the OSS CLI at a pinned version, verified against a recorded SHA-256 " +
+      "before it runs. The GitHub Actions around it are weaker: some are pinned to a commit SHA, " +
+      "most only to a major-version tag, which a compromised upstream release can move under us. " +
+      "Pinning is audited when a workflow file changes rather than enforced by a check.",
+  },
+  {
+    term: "The insider controls are process, not enforcement",
+    body:
+      "The hooks that block protected-path edits and unsigned live-trading pushes run in the " +
+      "developer's own environment, so a determined insider with write access can bypass the " +
+      "harness. What is left is pull-request review and GitHub branch protection — configuration " +
+      "audited out of band, not a property of the repository you can read. The same applies to the " +
+      "secret-scanner allowlist: a wrongly scoped entry would mask a real leak, and only review " +
+      "catches that.",
+  },
+  {
+    term: "The public endpoints still fingerprint",
+    body:
+      "Liveness and JWKS are deliberately minimal and secret-free, but their response shape still " +
+      "leaks stack and version information. That is accepted rather than mitigated, on the basis " +
+      "that the contract is public by design — and there is no WAF or bot-management layer in front " +
+      "of any of it.",
+  },
 ];
 
 export default function SecurityPage() {
@@ -271,8 +327,9 @@ export default function SecurityPage() {
               <span className="kicker">{"// pipeline"}</span>
               <h2>What CI refuses to merge.</h2>
               <p>
-                Secrets scanning and dependency auditing are gates, not dashboards — they fail the
-                job rather than filing a note for later.
+                Secrets scanning and dependency auditing are gates rather than dashboards — when they
+                run they fail the job instead of filing a note for later. Each row says what triggers
+                it, because a gate that does not fire is not a gate.
               </p>
             </Reveal>
             <RuledList>
@@ -291,9 +348,10 @@ export default function SecurityPage() {
               <span className="kicker">{"// limits"}</span>
               <h2>What we have not closed.</h2>
               <p>
-                This is the residual-risk column of the threat model, reproduced rather than
-                summarised away. If any of it is disqualifying for your deployment, better to learn
-                it here than after an integration.
+                A selection from the residual-risk column of the threat model — the entries a reader
+                deciding whether to deploy this would want first, not the whole table. SECURITY.md
+                carries every row, each next to the mitigation it sits behind. If any of this is
+                disqualifying for your deployment, better to learn it here than after an integration.
               </p>
             </Reveal>
             <RuledList>

@@ -59,6 +59,20 @@ export function DraftBanner() {
  *  describes the subject matter of the missing clause. */
 export type DraftSection = { heading: string; note: string };
 
+/** The outline itself.
+ *
+ *  `heading` renders as a real <h2>, not a styled <span>. These pages are
+ *  published on the argument that "the structure is useful to see", and
+ *  structure a screen reader cannot enumerate is not structure — with spans, all
+ *  three legal pages shipped fifteen sections under a single h1 and no headings
+ *  at all. h2 is the correct level: the legal pages have no .section-head, so the
+ *  page h1 from <PageHead> is the only heading above these and nothing is
+ *  skipped. The styling is unchanged — the class list still sets the mono face,
+ *  the size and the colour, and site.css's `* { margin: 0 }` reset plus the grid
+ *  parent mean the element box is identical to the span it replaced.
+ *
+ *  The row wrapper is a <div>, not a <span>: a heading inside a <span> is
+ *  phrasing content containing flow content, which is invalid HTML. */
 export function DraftOutline({ sections }: { sections: DraftSection[] }) {
   return (
     <ol className="m-0 grid list-none gap-0 p-0">
@@ -70,13 +84,13 @@ export function DraftOutline({ sections }: { sections: DraftSection[] }) {
           <span className="font-mono text-[0.8rem] text-ink-mute">
             {String(i + 1).padStart(2, "0")}
           </span>
-          <span className="grid gap-[0.3rem]">
-            <span className="font-mono text-[0.95rem] text-ink">{s.heading}</span>
+          <div className="grid gap-[0.3rem]">
+            <h2 className="font-mono text-[0.95rem] text-ink">{s.heading}</h2>
             <span className="text-[0.9rem] leading-[1.65] text-ink-soft">{s.note}</span>
             <span className="font-mono text-[0.72rem] uppercase tracking-[0.12em] text-ink-mute">
               to be drafted
             </span>
-          </span>
+          </div>
         </li>
       ))}
     </ol>
