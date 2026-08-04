@@ -24,8 +24,14 @@ from digiquant.olympus.atlas.diagnostics import register_breakdown_contributor
 from digiquant.olympus.atlas.state import AtlasResearchState
 
 MERGE_FALLBACK_KEY = "merge_fallback"
+CONTENT_FREEZE_KEY = "content_freeze"
 
-__all__ = ["MERGE_FALLBACK_KEY", "merge_fallback_breakdown"]
+__all__ = [
+    "CONTENT_FREEZE_KEY",
+    "MERGE_FALLBACK_KEY",
+    "content_freeze_breakdown",
+    "merge_fallback_breakdown",
+]
 
 
 @register_breakdown_contributor
@@ -51,5 +57,41 @@ def merge_fallback_breakdown(state: AtlasResearchState) -> dict[str, Any]:
         MERGE_FALLBACK_KEY: {
             "count": len(fallbacks),
             "segments": {slug: str(reason) for slug, reason in sorted(fallbacks.items())},
+        }
+    }
+
+
+@register_breakdown_contributor
+def content_freeze_breakdown(state: AtlasResearchState) -> dict[str, Any]:
+    """Count the segments whose edit merge produced a content-identical body (#1749/#1751).
+
+    A no-op merge still publishes a ``documents`` row under the run date marked
+    ``source="today"``, so it is counted in ``segments_ok`` and rendered in the dashboard's
+    "18/27 segments" banner. Before this key the freeze left no telemetry trace at all: it was
+    discoverable only by hashing ``documents.payload`` in SQL after the fact, which is how the
+    #1559 digest freeze and the #1555 commit freeze both went unnoticed while runs reported
+    ``ok``. Production 2026-07-31 recorded ``status='ok'``, ``segments_ok=18``, with
+    ``sector-healthcare`` byte-identical to 07-28 inside the 18.
+
+    ``segments_ok`` is deliberately NOT adjusted. It counts the segments that produced a row
+    today, which stays true of a frozen one, and it is read by ``atlas_run_health`` (migration
+    041), ``run-episodes.ts`` and three frontend components — redefining it is a separate
+    change with its own consumers to migrate. The honest fix for the *public* surface is the
+    freshness marker on the segment itself (``phase7_synthesis._segment_freshness``), which
+    rides in ``daily_snapshots.snapshot`` and needs no migration. This key is the operator
+    half: ``breakdown`` is omitted from the anon-readable 041 view.
+
+    Each value is the segment's ``unchanged_since`` date, so the row shows *how long* each
+    segment has been frozen rather than merely that it is. Returns ``{}`` when nothing froze,
+    matching ``merge_fallback`` and ``circuit_breaker_skips`` — no zero in every row. Never
+    gates: a frozen segment is a content-quality signal, not a run failure.
+    """
+    freezes = getattr(state, "content_freezes", None) or {}
+    if not freezes:
+        return {}
+    return {
+        CONTENT_FREEZE_KEY: {
+            "count": len(freezes),
+            "segments": {slug: str(since) for slug, since in sorted(freezes.items())},
         }
     }

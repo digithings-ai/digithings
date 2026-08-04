@@ -10,6 +10,7 @@ from digiquant.nautilus_runner import _build_result, _extract_pnl
 # _extract_pnl
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestExtractPnl:
     def _report(self, **kwargs) -> pd.DataFrame:
@@ -84,6 +85,7 @@ class TestExtractPnl:
 # ---------------------------------------------------------------------------
 # _build_result
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestBuildResult:

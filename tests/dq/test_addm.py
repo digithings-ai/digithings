@@ -29,6 +29,7 @@ def _clean_history():
 # record_sharpe
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestRecordSharpe:
     def test_creates_deque_for_new_strategy(self) -> None:
@@ -63,6 +64,7 @@ class TestRecordSharpe:
 # clear_history
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestClearHistory:
     def test_clear_single_strategy(self) -> None:
@@ -95,6 +97,7 @@ class TestClearHistory:
 # check_drift — insufficient history
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestCheckDriftInsufficientHistory:
     def test_zero_observations_returns_not_implemented(self) -> None:
@@ -119,6 +122,7 @@ class TestCheckDriftInsufficientHistory:
 # ---------------------------------------------------------------------------
 # check_drift — Z-score computation
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestCheckDriftZScore:
@@ -185,6 +189,7 @@ class TestCheckDriftZScore:
 # ---------------------------------------------------------------------------
 # TTL pruning
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestPruneStaleHistory:

@@ -740,7 +740,40 @@ DigiQuant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `circuit_breaker_skips`. Run
   status is unchanged — a fallback that then succeeds in full mode is still `ok` —
   but a segment that paid for a patch call *and* a full regeneration is now visible
-  to a cost audit. The dominant cause was unguarded `Literal[...]` axes, so
+  to a cost audit.
+
+  **Content identity (#1749/#1751).** A merge can succeed structurally and change nothing:
+  the model emits `set` ops whose values already hold, or declares `status="skipped"`.
+  `edit_mode/content_identity.py` owns that question and the two provenance keys that record
+  the answer, both in `documents.payload` (jsonb, no migration):
+  `content_unchanged` and `unchanged_since`. `MergeStats.content_changed` carries the verdict
+  — `ops_applied` counts ops *submitted*, so a patch can report six applied ops and change
+  nothing, which is what 54 of 69 frozen production rows did. Four consequences:
+
+  * `_run_edit_segment` stamps the merged body — `mark_unchanged` **propagates** the prior
+    chain's `unchanged_since` rather than resetting it; `clear_unchanged` is the matching
+    reset, needed because `apply_ops` copies the prior body.
+  * `PriorPublished.content_date` (`None` when the row carries no marker) feeds
+    `resolve_edit_mode`, which measures `gap_days` from the content date. Before this, a
+    no-op republish wrote a fresh `documents` row and `prior.date` followed it, so the gap was
+    1 on every run of a frozen chain and §5.3.2's `OLYMPUS_STALE_FULL_DAYS` hard cap could
+    never fire — `alt-politician-signals` published five rows carrying one body across seven
+    days at `gap_days=1` each. **This is not the verbatim guard §5.3.1 rejects** (ADR-0019 Q1,
+    *won't do*): the trigger is still purely elapsed days, only its input is corrected. The
+    markers are prospective — no already-published row carries one.
+  * `SegmentFreshness.source` is three-way: `today`, `frozen` (ran, changed nothing, `as_of`
+    is the content's own date), `baseline` (not regenerated). Keep
+    `atlas/snapshot.py`'s copy in lockstep — it is the read-path validator, `extra="forbid"`,
+    so a value the writer emits but that `Literal` omits is a ValidationError on every later
+    read.
+  * `atlas.telemetry.content_freeze_breakdown` projects `state.content_freezes` into
+    `breakdown` as a non-gating `content_freeze` key. `segments_ok` is deliberately
+    **unchanged** — it counts segments that produced a row today, which stays true of a frozen
+    one, and it is read by `atlas_run_health` (041), `run-episodes.ts` and three frontend
+    components.
+
+  Scoped to segments. The digest's equivalent freeze was fixed by #1559's
+  `carried_from`/`continuity` markers on the synthesis-carry path. The dominant cause was unguarded `Literal[...]` axes, so
   `SegmentReport` normalizes LLM synonyms for **every** Literal field of every
   subclass generically (`_normalize_literal_axes`): an unrecognized value degrades to
   `None` on an Optional axis and is still rejected on a required one (`growth` /

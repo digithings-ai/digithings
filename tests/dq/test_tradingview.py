@@ -18,6 +18,7 @@ from digiquant.tradingview import (
 # Alias resolution
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestResolve:
     def test_ema_alias(self) -> None:
@@ -53,6 +54,7 @@ class TestResolve:
 # Export — default params
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestExportToPineDefaults:
     @pytest.mark.parametrize("strategy", list(_PINE_TEMPLATES.keys()))
@@ -72,7 +74,10 @@ class TestExportToPineDefaults:
     def test_unknown_strategy_returns_failure(self) -> None:
         result = export_to_pine("no_such_strategy_xyz")
         assert result.success is False
-        assert "no_such_strategy_xyz" in result.message.lower() or "supported" in result.message.lower()
+        assert (
+            "no_such_strategy_xyz" in result.message.lower()
+            or "supported" in result.message.lower()
+        )
 
     def test_result_has_no_unresolved_template_vars(self) -> None:
         for strategy in _PINE_TEMPLATES:
@@ -92,6 +97,7 @@ class TestExportToPineDefaults:
 # Export — param overrides
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestExportToPineParams:
     def test_ema_cross_fast_period_override(self) -> None:
@@ -100,16 +106,22 @@ class TestExportToPineParams:
         assert "50" in result.script
 
     def test_bollinger_period_override(self) -> None:
-        result = export_to_pine("bollinger_mr", params={"bb_period": 15, "bb_std": 1.5, "sl_pct": 0.5})
+        result = export_to_pine(
+            "bollinger_mr", params={"bb_period": 15, "bb_std": 1.5, "sl_pct": 0.5}
+        )
         assert "15" in result.script
         assert "1.5" in result.script
 
     def test_rsi_param_override(self) -> None:
-        result = export_to_pine("rsi_momentum", params={"rsi_period": 7, "oversold": 25.0, "overbought": 75.0})
+        result = export_to_pine(
+            "rsi_momentum", params={"rsi_period": 7, "oversold": 25.0, "overbought": 75.0}
+        )
         assert "7" in result.script
 
     def test_macd_param_override(self) -> None:
-        result = export_to_pine("macd_trend", params={"fast_period": 8, "slow_period": 21, "signal_period": 5})
+        result = export_to_pine(
+            "macd_trend", params={"fast_period": 8, "slow_period": 21, "signal_period": 5}
+        )
         assert "8" in result.script
         assert "21" in result.script
         assert "5" in result.script
@@ -130,6 +142,7 @@ class TestExportToPineParams:
 # ---------------------------------------------------------------------------
 # Export — file output
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestExportToPineFileOutput:
@@ -160,6 +173,7 @@ class TestExportToPineFileOutput:
 # ---------------------------------------------------------------------------
 # Import stub
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestImportFromPine:

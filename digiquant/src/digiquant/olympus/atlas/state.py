@@ -590,6 +590,18 @@ class AtlasResearchState(BaseModel):
         default_factory=dict,
         description="Segments whose edit patch failed to merge and were regenerated full.",
     )
+    # Content freezes: segment slug → ``unchanged_since`` ISO date (#1749/#1751). An edit-mode
+    # merge that changed nothing still publishes a ``documents`` row under the run date marked
+    # source="today", so it lands in ``segments_ok`` and the freshness badge reads "today". The
+    # freeze was previously discoverable only by hashing payloads in SQL after the fact — which
+    # is how the #1559 digest freeze went unnoticed. Non-gating telemetry, same contract as
+    # ``merge_fallbacks``: written by edit-mode nodes, surfaced via
+    # ``atlas.telemetry.content_freeze_breakdown``, never read by a gate. Right-wins reducer for
+    # the same reason — one slug per fan-out node.
+    content_freezes: Annotated[dict[str, str], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="Segments whose edit merge produced a content-identical body.",
+    )
     published: list[PublishedArtifact] = Field(default_factory=list)
     # Append reducer (not last-writer-wins): parallel fan-out nodes each record
     # their own recoverable failure via ``{"errors": [PhaseError(...)]}``; the
