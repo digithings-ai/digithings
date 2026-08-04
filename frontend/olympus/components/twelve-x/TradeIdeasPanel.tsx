@@ -55,14 +55,21 @@ function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
 export default function TradeIdeasPanel({
   ideas,
   confluence,
+  highlightRanks,
 }: {
   ideas: FxTradeIdeaRow[];
   confluence: FxConfluenceSnapshotRow[];
+  highlightRanks?: ReadonlySet<number>;
 }) {
   const { crossLink } = useTwelveX();
   const [expanded, setExpanded] = useState(false);
   const [openRank, setOpenRank] = useState<number | null>(null);
   const toggleIdea = (rank: number) => setOpenRank((v) => (v === rank ? null : rank));
+
+  const highlightClass = (rank: number, base: string) =>
+    highlightRanks?.has(rank)
+      ? `${base} ring-2 ring-warn/50 ring-offset-1 ring-offset-surface`
+      : base;
 
   if (ideas.length === 0) {
     return (
@@ -96,7 +103,10 @@ export default function TradeIdeasPanel({
           must not read as green. Direction lives in its own colored label. */}
       <button
         type="button"
-        className="rounded-lg border border-accent/30 bg-accent/[0.06] p-4 text-left transition-colors hover:border-accent/50"
+        className={highlightClass(
+          top.rank,
+          'rounded-lg border border-accent/30 bg-accent/[0.06] p-4 text-left transition-colors hover:border-accent/50',
+        )}
         onClick={() => toggleIdea(top.rank)}
         aria-expanded={openRank === top.rank}
       >
@@ -121,7 +131,10 @@ export default function TradeIdeasPanel({
         <button
           key={`${idea.run_date}-${idea.rank}`}
           type="button"
-          className="rounded-md border border-hair px-3 py-2 text-left text-xs transition-colors hover:border-accent/50"
+          className={highlightClass(
+            idea.rank,
+            'rounded-md border border-hair px-3 py-2 text-left text-xs transition-colors hover:border-accent/50',
+          )}
           onClick={() => toggleIdea(idea.rank)}
           aria-expanded={openRank === idea.rank}
         >
