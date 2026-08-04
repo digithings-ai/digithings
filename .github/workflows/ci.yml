@@ -168,6 +168,7 @@ jobs:
               - 'scripts/ci_paths.yaml'
               - '.github/workflows/pipeline-digiquant-prices.yml'
               - '.github/workflows/db-migrate.yml'
+              - '.github/workflows/pipeline-olympus.yml'
             workflows:
               - '.github/workflows/**'
               - '.github/actionlint.yaml'

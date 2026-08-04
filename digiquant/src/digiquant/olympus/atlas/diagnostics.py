@@ -520,6 +520,7 @@ def _row(
     summary: RunSummary,
     started_at: datetime | None = None,
     finished_at: datetime | None = None,
+    attempt: int = 1,
 ) -> dict[str, Any]:
     usage = dict(usage_snapshot or {})
     breakdown = dict(summary.breakdown)
@@ -544,6 +545,11 @@ def _row(
     resolved_model = model or (models[0] if models else None)
     return {
         "run_id": run_id,
+        # Part of the primary key since migration 065 (#1762). ``created_at`` is deliberately
+        # still omitted from this payload — that is what makes an overwrite detectable after
+        # the fact (ON CONFLICT DO UPDATE preserves the first insert's ``created_at`` while
+        # replacing everything else), and it is how the 28 corrupted rows were found.
+        "attempt": attempt,
         "run_type": run_type,
         "run_date": run_date.isoformat(),
         "model": resolved_model,
@@ -585,9 +591,17 @@ def write_row(
     degraded_pct: float = _DEGRADED_PCT_DEFAULT,
     started_at: datetime | None = None,
     finished_at: datetime | None = None,
+    attempt: int = 1,
 ) -> RunSummary | None:
-    """Upsert one ``atlas_run_diagnostics`` row (on ``run_id``). Fail-soft → ``None`` on any
-    error (telemetry never breaks a run). Returns the :class:`RunSummary` on success.
+    """Upsert one ``atlas_run_diagnostics`` row (on ``run_id, attempt``). Fail-soft → ``None``
+    on any error (telemetry never breaks a run). Returns the :class:`RunSummary` on success.
+
+    The conflict key is per-ATTEMPT since #1762. ``pipeline-olympus.yml`` retries the chain up
+    to 3 times inside one job, so ``run_id`` alone made the last attempt's row overwrite the
+    expensive attempt's tokens and cost — 28 of 54 production rows, and it also collapsed
+    ``run-episodes.ts``'s ``attempts`` count to 1 and made its ``recovered`` outcome
+    unreachable. Requires migration 065; before it is applied the composite ``on_conflict``
+    raises, which the fail-soft below turns into one lost telemetry row rather than a dead run.
     """
     summary = summarize_run(state, degraded_pct=degraded_pct)
     try:
@@ -600,14 +614,16 @@ def write_row(
             summary=summary,
             started_at=started_at,
             finished_at=finished_at,
+            attempt=attempt,
         )
-        client.table("atlas_run_diagnostics").upsert(row, on_conflict="run_id").execute()
+        client.table("atlas_run_diagnostics").upsert(row, on_conflict="run_id,attempt").execute()
     except Exception as exc:  # telemetry write must never crash the run
         logger.warning("diagnostics: write_row failed (%s); run continues", exc)
         return None
     logger.info(
-        "diagnostics[%s]: status=%s segments ok=%d carried=%d failed=%d",
+        "diagnostics[%s attempt=%d]: status=%s segments ok=%d carried=%d failed=%d",
         run_id,
+        attempt,
         summary.status,
         summary.segments_ok,
         summary.segments_carried,

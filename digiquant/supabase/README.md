@@ -4,7 +4,7 @@ The single Supabase CLI project dir for the suite-wide **`core`** backend (Olymp
 portfolio, market data, strategy store — see
 [ADR 0021](../../docs/adr/0021-digiquant-supabase-project-topology.md)). There is exactly
 **one** migration chain: the numbered files under [`migrations/`](migrations/) —
-`001`–`064` at time of writing, with `037`, `038` and `059` never used and `062`
+`001`–`065` at time of writing, with `037`, `038` and `059` never used and `062`
 **burned — see below, do not reuse it**; new work appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
 tables and views.
 
@@ -58,6 +58,7 @@ deploy`, or the SQL editor.
 | `migrations/050_public_portfolio_views.sql` | Three anon-readable views — the public portfolio read surface (#1461/#1462) |
 | `migrations/063_prices_live_table.sql` | `public.prices_live` — the quote table Realtime streams as `postgres_changes`; RLS on, one SELECT policy, no write policy, `service_role` the sole writer (#1807) |
 | `migrations/064_prices_live_lease.sql` | `public.prices_live_lease` + `claim_prices_live_refresh(integer)` — the single-row lease and the atomic claim that bound the Finnhub refresh **rate**; replaced the #1756 invocation secret |
+| `migrations/065_atlas_run_diagnostics_attempt.sql` | `atlas_run_diagnostics.attempt` + primary key `(run_id, attempt)`, and `attempt` appended to the `atlas_run_health` view — one row per outer-retry **attempt** so the last retry stops overwriting the expensive attempt's cost (#1762). Legacy rows carry the `0` sentinel, never `1` |
 | `functions/prices-live/` | Deno edge function: polls Finnhub, upserts one row per ticker into `public.prices_live` (#1461, #1807) |
 
 The rest of this README is the operational guide for the **live price feed** (#1461).
