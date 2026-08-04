@@ -34,6 +34,7 @@ import {
   renderRiskDebateMarkdown,
 } from './render-pipeline-payloads';
 import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tickers';
+import { buildRebalanceActions } from './rebalance-actions';
 import {
   digestItemsToStrings,
   extractDigestContextBullets,
@@ -1171,21 +1172,9 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     if (pmRebDateMatches && pmRebPayload) {
       const acts = pmRebPayload.actions;
       if (Array.isArray(acts) && acts.length > 0) {
-        return acts
-          .map((a) => {
-            if (!a || typeof a !== 'object') return null;
-            const o = a as Record<string, unknown>;
-            const ticker = String(o.ticker || '').trim().toUpperCase();
-            if (!ticker) return null;
-            const current_pct = Number(o.current_pct ?? 0);
-            // Live shape: `target_pct`; fixture / test payloads: `recommended_pct`.
-            const recommended_pct = Number(o.target_pct ?? o.recommended_pct ?? 0);
-            const action = String(o.action || 'HOLD').toUpperCase();
-            // Carry rationale so downstream UI can render it without another fetch.
-            const rationale = o.rationale != null ? String(o.rationale) : undefined;
-            return { ticker, current_pct, recommended_pct, action, rationale };
-          })
-          .filter(Boolean) as { ticker: string; current_pct: number; recommended_pct: number; action: string; rationale?: string }[];
+        // buildRebalanceActions resolves the prior weight from the PREVIOUS book date (#1850);
+        // see that module for why the CURRENT book is the wrong source.
+        return buildRebalanceActions(acts, prevWeightByTicker);
       }
     }
     // Fallback: derive action from proposed vs current weight delta.
