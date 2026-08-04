@@ -520,7 +520,9 @@ export async function getTradeIdeas(runDate: string): Promise<FxTradeIdeaRow[]> 
   const rows = await querySupabase<FxTradeIdeaRow[]>((sb) =>
     sb
       .from('fx_trade_ideas_snapshot')
-      .select('run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, as_of')
+      .select(
+        'run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of'
+      )
       .eq('run_date', runDate)
       .order('rank', { ascending: true })
   );
