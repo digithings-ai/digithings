@@ -25,11 +25,14 @@ export const metadata: Metadata = {
     "An open-core agentic stack — research, retrieval, and chat behind one supervisor. Self-hosted, BYOK, audit-on by default. No vendor lock-in.",
   // Scheme-aware favicon tiles, mirroring digiquant-web: the light tile on a
   // dark browser chrome and vice versa, so the mark never reads as a flat box.
+  // The `d` + block-cursor reduction, not the full `digi` lockup — five character
+  // cells are illegible at 16px. Deliberately NOT an app/icon.svg: that file
+  // convention would override this block and silently drop the media queries.
   icons: {
     icon: [
-      { url: "/favicon-qr-light.svg", media: "(prefers-color-scheme: dark)" },
-      { url: "/favicon-qr.svg", media: "(prefers-color-scheme: light)" },
-      { url: "/favicon-qr.svg" },
+      { url: "/favicon-dg-light.svg", media: "(prefers-color-scheme: dark)" },
+      { url: "/favicon-dg.svg", media: "(prefers-color-scheme: light)" },
+      { url: "/favicon-dg.svg" },
     ],
   },
   openGraph: {

@@ -5,17 +5,20 @@
  *  Cross-domain: the header links out to digithings.ai (mirrors digithings.ai's
  *  digiquant.io backlink). Homepage sections use in-page anchors.
  */
-import { type NavLink } from "@digithings/web";
+import { TerminalMark, type NavLink } from "@digithings/web";
 
 export const DQ_CONTACT_EMAIL = "contact@digiquant.io";
 
-// Transparent QR marks (no opaque tile): dark modules for light theme, light
-// modules for dark theme. CSS shows the one matching [data-theme]. (Two <img>s
-// rather than a CSS mask — mask-image proved unreliable here.)
+// The terminal lockup: `d` + block cursor, then the wordmark. One inline SVG in
+// currentColor, so it follows ink through [data-theme] — this replaces the two
+// theme-swapped QR <img>s (a CSS mask proved unreliable here; currentColor does
+// not need one). Structurally identical to digithings-web's Brand by intent.
+//
+// `variant="compact"` deliberately: the full `digi` lockup is five character
+// cells wide and closes up below ~64px, well above nav height.
 export const Brand = () => (
   <>
-    <img src="/favicon-qr-mark-light.svg" alt="" className="brand-mark brand-mark-light" width={24} height={24} aria-hidden="true" />
-    <img src="/favicon-qr-mark-dark.svg" alt="" className="brand-mark brand-mark-dark" width={24} height={24} aria-hidden="true" />
+    <TerminalMark size={24} variant="compact" />
     <span className="brand-word">digiquant</span>
   </>
 );

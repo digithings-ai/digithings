@@ -35,6 +35,7 @@
 @source "../../digiweb/web/src/components/data-layout";
 @source "../../digiweb/web/src/components/typography";
 @source "../../digiweb/web/src/components/marquee";
+@source "../../digiweb/web/src/components/symbols";
 
 /* Point the token font families at the self-hosted next/font variables. */
 :root[data-theme] {
@@ -76,13 +77,6 @@
    page shading always reaches the top border. (The shared file also feeds
    digiquant.io, so we don't touch it.) */
 .glow { animation: none; transform: none; }
-
-/* brand QR mark: transparent, theme-inverted (dark modules in light mode, white
-   in dark) — two <img>s swapped by [data-theme] (Lightning CSS drops mask-image,
-   so a single recolorable mark isn't reliable). */
-.brand-mark { display: inline-block; }
-[data-theme="light"] .brand-mark-dark { display: none; }
-[data-theme="dark"] .brand-mark-light { display: none; }
 
 /* ==========================================================================
    v7 LANDING CHROME — originally ported from digiquant-web/app/globals.css
