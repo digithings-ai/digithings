@@ -346,6 +346,15 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
       continue;
     }
 
+    if (span.brief) {
+      rows.push({
+        kind: "brief",
+        themes: span.brief.themes,
+        ...(span.brief.questions ? { questions: span.brief.questions } : {}),
+      });
+      continue;
+    }
+
     // operation === "chat": an opaque upstream step. Collapse by label so a
     // provider re-emitting the same step does not stack duplicate rows.
     const key = span.label;

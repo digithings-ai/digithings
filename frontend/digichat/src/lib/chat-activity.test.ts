@@ -523,3 +523,72 @@ describe("Phase 2 document fields + brief allowlist", () => {
     });
   });
 });
+
+describe("toDigiChatActivity — Phase 2 rich hits + brief", () => {
+  it("passes tier/year/snippet through tool_result hits", () => {
+    const rows = toDigiChatActivity([
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "Sources",
+        toolName: "file_search",
+        query: "auth",
+        documents: [
+          {
+            title: "Auth",
+            path: "p",
+            tier: "peer_reviewed",
+            year: 2024,
+            snippet: "JWT",
+          },
+        ],
+      },
+    ]);
+    expect(rows).toEqual([
+      {
+        kind: "tool_result",
+        name: "file_search",
+        query: "auth",
+        hits: [
+          {
+            title: "Auth",
+            path: "p",
+            tier: "peer_reviewed",
+            year: 2024,
+            snippet: "JWT",
+          },
+        ],
+        count: 1,
+      },
+    ]);
+  });
+
+  it("projects brief spans onto kind brief", () => {
+    const rows = toDigiChatActivity([
+      {
+        operation: "chat",
+        status: "completed",
+        label: "Research brief",
+        brief: {
+          themes: [{ label: "Auth", summary: "RS256" }],
+          questions: ["Which tenant?"],
+        },
+      },
+    ]);
+    expect(rows).toEqual([
+      {
+        kind: "brief",
+        themes: [{ label: "Auth", summary: "RS256" }],
+        questions: ["Which tenant?"],
+      },
+    ]);
+  });
+
+  it("projects label-only chat (brief stripped) as trace", () => {
+    expect(
+      toDigiChatActivity([
+        { operation: "chat", status: "completed", label: "Research brief" },
+      ]),
+    ).toEqual([{ kind: "trace", label: "Research brief", done: true }]);
+  });
+});
