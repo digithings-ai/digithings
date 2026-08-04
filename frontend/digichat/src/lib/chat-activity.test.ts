@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
+import type { UIMessage } from "ai";
 import {
   sanitizeActivitySpan,
   applyActivityDetail,
   toDigiChatActivity,
+  messageActivities,
+  ACTIVITY_PART_TYPE,
   MAX_LABEL_CHARS,
   MAX_DOCUMENTS,
   MAX_SNIPPET_CHARS,
@@ -591,4 +594,30 @@ describe("toDigiChatActivity — Phase 2 rich hits + brief", () => {
       ]),
     ).toEqual([{ kind: "trace", label: "Research brief", done: true }]);
   });
+});
+
+it("messageActivities projects activity parts and ignores digigraphTrace", () => {
+  const message = {
+    id: "a1",
+    role: "assistant",
+    parts: [
+      {
+        type: ACTIVITY_PART_TYPE,
+        data: {
+          operation: "retrieve",
+          status: "completed",
+          label: "Sources",
+          toolName: "rag_sources",
+          documents: [{ title: "Auth", path: "doc-1", tier: "t", year: 2024 }],
+        },
+      },
+      {
+        type: "data-digigraphTrace",
+        data: { type: "rag_sources", payload: { sources: [{ source_id: "should-not-render" }] } },
+      },
+    ],
+  } as unknown as UIMessage;
+  const rows = messageActivities(message);
+  expect(rows.some((r) => r.kind === "tool_result")).toBe(true);
+  expect(JSON.stringify(rows)).not.toContain("should-not-render");
 });

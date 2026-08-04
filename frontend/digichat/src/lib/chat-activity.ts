@@ -17,6 +17,7 @@
  */
 
 import type { DigiChatActivity } from "@digithings/digichat-ui";
+import type { UIMessage } from "ai";
 
 export const ACTIVITY_PART_TYPE = "data-digichatActivity" as const;
 
@@ -387,4 +388,15 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
 
   if (reasoning) rows.push({ kind: "reasoning", text: reasoning });
   return orphanedRows.size ? rows.filter((_, idx) => !orphanedRows.has(idx)) : rows;
+}
+
+export function messageActivities(message: UIMessage): DigiChatActivity[] {
+  const spans = message.parts
+    .filter(
+      (part): part is { type: typeof ACTIVITY_PART_TYPE; data: unknown } =>
+        part.type === ACTIVITY_PART_TYPE
+    )
+    .map((part) => sanitizeActivitySpan(part.data))
+    .filter((span): span is ActivitySpan => span !== null);
+  return toDigiChatActivity(spans);
 }
