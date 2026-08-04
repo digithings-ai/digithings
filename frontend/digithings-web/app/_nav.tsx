@@ -5,7 +5,7 @@
  *  Cross-domain: the header links out to digiquant.io (the quant product);
  *  digiquant.io intentionally does not link back in its header.
  */
-import { TerminalMark, type NavLink } from "@digithings/web";
+import { TerminalMark, type NavItem, type NavLink } from "@digithings/web";
 
 export const DT_CONTACT_EMAIL = "contact@digithings.ai";
 
@@ -27,19 +27,46 @@ export const Brand = () => (
 /** v7 nav shape (used by <DtNav />): wayfinding links on the left of the tail,
  *  action CTAs (theme toggle + GitHub icon + Try Chat) rendered separately on the
  *  right. GitHub lives in the CTA cluster as an icon button, so it is intentionally
- *  omitted here to avoid rendering it twice. */
-export const DT_NAV_PRIMARY: NavLink[] = [
-  { label: "Architecture", href: "/#architecture" },
+ *  omitted here to avoid rendering it twice.
+ *
+ *  Four wayfinding entries, the last a NavGroup: the company pages (About,
+ *  Team, Security, Quality) are a small index, not four more top-level slots —
+ *  NavShell renders a group as a dropdown on the wide bar and as a labelled
+ *  section inside the narrow sheet. "Contact" left the bar with them: it is an
+ *  anchor on the home page and it lives in the footer. The legal pages
+ *  (terms, privacy, disclaimer) are footer-only by design — nobody navigates
+ *  to a disclaimer from a top bar. */
+export const DT_NAV_PRIMARY: NavItem[] = [
   { label: "Docs", href: "/docs" },
-  { label: "Contact", href: "/#contact" },
+  { label: "Architecture", href: "/#architecture" },
+  { label: "Services", href: "/services" },
+  {
+    label: "Company",
+    items: [
+      { label: "About", href: "/about" },
+      { label: "Team", href: "/team" },
+      { label: "Security", href: "/security" },
+      { label: "Quality", href: "/quality" },
+    ],
+  },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
 ];
 
+/** Footer stays a flat NavLink[] — <Footer/> takes links, not groups — and it
+ *  is where the long tail lives: the company pages again, then the legal set. */
 export const DT_FOOTER: NavLink[] = [
   { label: "Architecture", href: "/#architecture" },
   { label: "Docs", href: "/docs" },
+  { label: "Services", href: "/services" },
+  { label: "About", href: "/about" },
+  { label: "Team", href: "/team" },
+  { label: "Security", href: "/security" },
+  { label: "Quality", href: "/quality" },
   { label: "Contact", href: "/#contact" },
   { label: "digichat", href: "/chat" },
+  { label: "Terms", href: "/legal/terms" },
+  { label: "Privacy", href: "/legal/privacy" },
+  { label: "Disclaimer", href: "/legal/disclaimer" },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
 ];
