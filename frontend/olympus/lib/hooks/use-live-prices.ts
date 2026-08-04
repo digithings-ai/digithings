@@ -1,0 +1,182 @@
+"use client";
+
+/**
+ * useLivePrices (#1833) — the browser's read side of `public.prices_live`.
+ *
+ * A one-shot SEED (so a value exists before the first realtime event) plus a Realtime
+ * `postgres_changes` subscription, merged into a {@link LiveQuoteMap} keyed by UPPERCASE
+ * ticker. STRICTLY READ-ONLY: `select` and `channel` only — no insert, upsert, update,
+ * delete or rpc anywhere in this file, by design. A live price must never reach the
+ * close-keyed record; see lib/live-valuation.ts for the invariant this feature protects.
+ *
+ * Static-export safe (`output: "export"`): nothing touches `window` during render and the
+ * subscription lives entirely in a client effect. Null-client safe: lib/supabase.ts returns
+ * null when the env is unconfigured, and both lanes then simply stay dark.
+ *
+ * A row's mere PRESENCE is not "live enough" on its own — `quoted_at` stops advancing when
+ * the market closes, so anything rendering a freshness badge must read that timestamp
+ * ({@link LiveQuote.quotedAt}) rather than infer recency from the key existing.
+ */
+
+import { useEffect, useId, useState } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
+import {
+  liveQuoteFromRow,
+  mergeQuotes,
+  type LiveQuote,
+  type LiveQuoteMap,
+} from "@/lib/live-valuation";
+
+/**
+ * Topic PREFIX — a per-hook-instance suffix is appended below, and that is load-bearing.
+ *
+ * `RealtimeClient.channel()` DEDUPES BY TOPIC: given a topic it already holds, it returns
+ * the existing channel instead of creating a second one. Two hook instances sharing a module
+ * constant would therefore `.on()` the SAME channel, while only the first `.subscribe()`
+ * sends a join — so the join payload carries ONE postgres_changes filter while the client
+ * holds TWO bindings. The server's `ok` reply is index-matched against those bindings, the
+ * second finds no counterpart, and `_updatePostgresBindings` calls `unsubscribe()` and marks
+ * the channel errored — killing the lane for BOTH consumers with no exception and no console
+ * error, just quotes that never arrive. Deriving the topic per instance is what prevents it.
+ * (Same trap as frontend/digiquant-web/lib/live/useLivePrices.ts, which documents the
+ * realtime-js line numbers.)
+ */
+const CHANNEL_PREFIX = "olympus-prices-live";
+const TABLE = "prices_live" as const;
+/**
+ * `postgres_changes` fires ONE EVENT PER ROW — up to ~25 per publisher minute, not one per
+ * batch — and React does not batch across WebSocket frames. Without coalescing, every
+ * consumer re-renders 25 times a minute.
+ */
+const FLUSH_MS = 400;
+
+const EMPTY_MAP: LiveQuoteMap = {};
+
+/** Uppercase, de-duped, blanks dropped — the map's key contract. */
+function normalizeTickers(input: readonly string[] | undefined): string[] {
+  if (!input) return [];
+  const seen = new Set<string>();
+  for (const t of input) {
+    const s = t?.trim().toUpperCase();
+    if (s) seen.add(s);
+  }
+  return [...seen];
+}
+
+export interface UseLivePricesOptions {
+  /**
+   * Client override, for tests and for callers holding their own client. Pass `null` to
+   * disable both lanes explicitly; omit to use the shared browser client.
+   */
+  client?: SupabaseClient<Database> | null;
+}
+
+/**
+ * Live quotes for `tickers`, keyed by uppercase ticker. Missing keys are normal — the
+ * publisher caps at 25 symbols, so a held ticker may have no live coverage at all and the
+ * consumer must fall back to the close (that is `valuePosition`'s job in lib/live-valuation.ts).
+ *
+ * An empty `tickers` list is a no-op: no query, no channel, empty map.
+ */
+export function useLivePrices(
+  tickers: readonly string[],
+  options: UseLivePricesOptions = {}
+): LiveQuoteMap {
+  const symbols = normalizeTickers(tickers);
+  // Deps key on content, not identity — callers commonly pass a fresh array each render.
+  const symbolsKey = symbols.join(",");
+  const client = options.client === undefined ? supabase : options.client;
+  // Stable per-instance topic; see CHANNEL_PREFIX for why sharing one is fatal. `useId` is
+  // hydration-safe under `output: "export"` and constant across re-renders and effect re-runs.
+  // Stripped to `[A-Za-z0-9_-]` because the topic is sent verbatim in the phoenix join and
+  // this format is version-dependent: React 19.2.5 emits `_R_1_` (verified, already safe),
+  // but React 18 emitted `:r0:` and the current dev build can emit `«r0»`. The disambiguating
+  // digits survive the strip, so uniqueness holds either way.
+  const instanceId = useId().replace(/[^A-Za-z0-9_-]/g, "");
+
+  const [quotes, setQuotes] = useState<LiveQuoteMap>(EMPTY_MAP);
+
+  // Lane 1 — one-shot seed. Without it the map is empty until the publisher's next write:
+  // `postgres_changes` only fires on a change, so a freshly mounted tab would show nothing
+  // for up to a minute during the session, and nothing at all overnight and all weekend
+  // when the publisher is idle.
+  useEffect(() => {
+    if (!client || symbols.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      // Matches on the uppercase form, the publisher's convention. Migration 063 declined a
+      // ticker-casing CHECK, so casing is not enforced in the table — hence the read path
+      // (liveQuoteFromRow) uppercases defensively rather than trusting the row.
+      const { data, error } = await client
+        .from(TABLE)
+        .select("ticker, price, change_pct, quoted_at")
+        .in("ticker", symbols);
+      if (cancelled || error || !Array.isArray(data)) return;
+      const seeded: Record<string, LiveQuote> = {};
+      for (const row of data) {
+        const parsed = liveQuoteFromRow(row);
+        if (parsed) seeded[parsed.ticker] = parsed.quote;
+      }
+      if (Object.keys(seeded).length === 0) return;
+      // mergeQuotes, not a spread: lane 2 may already have landed a fresher tick for a
+      // ticker while this query was in flight, and the seed must not overwrite it.
+      setQuotes((prev) => mergeQuotes(prev, seeded));
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- symbolsKey tracks array content
+  }, [client, symbolsKey]);
+
+  // Lane 2 — Realtime `postgres_changes` on the table itself.
+  //
+  // NO `private: true`, deliberately. That flag routes authorization through RLS on
+  // `realtime.messages`, which this project can never police: the table is owned by
+  // `supabase_realtime_admin`, a role with zero members that we cannot join, so `CREATE
+  // POLICY` returns 42501 for us forever (why migration 062 was withdrawn). Adding it does
+  // not fail loudly — every join is refused silently and the overlay decays to closes.
+  useEffect(() => {
+    if (!client || symbols.length === 0) return;
+    const allowed = new Set(symbols);
+
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const buffer: Record<string, LiveQuote> = {};
+    const flush = () => {
+      flushTimer = null;
+      const batch = { ...buffer };
+      for (const k of Object.keys(buffer)) delete buffer[k];
+      if (Object.keys(batch).length === 0) return;
+      setQuotes((prev) => mergeQuotes(prev, batch));
+    };
+
+    const channel = client
+      .channel(`${CHANNEL_PREFIX}-${instanceId}`)
+      .on<Record<string, unknown>>(
+        "postgres_changes",
+        { event: "*", schema: "public", table: TABLE },
+        (payload) => {
+          // The publisher upserts, so this is INSERT on first sight and UPDATE thereafter;
+          // `*` covers both. A DELETE carries an empty `new` and liveQuoteFromRow rejects it
+          // (no ticker), so a partial row can never enter the map.
+          const parsed = liveQuoteFromRow(payload.new);
+          if (!parsed || !allowed.has(parsed.ticker)) return;
+          buffer[parsed.ticker] = parsed.quote; // last-write-wins per ticker = free dedupe
+          if (flushTimer === null) flushTimer = setTimeout(flush, FLUSH_MS);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      // Dropping a pending flush discards at most one window of quotes. The seed already
+      // holds a value for every covered ticker, so a consumer sees a mark, not a blank.
+      if (flushTimer) clearTimeout(flushTimer);
+      void client.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- symbolsKey tracks array content
+  }, [client, symbolsKey, instanceId]);
+
+  // Accumulate-only: a quote for a ticker no longer requested is simply never looked up.
+  return quotes;
+}

@@ -4,7 +4,10 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
+import { pnlColor } from '@/components/ui';
 import type { BookReconciliation } from '@/lib/book-reconciliation';
+import { valuePosition, type Valuation } from '@/lib/live-valuation';
+import { useLivePrices } from '@/lib/hooks/use-live-prices';
 import RiskEnvelopeCell from '@/components/portfolio/RiskEnvelopeCell';
 import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
 
@@ -15,6 +18,17 @@ import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-an
  * see lib/TABLES.md. (The click-to-expand PositionDrilldown this ruling also
  * cited went away with the orphaned Performance tab in #1747; this table has
  * had no row expansion since.)
+ *
+ * #1833 — the live valuation overlay. Each row's since-entry return is derived IN THE BROWSER
+ * from public.prices_live and persisted NOWHERE: this file reads, and never writes, and the
+ * close-keyed record (`positions.current_price` / `metrics_as_of`, written nightly by
+ * refresh_performance_metrics.py) stays the sole input to NAV history, returns and attribution.
+ * See lib/live-valuation.ts for the invariant and why breaking it is invisible.
+ *
+ * The figure rides in the risk column rather than a restored "Unrealized" column: #1664
+ * (8e345b83) narrowed this table to five columns — inventory, allocation, risk envelope,
+ * dossier — and its test pins that shape. Co-locating the number with #1834's marker on the
+ * stop↔target track keeps the change additive, and the marker is that number drawn.
  */
 export default function AllocationsPositionsTable(props: {
   reconciliation: BookReconciliation;
@@ -33,6 +47,12 @@ export default function AllocationsPositionsTable(props: {
     () => [...reconciliation.rows].sort((a, b) => b.normalizedWeight - a.normalizedWeight),
     [reconciliation.rows]
   );
+
+  // ONE subscription for the whole table — never per row. Coverage is not guaranteed per
+  // ticker (the publisher caps at 25 symbols), so a missing key is normal and every row falls
+  // back through valuePosition rather than being blanked.
+  const tickers = useMemo(() => sorted.map((p) => p.ticker.toUpperCase()), [sorted]);
+  const quotes = useLivePrices(tickers);
 
   return (
     <div
@@ -69,6 +89,8 @@ export default function AllocationsPositionsTable(props: {
             {sorted.map((p) => {
                   const tickerKey = p.ticker.toUpperCase();
                   const isSelected = selectedTicker === tickerKey;
+                  // live quote → close → nothing. Never a 0, never a midpoint.
+                  const valuation = valuePosition(p, quotes[tickerKey]);
                   return (
                       <tr key={p.ticker}
                         ref={(el) => {
@@ -106,11 +128,15 @@ export default function AllocationsPositionsTable(props: {
                           </span>
                         </td>
                         <td className="px-2 py-3 md:px-3">
-                          <RiskEnvelopeCell
-                            stopLossPct={p.stop_loss_pct}
-                            targetPctGain={p.target_pct_gain}
-                            horizonDays={null}
-                          />
+                          <div className="flex flex-col items-end gap-1">
+                            <MarkFigure ticker={p.ticker} valuation={valuation} />
+                            <RiskEnvelopeCell
+                              stopLossPct={p.stop_loss_pct}
+                              targetPctGain={p.target_pct_gain}
+                              horizonDays={null}
+                              valuation={valuation}
+                            />
+                          </div>
                         </td>
                         <td className="px-2 py-3 text-right md:px-3">
                           <Link
@@ -137,4 +163,75 @@ export default function AllocationsPositionsTable(props: {
       </div>
     </div>
   );
+}
+
+/**
+ * The since-entry return at the current moment, with the provenance that makes it readable.
+ *
+ * ATTRIBUTION IS PART OF THE FEATURE, not decoration: a live figure and a close figure that
+ * render identically leave the reader unable to tell current from stale (the ambiguity #1750
+ * flags for frozen documents). So the source rides beside the number as a word — `live` or
+ * `close`, which is legible without colour and survives a monochrome print — the exact
+ * timestamp sits in the tooltip for mouse users, and the whole sentence is in an sr-only span
+ * for assistive tech. Colour (via `pnlColor`) only ever repeats the sign, which the leading
+ * `+`/`−` already carries.
+ *
+ * `unavailable` renders the table's em-dash convention. NOT 0% — a fabricated zero reads as a
+ * real "flat" — and not a blank cell either.
+ */
+function MarkFigure({ ticker, valuation }: { ticker: string; valuation: Valuation }) {
+  const pct = valuation.unrealizedPct;
+  if (valuation.source === 'unavailable' || pct == null || !Number.isFinite(pct)) {
+    return (
+      <span className="font-mono text-[11px] text-ink-mute">
+        <span aria-hidden>—</span>
+        <span className="sr-only">{`${ticker}: no live quote and no closing mark, so no return is shown.`}</span>
+      </span>
+    );
+  }
+  const signed = `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+  const isLive = valuation.source === 'live';
+  const detail = attributionDetail(valuation);
+  return (
+    <span
+      className="flex items-baseline gap-1"
+      title={`${isLive ? 'Live' : 'Last close'} · ${signed} since entry · ${detail}`}
+    >
+      <span
+        className={`font-mono text-[11px] font-medium tabular-nums ${pnlColor(pct)}`}
+        aria-hidden
+      >
+        {signed}
+      </span>
+      <span
+        className="font-mono text-[0.55rem] uppercase tracking-[0.12em] text-ink-mute"
+        aria-hidden
+      >
+        {isLive ? 'live' : 'close'}
+      </span>
+      <span className="sr-only">
+        {`${ticker}: ${signed} since entry, ${isLive ? 'from a live quote' : 'from the last official close'}, ${detail}.`}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The as-of phrase for a valuation, formatted from the ISO string ONLY.
+ *
+ * Deliberately not `toLocale*`: this table is prerendered by the static export (`output:
+ * "export"`) and then hydrated in a browser on some other timezone, so a locale-formatted
+ * stamp would differ between the two renders and trip a hydration mismatch. UTC is also the
+ * honest unit here — `quoted_at` is the exchange's tick time, not the reader's wall clock.
+ */
+function attributionDetail(valuation: Valuation): string {
+  const asOf = valuation.asOf ?? '';
+  const day = asOf.slice(0, 10);
+  if (valuation.source !== 'live') {
+    return day ? `official close of ${day}` : 'official close, date unknown';
+  }
+  const parsed = Date.parse(asOf);
+  if (!Number.isFinite(parsed)) return asOf ? `quoted at ${asOf}` : 'quote time unknown';
+  const iso = new Date(parsed).toISOString();
+  return `quoted ${iso.slice(11, 16)} UTC on ${iso.slice(0, 10)}`;
 }
