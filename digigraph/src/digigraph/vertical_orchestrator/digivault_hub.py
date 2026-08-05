@@ -1,4 +1,4 @@
-"""DigiVault orchestrator manifest + invoke (tools owned by DigiVault HTTP API)."""
+"""digivault orchestrator manifest + invoke (tools owned by digivault HTTP API)."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def fetch_digivault_tool_dicts(
                 r.raise_for_status()
                 body = r.json()
         except HUB_CLIENT_ERRORS as e:
-            log_manifest_fetch_failure("DigiVault", e)
+            log_manifest_fetch_failure("digivault", e)
             raise
         tools = body.get("tools") or []
         if not isinstance(tools, list):
@@ -51,7 +51,7 @@ def invoke_digivault_tool(
     bearer_token: str | None,
     request_id: str | None,
 ) -> dict[str, Any]:
-    """POST ``/v1/orchestrator_invoke`` on DigiVault."""
+    """POST ``/v1/orchestrator_invoke`` on digivault."""
     url = f"{base_url.strip().rstrip('/')}/v1/orchestrator_invoke"
     headers = outbound_service_headers(request_id, bearer_token)
     headers["Content-Type"] = "application/json"

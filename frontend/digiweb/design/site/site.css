@@ -1,5 +1,5 @@
 /* ==========================================================================
-   DigiThings site foundation — shared component layer for the redesign.
+   digithings site foundation — shared component layer for the redesign.
    Consumes the [data-theme] semantic tokens in ../tokens.css. Terminal-CLI,
    utilitarian, spacious; light + dark; reduced-motion safe.
    Page-specific overrides live in each site's local style.css.

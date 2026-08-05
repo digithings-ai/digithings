@@ -1,6 +1,6 @@
 # score:allow pandas
 """
-DigiQuant Backtest Tearsheet — Premium Edition.
+digiquant Backtest Tearsheet — Premium Edition.
 Modern trading-terminal aesthetic, tabbed, exportable HTML.
 Requires: digiquant[visualization] (plotly).
 """
@@ -876,7 +876,7 @@ def _build_page(
   </div>
 
   <div class="footer">
-    <span>DigiQuant Backtest Report — Generated from NautilusTrader</span>
+    <span>digiquant Backtest Report — Generated from NautilusTrader</span>
     <span id="gen-time"></span>
   </div>
 </div>

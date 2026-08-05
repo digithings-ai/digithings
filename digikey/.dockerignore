@@ -1,4 +1,4 @@
-# DigiKey – keep build context small and fast
+# digikey – keep build context small and fast
 .git
 .pytest_cache
 *.egg-info

@@ -9,7 +9,7 @@ Realign **digithings.ai** hero to Cursor pattern: literal primary CTA, trust str
 ## Acceptance Criteria
 
 - [ ] Hero includes:
-  - Primary CTA: `Ask DigiChat` (or `Open docs` — pick one primary, one secondary ghost)
+  - Primary CTA: `Ask digichat` (or `Open docs` — pick one primary, one secondary ghost)
   - Secondary CTA with arrow suffix where appropriate
   - `TrustStrip` below CTAs: e.g. `open core · self-hosted · MCP-first`
   - `ProductFrame` showing supervisor diagram or static chat embed crop (no mesh on UI)
@@ -34,7 +34,7 @@ Realign **digithings.ai** hero to Cursor pattern: literal primary CTA, trust str
 ## Out of Scope
 
 - Bento module grid (C2)
-- Live DigiChat embed (#204)
+- Live digichat embed (#204)
 - Changelog band (C3)
 
 ## Dependencies

@@ -79,7 +79,7 @@ export function ControlsLayerReference() {
               input + label
             </p>
             <div className="flex flex-col gap-[0.4rem]">
-              <Label htmlFor="ctl-endpoint">DigiGraph base URL</Label>
+              <Label htmlFor="ctl-endpoint">digigraph base URL</Label>
               <Input id="ctl-endpoint" type="url" placeholder="https://api.example.com" />
             </div>
           </div>

@@ -1,4 +1,4 @@
-"""DigiQuant MCP server: backtest, optimize, export, strategy catalog.
+"""digiquant MCP server: backtest, optimize, export, strategy catalog.
 
 Run::
 
@@ -34,7 +34,7 @@ def _require_mcp() -> type:
 
 def create_mcp_server() -> Any:
     _require_mcp()
-    mcp = FastMCP("DigiQuant")
+    mcp = FastMCP("digiquant")
 
     @mcp.tool()
     def digiquant_list_strategies() -> str:
@@ -193,7 +193,7 @@ def create_mcp_server() -> Any:
         """Read rows from a whitelisted Olympus table (JSON).
 
         Exposes the same read-only, table-scoped reader the in-process Hermes
-        agents use, so external agents (DigiChat / Kairos) can fetch the paper
+        agents use, so external agents (digichat / Kairos) can fetch the paper
         book and market data by key (#925). Allowed tables: ``positions``,
         ``nav_history``, ``theses``, ``thesis_vehicles``, ``position_events``,
         ``portfolio_metrics``, ``price_history``, ``price_technicals``,
@@ -393,7 +393,7 @@ def run_mcp(
     port: int = 8767,
 ) -> None:
     mcp = create_mcp_server()
-    logger.info("Starting DigiQuant MCP server on %s:%d (transport=%s)", host, port, transport)
+    logger.info("Starting digiquant MCP server on %s:%d (transport=%s)", host, port, transport)
     mcp.run(transport=transport, host=host, port=port)
 
 
@@ -401,7 +401,7 @@ if __name__ == "__main__":
     import argparse
 
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
-    parser = argparse.ArgumentParser(description="DigiQuant MCP server")
+    parser = argparse.ArgumentParser(description="digiquant MCP server")
     parser.add_argument("--stdio", action="store_true", help="Use stdio transport (Claude Desktop)")
     parser.add_argument("--host", default=os.environ.get("DIGIQUANT_MCP_HOST", "127.0.0.1"))
     parser.add_argument(

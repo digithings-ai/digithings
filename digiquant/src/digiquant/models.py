@@ -1,4 +1,4 @@
-"""Structured outputs for DigiQuant (Pydantic). All data exchange uses these models."""
+"""Structured outputs for digiquant (Pydantic). All data exchange uses these models."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class BacktestResult(BaseModel):
-    """Result of a single backtest run. Used by DigiGraph and MCP."""
+    """Result of a single backtest run. Used by digigraph and MCP."""
 
     run_id: str = Field(..., description="Unique run identifier")
     strategy_name: str = Field(..., description="Strategy or idea label")

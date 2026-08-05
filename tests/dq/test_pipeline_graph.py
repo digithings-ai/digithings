@@ -1,4 +1,4 @@
-"""Unit tests for DigiQuant LangGraph pipeline (mocked service layer)."""
+"""Unit tests for digiquant LangGraph pipeline (mocked service layer)."""
 
 from __future__ import annotations
 

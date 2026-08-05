@@ -85,7 +85,7 @@ def test_status_is_public() -> None:
 
 
 def test_protected_route_requires_auth(monkeypatch: pytest.MonkeyPatch) -> None:
-    # No DigiKey configured -> middleware returns 503 auth_not_configured.
+    # No digikey configured -> middleware returns 503 auth_not_configured.
     monkeypatch.delenv("DIGIKEY_JWKS_URL", raising=False)
     monkeypatch.delenv("DIGIKEY_PUBLIC_KEY_PEM", raising=False)
     resp = TestClient(server.app).get("/v1/notes")
@@ -220,7 +220,7 @@ def test_orchestrator_invoke_search_notes(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
     hit = {
         "vault_path": "digigraph",
-        "title": "DigiGraph",
+        "title": "digigraph",
         "note_type": "module",
         "summary": "orchestration hub",
         "body_markdown": "LangGraph-based workflow engine.",
@@ -243,7 +243,7 @@ def test_orchestrator_invoke_search_notes(monkeypatch: pytest.MonkeyPatch) -> No
     assert resp.data["hits"] == [
         {
             "vault_path": "digigraph",
-            "title": "DigiGraph",
+            "title": "digigraph",
             "note_type": "module",
             "summary": "orchestration hub",
             "body_markdown": "LangGraph-based workflow engine.",

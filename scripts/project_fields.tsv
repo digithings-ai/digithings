@@ -1,14 +1,14 @@
 issue	phase	area	kind	priority	model
 2	Phase 2 — Hardening	Cross-cutting	Epic	P0	sonnet
 3	Phase 2 — Hardening	Cross-cutting	Epic	P0	sonnet
-4	Phase 2 — Hardening	DigiSmith	Epic	P1	sonnet
-5	Phase 2 — Hardening	DigiGraph	Epic	P1	sonnet
-6	Phase 2 — Hardening	DigiKey	Epic	P2	sonnet
+4	Phase 2 — Hardening	digismith	Epic	P1	sonnet
+5	Phase 2 — Hardening	digigraph	Epic	P1	sonnet
+6	Phase 2 — Hardening	digikey	Epic	P2	sonnet
 7	Phase 3 — Domain unification	Website	Epic	P1	sonnet
-8	Phase 3 — Domain unification	DigiChat	Epic	P1	sonnet
-9	Phase 3 — Domain unification	DigiQuant	Epic	P2	sonnet
-10	Phase 4 — Atlas on DigiGraph	Atlas	Epic	P2	sonnet
-11	Phase 4 — Atlas on DigiGraph	Atlas	Epic	P2	sonnet
+8	Phase 3 — Domain unification	digichat	Epic	P1	sonnet
+9	Phase 3 — Domain unification	digiquant	Epic	P2	sonnet
+10	Phase 4 — Atlas on digigraph	Atlas	Epic	P2	sonnet
+11	Phase 4 — Atlas on digigraph	Atlas	Epic	P2	sonnet
 12	Phase 5 — Atlas tiering	Atlas	Epic	P3	sonnet
 13	Phase 5 — Atlas tiering	Atlas	Epic	P3	sonnet
 14	SITAAS pilot	SITAAS	Epic	P1	sonnet
@@ -20,123 +20,123 @@ issue	phase	area	kind	priority	model
 20	Phase 2 — Hardening	SITAAS	Task	P1	sonnet
 21	Phase 2 — Hardening	Cross-cutting	Task	P1	sonnet
 22	Phase 3 — Domain unification	Website	Task	P1	sonnet
-23	Phase 3 — Domain unification	DigiSearch	Feature	P1	sonnet
-24	Phase 3 — Domain unification	DigiChat	Feature	P1	sonnet
+23	Phase 3 — Domain unification	digisearch	Feature	P1	sonnet
+24	Phase 3 — Domain unification	digichat	Feature	P1	sonnet
 25	SITAAS pilot	SITAAS	Task	P1	sonnet
 26	SITAAS pilot	SITAAS	Task	P1	sonnet
 27	SITAAS pilot	Docs	Chore	P2	sonnet
 28	Phase 5 — Atlas tiering	Atlas	Research	P3	sonnet
-29	Phase 3 — Domain unification	DigiChat	Research	P2	sonnet
+29	Phase 3 — Domain unification	digichat	Research	P2	sonnet
 30	Phase 5 — Atlas tiering	Cross-cutting	Research	P3	sonnet
 31	Phase 2 — Hardening	Cross-cutting	Epic	P0	sonnet
 33	Phase 3 — Domain unification	Website	Chore	P2	sonnet
 34	Phase 2 — Hardening	Cross-cutting	Epic	P0	sonnet
 40	Phase 2 — Hardening	Cross-cutting	Chore	P1	sonnet
 41	Phase 2 — Hardening	Cross-cutting	Epic	P1	sonnet
-42	Phase 2 — Hardening	DigiQuant	Bug	P0	opus
+42	Phase 2 — Hardening	digiquant	Bug	P0	opus
 43	Phase 2 — Hardening	Cross-cutting	Chore	P1	sonnet
 77	Phase 2 — Hardening	Cross-cutting	Chore	P1	sonnet
 79	Phase 3 — Domain unification	Website	Feature	P2	sonnet
 80	Phase 3 — Domain unification	Website	Chore	P2	sonnet
 81	Phase 3 — Domain unification	Website	Feature	P2	sonnet
 82	Phase 3 — Domain unification	Docs	Chore	P2	sonnet
-83	Phase 3 — Domain unification	DigiGraph	Task	P2	sonnet
-84	Phase 3 — Domain unification	DigiGraph	Feature	P2	sonnet
-85	Phase 3 — Domain unification	DigiGraph	Feature	P2	sonnet
-86	Phase 3 — Domain unification	DigiGraph	Feature	P2	sonnet
-87	Phase 3 — Domain unification	DigiGraph	Task	P2	sonnet
+83	Phase 3 — Domain unification	digigraph	Task	P2	sonnet
+84	Phase 3 — Domain unification	digigraph	Feature	P2	sonnet
+85	Phase 3 — Domain unification	digigraph	Feature	P2	sonnet
+86	Phase 3 — Domain unification	digigraph	Feature	P2	sonnet
+87	Phase 3 — Domain unification	digigraph	Task	P2	sonnet
 95	Phase 3 — Domain unification	Docs	Bug	P2	sonnet
-96	Phase 3 — Domain unification	DigiGraph	Task	P2	sonnet
-97	Phase 3 — Domain unification	DigiSearch	Task	P2	sonnet
+96	Phase 3 — Domain unification	digigraph	Task	P2	sonnet
+97	Phase 3 — Domain unification	digisearch	Task	P2	sonnet
 98	Phase 3 — Domain unification	Docs	Task	P2	sonnet
 100	Phase 3 — Domain unification	Website	Task	P2	sonnet
 101	Phase 3 — Domain unification	Website	Task	P2	sonnet
 103	Phase 3 — Domain unification	Docs	Chore	P2	sonnet
 105	Phase 2 — Hardening	Cross-cutting	Feature	P2	sonnet
-106	SITAAS pilot	DigiGraph	Feature	P1	sonnet
+106	SITAAS pilot	digigraph	Feature	P1	sonnet
 108	Phase 2 — Hardening	Cross-cutting	Feature	P2	sonnet
 109	Phase 2 — Hardening	Cross-cutting	Chore	P2	sonnet
-110	SITAAS pilot	DigiGraph	Feature	P1	sonnet
+110	SITAAS pilot	digigraph	Feature	P1	sonnet
 111	Phase 2 — Hardening	Cross-cutting	Feature	P2	sonnet
 121	Phase 2 — Hardening	Cross-cutting	Feature	P2	sonnet
 126	Phase 2 — Hardening	Cross-cutting	Chore	P1	sonnet
-145	SITAAS pilot	DigiChat	Feature	P2	sonnet
+145	SITAAS pilot	digichat	Feature	P2	sonnet
 171	Phase 3 — Domain unification	Cross-cutting	Feature	P1	sonnet
 172	Phase 3 — Domain unification	Cross-cutting	Feature	P1	sonnet
 173	Phase 3 — Domain unification	Cross-cutting	Feature	P2	sonnet
 175	Phase 3 — Domain unification	Cross-cutting	Feature	P1	opus
-179	Phase 3 — Domain unification	DigiQuant	Feature	P1	sonnet
-180	Phase 3 — Domain unification	DigiQuant	Feature	P1	sonnet
-181	Phase 3 — Domain unification	DigiQuant	Feature	P1	sonnet
-182	Phase 3 — Domain unification	DigiQuant	Feature	P2	sonnet
-183	Phase 3 — Domain unification	DigiQuant	Feature	P2	sonnet
-184	Phase 3 — Domain unification	DigiGraph	Feature	P0	opus
-185	Phase 3 — Domain unification	DigiGraph	Feature	P1	sonnet
-186	Phase 3 — Domain unification	DigiGraph	Feature	P1	sonnet
-187	Phase 3 — Domain unification	DigiGraph	Feature	P1	sonnet
-188	Phase 3 — Domain unification	DigiGraph	Research	P2	sonnet
-189	Phase 3 — Domain unification	DigiGraph	Feature	P2	sonnet
-190	Phase 3 — Domain unification	DigiGraph	Feature	P2	sonnet
-191	Phase 3 — Domain unification	DigiGraph	Chore	P1	sonnet
-192	Phase 3 — Domain unification	DigiGraph	Feature	P1	sonnet
-193	Phase 3 — Domain unification	DigiGraph	Feature	P2	sonnet
-194	Phase 3 — Domain unification	DigiGraph	Feature	P2	sonnet
-195	Phase 3 — Domain unification	DigiGraph	Chore	P1	sonnet
-196	Phase 3 — Domain unification	DigiSearch	Feature	P2	sonnet
-197	Phase 3 — Domain unification	DigiSearch	Feature	P1	sonnet
-198	Phase 3 — Domain unification	DigiSearch	Feature	P1	sonnet
-200	Phase 3 — Domain unification	DigiSearch	Chore	P1	sonnet
-201	Phase 3 — Domain unification	DigiChat	Feature	P2	sonnet
-202	Phase 3 — Domain unification	DigiChat	Feature	P2	sonnet
-203	Phase 3 — Domain unification	DigiChat	Feature	P2	sonnet
-204	Phase 3 — Domain unification	DigiChat	Feature	P2	sonnet
-205	Phase 3 — Domain unification	DigiChat	Feature	P2	sonnet
-206	Phase 3 — Domain unification	DigiKey	Feature	P0	opus
-207	Phase 3 — Domain unification	DigiKey	Feature	P1	opus
-208	Phase 3 — Domain unification	DigiKey	Feature	P0	opus
-209	Phase 3 — Domain unification	DigiKey	Feature	P0	opus
-210	Phase 3 — Domain unification	DigiKey	Feature	P0	opus
-211	Phase 3 — Domain unification	DigiKey	Feature	P1	sonnet
+179	Phase 3 — Domain unification	digiquant	Feature	P1	sonnet
+180	Phase 3 — Domain unification	digiquant	Feature	P1	sonnet
+181	Phase 3 — Domain unification	digiquant	Feature	P1	sonnet
+182	Phase 3 — Domain unification	digiquant	Feature	P2	sonnet
+183	Phase 3 — Domain unification	digiquant	Feature	P2	sonnet
+184	Phase 3 — Domain unification	digigraph	Feature	P0	opus
+185	Phase 3 — Domain unification	digigraph	Feature	P1	sonnet
+186	Phase 3 — Domain unification	digigraph	Feature	P1	sonnet
+187	Phase 3 — Domain unification	digigraph	Feature	P1	sonnet
+188	Phase 3 — Domain unification	digigraph	Research	P2	sonnet
+189	Phase 3 — Domain unification	digigraph	Feature	P2	sonnet
+190	Phase 3 — Domain unification	digigraph	Feature	P2	sonnet
+191	Phase 3 — Domain unification	digigraph	Chore	P1	sonnet
+192	Phase 3 — Domain unification	digigraph	Feature	P1	sonnet
+193	Phase 3 — Domain unification	digigraph	Feature	P2	sonnet
+194	Phase 3 — Domain unification	digigraph	Feature	P2	sonnet
+195	Phase 3 — Domain unification	digigraph	Chore	P1	sonnet
+196	Phase 3 — Domain unification	digisearch	Feature	P2	sonnet
+197	Phase 3 — Domain unification	digisearch	Feature	P1	sonnet
+198	Phase 3 — Domain unification	digisearch	Feature	P1	sonnet
+200	Phase 3 — Domain unification	digisearch	Chore	P1	sonnet
+201	Phase 3 — Domain unification	digichat	Feature	P2	sonnet
+202	Phase 3 — Domain unification	digichat	Feature	P2	sonnet
+203	Phase 3 — Domain unification	digichat	Feature	P2	sonnet
+204	Phase 3 — Domain unification	digichat	Feature	P2	sonnet
+205	Phase 3 — Domain unification	digichat	Feature	P2	sonnet
+206	Phase 3 — Domain unification	digikey	Feature	P0	opus
+207	Phase 3 — Domain unification	digikey	Feature	P1	opus
+208	Phase 3 — Domain unification	digikey	Feature	P0	opus
+209	Phase 3 — Domain unification	digikey	Feature	P0	opus
+210	Phase 3 — Domain unification	digikey	Feature	P0	opus
+211	Phase 3 — Domain unification	digikey	Feature	P1	sonnet
 216	Phase 3 — Domain unification	Cross-cutting	Chore	P2	sonnet
 217	Phase 3 — Domain unification	Cross-cutting	Feature	P2	sonnet
 218	Phase 3 — Domain unification	Cross-cutting	Feature	P3	sonnet
 220	Phase 3 — Domain unification	Cross-cutting	Feature	P2	sonnet
 221	Phase 3 — Domain unification	Cross-cutting	Feature	P2	opus
 222	Phase 3 — Domain unification	Cross-cutting	Chore	P2	sonnet
-257	Phase 3 — Domain unification	DigiChat	Feature	P2	sonnet
-258	Phase 3 — Domain unification	DigiChat	Feature	P2	sonnet
+257	Phase 3 — Domain unification	digichat	Feature	P2	sonnet
+258	Phase 3 — Domain unification	digichat	Feature	P2	sonnet
 259	Phase 3 — Domain unification	Cross-cutting	Feature	P2	sonnet
-261	Phase 3 — Domain unification	DigiChat	Feature	P1	sonnet
-266	Phase 3 — Domain unification	DigiChat	Feature	P1	sonnet
-280	Phase 3 — Domain unification	DigiChat	Feature	P3	sonnet
-281	Phase 3 — Domain unification	DigiChat	Feature	P3	sonnet
+261	Phase 3 — Domain unification	digichat	Feature	P1	sonnet
+266	Phase 3 — Domain unification	digichat	Feature	P1	sonnet
+280	Phase 3 — Domain unification	digichat	Feature	P3	sonnet
+281	Phase 3 — Domain unification	digichat	Feature	P3	sonnet
 291	Phase 3 — Domain unification	Cross-cutting	Chore	P0	sonnet
 292	Phase 3 — Domain unification	Cross-cutting	Chore	P1	sonnet
 293	Phase 3 — Domain unification	Cross-cutting	Chore	P1	sonnet
-307	Phase 3 — Domain unification	DigiKey	Feature	P2	sonnet
-308	Phase 3 — Domain unification	DigiKey	Feature	P2	sonnet
-309	Phase 3 — Domain unification	DigiGraph	Feature	P2	sonnet
-310	Phase 3 — Domain unification	DigiChat	Feature	P2	sonnet
-311	Phase 3 — Domain unification	DigiChat	Feature	P3	sonnet
-318	Phase 3 — Domain unification	DigiQuant	Chore	P2	sonnet
-335	Phase 3 — Domain unification	DigiQuant	Epic	P1	sonnet
-338	Phase 3 — Domain unification	DigiQuant	Task	P1	sonnet
-339	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-340	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
+307	Phase 3 — Domain unification	digikey	Feature	P2	sonnet
+308	Phase 3 — Domain unification	digikey	Feature	P2	sonnet
+309	Phase 3 — Domain unification	digigraph	Feature	P2	sonnet
+310	Phase 3 — Domain unification	digichat	Feature	P2	sonnet
+311	Phase 3 — Domain unification	digichat	Feature	P3	sonnet
+318	Phase 3 — Domain unification	digiquant	Chore	P2	sonnet
+335	Phase 3 — Domain unification	digiquant	Epic	P1	sonnet
+338	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+339	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+340	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
 379	Phase 3 — Domain unification	Cross-cutting	Chore	P2	sonnet
-395	Phase 3 — Domain unification	DigiQuant	Epic	P1	sonnet
-396	Phase 3 — Domain unification	DigiQuant	Chore	P1	sonnet
-397	Phase 3 — Domain unification	DigiQuant	Feature	P1	sonnet
-398	Phase 3 — Domain unification	DigiQuant	Feature	P2	sonnet
-399	Phase 3 — Domain unification	DigiGraph	Feature	P2	sonnet
-400	Phase 3 — Domain unification	DigiGraph	Chore	P1	sonnet
-401	Phase 3 — Domain unification	DigiGraph	Feature	P1	sonnet
-402	Phase 3 — Domain unification	DigiSearch	Feature	P1	sonnet
-403	Phase 3 — Domain unification	DigiSearch	Feature	P1	sonnet
-404	Phase 3 — Domain unification	DigiGraph	Feature	P2	sonnet
-405	Phase 3 — Domain unification	DigiQuant	Feature	P2	sonnet
-565	Phase 4 — Atlas on DigiGraph	Atlas	Epic	P2	sonnet
-566	Phase 4 — Atlas on DigiGraph	Atlas	Epic	P2	sonnet
+395	Phase 3 — Domain unification	digiquant	Epic	P1	sonnet
+396	Phase 3 — Domain unification	digiquant	Chore	P1	sonnet
+397	Phase 3 — Domain unification	digiquant	Feature	P1	sonnet
+398	Phase 3 — Domain unification	digiquant	Feature	P2	sonnet
+399	Phase 3 — Domain unification	digigraph	Feature	P2	sonnet
+400	Phase 3 — Domain unification	digigraph	Chore	P1	sonnet
+401	Phase 3 — Domain unification	digigraph	Feature	P1	sonnet
+402	Phase 3 — Domain unification	digisearch	Feature	P1	sonnet
+403	Phase 3 — Domain unification	digisearch	Feature	P1	sonnet
+404	Phase 3 — Domain unification	digigraph	Feature	P2	sonnet
+405	Phase 3 — Domain unification	digiquant	Feature	P2	sonnet
+565	Phase 4 — Atlas on digigraph	Atlas	Epic	P2	sonnet
+566	Phase 4 — Atlas on digigraph	Atlas	Epic	P2	sonnet
 577	Phase 2 — Hardening	Cross-cutting	Task	P1	sonnet
 579	Phase 2 — Hardening	Cross-cutting	Epic	P1	sonnet
 580	Phase 2 — Hardening	Cross-cutting	Task	P2	sonnet
@@ -145,52 +145,52 @@ issue	phase	area	kind	priority	model
 583	Phase 2 — Hardening	Cross-cutting	Task	P2	sonnet
 584	Phase 2 — Hardening	Cross-cutting	Task	P1	opus
 585	Phase 2 — Hardening	Cross-cutting	Task	P2	sonnet
-1493	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1495	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1501	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
+1493	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1495	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1501	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
 800	Phase 3 — Domain unification	Website	Task	P2	sonnet
-931	Phase 3 — Domain unification	DigiQuant	Task	P2	opus
-932	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-934	Phase 3 — Domain unification	DigiQuant	Task	P2	opus
-1065	Phase 3 — Domain unification	DigiQuant	Task	P2	opus
-1068	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1072	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1080	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1081	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1082	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1083	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1084	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1085	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1086	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1087	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
+931	Phase 3 — Domain unification	digiquant	Task	P2	opus
+932	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+934	Phase 3 — Domain unification	digiquant	Task	P2	opus
+1065	Phase 3 — Domain unification	digiquant	Task	P2	opus
+1068	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1072	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1080	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1081	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1082	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1083	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1084	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1085	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1086	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1087	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
 1141	Phase 3 — Domain unification	Cross-cutting	Epic	P1	sonnet
 1142	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
-1143	Phase 3 — Domain unification	DigiGraph	Task	P2	sonnet
-1144	Phase 3 — Domain unification	DigiSearch	Task	P2	sonnet
+1143	Phase 3 — Domain unification	digigraph	Task	P2	sonnet
+1144	Phase 3 — Domain unification	digisearch	Task	P2	sonnet
 1145	Phase 3 — Domain unification	Website	Task	P2	opus
-1177	Phase 3 — Domain unification	DigiSearch	Task	P2	sonnet
-1178	Phase 3 — Domain unification	DigiChat	Task	P2	sonnet
+1177	Phase 3 — Domain unification	digisearch	Task	P2	sonnet
+1178	Phase 3 — Domain unification	digichat	Task	P2	sonnet
 1180	Phase 3 — Domain unification	Website	Task	P2	sonnet
-1181	Phase 3 — Domain unification	DigiKey	Task	P2	opus
+1181	Phase 3 — Domain unification	digikey	Task	P2	opus
 1182	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
 1183	Phase 3 — Domain unification	Website	Task	P2	sonnet
-1184	Phase 3 — Domain unification	DigiGraph	Task	P2	sonnet
-1185	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1186	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
-1187	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
+1184	Phase 3 — Domain unification	digigraph	Task	P2	sonnet
+1185	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1186	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1187	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
 1188	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
-1189	Phase 3 — Domain unification	DigiSearch	Task	P2	sonnet
+1189	Phase 3 — Domain unification	digisearch	Task	P2	sonnet
 1190	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
 1191	Phase 3 — Domain unification	Website	Task	P2	sonnet
 1192	Phase 3 — Domain unification	Website	Task	P2	opus
 1193	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
-1194	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
+1194	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
 1195	Phase 3 — Domain unification	Website	Task	P2	sonnet
 1196	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
 1197	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
 1200	Phase 3 — Domain unification	Website	Epic	P1	sonnet
 1212	Phase 3 — Domain unification	Website	Task	P2	sonnet
-1279	Phase 3 — Domain unification	DigiChat	Task	P2	sonnet
+1279	Phase 3 — Domain unification	digichat	Task	P2	sonnet
 1281	Phase 3 — Domain unification	Website	Task	P2	sonnet
 1282	Phase 3 — Domain unification	Website	Task	P2	sonnet
 1350	Phase 3 — Domain unification	Website	Task	P2	sonnet
@@ -199,13 +199,13 @@ issue	phase	area	kind	priority	model
 1364	Phase 3 — Domain unification	Website	Task	P2	sonnet
 1369	Phase 3 — Domain unification	Website	Task	P2	sonnet
 1370	Phase 3 — Domain unification	Website	Task	P2	sonnet
-1536	Phase 3 — Domain unification	DigiQuant	Task	P2	opus
+1536	Phase 3 — Domain unification	digiquant	Task	P2	opus
 1538	Phase 3 — Domain unification	Website	Task	P2	sonnet
 1548	Phase 3 — Domain unification	Website	Task	P2	sonnet
 1551	Phase 3 — Domain unification	Website	Task	P2	sonnet
 1553	Phase 3 — Domain unification	Website	Task	P2	sonnet
-1555	Phase 3 — Domain unification	DigiQuant	Task	P2	opus
-1559	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
+1555	Phase 3 — Domain unification	digiquant	Task	P2	opus
+1559	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
 1562	Phase 3 — Domain unification	Website	Task	P2	sonnet
 1570	Phase 3 — Domain unification	Website	Task	P2	sonnet
 1572	Phase 3 — Domain unification	Website	Task	P2	sonnet
@@ -214,6 +214,7 @@ issue	phase	area	kind	priority	model
 1607	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
 1612	Phase 3 — Domain unification	Cross-cutting	Task	P2	opus
 1615	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
-1622	Phase 3 — Domain unification	DigiQuant	Task	P2	sonnet
+1622	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
 1636	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
-1855	Phase 2 — Hardening	DigiChat	Feature	P1	sonnet
+1855	Phase 2 — Hardening	digichat	Feature	P1	sonnet
+1866	Phase 3 — Domain unification	digichat	Task	P2	sonnet

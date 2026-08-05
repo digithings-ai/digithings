@@ -74,11 +74,11 @@ model_list:
 
 ---
 
-## DigiThings Use
+## digithings Use
 
 | Field | Value |
 |---|---|
-| Best for | Evaluating RAG quality; testing Rerank v3 for DigiSearch; 256k context prototyping |
+| Best for | Evaluating RAG quality; testing Rerank v3 for digisearch; 256k context prototyping |
 | DIGI_LLM_MODE tier | Not in automated pipeline — trial only |
 | Single-shot 100k | Yes — 256k context on Command A; ideal for full 10-K |
 | Privacy safe | Trial keys not for production use |
@@ -90,7 +90,7 @@ model_list:
 
 - Trial **non-production restriction** is hard — don't use trial keys in any automated workflow touching real data.
 - Monthly call cap (~1,000) makes it unsuitable for any recurring automated analysis.
-- **Embed v3 and Rerank v3 are genuinely best-in-class** — worth evaluating for DigiSearch even if Command A isn't used in production.
+- **Embed v3 and Rerank v3 are genuinely best-in-class** — worth evaluating for digisearch even if Command A isn't used in production.
 - API is not OpenAI-compatible natively — Cohere has its own SDK + LiteLLM handles translation.
 - For production: Embed v3 is very cheap ($0.10/1M tokens); Rerank v3 is $2/1k searches.
 

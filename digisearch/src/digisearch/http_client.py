@@ -1,6 +1,6 @@
-"""DigiSearch HTTP client: query the DigiSearch API and format results for display.
+"""digisearch HTTP client: query the digisearch API and format results for display.
 
-Used by DigiGraph and other callers. All display logic (table, columns, truncation) lives here;
+Used by digigraph and other callers. All display logic (table, columns, truncation) lives here;
 callers only pass base_url and query parameters.
 """
 
@@ -71,7 +71,7 @@ def query_digisearch(
     response_mode: str = "full",
     summarize_if_over: int | None = None,
 ) -> dict[str, Any] | None:
-    """Call DigiSearch POST /query. Returns full response (results, query, index_name, total, summary?) or None."""
+    """Call digisearch POST /query. Returns full response (results, query, index_name, total, summary?) or None."""
     if not (base_url and base_url.strip()):
         return None
     url = f"{base_url.rstrip('/')}/query"
@@ -138,7 +138,7 @@ def format_results_table(
 ) -> str:
     """Format API results as a markdown table. Universal; no project-specific logic."""
     if not results:
-        return f"DigiSearch results for: {query_text!r}\n\nNo results."
+        return f"digisearch results for: {query_text!r}\n\nNo results."
     k = top_k if top_k is not None else len(results)
     meta_cols = _metadata_columns(results[:k], preferred_columns)
     show_chunk_id = any(r.get("chunk_id") for r in results[:k])
@@ -170,7 +170,7 @@ def format_results_table(
         rows.append("| " + " | ".join(cells) + " |")
 
     table = "\n".join([header_line, sep_line] + rows)
-    return f"DigiSearch results for: {query_text!r}\n\n{table}"
+    return f"digisearch results for: {query_text!r}\n\n{table}"
 
 
 def search_documents(
@@ -186,7 +186,7 @@ def search_documents(
     summarize_if_over: int | None = None,
     preferred_columns: tuple[str, ...] | list[str] | None = None,
 ) -> str | None:
-    """Query DigiSearch via HTTP and return results as a formatted markdown table string. Appends text_summary when present."""
+    """Query digisearch via HTTP and return results as a formatted markdown table string. Appends text_summary when present."""
     data = query_digisearch(
         base_url,
         text,

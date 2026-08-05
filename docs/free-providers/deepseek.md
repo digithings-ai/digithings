@@ -87,7 +87,7 @@ Same weights, Western data jurisdiction:
 
 ---
 
-## DigiThings Use
+## digithings Use
 
 | Field | Value |
 |---|---|

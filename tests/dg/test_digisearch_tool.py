@@ -1,4 +1,4 @@
-"""Unit tests for DigiSearch orchestrator tool schemas and DigiGraph HTTP search helpers."""
+"""Unit tests for digisearch orchestrator tool schemas and digigraph HTTP search helpers."""
 
 from __future__ import annotations
 

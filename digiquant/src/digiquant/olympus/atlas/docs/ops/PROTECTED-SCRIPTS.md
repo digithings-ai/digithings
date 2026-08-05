@@ -103,7 +103,7 @@ PY
 | `position_entry_from_events.py` | **Keep** — helper module. |
 | `regen_research_deltas.py` | **Deleted (WS4b)** — already-run one-shot. |
 
-Apr 2026 one-off repair scripts (`repair_apr15_*`, `repair_historical_artifacts`, `fix_backfill_lineage`) were **removed** from the repo for the migration baseline (not shipped to DigiThings).
+Apr 2026 one-off repair scripts (`repair_apr15_*`, `repair_historical_artifacts`, `fix_backfill_lineage`) were **removed** from the repo for the migration baseline (not shipped to digithings).
 
 Everything else had at least one **text** reference (docs, workflows, other scripts). Treat “unreferenced” as **candidate only** — dynamic imports, subprocess calls with constructed paths, or docs outside the scanned extensions can still reference a script.
 

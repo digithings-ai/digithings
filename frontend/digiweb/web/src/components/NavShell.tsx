@@ -1,6 +1,6 @@
 "use client";
 /**
- * NavShell — the one scroll-aware top bar for every DigiThings marketing surface.
+ * NavShell — the one scroll-aware top bar for every digithings marketing surface.
  * Wide: brand · inline links · theme toggle + tail actions.
  * Narrow: brand · theme + actions + hamburger — links and the app CTA live in a
  * full-height portal sheet. Supersedes the per-app DqNav / DigiNav copies:

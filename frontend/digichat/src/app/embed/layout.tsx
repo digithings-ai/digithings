@@ -20,8 +20,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: "DigiChat",
-  description: "Embedded DigiChat preview.",
+  title: "digichat",
+  description: "Embedded digichat preview.",
   robots: { index: false, follow: false },
 };
 

@@ -1,4 +1,4 @@
-"""DigiVault — Obsidian-style markdown vault management.
+"""digivault — Obsidian-style markdown vault management.
 
 Core library: frontmatter parsing, wikilink parsing/rewriting, and the ``Vault``
 index with backlinks, tags, and maintenance operations. Importing ``digivault``

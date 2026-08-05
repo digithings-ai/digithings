@@ -1,4 +1,4 @@
-# DigiChat — Next.js standalone.
+# digichat — Next.js standalone.
 # Build from the REPO ROOT (compose: context '.', dockerfile frontend/digichat/Dockerfile):
 # the app is an npm workspace member whose lockfile lives at the repo root and whose
 # private @digithings/design dependency only resolves through the workspace link.

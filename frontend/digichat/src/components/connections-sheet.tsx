@@ -124,9 +124,9 @@ export function ConnectionsSheet() {
       <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle>DigiThings connections</SheetTitle>
+          <SheetTitle>digithings connections</SheetTitle>
           <SheetDescription>
-            Base URLs for the Python stack (DigiGraph, DigiQuant, DigiSmith, DigiSearch). Host dev defaults:
+            Base URLs for the Python stack (digigraph, digiquant, digismith, digisearch). Host dev defaults:
             <code className="mx-1 text-[11px]">127.0.0.1:8000–8003,8002</code>. Overrides are stored in an
             httpOnly cookie for this browser session.
           </SheetDescription>
@@ -174,7 +174,7 @@ export function ConnectionsSheet() {
             ) : null}
 
             <div className="space-y-2">
-              <Label htmlFor="dg">DigiGraph base URL</Label>
+              <Label htmlFor="dg">digigraph base URL</Label>
               <Input
                 id="dg"
                 value={form.digigraphUrl}
@@ -184,7 +184,7 @@ export function ConnectionsSheet() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="dq">DigiQuant base URL</Label>
+              <Label htmlFor="dq">digiquant base URL</Label>
               <Input
                 id="dq"
                 value={form.digiquantUrl}
@@ -194,7 +194,7 @@ export function ConnectionsSheet() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ds">DigiSmith base URL</Label>
+              <Label htmlFor="ds">digismith base URL</Label>
               <Input
                 id="ds"
                 value={form.digismithUrl}
@@ -204,7 +204,7 @@ export function ConnectionsSheet() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="dsearch">DigiSearch base URL</Label>
+              <Label htmlFor="dsearch">digisearch base URL</Label>
               <Input
                 id="dsearch"
                 value={form.digisearchUrl ?? ""}
@@ -218,7 +218,7 @@ export function ConnectionsSheet() {
                 autoComplete="off"
               />
               <p className="text-xs text-muted-foreground">
-                RAG / orchestrator hub uses this for health and (via DigiGraph) <code className="text-[11px]">DIGISEARCH_URL</code>{" "}
+                RAG / orchestrator hub uses this for health and (via digigraph) <code className="text-[11px]">DIGISEARCH_URL</code>{" "}
                 must match on the graph side. Docker Compose uses service names; native stack uses loopback.
               </p>
             </div>

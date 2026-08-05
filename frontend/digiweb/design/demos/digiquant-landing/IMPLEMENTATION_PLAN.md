@@ -22,7 +22,7 @@ Build v7 as a set of **digiquant-local client components** (canvas + scroll effe
 ### Pages — `frontend/digiquant-web/app/`
 - `page.tsx` — rewrite to: `<DqNav/>` + `<HeroMesh/>`/centered hero + `<PipelineScene/>` (id `#pipeline`) + `<StrategySuite/>` (id `#strategies`) + open-source/pricing CTA + `<Footer/>`. Remove the old hardcoded `TICKER`, the `dq-tickerbar`, the headline-left/chart-right hero, and the mini-flow. Keep the real "Open core (free) / Managed Atlas" pricing content but restyle into the new closing section.
 - `pipeline/page.tsx`, `strategies/page.tsx`, `subsystems/[id]/page.tsx` — swap shared `<Nav>` for `<DqNav>`, apply the new section/type styling. `strategies/[id]/page.tsx` keeps `TearsheetView` (real data) under `<DqNav>` with restyled chrome.
-- `layout.tsx` — update metadata to lowercase brand ("digiquant — a quant hedge fund in a box, …"), OG title/description; keep ThemeProvider/MotionProvider/grain/glow and the QR favicon. Rename remaining "DigiQuant" copy → "digiquant".
+- `layout.tsx` — update metadata to lowercase brand ("digiquant — a quant hedge fund in a box, …"), OG title/description; keep ThemeProvider/MotionProvider/grain/glow and the QR favicon. Rename remaining "digiquant" copy → "digiquant".
 
 ### CSS — `frontend/digiquant-web/app/globals.css`
 Replace the digiquant-specific blocks (old `.hero-*`, `.dq-tickerbar`, `.dq-ticker*`, `.dq-mini-flow`, hero `.panel`) with the v7 classes (mesh hero, `.ehead`/`.steps`/`.step` pipeline, `.ts-*` vertical suite, scroll-aware `.nav` states). Consume existing tokens only; do not redefine colors. Keep the existing `.ts-*` tearsheet classes used by `TearsheetView`.

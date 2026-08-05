@@ -1,5 +1,5 @@
 /* ==========================================================================
-   DigiThings Design System — Component primitives
+   digithings Design System — Component primitives
    --------------------------------------------------------------------------
    All values derive from tokens.css. Do not introduce raw hex values here.
    Primitives: .nav, .hero, .module-card, .feature-grid, .terminal,
@@ -553,7 +553,7 @@ p:last-child {
 
 /* --- .chat-embed-slot ---------------------------------------------------- */
 /*
- * Drop-in container where a DigiChat iframe / web-component can be mounted.
+ * Drop-in container where a digichat iframe / web-component can be mounted.
  * Page-level layouts decide sizing via surrounding flex/grid; this rule
  * just ensures the slot has a presentable frame and accent outline.
  */

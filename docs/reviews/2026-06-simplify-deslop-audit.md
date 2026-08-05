@@ -1,4 +1,4 @@
-# Simplify / Deslop Audit — DigiThings Monorepo
+# Simplify / Deslop Audit — digithings Monorepo
 
 **Date:** 2026-06-05  
 **Method:** Read-only heuristics (`except Exception`, `dict[str, Any]`, `# noqa`, `pass #`, `find_stale.py`), sampled worst files per module, cross-check vs [`AGENTS.md`](../../AGENTS.md) minimal-comment style.  
@@ -133,7 +133,7 @@ Heuristic density: **~35 files** with `except Exception`; **~60 files** with `di
 | `graph/state.py:8-54` | Simplify | M | TypedDict overlaps `models.py`; consolidate or generate from Pydantic |
 | `graph/research.py:108-142` | Simplify | M | Four nested config try/except → one loader |
 | `graph/research.py:272-557` | Deslop | M | Broad except on research invoke — map to connector errors |
-| `orchestration/builtin.py:130-131` | Deslop | H | Silent pass hides DigiSearch outage |
+| `orchestration/builtin.py:130-131` | Deslop | H | Silent pass hides digisearch outage |
 | `orchestration/builtin.py:159-217` | Reuse | M | Duplicates connector invoke patterns in `connectors/digisearch.py` |
 | `orchestration/builtin.py:43` | Simplify | M | 43× `dict[str, Any]` in one file — typed tool results |
 | `orchestration/registry.py:212,248` | Simplify | S | Dead `has_tool` / `register_mcp_server` (REM-100) |

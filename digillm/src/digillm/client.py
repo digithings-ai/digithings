@@ -242,7 +242,7 @@ def is_registered_provider(prefix: str) -> bool:
 def get_provider_api_key_env(prefix: str) -> str | None:
     """Return the API-key env var name for a registered provider, or ``None`` if unregistered.
 
-    Lets callers (e.g. DigiGraph's request-model resolution) check whether a
+    Lets callers (e.g. digigraph's request-model resolution) check whether a
     provider's key is configured *before* routing to it, without duplicating
     this registry or triggering :func:`get_client_for_model`'s ``RuntimeError``
     on a missing key.

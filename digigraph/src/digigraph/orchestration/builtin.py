@@ -155,13 +155,13 @@ def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[s
         if t:
             return t
     except _ORCHESTRATOR_CLIENT_ERRORS as exc:
-        logger.warning("DigiSearch manifest fetch failed for %s: %s", tool_name, exc)
+        logger.warning("digisearch manifest fetch failed for %s: %s", tool_name, exc)
     if tool_name == "digisearch_fetch_all":
         return {
             "type": "function",
             "function": {
                 "name": "digisearch_fetch_all",
-                "description": "Fetch all matching documents (pagination). Requires reachable DigiSearch orchestrator API.",
+                "description": "Fetch all matching documents (pagination). Requires reachable digisearch orchestrator API.",
                 "parameters": {
                     "type": "object",
                     "properties": {"query": {"type": "string"}},
@@ -173,7 +173,7 @@ def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[s
         "type": "function",
         "function": {
             "name": "digisearch",
-            "description": "Search documents via DigiSearch. Requires DIGISEARCH_URL and POST /v1/orchestrator_tools.",
+            "description": "Search documents via digisearch. Requires DIGISEARCH_URL and POST /v1/orchestrator_tools.",
             "parameters": {
                 "type": "object",
                 "properties": {"query": {"type": "string"}},
@@ -194,13 +194,13 @@ def _schema_from_digivault_manifest(ctx: ToolContext) -> dict[str, Any]:
         if t:
             return t
     except _ORCHESTRATOR_CLIENT_ERRORS as exc:
-        logger.warning("DigiVault manifest fetch failed for digivault_search_notes: %s", exc)
+        logger.warning("digivault manifest fetch failed for digivault_search_notes: %s", exc)
     return {
         "type": "function",
         "function": {
             "name": "digivault_search_notes",
             "description": (
-                "Full-text search over the DigiThings architecture vault. "
+                "Full-text search over the digithings architecture vault. "
                 "Requires DIGIVAULT_URL and POST /v1/orchestrator_tools."
             ),
             "parameters": {
@@ -225,7 +225,7 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
             request_id=context.request_id,
         )
     except _ORCHESTRATOR_CLIENT_ERRORS as e:
-        return f"DigiVault orchestrator invoke failed: {e}"
+        return f"digivault orchestrator invoke failed: {e}"
     if not inv.get("ok"):
         return json.dumps(inv)
     data = inv.get("data")
@@ -272,7 +272,7 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
             request_id=context.request_id,
         )
     except _ORCHESTRATOR_CLIENT_ERRORS as e:
-        return f"DigiSearch orchestrator invoke failed: {e}"
+        return f"digisearch orchestrator invoke failed: {e}"
     if not inv.get("ok"):
         return json.dumps(inv)
     data = inv.get("data")
@@ -343,7 +343,7 @@ def _handle_digisearch_fetch_all(
             request_id=context.request_id,
         )
     except _ORCHESTRATOR_CLIENT_ERRORS as e:
-        return f"DigiSearch orchestrator invoke failed: {e}"
+        return f"digisearch orchestrator invoke failed: {e}"
     if not inv.get("ok"):
         return json.dumps(inv)
     data = inv.get("data")
@@ -610,12 +610,12 @@ def _schema_digiquant_pipeline_delegate(ctx: ToolContext) -> dict[str, Any]:
         if t:
             return t
     except _ORCHESTRATOR_CLIENT_ERRORS as exc:
-        logger.warning("DigiQuant manifest fetch failed: %s", exc)
+        logger.warning("digiquant manifest fetch failed: %s", exc)
     return {
         "type": "function",
         "function": {
             "name": "digiquant_pipeline_delegate",
-            "description": "Run DigiQuant pipeline. Requires DIGIQUANT_URL and POST /v1/orchestrator_tools.",
+            "description": "Run digiquant pipeline. Requires DIGIQUANT_URL and POST /v1/orchestrator_tools.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -652,7 +652,7 @@ def _handle_digisearch_research_delegate(
             request_id=context.request_id,
         )
     except _ORCHESTRATOR_CLIENT_ERRORS as e:
-        return {"content": f"DigiSearch orchestrator invoke failed: {e}"}
+        return {"content": f"digisearch orchestrator invoke failed: {e}"}
     if not inv.get("ok"):
         return json.dumps(inv)
     data = inv.get("data")

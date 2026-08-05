@@ -198,7 +198,7 @@ def test_digi_project_config_load_re_reads_on_mtime_change(
     Then   a subsequent DigiProjectConfig.load() call returns the new value without
            a process restart (mtime-keyed cache invalidation per project-spec-v1alpha1).
 
-    The spec states: "DigiGraph reads the project config on every request (cached by mtime).
+    The spec states: "digigraph reads the project config on every request (cached by mtime).
     No restart required for non-secret field changes."
     """
     # Isolate: clear the module-level cache so previous tests don't interfere.

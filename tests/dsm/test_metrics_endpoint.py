@@ -1,4 +1,4 @@
-"""Smoke test: DigiSmith exposes /metrics with service/version/environment labels."""
+"""Smoke test: digismith exposes /metrics with service/version/environment labels."""
 
 from __future__ import annotations
 

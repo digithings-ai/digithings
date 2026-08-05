@@ -1,5 +1,5 @@
 """
-Heartbeat runner: read HEARTBEAT.md checklist, ping DigiGraph/DigiQuant health, log to audit.
+Heartbeat runner: read HEARTBEAT.md checklist, ping digigraph/digiquant health, log to audit.
 Run every 30–60 min via cron or Docker. Phase 3.
 """
 
@@ -80,7 +80,7 @@ def run_heartbeat() -> dict[str, bool]:
 
 
 def _check_drift_and_reoptimize() -> None:
-    """If ADDM reports drift, trigger re-optimize via DigiQuant (SIMP-025).
+    """If ADDM reports drift, trigger re-optimize via digiquant (SIMP-025).
 
     Drift stays colocated with heartbeat until Phase 3; each failure path writes an
     explicit ``audit_log`` event (no silent skip). ``main()`` exits 0/1 from health pings.

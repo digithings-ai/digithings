@@ -1,4 +1,4 @@
-"""Plotly chart builders for DigiQuant backtest tearsheets (SIMP-010)."""
+"""Plotly chart builders for digiquant backtest tearsheets (SIMP-010)."""
 
 from digiquant.charts.common import ChartUnavailable, section_unavailable_html
 from digiquant.charts.drawdown import (

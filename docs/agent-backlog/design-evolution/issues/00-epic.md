@@ -1,6 +1,6 @@
 ## Goal
 
-Implement the frontend design evolution plan in [`frontend/digiweb/design/EVOLUTION.md`](https://github.com/digithings-ai/digithings/blob/develop/frontend/digiweb/design/EVOLUTION.md): borrow advanced UI/UX patterns from Graphite (scroll/motion), Cursor (bento, literal CTAs), and x.ai (mono infrastructure, flat dashboards) across **digithings.ai**, **digiquant.io**, **DigiChat**, and **Olympus/twelve-x** — without copying any reference site literally.
+Implement the frontend design evolution plan in [`frontend/digiweb/design/EVOLUTION.md`](https://github.com/digithings-ai/digithings/blob/develop/frontend/digiweb/design/EVOLUTION.md): borrow advanced UI/UX patterns from Graphite (scroll/motion), Cursor (bento, literal CTAs), and x.ai (mono infrastructure, flat dashboards) across **digithings.ai**, **digiquant.io**, **digichat**, and **Olympus/twelve-x** — without copying any reference site literally.
 
 **Blend:** Cursor page map · Graphite scroll craft · xAI mono on dashboards · our mesh/grain/module accents.
 
@@ -33,7 +33,7 @@ Full index: [`docs/agent-backlog/design-evolution/INDEX.md`](https://github.com/
 ### Phase D — Dashboard & product surfaces
 - [ ] #1216 — Olympus glass → surface
 - [ ] #1217 — twelve-x utility polish
-- [ ] #1218 — DigiChat product-as-hero (#240 prerequisite)
+- [ ] #1218 — digichat product-as-hero (#240 prerequisite)
 - [ ] #1220 — Olympus subpage chrome docs
 
 ### Phase E — Primitives, copy & landing polish
@@ -47,7 +47,7 @@ Full index: [`docs/agent-backlog/design-evolution/INDEX.md`](https://github.com/
 - [ ] #1228 — E8 COPY_GUIDE.md
 - [ ] #1229 — E9 TrustStrip integration logos
 - [ ] #1230 — E10 CaseStudyCard (P3, content-gated)
-- [ ] #1231 — E11 Olympus status dot → DigiSmith (P3)
+- [ ] #1231 — E11 Olympus status dot → digismith (P3)
 
 **Deep spec:** [`docs/superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md`](https://github.com/digithings-ai/digithings/blob/develop/docs/superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md)
 
@@ -60,7 +60,7 @@ Full index: [`docs/agent-backlog/design-evolution/INDEX.md`](https://github.com/
 ## Related
 
 - Parent: #235 (shared design language epic)
-- Also: #1195 (hoist landing primitives), #240 (DigiChat tokens)
+- Also: #1195 (hoist landing primitives), #240 (digichat tokens)
 - Strategy: [`frontend/digiweb/design/EVOLUTION.md`](https://github.com/digithings-ai/digithings/blob/develop/frontend/digiweb/design/EVOLUTION.md)
 - Scans: [`frontend/digiweb/design/references/scans/`](https://github.com/digithings-ai/digithings/blob/develop/frontend/digiweb/design/references/scans/INDEX.md)
 

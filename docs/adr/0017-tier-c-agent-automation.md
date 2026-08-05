@@ -48,7 +48,7 @@ GitHub's **Skip approval for Copilot coding agent Actions workflows** setting is
 
 ### Policy gates (unchanged)
 
-The following DigiThings-specific components remain **unchanged**:
+The following digithings-specific components remain **unchanged**:
 
 | Asset | Role |
 |-------|------|

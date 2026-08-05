@@ -1,4 +1,4 @@
-"""Unit tests for DigiQuant backtest module (real Nautilus or raised error)."""
+"""Unit tests for digiquant backtest module (real Nautilus or raised error)."""
 
 from __future__ import annotations
 

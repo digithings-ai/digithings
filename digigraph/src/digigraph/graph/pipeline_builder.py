@@ -1,6 +1,6 @@
 """Declarative pipeline builder for LangGraph sub-graphs.
 
-A sub-graph like DigiQuant Atlas (#176) is a sequence of phases; each phase
+A sub-graph like digiquant Atlas (#176) is a sequence of phases; each phase
 has one or more nodes that may run in parallel, and every phase fully completes
 before the next begins. Instead of open-coding the edge plumbing per sub-graph,
 callers declare a ``list[PipelinePhase]`` and this builder compiles it into a

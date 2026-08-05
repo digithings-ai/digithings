@@ -4,7 +4,7 @@ Rules and context for Claude Code in this repo. See also [docs/agents/AGENT_WORK
 
 ## What this is
 
-DigiThings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + Atlas + Hermes sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digismith** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **olympus** (Atlas + Hermes dashboard). Sub-graphs in digiquant: Atlas at `digiquant/src/digiquant/olympus/atlas/`, Hermes at `digiquant/src/digiquant/olympus/hermes/`. Old `apps/digiquant-atlas/` is gone.
+digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + Atlas + Hermes sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digismith** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **olympus** (Atlas + Hermes dashboard). Sub-graphs in digiquant: Atlas at `digiquant/src/digiquant/olympus/atlas/`, Hermes at `digiquant/src/digiquant/olympus/hermes/`. Old `apps/digiquant-atlas/` is gone.
 
 ## Non-negotiable rules
 
@@ -123,7 +123,7 @@ So `feat/<slug>` and `fix/<slug>` are the only name-rule-valid patterns that sti
 ## Liveness vs status
 
 - `GET /healthz` — liveness probe, auth-exempt, always `{"ok": true}`, no downstream checks
-- `GET /v1/status` (DigiSmith) — operator diagnostic, may report config/versions; not for load balancers
+- `GET /v1/status` (digismith) — operator diagnostic, may report config/versions; not for load balancers
 
 ## Deployments (static sites)
 

@@ -1,4 +1,4 @@
-"""Structured trading preferences for DigiClone / quant workflows."""
+"""Structured trading preferences for digiclone / quant workflows."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class TradingProfile(BaseModel):
-    """User or tenant preferences; maps into DigiQuant optimization constraints."""
+    """User or tenant preferences; maps into digiquant optimization constraints."""
 
     horizon_days: int | None = Field(
         default=None, ge=1, description="Typical holding / evaluation horizon in days"
@@ -21,7 +21,7 @@ class TradingProfile(BaseModel):
     )
     min_trades: int | None = Field(default=None, ge=0)
     min_sharpe: float | None = Field(default=None)
-    notes: str = Field(default="", description="Freeform; not sent to DigiQuant")
+    notes: str = Field(default="", description="Freeform; not sent to digiquant")
 
 
 def trading_profile_from_state(raw: dict[str, Any] | None) -> TradingProfile | None:
@@ -79,7 +79,7 @@ def profiling_questions_for_workflow(
 def optimization_constraints_dict_from_profile(
     raw: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
-    """Derive DigiQuant OptimizationConstraints-shaped dict from a TradingProfile dict."""
+    """Derive digiquant OptimizationConstraints-shaped dict from a TradingProfile dict."""
     profile = trading_profile_from_state(raw)
     if profile is None:
         return None

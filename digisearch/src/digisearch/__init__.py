@@ -1,4 +1,4 @@
-"""DigiSearch – RAG, vectorization, document search for Digi ecosystem.
+"""digisearch – RAG, vectorization, document search for Digi ecosystem.
 
 Public client surface (``DigiSearch``, ``Chunk``, ``Document``, ``Query``,
 ``Result``) is resolved **lazily** via :pep:`562` ``__getattr__`` so that

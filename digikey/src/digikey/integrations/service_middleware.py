@@ -1,4 +1,4 @@
-"""Shared FastAPI auth: DigiKey JWT verification and scope enforcement."""
+"""Shared FastAPI auth: digikey JWT verification and scope enforcement."""
 
 from __future__ import annotations
 

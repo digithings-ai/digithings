@@ -1,6 +1,6 @@
-# DigiGraph Architecture
+# digigraph Architecture
 
-**Service:** DigiGraph
+**Service:** digigraph
 **Port:** 8000 (HTTP), 8766 (MCP streamable-http)
 **Role:** Orchestration hub — LangGraph state machine, tool registry, OpenAI-compatible API, SSE streaming
 **Status:** Phase 1 implemented; Phase 2 features (Graphiti memory, remote MCP enumeration, distributed checkpoints) are roadmap items
@@ -9,15 +9,15 @@
 
 ## 1. Overview
 
-DigiGraph is the central orchestration brain of the DigiThings stack. Every user request flows through it: from DigiClaw (gateway), from DigiChat (Next.js BFF), from Open WebUI (OpenAI-compatible model), or directly from Claude Desktop (MCP). DigiGraph owns three distinct roles:
+digigraph is the central orchestration brain of the digithings stack. Every user request flows through it: from digiclaw (gateway), from digichat (Next.js BFF), from Open WebUI (OpenAI-compatible model), or directly from Claude Desktop (MCP). digigraph owns three distinct roles:
 
 1. **LangGraph state machine.** Maintains a compiled `StateGraph[WorkflowState]` that routes through research, strategy validation, backtest, and optional optimize nodes. Profile-driven conditional edges control which path executes.
 
-2. **Tool registry and dispatcher.** Provides an in-process registry of named orchestrator tools (search, agents, Digistore introspection, planning primitives). Verticals (DigiSearch, DigiQuant) own their own OpenAI tool schemas, published via `POST /v1/orchestrator_tools`; DigiGraph fetches those schemas lazily and invokes them via `POST /v1/orchestrator_invoke`.
+2. **Tool registry and dispatcher.** Provides an in-process registry of named orchestrator tools (search, agents, Digistore introspection, planning primitives). Verticals (digisearch, digiquant) own their own OpenAI tool schemas, published via `POST /v1/orchestrator_tools`; digigraph fetches those schemas lazily and invokes them via `POST /v1/orchestrator_invoke`.
 
-3. **HTTP + MCP API surface.** Exposes a `POST /workflow` endpoint (DigiClaw custom skill), a `POST /v1/chat/completions` endpoint (Open WebUI / DigiChat), thread state APIs (opt-in), and an MCP server for Claude Desktop and DigiClaw agent integration.
+3. **HTTP + MCP API surface.** Exposes a `POST /workflow` endpoint (digiclaw custom skill), a `POST /v1/chat/completions` endpoint (Open WebUI / digichat), thread state APIs (opt-in), and an MCP server for Claude Desktop and digiclaw agent integration.
 
-DigiGraph is deliberately minimal as a hub: it does not implement the quant pipeline ordering (owned by DigiQuant) or tiered RAG (owned by DigiSearch). It coordinates them.
+digigraph is deliberately minimal as a hub: it does not implement the quant pipeline ordering (owned by digiquant) or tiered RAG (owned by digisearch). It coordinates them.
 
 ---
 
@@ -31,17 +31,17 @@ The following is built and functional as of this architecture review (March 2026
 | LangGraph `StateGraph[WorkflowState]` | Built | `graph/graph.py`, `graph/state.py` |
 | Research subgraph (LLM + tool loop) | Built | `graph/research.py`, `graph/research_subgraph.py` |
 | Research brief builder | Built | `graph/research_brief.py`, `research_brief_models.py` |
-| Backtest node (DigiQuant jobs + fallback) | Built | `graph/nodes.py` |
+| Backtest node (digiquant jobs + fallback) | Built | `graph/nodes.py` |
 | Optimize node | Built | `graph/nodes.py` |
 | Supervisor node (opt-in via `DIGI_SUPERVISOR=1`) | Built | `graph/nodes.py` |
 | Orchestrator tool registry | Built | `orchestration/registry.py` |
 | Built-in tools + skills | Built | `orchestration/builtin.py` |
-| Vertical hub clients (DigiSearch, DigiQuant, DigiVault) | Built | `vertical_orchestrator/digisearch_hub.py`, `vertical_orchestrator/digiquant_hub.py`, `vertical_orchestrator/digivault_hub.py` |
+| Vertical hub clients (digisearch, digiquant, digivault) | Built | `vertical_orchestrator/digisearch_hub.py`, `vertical_orchestrator/digiquant_hub.py`, `vertical_orchestrator/digivault_hub.py` |
 | SSE streaming via background thread + queue | Built | `server.py`, `workflow.py` |
 | LLM client (OpenAI SDK, LiteLLM compat) | Built | `digillm` (toolkit) + `llm_client.py` wrappers |
 | In-process LLM response cache (SHA-256, TTL) | Built | `digillm` |
 | Parallel tool execution for `parallel_safe` tools | Built | `digillm` (`run_tools`); set computed in `llm_client.py` |
-| DigiAuth JWT middleware (DigiKey) | Built | `server.py` (via `digikey.integrations.service_middleware`) |
+| digiauth JWT middleware (digikey) | Built | `server.py` (via `digikey.integrations.service_middleware`) |
 | Per-IP sliding-window rate limiter | Built | `rate_limit.py`, `server.py` |
 | Correlation ID middleware (`X-Request-ID`) | Built | `server.py` |
 | Tool allowlist enforcement | Built | `orchestration/registry.py`, `tool_policy.py` |
@@ -49,7 +49,7 @@ The following is built and functional as of this architecture review (March 2026
 | Digistore (session-scoped named datasets) | Built | `digistore.py`, `run_storage.py` |
 | MCP server (FastMCP, streamable-http + stdio) | Built | `mcp_server.py` |
 | Thread state / history / resume endpoints (opt-in) | Built | `server.py` |
-| DigiSmith tracing (`traceable` wrappers) | Built | `digillm` (via `digismith.trace.traceable`) |
+| digismith tracing (`traceable` wrappers) | Built | `digillm` (via `digismith.trace.traceable`) |
 | OpenTelemetry export (opt-in) | Built | `server.py` (via `digibase.otel.setup_otel_fastapi`) |
 | Planning executor (topo-sort + parallel steps) | Built | `planning/executor.py` |
 | Graphiti graph memory | **Not built** | Phase 2 roadmap |
@@ -67,16 +67,16 @@ The following is built and functional as of this architecture review (March 2026
 |--------|------|------|------------|-------|
 | `GET` | `/health` | None | Unlimited | Legacy health check (back-compat; prefer `/healthz`) |
 | `GET` | `/healthz` | None | Unlimited | Liveness probe — returns `{"ok": true}`; see AGENTS.md "Liveness vs status" |
-| `POST` | `/workflow` | DigiKey JWT (optional) | 10 req/min/IP | DigiClaw custom skill; body: `WorkflowRequest` |
-| `GET` | `/v1/models` | DigiKey JWT (optional) | 30 req/min/IP | OpenAI model list; returns `sitaas-rag` |
-| `GET` | `/v1/model-info` | DigiKey JWT (optional) | 30 req/min/IP | Current model + mode |
-| `POST` | `/v1/chat/completions` | DigiKey JWT (optional) | 10 req/min/IP | OpenAI chat completions; body: `ChatCompletionRequest`; supports `stream: true` |
-| `GET` | `/v1/debug/input_messages` | DigiKey JWT | 30 req/min/IP | Last N request summaries; **requires `DIGI_ENABLE_DEBUG_ENDPOINTS=1`** |
-| `GET` | `/test_llm` | DigiKey JWT | 30 req/min/IP | LLM connectivity test; **requires `DIGI_ENABLE_DEBUG_ENDPOINTS=1`** |
-| `GET` | `/threads/{thread_id}/state` | DigiKey JWT | 30 req/min/IP | LangGraph checkpoint state; **requires `DIGI_ENABLE_THREAD_API=1`** |
-| `GET` | `/threads/{thread_id}/history` | DigiKey JWT | 30 req/min/IP | Full checkpoint history; **requires `DIGI_ENABLE_THREAD_API=1`** |
-| `POST` | `/threads/{thread_id}/resume` | DigiKey JWT | 30 req/min/IP | Resume interrupted workflow; **requires `DIGI_ENABLE_THREAD_API=1`** |
-| `GET` | `/files/{path:path}` | DigiKey JWT | 30 req/min/IP | Serve exported files from `run_data_dir`; **requires `DIGI_ENABLE_THREAD_API=1`** |
+| `POST` | `/workflow` | digikey JWT (optional) | 10 req/min/IP | digiclaw custom skill; body: `WorkflowRequest` |
+| `GET` | `/v1/models` | digikey JWT (optional) | 30 req/min/IP | OpenAI model list; returns `sitaas-rag` |
+| `GET` | `/v1/model-info` | digikey JWT (optional) | 30 req/min/IP | Current model + mode |
+| `POST` | `/v1/chat/completions` | digikey JWT (optional) | 10 req/min/IP | OpenAI chat completions; body: `ChatCompletionRequest`; supports `stream: true` |
+| `GET` | `/v1/debug/input_messages` | digikey JWT | 30 req/min/IP | Last N request summaries; **requires `DIGI_ENABLE_DEBUG_ENDPOINTS=1`** |
+| `GET` | `/test_llm` | digikey JWT | 30 req/min/IP | LLM connectivity test; **requires `DIGI_ENABLE_DEBUG_ENDPOINTS=1`** |
+| `GET` | `/threads/{thread_id}/state` | digikey JWT | 30 req/min/IP | LangGraph checkpoint state; **requires `DIGI_ENABLE_THREAD_API=1`** |
+| `GET` | `/threads/{thread_id}/history` | digikey JWT | 30 req/min/IP | Full checkpoint history; **requires `DIGI_ENABLE_THREAD_API=1`** |
+| `POST` | `/threads/{thread_id}/resume` | digikey JWT | 30 req/min/IP | Resume interrupted workflow; **requires `DIGI_ENABLE_THREAD_API=1`** |
+| `GET` | `/files/{path:path}` | digikey JWT | 30 req/min/IP | Serve exported files from `run_data_dir`; **requires `DIGI_ENABLE_THREAD_API=1`** |
 
 Auth is enforced by `DigiAuthMiddleware` from `digikey.integrations.service_middleware`. Path-scope mappings are defined in `digigraph_path_scopes`. When `DIGIKEY_JWKS_URL` or `DIGIKEY_PUBLIC_KEY_PEM` is unset, the middleware operates in passthrough mode.
 
@@ -108,7 +108,7 @@ When `stream: true` in `POST /v1/chat/completions`:
    - `tool_call` / `tool_result` — formatted with the stream formatter (neutral or Open WebUI `<details>` style)
    - `content` — LLM token deltas, HTML-escaped
    - `reasoning` — accumulated into a `<thinking>` block before the first `content` chunk
-   - `trace` — `TraceEventV1` dicts embedded in `delta.digigraph_trace` for DigiChat
+   - `trace` — `TraceEventV1` dicts embedded in `delta.digigraph_trace` for digichat
    - `done` — terminates the generator loop
 4. If the client disconnects mid-stream, the generator raises an exception; the background thread continues running until it completes naturally. There is no cancellation token or thread interrupt mechanism — see Section 6 (Security Analysis).
 
@@ -126,22 +126,22 @@ When `stream: true` in `POST /v1/chat/completions`:
 | `session_id` | `str \| None` | Conversation ID; maps to LangGraph `thread_id` and Digistore namespace |
 | `request_id` | `str \| None` | Correlation ID propagated to outbound HTTP |
 | `workflow_id` | `str \| None` | Per-run UUID for audit log correlation |
-| `digi_bearer` | `str \| None` | JWT forwarded to DigiSearch and DigiQuant |
+| `digi_bearer` | `str \| None` | JWT forwarded to digisearch and digiquant |
 | `allowed_tool_names` | `list[str] \| None` | Tool allowlist; `None` = unrestricted |
-| `strategy_name` | `str` | LLM-extracted strategy for DigiQuant |
+| `strategy_name` | `str` | LLM-extracted strategy for digiquant |
 | `symbols` | `list[str]` | Ticker list |
-| `strategy_params` | `dict[str, Any]` | Optional pre-filled DigiQuant parameters |
+| `strategy_params` | `dict[str, Any]` | Optional pre-filled digiquant parameters |
 | `trading_profile` | `dict[str, Any]` | User/tenant trading profile; merged into `optimization_constraints` |
 | `research_note` | `str` | Research path label (`"LLM-extracted"`, `"document-mode"`, `"error"`) |
 | `research_response` | `str` | Freeform LLM answer in document/RAG mode |
-| `rag_sources` | `list[dict]` | Aggregated DigiSearch citations |
+| `rag_sources` | `list[dict]` | Aggregated digisearch citations |
 | `research_brief` | `dict[str, Any]` | Serialized `ResearchBrief` |
 | `profiling_questions` | `list[str]` | Brief + trading profile gap questions |
-| `research_filters` | `list[dict]` | Injected into every DigiSearch tool call |
-| `evidence_tier_preference` | `list[str]` | Evidence tier filter injected into DigiSearch |
-| `backtest_result` | `dict \| None` | DigiQuant result |
+| `research_filters` | `list[dict]` | Injected into every digisearch tool call |
+| `evidence_tier_preference` | `list[str]` | Evidence tier filter injected into digisearch |
+| `backtest_result` | `dict \| None` | digiquant result |
 | `backtest_job_id` | `str \| None` | Async job ID from `/v1/jobs/backtest` |
-| `optimize_result` | `dict \| None` | DigiQuant optimization result |
+| `optimize_result` | `dict \| None` | digiquant optimization result |
 | `optimize_error` | `str \| None` | Non-fatal error from optimize step |
 | `optimization_constraints` | `dict[str, Any]` | Merged from `trading_profile` + research |
 | `quant_artifact_uri` | `str \| None` | Opaque artifact ref (Phase 2 contract) |
@@ -164,9 +164,9 @@ Pydantic v2 model for `POST /workflow` and internal use:
 | `allowed_tools` | `list[str] \| None` | Overrides project/env allowlist |
 | `trading_profile` | `dict \| None` | Maps to `optimization_constraints` |
 | `strategy_params` | `dict \| None` | Skip LLM param extraction |
-| `research_filters` | `list[dict] \| None` | Injected into DigiSearch calls |
+| `research_filters` | `list[dict] \| None` | Injected into digisearch calls |
 | `digi_bearer` | `str \| None` | JWT propagated downstream |
-| `digi_trace_key_prefix` / `digi_trace_tenant` / `digi_trace_project_id` / `digi_trace_jti` | `str \| None` | DigiKey audit fields |
+| `digi_trace_key_prefix` / `digi_trace_tenant` / `digi_trace_project_id` / `digi_trace_jti` | `str \| None` | digikey audit fields |
 | `evidence_tier_preference` | `list[str] \| None` | Evidence tier filter |
 
 ### 4.3 WorkflowResult (`models.py`)
@@ -175,8 +175,8 @@ Pydantic v2 model for `POST /workflow` and internal use:
 |-------|------|-------|
 | `success` | `bool` | |
 | `message` | `str` | Human-readable summary or full RAG response |
-| `backtest_result` | `dict \| None` | DigiQuant `BacktestResult` |
-| `optimize_result` | `dict \| None` | DigiQuant optimization result |
+| `backtest_result` | `dict \| None` | digiquant `BacktestResult` |
+| `optimize_result` | `dict \| None` | digiquant optimization result |
 | `optimize_error` | `str \| None` | Non-fatal optimize error |
 | `research_brief` | `dict \| None` | Serialized `ResearchBrief` |
 | `rag_sources` | `list[dict] \| None` | Aggregated citations |
@@ -193,7 +193,7 @@ Typed output of the `research_brief_builder_node`:
 | `assumptions` | `list[str]` | Unstated assumptions in the request |
 | `corpus_gaps` | `list[str]` | Topics not covered by the retrieved corpus |
 | `profiling_questions` | `list[str]` | Follow-up questions for user |
-| `suggested_catalog_strategies` | `list[str]` | Strategy names from DigiQuant catalog |
+| `suggested_catalog_strategies` | `list[str]` | Strategy names from digiquant catalog |
 | `strategy_out_of_catalog` | `bool` | True when the strategy is novel |
 | `suggested_symbols` | `list[str]` | Ticker suggestions |
 | `suggested_strategy_params` | `dict[str, Any]` | Parameter hints |
@@ -303,19 +303,19 @@ The graph is compiled once per `build_workflow_graph()` call. In practice, `work
 Three-layer structure:
 
 1. **Primitives** (`tools/`): stateless callables not exposed to the LLM directly.
-2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. DigiSearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
+2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. digisearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
 3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `sitaas_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (one tool, `digivault_search_notes`) activates only when `DIGIVAULT_URL` is set.
 
 The registry is a module-level dict (`_tools`, `_skills` in `registry.py`). It is global to the process — all requests share the same registry. `register_tool` raises `ValueError` on duplicate names, so plugins loaded via `load_entrypoint_tools()` must use unique names.
 
 ### 5.4 Vertical Connector Pattern
 
-DigiSearch, DigiQuant, and DigiVault each own their tool schemas via `POST /v1/orchestrator_tools`. DigiGraph:
+digisearch, digiquant, and digivault each own their tool schemas via `POST /v1/orchestrator_tools`. digigraph:
 
 1. Calls `fetch_digisearch_tool_dicts(base_url, index_config, bearer, request_id)` at schema resolution time. Results are cached in a module-level dict (`_MANIFEST_CACHE`) keyed on `(base_url, index_config)` — this cache is **never invalidated** for the lifetime of the process.
 2. Invokes tools via `invoke_digisearch_tool(base_url, tool, args, ...)` → `POST /v1/orchestrator_invoke`.
-3. The DigiQuant connector follows the same pattern via `digiquant_hub.py`.
-4. The DigiVault connector (`digivault_hub.py`) follows the same pattern for one tool, `digivault_search_notes` — full-text search over the DigiThings architecture vault (Supabase-backed, `SupabaseStore.search`). It has no `index_config` (vault search is not index-scoped), so its manifest cache key is the base URL alone.
+3. The digiquant connector follows the same pattern via `digiquant_hub.py`.
+4. The digivault connector (`digivault_hub.py`) follows the same pattern for one tool, `digivault_search_notes` — full-text search over the digithings architecture vault (Supabase-backed, `SupabaseStore.search`). It has no `index_config` (vault search is not index-scoped), so its manifest cache key is the base URL alone.
 
 The manifest cache uses synchronous `httpx.Client` (blocking calls inside async FastAPI). This can block the event loop thread during tool schema resolution. The current request handling is synchronous (FastAPI's thread pool), so this is acceptable but limits throughput under high concurrency.
 
@@ -336,7 +336,7 @@ Process-wide singleton via `get_checkpointer()` in `graph/graph.py:29`:
 
 #### 5.5.1 High availability (multi-replica) — REM-099
 
-For **more than one DigiGraph replica** behind a load balancer, operators **must** set:
+For **more than one digigraph replica** behind a load balancer, operators **must** set:
 
 ```bash
 DIGI_CHECKPOINTER=postgres
@@ -353,7 +353,7 @@ A `threading.Lock` (`_checkpointer_lock`) guards lazy initialization. Context ma
 
 Olympus is the load-bearing case: `hermes/chain.py:125` derives `thread_id` as `"<GITHUB_RUN_ID>::atlas"` / `"::hermes"`, which is never reused, so no row ever became collectable. By 2026-08-01 the four checkpointer tables held 952 MB of a 1263 MB database (75%) and were growing ~50-58 MB/day.
 
-Retention is enforced **in the database, not in DigiGraph** — the pruner must not depend on a Python process being alive, and DigiGraph has no scheduler. `digiquant/supabase/migrations/061_checkpointer_retention.sql` installs `public.prune_langgraph_checkpoints(retain_days integer DEFAULT 14)` plus two daily pg_cron jobs (prune at 05:20 UTC, plain `VACUUM (ANALYZE)` at 05:50 UTC). See [`digiquant/supabase/SCHEMA.md`](../digiquant/supabase/SCHEMA.md) for the operator view (pause, verify, ownership requirement).
+Retention is enforced **in the database, not in digigraph** — the pruner must not depend on a Python process being alive, and digigraph has no scheduler. `digiquant/supabase/migrations/061_checkpointer_retention.sql` installs `public.prune_langgraph_checkpoints(retain_days integer DEFAULT 14)` plus two daily pg_cron jobs (prune at 05:20 UTC, plain `VACUUM (ANALYZE)` at 05:50 UTC). See [`digiquant/supabase/SCHEMA.md`](../digiquant/supabase/SCHEMA.md) for the operator view (pause, verify, ownership requirement).
 
 Three properties that any other Postgres-checkpointer deployment should copy:
 
@@ -411,7 +411,7 @@ The `_stream_callback_ctx` is a `ContextVar` used to pass the callback from `wor
 
 ## 6. Security Analysis
 
-### 6.1 DigiKey JWT Authentication
+### 6.1 digikey JWT Authentication
 
 `DigiAuthMiddleware` validates JWTs via `DIGIKEY_JWKS_URL` (JWKS endpoint) or `DIGIKEY_PUBLIC_KEY_PEM` (static PEM). Path-scope mappings control which scopes are required per route. When neither is configured, the middleware passes through unauthenticated requests — this is the default for local dev but must not be used in production.
 
@@ -444,11 +444,11 @@ An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. 
 
 ### 6.6 Streaming Cancellation Gap
 
-When a client disconnects from an SSE stream, the background thread (`run_digigraph_workflow_streaming`) continues executing until it completes or errors. There is no cancellation mechanism — no `threading.Event`, no exception injection into the thread. Under high load, many orphaned workflow threads can accumulate, each holding LLM connections and potentially making outbound HTTP calls to DigiSearch and DigiQuant. The `Queue.get()` in `_stream_completions_progressive` will eventually raise a `GeneratorExit` exception (when the generator is garbage-collected), which surfaces as a logged exception in the generator but does not stop the background thread.
+When a client disconnects from an SSE stream, the background thread (`run_digigraph_workflow_streaming`) continues executing until it completes or errors. There is no cancellation mechanism — no `threading.Event`, no exception injection into the thread. Under high load, many orphaned workflow threads can accumulate, each holding LLM connections and potentially making outbound HTTP calls to digisearch and digiquant. The `Queue.get()` in `_stream_completions_progressive` will eventually raise a `GeneratorExit` exception (when the generator is garbage-collected), which surfaces as a logged exception in the generator but does not stop the background thread.
 
 ### 6.7 Rate Limiter Trust Boundary
 
-The `RateLimiter._get_ip()` method trusts `X-Forwarded-For` without validation. A client can set `X-Forwarded-For: 1.2.3.4` to impersonate any IP and bypass per-IP rate limits. In a Docker Compose deployment behind a reverse proxy, this is acceptable only if the proxy strips or overrides the header before it reaches DigiGraph. Currently there is no proxy in the default Compose stack — DigiGraph is directly exposed on `127.0.0.1:8000`.
+The `RateLimiter._get_ip()` method trusts `X-Forwarded-For` without validation. A client can set `X-Forwarded-For: 1.2.3.4` to impersonate any IP and bypass per-IP rate limits. In a Docker Compose deployment behind a reverse proxy, this is acceptable only if the proxy strips or overrides the header before it reaches digigraph. Currently there is no proxy in the default Compose stack — digigraph is directly exposed on `127.0.0.1:8000`.
 
 ### 6.8 MCP Server Auth Gap
 
@@ -456,7 +456,7 @@ The MCP server (`mcp_server.py`) has no built-in authentication layer. The `stre
 
 ### 6.9 Manifest Cache Never Invalidates
 
-The vertical manifest caches in `digisearch_hub.py`, `digiquant_hub.py`, and `digivault_hub.py` are module-level dicts with no TTL or invalidation. If DigiSearch, DigiQuant, or DigiVault adds, removes, or changes a tool definition, the cached schema is stale until the DigiGraph process restarts. This affects tool schema accuracy in long-running deployments.
+The vertical manifest caches in `digisearch_hub.py`, `digiquant_hub.py`, and `digivault_hub.py` are module-level dicts with no TTL or invalidation. If digisearch, digiquant, or digivault adds, removes, or changes a tool definition, the cached schema is stale until the digigraph process restarts. This affects tool schema accuracy in long-running deployments.
 
 ---
 
@@ -464,9 +464,9 @@ The vertical manifest caches in `digisearch_hub.py`, `digiquant_hub.py`, and `di
 
 ### 7.1 Shared In-Process Checkpointer (Single-Node Constraint)
 
-The `MemorySaver` default stores all thread state in a Python dict in the DigiGraph process. Multiple DigiGraph replicas cannot share this state. SQLite is similarly single-process. Only the Postgres backend supports horizontal scaling, but even with Postgres, there is no distributed locking: two concurrent requests for the same `thread_id` can produce conflicting checkpoint writes.
+The `MemorySaver` default stores all thread state in a Python dict in the digigraph process. Multiple digigraph replicas cannot share this state. SQLite is similarly single-process. Only the Postgres backend supports horizontal scaling, but even with Postgres, there is no distributed locking: two concurrent requests for the same `thread_id` can produce conflicting checkpoint writes.
 
-**Practical limit:** A single DigiGraph instance can handle concurrent requests limited by the Python GIL + thread pool size. Each streaming request holds a thread for the duration of the workflow (potentially 30–120 seconds for backtest-inclusive flows). The default FastAPI thread pool is CPU-count × 5; large backtests can saturate it quickly.
+**Practical limit:** A single digigraph instance can handle concurrent requests limited by the Python GIL + thread pool size. Each streaming request holds a thread for the duration of the workflow (potentially 30–120 seconds for backtest-inclusive flows). The default FastAPI thread pool is CPU-count × 5; large backtests can saturate it quickly.
 
 ### 7.2 In-Memory Rate Limiter
 
@@ -481,7 +481,7 @@ The `MemorySaver` default stores all thread state in a Python dict in the DigiGr
 
 ### 7.4 Vertical Manifest HTTP Blocking
 
-`fetch_digisearch_tool_dicts`, `fetch_digiquant_tool_dicts`, and `fetch_digivault_tool_dicts` make synchronous `httpx` calls at schema resolution time, inside FastAPI's synchronous thread pool. If DigiSearch, DigiQuant, or DigiVault is slow or unavailable, this blocks a worker thread for up to 30 seconds (`timeout=30.0`). The first request after startup or cache invalidation pays this cost.
+`fetch_digisearch_tool_dicts`, `fetch_digiquant_tool_dicts`, and `fetch_digivault_tool_dicts` make synchronous `httpx` calls at schema resolution time, inside FastAPI's synchronous thread pool. If digisearch, digiquant, or digivault is slow or unavailable, this blocks a worker thread for up to 30 seconds (`timeout=30.0`). The first request after startup or cache invalidation pays this cost.
 
 ### 7.5 Postgres Checkpoint Path
 
@@ -503,7 +503,7 @@ When `DIGI_CHECKPOINTER=postgres`, the `PostgresSaver` is initialized synchronou
 
 ### 8.1 LLM Response Cache
 
-`digillm` implements an in-process SHA-256 keyed cache for non-tool `completion` calls (DigiGraph reaches it through `llm_client.completion`):
+`digillm` implements an in-process SHA-256 keyed cache for non-tool `completion` calls (digigraph reaches it through `llm_client.completion`):
 - Cache key: `sha256(json.dumps({model, messages, temperature}, sort_keys=True))`
 - TTL: configurable via `DIGI_LLM_CACHE_TTL_SECONDS` (default 3600s)
 - Capacity: 256 entries, FIFO eviction on overflow
@@ -519,7 +519,7 @@ Three modes: `test` (minimal), `medium` (balanced), `best` (largest). The projec
 
 ### 8.3 Digistore for LLM Context Reduction
 
-Search results from DigiSearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `builtin.py:58`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
+Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `builtin.py:58`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
 
 ### 8.4 Parallel Tool Execution
 
@@ -537,7 +537,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 
 ## 9. Integration Points
 
-### 9.1 DigiSearch
+### 9.1 digisearch
 
 **Protocol:** HTTP via `digisearch_hub.py`
 
@@ -546,10 +546,10 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - **Legacy:** `tools/digisearch.py` uses `POST /query` for non-orchestrator call sites (e.g. `_run_quant_or_augmented_path` in `research.py`).
 - **Auth:** Bearer token from `WorkflowState.digi_bearer` is forwarded via `Authorization: Bearer` header.
 - **Request correlation:** `X-Request-ID` forwarded from `ToolContext.request_id`.
-- **Filters:** `research_filters` and `evidence_tier_preference` from state are merged into every DigiSearch call by `_merged_digisearch_filters` in `builtin.py:34`.
-- **Env:** `DIGISEARCH_URL` (required; empty = DigiSearch tools disabled). In Docker: `http://digisearch:8002`.
+- **Filters:** `research_filters` and `evidence_tier_preference` from state are merged into every digisearch call by `_merged_digisearch_filters` in `builtin.py:34`.
+- **Env:** `DIGISEARCH_URL` (required; empty = digisearch tools disabled). In Docker: `http://digisearch:8002`.
 
-### 9.2 DigiQuant
+### 9.2 digiquant
 
 **Protocol:** HTTP via `digiquant_hub.py` (federated mode) + direct `httpx` in `graph/nodes.py` (backtest/optimize nodes)
 
@@ -560,7 +560,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - **Auth:** Bearer via `outbound_service_headers(request_id, bearer)` from `digibase.http`.
 - **Env:** `DIGIQUANT_URL` (default `http://127.0.0.1:8001`). `DIGIQUANT_DATA_DIR` required for backtest and optimize nodes.
 
-### 9.3 DigiKey
+### 9.3 digikey
 
 **Protocol:** JWT validation middleware (in-process)
 
@@ -570,44 +570,44 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - The middleware populates `request.state.digi_auth` (key_prefix, tenant_slug, project_id, jti) and `request.state.digi_bearer` (raw token) for downstream use.
 - Per-request LiteLLM proxy key override: `X-LiteLLM-Proxy-Key` header is parsed by the `lite_llm_proxy_header_context` middleware (`llm_auth.py`) and forwarded to digillm's proxy-key `ContextVar`, used by digillm's client.
 
-### 9.4 DigiSmith
+### 9.4 digismith
 
 **Protocol:** Library calls (no HTTP)
 
 - `digismith.trace.traceable` decorates `completion` and `run_tools` in `digillm`.
 - Activates when `LANGSMITH_API_KEY` is set and `langsmith` is installed.
 - Span attributes must include `workflow_id`, `request_id`, `session_id`. Raw prompts, API keys, and full doc bodies must not appear in spans.
-- In Docker Compose, a DigiSmith container exposes `GET /v1/status` on port 8003. DigiGraph does not make HTTP calls to DigiSmith; the library communicates with LangSmith directly.
+- In Docker Compose, a digismith container exposes `GET /v1/status` on port 8003. digigraph does not make HTTP calls to digismith; the library communicates with LangSmith directly.
 
-### 9.5 DigiChat
+### 9.5 digichat
 
-**Protocol:** HTTP (DigiChat → DigiGraph)
+**Protocol:** HTTP (digichat → digigraph)
 
-- DigiChat (Next.js BFF) proxies browser requests to `POST /v1/chat/completions` with `stream: true`.
-- DigiChat forwards `X-Session-Id` (browser session), `X-LiteLLM-Proxy-Key` (from DigiKey token exchange), and `X-Allowed-Tools` headers.
-- The `_digi_fields_from_request` helper in `server.py:145` extracts DigiKey JWT fields from middleware state and injects them into `WorkflowRequest` for audit correlation.
-- DigiChat receives `digigraph_trace` SSE deltas in `delta.digigraph_trace` for tool block rendering.
+- digichat (Next.js BFF) proxies browser requests to `POST /v1/chat/completions` with `stream: true`.
+- digichat forwards `X-Session-Id` (browser session), `X-LiteLLM-Proxy-Key` (from digikey token exchange), and `X-Allowed-Tools` headers.
+- The `_digi_fields_from_request` helper in `server.py:145` extracts digikey JWT fields from middleware state and injects them into `WorkflowRequest` for audit correlation.
+- digichat receives `digigraph_trace` SSE deltas in `delta.digigraph_trace` for tool block rendering.
 - Internal URL in Docker: `DIGIGRAPH_INTERNAL_URL=http://digigraph:8000`.
 
 ### 9.6 LiteLLM
 
 **Protocol:** OpenAI SDK to LiteLLM proxy
 
-- digillm's `get_client()` (used by DigiGraph via `llm_client`) creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
+- digillm's `get_client()` (used by digigraph via `llm_client`) creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
 - All LLM calls (research, brief builder, synthesis) go through LiteLLM, which routes to Ollama, OpenAI, or other configured providers.
 - Model selection: `get_model_for_mode()` returns the model ID from `config/model_modes.yaml` for the current mode. LiteLLM translates provider-prefixed IDs (e.g. `ollama/qwen3:8b`) to the target provider's expected format.
 - **Model routing:** callers must pass a concrete model string resolved via `config/model_modes.yaml`. The `digi/fast`, `digi/balanced`, `digi/best`, `digi/multimodal` named routes have been removed. Atlas/Hermes phases all use `openrouter/openrouter/auto` (OpenRouter Auto Router); set `OPENROUTER_API_KEY`. See `.env.example` and `config/model_modes.yaml`.
 - Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`).
 
-### 9.7 DigiVault
+### 9.7 digivault
 
 **Protocol:** HTTP via `digivault_hub.py`
 
 - **Manifest:** `POST /v1/orchestrator_tools` — returns the OpenAI tool dict for `digivault_search_notes`. Cached per `base_url` (no `index_config` — vault search is not index-scoped).
-- **Invoke:** `POST /v1/orchestrator_invoke` — dispatches to `SupabaseStore.search` (the `search_architecture_notes` RPC) on DigiVault's side. Accepts `{tool, arguments}`.
+- **Invoke:** `POST /v1/orchestrator_invoke` — dispatches to `SupabaseStore.search` (the `search_architecture_notes` RPC) on digivault's side. Accepts `{tool, arguments}`.
 - **Auth:** Bearer token from `WorkflowState.digi_bearer` is forwarded via `Authorization: Bearer` header; `X-Request-ID` forwarded from `ToolContext.request_id`.
 - **Env:** `DIGIVAULT_URL` (empty = the `digivault` skill is not registered for the request; other skills are unaffected). In Docker: `http://digivault:8004`.
-- **Purpose:** reproduces the vault-grounded documentation search the digithings.ai chat widget calls directly today ([ADR-0018](../docs/adr/0018-digichat-path-routing.md), epic #1248) — the tool DigiChat's BFF needs once traffic moves off the bespoke widget onto DigiGraph.
+- **Purpose:** reproduces the vault-grounded documentation search the digithings.ai chat widget calls directly today ([ADR-0018](../docs/adr/0018-digichat-path-routing.md), epic #1248) — the tool digichat's BFF needs once traffic moves off the bespoke widget onto digigraph.
 
 ---
 
@@ -634,10 +634,10 @@ digigraph:
 
 | Variable | Default (Compose) | Description |
 |----------|------------------|-------------|
-| `DIGIQUANT_URL` | `http://digiquant:8001` | DigiQuant HTTP base URL |
-| `DIGISEARCH_URL` | `http://digisearch:8002` | DigiSearch HTTP base URL; empty = search disabled |
-| `DIGIVAULT_URL` | `http://digivault:8004` | DigiVault HTTP base URL; empty = `digivault_search_notes` disabled |
-| `DIGISMITH_URL` | `http://digismith:8003` | DigiSmith status URL (unused by DigiGraph HTTP) |
+| `DIGIQUANT_URL` | `http://digiquant:8001` | digiquant HTTP base URL |
+| `DIGISEARCH_URL` | `http://digisearch:8002` | digisearch HTTP base URL; empty = search disabled |
+| `DIGIVAULT_URL` | `http://digivault:8004` | digivault HTTP base URL; empty = `digivault_search_notes` disabled |
+| `DIGISMITH_URL` | `http://digismith:8003` | digismith status URL (unused by digigraph HTTP) |
 | `DIGIKEY_JWKS_URL` | `http://digikey:8005/.well-known/jwks.json` | JWT public key endpoint |
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer claim |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience claim |
@@ -701,13 +701,13 @@ The following are explicitly documented as roadmap items:
 | Feature | Gap | Current Workaround |
 |---------|-----|-------------------|
 | **Graphiti graph memory** | Not implemented; `ARCHITECTURE.md` describes Neo4j + Graphiti for temporal strategy memory | Strategies are not persisted between conversations |
-| **Remote MCP enumeration** | DigiGraph cannot discover or integrate arbitrary third-party MCP servers | Only in-process registry + DigiSearch/DigiQuant vertical HTTP |
+| **Remote MCP enumeration** | digigraph cannot discover or integrate arbitrary third-party MCP servers | Only in-process registry + digisearch/digiquant vertical HTTP |
 | **OpenAI Responses API** | Not implemented; Chat Completions is the only LLM protocol | LiteLLM `/v1/responses` compatibility noted as future path |
-| **Distributed checkpoints** | MemorySaver/SQLite are single-node; Postgres has no advisory locks | Single DigiGraph instance |
+| **Distributed checkpoints** | MemorySaver/SQLite are single-node; Postgres has no advisory locks | Single digigraph instance |
 | **Per-user RBAC** | JWT subject not bound to checkpoint or tool access | Shared `thread_id` namespace; allowlists are per-request not per-user |
 | **Auth-bound checkpoints** | `thread_id` is caller-supplied; no ownership enforcement | Trust the client not to use other users' thread IDs |
 | **Request cancellation** | No mechanism to cancel in-flight streaming workflows | Background threads run to completion |
-| **DigiClaw subgraph exposure** | DigiClaw can attach only to the hub, not to vertical MCP servers directly | DigiClaw calls `/workflow` only |
+| **digiclaw subgraph exposure** | digiclaw can attach only to the hub, not to vertical MCP servers directly | digiclaw calls `/workflow` only |
 
 ---
 
@@ -717,7 +717,7 @@ The following are critical recommendations based on observed architectural gaps:
 
 ### 12.1 Distributed Checkpointing with Postgres Advisory Locks
 
-**Problem:** Multiple DigiGraph replicas with shared Postgres checkpoints can interleave writes to the same `thread_id`, corrupting state.
+**Problem:** Multiple digigraph replicas with shared Postgres checkpoints can interleave writes to the same `thread_id`, corrupting state.
 
 **Recommendation:** Wrap each `graph.invoke()` call with a Postgres advisory lock keyed on `hash(thread_id)`. The `PostgresSaver` in `langgraph-checkpoint-postgres` does not implement this. A thin wrapper should acquire an advisory lock before `invoke` and release it in a `finally` block. Use `pg_try_advisory_xact_lock` for timeout semantics. This enables true horizontal scaling with guaranteed per-thread serialization.
 
@@ -727,7 +727,7 @@ The following are critical recommendations based on observed architectural gaps:
 
 **Recommendation:** Introduce a `threading.Event` per streaming request. Pass it into `run_digigraph_workflow_streaming` as a `cancel_event` argument. The research tool loop should poll `cancel_event.is_set()` between tool rounds (after each `event_queue.put`). The streaming generator should set the event when it detects client disconnect (when `StreamingResponse` generator raises `GeneratorExit`). This bounds the maximum waste to one tool round's latency.
 
-### 12.3 Thread State Scoping to DigiKey JWT Subject
+### 12.3 Thread State Scoping to digikey JWT Subject
 
 **Problem:** Any authenticated caller can read any thread's state. In multi-tenant deployments, `session_id` collisions (especially `"default"`) expose one tenant's data to another.
 
@@ -735,7 +735,7 @@ The following are critical recommendations based on observed architectural gaps:
 
 ### 12.4 Sandboxed Code Execution
 
-**Problem:** `data_engineer_agent` executes arbitrary Python code (Polars operations). Even with `DIGI_ALLOW_CODE_EXEC` as a gate, the execution is in the same process as DigiGraph with access to all environment variables (including API keys) and the full filesystem.
+**Problem:** `data_engineer_agent` executes arbitrary Python code (Polars operations). Even with `DIGI_ALLOW_CODE_EXEC` as a gate, the execution is in the same process as digigraph with access to all environment variables (including API keys) and the full filesystem.
 
 **Recommendation:** Isolate `data_engineer_agent` code execution in a subprocess or container with:
 - A restricted Python environment (no `os`, `subprocess`, `importlib`, `socket` imports)
@@ -753,7 +753,7 @@ Until this is implemented, `DIGI_ALLOW_CODE_EXEC` should default to `0` and oper
 
 ### 12.6 Prometheus Metrics Endpoints
 
-**Problem:** There are no observable performance or business metrics exported from DigiGraph. Operators cannot measure request latency, LLM cache hit rates, tool call counts, or streaming session counts without parsing logs.
+**Problem:** There are no observable performance or business metrics exported from digigraph. Operators cannot measure request latency, LLM cache hit rates, tool call counts, or streaming session counts without parsing logs.
 
 **Recommendation:** Add `prometheus-client` as a dependency. Expose `GET /metrics` (Prometheus text format) with:
 - `digigraph_workflow_duration_seconds` (histogram, labels: profile, has_backtest)
@@ -762,7 +762,7 @@ Until this is implemented, `DIGI_ALLOW_CODE_EXEC` should default to `0` and oper
 - `digigraph_active_streaming_sessions` (gauge)
 - `digigraph_rate_limit_rejections_total` (labels: path)
 
-This complements DigiSmith's LangSmith tracing with operational metrics visible to Grafana or similar systems.
+This complements digismith's LangSmith tracing with operational metrics visible to Grafana or similar systems.
 
 ### 12.7 Compiled Graph Cache
 
@@ -786,7 +786,7 @@ All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extr
 
 `digigraph/src/digigraph/graph/research_agent.py` and
 `digigraph/src/digigraph/graph/pipeline_builder.py` provide reusable
-primitives for composing phase-structured research sub-graphs. The DigiQuant
+primitives for composing phase-structured research sub-graphs. The digiquant
 Atlas migration (issue #176, ADR-0009) is the first consumer.
 
 - `run_research_agent(skill_text, phase_inputs, shared_context, output_model)` —

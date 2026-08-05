@@ -3,7 +3,7 @@
 
 # Free-Provider Reference Index
 
-Deep-reference documentation for every free-tier LLM API available for DigiThings.
+Deep-reference documentation for every free-tier LLM API available for digithings.
 Each file is derived from `docs/providers/snapshots/` and updated weekly by the `provider-review` workflow.
 
 **Setup guides**: [`docs/providers/`](../providers/)

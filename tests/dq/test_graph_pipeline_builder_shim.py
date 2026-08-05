@@ -1,4 +1,4 @@
-"""REM-059: digiquant.olympus.hermes.pipeline_builder re-exports DigiGraph builder."""
+"""REM-059: digiquant.olympus.hermes.pipeline_builder re-exports digigraph builder."""
 
 from __future__ import annotations
 

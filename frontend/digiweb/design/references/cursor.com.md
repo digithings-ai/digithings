@@ -120,7 +120,7 @@ Typical homepage flow:
 
 ---
 
-## 9. Adopt / Adapt / Avoid (DigiThings)
+## 9. Adopt / Adapt / Avoid (digithings)
 
 | Adopt | Adapt | Avoid |
 |-------|-------|-------|
@@ -129,7 +129,7 @@ Typical homepage flow:
 | Literal CTAs + install commands | Docker compose / make targets in mono | Vague “Deploy a node” with no route |
 | Changelog / news band | GitHub releases, digigraph changelog | — |
 | Testimonial / quote strip | Builder quotes, OSS adopters | Fake metrics |
-| Product frame with border + shadow | Tearsheet, DigiChat, Olympus embed | — |
+| Product frame with border + shadow | Tearsheet, digichat, Olympus embed | — |
 | Two-column hero layout | Mesh **behind** frame, not over copy | Side-by-side “headline + random chart” cliché |
 
 ---

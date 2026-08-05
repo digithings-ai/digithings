@@ -1,4 +1,4 @@
-"""Prometheus metrics helper for DigiThings FastAPI services.
+"""Prometheus metrics helper for digithings FastAPI services.
 
 Provides :func:`install_metrics` which mounts a ``/metrics`` endpoint and an ASGI
 middleware that records standard HTTP metrics (request count, duration, in-flight)

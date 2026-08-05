@@ -1,7 +1,7 @@
-# DigiLLM – Architecture
+# digillm – Architecture
 
 `digillm` is the **single home for all LLM client / API-wrapper / tooling code**
-in the DigiThings monorepo. It is a standalone, **provider-agnostic** library
+in the digithings monorepo. It is a standalone, **provider-agnostic** library
 extracted from the mature `digigraph.llm` implementation. It speaks to any
 OpenAI-compatible endpoint and carries **no FastAPI / service coupling** and no
 hard dependency on `digismith`.
@@ -108,7 +108,7 @@ resolve_model(mode, modes: dict | None = None, *, path=None, default=None) -> st
 
 Opt-in test/medium/best resolution. **Deployment-agnostic**: takes an explicit
 `{mode: model}` mapping or a caller-supplied YAML `path` (flat mapping or a
-`defaults:` sub-mapping, matching DigiThings' `model_modes.yaml`). It hardcodes
+`defaults:` sub-mapping, matching digithings' `model_modes.yaml`). It hardcodes
 **no** config-directory location. Callers may also just pass a concrete model
 string to `chat_completion` and skip this entirely.
 

@@ -24,8 +24,8 @@
 1. **Unmarked `tests/ds/` + edgar tests** — cited in audit §3 scripts; no `AUDIT-*` or `REM-*`.
 2. **DOC-02 `ROADMAP.md`** — only `SECURITY.md` in REM-016; roadmap still understates revocation.
 3. **DOC-04 / DOC-05 architecture files** — REM-112 targets `digiquant/AGENTS.md` only; `digiquant/ARCHITECTURE.md` and `digiclaw/ARCHITECTURE.md` ADDM/auth wording not explicit.
-4. **DigiGraph MCP `workflow` tool** — bypasses `DigiAuthMiddleware` (audit §3 digigraph); bind fix (REM-002) does not document tool-level auth.
-5. **DigiChat in monorepo test gate** — `make test-unit` omission (audit §3 digichat); REM-122 fixes `AGENTS.md` only, not `Makefile`.
+4. **digigraph MCP `workflow` tool** — bypasses `DigiAuthMiddleware` (audit §3 digigraph); bind fix (REM-002) does not document tool-level auth.
+5. **digichat in monorepo test gate** — `make test-unit` omission (audit §3 digichat); REM-122 fixes `AGENTS.md` only, not `Makefile`.
 6. **Org / quota cron** — REM-041–043 deferred; daily red noise from Atlas may persist through Phase 0.
 
 ---
@@ -219,7 +219,7 @@ Sourced from audit **§3 module tables** and **§5 CI matrix** (~297 raw → 105
 | G-10 | Low | digigraph | **`vertical` hub** tools untested (named in §3) | REM-053 bundle |
 | G-11 | Low | landings | **Cloudflare Olympus deploy** without monorepo gate | REM-038 partial (CI only) |
 
-**Already captured elsewhere (not gaps):** DigiChat embed (AUDIT-010), execute_python sandbox (AUDIT-012), ingest stub (AUDIT-001), heartbeat JWT (AUDIT-004), hook tests / compose health (REM-127/128), pandas strategies (AUDIT-057/058).
+**Already captured elsewhere (not gaps):** digichat embed (AUDIT-010), execute_python sandbox (AUDIT-012), ingest stub (AUDIT-001), heartbeat JWT (AUDIT-004), hook tests / compose health (REM-127/128), pandas strategies (AUDIT-057/058).
 
 ---
 
@@ -229,7 +229,7 @@ Add to implementation plan as **`REM-138` … `REM-145`** (or fold into wave-0 b
 
 | Proposed ID | Maps | Title | Wave | Effort |
 |-------------|------|-------|------|--------|
-| **REM-138** | G-01 | Document + enforce auth on DigiGraph MCP `workflow` tool (scope or disable when unauthenticated) | 1 | M |
+| **REM-138** | G-01 | Document + enforce auth on digigraph MCP `workflow` tool (scope or disable when unauthenticated) | 1 | M |
 | **REM-139** | G-03 | Add `@pytest.mark.unit` to deselected **`tests/ds/**`** modules | 2 | S |
 | **REM-140** | G-04 | Locate and mark **`edgar`** (or named) tests with `@pytest.mark.unit` | 2 | S |
 | **REM-141** | DOC-02 | Update **`ROADMAP.md`** revocation / Redis opt-in (with REM-016) | 4 | S |
@@ -262,7 +262,7 @@ Add to implementation plan as **`REM-138` … `REM-145`** (or fold into wave-0 b
 | 041 | 041 | Defer §7 — org policy | Weekly snapshot stays red |
 | 042–043 | 042–043 | Defer §7 — quota/ops | Atlas cron may stay red |
 | 058 | 058 | Partial defer — large pandas migration | Scope creep in mega-PR |
-| 059 | 059 | Defer / thin shim | Hermes still coupled to DigiGraph |
+| 059 | 059 | Defer / thin shim | Hermes still coupled to digigraph |
 | 100 | 100 | Depends on issue #401 | Registry dead code vs wire-up |
 | 010 | 010 | Human gate | Wrong embed design shipped |
 | 012 | 012 | Human gate — container TBD | False sense of sandbox security |

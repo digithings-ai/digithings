@@ -1,6 +1,6 @@
 """Compiled Atlas sub-graph — research only.
 
-DigiClaw (issue #219) and the chain orchestrator invoke the Atlas pipeline
+digiclaw (issue #219) and the chain orchestrator invoke the Atlas pipeline
 through ``build_atlas_graph`` + ``AtlasInput``. The contract is deliberately
 small and stable so callers never have to know about internal phase
 structure.
@@ -50,7 +50,7 @@ from digiquant.olympus.atlas.state import (
 
 @dataclass(frozen=True)
 class AtlasInput:
-    """Contract between DigiClaw and the Atlas sub-graph.
+    """Contract between digiclaw and the Atlas sub-graph.
 
     Kept small on purpose — one job's worth of invocation data. The
     watchlist is part of the input (not the state) because Phase 7C's
@@ -175,7 +175,7 @@ def initial_state(
 ) -> AtlasResearchState:
     """Build an ``AtlasResearchState`` from ``AtlasInput``.
 
-    Separated from ``build_atlas_graph`` so tests and DigiClaw can
+    Separated from ``build_atlas_graph`` so tests and digiclaw can
     construct states without touching the graph compiler.
     """
     extra: dict[str, Any] = {}

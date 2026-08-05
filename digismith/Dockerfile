@@ -1,4 +1,4 @@
-# DigiSmith – observability control plane (LangSmith helpers + status API)
+# digismith – observability control plane (LangSmith helpers + status API)
 # Build from repo root: docker compose build digismith (context: .)
 # See digismith/ARCHITECTURE.md and root SECURITY.md. Bind to 127.0.0.1 in production via compose.
 

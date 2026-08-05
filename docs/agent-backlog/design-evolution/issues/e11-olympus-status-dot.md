@@ -1,6 +1,6 @@
 ## Goal
 
-Add optional **Olympus footer status dot** wired to DigiSmith `GET /v1/status` — Graphite-style operator health indicator for dashboard surfaces ([design spec §Layer B](../../../superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md)).
+Add optional **Olympus footer status dot** wired to digismith `GET /v1/status` — Graphite-style operator health indicator for dashboard surfaces ([design spec §Layer B](../../../superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md)).
 
 ## Component
 
@@ -8,8 +8,8 @@ Add optional **Olympus footer status dot** wired to DigiSmith `GET /v1/status` �
 
 ## Acceptance Criteria
 
-- [ ] Small status dot in Olympus footer (or app shell) — green/amber/red mapped from DigiSmith diagnostic response
-- [ ] Poll interval documented (e.g. 60s); graceful degradation when DigiSmith unreachable (grey/unknown)
+- [ ] Small status dot in Olympus footer (or app shell) — green/amber/red mapped from digismith diagnostic response
+- [ ] Poll interval documented (e.g. 60s); graceful degradation when digismith unreachable (grey/unknown)
 - [ ] No PII in tooltip; optional mono label "all systems operational" / "degraded"
 - [ ] Does not block page load; fetch is async/non-blocking
 - [ ] Feature flag or env to disable in local dev without stack
@@ -18,7 +18,7 @@ Add optional **Olympus footer status dot** wired to DigiSmith `GET /v1/status` �
 ## Test Requirements
 
 - Manual with stack-local: dot reflects `/v1/status`
-- Manual without DigiSmith: dot shows unknown state, no console errors
+- Manual without digismith: dot shows unknown state, no console errors
 - Olympus build passes
 
 ## Documentation to Update

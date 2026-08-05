@@ -1,4 +1,4 @@
-# DigiClaw – heartbeat runner + JSONL audit log
+# digiclaw – heartbeat runner + JSONL audit log
 # Build from repo root: docker compose build digiclaw (context: .)
 # See digiclaw/ARCHITECTURE.md.
 
