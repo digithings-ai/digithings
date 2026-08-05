@@ -17,9 +17,17 @@ Triggered automation. Fixed rule, no judgment. Runs on a schedule or event insid
 **Copilot execution is retired (2026-08-05).** The subscription lapsed, and with it
 `copilot-issue-dispatch`, `copilot-pr-lifecycle`, `copilot-pr-mark-ready`,
 `copilot-pr-targeted-ci` and `copilot-quota-gate` were deleted. Nothing dispatches
-`exec:copilot` now — issues carrying that label are not picked up by anything, so
-`pipeline-maintenance.yml` and `pipeline-digiquant-prices.yml` still applying it is a
-known loose end. Moving that automation to Cursor is open work.
+`exec:copilot`, so every site that applied it was retargeted at `exec:cursor` (5 in
+`pipeline-maintenance.yml`, 2 in `pipeline-digiquant-prices.yml`), the now-meaningless
+bare `copilot` label was dropped from 8 issue-creation sites, and the five issues
+already stranded on the dead tier were migrated. The label itself is kept, marked
+RETIRED in its description — 19 closed issues carry it and deleting a label strips it
+from their history too.
+
+**Caveat worth knowing before relying on `exec:cursor`:** it has 68 open issues, the
+oldest from 2026-04-19, and 1 closed in the last 30 days. Retargeting stops new work
+being stranded on a tier with no consumer at all; it does not by itself mean the work
+gets done. Whether the Cursor Automation is actually running is a separate question.
 
 **PR code review:** Cursor Bugbot, invoked by hand with a `bugbot run` comment once a
 diff is final. Never at PR open and never per push — Bugbot went usage-based in June

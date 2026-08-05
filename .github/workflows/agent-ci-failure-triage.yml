@@ -108,7 +108,7 @@ jobs:
           URL=$(gh issue create \
             --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,ci:failure,maintenance,component:root,risk:low,exec:cursor" \
+            --label "ci:failure,maintenance,component:root,risk:low,exec:cursor" \
             --body-file /tmp/triage-body.md)
 
           echo "Created: $URL"
