@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.6.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.5.0...digichat-v0.6.0) (2026-08-05)
+
+
+### Features
+
+* **design-system:** retire the QR favicon for a terminal identity ([#1843](https://github.com/digithings-ai/digithings/issues/1843)) ([7966e3b](https://github.com/digithings-ai/digithings/commit/7966e3be1c3ad548bb19835cbb25a769ace1d1e0)), closes [#1841](https://github.com/digithings-ai/digithings/issues/1841)
+* **digichat:** add digichat ready/seed postMessage validators ([30094d8](https://github.com/digithings-ai/digithings/commit/30094d8d6372c1326572727b27aaca1bc8ad01a0))
+* **digichat:** allow first-party digithings hosts without embed token ([556d9a7](https://github.com/digithings-ai/digithings/commit/556d9a7d4406639791b1bcd229de3e05666eaf66))
+* **digichat:** drive embed BYOK/status/layout from tenant flags ([9dfe479](https://github.com/digithings-ai/digithings/commit/9dfe479af361f5f780e2b92ab4366b5f70c519ec))
+* **digichat:** parse independent embed UI flags from tenant config ([984c0d6](https://github.com/digithings-ai/digithings/commit/984c0d6c3167161a2adc0f211370b951b825dd87))
+* **digichat:** Phase 2 unification — digivault port + digigraph rich mapping ([#1859](https://github.com/digithings-ai/digithings/issues/1859)) ([8f56e17](https://github.com/digithings-ai/digithings/commit/8f56e1783c62d93131472707daef6c61b918412f))
+* **digichat:** project embed UI flags through tenant-config API ([e4373f0](https://github.com/digithings-ai/digithings/commit/e4373f031d058f26467fa82970e1c8de871fc199))
+* **digichat:** scaffold DigiThings DigiChat on Cloudflare Containers ([032493e](https://github.com/digithings-ai/digithings/commit/032493e33b6a22525769319d51724683626b3085))
+* **digichat:** shared activity protocol (unification phase 1) ([#1817](https://github.com/digithings-ai/digithings/issues/1817)) ([32f8e92](https://github.com/digithings-ai/digithings/commit/32f8e92626c2ffe905cd5a8bfd8d0806c9ceebbd))
+* **digichat:** wire ready/seed protocol into embed session ([2a6c075](https://github.com/digithings-ai/digithings/commit/2a6c0752bcc1a50cf25c7954051e68e63d02cd4e))
+* **website:** Phase 3 Pages-native digichat-ui (no Containers) ([eefac60](https://github.com/digithings-ai/digithings/commit/eefac60179db807088335cca1f6177a5183dbb70))
+* **website:** retire CF chat Function and native useStackChat stack ([b54c73d](https://github.com/digithings-ai/digithings/commit/b54c73d4487cfd5329d3193801a0f1077f13ec6a))
+
+
+### Bug Fixes
+
+* **digichat:** accept readonly messages in embed seed ([1767bf3](https://github.com/digithings-ai/digithings/commit/1767bf3e708e7f6642ac2ba4e78a6e64ff962295))
+* **digichat:** apply URL hex accent after mount on embed ([#1854](https://github.com/digithings-ai/digithings/issues/1854)) ([720f96c](https://github.com/digithings-ai/digithings/commit/720f96c8f7153a39d6a28637f1c84f62374fa479))
+* **digichat:** read embed token/host via useSearchParams ([2763be4](https://github.com/digithings-ai/digithings/commit/2763be4dd41db1a858dd66994d7fbe2e8db64f7f))
+* **digichat:** read embed token/host via useSearchParams ([5b167df](https://github.com/digithings-ai/digithings/commit/5b167df1e842e1db98f4d0dc4b910b35ed7e07f3))
+* **digichat:** retarget Phase 3 embed to same-origin /embed ([21ee786](https://github.com/digithings-ai/digithings/commit/21ee786b6a34077c867ba9cf8f4e966e69f181ba))
+* **digichat:** send trial unlock header at request time ([0daa626](https://github.com/digithings-ai/digithings/commit/0daa626b2e1af2592900643aef0ba1228fc5df39))
+* **digichat:** send trial unlock header at request time ([80e2f85](https://github.com/digithings-ai/digithings/commit/80e2f8510bc6f24826ea1abfe1139cfbcb1de4e5))
+
 ## [0.5.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.4.1...digichat-v0.5.0) (2026-07-31)
 
 
