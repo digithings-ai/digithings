@@ -48,6 +48,12 @@ export type EmbedTenantConfig = {
    * should not stream retrieved titles to anonymous visitors.
    */
   activityDetail: ActivityDetail;
+  /** When true, embed shows BYOK/settings. Independent of gateMode. */
+  showByok?: boolean;
+  /** When true, embed shows digichat-ui status bar. Independent of gateMode. */
+  showStatusBar?: boolean;
+  /** page = full content chrome inside iframe; embed = compact iframe child. */
+  layout?: "page" | "embed";
   /**
    * Per-tenant secret. Knowing a tenant's host string is public (it's the
    * tenant's own domain) so registry membership alone must never grant
@@ -210,6 +216,16 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: activityDetail must be "off", "labels", or "full"`);
   }
 
+  if (v.showByok !== undefined && typeof v.showByok !== "boolean") {
+    throw new Error(`${ctx}: showByok must be a boolean`);
+  }
+  if (v.showStatusBar !== undefined && typeof v.showStatusBar !== "boolean") {
+    throw new Error(`${ctx}: showStatusBar must be a boolean`);
+  }
+  if (v.layout !== undefined && v.layout !== "page" && v.layout !== "embed") {
+    throw new Error(`${ctx}: layout must be "page" or "embed"`);
+  }
+
   return {
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
@@ -225,6 +241,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     placeholder: typeof v.placeholder === "string" ? v.placeholder : undefined,
     lockedContact: typeof v.lockedContact === "string" ? v.lockedContact : undefined,
     activityDetail: (v.activityDetail as ActivityDetail | undefined) ?? "labels",
+    showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
+    showStatusBar: typeof v.showStatusBar === "boolean" ? v.showStatusBar : undefined,
+    layout: v.layout === "page" || v.layout === "embed" ? v.layout : undefined,
   };
 }
 

@@ -368,6 +368,66 @@ describe("parseEmbedTenants", () => {
       );
     });
   });
+
+  it("parses showByok, showStatusBar, layout independent of gateMode", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "digithings.ai": {
+          slug: "digithings",
+          backend: {
+            type: "digivault",
+            supabaseUrlEnv: "A_URL",
+            supabaseAnonKeyEnv: "A_ANON",
+            openRouterKeyEnv: "A_OR",
+          },
+          gateMode: "ungated",
+          showByok: true,
+          showStatusBar: true,
+          layout: "page",
+          activityDetail: "full",
+          token: "t",
+        },
+      }),
+    );
+    const t = reg.get("digithings.ai")!;
+    expect(t.gateMode).toBe("ungated");
+    expect(t.showByok).toBe(true);
+    expect(t.showStatusBar).toBe(true);
+    expect(t.layout).toBe("page");
+  });
+
+  it("rejects invalid layout", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "ex",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            layout: "fullscreen",
+            token: "t",
+          },
+        }),
+      ),
+    ).toThrow(/layout/);
+  });
+
+  it("omits UI flags when absent (callers default)", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "ex",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+        },
+      }),
+    );
+    const t = reg.get("example.com")!;
+    expect(t.showByok).toBeUndefined();
+    expect(t.showStatusBar).toBeUndefined();
+    expect(t.layout).toBeUndefined();
+  });
 });
 
 describe("resolveEmbedTenantByHost", () => {
