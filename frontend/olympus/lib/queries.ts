@@ -35,6 +35,7 @@ import {
 } from './render-pipeline-payloads';
 import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tickers';
 import { buildRebalanceActions } from './rebalance-actions';
+import { holdingWeightChange } from './holding-weight-change';
 import {
   digestItemsToStrings,
   extractDigestContextBullets,
@@ -1110,9 +1111,17 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     type: 'LONG' as const,
     weight_actual: Number(p.weight_pct ?? 0),
     weight_target: targetWeightByTicker.has(p.ticker) ? targetWeightByTicker.get(p.ticker)! : null,
+    // `prevWeightByTicker.get(...) ?? 0` used to make a brand-new 10% position report `+10.0pp`
+    // — a rate of change for something with no prior size to change from, which reads as
+    // "added 10 points to an existing holding" rather than "opened a position" (#1850). A
+    // ticker missing from the prior book is `undefined`, and `holdingWeightChange` keeps that
+    // distinct from a held-but-0% sleeve, which genuinely can move.
     weight_delta:
       latestPosDate && prevPosDate
-        ? Number(p.weight_pct ?? 0) - (prevWeightByTicker.get(p.ticker) ?? 0)
+        ? holdingWeightChange(
+            Number(p.weight_pct ?? 0),
+            prevWeightByTicker.has(p.ticker) ? prevWeightByTicker.get(p.ticker) : null,
+          ).deltaPp
         : null,
     current_price: p.current_price != null ? Number(p.current_price) : latestClose(p.ticker).curr,
     entry_price: resolvedEntryPrice(p),

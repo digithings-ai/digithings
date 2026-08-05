@@ -135,6 +135,7 @@ export default function AllocationsPositionsTable(props: {
                         </td>
                         <td className="px-2 py-3 text-right md:px-3">
                           <span className="block font-medium">{p.normalizedWeight.toFixed(1)}%</span>
+                          <WeightChangeBadge deltaPp={p.weight_delta ?? null} />
                           <span className="mt-0.5 block text-[0.64rem] text-ink-mute">
                             {p.weight_target != null ? `${p.weight_target.toFixed(1)}% target` : 'no target'}
                           </span>
@@ -234,6 +235,33 @@ function useNowMs(intervalMs = CLOCK_TICK_MS): number {
  * `unavailable` renders the table's em-dash convention. NOT 0% — a fabricated zero reads as a
  * real "flat" — and not a blank cell either.
  */
+/**
+ * Signed change in this holding's size since the previous book date, in percentage points.
+ *
+ * Renders NOTHING when there is no rate of change to show — a brand-new position, a removed one,
+ * or a hold that did not move. That is the owner's rule for #1850: *"if it was completely removed
+ * or if it's a brand new position, then there isn't a rate of change to it. It's just a brand new
+ * position or it's gone."* `weight_delta` is null in exactly those cases (see
+ * `lib/holding-weight-change.ts`), so an absent badge is the honest rendering rather than a `0.0pp`
+ * that would read as a measured non-move.
+ */
+function WeightChangeBadge({ deltaPp }: { deltaPp: number | null }) {
+  if (deltaPp === null || Math.abs(deltaPp) < 0.05) return null;
+  const up = deltaPp > 0;
+  return (
+    <span
+      // Neutral `text-ink-soft`, matching HoldingsActivityTable's weight-change column, NOT
+      // text-up/text-down: tokens.css reserves --up/--down for P&L semantics, and a position
+      // getting bigger is not a gain. The sign carries the direction.
+      className="mt-0.5 block font-mono text-[0.64rem] text-ink-soft"
+      title={`${up ? 'Added' : 'Trimmed'} ${Math.abs(deltaPp).toFixed(1)} percentage points since the previous book`}
+    >
+      {up ? '+' : '−'}
+      {Math.abs(deltaPp).toFixed(1)}pp
+    </span>
+  );
+}
+
 function MarkFigure({ ticker, valuation }: { ticker: string; valuation: Valuation }) {
   const pct = valuation.unrealizedPct;
   if (valuation.source === 'unavailable' || pct == null || !Number.isFinite(pct)) {
