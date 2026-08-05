@@ -6,15 +6,16 @@
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@digithings/design": "*",
     "@digithings/digichat-ui": "*",
     "@digithings/web": "*",
-    "motion": "^12.23.12",
     "geist": "^1.5.1",
     "mermaid": "^11.16.0",
+    "motion": "^12.23.12",
     "next": "16.2.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -29,8 +30,10 @@
     "@types/react-dom": "^19.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "happy-dom": "^20.11.1",
     "postcss": "^8.5.4",
     "tailwindcss": "^4.1.7",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.10"
   }
 }
