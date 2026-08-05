@@ -167,7 +167,7 @@ make up-digichat
 # or: docker compose --profile digichat up -d --build
 ```
 
-**Notes:** Requires `AUTH_SECRET`, `AUTH_URL`, `DIGIKEY_BFF_TOKEN` in `.env`. digichat auto-migrates the database on startup (`DIGICHAT_AUTO_MIGRATE=1`). Default host port is 3005; override with `DIGICHAT_PUBLISH_PORT`. To bind to LAN (not just loopback), set `DIGICHAT_PUBLISH_HOST=0.0.0.0` — see `SECURITY.md`.
+**Notes:** Requires `AUTH_SECRET`, `AUTH_URL`, `DIGIKEY_BFF_TOKEN` in `.env`. DigiChat auto-migrates the database on startup (`DIGICHAT_AUTO_MIGRATE=1`). Default host port is 3005; override with `DIGICHAT_PUBLISH_PORT`. To bind to LAN (not just loopback), set `DIGICHAT_PUBLISH_HOST=0.0.0.0` — see `SECURITY.md`.
 
 ---
 
@@ -352,7 +352,7 @@ Human-in-the-loop interrupt before code execution is supported via `DIGI_INTERRU
 | Unsandboxed code execution | High | Off by default (`DIGI_ALLOW_CODE_EXEC`); loopback-only network | gVisor or subprocess sandboxing |
 | Multi-tenant incomplete | Medium | Network isolation; per-key scopes | digibase + per-tenant index isolation |
 | Ephemeral JWKS rotates on restart | Medium | Dev-only (`DIGIKEY_ALLOW_EPHEMERAL_KEY=1`); use PEM or stable key in production | Vault/KMS-backed signing keys |
-| digichat `DIGICHAT_PUBLISH_HOST=0.0.0.0` | High if set | Warning in `SECURITY.md`; not the default | Always use Tailscale/CF Tunnel for remote |
+| DigiChat `DIGICHAT_PUBLISH_HOST=0.0.0.0` | High if set | Warning in `SECURITY.md`; not the default | Always use Tailscale/CF Tunnel for remote |
 
 See [SECURITY.md](SECURITY.md) for the full hardening spec.
 

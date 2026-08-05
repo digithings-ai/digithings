@@ -98,20 +98,20 @@ def test_top_level_import_stays_lazy() -> None:
 
 @pytest.mark.unit
 def test_lazy_client_attribute_still_resolves() -> None:
-    """`digisearch.digisearch` (and core models) still resolve via PEP 562 __getattr__."""
-    from digisearch.client import digisearch as RealClient
+    """`digisearch.DigiSearch` (and core models) still resolve via PEP 562 __getattr__."""
+    from digisearch.client import DigiSearch as RealClient
     from digisearch.core.models import Document as RealDocument
 
     import digisearch
 
     # Public names are exported and discoverable...
-    for name in ("digisearch", "Chunk", "Document", "Query", "Result"):
+    for name in ("DigiSearch", "Chunk", "Document", "Query", "Result"):
         assert name in digisearch.__all__
         assert name in dir(digisearch)
 
     # ...and resolve to the real objects on attribute access (exercises __getattr__,
     # and avoids importing `digisearch` via both `import` and `from`).
-    assert digisearch.digisearch is RealClient
+    assert digisearch.DigiSearch is RealClient
     assert digisearch.Document is RealDocument
     assert all(getattr(digisearch, n) is not None for n in ("Chunk", "Query", "Result"))
 
