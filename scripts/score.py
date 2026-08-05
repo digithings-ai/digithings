@@ -77,6 +77,8 @@ SCORE_SKIP_PATH_FRAGMENTS: tuple[str, ...] = (
     # hit all files). This is the source-of-truth design dir we iterate heavily;
     # secrets are still covered by gitleaks. See #1310.
     "frontend/digiweb/design/",
+    # Lockfile integrity hashes contain XXX substrings that trip TODO/FIXME scan.
+    "package-lock.json",
 )
 
 # ── Anti-pattern definitions ──────────────────────────────────────────────────

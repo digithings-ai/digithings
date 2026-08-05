@@ -26,7 +26,7 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed` for customers) st
 2. Midday Phase 3 amendment: `/chat` Pages shell + iframe → Containers `/embed` (blocked on Workers Paid).
 3. Evening amendment: native digichat-ui + Pages Function (this revision).
 
-Deferred scaffold: [`frontend/digichat-cloudflare/`](../frontend/digichat-cloudflare/README.md) if DigiThings later adopts Workers Paid and wants one digichat Node for marketing + embeds.
+Deferred scaffold: [`frontend/digichat-cloudflare/`](../../frontend/digichat-cloudflare/README.md) if DigiThings later adopts Workers Paid and wants one digichat Node for marketing + embeds.
 
 ## Production configuration
 

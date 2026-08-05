@@ -12,5 +12,4 @@ digivault Function). See Phase 3 ops checklist.
 - DataTap DigiChat ACA is **client-only** — do not use for DigiThings.
 - **2026-08-05:** a DigiThings misdeploy on DataTap WebSite was torn down.
 
-Scripts in this directory (`build-image.sh`, `import-ghcr.sh`, `apply-secrets.sh`)
-targeted Azure ACA and must **not** be used for DigiThings.
+Azure ACA scripts previously in this directory were removed — do not recreate them.
