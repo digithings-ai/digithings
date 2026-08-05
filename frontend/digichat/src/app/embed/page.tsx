@@ -47,6 +47,13 @@ import {
   useEmbedTenantConfig,
   type EmbedTenantClientConfig,
 } from "@/hooks/use-embed-tenant-config";
+import { resolveEmbedUiFlags } from "@/lib/embed-ui-flags";
+import { applyEmbedSeed } from "@/lib/embed-seed-apply";
+import {
+  READY_MESSAGE,
+  isAllowedSeedParentOrigin,
+  parseSeedMessage,
+} from "@/lib/embed-seed-messages";
 
 type Accent = "digithings" | "digiquant" | "digichat";
 
@@ -181,7 +188,9 @@ function EmbedChat({
     useBYOKKey();
   const ungated = tenantCfg.gateMode === "ungated";
   const isTrialForm = tenantCfg.gateMode === "trial_form";
-  const showByok = !ungated && !isTrialForm; // trial_form defers unlock to the parent form, not BYOK
+  const uiFlags = resolveEmbedUiFlags(tenantCfg);
+  // trial_form still hides BYOK until parent unlock — product rule for DataTap only
+  const showByok = isTrialForm ? false : uiFlags.showByok;
 
   // Mirrors useEmbedGate's own host resolution (resolveEmbedHost(host)) so the
   // persisted trial-unlock flag is keyed identically to the persisted turn
@@ -256,6 +265,48 @@ function EmbedChat({
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
   });
+
+  const [seedApplied, setSeedApplied] = useState(false);
+  const [hideIntroForSeed, setHideIntroForSeed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !host) return;
+    let parentOrigin: string;
+    try {
+      parentOrigin = host.includes("://") ? new URL(host).origin : `https://${host}`;
+    } catch {
+      return;
+    }
+    window.parent.postMessage(READY_MESSAGE, parentOrigin);
+  }, [host]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || seedApplied) return;
+    const allowed = new Set<string>();
+    if (host) {
+      try {
+        allowed.add(host.includes("://") ? new URL(host).origin : `https://${host}`);
+      } catch {
+        /* ignore */
+      }
+    }
+    for (const h of ["https://digithings.ai", "https://www.digithings.ai"]) {
+      if (isAllowedSeedParentOrigin(h)) allowed.add(h);
+    }
+
+    const onMessage = (event: MessageEvent) => {
+      const parsed = parseSeedMessage(event, allowed);
+      if (!parsed) return;
+      applyEmbedSeed(
+        { messages: parsed.messages, pending: parsed.pending },
+        { seed: chat.seed, send: chat.send },
+      );
+      setSeedApplied(true);
+      setHideIntroForSeed(true);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [host, seedApplied, chat.seed, chat.send]);
 
   // The upstream conversation id is the useful handle (it maps to the real backend
   // conversation); fall back to nothing rather than blocking the gate.
@@ -389,8 +440,8 @@ function EmbedChat({
       suggestions={suggestions}
       placeholder={placeholder}
       showByok={showByok}
-      showStatusBar={false}
-      layout="embed"
+      showStatusBar={uiFlags.showStatusBar}
+      layout={uiFlags.layout}
       chat={{ ...chat, send: wrappedSend }}
       headerSlot={headerSlot}
       footerSlot={footerSlot}
@@ -405,7 +456,7 @@ function EmbedChat({
           <PaywallCard lockedContact={tenantCfg.lockedContact} />
         ) : undefined
       }
-      showIntro={!gate.locked && !trialLocked}
+      showIntro={!gate.locked && !trialLocked && !hideIntroForSeed}
       ariaLabel={headerTitle ?? "digichat embed"}
     />
   );
