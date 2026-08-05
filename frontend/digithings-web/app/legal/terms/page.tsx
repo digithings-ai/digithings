@@ -12,6 +12,11 @@ import {
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
+  // Kept out of search results until real reviewed text lands. The visible
+  // DraftBanner stops a *visitor* mistaking the outline for a policy, but a
+  // search result for "digithings terms" that opens a draft misleads before the
+  // banner is ever read — and the fix is one line, not a copy argument.
+  robots: { index: false, follow: true },
   title: "terms of use — draft outline",
   description:
     "Draft outline of the DigiThings website and services terms of use. Not in force, not legal " +
