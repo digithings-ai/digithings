@@ -15,14 +15,15 @@ been reviewed at all — the exact failure it is built to catch. Equally load-be
 is that a label or a human approval always clears the gate, so an outage at Cursor
 can never freeze a deploy.
 
-The subject-parsing tests pin real commit subjects from this repository's history,
-because the squash format ("subject (#1234)") is the only link a commit has back
-to its pull request.
+The subject-parsing tests pin real commit subjects from this repository's history.
+Merge-style child commits retain their original subjects, so the gate falls back
+to GitHub's commit-to-PR association for those commits.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any  # score:allow untyped any — dynamically loaded module
@@ -198,6 +199,49 @@ def test_a_trailing_issue_reference_is_not_mistaken_for_the_pr() -> None:
 def test_merge_commits_are_detected_by_parent_count() -> None:
     assert crc.is_merge_commit("aaa bbb")
     assert not crc.is_merge_commit("aaa")
+
+
+def test_unnumbered_commit_uses_its_merged_github_pr_association(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Merge-style PR child commits do not carry ``(#1234)`` in their subjects."""
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(
+        crc,
+        "_gh_json",
+        lambda _args: [
+            {"number": 1900, "merged_at": None},
+            {"number": 1899, "merged_at": "2026-08-05T19:51:00Z"},
+        ],
+    )
+
+    assert crc.associated_pr_number("a7bf7721") == 1899
+
+
+def test_open_promotion_pr_does_not_legitimize_a_direct_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only an already-merged source PR can supply review evidence."""
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(
+        crc,
+        "_gh_json",
+        lambda _args: [{"number": 1900, "merged_at": None}],
+    )
+
+    assert crc.associated_pr_number("direct123") is None
+
+
+def test_github_association_failure_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A transient API failure must not crash or approve an unlinked commit."""
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+
+    def fail(_args: list[str]) -> list[dict[str, Any]]:
+        raise subprocess.CalledProcessError(1, "gh api")
+
+    monkeypatch.setattr(crc, "_gh_json", fail)
+
+    assert crc.associated_pr_number("unknown123") is None
 
 
 # ── workflow wiring: a gate that never runs gates nothing ────────────────────
