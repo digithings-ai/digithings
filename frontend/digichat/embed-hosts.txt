@@ -1,6 +1,8 @@
 # Plain hostnames for DIGICHAT_EMBED_HOSTS (build-time CSP frame-ancestors).
 # No secrets — safe as a Docker build-arg. One hostname per line; # comments ignored.
 # Also listed in ARCHITECTURE.md §10.
+digithings.ai
+www.digithings.ai
 datatapstream.com
 www.datatapstream.com
 dev.datatapstream.com

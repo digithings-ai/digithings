@@ -139,7 +139,7 @@ async function testAnthropicKey(key: string): Promise<TestResult> {
 
 async function testOpenRouterKey(key: string, model: string): Promise<TestResult> {
   const referer =
-    process.env.DIGICHAT_SITE_URL?.trim() || "https://chat.digithings.ai";
+    process.env.DIGICHAT_SITE_URL?.trim() || "https://digithings.ai";
   try {
     const resp = await fetchWithTimeout(`${OPENROUTER_API_BASE}/chat/completions`, {
       method: "POST",

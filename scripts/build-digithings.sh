@@ -54,15 +54,20 @@ grep -q 'aria-label="digithings module manifest"' dist/index.html || { echo "ERR
 [ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
 # Cloudflare Pages Functions live at the PROJECT ROOT (this script's CWD = repo root),
-# NOT inside the static output dir. The /api/chat docs-assistant Function is authored
-# under frontend/digithings-web/functions/; mirror it to a repo-root functions/ so the
-# (repo-root) Pages project compiles it. The chat reads the DigiVault vault from Supabase
-# at runtime (CORE_SUPABASE_URL / CORE_SUPABASE_ANON_KEY + OPENROUTER_API_KEY as Pages env
-# vars) — no bundled data, so there is nothing to assert in dist/ beyond the export above.
+# NOT inside the static output dir. Mirror from frontend/digithings-web/functions/
+# (Phase 3: digivault /api/chat + /api/byok on free Pages — no Containers).
 echo "--- mirroring Pages Functions to repo root ---"
 rm -rf functions
-cp -r frontend/digithings-web/functions functions
-[ -f functions/api/chat.ts ] || { echo "ERROR: chat Function missing from functions/" >&2; exit 1; }
+if [ -d frontend/digithings-web/functions ] && [ -n "$(find frontend/digithings-web/functions -type f 2>/dev/null | head -1)" ]; then
+  cp -r frontend/digithings-web/functions functions
+else
+  echo "ERROR: expected frontend/digithings-web/functions (digivault /api/chat)" >&2
+  exit 1
+fi
+if [ ! -f functions/api/chat.ts ]; then
+  echo "ERROR: functions/api/chat.ts missing after mirror" >&2
+  exit 1
+fi
 
 echo "--- dist/ contents ---"
 ls -la dist/

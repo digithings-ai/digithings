@@ -208,6 +208,9 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dc-settings-error { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--down); }
 .dc-settings-test-ok { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--up); }
 
+
+/* Landing / module cards continue below */
+
 /* ---- /docs API reference — app-owned CONTENT chrome only. The shell
    (responsive sidebar + scroll-spy + mobile disclosure), hero, code blocks,
    field-table hairlines and the HTTP-method color ramp live in the shared

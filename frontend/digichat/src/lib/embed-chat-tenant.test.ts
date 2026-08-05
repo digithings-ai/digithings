@@ -99,3 +99,42 @@ describe("resolveEmbedChatTenant legacy behavior (unknown host)", () => {
     if (result instanceof Response) expect(result.status).toBe(503);
   });
 });
+
+const DIGITHINGS_REGISTRY = JSON.stringify({
+  "digithings.ai": {
+    slug: "digithings",
+    aliases: ["www.digithings.ai"],
+    backend: {
+      type: "digivault",
+      supabaseUrlEnv: "DIGITHINGS_SUPABASE_URL",
+      supabaseAnonKeyEnv: "DIGITHINGS_SUPABASE_ANON_KEY",
+      openRouterKeyEnv: "DIGITHINGS_OPENROUTER_API_KEY",
+    },
+    gateMode: "ungated",
+    activityDetail: "full",
+    token: "digithings-schema-token",
+  },
+});
+
+describe("first-party digithings host", () => {
+  it("resolves without X-Embed-Token when host is allowlisted and registered", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://digithings.ai" }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("digithings");
+    expect(result.embedConfig?.gateMode).toBe("ungated");
+  });
+
+  it("still requires a token for non-first-party registered hosts", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://datatapstream.com" }),
+    );
+    expect(result).toBeInstanceOf(Response);
+  });
+});
