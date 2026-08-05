@@ -1,4 +1,4 @@
-"""Concurrency tests for DigiGraph — isolated WorkflowState per thread_id.
+"""Concurrency tests for digigraph — isolated WorkflowState per thread_id.
 
 These tests verify that concurrent workflow runs with different thread IDs
 do not bleed state into each other. All graph interactions are patched so

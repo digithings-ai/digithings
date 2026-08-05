@@ -83,23 +83,23 @@ TASKS = [
     },
     {
         "parent": 296, "slug": "296-persistence",
-        "title": "[agent] Profile persistence — per-user storage backend (DigiKey-adjacent initially)",
+        "title": "[agent] Profile persistence — per-user storage backend (digikey-adjacent initially)",
         "labels": "agent-task,component:digikey,priority:medium,complexity:M,type:feature,risk:med",
-        "goal": "Store and retrieve per-user investment profiles and asset preferences. Initial backend lives alongside DigiKey (shares identity boundary); migrate to DigiStore when that module lands (#172).",
+        "goal": "Store and retrieve per-user investment profiles and asset preferences. Initial backend lives alongside digikey (shares identity boundary); migrate to digistore when that module lands (#172).",
         "accept": [
             "CRUD API: create, read, update, (soft-)delete profile + asset-prefs by user id.",
             "Row-level isolation: a user can only read/write their own records.",
             "Audit: writes emit `digibase.audit` events with PII redaction.",
             "Unit tests cover happy path + authz negatives.",
-            "Migration path to DigiStore documented (ADR or plan file).",
+            "Migration path to digistore documented (ADR or plan file).",
         ],
         "docs": "digikey/ARCHITECTURE.md (new section); digiquant/docs/profiles/README.md.",
     },
     {
         "parent": 296, "slug": "296-jwt-claims",
-        "title": "[agent] Profile claims on DigiKey JWTs — profile_id and profile_version",
+        "title": "[agent] Profile claims on digikey JWTs — profile_id and profile_version",
         "labels": "agent-task,component:digikey,priority:medium,complexity:S,type:feature,risk:med",
-        "goal": "DigiKey JWTs carry minimal profile pointers (`profile_id`, `profile_version`) so downstream services (Atlas, DigiGraph) can key off the authenticated user without a second DB lookup.",
+        "goal": "digikey JWTs carry minimal profile pointers (`profile_id`, `profile_version`) so downstream services (Atlas, digigraph) can key off the authenticated user without a second DB lookup.",
         "accept": [
             "Claim schema documented in `digikey/ARCHITECTURE.md`.",
             "JWTs minted post-login include the claims when a profile exists.",
@@ -110,7 +110,7 @@ TASKS = [
     },
     {
         "parent": 296, "slug": "296-intake-subgraph",
-        "title": "[agent] DigiChat intake sub-graph — guided profile-building conversation",
+        "title": "[agent] digichat intake sub-graph — guided profile-building conversation",
         "labels": "agent-task,component:digigraph,priority:medium,complexity:L,type:feature,risk:med",
         "goal": "A LangGraph sub-graph that walks a user through a 5–8 minute conversation and emits a complete `InvestmentProfile` via Pydantic v2 structured outputs. Asks clarifying follow-ups on ambiguous answers.",
         "accept": [
@@ -124,11 +124,11 @@ TASKS = [
     },
     {
         "parent": 296, "slug": "296-intake-ui",
-        "title": "[agent] DigiChat UI for profile intake — entry CTA, progress, review screen",
+        "title": "[agent] digichat UI for profile intake — entry CTA, progress, review screen",
         "labels": "agent-task,component:digichat,priority:medium,complexity:M,type:feature,risk:low",
-        "goal": "User-facing surface in DigiChat for running the intake sub-graph: 'Set up your profile' CTA on first login, inline progress during the conversation, a review-and-edit screen before final submit.",
+        "goal": "User-facing surface in digichat for running the intake sub-graph: 'Set up your profile' CTA on first login, inline progress during the conversation, a review-and-edit screen before final submit.",
         "accept": [
-            "New route or panel in DigiChat that kicks the intake sub-graph.",
+            "New route or panel in digichat that kicks the intake sub-graph.",
             "Progress indicator (e.g., step N of M) visible during intake.",
             "Pre-submit review screen lets user edit any field.",
             "On submit, profile is persisted and user returns to the main chat.",
@@ -170,7 +170,7 @@ TASKS = [
         "accept": [
             "UI entry point: a 'Run custom research' button with a prompt field.",
             "Backend queues a job keyed to user + profile + prompt.",
-            "Job executes via DigiGraph research sub-graph (existing or #186/#187).",
+            "Job executes via digigraph research sub-graph (existing or #186/#187).",
             "Results land in a user-scoped location in Atlas (new 'My research' section) and optionally trigger email/webhook.",
             "Rate-limited per user (config-driven).",
         ],
@@ -182,7 +182,7 @@ TASKS = [
         "parent": 297, "slug": "297-adr",
         "title": "[agent] ADR — Atlas belongs in digiquant/, not apps/",
         "labels": "agent-task,component:root,priority:high,complexity:S,type:research,risk:low",
-        "goal": "File ADR-00XX that reverses the `apps/digiquant-atlas/` pattern: Atlas is a DigiQuant product and lives inside the module. Captures the rationale (product family coherence, frontend-umbrella alignment, tooling de-duplication) and the phased migration plan.",
+        "goal": "File ADR-00XX that reverses the `apps/digiquant-atlas/` pattern: Atlas is a digiquant product and lives inside the module. Captures the rationale (product family coherence, frontend-umbrella alignment, tooling de-duplication) and the phased migration plan.",
         "accept": [
             "ADR drafted in `docs/adr/00XX-atlas-in-digiquant.md` following the existing ADR template.",
             "Status: Accepted (once merged).",

@@ -1,6 +1,6 @@
 # NautilusTrader Built-in Strategies
 
-Catalog of all strategies in `nautilus_trader.examples.strategies`. Use this to avoid duplicating Nautilus functionality in DigiQuant.
+Catalog of all strategies in `nautilus_trader.examples.strategies`. Use this to avoid duplicating Nautilus functionality in digiquant.
 
 ## Strategy Catalog
 
@@ -24,7 +24,7 @@ Catalog of all strategies in `nautilus_trader.examples.strategies`. Use this to 
 
 ## OHLCV/Bar Compatibility
 
-DigiQuant's backtest pipeline uses **bar data** (OHLCV). Bar-compatible strategies:
+digiquant's backtest pipeline uses **bar data** (OHLCV). Bar-compatible strategies:
 
 - EMACross
 - EMACrossLongOnly
@@ -68,7 +68,7 @@ For custom strategies, use `nautilus_trader.indicators`:
 
 ## When to Use Each
 
-| Use Case | Nautilus Strategy | DigiQuant Custom |
+| Use Case | Nautilus Strategy | digiquant Custom |
 |----------|-------------------|------------------|
 | Crossover | EMACross | - |
 | Long-only equities | EMACrossLongOnly | - |

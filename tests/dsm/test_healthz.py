@@ -1,4 +1,4 @@
-"""DigiSmith ``/healthz`` liveness contract.
+"""digismith ``/healthz`` liveness contract.
 
 Contract (see AGENTS.md "Liveness vs status"): ``/healthz`` is the minimal
 liveness probe; ``/v1/status`` remains the richer diagnostic surface.

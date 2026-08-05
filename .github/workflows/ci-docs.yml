@@ -42,7 +42,7 @@ jobs:
       - name: Check internal markdown links
         run: uv run --frozen --no-sync python scripts/check_doc_links.py
 
-      - name: Lint the docs/vision DigiVault vault
+      - name: Lint the docs/vision digivault vault
         # `uv run make` rather than bare `make`: the Makefile target invokes
         # `python3` directly, and uv run puts the synced venv first on PATH so
         # that resolves to the locked interpreter instead of the system one.

@@ -1,6 +1,6 @@
-# Migration roadmap: DigiThings, DigiGraph, multi-tenant
+# Migration roadmap: digithings, digigraph, multi-tenant
 
-This document is the **post-cleanup migration spec** for moving **digiquant-atlas** into the **DigiThings** monorepo as the **DigiQuant** product, adopting **DigiGraph** (LangGraph) for scheduled runs, then adding **user tenancy** (auth, workspaces, BYOK, Stripe, RLS).
+This document is the **post-cleanup migration spec** for moving **digiquant-atlas** into the **digithings** monorepo as the **digiquant** product, adopting **digigraph** (LangGraph) for scheduled runs, then adding **user tenancy** (auth, workspaces, BYOK, Stripe, RLS).
 
 **Before executing:** complete [PRE-MIGRATION-CLEANUP.md](PRE-MIGRATION-CLEANUP.md) so the tree you migrate is lean.
 
@@ -10,7 +10,7 @@ This document is the **post-cleanup migration spec** for moving **digiquant-atla
 
 **Wave 2 design detail:** [DIGITHINGS-WAVE2-GRAPH-SKETCH.md](DIGITHINGS-WAVE2-GRAPH-SKETCH.md) — graph families, node types, Cowork task mapping, env/idempotency (implements **§ P1b**).
 
-**External repos:** The DigiThings monorepo lives alongside this repo — on disk: `../digithings` from the parent of `digiquant-atlas` (e.g. `/Users/…/Code/digithings`). Product name **DigiThings**; folder name may be lowercase.
+**External repos:** The digithings monorepo lives alongside this repo — on disk: `../digithings` from the parent of `digiquant-atlas` (e.g. `/Users/…/Code/digithings`). Product name **digithings**; folder name may be lowercase.
 
 ---
 
@@ -20,13 +20,13 @@ Execution is intentionally **three waves**. Do **not** start Wave 3 (user worksp
 
 | Wave | Priority | Outcome |
 |------|----------|---------|
-| **Wave 1 — DigiThings + DigiQuant** | **First** | Atlas **lives inside the DigiThings monorepo** as a **DigiQuant** app/service (package + route + deploy), same way other first-class apps do. One build pipeline, shared conventions, path to DigiChat/DigiClaw integration. |
-| **Wave 2 — DigiGraph operations** | **Second** | **Stop depending on Cowork UI schedules** for recurring work. Implement **daily** and **postmortem** (and related) runs as **DigiGraph** graphs (**LangGraph** in DigiThings — “line graph” in conversation = this stack). **Systematic execution**: your own schedule (cron / API / queue), **API connections**, MCP and tools already wired in DigiThings. Graph nodes call the **same canonical Python/scripts** (`publish_document`, `run_db_first`, `validate_db_first`, etc.) where possible. |
+| **Wave 1 — digithings + digiquant** | **First** | Atlas **lives inside the digithings monorepo** as a **digiquant** app/service (package + route + deploy), same way other first-class apps do. One build pipeline, shared conventions, path to digichat/digiclaw integration. |
+| **Wave 2 — digigraph operations** | **Second** | **Stop depending on Cowork UI schedules** for recurring work. Implement **daily** and **postmortem** (and related) runs as **digigraph** graphs (**LangGraph** in digithings — “line graph” in conversation = this stack). **Systematic execution**: your own schedule (cron / API / queue), **API connections**, MCP and tools already wired in digithings. Graph nodes call the **same canonical Python/scripts** (`publish_document`, `run_db_first`, `validate_db_first`, etc.) where possible. |
 | **Wave 3 — Users & tenancy** | **Final** | **User access** (OAuth), **user settings**, **user-level research**, **workspaces**, **BYOK**, **Stripe**, **RLS** — the productized multi-tenant plan (former **P2–P8** in this doc). |
 
-**Cowork:** After Wave 2, **scheduled** operator work moves to **DigiGraph**; [`cowork/`](../../cowork/) can remain a **manual escape hatch** (ad-hoc sessions), not the source of truth for cron-like reliability.
+**Cowork:** After Wave 2, **scheduled** operator work moves to **digigraph**; [`cowork/`](../../cowork/) can remain a **manual escape hatch** (ad-hoc sessions), not the source of truth for cron-like reliability.
 
-**Note:** DigiThings already describes **LangGraph** orchestration as **DigiGraph** ([digithings README](../../../digithings/README.md)). Use that stack for Wave 2 so you do not maintain two orchestration philosophies.
+**Note:** digithings already describes **LangGraph** orchestration as **digigraph** ([digithings README](../../../digithings/README.md)). Use that stack for Wave 2 so you do not maintain two orchestration philosophies.
 
 ---
 
@@ -87,7 +87,7 @@ flowchart TB
   subgraph client [Browser]
     UI[Next_Atlas_UI]
   end
-  subgraph edge [DigiThings_host]
+  subgraph edge [digithings_host]
     BFF[Route_handlers_BFF]
     UI --> BFF
   end
@@ -99,15 +99,15 @@ flowchart TB
 ```
 
 - **Browser** uses **anon** or **authenticated** Supabase client for **RLS-scoped reads**; **never** service role.
-- **BFF** (Next.js Route Handlers or DigiThings equivalent): Stripe webhooks, encrypt BYOK, **internal** job triggers with `CRON_SECRET`.
+- **BFF** (Next.js Route Handlers or digithings equivalent): Stripe webhooks, encrypt BYOK, **internal** job triggers with `CRON_SECRET`.
 - **Worker** uses **service role** + explicit `workspace_id` on writes; loads decrypted BYOK in memory only for job duration.
-- **Wave 2 (before Wave 3):** **DigiGraph** runs daily/postmortem jobs; may use the same worker process without multi-tenant columns until Wave 3 adds `workspace_id`.
+- **Wave 2 (before Wave 3):** **digigraph** runs daily/postmortem jobs; may use the same worker process without multi-tenant columns until Wave 3 adds `workspace_id`.
 
 ---
 
 ## C) Phasing (detailed)
 
-**Wave mapping:** **Wave 1** = **P1** below. **Wave 2** = new section **P1b / DigiGraph ops** (inserted after P1). **Wave 3** = **P2–P8** (multi-tenant productization). Detailed acceptance criteria for P2–P8 are unchanged; they are simply **deferred** until after Wave 2 unless you explicitly parallelize (not recommended).
+**Wave mapping:** **Wave 1** = **P1** below. **Wave 2** = new section **P1b / digigraph ops** (inserted after P1). **Wave 3** = **P2–P8** (multi-tenant productization). Detailed acceptance criteria for P2–P8 are unchanged; they are simply **deferred** until after Wave 2 unless you explicitly parallelize (not recommended).
 
 Each phase has **deliverables**, **files/migrations**, and **acceptance criteria**.
 
@@ -115,8 +115,8 @@ Each phase has **deliverables**, **files/migrations**, and **acceptance criteria
 
 | Step | Hard prerequisites | Notes |
 |------|---------------------|--------|
-| **Wave 1 (P1)** | None | Import repo; DigiQuant route |
-| **Wave 2 (DigiGraph)** | Wave 1 codebase in monorepo | Replace Cowork **schedules** with graphs + triggers |
+| **Wave 1 (P1)** | None | Import repo; digiquant route |
+| **Wave 2 (digigraph)** | Wave 1 codebase in monorepo | Replace Cowork **schedules** with graphs + triggers |
 | **Wave 3 (P2–P8)** | Wave 2 **or** at least stable headless runs | Tenancy touches many tables—do after ops migration |
 
 **Legacy P2–P8 dependency table (Wave 3 only):**
@@ -134,24 +134,24 @@ Each phase has **deliverables**, **files/migrations**, and **acceptance criteria
 
 ### P1 — Monorepo + hosting (Wave 1)
 
-**Goal:** Atlas UI and build live inside DigiThings; one deploy; optional redirect from GitHub Pages.
+**Goal:** Atlas UI and build live inside digithings; one deploy; optional redirect from GitHub Pages.
 
 **Execution plan:** [DIGITHINGS-WAVE1-PLAN.md](DIGITHINGS-WAVE1-PLAN.md) — naming (`apps/digiquant-atlas` vs `digiquant/`), subtree vs submodule, Next `basePath`, CI, ordered checklist.
 
 | Task | Detail |
 |------|--------|
-| Import | `apps/digiquant-atlas` or `apps/atlas` (align with DigiThings conventions); preserve or subtree history. |
+| Import | `apps/digiquant-atlas` or `apps/atlas` (align with digithings conventions); preserve or subtree history. |
 | Routing | Sub-path e.g. `/digiquant-atlas` or `/atlas` — match [`digichat/ARCHITECTURE.md`](../../../digithings/digichat/ARCHITECTURE.md) routing patterns. |
 | Env | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, server-only `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_*`, `ATLAS_ENCRYPTION_KEY` / KMS ref, `CRON_SECRET`. |
-| CI | Build + deploy step in DigiThings pipeline; E2E smoke on staging. |
+| CI | Build + deploy step in digithings pipeline; E2E smoke on staging. |
 
 **Acceptance:** Staging URL loads Atlas pages (`/`, `/library`, `/portfolio`, …) under sub-route; no secrets in client bundle.
 
 ---
 
-### P1b — DigiGraph scheduled operations (Wave 2)
+### P1b — digigraph scheduled operations (Wave 2)
 
-**Goal:** **Delegate** recurring **daily** pipeline steps and **postmortem** (and similar review) runs from **Claude Cowork scheduled tasks** to **DigiGraph** (**LangGraph**) inside DigiThings: a **single systematic** system with **schedule** (cron, queue worker, or HTTP trigger), **provider APIs**, and **MCP / tool** access already centralized (DigiClaw, DigiThings connectors).
+**Goal:** **Delegate** recurring **daily** pipeline steps and **postmortem** (and similar review) runs from **Claude Cowork scheduled tasks** to **digigraph** (**LangGraph**) inside digithings: a **single systematic** system with **schedule** (cron, queue worker, or HTTP trigger), **provider APIs**, and **MCP / tool** access already centralized (digiclaw, digithings connectors).
 
 **Implementation sketch:** [DIGITHINGS-WAVE2-GRAPH-SKETCH.md](DIGITHINGS-WAVE2-GRAPH-SKETCH.md) — replaces narrative-only planning with graph names, node boundaries, and acceptance cross-check for this section.
 
@@ -159,11 +159,11 @@ Each phase has **deliverables**, **files/migrations**, and **acceptance criteria
 |------|--------|
 | Graphs | Define at least: **(1) daily research/digest path** aligned with [`RUNBOOK.md`](../../RUNBOOK.md) + [`cowork/tasks/research-daily-delta.md`](../../cowork/tasks/research-daily-delta.md) / router; **(2) postmortem** flows aligned with [`post-mortem-research-github.md`](../../cowork/tasks/post-mortem-research-github.md) / portfolio variants. |
 | Nodes | Prefer **thin nodes** that shell out or import existing **Python** entrypoints (`publish_document.py`, `materialize_snapshot.py`, `run_db_first.py`, `validate_db_first.py`) so **one canonical publish path** remains. |
-| Schedule | Wire **DigiThings** scheduler (or GHA calling an internal API) to **start graph runs**; use **idempotency** keys per `(date, run_type, graph_name)`. |
-| Secrets | Operator/provider keys from **DigiThings env** or vault — same trust model as today’s service role on workers. |
-| Cowork | **Remove reliance** on Cowork **calendar** for these jobs; keep **manual** [`cowork/tasks/`](../../cowork/tasks/) for ad-hoc operator sessions. Update [`cowork/PROJECT.md`](../../cowork/PROJECT.md) to say **scheduled** runs = DigiGraph. |
+| Schedule | Wire **digithings** scheduler (or GHA calling an internal API) to **start graph runs**; use **idempotency** keys per `(date, run_type, graph_name)`. |
+| Secrets | Operator/provider keys from **digithings env** or vault — same trust model as today’s service role on workers. |
+| Cowork | **Remove reliance** on Cowork **calendar** for these jobs; keep **manual** [`cowork/tasks/`](../../cowork/tasks/) for ad-hoc operator sessions. Update [`cowork/PROJECT.md`](../../cowork/PROJECT.md) to say **scheduled** runs = digigraph. |
 
-**Acceptance:** A dated daily run and a postmortem run complete **without opening Cowork**, logs + Supabase rows match what a manual script run would produce; failures visible in DigiThings/DigiGraph observability.
+**Acceptance:** A dated daily run and a postmortem run complete **without opening Cowork**, logs + Supabase rows match what a manual script run would produce; failures visible in digithings/digigraph observability.
 
 ---
 
@@ -388,7 +388,7 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 - `frontend/app/settings/**` (layout + tabs)
 - `frontend/lib/auth.ts` (session helpers)
 - `frontend/lib/workspace-context.tsx` (optional)
-- `app/api/**/route.ts` (or under DigiThings `apps/.../api`) for Stripe + credentials
+- `app/api/**/route.ts` (or under digithings `apps/.../api`) for Stripe + credentials
 - `templates/schemas/rebalancing-policy.schema.json` (and siblings)
 - `docs/ops/multi-tenant.md`
 - `scripts/atlas_runner/**` (or equivalent)
@@ -398,13 +398,13 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 - [`frontend/lib/supabase.ts`](../../frontend/lib/supabase.ts), [`frontend/lib/queries.ts`](../../frontend/lib/queries.ts), [`frontend/lib/types.ts`](../../frontend/lib/types.ts)
 - [`frontend/app/layout.tsx`](../../frontend/app/layout.tsx), page components that assume single-tenant data
 - All publisher scripts listed in P6
-- [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) / DigiThings CI when merged
+- [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) / digithings CI when merged
 - [`RUNBOOK.md`](../../RUNBOOK.md), [`cowork/PROJECT.md`](../../cowork/PROJECT.md), [`AGENTS.md`](../../AGENTS.md) (operator rules)
 
-**DigiThings repo (merge side)**
+**digithings repo (merge side)**
 
 - App registration, shared `layout` nav link to Atlas
-- Optional: DigiChat tool definitions calling Atlas BFF
+- Optional: digichat tool definitions calling Atlas BFF
 - Docker compose service for **worker** (if not GHA-only)
 
 ---
@@ -443,7 +443,7 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 
 ## H) Cowork / manual operator (ongoing)
 
-- After **Wave 2**, **scheduled** work is **DigiGraph**, not Cowork UI timers. **Cowork** remains for **ad-hoc** operator sessions and emergencies.
+- After **Wave 2**, **scheduled** work is **digigraph**, not Cowork UI timers. **Cowork** remains for **ad-hoc** operator sessions and emergencies.
 - Document **`ATLAS_WORKSPACE_ID`** (or `--workspace-id`) in [`cowork/PROJECT.md`](../../cowork/PROJECT.md) and [`RUNBOOK.md`](../../RUNBOOK.md) (Wave 3 when multi-tenant writes matter).
 - Manual runs use **service role** on operator machine — treat laptop as **trusted**; never commit keys.
 
@@ -451,9 +451,9 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 
 ## I) Future (out of v1 scope)
 
-- **DigiQuant** signals → PM (NautilusTrader / Polars artifacts linked to theses; PM reads signals as sizing/constraints).
+- **digiquant** signals → PM (NautilusTrader / Polars artifacts linked to theses; PM reads signals as sizing/constraints).
 - **Enterprise** SAML, SCIM, multi-seat, contracts.
-- **DigiChat**-first onboarding ([`digichat/ARCHITECTURE.md`](../../../digithings/digichat/ARCHITECTURE.md)).
+- **digichat**-first onboarding ([`digichat/ARCHITECTURE.md`](../../../digithings/digichat/ARCHITECTURE.md)).
 
 ---
 
@@ -468,13 +468,13 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 
 ## K) Suggested execution order (when you leave plan mode)
 
-1. **Wave 1 — P1:** Import Atlas into **DigiThings** per [DIGITHINGS-WAVE1-PLAN.md](DIGITHINGS-WAVE1-PLAN.md); route + env + CI on staging.
-2. **Wave 2 — P1b:** Implement **DigiGraph** flows for **daily** + **postmortem** (etc.) per [DIGITHINGS-WAVE2-GRAPH-SKETCH.md](DIGITHINGS-WAVE2-GRAPH-SKETCH.md); wire schedule/API; retire Cowork **scheduled** reliance; keep scripts as the canonical publish path.
+1. **Wave 1 — P1:** Import Atlas into **digithings** per [DIGITHINGS-WAVE1-PLAN.md](DIGITHINGS-WAVE1-PLAN.md); route + env + CI on staging.
+2. **Wave 2 — P1b:** Implement **digigraph** flows for **daily** + **postmortem** (etc.) per [DIGITHINGS-WAVE2-GRAPH-SKETCH.md](DIGITHINGS-WAVE2-GRAPH-SKETCH.md); wire schedule/API; retire Cowork **scheduled** reliance; keep scripts as the canonical publish path.
 3. **Wave 3 — Req sign-off:** confirm **A.4** before large DB churn.
 4. **P2a–c** migrations → regenerate types → **P3** auth + query scoping.
 5. **P4** Stripe + credential encrypt → **P5** account settings UI.
 6. **P6** `--workspace-id` on publishers + graph/worker alignment.
-7. **P7** per-tenant job rules (if not subsumed by DigiThings scheduler).
+7. **P7** per-tenant job rules (if not subsumed by digithings scheduler).
 8. **P8** hardening + docs + production cutover checklist.
 
 The **YAML todos** at the top list **waves** first, then granular **P*** items for Wave 3 tracking.
@@ -488,11 +488,11 @@ The **YAML todos** at the top list **waves** first, then granular **P*** items f
 | **BYOK** | Bring your own key — user’s LLM provider API key, encrypted at rest, used only server-side for their jobs. |
 | **System workspace** | Single `workspaces` row (`type = system`) whose `workspace_id` tags **global** research readable by entitled free/paid users per RLS. |
 | **User workspace** | Per-account workspace for **custom** research + **portfolio** rows; isolated by RLS. |
-| **BFF** | Backend-for-frontend — Next.js Route Handlers (or DigiThings equivalent) that hold secrets and call Stripe / encrypt credentials. |
+| **BFF** | Backend-for-frontend — Next.js Route Handlers (or digithings equivalent) that hold secrets and call Stripe / encrypt credentials. |
 | **Runner / worker** | Process using **service role** to read workspace config, decrypt BYOK in memory, call provider API, invoke Python publishers. |
 | **Entitlements** | `plan_tier` + `subscription_status` + feature gates; enforced in BFF and reflected in UI. |
 | **Track A / B** | Research-only vs portfolio PM track ([`RUNBOOK.md`](../../RUNBOOK.md)). |
-| **DigiGraph** | DigiThings’ **LangGraph**-based orchestration for tool-calling workflows — use for **Wave 2** scheduled runs. |
+| **digigraph** | digithings’ **LangGraph**-based orchestration for tool-calling workflows — use for **Wave 2** scheduled runs. |
 
 ---
 
@@ -504,7 +504,7 @@ Keep these paths stable so runners and Cowork stay aligned:
 |-------|------|
 | Full repo inventory (pre-export) | [`docs/ops/REPOSITORY-INVENTORY.md`](REPOSITORY-INVENTORY.md) |
 | Wave 1 monorepo + hosting plan | [`docs/ops/DIGITHINGS-WAVE1-PLAN.md`](DIGITHINGS-WAVE1-PLAN.md) |
-| Wave 2 DigiGraph graph sketch | [`docs/ops/DIGITHINGS-WAVE2-GRAPH-SKETCH.md`](DIGITHINGS-WAVE2-GRAPH-SKETCH.md) |
+| Wave 2 digigraph graph sketch | [`docs/ops/DIGITHINGS-WAVE2-GRAPH-SKETCH.md`](DIGITHINGS-WAVE2-GRAPH-SKETCH.md) |
 | Operator briefing | [`cowork/PROJECT.md`](../../cowork/PROJECT.md), [`RUNBOOK.md`](../../RUNBOOK.md) |
 | Digest / delta schemas | [`templates/digest-snapshot-schema.json`](../../templates/digest-snapshot-schema.json), [`templates/delta-request-schema.json`](../../templates/delta-request-schema.json) |
 | Schedule concepts (rebalancing_policy) | [`config/schedule.json`](../../config/schedule.json) |

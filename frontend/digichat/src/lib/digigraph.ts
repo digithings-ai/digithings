@@ -1,9 +1,9 @@
 import { createOpenAI } from "@ai-sdk/openai";
 
 /**
- * OpenAI-compatible client pointed at DigiGraph (/v1).
+ * OpenAI-compatible client pointed at digigraph (/v1).
  * @param baseUrlOverride — optional base without /v1 (from ecosystem cookie).
- * @param upstreamApiKeyOverride — DigiKey JWT or DIGIGRAPH_UPSTREAM_API_KEY (required).
+ * @param upstreamApiKeyOverride — digikey JWT or DIGIGRAPH_UPSTREAM_API_KEY (required).
  */
 export function createDigiGraphClient(
   baseUrlOverride?: string | null,

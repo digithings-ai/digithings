@@ -71,7 +71,7 @@ export const guides: Guide[] = [
     title: "Conventions",
     blocks: [
       { kind: "h", text: "Liveness vs status" },
-      { kind: "p", text: "`GET /healthz` is the auth-exempt liveness probe — always `{\"ok\": true}`, for load balancers. `GET /v1/status` (DigiGraph, DigiSmith) is a richer operator diagnostic; never use it for health checks." },
+      { kind: "p", text: "`GET /healthz` is the auth-exempt liveness probe — always `{\"ok\": true}`, for load balancers. `GET /v1/status` (digigraph, digismith) is a richer operator diagnostic; never use it for health checks." },
       { kind: "h", text: "Error envelope" },
       { kind: "p", text: "Every service returns the same error shape:" },
       { kind: "code", lang: "json", code: '{\n  "error": {\n    "code": "http_401",\n    "message": "Bearer token required",\n    "request_id": "req-…",\n    "service": "digigraph"\n  }\n}' },

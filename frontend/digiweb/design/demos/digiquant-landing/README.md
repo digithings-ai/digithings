@@ -35,6 +35,6 @@ generated QR marks (already copied into `digiquant-web/public/favicon-qr*.svg`).
 - `digiquant-web/public/favicon-qr.svg` + `-light.svg` now encode `https://digiquant.io`.
 - `digiquant-web/app/_nav.tsx` `Brand` already renders lowercase `digiquant` + the QR mark.
 - `digiquant-web/app/layout.tsx` wires the QR favicon (light/dark). Metadata title still says
-  "DigiQuant" — rename to lowercase per the plan.
+  "digiquant" — rename to lowercase per the plan.
 - `.claude/launch.json` has dev-server configs: `digiquant-web` (4011), `digithings-web` (4012),
   `demos` (4020, static-serves this folder). Run `npm install` in the worktree first.

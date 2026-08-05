@@ -1,4 +1,4 @@
-"""P2 dogfood (ADR-0023 / epic #1453): compile skills from DigiThings' own
+"""P2 dogfood (ADR-0023 / epic #1453): compile skills from digithings' own
 modules — their real `ARCHITECTURE.md` + `AGENTS.md` — as a known-good corpus
 that validates the compiler pipeline end-to-end (ingest -> synthesize ->
 package) against real repo content, not synthetic fixtures.
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Every DigiThings module with doc files a real client-style user would point
+# Every digithings module with doc files a real client-style user would point
 # the compiler at (name -> path relative to repo root). Not every module has
 # both files (e.g. digillm has no AGENTS.md yet) — _doc_files below tolerates
 # that, requiring at least one.
@@ -62,7 +62,7 @@ def test_dogfood_compiles_each_module(module: str, tmp_path: Path) -> None:
     source = SkillSource(
         kind=SourceKind.LOCAL_PATH,
         name=module,
-        description_hint=f"How to work with the DigiThings {module} module",
+        description_hint=f"How to work with the digithings {module} module",
         local_path=staging,
     )
     result = compile_skill(source)

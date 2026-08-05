@@ -1,6 +1,6 @@
-"""Stable JSON shape for DigiSearch query hits across backends (Azure, Chroma, stub).
+"""Stable JSON shape for digisearch query hits across backends (Azure, Chroma, stub).
 
-Hubs (DigiGraph), DigiChat, and MCP should only rely on the top-level keys documented in
+Hubs (digigraph), digichat, and MCP should only rely on the top-level keys documented in
 ``STANDARD_HIT_KEYS``. Backend-specific fields are lifted out of chunk metadata where
 possible (e.g. Azure ``@search.highlights`` → ``highlights``).
 """

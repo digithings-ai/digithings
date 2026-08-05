@@ -2,9 +2,9 @@
 --
 -- Run with:  supabase db push   (or apply via MCP against this project).
 --
--- DigiQuant strategy store (#1064). This project — historically the Olympus/Atlas
+-- digiquant strategy store (#1064). This project — historically the Olympus/Atlas
 -- DB (config.toml project_id "digiquant-atlas") — is being repurposed as the unified
--- DigiQuant shared backend (Supabase display name "core"), beside the dedicated
+-- digiquant shared backend (Supabase display name "core"), beside the dedicated
 -- "twelve-x" project. The shared market datasets (price_history / price_technicals /
 -- trading_calendar / macro_series_observations) already live here, so #1064 reduces to
 -- ADDING the strategy store. See docs/adr/0021-digiquant-supabase-project-topology.md.

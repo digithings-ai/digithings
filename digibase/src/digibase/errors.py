@@ -1,4 +1,4 @@
-"""Consistent JSON error responses for DigiThings HTTP APIs."""
+"""Consistent JSON error responses for digithings HTTP APIs."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class ApiErrorBody(BaseModel):
 
 
 class ApiErrorEnvelope(BaseModel):
-    """Wrapper used across DigiThings public HTTP APIs."""
+    """Wrapper used across digithings public HTTP APIs."""
 
     error: ApiErrorBody
 

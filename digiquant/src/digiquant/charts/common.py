@@ -1,4 +1,4 @@
-"""Shared chart layout and helpers for DigiQuant tearsheets."""
+"""Shared chart layout and helpers for digiquant tearsheets."""
 
 from __future__ import annotations
 

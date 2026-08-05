@@ -3,7 +3,7 @@
 @import "shadcn/tailwind.css";
 
 /* ---------------------------------------------------------------------------
- * DigiThings design canon (#1403; supersedes the #273/#260 shadcn palette).
+ * digithings design canon (#1403; supersedes the #273/#260 shadcn palette).
  *
  * Token flow is now one-directional, canon-first:
  *   @digithings/design/tokens.css   — [data-theme] semantic tokens
@@ -206,15 +206,15 @@
 }
 
 /* ---------------------------------------------------------------------------
- * #273 — DigiChat modern-terminal chrome.
+ * #273 — digichat modern-terminal chrome.
  *
  * `.app-shell` scopes the brand `--accent` so the design primitives
- * pick up the DigiChat rose without disturbing shadcn's neutral `--accent` at
+ * pick up the digichat rose without disturbing shadcn's neutral `--accent` at
  * `:root`. `.dc-term-*` classes layer chat-specific affordances (message
  * rows, tool chips, sources accordion, streaming caret) on top of the
  * primitive palette.
  * ------------------------------------------------------------------------- */
-/* Brand accent for the DigiChat chrome — rose is the official livery
+/* Brand accent for the digichat chrome — rose is the official livery
    (ruled 2026-07-06, split off digiquant's shared cyan; tokens.css
    --accent-digichat is the single source). Still scoped to .app-shell
    so shadcn's neutral --accent hover stays authoritative elsewhere. */

@@ -686,7 +686,7 @@ jobs:
   # ── 9. Duplicate issue scan ─────────────────────────────────────────────────
   # Finds open issues with near-identical titles and creates a Copilot task
   # to resolve them. Uses word-overlap similarity after stripping the
-  # bracket-prefix convention DigiThings uses (e.g. "[feat] x" vs "[fix] x").
+  # bracket-prefix convention digithings uses (e.g. "[feat] x" vs "[fix] x").
   duplicate-issues:
     name: Duplicate issue scan
     runs-on: ubuntu-latest

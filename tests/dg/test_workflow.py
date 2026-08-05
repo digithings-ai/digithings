@@ -11,7 +11,7 @@ from digigraph.workflow import run_digigraph_workflow
 
 @pytest.mark.unit
 class TestRunDigigraphWorkflow:
-    """run_digigraph_workflow contract. Integration with DigiQuant in e2e."""
+    """run_digigraph_workflow contract. Integration with digiquant in e2e."""
 
     def test_returns_workflow_result(self) -> None:
         req = WorkflowRequest(prompt="Backtest tech")
@@ -43,7 +43,7 @@ class TestRunDigigraphWorkflow:
                 "strategy_name": "x",
                 "symbols": ["A"],
                 "backtest_result": None,
-                "error": "DigiQuant connection refused",
+                "error": "digiquant connection refused",
             }
         with patch("digigraph.workflow.build_workflow_graph") as m:
             m.return_value.invoke = _mock_invoke

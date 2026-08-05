@@ -1,4 +1,4 @@
-"""Unit tests for DigiQuant Pydantic models."""
+"""Unit tests for digiquant Pydantic models."""
 
 from __future__ import annotations
 

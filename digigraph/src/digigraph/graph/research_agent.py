@@ -6,12 +6,12 @@ filter, citation discipline) lives in this module. The *what* (which sector,
 which data sources, which output schema) is injected per call as
 ``skill_text`` + ``output_model``.
 
-This lets sub-graphs — notably DigiQuant Atlas (#176/#177) — compose research
+This lets sub-graphs — notably digiquant Atlas (#176/#177) — compose research
 pipelines from declarative phase configs without re-authoring a prompt per
 segment. The module stays generic: no Atlas-specific vocabulary here.
 
 The existing ``digigraph.graph.research`` node is the RAG/tool-loop research
-node invoked by the DigiGraph supervisor; it is a different concern and is
+node invoked by the digigraph supervisor; it is a different concern and is
 not touched.
 """
 

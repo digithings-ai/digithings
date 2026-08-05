@@ -1,4 +1,4 @@
-"""LangGraph pipeline for DigiQuant: validate → backtest → optional optimize → optional export."""
+"""LangGraph pipeline for digiquant: validate → backtest → optional optimize → optional export."""
 
 from __future__ import annotations
 

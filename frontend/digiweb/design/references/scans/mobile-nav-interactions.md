@@ -40,7 +40,7 @@
   - Social row: 28×28 icon buttons (Contact, Slack, GitHub, X, LinkedIn, YouTube)
   - "©2026 Graphite"
 
-### Implications for DigiThings
+### Implications for digithings
 
 - Graphite keeps **conversion CTAs in header** on mobile, not only in sheet
 - Our pattern (theme + GitHub always visible, primary CTA in sheet footer) is valid but different — document intentional choice in EVOLUTION.md
@@ -96,7 +96,7 @@ Automated browser received "Sorry, you have been blocked" on `x.ai`.
 
 ---
 
-## DigiThings mobile nav (our implementation)
+## digithings mobile nav (our implementation)
 
 Documented for comparison with references:
 

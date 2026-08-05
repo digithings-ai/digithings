@@ -1,4 +1,4 @@
-"""CORS allowlist tests for DigiGraph.
+"""CORS allowlist tests for digigraph.
 
 Exercises the shared :func:`digibase.cors.install_cors` helper as wired into
 ``digigraph.server``: an allowed origin receives an ``access-control-allow-origin``

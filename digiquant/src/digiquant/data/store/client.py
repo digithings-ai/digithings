@@ -1,6 +1,6 @@
-"""Thin client factory for the DigiQuant strategy store (#1064).
+"""Thin client factory for the digiquant strategy store (#1064).
 
-The strategy store lives in the unified DigiQuant **"core"** project — the project
+The strategy store lives in the unified digiquant **"core"** project — the project
 historically used by Olympus/Atlas (`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`),
 repurposed as the suite-wide shared backend (free-tier 2-project limit; see
 ``docs/adr/0021-digiquant-supabase-project-topology.md``).
@@ -46,7 +46,7 @@ def _first_env(*names: str) -> str | None:
 
 
 def digiquant_credentials() -> tuple[str | None, str | None]:
-    """Return ``(url, service_key)`` for the DigiQuant ``core`` project.
+    """Return ``(url, service_key)`` for the digiquant ``core`` project.
 
     Resolution order (#1090): ``CORE_SUPABASE_*`` → legacy ``*_DIGIQUANT`` → original
     ``SUPABASE_URL`` / ``SUPABASE_SERVICE_ROLE_KEY``. Blank values normalize to ``None``
@@ -63,7 +63,7 @@ def digiquant_credentials() -> tuple[str | None, str | None]:
 
 
 def build_digiquant_client():  # pragma: no cover - thin wrapper over supabase SDK
-    """Build a service-role client for the DigiQuant ``core`` project.
+    """Build a service-role client for the digiquant ``core`` project.
 
     Returns ``None`` when either credential is missing (matches the legacy
     ``build_supabase_client`` contract so callers can fail soft).

@@ -56,7 +56,7 @@ def _write_nautilus_bundle_zip(
         )
     artifact_path = out_dir / f"{strategy_name}_nautilus_bundle_{run_id[:8]}.zip"
     readme = (
-        "DigiQuant Nautilus bundle (DigiClone)\n"
+        "digiquant Nautilus bundle (digiclone)\n"
         "====================================\n\n"
         f"strategy_name: {strategy_name}\n"
         f"canonical: {canonical}\n\n"

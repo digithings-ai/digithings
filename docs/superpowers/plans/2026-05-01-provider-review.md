@@ -3051,7 +3051,7 @@ jobs:
         run: |
           TODAY=$(date -u +%Y-%m-%d)
           claude --print "
-          You are performing the weekly LLM provider review for the DigiThings project.
+          You are performing the weekly LLM provider review for the digithings project.
 
           Your context package is in /tmp/review/:
           - snapshots.json: current provider snapshots (update these)

@@ -79,7 +79,7 @@ model_list:
 
 ---
 
-## DigiThings Use
+## digithings Use
 
 | Field | Value |
 |---|---|

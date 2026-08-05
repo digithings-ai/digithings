@@ -1,7 +1,7 @@
 # Claude Code Onboarding — Tier 3 Delegation
 
 This document covers everything needed to dispatch Claude Code (Tier 3) against
-DigiThings backlog issues — both the local interactive path and the cloud
+digithings backlog issues — both the local interactive path and the cloud
 GitHub-Action path.
 
 Parallel to `docs/agents/CURSOR_AGENT_ONBOARDING.md`, but Claude is reserved

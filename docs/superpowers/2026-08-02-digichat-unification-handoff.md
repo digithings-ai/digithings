@@ -1,4 +1,4 @@
-# DigiChat unification — handoff
+# digichat unification — handoff
 
 **Written:** 2026-08-02, to continue this work in a fresh session (different subscription/machine).
 Point a new Claude Code session at this file: `docs/superpowers/2026-08-02-digichat-unification-handoff.md`
@@ -7,7 +7,7 @@ a prior session's memory.
 
 ## Where this came from
 
-Owner noticed DataTap's embedded DigiChat looks nothing like digithings.ai's native chat — flat trace
+Owner noticed DataTap's embedded digichat looks nothing like digithings.ai's native chat — flat trace
 rows instead of the layered "thinking chain" — despite both supposedly using the same code. Investigation
 found the UI package (`@digithings/digichat-ui`) really is shared, but the backend and controller are two
 independently-written stacks that happened to feed the same component. Owner wants genuine sharing:

@@ -4,17 +4,17 @@
 
 ## Why this document exists
 
-DigiThings is designed to make AI **accessible and modular** — not locked to a single vendor or a single price point. This doc catalogs every legitimate way a developer can plug an LLM into the stack via LiteLLM, ordered from "free for dev testing" to "production-grade paid." The principle: **clever engineering over expensive tokens.** Flagship models (Opus, GPT-5, Gemini Pro) are reserved for real evals; day-to-day work runs on free tiers and cheap fallbacks.
+digithings is designed to make AI **accessible and modular** — not locked to a single vendor or a single price point. This doc catalogs every legitimate way a developer can plug an LLM into the stack via LiteLLM, ordered from "free for dev testing" to "production-grade paid." The principle: **clever engineering over expensive tokens.** Flagship models (Opus, GPT-5, Gemini Pro) are reserved for real evals; day-to-day work runs on free tiers and cheap fallbacks.
 
-Future work (see [VISION.md](VISION.md)): DigiChat will expose a model picker where the user supplies their own API key for any provider listed here, and the UI routes through our LiteLLM proxy.
+Future work (see [VISION.md](VISION.md)): digichat will expose a model picker where the user supplies their own API key for any provider listed here, and the UI routes through our LiteLLM proxy.
 
 **Setup guides:** for step-by-step instructions on obtaining an API key and configuring each provider, see [providers/](providers/) — one file per provider.
 
-**Deep-reference docs:** for complete model listings, exact rate limits, context windows, and DigiThings-specific usage notes for every free-tier provider, see [free-providers/](free-providers/) — maintained weekly by the `provider-review` workflow. Start there when making provider selection decisions.
+**Deep-reference docs:** for complete model listings, exact rate limits, context windows, and digithings-specific usage notes for every free-tier provider, see [free-providers/](free-providers/) — maintained weekly by the `provider-review` workflow. Start there when making provider selection decisions.
 
 ## How providers plug into LiteLLM
 
-DigiThings routes all LLM traffic through `config/litellm.yaml`. Each provider below lists its LiteLLM prefix. The pattern:
+digithings routes all LLM traffic through `config/litellm.yaml`. Each provider below lists its LiteLLM prefix. The pattern:
 
 ```yaml
 model_list:
@@ -194,7 +194,7 @@ Hardware rule of thumb: 7–14B runs on 16GB Mac / consumer GPU (Q4/Q5 quant). 7
 
 ## BYO-key aggregators
 
-- **LiteLLM proxy (self-hosted)** — the canonical DigiThings pattern. `config/litellm.yaml` registers every provider above with prefixed model names, one OpenAI-compatible endpoint, unified auth, caching, budgets, fallback chains.
+- **LiteLLM proxy (self-hosted)** — the canonical digithings pattern. `config/litellm.yaml` registers every provider above with prefixed model names, one OpenAI-compatible endpoint, unified auth, caching, budgets, fallback chains.
 - **OpenRouter BYO-key** — bring your Anthropic/OpenAI/Gemini key, pay upstream + 5% surcharge. Useful when you want OR's routing UX without double-paying margins.
 - **Portkey, Helicone, TrueFoundry** — alternative gateways with observability focus.
 
@@ -215,11 +215,11 @@ Hardware rule of thumb: 7–14B runs on 16GB Mac / consumer GPU (Q4/Q5 quant). 7
 
 ---
 
-## DigiThings integration plan
+## digithings integration plan
 
 1. **`config/litellm.yaml`** — define model aliases (`test`, `medium`, `best`, `coding`, `vision`, `embeddings`) each backed by a fallback chain of providers from this doc.
 2. **`DIGI_LLM_MODE`** — env var picks the alias tier.
-3. **DigiChat model picker** (future) — UI surfaces provider list from this doc; user pastes their API key; DigiChat writes to LiteLLM proxy config at runtime.
+3. **digichat model picker** (future) — UI surfaces provider list from this doc; user pastes their API key; digichat writes to LiteLLM proxy config at runtime.
 4. **Cost guard** — LiteLLM budgets enforce monthly caps per alias. Flagship tier (`best`) requires explicit opt-in.
 5. **Audit** — all routed calls logged via `digibase.audit.redact_mapping` so secrets never persist.
 

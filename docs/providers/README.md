@@ -1,6 +1,6 @@
 # Provider Setup Guides
 
-Step-by-step instructions for obtaining API keys and wiring each LLM provider into DigiThings via LiteLLM.
+Step-by-step instructions for obtaining API keys and wiring each LLM provider into digithings via LiteLLM.
 
 **For the full catalog of what each provider offers (free tier limits, pricing, recommendations) see [../LLM_PROVIDERS.md](../LLM_PROVIDERS.md).** This directory is the *how-to* companion — one file per provider, focused on setup only.
 

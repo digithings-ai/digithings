@@ -468,7 +468,7 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
       </p>
       <p className="mb-3 text-xs text-muted-foreground">
         Bring your own OpenRouter, OpenAI, or Anthropic key for unlimited chat — your key is
-        stored only in your browser. Or open the full DigiChat app.
+        stored only in your browser. Or open the full digichat app.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -489,7 +489,7 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
           className="inline-flex items-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium hover:bg-muted"
         >
           <ExternalLink className="mr-1.5 size-3.5" />
-          Open DigiChat
+          Open digichat
         </a>
       </div>
 

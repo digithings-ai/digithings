@@ -1,8 +1,8 @@
-# DigiChat Activity Protocol Implementation Plan
+# digichat Activity Protocol Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace DigiChat's single `data-digigraphTrace{label,status}` data-part with an OpenTelemetry GenAI-named activity vocabulary, so every backend provider can feed the four richer activity kinds the shared UI already renders.
+**Goal:** Replace digichat's single `data-digigraphTrace{label,status}` data-part with an OpenTelemetry GenAI-named activity vocabulary, so every backend provider can feed the four richer activity kinds the shared UI already renders.
 
 **Architecture:** One new module (`src/lib/chat-activity.ts`) owns the `ActivitySpan` type, a server-side allowlist/detail gate, and the client-side projection onto `@digithings/digichat-ui`'s `DigiChatActivity` union. Providers write `data-digichatActivity`; the client reads it and falls back to the legacy trace part for one release. Tasks are ordered so the client understands both shapes *before* any provider switches — there is no commit at which activities stop rendering.
 
@@ -193,7 +193,7 @@ Create `frontend/digichat/src/lib/chat-activity.ts`:
 
 ```ts
 /**
- * DigiChat activity protocol — the vocabulary every backend provider emits and
+ * digichat activity protocol — the vocabulary every backend provider emits and
  * the shared UI renders.
  *
  * Field names follow OpenTelemetry GenAI semantic conventions (`operation` is

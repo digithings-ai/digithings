@@ -22,7 +22,7 @@ source_urls:
 > **Access:** email signup  
 > **Privacy:** no training on free-tier data (based on current policy)
 
-The fastest inference provider on the market (500–1,500 tok/s on Llama/Qwen via custom TSMC silicon). Free tier offers 14,400 RPD on flagship models — the highest daily request volume of any standing free provider. Primary role in DigiThings: high-throughput dev testing and production fallback where raw speed matters more than context depth.
+The fastest inference provider on the market (500–1,500 tok/s on Llama/Qwen via custom TSMC silicon). Free tier offers 14,400 RPD on flagship models — the highest daily request volume of any standing free provider. Primary role in digithings: high-throughput dev testing and production fallback where raw speed matters more than context depth.
 
 ---
 
@@ -76,7 +76,7 @@ model_list:
 
 ---
 
-## DigiThings Use
+## digithings Use
 
 | Field | Value |
 |---|---|

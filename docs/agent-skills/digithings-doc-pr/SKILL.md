@@ -1,9 +1,9 @@
 ---
 name: digithings-doc-pr
-description: Prepare a documentation-only pull request and optional automerge-docs labeling for DigiThings.
+description: Prepare a documentation-only pull request and optional automerge-docs labeling for digithings.
 ---
 
-# DigiThings doc PR skill
+# digithings doc PR skill
 
 ## When to use
 

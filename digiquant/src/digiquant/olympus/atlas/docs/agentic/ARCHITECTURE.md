@@ -695,16 +695,16 @@ Tier-wide changes belong in `config/olympus_models.yaml` (capability pools per t
 
 ---
 
-## DigiGraph Sub-graph Orchestration (issue #176, ADR-0009)
+## digigraph Sub-graph Orchestration (issue #176, ADR-0009)
 
-The 9-phase pipeline described above is now orchestrated by a DigiGraph
+The 9-phase pipeline described above is now orchestrated by a digigraph
 sub-graph in `digiquant/src/digiquant/olympus/atlas/`. Skill files in
 `skills/<slug>/SKILL.md` remain the authoritative "what to research"
 instructions — they are injected into a generic research agent at runtime
 rather than ported as prompt code.
 
 Entry point: `digiquant_atlas.graph.build_atlas_graph` plus `AtlasInput`.
-DigiClaw (issue #219) invokes this on a cron schedule.
+digiclaw (issue #219) invokes this on a cron schedule.
 
 **What changed operationally:**
 

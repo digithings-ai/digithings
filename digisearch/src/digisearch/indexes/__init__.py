@@ -1,1 +1,1 @@
-"""DigiSearch index backends."""
+"""digisearch index backends."""

@@ -1,6 +1,6 @@
 # @digithings/digichat-ui — architecture
 
-Shared DigiChat terminal-session UI. Two consumers render it today:
+Shared digichat terminal-session UI. Two consumers render it today:
 **digichat** (`src/app/embed/page.tsx`, the iframe embed) and
 **digithings-web** (`components/DigiChatSession.tsx` → `/chat`). Both also
 `@import` this package's stylesheets from their `globals.css`.

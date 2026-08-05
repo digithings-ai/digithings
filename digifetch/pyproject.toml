@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "digifetch"
 version = "0.1.0"
-description = "DigiFetch – shared web-scraping / headless-fetch engine (browser session lifecycle, retry/backoff, rate limiting, HTTP fetch + download, parsing handoff) for DigiThings"
+description = "digifetch – shared web-scraping / headless-fetch engine (browser session lifecycle, retry/backoff, rate limiting, HTTP fetch + download, parsing handoff) for digithings"
 readme = "ARCHITECTURE.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }

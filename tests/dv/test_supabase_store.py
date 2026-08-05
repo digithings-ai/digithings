@@ -51,25 +51,25 @@ class _FakeClient:
 _ROWS = [
     {
         "vault_path": "digigraph",
-        "title": "DigiGraph",
+        "title": "digigraph",
         "frontmatter": {
-            "title": "DigiGraph",
+            "title": "digigraph",
             "type": "module",
             "status": "reviewed",
             "tags": ["core", "orchestration"],
         },
-        "body_markdown": "# DigiGraph\n> hub\n\nOrchestrates [[digisearch|DigiSearch]].",
+        "body_markdown": "# digigraph\n> hub\n\nOrchestrates [[digisearch|digisearch]].",
     },
     {
         "vault_path": "digisearch",
-        "title": "DigiSearch",
+        "title": "digisearch",
         "frontmatter": {
-            "title": "DigiSearch",
+            "title": "digisearch",
             "type": "module",
             "status": "reviewed",
             "tags": ["core", "retrieval"],
         },
-        "body_markdown": "# DigiSearch\n> rag pipeline",
+        "body_markdown": "# digisearch\n> rag pipeline",
     },
 ]
 
@@ -80,7 +80,7 @@ def test_reconstructs_notes_with_tags_and_backlinks() -> None:
     assert {n.name for n in vault.list_notes()} == {"digigraph", "digisearch"}
     digigraph = vault.get_note("digigraph")
     assert digigraph is not None
-    assert digigraph.title == "DigiGraph"
+    assert digigraph.title == "digigraph"
     assert set(digigraph.tags) == {"core", "orchestration"}
     # The [[digisearch]] wikilink resolves into a backlink — same indexing as on disk.
     assert vault.backlinks("digisearch") == ("digigraph",)
@@ -89,7 +89,7 @@ def test_reconstructs_notes_with_tags_and_backlinks() -> None:
 def test_read_text_uses_body_cache() -> None:
     vault = SupabaseStore(_FakeClient(_ROWS)).load_vault()
     body = vault.read_text("digigraph")
-    assert "Orchestrates" in body and "DigiGraph" in body
+    assert "Orchestrates" in body and "digigraph" in body
 
 
 def test_store_backed_vault_is_read_only() -> None:
@@ -115,7 +115,7 @@ def test_blank_vault_path_rows_are_skipped() -> None:
 def test_search_calls_rpc_and_returns_models() -> None:
     hit = {
         "vault_path": "digikey",
-        "title": "DigiKey",
+        "title": "digikey",
         "note_type": "module",
         "summary": "auth control plane",
         "body_markdown": "JWT auth with scoped API keys.",

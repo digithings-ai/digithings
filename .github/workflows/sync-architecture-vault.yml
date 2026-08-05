@@ -1,5 +1,5 @@
 name: sync-architecture-vault
-# Publish the DigiVault-managed docs/vision vault → Supabase public.architecture_notes
+# Publish the digivault-managed docs/vision vault → Supabase public.architecture_notes
 # so the digithings.ai docs chat always reads the current architecture docs. The repo
 # docs are the source of truth; this mirrors them to the DB on every change ("publish
 # on update"). Dogfoods two modules: digivault parses the vault, digibase[supabase]

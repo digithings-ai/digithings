@@ -1,8 +1,8 @@
 /**
- * Single source of truth for DigiThings modules — drives the landing cards,
+ * Single source of truth for digithings modules — drives the landing cards,
  * the architecture/scrollytelling graph, the per-module detail pages, and the
  * stack rows. Content is codebase-accurate (real packages, docker
- * commands, init snippets). DigiStore/DigiLink are tier "roadmap".
+ * commands, init snippets). digistore/digilink are tier "roadmap".
  */
 
 export type Tier = "core" | "support" | "roadmap";
@@ -312,8 +312,8 @@ export const modules: ModuleNode[] = [
       { name: "MinIO", icon: null, mono: "Mi" },
     ],
     dockerCmd: null,
-    initSnippet: { lang: "python", code: 'DigiStore.configure(backend="s3")  # planned' },
-    api: [{ label: "Configure backend", code: 'DigiStore.configure(backend="s3")' }],
+    initSnippet: { lang: "python", code: 'digistore.configure(backend="s3")  # planned' },
+    api: [{ label: "Configure backend", code: 'digistore.configure(backend="s3")' }],
     links: [{ label: "Roadmap", href: "https://github.com/digithings-ai" }],
     related: ["digiquant", "digisearch"],
   },

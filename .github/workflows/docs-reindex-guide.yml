@@ -1,10 +1,10 @@
-# Reindex the DigiThings-guide `docs` index on merge to develop.
+# Reindex the digithings-guide `docs` index on merge to develop.
 #
 # Keep the `paths:` filter below in sync with `sources:` in
 # docs/projects/digithings-guide/indexes/docs.yaml.
 #
 # Dry-run always runs (resolves globs, parses + chunks in-process via the
-# DigiSearch stub backend). The apply step calls the DigiSearch HTTP API and
+# digisearch stub backend). The apply step calls the digisearch HTTP API and
 # is skipped when DIGISEARCH_URL is not set (e.g. forks, no secret configured).
 name: "Docs: reindex guide"
 
@@ -77,7 +77,7 @@ jobs:
           DIGISEARCH_ALLOW_STUB: "1"
         run: uv run --frozen --no-sync python scripts/reindex_digithings_guide.py
 
-      - name: Reindex (apply — posts to DigiSearch HTTP API)
+      - name: Reindex (apply — posts to digisearch HTTP API)
         if: env.DIGISEARCH_URL != ''
         env:
           DIGISEARCH_URL: ${{ secrets.DIGISEARCH_URL }}

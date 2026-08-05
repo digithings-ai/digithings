@@ -1,4 +1,4 @@
-"""DigiSearch client - unified orchestrator. DigiSearch.from_config()."""
+"""digisearch client - unified orchestrator. digisearch.from_config()."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from digisearch.core.models import Document, Query, Result
 
 
 class DigiSearch:
-    """Unified DigiSearch client. Orchestrates indexes, embedding, search."""
+    """Unified digisearch client. Orchestrates indexes, embedding, search."""
 
     def __init__(self, config: DigiSearchConfig | None = None) -> None:
         self.config = config or DigiSearchConfig.from_env()

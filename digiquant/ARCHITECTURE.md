@@ -1,8 +1,8 @@
-# DigiQuant Architecture
+# digiquant Architecture
 
 **Version:** 0.1.x
 **Last updated:** 2026-03-29
-**Audience:** Engineers, reviewers, and agents working on or integrating with DigiQuant.
+**Audience:** Engineers, reviewers, and agents working on or integrating with digiquant.
 
 ---
 
@@ -25,26 +25,26 @@
 
 ## 1. Overview
 
-DigiQuant is the deterministic quant engine of the DigiThings stack. Its primary role is to own and execute the ordered pipeline: **validate → backtest → optimize → export**. No other service in the stack is permitted to make performance claims (Sharpe, PnL, trade count) without a result originating from this service.
+digiquant is the deterministic quant engine of the digithings stack. Its primary role is to own and execute the ordered pipeline: **validate → backtest → optimize → export**. No other service in the stack is permitted to make performance claims (Sharpe, PnL, trade count) without a result originating from this service.
 
-DigiQuant operates as an internal vertical in the federated hub model. Typical callers are:
+digiquant operates as an internal vertical in the federated hub model. Typical callers are:
 
-- **DigiGraph** (orchestration hub) — calls via HTTP orchestrator endpoints and dispatches tool invocations through `/v1/orchestrator_invoke`
-- **MCP clients** (IDE, Claude Desktop, DigiClaw) — attach directly via `streamable-http` or `stdio` transport on port 8767
+- **digigraph** (orchestration hub) — calls via HTTP orchestrator endpoints and dispatches tool invocations through `/v1/orchestrator_invoke`
+- **MCP clients** (IDE, Claude Desktop, digiclaw) — attach directly via `streamable-http` or `stdio` transport on port 8767
 - **Power users** — call HTTP endpoints directly or use the `digiquant` CLI
-- **DigiClaw** (heartbeat service) — polls `/check_drift` for ADDM-triggered re-optimization
+- **digiclaw** (heartbeat service) — polls `/check_drift` for ADDM-triggered re-optimization
 
 ### NautilusTrader Integration
 
 NautilusTrader is the sole backtest and live-trade execution engine. Its key properties relevant to architecture:
 
 - **Rust core** for the event loop, order book, and fill simulation — Python strategies attach via the Actor/MessageBus pattern
-- **`BacktestEngine`** is the synchronous entrypoint; DigiQuant calls `engine.run()` in the current thread
+- **`BacktestEngine`** is the synchronous entrypoint; digiquant calls `engine.run()` in the current thread
 - **Bar-driven** by default: OHLCV data is fed through `BarDataWrangler` and replayed bar-by-bar to the strategy's `on_bar()` callback
 - **`TestInstrumentProvider.equity()`** is used for simulation instruments; no real market microstructure (no bid/ask spread, no partial fills) in the default configuration
 - **Optional dependency**: installed via `digiquant[nautilus]`. The backtest entry point falls through to `None` if `nautilus_trader` is not importable.
 
-The Polars-to-pandas boundary in `nautilus_runner.py` is a deliberate, documented exception to the "Polars only" rule. Nautilus's `BarDataWrangler.process()` requires a pandas DataFrame with a `timestamp` UTC index. All other data handling in DigiQuant (CSV loading, account report parsing, result assembly) uses Polars.
+The Polars-to-pandas boundary in `nautilus_runner.py` is a deliberate, documented exception to the "Polars only" rule. Nautilus's `BarDataWrangler.process()` requires a pandas DataFrame with a `timestamp` UTC index. All other data handling in digiquant (CSV loading, account report parsing, result assembly) uses Polars.
 
 **Version pinning:** `nautilus_trader` is pinned to `>=1.190,<2` in `pyproject.toml`. The 2.x series introduced an async-first API surface with breaking changes to `BacktestEngine.run()` and the Actor registration model.
 
@@ -53,7 +53,7 @@ The Polars-to-pandas boundary in `nautilus_runner.py` is a deliberate, documente
 
 ### Pipeline Ownership
 
-DigiQuant owns the ordered quant workflow internally via a LangGraph `StateGraph` in `digiquant/src/digiquant/graph/pipeline.py`. This graph is not the same as DigiGraph's supervisor — it is a local, synchronous, domain-specific pipeline that ensures validate runs before backtest, backtest before optimize, and optimize before export. DigiGraph is the external orchestration hub that decides *when* to call DigiQuant, not *how* DigiQuant sequences its own steps.
+digiquant owns the ordered quant workflow internally via a LangGraph `StateGraph` in `digiquant/src/digiquant/graph/pipeline.py`. This graph is not the same as digigraph's supervisor — it is a local, synchronous, domain-specific pipeline that ensures validate runs before backtest, backtest before optimize, and optimize before export. digigraph is the external orchestration hub that decides *when* to call digiquant, not *how* digiquant sequences its own steps.
 
 ---
 
@@ -121,7 +121,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `addm.py` | Rolling Sharpe Z-score drift detection |
 | `audit.py` | JSONL append-only audit log |
 | `mcp_server.py` | FastMCP server wrapping `service.py` |
-| `orchestrator_tools.py` | OpenAI-style tool manifest for DigiGraph |
+| `orchestrator_tools.py` | OpenAI-style tool manifest for digigraph |
 | `brokers/stubs.py` | IB, Alpaca, QuantConnect stubs (all `NotImplementedError`) |
 | `tradingview.py` | PyneCore stubs (not implemented) |
 | `data/loader.py` | Polars OHLCV CSV loading and synthetic data generation |
@@ -136,7 +136,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 
 ### REST Endpoints
 
-All endpoints bind on `127.0.0.1:8001` by default. Auth is enforced by `DigiAuthMiddleware` from `digikey.integrations`. The `/health` endpoint is public; all others require a valid DigiKey JWT with the appropriate scope.
+All endpoints bind on `127.0.0.1:8001` by default. Auth is enforced by `DigiAuthMiddleware` from `digikey.integrations`. The `/health` endpoint is public; all others require a valid digikey JWT with the appropriate scope.
 
 #### Synchronous endpoints
 
@@ -162,7 +162,7 @@ All endpoints bind on `127.0.0.1:8001` by default. Auth is enforced by `DigiAuth
 | `GET` | `/backtest/{job_id}/result` | `digiquant:backtest` | Final `BacktestResult` (202 if still running) |
 | `GET` | `/v1/jobs/{job_id}/status` | `digiquant:backtest` | Job lifecycle: `running` | `completed` | `failed` |
 
-#### Orchestrator endpoints (DigiGraph hub dispatch)
+#### Orchestrator endpoints (digigraph hub dispatch)
 
 | Method | Path | Auth Scope | Description |
 |---|---|---|---|
@@ -200,11 +200,11 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend. Delegates each strategy to `generate_tearsheets.run_strategy_isolated` (spawn-per-strategy, #1389 — a second in-process engine would SIGABRT the long-lived server); resolves calibrations file → Supabase (example only via `allow_example_calibrations`), accepts `signal_delay_days` (#1462), and returns `{"entries", "failures"}` with per-strategy errors as data. Does **not** write `index.json` (the CLI `main()` owns that) |
 | `digiquant_validate_slapper_vs_tradingview` | Trade-level parity check of a Slapper strategy against a TradingView "List of Trades" CSV export |
 
-The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by DigiGraph's hub dispatch to alias the pipeline call.
+The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by digigraph's hub dispatch to alias the pipeline call.
 
 #### Slapper tearsheet pipeline
 
-The BTC/ETH/SOL Slapper tearsheets published on digiquant.io are produced end-to-end by DigiQuant's own pipeline:
+The BTC/ETH/SOL Slapper tearsheets published on digiquant.io are produced end-to-end by digiquant's own pipeline:
 
 1. **Price** — `scripts/fetch_coinbase.py` pulls daily Coinbase OHLCV (CCXT) into `data/price-history/<TICKER>.csv` (matches TradingView's Coinbase series).
 2. **Backtest** — `scripts/generate_tearsheets.py` runs each strategy through the NautilusTrader engine, extracts round-trip trades from the positions report, and builds a TradingView-style percent-of-equity compounding equity curve + All/Long/Short stats, emitting `TearsheetData` JSON (`tearsheet_data.from_nautilus_run`) into `frontend/digiquant-web/public/strategies/`. Each strategy's backtest runs in its **own spawned process** (#1389): NautilusTrader's Rust logging can only initialize once per process (`log::set_boxed_logger`), so a second in-process `BacktestEngine` aborts the interpreter with a logger re-init panic (SIGABRT). Isolation also contains any engine crash to its strategy — the script collects per-strategy success/failure, prints an OK/FAILED summary line per strategy, and exits non-zero if **any** strategy failed. On a partial failure, `index.json` keeps the prior entry for each failed strategy (so digiquant.io does not lose a live strategy card); a fully successful full run rewrites `index.json` as before.
@@ -386,7 +386,7 @@ Each strategy in the registry is a `Strategy` subclass (which inherits from `Act
 5. After `run()` completes, `engine.trader.generate_order_fills_report()` and `generate_account_report()` provide structured output
 6. `engine.dispose()` frees internal resources
 
-DigiQuant calls this pattern in `_build_engine()` in `nautilus_runner.py`. One engine instance is created per backtest run and disposed immediately after metric extraction. There is no engine reuse across runs.
+digiquant calls this pattern in `_build_engine()` in `nautilus_runner.py`. One engine instance is created per backtest run and disposed immediately after metric extraction. There is no engine reuse across runs.
 
 **Default position sizing is instrument-aware.** The venue starts with `STARTING_BALANCE_USD` ($1M) cash. When a caller does not pass `trade_size`, `_build_engine()` derives one via `_default_trade_size()`: `floor(STARTING_BALANCE_USD * DEFAULT_NOTIONAL_FRACTION / first_bar_price)`, clamped to a minimum of 1 unit. This keeps per-trade notional at a fixed fraction (default 2%) of equity rather than a fixed unit count. A fixed count (the old `Decimal(1000)`) silently over-leveraged high-priced instruments — 1000 BTC units at ~$10k+ on a $1M account is 10–100x leverage, so Nautilus halted the whole run with `AccountBalanceNegative` after a handful of bars and returned a misleading 1-trade result. An explicit caller `trade_size` always overrides the default. Regression coverage: `tests/dq/test_default_trade_size.py`.
 
@@ -427,7 +427,7 @@ Audit events are written explicitly in `server.py` after `run_backtest`, `run_op
 
 ## 6. Security Analysis
 
-### DigiKey JWT Scopes
+### digikey JWT Scopes
 
 Access control is enforced by `DigiAuthMiddleware` from `digikey.integrations.service_middleware`. Scope requirements per path, as defined in `digiquant_path_scopes()`:
 
@@ -438,7 +438,7 @@ Access control is enforced by `DigiAuthMiddleware` from `digikey.integrations.se
 | `digiquant:backtest` + `digiquant:optimize` | `/run_pipeline`, `/v1/workflow`, `/v1/orchestrator_invoke` |
 | None (public) | `/health`, `/docs`, `/redoc`, `/openapi.json` |
 
-When DigiKey is not configured or `DIGI_API_KEY` is not set, the middleware may fall through to unauthenticated access depending on the middleware implementation. Production deployments must set DigiKey JWKS URL and audience.
+When digikey is not configured or `DIGI_API_KEY` is not set, the middleware may fall through to unauthenticated access depending on the middleware implementation. Production deployments must set digikey JWKS URL and audience.
 
 ### Strategy Sandboxing Gap
 
@@ -458,7 +458,7 @@ CORS is configured via the shared `digibase.cors.install_cors(app, service="digi
 
 The `audit_log()` function redacts payload keys containing `password`, `api_key`, `token`, or `secret`. This is a substring match, so it catches variations like `api_key_prefix` or `access_token`. However, secrets could leak through non-obvious keys (e.g., `bearer`, `credential`, `auth`) or through nested dicts (redaction only applies to the top-level `payload` dict, not recursively). The redaction list is hardcoded and cannot be extended without code changes.
 
-The audit JSONL file is world-readable if default filesystem permissions apply. In Docker, the file is mounted at `./digiquant/results/audit` and shared with the DigiGraph and DigiClaw containers. Access controls on this directory should be reviewed.
+The audit JSONL file is world-readable if default filesystem permissions apply. In Docker, the file is mounted at `./digiquant/results/audit` and shared with the digigraph and digiclaw containers. Access controls on this directory should be reviewed.
 
 ---
 
@@ -488,7 +488,7 @@ Strategy registrations are ephemeral — they exist only in the process memory o
 
 The in-process backtest job table (`_backtest_jobs`) has a documented 5-minute TTL but no active cleanup task. Jobs accumulate until the process restarts.
 
-The DigiQuant strategy store (#1064; see [§ DigiQuant Data Layer](#digiquant-data-layer--strategy-store--shared-data-1064)) now provides the durable substrate for per-strategy config, fitted calibration, trades, tearsheets, and live signals. Wiring `service_run_backtest` / the Slapper recompute job to persist canonical run records there (strategy git sha, params hash, data fingerprint) is the remaining step toward reproducible `run_id`s — tracked by #1067/#1068.
+The digiquant strategy store (#1064; see [§ digiquant Data Layer](#digiquant-data-layer--strategy-store--shared-data-1064)) now provides the durable substrate for per-strategy config, fitted calibration, trades, tearsheets, and live signals. Wiring `service_run_backtest` / the Slapper recompute job to persist canonical run records there (strategy git sha, params hash, data fingerprint) is the remaining step toward reproducible `run_id`s — tracked by #1067/#1068.
 
 ---
 
@@ -522,25 +522,25 @@ JSON export is near-instant (file write of a small JSON object). The `nautilus_b
 
 ## 9. Integration Points
 
-### Orchestrator Tools Contract with DigiGraph
+### Orchestrator Tools Contract with digigraph
 
-DigiGraph discovers DigiQuant's capabilities via `POST /v1/orchestrator_tools`, which returns an OpenAI function-calling compatible manifest of 6 tools. DigiGraph then dispatches tool calls via `POST /v1/orchestrator_invoke` with `{"tool": "digiquant_*", "arguments": {...}}`.
+digigraph discovers digiquant's capabilities via `POST /v1/orchestrator_tools`, which returns an OpenAI function-calling compatible manifest of 6 tools. digigraph then dispatches tool calls via `POST /v1/orchestrator_invoke` with `{"tool": "digiquant_*", "arguments": {...}}`.
 
 The manifest is built by `build_orchestrator_tool_manifest()` in `orchestrator_tools.py`. It is static (not dynamically generated from Pydantic schemas), which creates a risk of schema drift if `BacktestRequest` or `PipelineRequest` evolves without a corresponding update to the manifest.
 
 The `_normalize_symbols()` helper in `server.py` normalizes symbols in `v1_orchestrator_invoke` (uppercase, strip whitespace, filter empty) to prevent common LLM formatting artifacts from causing validation failures.
 
-### DigiKey Auth Middleware
+### digikey Auth Middleware
 
-`DigiAuthMiddleware` from `digikey.integrations.service_middleware` is mounted as an ASGI middleware before route handlers. It validates JWT Bearer tokens against the DigiKey JWKS endpoint (`DIGIKEY_JWKS_URL`), checks issuer (`DIGIKEY_ISSUER`), audience (`DIGIKEY_AUDIENCE`), and required scopes via `digiquant_path_scopes()`. When DigiKey is not available or misconfigured, the middleware behavior depends on the DigiKey package's failure mode.
+`DigiAuthMiddleware` from `digikey.integrations.service_middleware` is mounted as an ASGI middleware before route handlers. It validates JWT Bearer tokens against the digikey JWKS endpoint (`DIGIKEY_JWKS_URL`), checks issuer (`DIGIKEY_ISSUER`), audience (`DIGIKEY_AUDIENCE`), and required scopes via `digiquant_path_scopes()`. When digikey is not available or misconfigured, the middleware behavior depends on the digikey package's failure mode.
 
-### DigiSmith Tracing
+### digismith Tracing
 
-OpenTelemetry instrumentation is set up via `setup_otel_fastapi(app, service_name="digiquant")` from `digibase.otel`. This instruments all FastAPI routes with spans. The OTEL exporter is configured via the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env var. When the endpoint is not set, tracing is a no-op. DigiQuant does not explicitly add custom span attributes with `workflow_id`, `request_id`, or `session_id` — these would need to be added from `request.state.request_id` (set by the correlation ID middleware) if tracing is actively used.
+OpenTelemetry instrumentation is set up via `setup_otel_fastapi(app, service_name="digiquant")` from `digibase.otel`. This instruments all FastAPI routes with spans. The OTEL exporter is configured via the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env var. When the endpoint is not set, tracing is a no-op. digiquant does not explicitly add custom span attributes with `workflow_id`, `request_id`, or `session_id` — these would need to be added from `request.state.request_id` (set by the correlation ID middleware) if tracing is actively used.
 
-### DigiClaw Heartbeat and ADDM Drift Detection
+### digiclaw Heartbeat and ADDM Drift Detection
 
-The DigiClaw heartbeat container calls `GET /check_drift?strategy_id=…` on a schedule. The `check_drift()` function in `addm.py` performs a rolling Sharpe Z-score calculation against in-process history built by `record_sharpe()`. The HTTP handler accepts optional `current_sharpe` (wired from DigiClaw when available) and `service_run_backtest()` records Sharpe after successful backtests. With fewer than three observations, `check_drift()` still returns `implemented=False`; operators must feed history via backtests or explicit `current_sharpe` before drift detection is meaningful. History is in-process only (not durable across restarts).
+The digiclaw heartbeat container calls `GET /check_drift?strategy_id=…` on a schedule. The `check_drift()` function in `addm.py` performs a rolling Sharpe Z-score calculation against in-process history built by `record_sharpe()`. The HTTP handler accepts optional `current_sharpe` (wired from digiclaw when available) and `service_run_backtest()` records Sharpe after successful backtests. With fewer than three observations, `check_drift()` still returns `implemented=False`; operators must feed history via backtests or explicit `current_sharpe` before drift detection is meaningful. History is in-process only (not durable across restarts).
 
 ---
 
@@ -576,7 +576,7 @@ digiquant:
     start_period: 10s
 ```
 
-The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies from writing to the data directory. The results volume (`/app/results`) is writable, which is where exports and tearsheets land. The audit log is mounted into the DigiGraph and DigiClaw containers at `./digiquant/results/audit`.
+The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies from writing to the data directory. The results volume (`/app/results`) is writable, which is where exports and tearsheets land. The audit log is mounted into the digigraph and digiclaw containers at `./digiquant/results/audit`.
 
 `NAUTILUS=1` (default) enables the NautilusTrader dependency installation in the Dockerfile. Set `NAUTILUS=0` for a lighter image that returns `None` from `run_nautilus_backtest()`.
 
@@ -592,7 +592,7 @@ The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies
 | `DIGIQUANT_STRATEGY_SPECS_PATH` | `""` | Path to YAML file with custom/tenant param specs |
 | `EXPORT_OUTPUT_DIR` | `digiquant/results/exports` | Allowed root for export artifact writes |
 | `AUDIT_LOG_PATH` | `digiquant/results/audit/events.jsonl` | JSONL audit log path |
-| `DIGIKEY_JWKS_URL` | `http://digikey:8005/.well-known/jwks.json` | DigiKey JWKS endpoint |
+| `DIGIKEY_JWKS_URL` | `http://digikey:8005/.well-known/jwks.json` | digikey JWKS endpoint |
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience |
 | `DIGIKEY_PUBLIC_KEY_PEM` | `""` | Inline PEM for offline JWT verification |
@@ -614,7 +614,7 @@ The MCP server shares no state with the HTTP server. Both use `service.py` as th
 
 ### NautilusTrader Data Volume
 
-NautilusTrader's backtest engine holds all bar data in memory. There is no on-disk Nautilus data store; the DigiQuant data volume contains only OHLCV CSV files loaded by `data/loader.py`. Nautilus's own persistence layer (Parquet catalog, `BacktestNode` data infrastructure) is not used — DigiQuant uses the lighter `BacktestEngine` directly.
+NautilusTrader's backtest engine holds all bar data in memory. There is no on-disk Nautilus data store; the digiquant data volume contains only OHLCV CSV files loaded by `data/loader.py`. Nautilus's own persistence layer (Parquet catalog, `BacktestNode` data infrastructure) is not used — digiquant uses the lighter `BacktestEngine` directly.
 
 ---
 
@@ -630,7 +630,7 @@ No ML or RL code exists. The approved packages (Qlib, FinRL, XGBoost) are named 
 
 ### ADDM Drift Detection (In-Process; Persistence Gap)
 
-`addm.py` implements rolling Sharpe Z-score drift detection. `service_run_backtest()` calls `record_sharpe()` when `sharpe_ratio` is present; `GET /check_drift` accepts optional `current_sharpe` and returns `implemented=False` until at least three observations exist for the strategy. History lives in an in-process `deque` — it is lost on restart and is not shared across replicas. Remaining work: persist history (Postgres or Redis), wire DigiClaw to pass `current_sharpe`, and productize re-optimization when `drift_detected=true`.
+`addm.py` implements rolling Sharpe Z-score drift detection. `service_run_backtest()` calls `record_sharpe()` when `sharpe_ratio` is present; `GET /check_drift` accepts optional `current_sharpe` and returns `implemented=False` until at least three observations exist for the strategy. History lives in an in-process `deque` — it is lost on restart and is not shared across replicas. Remaining work: persist history (Postgres or Redis), wire digiclaw to pass `current_sharpe`, and productize re-optimization when `drift_detected=true`.
 
 ### Remote Worker Delegation
 
@@ -646,7 +646,7 @@ There is no sandbox for strategy code. This gap is documented in `ARCHITECTURE.m
 
 ### Persistent Run History
 
-Each `BacktestResult` has a `run_id` but no persistent store. The audit JSONL is append-only and not queryable. There is no `GET /runs/{run_id}` endpoint. Run history for comparison (A/B backtests) requires either a DigiQuant-owned store (SQLite/Postgres) or a shared DigiChat Postgres table. This gap blocks the "compare runs" user journey described in `DIGIQUANT_CHAT_PRODUCT_GAP.md`.
+Each `BacktestResult` has a `run_id` but no persistent store. The audit JSONL is append-only and not queryable. There is no `GET /runs/{run_id}` endpoint. Run history for comparison (A/B backtests) requires either a digiquant-owned store (SQLite/Postgres) or a shared digichat Postgres table. This gap blocks the "compare runs" user journey described in `DIGIQUANT_CHAT_PRODUCT_GAP.md`.
 
 ---
 
@@ -669,7 +669,7 @@ The `ProcessPoolExecutor` path already exists for grid/random optimization; exte
 
 **Problem:** `run_id` is not reproducible; strategy code version is not recorded; no run comparison is possible.
 
-**Recommendation:** Emit a canonical run record from `service_run_backtest()` and `service_run_optimize()` to a Postgres table (or DigiBase when available). The run record should include: `run_id`, `strategy_name`, `strategy_git_sha` (from `__version__` or git tag), `params_hash` (SHA-256 of sorted params JSON), `symbols`, `data_fingerprint` (SHA-256 of first/last row of CSV), `result_json`, `created_at`. This enables `GET /runs/{run_id}` for reproducibility checks and a comparison endpoint (`GET /runs?strategy_name=&symbols=`) for the DigiChat A/B workflow.
+**Recommendation:** Emit a canonical run record from `service_run_backtest()` and `service_run_optimize()` to a Postgres table (or digibase when available). The run record should include: `run_id`, `strategy_name`, `strategy_git_sha` (from `__version__` or git tag), `params_hash` (SHA-256 of sorted params JSON), `symbols`, `data_fingerprint` (SHA-256 of first/last row of CSV), `result_json`, `created_at`. This enables `GET /runs/{run_id}` for reproducibility checks and a comparison endpoint (`GET /runs?strategy_name=&symbols=`) for the digichat A/B workflow.
 
 ### (c) Async Job Queue for Long Backtests (Avoid HTTP Timeout)
 
@@ -689,7 +689,7 @@ The `_run_trial()` function in `optimize.py` is already structured as a top-leve
 
 ### (e) ADDM Persistence and Heartbeat Wiring
 
-**Problem:** Sharpe history is in-process only; DigiClaw may skip drift checks when no DigiKey bearer is configured (`drift_check_skipped`), even though `/check_drift` is implemented.
+**Problem:** Sharpe history is in-process only; digiclaw may skip drift checks when no digikey bearer is configured (`drift_check_skipped`), even though `/check_drift` is implemented.
 
 **Recommendation:**
 
@@ -709,7 +709,7 @@ The `_run_trial()` function in `optimize.py` is already structured as a top-leve
 - `digiquant_job_queue_size` (gauge) — tracks in-flight async jobs
 - `digiquant_rate_limit_rejections_total` (counter, labeled by `path`) — identifies rate limit pressure
 
-These metrics complement DigiSmith's LLM-level tracing by providing infrastructure-level observability on the compute-intensive quant path.
+These metrics complement digismith's LLM-level tracing by providing infrastructure-level observability on the compute-intensive quant path.
 
 ## Observability
 
@@ -721,7 +721,7 @@ All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extr
 
 ## Atlas + Hermes Sub-graphs (ADR-0009 + ADR-0015 + ADR-0020)
 
-DigiQuant ships two sibling sub-graphs that compose end-to-end on **one daily topology**
+digiquant ships two sibling sub-graphs that compose end-to-end on **one daily topology**
 ([#930](https://github.com/digithings-ai/digithings/issues/930), spec
 [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)):
 
@@ -1126,7 +1126,7 @@ beliefs distillation is on-demand only. Legacy `digiquant/scripts/atlas/publish_
 and `materialize_snapshot.py` are frozen.
 
 Skills as injected context: each phase loads a `SKILL.md` file and passes
-it to DigiGraph's generic research agent alongside a Pydantic output
+it to digigraph's generic research agent alongside a Pydantic output
 model. No prompt ports; skills stay authoritative as Markdown. 11
 near-duplicate sector skills were collapsed into one templated
 `sector-research` skill + `config/sectors.yaml`.
@@ -1134,9 +1134,9 @@ near-duplicate sector skills were collapsed into one templated
 See `docs/adr/0009-atlas-supabase-persistence.md` for the persistence
 decision and `docs/adr/0015-atlas-vs-hermes.md` for the engine split.
 
-## DigiQuant Data Layer — Strategy Store + Shared Data (#1064)
+## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 
-The DigiQuant shared backend is the **`core`** Supabase project — the project historically
+The digiquant shared backend is the **`core`** Supabase project — the project historically
 used by Olympus/Atlas (`config.toml project_id "digiquant-atlas"`, rooted at
 `digiquant/supabase/`), repurposed (renamed `core`) as the suite-wide backend rather than a
 separate project, because the `digiquant.io` org is free-tier (2-project limit) and both
@@ -1293,18 +1293,18 @@ subscribe snippet (the topic must be unique per hook instance — `RealtimeClien
 dedupes by topic, and a shared one silently kills the lane for every consumer), and
 [`supabase/SCHEMA.md`](supabase/SCHEMA.md) for the table inventory.
 
-## DigiSearch Integration (#199)
+## digisearch Integration (#199)
 
 Finalized Atlas research documents in Supabase `documents` are indexed
-into DigiSearch's vector store so the Kairos exploration agent and
-DigiChat can semantically search the research library.
+into digisearch's vector store so the Kairos exploration agent and
+digichat can semantically search the research library.
 
 **Helper module:** `digisearch/src/digisearch/atlas_ingest.py`
 
 - `ingest_atlas_payload(row, *, index_name=None)` — pure function: takes a
   pre-fetched `documents` row dict, runs it through the standard
   `RecursiveChunker(512, 64)` (same as `POST /ingest`), stamps Atlas
-  metadata onto each chunk, and upserts into the configured DigiSearch
+  metadata onto each chunk, and upserts into the configured digisearch
   index. Returns an `IndexedDocument` summary.
 - `ingest_atlas_document(client, date, document_key, *, index_name=None)` —
   Supabase-aware wrapper: fetches the row by `(date, document_key)` then
@@ -1343,7 +1343,7 @@ doc_type, segment, sector, run_type, index_name)` in
 `digisearch/src/digisearch/mcp_server.py`. Returns up to `top_k` typed
 hits with shape `{chunk_id, doc_id, score, content, content_length,
 metadata}`. The tool defaults to the Atlas index and AND-combines all
-non-null filters via DigiSearch's structured-filter pipeline (`Query.filters
+non-null filters via digisearch's structured-filter pipeline (`Query.filters
 = {"structured": [...]}`); empty filter args become a plain hybrid search.
 
 **Idempotency:** `ingest_atlas_payload` derives both `Document.id` and
@@ -1359,9 +1359,9 @@ writes to Supabase. A poller or follow-up explicit call is responsible
 for driving `ingest_atlas_document` against each `(date, document_key)`
 returned in `state.published`.
 
-**Punted — DigiStore eventing (#57):** real-time Atlas publish →
-DigiSearch reindex via DigiStore events is out of scope for #199 because
-DigiStore is not yet implemented. Once it lands, the natural wiring is
+**Punted — digistore eventing (#57):** real-time Atlas publish →
+digisearch reindex via digistore events is out of scope for #199 because
+digistore is not yet implemented. Once it lands, the natural wiring is
 either (a) call `ingest_atlas_document` directly at the end of
 `publish_phase`, or (b) push the natural keys onto a queue that
 `ingest_worker.py` (currently a placeholder per

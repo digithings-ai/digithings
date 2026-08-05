@@ -61,7 +61,7 @@ UI previews — not abstract feature bullets.
 
 **Two-face system:** Mono = infrastructure voice · Sans = readable body
 
-**Lesson:** Mono as display is the brand — aligns with DigiThings terminal identity.
+**Lesson:** Mono as display is the brand — aligns with digithings terminal identity.
 
 ---
 
@@ -119,13 +119,13 @@ UI previews — not abstract feature bullets.
 
 ---
 
-## 9. Adopt / Adapt / Avoid (DigiThings)
+## 9. Adopt / Adapt / Avoid (digithings)
 
 | Adopt | Adapt | Avoid |
 |-------|-------|-------|
 | Mono eyebrows (`// section`, uppercase kicker) | Already have `.kicker` in `site.css` | 320px display on dashboard |
 | Outline pill buttons on dark | Ghost `.btn` + hairline | Pill-only system (we need rects for tables) |
-| Capability cards with real UI | Grok → DigiGraph workflow, DigiChat, Atlas | Pure black `#000` canvas |
+| Capability cards with real UI | Grok → digigraph workflow, digichat, Atlas | Pure black `#000` canvas |
 | API section with copy-paste code | digikey token exchange, `make stack-local` | Dark-only (we ship light mode) |
 | Stat counters | Module count, backtest runs, open issues | Fake scale metrics |
 | No shadow elevation | Olympus glass → flatten over time | Removing all atmosphere from **landings** |

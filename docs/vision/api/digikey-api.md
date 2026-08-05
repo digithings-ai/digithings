@@ -23,9 +23,9 @@ SQLAlchemy over Postgres stores keys, bcrypt hashes them, and an optional Redis 
 ## Authentication
 digikey is the issuer. Admin routes require the `DIGIKEY_ADMIN_TOKEN` bearer; token exchange takes a raw API key or a BFF-session grant. JWKS and /healthz are public.
 
-- `digigraph:workflow / :chat / :mcp` — DigiGraph routes
-- `digiquant:backtest / :optimize` — DigiQuant routes
-- `digisearch:query / :ingest` — DigiSearch routes
+- `digigraph:workflow / :chat / :mcp` — digigraph routes
+- `digiquant:backtest / :optimize` — digiquant routes
+- `digisearch:query / :ingest` — digisearch routes
 - `*` — Wildcard (all scopes) — dev_global keys only
 
 ## Run locally
@@ -41,7 +41,7 @@ uvicorn digikey.server:app
 - `DIGIKEY_DATABASE_URL` — required: SQLite or Postgres URL for key storage.
 - `DIGIKEY_PRIVATE_KEY_PEM`: RSA 2048 PEM for RS256 signing (prod).
 - `DIGIKEY_ADMIN_TOKEN` — required: Bearer for POST /v1/admin/keys.
-- `DIGIKEY_BFF_TOKEN`: Bearer for grant_type=bff_session (DigiChat).
+- `DIGIKEY_BFF_TOKEN`: Bearer for grant_type=bff_session (digichat).
 - `DIGIKEY_JWT_TTL_SEC` (default `900`): Access-token lifetime.
 - `DIGIKEY_BLOCKLIST_REDIS_URL`: Redis for JWT revocation (prod).
 

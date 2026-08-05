@@ -1,4 +1,4 @@
-"""DigiFetch — the shared web-scraping / headless-fetch engine for DigiThings.
+"""digifetch — the shared web-scraping / headless-fetch engine for digithings.
 
 A standalone **library** (no FastAPI, no port, no service coupling) extracting
 the *reusable* parts of twelve-x's scrapers: headless-browser session lifecycle,

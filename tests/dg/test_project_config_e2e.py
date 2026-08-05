@@ -1,4 +1,4 @@
-"""E2E loader test: DigiGraph resolves digiproject.yaml and surfaces it via /v1/status.
+"""E2E loader test: digigraph resolves digiproject.yaml and surfaces it via /v1/status.
 
 Self-contained via FastAPI TestClient — no running stack required, but marked `e2e`
 per epic #3 so it runs under the e2e suite.

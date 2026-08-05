@@ -12,7 +12,7 @@ describe("digivault-vault", () => {
         JSON.stringify([
           {
             vault_path: "arch/digikey.md",
-            title: "DigiKey",
+            title: "digikey",
             body_markdown: "# secret body",
           },
         ]),
@@ -28,7 +28,7 @@ describe("digivault-vault", () => {
     expect(toolText).toContain("secret body");
     expect(JSON.stringify(activityDocuments)).not.toContain("secret body");
     expect(JSON.stringify(activityDocuments)).not.toContain("body_markdown");
-    expect(activityDocuments[0]).toEqual({ title: "DigiKey", path: "arch/digikey.md" });
+    expect(activityDocuments[0]).toEqual({ title: "digikey", path: "arch/digikey.md" });
   });
 
   it("posts CF-parity RPC body field names", async () => {

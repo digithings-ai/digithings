@@ -1,11 +1,11 @@
-"""digiquant.olympus.atlas — phase-structured research pipeline over DigiGraph.
+"""digiquant.olympus.atlas — phase-structured research pipeline over digigraph.
 
 Public surface:
 
 Runtime entry points:
     - :class:`digiquant.olympus.atlas.state.AtlasResearchState` — sub-graph state model.
     - :func:`digiquant.olympus.atlas.graph.build_atlas_graph` — compiled LangGraph entry point.
-    - :class:`digiquant.olympus.atlas.graph.AtlasInput` — DigiClaw-facing invocation contract.
+    - :class:`digiquant.olympus.atlas.graph.AtlasInput` — digiclaw-facing invocation contract.
     - :func:`digiquant.olympus.atlas.skills.load_skill` — SKILL.md loader.
     - :func:`digiquant.olympus.atlas.schemas.load_schema` — JSON-Schema loader.
 

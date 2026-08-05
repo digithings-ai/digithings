@@ -7,7 +7,7 @@
  * (equity with log/linear toggle, drawdown, dual-axis per-trade & cumulative
  * P&L — all sharing one zoom/pan time window), a returns heatmap, and the trade
  * log. "Download PDF" opens the system print dialog with a light-mode,
- * full-span export layout (all charts and tables, DigiQuant branding).
+ * full-span export layout (all charts and tables, digiquant branding).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -213,7 +213,7 @@ export function TearsheetView({ slug }: { slug: string }) {
       printTitleRef.current = document.title;
       document.documentElement.setAttribute("data-theme", "light");
       document.documentElement.classList.add("ts-printing");
-      document.title = `${sheetTitle} — DigiQuant`;
+      document.title = `${sheetTitle} — digiquant`;
       setPrinting(true);
     };
     const onAfterPrint = () => {
@@ -290,7 +290,7 @@ export function TearsheetView({ slug }: { slug: string }) {
   const chartScale = printing ? "linear" : scale;
 
   const handlePrint = () => {
-    runTearsheetPrint({ documentTitle: `${title} — DigiQuant`, setPrinting });
+    runTearsheetPrint({ documentTitle: `${title} — digiquant`, setPrinting });
   };
 
   const zoomed = !viewsNear(view, presetView);

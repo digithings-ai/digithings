@@ -289,7 +289,7 @@ Action-oriented: "Introducing /goal", "Grok on Databricks", "Agent Dashboard in 
 
 ---
 
-## 9. Adopt / Adapt / Avoid (DigiThings)
+## 9. Adopt / Adapt / Avoid (digithings)
 
 | Adopt | Adapt | Avoid |
 |-------|-------|-------|
@@ -297,7 +297,7 @@ Action-oriented: "Introducing /goal", "Grok on Databricks", "Agent Dashboard in 
 | Outline pill secondary actions | Filter chips on twelve-x | Dark-only (we ship light mode) |
 | API band + copy-paste code | digikey token exchange docs | Zero decoration on **landings** (keep mesh) |
 | Stat counters with real metrics | OSS download counts when available | Fake GPU counts |
-| Modality capability cards | DigiGraph / DigiChat / DigiQuant / DigiSearch | Pill-only buttons for data tables |
+| Modality capability cards | digigraph / digichat / digiquant / digisearch | Pill-only buttons for data tables |
 | Pricing tables with units | digiquant API if/when priced | Pure black `#000` |
 | News/changelog archive | GitHub releases blog | — |
 

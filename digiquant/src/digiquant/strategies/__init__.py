@@ -1,4 +1,4 @@
-# DigiQuant strategy repository. See digiquant/ARCHITECTURE.md and docs/NAUTILUS_STRATEGIES.md.
+# digiquant strategy repository. See digiquant/ARCHITECTURE.md and docs/NAUTILUS_STRATEGIES.md.
 
 # Side-effect imports register each strategy with the registry on load.
 from digiquant.strategies import (

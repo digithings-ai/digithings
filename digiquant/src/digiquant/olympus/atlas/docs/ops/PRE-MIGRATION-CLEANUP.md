@@ -1,8 +1,8 @@
-# Pre-migration cleanup (lean repo before DigiThings)
+# Pre-migration cleanup (lean repo before digithings)
 
-**Goal:** Reduce noise in **digiquant-atlas** so what you copy into **DigiThings** is **intentional**—runtime + operator tooling + docs—without deleting anything required for today’s pipeline.
+**Goal:** Reduce noise in **digiquant-atlas** so what you copy into **digithings** is **intentional**—runtime + operator tooling + docs—without deleting anything required for today’s pipeline.
 
-**After cleanup:** follow [MIGRATION-ROADMAP-DIGITHINGS.md](MIGRATION-ROADMAP-DIGITHINGS.md) (Wave 1 → Wave 2 DigiGraph → Wave 3 tenancy).
+**After cleanup:** follow [MIGRATION-ROADMAP-DIGITHINGS.md](MIGRATION-ROADMAP-DIGITHINGS.md) (Wave 1 → Wave 2 digigraph → Wave 3 tenancy).
 
 ---
 
@@ -64,7 +64,7 @@ After WS4a deslop, the live graph skills are the segment skills (alt-data, macro
 
 | Stance | Detail |
 |--------|--------|
-| **Do not delete** a skill until you grep for `skills/<name>` and `cowork/tasks`, and confirm DigiGraph will not invoke it in Wave 2. |
+| **Do not delete** a skill until you grep for `skills/<name>` and `cowork/tasks`, and confirm digigraph will not invoke it in Wave 2. |
 | **Consolidation** (optional): merge tiny sector skills later—**not** required pre-migration. |
 | **`.claude/skills/`** | Editor/plugin copies—dedupe vs `skills/` when convenient; **canonical** agent instructions stay under **`skills/`**. |
 
@@ -72,7 +72,7 @@ After WS4a deslop, the live graph skills are the segment skills (alt-data, macro
 
 ## 5. Migration baseline (no in-repo archives)
 
-For a clean export to DigiThings, **`archive/`**, **`docs/archive/`**, and incident-only repair trees are **not** kept in this repository. **Architecture** is documented in [`docs/agentic/ARCHITECTURE.md`](../agentic/ARCHITECTURE.md) (root [`docs/ARCHITECTURE-REVIEW.md`](../../docs/ARCHITECTURE-REVIEW.md) redirects there). Operator truth: [`RUNBOOK.md`](../../RUNBOOK.md).
+For a clean export to digithings, **`archive/`**, **`docs/archive/`**, and incident-only repair trees are **not** kept in this repository. **Architecture** is documented in [`docs/agentic/ARCHITECTURE.md`](../agentic/ARCHITECTURE.md) (root [`docs/ARCHITECTURE-REVIEW.md`](../../docs/ARCHITECTURE-REVIEW.md) redirects there). Operator truth: [`RUNBOOK.md`](../../RUNBOOK.md).
 
 ---
 
@@ -91,10 +91,10 @@ For a clean export to DigiThings, **`archive/`**, **`docs/archive/`**, and incid
 
 ## 7. Definition of done (pre-migration)
 
-- **Single story** for “what ships to DigiThings”: `frontend/`, `supabase/`, `scripts/`, `skills/`, `templates/`, `config/` (examples + non-secret), `cowork/`, `docs/` (trimmed), CI workflows — **no** parallel `archive/` documentation trees.
+- **Single story** for “what ships to digithings”: `frontend/`, `supabase/`, `scripts/`, `skills/`, `templates/`, `config/` (examples + non-secret), `cowork/`, `docs/` (trimmed), CI workflows — **no** parallel `archive/` documentation trees.
 - **No reliance** on committed scratch under `data/`.
 - **Protected list** maintained at [PROTECTED-SCRIPTS.md](PROTECTED-SCRIPTS.md); **skills audit** at [SKILLS-AUDIT.md](SKILLS-AUDIT.md).
-- **Migration roadmap** filed as [MIGRATION-ROADMAP-DIGITHINGS.md](MIGRATION-ROADMAP-DIGITHINGS.md) and ready to open as PR context in DigiThings.
+- **Migration roadmap** filed as [MIGRATION-ROADMAP-DIGITHINGS.md](MIGRATION-ROADMAP-DIGITHINGS.md) and ready to open as PR context in digithings.
 - **Full repository accounting:** every top-level folder and policy for gitignored paths — [REPOSITORY-INVENTORY.md](REPOSITORY-INVENTORY.md). Re-run `git ls-files | wc -l` after major moves; update § 1 counts in that file.
 
 ---

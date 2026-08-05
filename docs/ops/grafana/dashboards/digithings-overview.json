@@ -12,7 +12,7 @@
       }
     ]
   },
-  "description": "DigiThings core stack overview — request rate, errors, latency, in-flight, memory. Seeded by ADR-0003.",
+  "description": "digithings core stack overview — request rate, errors, latency, in-flight, memory. Seeded by ADR-0003.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -155,7 +155,7 @@
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
   "timezone": "",
-  "title": "DigiThings — Overview",
+  "title": "digithings — Overview",
   "uid": "digithings-overview",
   "version": 1,
   "weekStart": ""

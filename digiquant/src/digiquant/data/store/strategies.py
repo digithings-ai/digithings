@@ -1,6 +1,6 @@
-"""Polars-friendly accessor for the DigiQuant strategy store (#1064).
+"""Polars-friendly accessor for the digiquant strategy store (#1064).
 
-Read/write helpers over the dedicated DigiQuant Supabase project (see
+Read/write helpers over the dedicated digiquant Supabase project (see
 :mod:`digiquant.data.store.client`). Writers use the service role (which bypasses
 RLS); public read helpers project only the non-sensitive columns. Fitted
 calibration params live in the private ``strategy_calibrations`` sidecar and are

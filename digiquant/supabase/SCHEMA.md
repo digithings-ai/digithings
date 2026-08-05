@@ -77,7 +77,7 @@ erDiagram
 
 ### Strategy store — new in migration 046 (#1064)
 
-This project is the unified DigiQuant **`core`** backend (Supabase display name `core`;
+This project is the unified digiquant **`core`** backend (Supabase display name `core`;
 local alias still `project_id "digiquant-atlas"`). Migration 046 adds the strategy store
 (additive only — no existing table touched). See
 [`docs/adr/0021-digiquant-supabase-project-topology.md`](../../docs/adr/0021-digiquant-supabase-project-topology.md).
