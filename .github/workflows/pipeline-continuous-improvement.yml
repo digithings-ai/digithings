@@ -136,7 +136,7 @@ jobs:
             ### <N>. <pattern name>
             - **Evidence**: PRs #X, #Y, #Z (or commit SHAs, or workflow runs)
             - **Suggestion**: <concrete action the team should take>
-            - **Tier**: exec:copilot / exec:cursor / exec:claude (which tier should execute)
+            - **Tier**: exec:cursor / exec:claude (which tier should execute)
             - **Effort**: S / M / L / XL
             - **Would close**: <count> repeat findings OR <describes failure mode>
 

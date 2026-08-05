@@ -68,15 +68,13 @@ gh run list -w agent-quota-reset.yml -L 3
 
 ### Executable checklist
 
-- [ ] Confirm `copilot-quota-gate.yml` is enabled on schedule.
-- [ ] Inspect last run: `gh run view $(gh run list -w copilot-quota-gate.yml -L 1 --json databaseId -q '.[0].databaseId') --log-failed`
+- [x] ~~Confirm `copilot-quota-gate.yml` is enabled on schedule.~~ Deleted 2026-08-05 with the Copilot subscription.
 - [ ] When `quota:copilot-exhausted` on #387: new `exec:copilot` issues get comment + `pending:quota` (see workflow).
 - [ ] After billing/seat refresh: remove exhausted label on #387.
 
 ### Verify
 
 ```bash
-gh run list -w copilot-quota-gate.yml -L 5
 ```
 
 ---

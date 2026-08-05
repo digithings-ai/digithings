@@ -63,12 +63,9 @@ the broader delegation framework.
 | `@claude` mention | `claude.yml` | on issue / comment / review `@claude` mention | Targeted Tier 3 help |
 | `exec:claude` label dispatch | `claude-code-dispatch.yml` | on `exec:claude` / `opened` | Local Tier-3 instructions (`make task ISSUE=N`) |
 | `exec:cursor` label dispatch | Cursor Automation (cloud) | on `exec:cursor` label event | Starts Cursor Cloud Agent session; quota-checked; fallback: `agent-dispatch-replay.yml` |
-| `exec:copilot` assign bridge | `copilot-issue-dispatch.lock.yml` (gh-aw) | on `exec:copilot` / `opened` | Assigns `@Copilot` via `assign-to-agent` safe output when quota allows |
 | Stuck dispatch replay | `agent-dispatch-replay.yml` | manual `workflow_dispatch` | Bounces `exec:*` labels on backlog issues |
 | Agent PR autolabel | `agent-pr-autolabel.yml` | on CI success | Adds `automerge-agent` to `cursor/*` / `copilot/*` PRs |
 | Agent PR auto-merge | `automerge-agent-prs.yml` | on `automerge-agent` label + green CI | Squash auto-merge for low-risk agent PRs |
-| Copilot PR lifecycle | `copilot-pr-lifecycle.lock.yml` (gh-aw) | every 10 min + manual | End-to-end `copilot/*` loop: issue link, mark-ready, CI, review, fix rounds, automerge |
-| Copilot targeted CI | `copilot-pr-targeted-ci.yml` | lifecycle dispatch (fallback) | Path-filtered checks when main CI has not run; posts `Copilot targeted CI` check on PR head SHA |
 | Agent PR finalizer | `agent-pr-finalizer.yml` | daily 07:00 UTC + manual | Backstop for `cursor/*` PRs; triage, fix dispatch, automerge when eligible |
 | PR quality gate | `pr-quality-gate.yml` | on PR open/edit | Blocks task/* branch merges without `/simplify` + `/review` checkboxes |
 | PR issue linkage | `pr-linkage.yml` | on PR open/edit | Blocks merge without `Fixes #N` / `Closes #N` |
