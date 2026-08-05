@@ -132,8 +132,9 @@ To update the landing page: edit `frontend/digithings-web/`, run the build scrip
 
 ### digithings.ai/chat — DigiChat marketing pane (Phase 3)
 
-> **Status:** code cutover lands with Phase 3; digithings-owned digichat at
-> `https://chat.digithings.ai` may still need ops (DNS/ACA/env) — see the ops checklist.
+> **Status:** digithings-owned ACA is live (interim FQDN in
+> `infra/digichat-digithings/README.md`); `chat.digithings.ai` DNS + ACA hostname
+> bind remain human steps — see the ops checklist.
 
 - **Shell:** Cloudflare Pages serves `/chat` with `DtNav` + iframe (`ChatEmbedShell`).
 - **Iframe target:** `{NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}/embed?host=https://digithings.ai` (no embed token for first-party hosts).
