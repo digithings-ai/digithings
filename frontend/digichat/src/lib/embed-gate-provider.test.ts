@@ -19,6 +19,11 @@ describe("consumeChatAccess", () => {
     expect(await consumeChatAccess("https://api.test/consume", "id.secret")).toBe("deny");
   });
 
+  it.each([400, 403])("denies invalid-token client errors (%s)", async (status) => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("invalid token", { status })));
+    expect(await consumeChatAccess("https://api.test/consume", "garbage")).toBe("deny");
+  });
+
   // Availability over strictness: an outage in the quota service must not break chat on every
   // embedding site. The documented consequence is that the cap is soft by construction.
   it("allows on a 500", async () => {

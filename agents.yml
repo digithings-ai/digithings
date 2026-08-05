@@ -34,14 +34,6 @@ scoring_thresholds:
 execution_tiers:
   # Minimum-capability ceiling: a lower tier must NEVER pick up a higher-tier task.
   # A human on Claude Code can take anything. See docs/agents/EXECUTION_TIERS.md.
-  - label: "exec:copilot"
-    name: "Tier 1 — GitHub Copilot (retired)"
-    scope: "Historical label only — no workflow dispatches or assigns this tier."
-    examples:
-      - "Closed issues and PRs created before retirement on 2026-08-05"
-    dispatch: "retired"
-    never:
-      - "New task assignment or automated dispatch"
   - label: "exec:cursor"
     name: "Tier 2 — Cursor Cloud Agent"
     scope: "One-paragraph spec, clear acceptance criteria, no mid-task dialogue."
@@ -71,8 +63,7 @@ execution_tiers:
 
 # Heuristics for default tier when a creator hasn't classified explicitly.
 # risk:high OR matches a human_gate → exec:claude.
-# risk:low + housekeeping (deps, lint, stale) → exec:cursor.
-# Everything not human-gated → exec:cursor.
+# Everything else → exec:cursor.
 tier_routing:
   claude_triggers:
     - "risk:high"
@@ -80,7 +71,7 @@ tier_routing:
     - "component:digikey (auth/JWT changes)"
     - "live-trading paths"
     - "cross-component integration"
-  cursor_default: true
+
 
 human_gates:
   - "Any change to auth, JWT, or cryptography code (digikey/)"
