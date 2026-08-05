@@ -1,7 +1,8 @@
 name: "Agent: Claude review"
 
-# Secondary PR reviewer (Tier 3 fallback). Primary PR review is handled by
-# Copilot — see .github/workflows/ci.yml request-copilot-review job.
+# Secondary PR reviewer (Tier 3 fallback). Primary PR review is Cursor Bugbot,
+# invoked on demand with a `bugbot run` comment — the Copilot request job in
+# ci.yml was retired 2026-08-05 when the subscription lapsed.
 #
 # Feature-flagged OFF by default. Opt-in via repo variable:
 #   Settings → Secrets and variables → Actions → Variables

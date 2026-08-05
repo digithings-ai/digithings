@@ -23,8 +23,8 @@ export const metadata: Metadata = {
   title: "digiquant — a quant research desk in a glass box you own",
   description:
     "The research stack an institutional desk would build — Atlas researches, Hermes sizes the risk, "
-    + "every run carrying one request id into a redacted audit trail. Open-source and self-hosted, so "
-    + "work that once needed a team runs for one.",
+    + "and every run writes a decision log under its own run id, redacted on the way out. Open-source "
+    + "and self-hosted, so work that once needed a team runs for one.",
   // Scheme-aware favicon tiles: the light tile on dark browser chrome and vice
   // versa. The `d` + block-cursor reduction, not the full `digi` lockup — five
   // character cells are illegible at 16px. Deliberately NOT an app/icon.svg:
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     title: "digiquant — a quant research desk in a glass box you own",
     description:
       "Atlas researches, Hermes sizes the risk, and the deliberation stays on the record. Open-source, "
-      + "self-hosted, traceable end to end.",
+      + "self-hosted, with a decision log per run.",
     url: "https://digiquant.io",
     type: "website",
   },
