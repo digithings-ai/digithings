@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.6.0...digichat-v0.7.0) (2026-08-06)
+
+
+### Features
+
+* **digichat:** accept and store the chat access token from the unlock message
+* **digichat:** send the chat access token at request time
+* **digichat:** add an optional per-tenant quota gate config
+* **digichat:** enforce chat quota server-side when a tenant configures a gate
+
 ## [0.6.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.5.0...digichat-v0.6.0) (2026-08-05)
 
 
