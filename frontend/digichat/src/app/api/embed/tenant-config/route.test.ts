@@ -74,4 +74,34 @@ describe("GET /api/embed/tenant-config", () => {
       attribution: false,
     });
   });
+
+  const DIGITHINGS_REGISTRY = JSON.stringify({
+    "digithings.ai": {
+      slug: "digithings",
+      aliases: ["www.digithings.ai"],
+      backend: {
+        type: "digivault",
+        supabaseUrlEnv: "DIGITHINGS_SUPABASE_URL",
+        supabaseAnonKeyEnv: "DIGITHINGS_SUPABASE_ANON_KEY",
+        openRouterKeyEnv: "DIGITHINGS_OPENROUTER_API_KEY",
+      },
+      gateMode: "ungated",
+      activityDetail: "full",
+      token: "digithings-schema-token",
+    },
+  });
+
+  it("returns digithings config for first-party host without token", async () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const res = await GET(
+      new Request("https://chat.example.com/api/embed/tenant-config", {
+        headers: { "X-Embed-Host": "https://digithings.ai" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.slug).toBe("digithings");
+    expect(body.gateMode).toBe("ungated");
+  });
 });
