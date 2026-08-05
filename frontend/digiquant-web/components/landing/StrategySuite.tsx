@@ -355,7 +355,7 @@ export function StrategySuite() {
             <span className="kicker">{"// pre-built strategy library"}</span>
             <h2 className="dq-title">Research-grade systems, ready to explore.</h2>
             <p className="dq-sub">
-              Browse calibrated backtests from the DigiQuant library — equity, drawdown, trade
+              Browse calibrated backtests from the digiquant library — equity, drawdown, trade
               logs, and full tearsheets for every release. More assets join the catalog as they
               clear the pipeline.
             </p>

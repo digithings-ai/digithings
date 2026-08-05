@@ -1,8 +1,8 @@
-# DigiSkills – Agent guide
+# digiskills – Agent guide
 
 ## Purpose
 
-DigiSkills compiles a source (a local codebase/docs path, or remote docs/
+digiskills compiles a source (a local codebase/docs path, or remote docs/
 OpenAPI URLs) into a standard, installable Agent Skill package (`SKILL.md` +
 `references/`). A pure-Python core library plus optional `cli`/`ingest`/`llm`
 extras — no FastAPI service yet.

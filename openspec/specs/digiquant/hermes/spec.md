@@ -1,4 +1,4 @@
-# DigiQuant / Hermes — Spec
+# digiquant / Hermes — Spec
 
 **Sub-graph of digiquant (port 8001)**  
 **Role:** Market data ingestion, signal generation, and strategy registry sub-graph.

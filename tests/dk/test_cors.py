@@ -1,4 +1,4 @@
-"""CORS allowlist tests for DigiKey (uses shared digibase.cors helper)."""
+"""CORS allowlist tests for digikey (uses shared digibase.cors helper)."""
 
 from __future__ import annotations
 

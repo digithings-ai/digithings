@@ -2,7 +2,7 @@
 
 Split from the former tests/dg/test_llm.py (#632 P2). These are the safety net
 for the auth/credential funnel: they assert that the header parsers feed digillm's
-override contextvars correctly and that DigiGraph's own ``(key, provider)`` BYOK
+override contextvars correctly and that digigraph's own ``(key, provider)`` BYOK
 record is preserved. Client-side key resolution now lives in digillm and is
 covered by digillm/tests/test_digillm.py.
 """
@@ -159,7 +159,7 @@ class TestByokHeader:
         assert digillm_get_byok() is None
 
     def test_anthropic_byok_does_not_feed_digillm(self) -> None:
-        """Anthropic BYOK is stored on DigiGraph's contextvar but NOT wired into the OpenAI client.
+        """Anthropic BYOK is stored on digigraph's contextvar but NOT wired into the OpenAI client.
 
         It falls through to the env-configured credentials, matching legacy behavior.
         """

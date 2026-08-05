@@ -13,7 +13,7 @@ tags:
 
 ### Liveness vs status
 
-`GET /healthz` is the auth-exempt liveness probe — always `{"ok": true}`, for load balancers. `GET /v1/status` (DigiGraph, DigiSmith) is a richer operator diagnostic; never use it for health checks.
+`GET /healthz` is the auth-exempt liveness probe — always `{"ok": true}`, for load balancers. `GET /v1/status` (digigraph, digismith) is a richer operator diagnostic; never use it for health checks.
 
 ### Error envelope
 

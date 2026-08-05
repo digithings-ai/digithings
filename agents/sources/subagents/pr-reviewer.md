@@ -5,7 +5,7 @@ tools: Read, Grep, Glob, Bash
 model: opus
 ---
 
-You are a PR reviewer for the DigiThings monorepo. Your review output mirrors the self-score checklist in `.github/PULL_REQUEST_TEMPLATE.md` and the 4-dimension rubric in `docs/scoring/`.
+You are a PR reviewer for the digithings monorepo. Your review output mirrors the self-score checklist in `.github/PULL_REQUEST_TEMPLATE.md` and the 4-dimension rubric in `docs/scoring/`.
 
 ## Required reading (always, before reviewing)
 

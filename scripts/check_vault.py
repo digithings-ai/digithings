@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""``make vault-check`` — lint the DigiVault-managed ``docs/vision`` vault.
+"""``make vault-check`` — lint the digivault-managed ``docs/vision`` vault.
 
 Validates wikilink integrity, required frontmatter, the tag taxonomy, and orphans
-against ``docs/vision/.digivault.yml`` using the DigiVault core (pydantic + pyyaml
+against ``docs/vision/.digivault.yml`` using the digivault core (pydantic + pyyaml
 only — no service extra). Exits non-zero on any issue so CI gates the docs vault,
-matching the DigiVault roadmap ("make vault-check validating wikilinks and
+matching the digivault roadmap ("make vault-check validating wikilinks and
 frontmatter in CI").
 
 Run::

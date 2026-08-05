@@ -1,4 +1,4 @@
-"""DigiKey token response includes litellm_proxy_api_key when DIGIKEY_LITELLM_PROXY_KEY is set."""
+"""digikey token response includes litellm_proxy_api_key when DIGIKEY_LITELLM_PROXY_KEY is set."""
 
 from __future__ import annotations
 

@@ -18,4 +18,4 @@ while read -r pid; do
   fi
 done < "$PIDFILE"
 rm -f "$PIDFILE"
-echo "Stopped local stack (DigiKey + LiteLLM + Python services from last run_stack_local)."
+echo "Stopped local stack (digikey + LiteLLM + Python services from last run_stack_local)."

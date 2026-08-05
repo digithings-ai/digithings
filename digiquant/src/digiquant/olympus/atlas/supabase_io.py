@@ -1,7 +1,7 @@
 """Supabase adapter for the Atlas sub-graph.
 
 Replaces the legacy ``scripts/publish_document.py`` and
-``scripts/materialize_snapshot.py`` write paths from inside the DigiGraph
+``scripts/materialize_snapshot.py`` write paths from inside the digigraph
 sub-graph. Same tables, same unique keys — the legacy scripts will be frozen
 in commit 9 so both paths can never write concurrently.
 
@@ -187,7 +187,7 @@ def _audit(event_type: str, payload: dict[str, Any]) -> None:
       doc_type, run_type). Never pass raw LLM payloads, response bodies,
       or ``content``/``payload``/``snapshot`` blobs — those may contain
       PII or prompt text that the shallow redactor will not scrub.
-    - This logger.info call emits to the standard logger; DigiGraph's
+    - This logger.info call emits to the standard logger; digigraph's
       ``audit.py`` wraps that into structured JSONL downstream.
     """
     logger.info("atlas_io audit: %s %s", event_type, redact_mapping(payload))

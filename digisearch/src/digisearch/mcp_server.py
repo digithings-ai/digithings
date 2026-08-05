@@ -1,4 +1,4 @@
-"""DigiSearch MCP server. Exposes document search as MCP tools for DigiGraph/DigiFlow."""
+"""digisearch MCP server. Exposes document search as MCP tools for digigraph/digiflow."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP(
-    "DigiSearch",
+    "digisearch",
     json_response=True,
 )
 
@@ -27,7 +27,7 @@ _digisearch_client: Any | None = None
 
 
 def create_mcp_with_indexes(client: object) -> FastMCP:
-    """Wire a DigiSearch client into the MCP server so tools use the real backend.
+    """Wire a digisearch client into the MCP server so tools use the real backend.
 
     Call this at startup when a configured client is available. Without it, tools
     fall back to the in-memory stub (development only).
@@ -35,7 +35,7 @@ def create_mcp_with_indexes(client: object) -> FastMCP:
     global _digisearch_client
     _digisearch_client = client
     if client is not None:
-        logger.info("DigiSearch MCP server wired to real client: %s", type(client).__name__)
+        logger.info("digisearch MCP server wired to real client: %s", type(client).__name__)
     else:
         logger.warning("create_mcp_with_indexes called with None — MCP tools will use stub backend")
     return mcp
@@ -48,7 +48,7 @@ def digisearch_query(
     top_k: int = 10,
     mode: str = "hybrid",
 ) -> str:
-    """Search documents in DigiSearch. Returns relevant chunks for RAG or agent context.
+    """Search documents in digisearch. Returns relevant chunks for RAG or agent context.
 
     Use this when you need to find information in ingested documents (research papers,
     strategy docs, compliance docs, etc.). Supports keyword, vector, and hybrid search.
@@ -62,8 +62,8 @@ def digisearch_query(
 
             response = SearchResponse(results=results)
         except (RuntimeError, ValueError, ImportError, OSError, TypeError) as e:
-            logger.error("DigiSearch client query failed: %s", e)
-            return f"[DigiSearch query error: {e}]"
+            logger.error("digisearch client query failed: %s", e)
+            return f"[digisearch query error: {e}]"
     else:
         allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
             "1",
@@ -71,7 +71,7 @@ def digisearch_query(
             "yes",
         )
         if not allow_stub:
-            return "DigiSearch MCP is not wired to a backend client and stub fallback is disabled."
+            return "digisearch MCP is not wired to a backend client and stub fallback is disabled."
         response = query_index(q, index_name=idx)
     if not response.results:
         return f"No results for query: {text!r}"
@@ -110,7 +110,7 @@ def search_strategies(
     run_type: str | None = None,
     index_name: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Semantic search over the Atlas research library indexed by DigiSearch.
+    """Semantic search over the Atlas research library indexed by digisearch.
 
     Filters are AND-combined. Date range filters use ``date_ordinal`` (an
     integer ``YYYYMMDD`` stamped at ingest); pass e.g. ``date_from_ymd=20260420``

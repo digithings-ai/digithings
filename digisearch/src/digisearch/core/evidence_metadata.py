@@ -1,4 +1,4 @@
-"""Normative evidence metadata for DigiSearch / DigiClone indexes.
+"""Normative evidence metadata for digisearch / digiclone indexes.
 
 Chunk and document metadata SHOULD include these keys when known so that
 `Query.filters` (structured) can restrict by tier, venue, year, and tags.
@@ -13,7 +13,7 @@ from typing import Any
 
 from digisearch.core.models import Chunk, Document
 
-# Evidence tier vocabulary (normative for DigiClone research indexes).
+# Evidence tier vocabulary (normative for digiclone research indexes).
 EVIDENCE_TIER_PEER_REVIEWED = "peer_reviewed"
 EVIDENCE_TIER_WORKING_PAPER = "working_paper"
 EVIDENCE_TIER_INDUSTRY = "industry"

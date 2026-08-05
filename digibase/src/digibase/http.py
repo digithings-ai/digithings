@@ -50,7 +50,7 @@ def outbound_service_headers(
     extra: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """
-    Merge correlation id, optional Bearer (DigiKey JWT or legacy API key material), and extra headers.
+    Merge correlation id, optional Bearer (digikey JWT or legacy API key material), and extra headers.
     *bearer_token* must be the raw secret or JWT (no ``Bearer `` prefix).
     """
     h: dict[str, str] = {}

@@ -1,5 +1,5 @@
 /**
- * DigiChat activity protocol — the vocabulary every backend provider emits and
+ * digichat activity protocol — the vocabulary every backend provider emits and
  * the shared UI renders.
  *
  * Field names follow OpenTelemetry GenAI semantic conventions (`operation` is

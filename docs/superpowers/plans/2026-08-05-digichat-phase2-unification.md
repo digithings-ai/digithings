@@ -1,4 +1,4 @@
-# DigiChat Phase 2 Unification Implementation Plan
+# digichat Phase 2 Unification Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -785,7 +785,7 @@ describe("mapDigigraphTraceToSpans", () => {
           sources: [
             {
               source_id: "doc-1",
-              snippet: "JWT exchange via DigiKey",
+              snippet: "JWT exchange via digikey",
               metadata: {
                 title: "Auth plane",
                 evidence_tier: "peer_reviewed",
@@ -813,7 +813,7 @@ describe("mapDigigraphTraceToSpans", () => {
           path: "doc-1",
           tier: "peer_reviewed",
           year: 2024,
-          snippet: "JWT exchange via DigiKey",
+          snippet: "JWT exchange via digikey",
         },
         {
           title: "10.1/x",
@@ -1662,7 +1662,7 @@ it("projects activity documents without body_markdown", async () => {
       JSON.stringify([
         {
           vault_path: "arch/digikey.md",
-          title: "DigiKey",
+          title: "digikey",
           body_markdown: "# secret body",
         },
       ]),
@@ -1678,7 +1678,7 @@ it("projects activity documents without body_markdown", async () => {
   expect(toolText).toContain("secret body"); // model context may include truncated body
   expect(JSON.stringify(activityDocuments)).not.toContain("secret body");
   expect(JSON.stringify(activityDocuments)).not.toContain("body_markdown");
-  expect(activityDocuments[0]).toEqual({ title: "DigiKey", path: "arch/digikey.md" });
+  expect(activityDocuments[0]).toEqual({ title: "digikey", path: "arch/digikey.md" });
 });
 
 // digivault-ndjson-adapter.test.ts

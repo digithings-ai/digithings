@@ -1,4 +1,4 @@
-"""DigiBase connectors — write clients for external services (Supabase, etc.).
+"""digibase connectors — write clients for external services (Supabase, etc.).
 
 The Supabase connector requires the optional ``digibase[supabase]`` extra. It is
 imported lazily so that ``import digibase.connectors`` and the base connector

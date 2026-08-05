@@ -123,7 +123,7 @@ export interface FxEventSnapshotRow {
 }
 
 /**
- * `economic_calendar` in the shared DigiQuant **core** project — upcoming macro catalysts.
+ * `economic_calendar` in the shared digiquant **core** project — upcoming macro catalysts.
  * Read for the next-14-day window, ordered by `event_datetime_utc`.
  *
  * Not a twelve-x table, despite living in this module. The calendar is shared, so #1066

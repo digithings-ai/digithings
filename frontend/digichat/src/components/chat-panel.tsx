@@ -353,7 +353,7 @@ export function ChatPanel({
             <div className="dc-term-row dc-term-row-assistant">
               <span className="dc-term-marker">▸</span>
               <div className="dc-term-body" style={{ color: "var(--text-secondary)" }}>
-                DigiChat ready. Ask a question or type <code className="font-mono">/help</code> for commands.
+                digichat ready. Ask a question or type <code className="font-mono">/help</code> for commands.
               </div>
             </div>
           ) : null}
@@ -510,7 +510,7 @@ export function ChatChrome({
   return (
     <header className="app-topbar">
       {leading}
-      <span className="app-topbar-title">{threadTitle || "DigiChat"}</span>
+      <span className="app-topbar-title">{threadTitle || "digichat"}</span>
       <span className="app-topbar-meta">{userSubtitle}</span>
     </header>
   );

@@ -128,9 +128,9 @@ gh run list -w copilot-quota-gate.yml -L 5
 
 ---
 
-## REM-059 — Hermes / DigiGraph pipeline decoupling (AUDIT-059)
+## REM-059 — Hermes / digigraph pipeline decoupling (AUDIT-059)
 
-**Status:** done (shim) — `digiquant.olympus.hermes.pipeline_builder` re-exports DigiGraph builder; Hermes entrypoints import the shim. Full copy/decouple deferred → [#579](https://github.com/digithings-ai/digithings/issues/579).
+**Status:** done (shim) — `digiquant.olympus.hermes.pipeline_builder` re-exports digigraph builder; Hermes entrypoints import the shim. Full copy/decouple deferred → [#579](https://github.com/digithings-ai/digithings/issues/579).
 
 ### In-repo artifacts
 
@@ -139,7 +139,7 @@ gh run list -w copilot-quota-gate.yml -L 5
 | `digiquant/src/digiquant/olympus/hermes/pipeline_builder.py` | Stable digiquant import path (Hermes) |
 | `digiquant/src/digiquant/olympus/hermes/graph.py` | Imports shim |
 | `digiquant/src/digiquant/olympus/hermes/chain.py` | Publish pass imports shim |
-| REM-048 | DigiQuant quant pipeline graph singleton cache |
+| REM-048 | digiquant quant pipeline graph singleton cache |
 
 ### Executable checklist (developer)
 
@@ -161,7 +161,7 @@ gh run list -w copilot-quota-gate.yml -L 5
 
 ---
 
-## REM-133 — E2E DigiSearch ingest/search step
+## REM-133 — E2E digisearch ingest/search step
 
 **Status:** Deferred to follow-up after stack secrets stable (`E2E_BEARER_TOKEN`).
 

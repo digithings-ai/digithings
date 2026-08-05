@@ -10,7 +10,7 @@ describe("mapDigigraphTraceToSpans", () => {
           sources: [
             {
               source_id: "doc-1",
-              snippet: "JWT exchange via DigiKey",
+              snippet: "JWT exchange via digikey",
               metadata: {
                 title: "Auth plane",
                 evidence_tier: "peer_reviewed",
@@ -38,7 +38,7 @@ describe("mapDigigraphTraceToSpans", () => {
           path: "doc-1",
           tier: "peer_reviewed",
           year: 2024,
-          snippet: "JWT exchange via DigiKey",
+          snippet: "JWT exchange via digikey",
         },
         {
           title: "10.1/x",

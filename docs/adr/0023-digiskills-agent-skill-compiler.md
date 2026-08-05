@@ -1,11 +1,11 @@
-# ADR-0023 — DigiSkills: agent-skill compiler and distribution module
+# ADR-0023 — digiskills: agent-skill compiler and distribution module
 
 **Status:** Proposed (2026-07-09)
 **Context:** Epic [#1453](https://github.com/digithings-ai/digithings/issues/1453), task [#1454](https://github.com/digithings-ai/digithings/issues/1454)
 
 ## Context
 
-A client already runs DigiChat embedded on their (Azure-hosted) documentation site, answering questions over their API docs. They now want to go further: give their own developers' coding agents (Claude Code, Cursor, etc.) a **downloadable skill** — installable into a project the same way any other agent skill is installed — so an agent writing integration code against the client's API has deep, current knowledge of it, sourced from their docs and codebase.
+A client already runs digichat embedded on their (Azure-hosted) documentation site, answering questions over their API docs. They now want to go further: give their own developers' coding agents (Claude Code, Cursor, etc.) a **downloadable skill** — installable into a project the same way any other agent skill is installed — so an agent writing integration code against the client's API has deep, current knowledge of it, sourced from their docs and codebase.
 
 No module in this repo does that today. What exists is adjacent but narrower:
 
@@ -18,21 +18,21 @@ This is a new module and a new external-distribution surface (third parties cons
 
 ## Options considered
 
-1. **Live MCP server as the distribution mechanism.** Matches the repo's MCP-first rule and every other module's pattern exactly. Rejected as the *primary* Phase 1 mechanism: it requires the client's agent environment to hold a live network connection and credentials to a DigiThings-hosted endpoint, which is a heavier ask than "install a skill" and puts hosting/availability/auth on the critical path for a client's local dev workflow. Not ruled out long-term — see Phase 4 below.
+1. **Live MCP server as the distribution mechanism.** Matches the repo's MCP-first rule and every other module's pattern exactly. Rejected as the *primary* Phase 1 mechanism: it requires the client's agent environment to hold a live network connection and credentials to a digithings-hosted endpoint, which is a heavier ask than "install a skill" and puts hosting/availability/auth on the critical path for a client's local dev workflow. Not ruled out long-term — see Phase 4 below.
 2. **Static installable package only, matching the Anthropic Agent Skills format exactly** (`SKILL.md` with YAML frontmatter + `references/`/`scripts/` — the same shape already used by `.claude/skills/` and `docs/agent-skills/` in this repo). Chosen for Phase 1: zero new runtime dependency or trust surface for the consumer, works offline once downloaded, and installs into `.claude/skills/`, Cursor rules, or any other agent's skill directory exactly like a hand-authored skill.
-3. **Build the generic external-codebase compiler first**, vs. building the "surface DigiThings' own modules as skills" version first. Chosen: build the generic compiler first, because that is the client's actual need. DigiThings' own modules become the first *dogfooding corpus* for validating the generator (its `ARCHITECTURE.md`/`AGENTS.md`/MCP manifests are convenient known-good input), not the primary design target.
+3. **Build the generic external-codebase compiler first**, vs. building the "surface digithings' own modules as skills" version first. Chosen: build the generic compiler first, because that is the client's actual need. digithings' own modules become the first *dogfooding corpus* for validating the generator (its `ARCHITECTURE.md`/`AGENTS.md`/MCP manifests are convenient known-good input), not the primary design target.
 4. **Full hosted platform/marketplace (self-serve ingestion, per-tenant catalog, live registry) as Phase 1.** Rejected for now — deliberately deferred. Running ingestion against a third party's private codebase/docs/API credentials is a new trust boundary that needs its own security review, and a hosting/multi-tenancy design is a second novel-architecture decision that shouldn't be bundled into this one.
 
 ## Decision
 
-Scaffold a new top-level module, `digiskills/`, following the standard DigiThings module pattern (see `digivault/ARCHITECTURE.md` for the reference shape): a pure-Python core library (`digiskills/src/digiskills/`, no FastAPI/service import at module load) plus a thin service/CLI layer behind optional extras (`[cli]` now; `[service]` later if/when a hosted mode is built), reusing `digibase` (error envelopes, metrics, CORS) and `digikey` (scopes) if and when a network-facing layer is added — never reimplementing auth.
+Scaffold a new top-level module, `digiskills/`, following the standard digithings module pattern (see `digivault/ARCHITECTURE.md` for the reference shape): a pure-Python core library (`digiskills/src/digiskills/`, no FastAPI/service import at module load) plus a thin service/CLI layer behind optional extras (`[cli]` now; `[service]` later if/when a hosted mode is built), reusing `digibase` (error envelopes, metrics, CORS) and `digikey` (scopes) if and when a network-facing layer is added — never reimplementing auth.
 
 **Core capability (P1):** a skill compiler. Given a source — a local codebase path, one or more docs/OpenAPI URLs, or a pre-built digisearch corpus — it:
 1. Ingests the source via `digisearch` (chunk/embed/retrieve) and `digifetch` (scrape docs/specs where no static export exists).
 2. Synthesizes a `SKILL.md` (YAML frontmatter: `name`, `description`/trigger heuristics) plus supporting `references/` and code-snippet files via an LLM pass (`digillm`), grounded in the retrieved corpus.
 3. Emits a plain directory/zip in the standard Agent Skills shape — no server, no new dependency for the consumer. This is what "install like any other skill" means concretely: drop the folder into `.claude/skills/<name>/`, a Cursor skills path, etc.
 
-**Dogfooding (P2):** run the same compiler against DigiThings' own `ARCHITECTURE.md`/`AGENTS.md`/MCP tool manifests to produce skill packages for digigraph, digisearch, digiquant, etc. This validates the generator against content we already control and incidentally satisfies the original "surface DigiThings modules as skills" ask, without being the thing the generator was designed around.
+**Dogfooding (P2):** run the same compiler against digithings' own `ARCHITECTURE.md`/`AGENTS.md`/MCP tool manifests to produce skill packages for digigraph, digisearch, digiquant, etc. This validates the generator against content we already control and incidentally satisfies the original "surface digithings modules as skills" ask, without being the thing the generator was designed around.
 
 **External pilot (P3):** run the compiler against the client's actual docs/API. Explicitly gated: this is the point where private third-party content and possibly API credentials enter the ingestion pipeline, and it requires its own security review before any client data is processed — not covered by this ADR.
 
@@ -45,7 +45,7 @@ Scaffold a new top-level module, `digiskills/`, following the standard DigiThing
 - Reuses three existing libraries (digisearch, digifetch, digillm) instead of building a new ingestion/synthesis stack from scratch.
 - Static-package distribution adds no new attack surface or always-on dependency for whoever installs the skill — it's just files, consistent with how Claude/Cursor/etc. already expect skills to arrive.
 - Standard module scaffold keeps `digiskills` consistent with every other component's docs, test command, and extras convention, so `AGENT_WORKFLOW.md`'s existing playbook (read AGENTS.md/ARCHITECTURE.md first, `pytest -m unit -k digiskills`, `make score`) applies unchanged.
-- Dogfooding against DigiThings' own modules gives a free, already-correct test corpus before any client content is touched.
+- Dogfooding against digithings' own modules gives a free, already-correct test corpus before any client content is touched.
 
 ### Negative / tradeoffs
 

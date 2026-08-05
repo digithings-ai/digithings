@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make Atlas research phases produce substantive output by grounding the LLM on real data — via a DigiQuant data tool over Supabase (price/technicals/macro) and Grok Live Search (curated domains) — instead of the current freshness-snapshot-only context.
+**Goal:** Make Atlas research phases produce substantive output by grounding the LLM on real data — via a digiquant data tool over Supabase (price/technicals/macro) and Grok Live Search (curated domains) — instead of the current freshness-snapshot-only context.
 
 **Architecture:** Equip `run_research_agent` with tools. (1) An in-process + MCP "data tool" reads the `price_technicals`/`macro_series_observations` tables we already maintain. (2) Grok Live Search is enabled per call via `search_parameters` passed through the OpenAI-compatible client's `extra_body`, scoped to a checked-in domain allowlist. Phases run a tool loop (`chat_completion_with_tools`) then validate the final JSON against the Pydantic schema using the existing retry loop (function-tools and `response_format=json_schema` are mutually exclusive; Live Search is orthogonal).
 

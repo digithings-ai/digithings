@@ -1,4 +1,4 @@
-# Agent Guide: DigiFetch
+# Agent Guide: digifetch
 
 <!--
 Scorer false positive: this guide references the stdlib ``sleep`` builtin in prose to
@@ -9,8 +9,8 @@ Suppress that rule for this file:
 
 ## Purpose
 
-DigiFetch is a **shared Python library** (`digifetch` package): the reusable
-**web-scraping / headless-fetch engine** for DigiThings. It provides headless-
+digifetch is a **shared Python library** (`digifetch` package): the reusable
+**web-scraping / headless-fetch engine** for digithings. It provides headless-
 browser **session lifecycle**, composable **retry/backoff**, a min-interval
 **rate limiter**, and an httpx **fetch/download** path with a Playwright→HTTP
 **cookie hand-off**. It has **no server, no port, no service coupling** and reads

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-create_backlog_batch.py — Batch-create the DigiThings 12-month backlog.
+create_backlog_batch.py — Batch-create the digithings 12-month backlog.
 
 Creates ~57 GitHub issues covering all module roadmap items, assigns them to
 the correct module project board, and prints a TSV for set_project_fields.sh.
@@ -47,25 +47,25 @@ ISSUES = [
         component="root", type="feat", risk="med", priority="high", complexity="L",
         model="opus", milestone=None,
         labels_extra=["type:feature", "complexity:L", "priority:high"],
-        title="[Epic] DigiLink — connection and translation layer",
+        title="[Epic] digilink — connection and translation layer",
         body="""\
 ## Goal
-Establish DigiLink as a first-class module that serves as the universal connection layer for DigiThings — both internally between modules (standardised HTTP/gRPC) and externally to any protocol a client needs (REST, MCP, CLI, Docker, webhooks). Every DigiThings capability is defined once and exposed through multiple protocol adapters derived from that single definition.
+Establish digilink as a first-class module that serves as the universal connection layer for digithings — both internally between modules (standardised HTTP/gRPC) and externally to any protocol a client needs (REST, MCP, CLI, Docker, webhooks). Every digithings capability is defined once and exposed through multiple protocol adapters derived from that single definition.
 
 ## Why this epic
-Currently each module exposes its own REST API independently with no shared translation layer. Adding MCP support, a CLI, or a desktop AI connector requires manual work per module. DigiLink eliminates this by generating adapters from a central capability registry.
+Currently each module exposes its own REST API independently with no shared translation layer. Adding MCP support, a CLI, or a desktop AI connector requires manual work per module. digilink eliminates this by generating adapters from a central capability registry.
 
 ## Sub-tasks (in digisearch / digigraph project boards)
-- [ ] DigiLink module scaffold — capability registry and adapter framework
+- [ ] digilink module scaffold — capability registry and adapter framework
 - [ ] MCP adapter generation from OpenAPI specs
 - [ ] CLI wrapper auto-generation from REST endpoints
 - [ ] Desktop AI connector library (Claude Desktop, Cursor, Windsurf)
 - [ ] Webhook/event connector for async integrations
 
 ## Acceptance Criteria
-- [ ] Every DigiThings capability is reachable via REST, MCP tool, and CLI without per-module adapter code
-- [ ] Adding a new module requires only registering it in DigiLink — no new adapter code
-- [ ] Claude Desktop can call DigiQuant backtest tools via MCP
+- [ ] Every digithings capability is reachable via REST, MCP tool, and CLI without per-module adapter code
+- [ ] Adding a new module requires only registering it in digilink — no new adapter code
+- [ ] Claude Desktop can call digiquant backtest tools via MCP
 - [ ] `docs/vision/digilink.md` reflects implementation state
 
 ## Documentation to Update
@@ -78,21 +78,21 @@ Currently each module exposes its own REST API independently with no shared tran
         component="root", type="feat", risk="low", priority="high", complexity="L",
         model="sonnet", milestone=None,
         labels_extra=["type:feature", "complexity:L", "priority:high"],
-        title="[Epic] DigiStore — standalone storage abstraction module",
+        title="[Epic] digistore — standalone storage abstraction module",
         body="""\
 ## Goal
-Extract and build DigiStore as a proper standalone module — the unified storage abstraction layer for the entire DigiThings ecosystem. Currently DigiStore exists only as a thin session/dataset cache inside DigiGraph. The standalone module provides one interface over SQLite (local dev), Postgres/Supabase (production), and S3/MinIO (file storage), with OpenBB as the data retrieval layer underneath.
+Extract and build digistore as a proper standalone module — the unified storage abstraction layer for the entire digithings ecosystem. Currently digistore exists only as a thin session/dataset cache inside digigraph. The standalone module provides one interface over SQLite (local dev), Postgres/Supabase (production), and S3/MinIO (file storage), with OpenBB as the data retrieval layer underneath.
 
 ## Sub-tasks (tracked separately)
-- [ ] DigiStore standalone module scaffold (new top-level module)
+- [ ] digistore standalone module scaffold (new top-level module)
 - [ ] Backend registry: SQLite, Postgres/Supabase, S3/MinIO
 - [ ] OpenBB integration as data retrieval layer
 - [ ] Dockerized local dev stack
 
 ## Acceptance Criteria
-- [ ] DigiStore is a standalone Python package importable independently of DigiGraph
+- [ ] digistore is a standalone Python package importable independently of digigraph
 - [ ] SQLite, Supabase, and MinIO backends all work via the same interface
-- [ ] DigiGraph's existing Digistore functionality migrated without regression
+- [ ] digigraph's existing Digistore functionality migrated without regression
 - [ ] `docs/vision/digistore.md` reflects implementation state
 
 ## Documentation to Update
@@ -105,13 +105,13 @@ Extract and build DigiStore as a proper standalone module — the unified storag
         component="root", type="feat", risk="high", priority="critical", complexity="XL",
         model="opus", milestone=None,
         labels_extra=["type:feature", "complexity:XL", "priority:critical"],
-        title="[Epic] DigiKey — SSO federation and org/project membership",
+        title="[Epic] digikey — SSO federation and org/project membership",
         body="""\
 ## Goal
-Extend DigiKey beyond API key management to a full identity platform: SSO federation (Microsoft OIDC/SAML, Google OIDC), organization and project membership model, and resource-level JWT claims that encode which specific indexes, sub-graphs, and data views a user can access.
+Extend digikey beyond API key management to a full identity platform: SSO federation (Microsoft OIDC/SAML, Google OIDC), organization and project membership model, and resource-level JWT claims that encode which specific indexes, sub-graphs, and data views a user can access.
 
 ## Why now
-Enterprise client onboarding (e.g. a company using Microsoft) requires employees to log in with corporate credentials. DigiChat's adaptive UI requires fine-grained JWT scopes. DigiSearch's per-user result filtering requires resource-level claims.
+Enterprise client onboarding (e.g. a company using Microsoft) requires employees to log in with corporate credentials. digichat's adaptive UI requires fine-grained JWT scopes. digisearch's per-user result filtering requires resource-level claims.
 
 ## Sub-tasks (in digikey project board)
 - [ ] Microsoft OIDC/SAML SSO integration
@@ -122,9 +122,9 @@ Enterprise client onboarding (e.g. a company using Microsoft) requires employees
 - [ ] Scheduled JWKS rotation with zero-downtime overlap
 
 ## Acceptance Criteria
-- [ ] An enterprise user can log in with their Microsoft account and receive a DigiKey JWT
+- [ ] An enterprise user can log in with their Microsoft account and receive a digikey JWT
 - [ ] The JWT contains their org ID, project ID, and allowed resource list
-- [ ] DigiSearch filters results based on JWT claims without code changes per client
+- [ ] digisearch filters results based on JWT claims without code changes per client
 - [ ] `docs/vision/digikey.md` reflects implementation state
 
 ## Documentation to Update
@@ -137,19 +137,19 @@ Enterprise client onboarding (e.g. a company using Microsoft) requires employees
         component="root", type="feat", risk="med", priority="high", complexity="XL",
         model="opus", milestone=None,
         labels_extra=["type:feature", "complexity:XL", "priority:high"],
-        title="[Epic] DigiClaw — OpenClaw integration and autonomous agent scheduling",
+        title="[Epic] digiclaw — OpenClaw integration and autonomous agent scheduling",
         body="""\
 ## Goal
-Build out DigiClaw from its current heartbeat/audit MVP into the always-on agent orchestration layer: OpenClaw runtime integration, agent definition schema, cron/continuous scheduling, and the Atlas daily cycle running automatically without manual execution.
+Build out digiclaw from its current heartbeat/audit MVP into the always-on agent orchestration layer: OpenClaw runtime integration, agent definition schema, cron/continuous scheduling, and the Atlas daily cycle running automatically without manual execution.
 
 ## Sub-tasks (in digiclaw project board)
 - [ ] OpenClaw runtime integration
 - [ ] Agent definition schema and registry
 - [ ] Cron and continuous scheduling
-- [ ] Atlas daily cycle automation — DigiClaw scheduled job
+- [ ] Atlas daily cycle automation — digiclaw scheduled job
 - [ ] Strategy performance monitor agent
 - [ ] ADDM — Adaptive Drift Detection Monitor (rewrite from stub)
-- [ ] DigiClaw dashboard — agent status and audit log viewer
+- [ ] digiclaw dashboard — agent status and audit log viewer
 
 ## Acceptance Criteria
 - [ ] Atlas daily delta, weekly full-gen, and monthly rollup run automatically on schedule
@@ -170,17 +170,17 @@ Build out DigiClaw from its current heartbeat/audit MVP into the always-on agent
         title="[Epic] digithings.ai and digiquant.io — live website demos",
         body="""\
 ## Goal
-Deploy two embedded DigiChat instances — one on digithings.ai (platform overview, DigiThings docs indexed, 3-question free tier) and one on digiquant.io (investment profiling entry flow, paywall into Kairos). Both showcase BYOK model selection and the DigiThings modularity story.
+Deploy two embedded digichat instances — one on digithings.ai (platform overview, digithings docs indexed, 3-question free tier) and one on digiquant.io (investment profiling entry flow, paywall into Kairos). Both showcase BYOK model selection and the digithings modularity story.
 
 ## Sub-tasks (in digichat and digisearch project boards)
-- [ ] digithings-guide index — DigiThings docs indexed and live
+- [ ] digithings-guide index — digithings docs indexed and live
 - [ ] digithings.ai demo instance — 3-question free tier, model selector
 - [ ] digiquant.io investment profiling entry flow
 
 ## Acceptance Criteria
-- [ ] A visitor to digithings.ai can ask 3 questions about DigiThings without an API key
+- [ ] A visitor to digithings.ai can ask 3 questions about digithings without an API key
 - [ ] BYOK input allows continuing with their own key
-- [ ] digiquant.io investment profiling saves a user profile to DigiStore
+- [ ] digiquant.io investment profiling saves a user profile to digistore
 - [ ] Both demos are live and monitored
 
 ## Documentation to Update
@@ -188,19 +188,19 @@ Deploy two embedded DigiChat instances — one on digithings.ai (platform overvi
 """,
     ),
 
-    # ── DigiQuant (Project #2) ─────────────────────────────────────────────────
+    # ── digiquant (Project #2) ─────────────────────────────────────────────────
 
     dict(
         component="digiquant", type="feat", risk="high", priority="critical", complexity="XL",
         model="opus", milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:XL", "priority:critical", "stage:ideation"],
-        title="[FEATURE] Migrate Atlas research cycles to DigiGraph sub-graphs",
+        title="[FEATURE] Migrate Atlas research cycles to digigraph sub-graphs",
         body="""\
 ## Goal
-Rebuild Atlas from manual instruction files and scripts into a deterministic DigiGraph sub-graph execution graph. The result: a reliable, scheduled Atlas pipeline with parallel research layer execution (data → sector → macro), batched API calls, Pydantic structured outputs at every node, and prompt caching to minimise cost.
+Rebuild Atlas from manual instruction files and scripts into a deterministic digigraph sub-graph execution graph. The result: a reliable, scheduled Atlas pipeline with parallel research layer execution (data → sector → macro), batched API calls, Pydantic structured outputs at every node, and prompt caching to minimise cost.
 
 ## From scratch
-YES — current Atlas is ad-hoc scripts requiring manual execution and backfilling. A full DigiGraph implementation is needed, not a refactor.
+YES — current Atlas is ad-hoc scripts requiring manual execution and backfilling. A full digigraph implementation is needed, not a refactor.
 
 ## Acceptance Criteria
 - [ ] Atlas sub-graph runs without manual intervention when triggered
@@ -208,7 +208,7 @@ YES — current Atlas is ad-hoc scripts requiring manual execution and backfilli
 - [ ] All LLM calls use structured outputs (Pydantic v2 models)
 - [ ] Prompt caching enabled on all repeated-context calls
 - [ ] Daily Digest generated fresh; other documents delta-patched
-- [ ] Sub-graph can be scheduled via DigiClaw
+- [ ] Sub-graph can be scheduled via digiclaw
 - [ ] `digiquant/ARCHITECTURE.md` and `digigraph/ARCHITECTURE.md` updated
 
 ## Files affected (new)
@@ -218,7 +218,7 @@ YES — current Atlas is ad-hoc scripts requiring manual execution and backfilli
 - `digigraph/src/digigraph/graph/atlas/prompts.py`
 
 ## Dependencies
-None — this is the foundation for Hermes, Kairos, and DigiClaw Atlas runner.
+None — this is the foundation for Hermes, Kairos, and digiclaw Atlas runner.
 
 ## Parallelizable: NO — blocks Hermes (#8), Atlas runner (#47)
 ## Model: opus — complex orchestration, parallel sub-graph design
@@ -241,7 +241,7 @@ YES — new capability, no existing implementation.
 - [ ] Delta instruction format defined (Pydantic v2 model): operation, location, content
 - [ ] Delta application is idempotent — re-applying the same delta is safe
 - [ ] Full document regeneration still works when triggered (weekly cadence)
-- [ ] Delta documents are NOT indexed by DigiSearch (only resolved final state)
+- [ ] Delta documents are NOT indexed by digisearch (only resolved final state)
 - [ ] Unit tests for delta application edge cases (insert, replace, delete, append)
 
 ## Files affected (new)
@@ -261,7 +261,7 @@ YES — new capability, no existing implementation.
         title="[FEATURE] Hermes portfolio deliberation pipeline",
         body="""\
 ## Goal
-Build the Hermes deliberation pipeline as DigiGraph sub-graphs: a multi-agent system that takes Atlas research, constructs investment theses, maps them to acceptable assets (filtered by user profile), runs parallel analyst agents per asset (bull/bear/headwinds/tailwinds), deliberates with a portfolio manager agent, and produces a final portfolio weight output.
+Build the Hermes deliberation pipeline as digigraph sub-graphs: a multi-agent system that takes Atlas research, constructs investment theses, maps them to acceptable assets (filtered by user profile), runs parallel analyst agents per asset (bull/bear/headwinds/tailwinds), deliberates with a portfolio manager agent, and produces a final portfolio weight output.
 
 ## From scratch
 YES — Hermes does not exist yet. Full build.
@@ -295,21 +295,21 @@ YES — Hermes does not exist yet. Full build.
         component="digiquant", type="feat", risk="med", priority="high", complexity="L",
         model="sonnet", milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:L", "priority:high"],
-        title="[FEATURE] Kairos strategy exploration DigiChat interface",
+        title="[FEATURE] Kairos strategy exploration digichat interface",
         body="""\
 ## Goal
-Build the Kairos product-mode interface: a DigiChat experience where a user describes a trading idea and Kairos researches (tapping Atlas research + Hermes recommendations), derives candidate strategies, sends them through VectorBT sweep rounds, refines with NautilusTrader, and presents results. Multi-strategy parallel research rounds at scale.
+Build the Kairos product-mode interface: a digichat experience where a user describes a trading idea and Kairos researches (tapping Atlas research + Hermes recommendations), derives candidate strategies, sends them through VectorBT sweep rounds, refines with NautilusTrader, and presents results. Multi-strategy parallel research rounds at scale.
 
 ## From scratch
 YES — the product interface does not exist. Current Kairos is developer-facing CLI/scripts only.
 
 ## Acceptance Criteria
-- [ ] User can describe a strategy idea in natural language via DigiChat
+- [ ] User can describe a strategy idea in natural language via digichat
 - [ ] Kairos sub-graph retrieves relevant Atlas research and Hermes recommendations
 - [ ] VectorBT runs parameter sweep (multiple variations in parallel)
 - [ ] Top candidates passed to NautilusTrader for final backtest validation
-- [ ] Results (metrics, equity curve link) returned to DigiChat
-- [ ] Strategy saved to DigiStore (Supabase) on user approval
+- [ ] Results (metrics, equity curve link) returned to digichat
+- [ ] Strategy saved to digistore (Supabase) on user approval
 - [ ] `digiquant/ARCHITECTURE.md` updated
 
 ## Files affected (new)
@@ -328,14 +328,14 @@ YES — the product interface does not exist. Current Kairos is developer-facing
         component="digiquant", type="feat", risk="low", priority="high", complexity="M",
         model="sonnet", milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:integration", "complexity:M", "priority:high"],
-        title="[INTEGRATION] OpenBB as DigiStore data retrieval layer",
+        title="[INTEGRATION] OpenBB as digistore data retrieval layer",
         body="""\
 ## Goal
-Integrate OpenBB SDK as the data aggregation layer beneath DigiStore. OpenBB unifies ~100 free data sources (price, fundamentals, macro, crypto, news, options) under one SDK. DigiStore wraps OpenBB for retrieval and persists results to Supabase/S3 for caching.
+Integrate OpenBB SDK as the data aggregation layer beneath digistore. OpenBB unifies ~100 free data sources (price, fundamentals, macro, crypto, news, options) under one SDK. digistore wraps OpenBB for retrieval and persists results to Supabase/S3 for caching.
 
 ## Acceptance Criteria
 - [ ] OpenBB installed and configured in `digiquant/`
-- [ ] `DigiStoreOpenBBAdapter` wraps OpenBB calls with DigiStore caching
+- [ ] `DigiStoreOpenBBAdapter` wraps OpenBB calls with digistore caching
 - [ ] At minimum: price history, fundamental data (EdgarTools), macro (FRED), crypto (CoinGecko)
 - [ ] Cached data served from Supabase; only fetches fresh when cache is stale
 - [ ] Unit tests with mocked OpenBB responses
@@ -363,13 +363,13 @@ Build deployment connectors that take a validated Kairos strategy (passed Nautil
 ## Non-negotiables
 - Human approval gate REQUIRED before any live deployment — non-bypassable
 - No live-trading path touched without this gate
-- Audit trail via DigiClaw for every deployment action
+- Audit trail via digiclaw for every deployment action
 
 ## Acceptance Criteria
 - [ ] `AlpacaDeployment` and `QuantConnectDeployment` classes implement `DeploymentBase`
 - [ ] Paper trading validation step mandatory before live deployment option appears
-- [ ] Human approval gate: deployment cannot proceed without explicit human sign-off in DigiChat
-- [ ] DigiClaw audit log captures every deployment action
+- [ ] Human approval gate: deployment cannot proceed without explicit human sign-off in digichat
+- [ ] digiclaw audit log captures every deployment action
 - [ ] `digiquant/ARCHITECTURE.md` updated
 
 ## Files affected (new)
@@ -418,11 +418,11 @@ Add VectorBT as the fast strategy ideation layer alongside NautilusTrader. Vecto
         title="[FEATURE] digiquant.io investment profiling entry flow",
         body="""\
 ## Goal
-Build the digiquant.io free-tier entry experience: a structured investment profiling chat that collects user preferences (risk tolerance, time horizon, asset classes, investment goals), saves the profile to DigiStore, and shows what Atlas/Hermes could produce for their profile. Paywall trigger: "Ready to build your first strategy? Start with Kairos."
+Build the digiquant.io free-tier entry experience: a structured investment profiling chat that collects user preferences (risk tolerance, time horizon, asset classes, investment goals), saves the profile to digistore, and shows what Atlas/Hermes could produce for their profile. Paywall trigger: "Ready to build your first strategy? Start with Kairos."
 
 ## Acceptance Criteria
-- [ ] Investment profiling sub-graph collects profile via structured DigiChat conversation
-- [ ] User profile saved to DigiStore (Supabase) as `InvestmentProfile` Pydantic model
+- [ ] Investment profiling sub-graph collects profile via structured digichat conversation
+- [ ] User profile saved to digistore (Supabase) as `InvestmentProfile` Pydantic model
 - [ ] Sample Atlas research summary shown relevant to their stated interests
 - [ ] Paywall trigger rendered at end of free flow
 - [ ] Free tier: no API key required (cheap model, limited tokens)
@@ -438,13 +438,13 @@ Build the digiquant.io free-tier entry experience: a structured investment profi
 """,
     ),
 
-    # ── DigiGraph (Project #3) ─────────────────────────────────────────────────
+    # ── digigraph (Project #3) ─────────────────────────────────────────────────
 
     dict(
         component="digigraph", type="fix", risk="high", priority="critical", complexity="M",
         model="opus", milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:critical"],
-        title="[SECURITY] DigiGraph security hardening — IMPROVEMENT_PLAN Phase 1",
+        title="[SECURITY] digigraph security hardening — IMPROVEMENT_PLAN Phase 1",
         body="""\
 ## Goal
 Close the 8 critical security gaps identified in `docs/IMPROVEMENT_PLAN_V2.md` Phase 1. These are blocking — none of the public-facing deployments (digithings.ai, digiquant.io) should go live until these are resolved.
@@ -452,11 +452,11 @@ Close the 8 critical security gaps identified in `docs/IMPROVEMENT_PLAN_V2.md` P
 ## Items to fix
 1. API key timing attack — constant-time comparison (1-line fix)
 2. Path traversal — resolve-first pattern in `path_utils.py` (new util, 4 callsites)
-3. OData filter injection — grammar validator or raw-filter allowlist in DigiSearch
-4. Session ID length limit — 1 line in DigiGraph
-5. DigiSearch stub explicit error — show "no_backend_configured" not fake results
+3. OData filter injection — grammar validator or raw-filter allowlist in digisearch
+4. Session ID length limit — 1 line in digigraph
+5. digisearch stub explicit error — show "no_backend_configured" not fake results
 6. CORS default — require explicit allowlist, not `["*"]`
-7. Data directory traversal in DigiQuant — 4 lines
+7. Data directory traversal in digiquant — 4 lines
 8. Sandbox `execute_python.py` — gate behind env var or subprocess sandbox
 
 ## Acceptance Criteria
@@ -484,10 +484,10 @@ Close the 8 critical security gaps identified in `docs/IMPROVEMENT_PLAN_V2.md` P
         title="[FEATURE] Investor document builder sub-graph",
         body="""\
 ## Goal
-Build a proprietary DigiGraph sub-graph that takes an investment thesis, selected assets, and user context, and produces a formal investor document: executive summary, thesis statement, asset analysis, risk factors, and recommended allocation. Output: structured Pydantic model + formatted markdown.
+Build a proprietary digigraph sub-graph that takes an investment thesis, selected assets, and user context, and produces a formal investor document: executive summary, thesis statement, asset analysis, risk factors, and recommended allocation. Output: structured Pydantic model + formatted markdown.
 
 ## Acceptance Criteria
-- [ ] Sub-graph registered in DigiGraph tool registry
+- [ ] Sub-graph registered in digigraph tool registry
 - [ ] Accepts: thesis (str), assets (list), user_context (dict)
 - [ ] Produces: `InvestorDocument` Pydantic v2 model with all required sections
 - [ ] Formatted markdown output suitable for export to PDF
@@ -511,21 +511,21 @@ Build a proprietary DigiGraph sub-graph that takes an investment thesis, selecte
         title="[FEATURE] Scholarly article synthesis sub-graph",
         body="""\
 ## Goal
-Build a sub-graph that ingests scholarly articles (PDFs or URLs), extracts key findings, and synthesises them into a structured research note saved to the DigiStore research library. Feeds the Atlas knowledge base with academic-quality content.
+Build a sub-graph that ingests scholarly articles (PDFs or URLs), extracts key findings, and synthesises them into a structured research note saved to the digistore research library. Feeds the Atlas knowledge base with academic-quality content.
 
 ## Acceptance Criteria
 - [ ] Sub-graph accepts: list of article URLs or file paths
-- [ ] Uses DigiSearch PDF parser for ingestion
+- [ ] Uses digisearch PDF parser for ingestion
 - [ ] Produces: `ResearchNote` Pydantic v2 model (title, key findings, methodology, implications, citations)
-- [ ] Saves to DigiStore research library with proper metadata
-- [ ] Registered as a DigiGraph tool
+- [ ] Saves to digistore research library with proper metadata
+- [ ] Registered as a digigraph tool
 - [ ] Unit tests with sample article fixture
 
 ## Files affected (new)
 - `digigraph/src/digigraph/graph/subgraphs/article_synthesis.py`
 - `tests/dg/test_article_synthesis.py`
 
-## Dependencies: DigiSearch PDF parsing (already exists), DigiStore
+## Dependencies: digisearch PDF parsing (already exists), digistore
 ## Parallelizable: YES — alongside investor_doc sub-graph
 ## Model: sonnet
 """,
@@ -538,14 +538,14 @@ Build a sub-graph that ingests scholarly articles (PDFs or URLs), extracts key f
         title="[FEATURE] Exploration agent sub-graph — exhaustive index search",
         body="""\
 ## Goal
-Build a fast, cheap exploration agent sub-graph that exhaustively searches a DigiSearch index to uncover every relevant piece of information before synthesis. Uses a cheap/fast model (e.g. Haiku) with quick iterations. The "deep search" pattern — analogous to Perplexity's deep research mode.
+Build a fast, cheap exploration agent sub-graph that exhaustively searches a digisearch index to uncover every relevant piece of information before synthesis. Uses a cheap/fast model (e.g. Haiku) with quick iterations. The "deep search" pattern — analogous to Perplexity's deep research mode.
 
 ## Acceptance Criteria
 - [ ] Sub-graph accepts: query (str), index_name (str), max_iterations (int, default 10)
 - [ ] Uses cheap model (configurable, default haiku/flash)
 - [ ] Iteratively refines search queries based on what's been found
 - [ ] Returns: `ExplorationResult` — ranked findings with source references
-- [ ] Registered as a DigiGraph tool callable by other sub-graphs
+- [ ] Registered as a digigraph tool callable by other sub-graphs
 - [ ] Cost guard: stops at max_iterations or when coverage metric plateaus
 - [ ] Unit tests
 
@@ -553,7 +553,7 @@ Build a fast, cheap exploration agent sub-graph that exhaustively searches a Dig
 - `digigraph/src/digigraph/graph/subgraphs/exploration.py`
 - `tests/dg/test_exploration.py`
 
-## Dependencies: DigiSearch (already exists)
+## Dependencies: digisearch (already exists)
 ## Parallelizable: YES
 ## Model: sonnet
 """,
@@ -566,13 +566,13 @@ Build a fast, cheap exploration agent sub-graph that exhaustively searches a Dig
         title="[FEATURE] Graphiti graph memory integration",
         body="""\
 ## Goal
-Integrate Graphiti (temporal knowledge graph) as an optional persistent memory backend for DigiGraph. Enables cross-session knowledge accumulation — agents remember what they learned, who said what, and how the world has changed over time. Particularly valuable for Atlas (remembering past research conclusions) and Hermes (tracking thesis evolution).
+Integrate Graphiti (temporal knowledge graph) as an optional persistent memory backend for digigraph. Enables cross-session knowledge accumulation — agents remember what they learned, who said what, and how the world has changed over time. Particularly valuable for Atlas (remembering past research conclusions) and Hermes (tracking thesis evolution).
 
 ## Acceptance Criteria
 - [ ] Graphiti installed as optional dependency (`digigraph[memory]`)
 - [ ] `GraphitiMemory` implements `MemoryBase` interface
 - [ ] Activated via `DIGI_MEMORY_BACKEND=graphiti` env var
-- [ ] DigiGraph nodes can read/write to the knowledge graph
+- [ ] digigraph nodes can read/write to the knowledge graph
 - [ ] No regression when Graphiti is not configured (graceful fallback)
 - [ ] `digigraph/ARCHITECTURE.md` updated
 
@@ -594,11 +594,11 @@ Integrate Graphiti (temporal knowledge graph) as an optional persistent memory b
         title="[FEATURE] Remote MCP enumeration — discover external MCP servers at runtime",
         body="""\
 ## Goal
-Extend the DigiGraph tool registry to enumerate and integrate external MCP servers at runtime. A DigiGraph instance can discover tools from any MCP server pointed at it via config, making the tool registry open and extensible without code changes.
+Extend the digigraph tool registry to enumerate and integrate external MCP servers at runtime. A digigraph instance can discover tools from any MCP server pointed at it via config, making the tool registry open and extensible without code changes.
 
 ## Acceptance Criteria
 - [ ] `DIGI_MCP_SERVERS` env var accepts comma-separated MCP server URLs
-- [ ] At startup, DigiGraph enumerates tools from each configured MCP server
+- [ ] At startup, digigraph enumerates tools from each configured MCP server
 - [ ] Enumerated tools appear in the tool registry alongside built-in tools
 - [ ] Tool calls are proxied to the correct MCP server transparently
 - [ ] `digigraph/ARCHITECTURE.md` updated
@@ -620,7 +620,7 @@ Extend the DigiGraph tool registry to enumerate and integrate external MCP serve
         title="[FEATURE] OpenAI Responses API support",
         body="""\
 ## Goal
-Add support for the OpenAI Responses API (stateful conversations, built-in tools, file search) as an alternative completion backend in DigiGraph's LLM layer. Enables richer integrations for clients using the Responses API natively.
+Add support for the OpenAI Responses API (stateful conversations, built-in tools, file search) as an alternative completion backend in digigraph's LLM layer. Enables richer integrations for clients using the Responses API natively.
 
 ## Acceptance Criteria
 - [ ] `ResponsesAPIClient` implements the `LLMClient` interface in `llm.py`
@@ -639,7 +639,7 @@ Add support for the OpenAI Responses API (stateful conversations, built-in tools
 """,
     ),
 
-    # ── DigiSearch (Project #4) ────────────────────────────────────────────────
+    # ── digisearch (Project #4) ────────────────────────────────────────────────
 
     dict(
         component="digisearch", type="feat", risk="low", priority="medium", complexity="M",
@@ -648,7 +648,7 @@ Add support for the OpenAI Responses API (stateful conversations, built-in tools
         title="[FEATURE] Expand vector backend registry — Qdrant, Weaviate, LanceDB",
         body="""\
 ## Goal
-Add three new vector store backends to DigiSearch's pluggable registry: Qdrant (high-performance, self-hostable), Weaviate (strong built-in hybrid search), and LanceDB (columnar + vector, excellent for local use). Each implements the existing `BackendBase` interface.
+Add three new vector store backends to digisearch's pluggable registry: Qdrant (high-performance, self-hostable), Weaviate (strong built-in hybrid search), and LanceDB (columnar + vector, excellent for local use). Each implements the existing `BackendBase` interface.
 
 ## Acceptance Criteria
 - [ ] `QdrantBackend`, `WeaviateBackend`, `LanceDBBackend` all implement `BackendBase`
@@ -672,14 +672,14 @@ Add three new vector store backends to DigiSearch's pluggable registry: Qdrant (
         component="digisearch", type="feat", risk="low", priority="high", complexity="M",
         model="sonnet", milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
-        title="[FEATURE] Selective indexing — draft/final state tracking from DigiStore",
+        title="[FEATURE] Selective indexing — draft/final state tracking from digistore",
         body="""\
 ## Goal
-Implement selective indexing rules: DigiSearch only indexes finalized documents from DigiStore, not delta patches, drafts, or intermediate agent outputs. Re-index is triggered when a document transitions to final state. This prevents delta noise from polluting the search index.
+Implement selective indexing rules: digisearch only indexes finalized documents from digistore, not delta patches, drafts, or intermediate agent outputs. Re-index is triggered when a document transitions to final state. This prevents delta noise from polluting the search index.
 
 ## Acceptance Criteria
-- [ ] `DocumentState` enum: DRAFT, FINAL defined in DigiStore
-- [ ] DigiSearch indexer only processes documents with state=FINAL
+- [ ] `DocumentState` enum: DRAFT, FINAL defined in digistore
+- [ ] digisearch indexer only processes documents with state=FINAL
 - [ ] Re-index triggered on DRAFT→FINAL transition (event or polling)
 - [ ] Delta patch files explicitly excluded from indexing
 - [ ] Integration test: create draft → index → verify not found → finalize → verify found
@@ -688,7 +688,7 @@ Implement selective indexing rules: DigiSearch only indexes finalized documents 
 - `digisearch/src/digisearch/indexer.py` (extend)
 - `digistore/src/digistore/models.py` (DocumentState enum — new)
 
-## Dependencies: DigiStore standalone module (#57)
+## Dependencies: digistore standalone module (#57)
 ## Parallelizable: NO
 ## Model: sonnet
 """,
@@ -698,13 +698,13 @@ Implement selective indexing rules: DigiSearch only indexes finalized documents 
         component="digisearch", type="feat", risk="med", priority="high", complexity="M",
         model="opus", milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
-        title="[FEATURE] Index access control via DigiKey JWT scopes",
+        title="[FEATURE] Index access control via digikey JWT scopes",
         body="""\
 ## Goal
-Add JWT-based access control to DigiSearch: the JWT issued by DigiKey contains which indexes the user is allowed to query and what document-level filters apply. DigiSearch enforces this without per-client code changes.
+Add JWT-based access control to digisearch: the JWT issued by digikey contains which indexes the user is allowed to query and what document-level filters apply. digisearch enforces this without per-client code changes.
 
 ## Acceptance Criteria
-- [ ] DigiSearch reads `index:<name>` scopes from the validated JWT
+- [ ] digisearch reads `index:<name>` scopes from the validated JWT
 - [ ] Requests for an index the user lacks scope for return 403 (not 404)
 - [ ] Document-level filter applied when JWT contains filter rules (e.g. department=engineering)
 - [ ] No regression for unauthenticated/internal calls
@@ -716,7 +716,7 @@ Add JWT-based access control to DigiSearch: the JWT issued by DigiKey contains w
 - `digisearch/src/digisearch/auth.py` (new)
 - `tests/ds/test_access_control.py` (new)
 
-## Dependencies: DigiKey resource-level JWT claims (#37)
+## Dependencies: digikey resource-level JWT claims (#37)
 ## Parallelizable: NO
 ## Model: opus — security-sensitive
 """,
@@ -726,19 +726,19 @@ Add JWT-based access control to DigiSearch: the JWT issued by DigiKey contains w
         component="digisearch", type="feat", risk="low", priority="high", complexity="M",
         model="sonnet", milestone=None,
         labels_extra=["type:integration", "complexity:M", "priority:high"],
-        title="[INTEGRATION] DigiQuant research library indexing — Atlas documents",
+        title="[INTEGRATION] digiquant research library indexing — Atlas documents",
         body="""\
 ## Goal
-Configure DigiSearch to index finalized Atlas research documents from DigiStore, enabling the Kairos exploration agent and DigiChat to semantically search the research library.
+Configure digisearch to index finalized Atlas research documents from digistore, enabling the Kairos exploration agent and digichat to semantically search the research library.
 
 ## Acceptance Criteria
-- [ ] Atlas finalised documents trigger DigiSearch re-index via DigiStore event
+- [ ] Atlas finalised documents trigger digisearch re-index via digistore event
 - [ ] Research library searchable via `search_strategies()` MCP tool
 - [ ] Correct metadata filtering: query by date, doc_type, sector, asset_class
-- [ ] Integration test: finalize an Atlas doc → verify searchable in DigiSearch
-- [ ] `digiquant/ARCHITECTURE.md` updated (DigiSearch integration section)
+- [ ] Integration test: finalize an Atlas doc → verify searchable in digisearch
+- [ ] `digiquant/ARCHITECTURE.md` updated (digisearch integration section)
 
-## Dependencies: Atlas migration (#6), DigiStore (#57), Selective indexing (#24)
+## Dependencies: Atlas migration (#6), digistore (#57), Selective indexing (#24)
 ## Parallelizable: NO
 ## Model: sonnet
 """,
@@ -748,20 +748,20 @@ Configure DigiSearch to index finalized Atlas research documents from DigiStore,
         component="digisearch", type="feat", risk="low", priority="medium", complexity="S",
         model="sonnet", milestone=None,
         labels_extra=["type:infra", "complexity:S", "priority:medium"],
-        title="[INFRA] digithings-guide index — DigiThings docs indexed for digithings.ai demo",
+        title="[INFRA] digithings-guide index — digithings docs indexed for digithings.ai demo",
         body="""\
 ## Goal
-Deploy the digithings-guide DigiSearch index (already defined in `docs/projects/digithings-guide/`) so the digithings.ai chat demo can answer questions about DigiThings from the actual documentation.
+Deploy the digithings-guide digisearch index (already defined in `docs/projects/digithings-guide/`) so the digithings.ai chat demo can answer questions about digithings from the actual documentation.
 
 ## Acceptance Criteria
 - [ ] `docs/projects/digithings-guide/` index deployed and populated
 - [ ] All `docs/`, `ARCHITECTURE.md`, ADRs, vision docs, module READMEs indexed
-- [ ] Semantic search returns relevant results for queries like "what does DigiQuant do?"
-- [ ] Index auto-updates when docs change (CI hook or scheduled DigiClaw job)
+- [ ] Semantic search returns relevant results for queries like "what does digiquant do?"
+- [ ] Index auto-updates when docs change (CI hook or scheduled digiclaw job)
 
 ## Files affected
 - `docs/projects/digithings-guide/indexes/docs.yaml` (extend sources)
-- DigiSearch deployment config
+- digisearch deployment config
 
 ## Dependencies: None — independent
 ## Parallelizable: YES
@@ -769,7 +769,7 @@ Deploy the digithings-guide DigiSearch index (already defined in `docs/projects/
 """,
     ),
 
-    # ── DigiChat (Project #5) ──────────────────────────────────────────────────
+    # ── digichat (Project #5) ──────────────────────────────────────────────────
 
     dict(
         component="digichat", type="feat", risk="low", priority="high", complexity="M",
@@ -778,12 +778,12 @@ Deploy the digithings-guide DigiSearch index (already defined in `docs/projects/
         title="[FEATURE] Model selector settings panel — multi-provider BYOK",
         body="""\
 ## Goal
-Build a model selector settings panel in DigiChat where users configure their LLM provider connections: API key input, provider selection, and optional OAuth for providers requiring it. Stored per user in DigiStore. LiteLLM handles the translation — this is pure frontend + config plumbing.
+Build a model selector settings panel in digichat where users configure their LLM provider connections: API key input, provider selection, and optional OAuth for providers requiring it. Stored per user in digistore. LiteLLM handles the translation — this is pure frontend + config plumbing.
 
 ## Acceptance Criteria
-- [ ] Settings panel accessible from DigiChat UI
+- [ ] Settings panel accessible from digichat UI
 - [ ] Supports: OpenAI, Anthropic, Gemini, Ollama (local), and a generic "custom" provider
-- [ ] API key stored encrypted in DigiStore per user (never in localStorage)
+- [ ] API key stored encrypted in digistore per user (never in localStorage)
 - [ ] Provider selection persists across sessions
 - [ ] Model selection dropdown populated based on configured provider's available models
 - [ ] Existing BYOK flow migrated to use this panel
@@ -803,14 +803,14 @@ Build a model selector settings panel in DigiChat where users configure their LL
         component="digichat", type="feat", risk="med", priority="high", complexity="M",
         model="opus", milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
-        title="[FEATURE] Microsoft SSO and Google OIDC login via DigiKey",
+        title="[FEATURE] Microsoft SSO and Google OIDC login via digikey",
         body="""\
 ## Goal
-Add SSO login options to DigiChat using DigiKey as the identity broker. Users from Microsoft-tenant organizations log in with their corporate account; general users log in with Google. DigiKey issues a JWT with org/project membership and resource scopes.
+Add SSO login options to digichat using digikey as the identity broker. Users from Microsoft-tenant organizations log in with their corporate account; general users log in with Google. digikey issues a JWT with org/project membership and resource scopes.
 
 ## Acceptance Criteria
-- [ ] "Login with Microsoft" and "Login with Google" buttons in DigiChat
-- [ ] Auth flow: DigiChat → DigiKey SSO endpoint → corporate IdP → DigiKey JWT → DigiChat session
+- [ ] "Login with Microsoft" and "Login with Google" buttons in digichat
+- [ ] Auth flow: digichat → digikey SSO endpoint → corporate IdP → digikey JWT → digichat session
 - [ ] JWT scopes drive visible tools/indexes (adaptive UI — see #30)
 - [ ] Existing email/password and API key login unaffected
 - [ ] `digichat/ARCHITECTURE.md` updated
@@ -819,8 +819,8 @@ Add SSO login options to DigiChat using DigiKey as the identity broker. Users fr
 - `digichat/src/auth.ts` (extend)
 - `digichat/src/app/api/auth/` (extend)
 
-## Dependencies: DigiKey Microsoft OIDC (#34)
-## Parallelizable: NO — depends on DigiKey SSO
+## Dependencies: digikey Microsoft OIDC (#34)
+## Parallelizable: NO — depends on digikey SSO
 ## Model: opus
 """,
     ),
@@ -832,7 +832,7 @@ Add SSO login options to DigiChat using DigiKey as the identity broker. Users fr
         title="[FEATURE] Adaptive UI — scope-driven tool and index visibility",
         body="""\
 ## Goal
-Make DigiChat's UI adapt to the user's DigiKey JWT scopes: tools, indexes, and sub-graphs not in the user's scope simply don't appear — not locked, not visible. A free user sees the public demo; an enterprise user sees their org's indexes and tools.
+Make digichat's UI adapt to the user's digikey JWT scopes: tools, indexes, and sub-graphs not in the user's scope simply don't appear — not locked, not visible. A free user sees the public demo; an enterprise user sees their org's indexes and tools.
 
 ## Acceptance Criteria
 - [ ] JWT scopes read on login and stored in client session (no JWT exposure to frontend)
@@ -846,8 +846,8 @@ Make DigiChat's UI adapt to the user's DigiKey JWT scopes: tools, indexes, and s
 - `digichat/src/components/sidebar/` (extend)
 - `digichat/src/app/api/me/` (new — returns user scope summary)
 
-## Dependencies: DigiKey resource-level JWTs (#37)
-## Parallelizable: NO — depends on DigiKey
+## Dependencies: digikey resource-level JWTs (#37)
+## Parallelizable: NO — depends on digikey
 ## Model: sonnet
 """,
     ),
@@ -859,12 +859,12 @@ Make DigiChat's UI adapt to the user's DigiKey JWT scopes: tools, indexes, and s
         title="[FEATURE] digithings.ai demo — docs indexed, 3-question free tier",
         body="""\
 ## Goal
-Deploy the digithings.ai DigiChat demo instance: DigiThings own docs indexed, 3 free questions with a cheap model (Haiku/Flash), BYOK to continue, model selector visible, sample questions displayed.
+Deploy the digithings.ai digichat demo instance: digithings own docs indexed, 3 free questions with a cheap model (Haiku/Flash), BYOK to continue, model selector visible, sample questions displayed.
 
 ## Acceptance Criteria
 - [ ] Visitor can ask 3 questions without any API key
 - [ ] Token/question counter visible and enforced
-- [ ] Sample questions shown: "What is DigiThings?", "What does DigiQuant do?", "How do I deploy DigiThings?"
+- [ ] Sample questions shown: "What is digithings?", "What does digiquant do?", "How do I deploy digithings?"
 - [ ] BYOK prompt shown after 3rd question with provider options
 - [ ] digithings-guide index (#27) live and powering responses
 - [ ] Deployment config committed and documented
@@ -902,7 +902,7 @@ Build conversation history UI: users can see past conversations, resume them, re
 """,
     ),
 
-    # ── DigiKey (Project #6) ───────────────────────────────────────────────────
+    # ── digikey (Project #6) ───────────────────────────────────────────────────
 
     dict(
         component="digikey", type="feat", risk="high", priority="critical", complexity="L",
@@ -911,17 +911,17 @@ Build conversation history UI: users can see past conversations, resume them, re
         title="[FEATURE] Microsoft OIDC/SAML SSO integration",
         body="""\
 ## Goal
-Add Microsoft identity provider support to DigiKey. Enterprise clients using Microsoft tenants can log in with their corporate credentials. DigiKey maps the Microsoft identity to a DigiThings project/org and issues a JWT with appropriate scopes.
+Add Microsoft identity provider support to digikey. Enterprise clients using Microsoft tenants can log in with their corporate credentials. digikey maps the Microsoft identity to a digithings project/org and issues a JWT with appropriate scopes.
 
 ## From scratch
-YES — SSO infrastructure does not exist in DigiKey.
+YES — SSO infrastructure does not exist in digikey.
 
 ## Acceptance Criteria
-- [ ] Microsoft OIDC authorization code flow implemented in DigiKey
+- [ ] Microsoft OIDC authorization code flow implemented in digikey
 - [ ] SAML 2.0 support for orgs using SAML (optional, configurable)
-- [ ] Identity mapped to DigiThings project via `DIGI_SSO_TENANT_MAP` config
+- [ ] Identity mapped to digithings project via `DIGI_SSO_TENANT_MAP` config
 - [ ] JWT issued with org_id, project_id, and resource scopes from org config
-- [ ] Token exchange: Microsoft token → DigiKey JWT (same `token_exchange` endpoint)
+- [ ] Token exchange: Microsoft token → digikey JWT (same `token_exchange` endpoint)
 - [ ] Unit tests with mocked Microsoft OIDC responses
 - [ ] `digikey/ARCHITECTURE.md` updated
 
@@ -930,8 +930,8 @@ YES — SSO infrastructure does not exist in DigiKey.
 - `digikey/src/digikey/sso/microsoft.py`
 - `digikey/src/digikey/sso/base.py`
 
-## Dependencies: None — foundation for Google OIDC (#35) and DigiChat SSO
-## Parallelizable: NO — blocks DigiChat SSO login
+## Dependencies: None — foundation for Google OIDC (#35) and digichat SSO
+## Parallelizable: NO — blocks digichat SSO login
 ## Model: opus — security-critical identity path
 """,
     ),
@@ -943,11 +943,11 @@ YES — SSO infrastructure does not exist in DigiKey.
         title="[FEATURE] Google OIDC integration",
         body="""\
 ## Goal
-Add Google OIDC as a second SSO provider in DigiKey, using the SSO framework established by the Microsoft integration. General users (not enterprise) can log in with their Google account.
+Add Google OIDC as a second SSO provider in digikey, using the SSO framework established by the Microsoft integration. General users (not enterprise) can log in with their Google account.
 
 ## Acceptance Criteria
 - [ ] Google OIDC authorization code flow implemented using `sso/base.py`
-- [ ] Google identity mapped to DigiThings user (personal account, no org mapping required)
+- [ ] Google identity mapped to digithings user (personal account, no org mapping required)
 - [ ] JWT issued with user_id and default tier scopes
 - [ ] Unit tests
 - [ ] `digikey/ARCHITECTURE.md` updated
@@ -968,10 +968,10 @@ Add Google OIDC as a second SSO provider in DigiKey, using the SSO framework est
         title="[FEATURE] Organization and project membership API",
         body="""\
 ## Goal
-Build the organization and project membership data model and API in DigiKey. A user belongs to one or more organizations; each org has one or more projects; each project has a set of resource permissions. This is the foundation for resource-level JWTs and multi-tenant isolation.
+Build the organization and project membership data model and API in digikey. A user belongs to one or more organizations; each org has one or more projects; each project has a set of resource permissions. This is the foundation for resource-level JWTs and multi-tenant isolation.
 
 ## From scratch
-YES — DigiKey currently has users and API keys but no org/project concept.
+YES — digikey currently has users and API keys but no org/project concept.
 
 ## Acceptance Criteria
 - [ ] Database schema: `orgs`, `projects`, `org_members`, `project_members` tables
@@ -999,13 +999,13 @@ YES — DigiKey currently has users and API keys but no org/project concept.
         title="[FEATURE] Resource-level JWT claims — index and sub-graph access scopes",
         body="""\
 ## Goal
-Extend DigiKey's JWT issuance to include resource-level claims: which specific DigiSearch indexes, which DigiGraph sub-graphs, and what data-filter rules apply to this user. Downstream services (DigiSearch, DigiGraph, DigiChat) read these claims to enforce access without per-client code changes.
+Extend digikey's JWT issuance to include resource-level claims: which specific digisearch indexes, which digigraph sub-graphs, and what data-filter rules apply to this user. Downstream services (digisearch, digigraph, digichat) read these claims to enforce access without per-client code changes.
 
 ## Acceptance Criteria
 - [ ] JWT payload includes `resources` claim: `{indexes: [...], subgraphs: [...], filters: {...}}`
 - [ ] Resources derived from org/project configuration (not hardcoded)
-- [ ] DigiSearch enforces `indexes` claim (see #25)
-- [ ] DigiGraph enforces `subgraphs` claim on tool invocation
+- [ ] digisearch enforces `indexes` claim (see #25)
+- [ ] digigraph enforces `subgraphs` claim on tool invocation
 - [ ] JWT size remains reasonable (< 8KB) — pagination or reference tokens if needed
 - [ ] Unit tests for resource claim generation and enforcement
 - [ ] `digikey/ARCHITECTURE.md` updated
@@ -1078,7 +1078,7 @@ Implement scheduled JWKS key rotation that maintains a transition period where b
 """,
     ),
 
-    # ── DigiSmith (Project #7) ─────────────────────────────────────────────────
+    # ── digismith (Project #7) ─────────────────────────────────────────────────
 
     dict(
         component="digismith", type="feat", risk="low", priority="high", complexity="M",
@@ -1087,10 +1087,10 @@ Implement scheduled JWKS key rotation that maintains a transition period where b
         title="[FEATURE] Prometheus /metrics endpoint rollout to all services",
         body="""\
 ## Goal
-Roll out Prometheus `/metrics` endpoints to all DigiThings services using the shared `digibase.metrics` instrumentation. Consistent labels across all services enable unified dashboards.
+Roll out Prometheus `/metrics` endpoints to all digithings services using the shared `digibase.metrics` instrumentation. Consistent labels across all services enable unified dashboards.
 
 ## Acceptance Criteria
-- [ ] `/metrics` endpoint live on: DigiGraph, DigiQuant, DigiSearch, DigiKey, DigiSmith, DigiClaw
+- [ ] `/metrics` endpoint live on: digigraph, digiquant, digisearch, digikey, digismith, digiclaw
 - [ ] Consistent metric labels: `service`, `version`, `environment`
 - [ ] Request duration histogram, request count, and error rate per route
 - [ ] `digibase/src/digibase/metrics.py` utility used by all (no per-service duplicate)
@@ -1114,13 +1114,13 @@ Roll out Prometheus `/metrics` endpoints to all DigiThings services using the sh
         title="[FEATURE] X-Request-ID correlation ID propagation across all services",
         body="""\
 ## Goal
-Propagate X-Request-ID headers through all service-to-service calls so a single user request can be traced end-to-end through DigiChat → DigiGraph → DigiSearch/DigiQuant → DigiKey. Uses the existing `digibase.http` outbound header utilities.
+Propagate X-Request-ID headers through all service-to-service calls so a single user request can be traced end-to-end through digichat → digigraph → digisearch/digiquant → digikey. Uses the existing `digibase.http` outbound header utilities.
 
 ## Acceptance Criteria
 - [ ] All incoming requests assign or pass through an X-Request-ID
 - [ ] All outbound HTTP calls from any service include the X-Request-ID
 - [ ] Request ID appears in all log lines for that request
-- [ ] Correlation ID visible in DigiSmith `/v1/status` for active requests
+- [ ] Correlation ID visible in digismith `/v1/status` for active requests
 - [ ] Integration test: single request traced through 3 service hops
 
 ## Files affected
@@ -1140,7 +1140,7 @@ Propagate X-Request-ID headers through all service-to-service calls so a single 
         title="[FEATURE] PII redaction middleware before LangSmith tracing",
         body="""\
 ## Goal
-Add PII redaction middleware in DigiSmith that strips sensitive fields (API keys, email addresses, personal identifiers) from trace data before it reaches LangSmith. Required before enabling LangSmith in production.
+Add PII redaction middleware in digismith that strips sensitive fields (API keys, email addresses, personal identifiers) from trace data before it reaches LangSmith. Required before enabling LangSmith in production.
 
 ## Acceptance Criteria
 - [ ] `PiiRedactor` strips: email patterns, API key patterns (`dgk_live_*`, `sk-*`), phone numbers
@@ -1163,13 +1163,13 @@ Add PII redaction middleware in DigiSmith that strips sensitive fields (API keys
         component="digismith", type="feat", risk="low", priority="medium", complexity="M",
         model="sonnet", milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:medium"],
-        title="[FEATURE] Structured logging throughout DigiSearch",
+        title="[FEATURE] Structured logging throughout digisearch",
         body="""\
 ## Goal
-Add structured JSON logging throughout DigiSearch — currently it has zero structured logging. Every significant operation (parse, chunk, embed, index, query) should emit a structured log entry with request_id, operation, duration, and outcome.
+Add structured JSON logging throughout digisearch — currently it has zero structured logging. Every significant operation (parse, chunk, embed, index, query) should emit a structured log entry with request_id, operation, duration, and outcome.
 
 ## Acceptance Criteria
-- [ ] All DigiSearch modules use `structlog` or Python `logging` with JSON formatter
+- [ ] All digisearch modules use `structlog` or Python `logging` with JSON formatter
 - [ ] Log entries include: timestamp, level, service, request_id, operation, duration_ms, outcome
 - [ ] No sensitive data (document content, user queries) in logs at INFO level
 - [ ] Log level configurable via `DIGI_LOG_LEVEL` env var
@@ -1184,7 +1184,7 @@ Add structured JSON logging throughout DigiSearch — currently it has zero stru
 """,
     ),
 
-    # ── DigiClaw (Project #8) ──────────────────────────────────────────────────
+    # ── digiclaw (Project #8) ──────────────────────────────────────────────────
 
     dict(
         component="digiclaw", type="feat", risk="med", priority="high", complexity="L",
@@ -1193,14 +1193,14 @@ Add structured JSON logging throughout DigiSearch — currently it has zero stru
         title="[INFRA] OpenClaw runtime integration",
         body="""\
 ## Goal
-Integrate the OpenClaw runtime as the agent execution engine beneath DigiClaw. OpenClaw handles the actual agent loop, tool calling, and session management. DigiClaw wraps it with scheduling, agent definitions, audit logging, and tool provisioning.
+Integrate the OpenClaw runtime as the agent execution engine beneath digiclaw. OpenClaw handles the actual agent loop, tool calling, and session management. digiclaw wraps it with scheduling, agent definitions, audit logging, and tool provisioning.
 
 ## From scratch
-YES — DigiClaw currently has no OpenClaw integration.
+YES — digiclaw currently has no OpenClaw integration.
 
 ## Acceptance Criteria
-- [ ] OpenClaw installed as DigiClaw dependency
-- [ ] `OpenClawRuntime` class wraps OpenClaw with DigiClaw's agent definition schema
+- [ ] OpenClaw installed as digiclaw dependency
+- [ ] `OpenClawRuntime` class wraps OpenClaw with digiclaw's agent definition schema
 - [ ] An agent can be launched with: definition file, tool list, and schedule config
 - [ ] Agent output captured and written to JSONL audit log
 - [ ] `digiclaw/ARCHITECTURE.md` updated with integration architecture
@@ -1210,7 +1210,7 @@ YES — DigiClaw currently has no OpenClaw integration.
 - `digiclaw/src/digiclaw/openclaw/runtime.py`
 - `digiclaw/src/digiclaw/openclaw/adapter.py`
 
-## Dependencies: None — foundation for all other DigiClaw tasks
+## Dependencies: None — foundation for all other digiclaw tasks
 ## Parallelizable: NO — blocks agent registry and scheduler
 ## Model: opus — novel architecture integration
 """,
@@ -1223,7 +1223,7 @@ YES — DigiClaw currently has no OpenClaw integration.
         title="[FEATURE] Agent definition schema and registry",
         body="""\
 ## Goal
-Define the schema for DigiClaw agent definitions (YAML files) and build the registry that loads, validates, and manages them. An agent definition specifies: what the agent does, which tools/sub-graphs it has access to, its schedule, and its output sink.
+Define the schema for digiclaw agent definitions (YAML files) and build the registry that loads, validates, and manages them. An agent definition specifies: what the agent does, which tools/sub-graphs it has access to, its schedule, and its output sink.
 
 ## Acceptance Criteria
 - [ ] `AgentDefinition` Pydantic v2 schema: name, description, tools, schedule, output_sink
@@ -1251,7 +1251,7 @@ Define the schema for DigiClaw agent definitions (YAML files) and build the regi
         title="[FEATURE] Cron and continuous scheduling",
         body="""\
 ## Goal
-Build the scheduling layer for DigiClaw: agents can be scheduled on a cron expression, run continuously (24/7 with configurable sleep between iterations), or triggered by events. The scheduler manages agent lifecycle: start, stop, pause, resume.
+Build the scheduling layer for digiclaw: agents can be scheduled on a cron expression, run continuously (24/7 with configurable sleep between iterations), or triggered by events. The scheduler manages agent lifecycle: start, stop, pause, resume.
 
 ## Acceptance Criteria
 - [ ] Cron schedule parsed from agent definition YAML (standard cron syntax)
@@ -1275,23 +1275,23 @@ Build the scheduling layer for DigiClaw: agents can be scheduled on a cron expre
         component="digiclaw", type="feat", risk="med", priority="critical", complexity="M",
         model="sonnet", milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:critical"],
-        title="[FEATURE] Atlas daily cycle automation — DigiClaw scheduled job",
+        title="[FEATURE] Atlas daily cycle automation — digiclaw scheduled job",
         body="""\
 ## Goal
-Define and deploy the Atlas daily cycle as a DigiClaw scheduled job: delta updates at 06:00 UTC daily, full regeneration weekly (configurable), monthly rollup on the 1st. Eliminates manual Atlas execution entirely.
+Define and deploy the Atlas daily cycle as a digiclaw scheduled job: delta updates at 06:00 UTC daily, full regeneration weekly (configurable), monthly rollup on the 1st. Eliminates manual Atlas execution entirely.
 
 ## Acceptance Criteria
 - [ ] `digiclaw/agents/atlas_daily.yaml` agent definition with correct schedule
-- [ ] Agent triggers the Atlas DigiGraph sub-graph via MCP/API call
+- [ ] Agent triggers the Atlas digigraph sub-graph via MCP/API call
 - [ ] Run result (success/failure, documents updated, token cost) written to audit log
-- [ ] Alert triggered (via DigiSmith or webhook) if run fails 2x consecutively
+- [ ] Alert triggered (via digismith or webhook) if run fails 2x consecutively
 - [ ] Integration test: trigger agent manually, verify Atlas sub-graph runs
 
 ## Files affected (new)
 - `digiclaw/agents/atlas_daily.yaml`
 - `digiclaw/src/digiclaw/jobs/atlas_daily.py`
 
-## Dependencies: Scheduler (#46) + Atlas DigiGraph migration (#6)
+## Dependencies: Scheduler (#46) + Atlas digigraph migration (#6)
 ## Parallelizable: NO
 ## Model: sonnet
 """,
@@ -1304,7 +1304,7 @@ Define and deploy the Atlas daily cycle as a DigiClaw scheduled job: delta updat
         title="[FEATURE] Strategy performance monitor agent",
         body="""\
 ## Goal
-Build a DigiClaw agent that continuously monitors live strategy performance against backtest baseline. Detects statistically significant P&L drift, Sharpe degradation, or execution anomalies and files a GitHub issue or sends an alert.
+Build a digiclaw agent that continuously monitors live strategy performance against backtest baseline. Detects statistically significant P&L drift, Sharpe degradation, or execution anomalies and files a GitHub issue or sends an alert.
 
 ## Acceptance Criteria
 - [ ] `digiclaw/agents/strategy_monitor.yaml` agent definition (continuous, 1hr interval)
@@ -1340,7 +1340,7 @@ YES — current ADDM is a stub. Full implementation needed.
 - [ ] Statistical drift detection: Page-Hinkley test or CUSUM on rolling performance metrics
 - [ ] Agent output quality drift: embedding distance between recent outputs and historical baseline
 - [ ] `DriftReport` Pydantic v2 model: drift_type, severity, metric, threshold, recommendation
-- [ ] ADDM runs as a DigiClaw agent (scheduled, after each monitored run)
+- [ ] ADDM runs as a digiclaw agent (scheduled, after each monitored run)
 - [ ] Unit tests with synthetic drift scenarios
 - [ ] `digiclaw/ARCHITECTURE.md` updated (ADDM section)
 
@@ -1354,7 +1354,7 @@ YES — current ADDM is a stub. Full implementation needed.
 """,
     ),
 
-    # ── DigiBase (Project #9) ──────────────────────────────────────────────────
+    # ── digibase (Project #9) ──────────────────────────────────────────────────
 
     dict(
         component="digibase", type="chore", risk="low", priority="medium", complexity="M",
@@ -1363,11 +1363,11 @@ YES — current ADDM is a stub. Full implementation needed.
         title="[CHORE] Extend OTel wiring — all services emit OpenTelemetry traces",
         body="""\
 ## Goal
-Extend DigiBase's optional OTel wiring so that all services emit OpenTelemetry traces when `DIGI_OTEL_ENDPOINT` is configured. Enables integration with Jaeger, Tempo, or any OTLP-compatible backend.
+Extend digibase's optional OTel wiring so that all services emit OpenTelemetry traces when `DIGI_OTEL_ENDPOINT` is configured. Enables integration with Jaeger, Tempo, or any OTLP-compatible backend.
 
 ## Acceptance Criteria
 - [ ] All services import and initialise OTel from `digibase.otel` (no per-service setup)
-- [ ] Spans cover: incoming HTTP requests, LLM calls, DigiSearch queries, DigiKey exchanges
+- [ ] Spans cover: incoming HTTP requests, LLM calls, digisearch queries, digikey exchanges
 - [ ] Service name and version in resource attributes
 - [ ] Zero overhead when `DIGI_OTEL_ENDPOINT` is not set
 - [ ] Docker Compose OTel Collector config added (optional profile)
@@ -1382,24 +1382,24 @@ Extend DigiBase's optional OTel wiring so that all services emit OpenTelemetry t
 """,
     ),
 
-    # ── DigiLink (tracked in digigraph project for now) ────────────────────────
+    # ── digilink (tracked in digigraph project for now) ────────────────────────
 
     dict(
         component="digigraph", type="feat", risk="med", priority="high", complexity="XL",
         model="opus", milestone=None,
         labels_extra=["type:infra", "complexity:XL", "priority:high"],
-        title="[INFRA] DigiLink module scaffold — capability registry and adapter framework",
+        title="[INFRA] digilink module scaffold — capability registry and adapter framework",
         body="""\
 ## Goal
-Scaffold DigiLink as a new top-level DigiThings module. DigiLink is the connection and translation layer: a central capability registry where every DigiThings capability is registered once and exposed via multiple protocol adapters (REST, MCP, CLI, Docker, webhooks).
+Scaffold digilink as a new top-level digithings module. digilink is the connection and translation layer: a central capability registry where every digithings capability is registered once and exposed via multiple protocol adapters (REST, MCP, CLI, Docker, webhooks).
 
 ## From scratch
-YES — DigiLink does not exist yet.
+YES — digilink does not exist yet.
 
 ## Architecture
 ```
 Capability definition (OpenAPI schema / function signature)
-    ↓  DigiLink registry
+    ↓  digilink registry
 REST  ·  MCP tool  ·  CLI command  ·  Docker entrypoint  ·  Webhook
 ```
 
@@ -1408,7 +1408,7 @@ REST  ·  MCP tool  ·  CLI command  ·  Docker entrypoint  ·  Webhook
 - [ ] `CapabilityRegistry` — registers capabilities with name, schema, handler
 - [ ] REST adapter: FastAPI router auto-generated from registered capabilities
 - [ ] Docker entrypoint pattern: each capability callable as a container
-- [ ] At least one DigiQuant capability registered and accessible via REST + CLI
+- [ ] At least one digiquant capability registered and accessible via REST + CLI
 - [ ] `docs/vision/digilink.md` updated to reflect implementation state
 - [ ] `ARCHITECTURE.md` updated
 
@@ -1419,7 +1419,7 @@ REST  ·  MCP tool  ·  CLI command  ·  Docker entrypoint  ·  Webhook
 - `digilink/src/digilink/adapters/rest.py`
 
 ## Dependencies: None — new module, but MCP adapter depends on this
-## Parallelizable: NO — foundation for all DigiLink sub-tasks
+## Parallelizable: NO — foundation for all digilink sub-tasks
 ## Model: opus — novel module architecture
 """,
     ),
@@ -1428,23 +1428,23 @@ REST  ·  MCP tool  ·  CLI command  ·  Docker entrypoint  ·  Webhook
         component="digigraph", type="feat", risk="low", priority="high", complexity="M",
         model="sonnet", milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:high"],
-        title="[FEATURE] DigiLink — MCP adapter generation from OpenAPI specs",
+        title="[FEATURE] digilink — MCP adapter generation from OpenAPI specs",
         body="""\
 ## Goal
-Build the MCP adapter in DigiLink that auto-generates MCP tool definitions from registered capability schemas (OpenAPI). Any DigiThings capability registered in DigiLink becomes callable via Claude Desktop, Cursor, or any MCP client.
+Build the MCP adapter in digilink that auto-generates MCP tool definitions from registered capability schemas (OpenAPI). Any digithings capability registered in digilink becomes callable via Claude Desktop, Cursor, or any MCP client.
 
 ## Acceptance Criteria
 - [ ] `McpAdapter` reads capability registry and emits MCP tool definitions
 - [ ] MCP server serves generated tool list at `/mcp/tools`
 - [ ] Tool calls are proxied to the capability handler
-- [ ] Integration test: DigiQuant `run_backtest` callable via MCP protocol
+- [ ] Integration test: digiquant `run_backtest` callable via MCP protocol
 - [ ] `docs/vision/digilink.md` updated
 
 ## Files affected (new)
 - `digilink/src/digilink/adapters/mcp.py`
 - `tests/dl/test_mcp_adapter.py`
 
-## Dependencies: DigiLink scaffold (#53)
+## Dependencies: digilink scaffold (#53)
 ## Parallelizable: NO — sequential after scaffold
 ## Model: sonnet
 """,
@@ -1454,10 +1454,10 @@ Build the MCP adapter in DigiLink that auto-generates MCP tool definitions from 
         component="digigraph", type="feat", risk="low", priority="medium", complexity="M",
         model="sonnet", milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:medium"],
-        title="[FEATURE] DigiLink — CLI wrapper auto-generation from REST endpoints",
+        title="[FEATURE] digilink — CLI wrapper auto-generation from REST endpoints",
         body="""\
 ## Goal
-Build the CLI adapter in DigiLink that auto-generates Click/Typer CLI commands from registered capabilities. Every DigiThings capability becomes callable as a terminal command without per-module CLI maintenance.
+Build the CLI adapter in digilink that auto-generates Click/Typer CLI commands from registered capabilities. Every digithings capability becomes callable as a terminal command without per-module CLI maintenance.
 
 ## Acceptance Criteria
 - [ ] `CliAdapter` generates Click commands from capability registry
@@ -1469,7 +1469,7 @@ Build the CLI adapter in DigiLink that auto-generates Click/Typer CLI commands f
 ## Files affected (new)
 - `digilink/src/digilink/adapters/cli.py`
 
-## Dependencies: DigiLink scaffold (#53)
+## Dependencies: digilink scaffold (#53)
 ## Parallelizable: YES — parallel with MCP adapter after scaffold
 ## Model: sonnet
 """,
@@ -1479,41 +1479,41 @@ Build the CLI adapter in DigiLink that auto-generates Click/Typer CLI commands f
         component="digigraph", type="feat", risk="low", priority="medium", complexity="M",
         model="sonnet", milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:medium"],
-        title="[FEATURE] DigiLink — desktop AI connector library (Claude Desktop, Cursor, Windsurf)",
+        title="[FEATURE] digilink — desktop AI connector library (Claude Desktop, Cursor, Windsurf)",
         body="""\
 ## Goal
-Build pre-packaged connector configurations for the major desktop AI apps (Claude Desktop, Cursor, Windsurf) that users can drop in to connect to a DigiThings instance with one config file. Built on the MCP adapter (#54).
+Build pre-packaged connector configurations for the major desktop AI apps (Claude Desktop, Cursor, Windsurf) that users can drop in to connect to a digithings instance with one config file. Built on the MCP adapter (#54).
 
 ## Acceptance Criteria
 - [ ] `digilink/connectors/claude-desktop-config.json` — ready to paste into Claude Desktop settings
 - [ ] `digilink/connectors/cursor-config.json` — Cursor MCP config
 - [ ] `digilink/connectors/windsurf-config.json` — Windsurf MCP config
-- [ ] `make generate-connectors` command auto-generates all configs with correct DigiThings URL
+- [ ] `make generate-connectors` command auto-generates all configs with correct digithings URL
 - [ ] Connector configs documented in `docs/vision/digilink.md`
 
 ## Files affected (new)
 - `digilink/connectors/` directory
 - `digilink/src/digilink/connectors/generator.py`
 
-## Dependencies: DigiLink MCP adapter (#54)
+## Dependencies: digilink MCP adapter (#54)
 ## Parallelizable: YES — after MCP adapter
 ## Model: sonnet
 """,
     ),
 
-    # ── DigiStore (tracked separately, scaffold first) ─────────────────────────
+    # ── digistore (tracked separately, scaffold first) ─────────────────────────
 
     dict(
         component="digigraph", type="feat", risk="med", priority="high", complexity="L",
         model="sonnet", milestone=None,
         labels_extra=["type:infra", "complexity:L", "priority:high"],
-        title="[INFRA] DigiStore standalone module scaffold",
+        title="[INFRA] digistore standalone module scaffold",
         body="""\
 ## Goal
-Extract DigiStore from DigiGraph and build it as a proper standalone Python module — the unified storage abstraction layer for the entire DigiThings ecosystem. Backends: SQLite (local dev), Postgres/Supabase (production), S3/MinIO (file/blob storage).
+Extract digistore from digigraph and build it as a proper standalone Python module — the unified storage abstraction layer for the entire digithings ecosystem. Backends: SQLite (local dev), Postgres/Supabase (production), S3/MinIO (file/blob storage).
 
 ## From scratch
-YES — DigiStore currently exists only as a thin session/dataset cache inside DigiGraph. This is a new standalone module.
+YES — digistore currently exists only as a thin session/dataset cache inside digigraph. This is a new standalone module.
 
 ## Acceptance Criteria
 - [ ] `digistore/` top-level Python package with `pyproject.toml`
@@ -1522,7 +1522,7 @@ YES — DigiStore currently exists only as a thin session/dataset cache inside D
 - [ ] `PostgresBackend` (Supabase) — async, connection pooling
 - [ ] `S3Backend` / `MinioBackend` — for file/blob storage
 - [ ] Backend selected via `DIGI_STORE_BACKEND` env var
-- [ ] DigiGraph's existing Digistore functionality migrated without regression
+- [ ] digigraph's existing Digistore functionality migrated without regression
 - [ ] Dockerized local dev stack: SQLite + MinIO + Postgres
 - [ ] Unit tests for all backends (SQLite real; Postgres/S3 mocked)
 - [ ] `docs/vision/digistore.md` updated
@@ -1536,8 +1536,8 @@ YES — DigiStore currently exists only as a thin session/dataset cache inside D
 ## Files affected (modify)
 - `digigraph/src/digigraph/digistore.py` → migrate to import from `digistore`
 
-## Dependencies: None — but DigiSearch selective indexing depends on this
-## Parallelizable: NO — blocks DigiSearch (#24) and OpenBB integration (#10)
+## Dependencies: None — but digisearch selective indexing depends on this
+## Parallelizable: NO — blocks digisearch (#24) and OpenBB integration (#10)
 ## Model: sonnet
 """,
     ),

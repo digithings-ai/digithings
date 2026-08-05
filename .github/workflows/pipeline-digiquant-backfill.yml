@@ -1,4 +1,4 @@
-name: "Pipeline: DigiQuant backfill"
+name: "Pipeline: digiquant backfill"
 
 # One-shot, manually-triggered workflow with two modes:
 #

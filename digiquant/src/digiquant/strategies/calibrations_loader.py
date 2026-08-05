@@ -1,4 +1,4 @@
-"""Load Slapper calibrations from disk or the DigiQuant strategy store (#1064)."""
+"""Load Slapper calibrations from disk or the digiquant strategy store (#1064)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Shared constraint checking for DigiQuant optimization."""
+"""Shared constraint checking for digiquant optimization."""
 
 from __future__ import annotations
 

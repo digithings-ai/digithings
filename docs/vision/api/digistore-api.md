@@ -26,7 +26,7 @@ Roadmap. Today a session-scoped dataset manager lives inside digigraph; the stan
 
 ## Notes
 - Planned: one storage API over S3, MinIO, Postgres, or SQLite so business code never binds to a backend.
-- Planned surface: DigiStore.configure(backend=…) + get/put/list over a backend-neutral interface.
+- Planned surface: digistore.configure(backend=…) + get/put/list over a backend-neutral interface.
 
 ## Stack
 Postgres, SQLite, S3, MinIO

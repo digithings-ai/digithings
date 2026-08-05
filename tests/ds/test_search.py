@@ -1,4 +1,4 @@
-"""Unit tests for DigiSearch."""
+"""Unit tests for digisearch."""
 
 from __future__ import annotations
 

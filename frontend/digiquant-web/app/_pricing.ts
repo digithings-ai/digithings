@@ -21,7 +21,7 @@ import { DQ_CONTACT_EMAIL } from "./_nav";
 
 export const CONTACT_EMAIL = DQ_CONTACT_EMAIL;
 export const WAITLIST_MAILTO = `mailto:${CONTACT_EMAIL}?subject=Managed%20Olympus%20waitlist`;
-export const ENTERPRISE_MAILTO = `mailto:${CONTACT_EMAIL}?subject=DigiQuant%20enterprise`;
+export const ENTERPRISE_MAILTO = `mailto:${CONTACT_EMAIL}?subject=digiquant%20enterprise`;
 
 export const PRICING_TIERS: readonly PricingTier[] = [
   {
@@ -37,8 +37,8 @@ export const PRICING_TIERS: readonly PricingTier[] = [
     id: "managed",
     name: "Managed",
     price: "Coming soon",
-    desc: "Hosted DigiThings with managed upgrades and observability. In development.",
-    features: ["Everything in Self-hosted", "Managed upgrades", "Hosted tracing (DigiSmith)"],
+    desc: "Hosted digithings with managed upgrades and observability. In development.",
+    features: ["Everything in Self-hosted", "Managed upgrades", "Hosted tracing (digismith)"],
     cta: { label: "Join the waitlist", href: WAITLIST_MAILTO },
     featured: true,
   },
@@ -59,7 +59,7 @@ export const PRICING_FAQ: readonly { q: string; a: string }[] = [
   },
   {
     q: "How is NautilusTrader licensed?",
-    a: "DigiQuant builds on NautilusTrader (open source) for all backtest, optimize, and live paths — see the NautilusTrader repository for its current license terms.",
+    a: "digiquant builds on NautilusTrader (open source) for all backtest, optimize, and live paths — see the NautilusTrader repository for its current license terms.",
   },
   {
     q: "Do I bring my own model keys?",

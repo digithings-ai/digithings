@@ -1,4 +1,4 @@
-"""Pydantic v2 HTTP input-validation tests for DigiGraph.
+"""Pydantic v2 HTTP input-validation tests for digigraph.
 
 Covers:
 - Malformed JSON and missing required fields → 422 with Pydantic-formatted error body.

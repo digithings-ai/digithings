@@ -1,7 +1,7 @@
 # Cursor Agent Onboarding — Tier 2 Delegation
 
 This document covers everything needed to connect a Cursor Pro background agent to
-the DigiThings issue board and have it autonomously execute `exec:cursor` tasks.
+the digithings issue board and have it autonomously execute `exec:cursor` tasks.
 
 ## Prerequisites
 
@@ -62,7 +62,7 @@ Configure the following Automation at [cursor.com/settings/automations](https://
 
 | Field | Value |
 |-------|-------|
-| **Name** | `DigiThings exec:cursor dispatch` |
+| **Name** | `digithings exec:cursor dispatch` |
 | **Trigger** | GitHub — issue labeled `exec:cursor` |
 | **Repository** | `digithings-ai/digithings` |
 | **Base branch** | `develop` |
@@ -72,7 +72,7 @@ Configure the following Automation at [cursor.com/settings/automations](https://
 **Instructions (paste verbatim):**
 
 ```
-You are executing a DigiThings exec:cursor task. Work through this sequence:
+You are executing a digithings exec:cursor task. Work through this sequence:
 
 1. PRE-FLIGHT: Read the component AGENTS.md and ARCHITECTURE.md for the component
    identified from the issue labels (e.g. component:digisearch → digisearch/AGENTS.md).

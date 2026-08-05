@@ -1,4 +1,4 @@
-# DigiClaw — Spec
+# digiclaw — Spec
 
 **Port:** none (background process)  
 **Role:** Heartbeat runner and append-only JSONL audit log.

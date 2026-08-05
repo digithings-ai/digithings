@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "digivault"
 version = "0.1.0"
-description = "DigiVault – Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags, taxonomy) for DigiThings"
+description = "digivault – Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags, taxonomy) for digithings"
 readme = "ARCHITECTURE.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }

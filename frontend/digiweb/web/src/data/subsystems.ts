@@ -1,4 +1,4 @@
-/** DigiQuant subsystems — Atlas (research) → Hermes (signals) → Kairos (execution).
+/** digiquant subsystems — Atlas (research) → Hermes (signals) → Kairos (execution).
  *  Same shape conventions as modules; drives the pipeline graph + detail pages.
  *
  *  Accuracy note (#1846): Atlas and Hermes are shipped LangGraph sub-graphs under

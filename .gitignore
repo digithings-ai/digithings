@@ -47,7 +47,7 @@ digiquant/results/
 # Local agent memory archives (Cursor/agent tooling) — JAN-005
 .remember/
 
-# Local DigiKey dev SQLite (run_stack_local.sh) — JAN-006
+# Local digikey dev SQLite (run_stack_local.sh) — JAN-006
 .local_digikey.sqlite
 /*.sqlite
 
@@ -84,10 +84,10 @@ digikey/examples/vault.yaml
 digi-bundle-*.tar.gz
 .DS_Store
 
-# DigiGraph ECharts (installed in Docker / local npm ci; do not vendor node_modules)
+# digigraph ECharts (installed in Docker / local npm ci; do not vendor node_modules)
 digigraph/src/digigraph/tools/analytics/visualization/echarts/node_modules/
 
-# DigiSearch EDGAR dev exports (generated; keep devdata/edgar_sample/.gitkeep)
+# digisearch EDGAR dev exports (generated; keep devdata/edgar_sample/.gitkeep)
 digisearch/devdata/edgar_sample/edgar_*.md
 digisearch/devdata/edgar_sample/edgar_*.yaml
 

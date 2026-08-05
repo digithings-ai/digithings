@@ -1,8 +1,8 @@
-# DigiChat Phase 2 unification — design
+# digichat Phase 2 unification — design
 
 **Date:** 2026-08-05
 **Status:** Approved (brainstorm complete; awaiting user review of this written spec)
-**Scope:** Phase 2 of the DigiChat unification program — digivault provider port (2a) + digigraph rich mapping / dual-emit retirement (2b), shipped as **one PR**.
+**Scope:** Phase 2 of the digichat unification program — digivault provider port (2a) + digigraph rich mapping / dual-emit retirement (2b), shipped as **one PR**.
 
 ## Problem
 

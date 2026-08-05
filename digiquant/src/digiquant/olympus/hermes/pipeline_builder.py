@@ -1,4 +1,4 @@
-"""REM-059 — DigiQuant shim over DigiGraph's declarative phase builder.
+"""REM-059 — digiquant shim over digigraph's declarative phase builder.
 
 Atlas and Hermes sub-graphs share the same LangGraph topology helper. Full
 decoupling (copy implementation into digiquant, drop digigraph import) is

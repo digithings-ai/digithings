@@ -1,7 +1,7 @@
-# DigiQuant — Design & Implementation Gap (DigiChat / DigiGraph Vision)
+# digiquant — Design & Implementation Gap (digichat / digigraph Vision)
 
 **Audience:** Engineering planning for the “investing copilot” flow: research → user profiling → baseline strategy → iterate/backtest → optimize → compare → export/deploy.  
-**Scope:** DigiQuant’s role inside **DigiThings** (DigiChat UI, DigiGraph orchestration, DigiSearch RAG, DigiSmith observability, DigiClaw gateway).  
+**Scope:** digiquant’s role inside **digithings** (digichat UI, digigraph orchestration, digisearch RAG, digismith observability, digiclaw gateway).  
 **Status:** Gap analysis as of repo state (February 2026). Update this doc when capabilities land.
 
 ---
@@ -10,7 +10,7 @@
 
 ### 1.1 User journey (canonical)
 
-1. **Explore** — User asks about an asset class or theme (e.g. gold); system grounds answers in **documentation / peer-reviewed or curated sources** (primarily **DigiSearch**), not in fabricated backtest stats.
+1. **Explore** — User asks about an asset class or theme (e.g. gold); system grounds answers in **documentation / peer-reviewed or curated sources** (primarily **digisearch**), not in fabricated backtest stats.
 2. **Ideate** — System proposes **strategy families** that fit the user’s goals and literature, with honest uncertainty and **no implied performance** until a backtest runs.
 3. **Profile** — Structured capture of: horizon, long/short/both, instruments (spot, futures, ETF), risk tolerance, constraints, data availability, jurisdiction — stored as a **versioned intent object**, not only chat prose.
 4. **Baseline** — Map intent → **registered strategy + default params** (or approved template); run **initial backtest** on **user- or tenant-provided OHLCV** (or approved data feeds).
@@ -22,14 +22,14 @@
 
 | Layer | Owns |
 |-------|------|
-| **DigiChat** | UX, conversation persistence, displaying tool results & comparisons, tenant config (URLs, health). |
-| **DigiGraph** | LangGraph workflows, LLM calls, **when** to call quant vs search, session/workflow state, tool routing. |
-| **DigiSearch** | Ingestion, chunking, retrieval, citations for research steps. |
-| **DigiQuant** | **Deterministic** backtest/optimize/export, strategy registry, data loading (Polars), Nautilus execution, structured metrics. |
-| **DigiSmith** | Traces/metrics for LLM and (optionally) quant spans. |
-| **DigiClaw** | Gateway, audit, heartbeat — policy and egress concerns. |
+| **digichat** | UX, conversation persistence, displaying tool results & comparisons, tenant config (URLs, health). |
+| **digigraph** | LangGraph workflows, LLM calls, **when** to call quant vs search, session/workflow state, tool routing. |
+| **digisearch** | Ingestion, chunking, retrieval, citations for research steps. |
+| **digiquant** | **Deterministic** backtest/optimize/export, strategy registry, data loading (Polars), Nautilus execution, structured metrics. |
+| **digismith** | Traces/metrics for LLM and (optionally) quant spans. |
+| **digiclaw** | Gateway, audit, heartbeat — policy and egress concerns. |
 
-**Rule:** Anything that must not hallucinate (Sharpe, PnL, trade list) belongs in **DigiQuant** (or downstream verified stores), not in the raw LLM transcript.
+**Rule:** Anything that must not hallucinate (Sharpe, PnL, trade list) belongs in **digiquant** (or downstream verified stores), not in the raw LLM transcript.
 
 ---
 
@@ -72,22 +72,22 @@ Use this as the baseline for “reuse vs build.”
 
 Cross-cutting: **rate limits**, optional **`DIGI_API_KEY`** Bearer auth, **`X-Request-ID`**, **digibase** error envelope, optional OTEL (`digibase[otel]`).
 
-### 2.3 DigiGraph integration today (`digigraph/src/digigraph/graph/nodes.py`)
+### 2.3 digigraph integration today (`digigraph/src/digigraph/graph/nodes.py`)
 
-- **`backtest_node`** calls DigiQuant with **`strategy_name`**, **`symbols`**, **`data_dir`** from env **`DIGIQUANT_DATA_DIR`** only.
+- **`backtest_node`** calls digiquant with **`strategy_name`**, **`symbols`**, **`data_dir`** from env **`DIGIQUANT_DATA_DIR`** only.
 - Prefers **`POST /v1/jobs/backtest`** + poll **`GET /v1/jobs/{id}/status`**, then **`GET /backtest/{id}/result`**; falls back to legacy paths and finally **`POST /run_backtest`**.
 - **`strategy_validator_node`** checks `strategy_name` and non-empty `symbols`.
 - **Does not** pass **`strategy_params`**, **`data_path`**, **`constraints`**, or **`tearsheet_path`** from workflow state.
 
-### 2.4 DigiChat integration today
+### 2.4 digichat integration today
 
-- **Health / config**: `digichat/src/lib/ecosystem.ts`, connections sheet — operator can set **DigiQuant base URL**; `GET /api/health` pings DigiQuant.
-- **No first-class “quant run” UI** beyond generic tool/collapsible parts in chat (no comparison matrix, no run history from DigiQuant).
+- **Health / config**: `digichat/src/lib/ecosystem.ts`, connections sheet — operator can set **digiquant base URL**; `GET /api/health` pings digiquant.
+- **No first-class “quant run” UI** beyond generic tool/collapsible parts in chat (no comparison matrix, no run history from digiquant).
 
 ### 2.5 Architecture docs
 
-- `ARCHITECTURE.md` states **MCP-first** and “DigiGraph exposes major nodes as MCP tools”; DigiQuant is described as invoked **by DigiGraph**, not directly by the user.
-- `digiquant/ARCHITECTURE.md` Phase 2 is accurate for **backtest/optimize/export HTTP**; it notes **DigiGraph still calls HTTP** and full **MCP exposure from DigiQuant** is not the current primary integration.
+- `ARCHITECTURE.md` states **MCP-first** and “digigraph exposes major nodes as MCP tools”; digiquant is described as invoked **by digigraph**, not directly by the user.
+- `digiquant/ARCHITECTURE.md` Phase 2 is accurate for **backtest/optimize/export HTTP**; it notes **digigraph still calls HTTP** and full **MCP exposure from digiquant** is not the current primary integration.
 
 ---
 
@@ -100,20 +100,20 @@ For each area: **goal**, **today**, **gap**, **leverage existing code**, **optio
 | | |
 |--|--|
 | **Goal** | Grounded answers with citations; separate *theory* from *empirical results on user data*. |
-| **Today** | DigiQuant has **no RAG** and no paper index. DigiGraph runs **research_inner** + **research_brief_builder** with a typed **`ResearchBrief`** (`digigraph/research_brief_models.py`) and **`rag_sources`**; DigiSearch stores tier-tagged chunks and structured filters (see `digisearch/ARCHITECTURE.md`). |
+| **Today** | digiquant has **no RAG** and no paper index. digigraph runs **research_inner** + **research_brief_builder** with a typed **`ResearchBrief`** (`digigraph/research_brief_models.py`) and **`rag_sources`**; digisearch stores tier-tagged chunks and structured filters (see `digisearch/ARCHITECTURE.md`). |
 | **Gap** | Registry validation of **`suggested_catalog_strategies`** against live **`list_strategies`** remains a product hardening step. |
-| **Leverage** | Keep all literature in **DigiSearch** + DigiGraph prompts; DigiQuant exposes **`list_strategies`** + **`StrategySpec.metadata`** for catalog-aware briefs and backtests only. |
-| **Options** | (A) Duplicate a small “quant FAQ” corpus in DigiQuant — **avoid** (split brain). (B) **DigiSearch collections** per asset class + `digisearch` tool — **prefer**. |
-| **Direction** | Tighten **brief → validate_strategy → backtest**: reject unknown `strategy_name`, surface registry aliases in prompts, and keep **no performance claims** in RAG prompts until DigiQuant runs. |
+| **Leverage** | Keep all literature in **digisearch** + digigraph prompts; digiquant exposes **`list_strategies`** + **`StrategySpec.metadata`** for catalog-aware briefs and backtests only. |
+| **Options** | (A) Duplicate a small “quant FAQ” corpus in digiquant — **avoid** (split brain). (B) **digisearch collections** per asset class + `digisearch` tool — **prefer**. |
+| **Direction** | Tighten **brief → validate_strategy → backtest**: reject unknown `strategy_name`, surface registry aliases in prompts, and keep **no performance claims** in RAG prompts until digiquant runs. |
 
 ### 3.2 User profiling & intent (investment period, products, long/short)
 
 | | |
 |--|--|
 | **Goal** | Deterministic mapping from user answers to **backtest constraints** and **instrument universe**. |
-| **Today** | `WorkflowState` includes `trading_profile`, `research_brief`, `rag_sources`, `profiling_questions`, plus `strategy_name` / `symbols` / `backtest_result`. DigiQuant has **`OptimizationConstraints`**. |
-| **Gap** | No persisted **`TradingProfile` / `StrategyIntent`** shared across DigiChat session and DigiGraph checkpoint. |
-| **Leverage** | Extend **`WorkflowState`** (or a nested dict) with a versioned profile; mirror summaries into **DigiChat Postgres** (`conversations`) or **Graphiti** per `ARCHITECTURE.md`. |
+| **Today** | `WorkflowState` includes `trading_profile`, `research_brief`, `rag_sources`, `profiling_questions`, plus `strategy_name` / `symbols` / `backtest_result`. digiquant has **`OptimizationConstraints`**. |
+| **Gap** | No persisted **`TradingProfile` / `StrategyIntent`** shared across digichat session and digigraph checkpoint. |
+| **Leverage** | Extend **`WorkflowState`** (or a nested dict) with a versioned profile; mirror summaries into **digichat Postgres** (`conversations`) or **Graphiti** per `ARCHITECTURE.md`. |
 | **Options** | (A) Profile only in LLM memory — **weak** (drift, no audits). (B) **Pydantic profile** required before `backtest_node` — **strong**. |
 | **Direction** | Add **`digigraph/models/profile.py`** (or under `digiquant` only if you want quant-owned validation): horizon, allowed sides, max leverage, instrument types, tax considerations — **validate** against what Nautilus strategies actually support. |
 
@@ -133,11 +133,11 @@ For each area: **goal**, **today**, **gap**, **leverage existing code**, **optio
 | | |
 |--|--|
 | **Goal** | Chat says “gold”; system resolves to **correct CSV / feed** and bar size. |
-| **Today** | Operator sets **`DIGIQUANT_DATA_DIR`**; files must be **`{symbol}.csv`**. **`scripts/fetch_real_ohlcv.py`** exists for ad hoc fetch. Chat has **no** upload flow to DigiQuant volume. |
+| **Today** | Operator sets **`DIGIQUANT_DATA_DIR`**; files must be **`{symbol}.csv`**. **`scripts/fetch_real_ohlcv.py`** exists for ad hoc fetch. Chat has **no** upload flow to digiquant volume. |
 | **Gap** | No **session-scoped dataset registry** linking `X-Digichat-Session` → approved data refs (Digistore / blob URI). |
-| **Leverage** | `data/loader.py` and env **`DIGIQUANT_DATA_DIR`**; `WorkflowState.stored_datasets` hook exists in state typed dict but is **not** wired to DigiQuant paths in `backtest_node`. |
-| **Options** | (A) Pre-load tenant datasets on volume — ops-heavy. (B) **DigiChat upload** → object store + **signed path** passed as `data_path` — product-friendly. (C) **Data catalog service** — longer-term. |
-| **Direction** | Minimal: extend **`backtest_node`** to accept **`data_path`** or **`dataset_ref`** from state populated by an upload/metadata tool. DigiQuant adds **`POST /datasets/register` (optional)** only if BFF cannot map refs to paths. |
+| **Leverage** | `data/loader.py` and env **`DIGIQUANT_DATA_DIR`**; `WorkflowState.stored_datasets` hook exists in state typed dict but is **not** wired to digiquant paths in `backtest_node`. |
+| **Options** | (A) Pre-load tenant datasets on volume — ops-heavy. (B) **digichat upload** → object store + **signed path** passed as `data_path` — product-friendly. (C) **Data catalog service** — longer-term. |
+| **Direction** | Minimal: extend **`backtest_node`** to accept **`data_path`** or **`dataset_ref`** from state populated by an upload/metadata tool. digiquant adds **`POST /datasets/register` (optional)** only if BFF cannot map refs to paths. |
 
 ### 3.5 Backtest parameterized from chat
 
@@ -165,11 +165,11 @@ For each area: **goal**, **today**, **gap**, **leverage existing code**, **optio
 | | |
 |--|--|
 | **Goal** | Side-by-side metrics for A/B variants; reproducibility. |
-| **Today** | Each `BacktestResult` has `run_id`; **no** persistent run store in DigiQuant; in-memory **backtest cache** only. |
+| **Today** | Each `BacktestResult` has `run_id`; **no** persistent run store in digiquant; in-memory **backtest cache** only. |
 | **Gap** | **Artifact store** (Postgres/JSONL/S3) with `session_id`, `strategy_name`, `params`, `data fingerprint`, metrics. |
 | **Leverage** | `audit.py` JSONL pattern (`dq_audit_log`); **`run_id`** already generated. |
-| **Options** | (A) **DigiChat DB** tables `quant_runs` — UI-native. (B) **DigiQuant-owned** `results/` SQLite/Postgres — better for non-chat clients. (C) **Blob + checksum** per `ARCHITECTURE.md` “opaque URI”. |
-| **Direction** | Define **canonical run record** (Pydantic) emitted by DigiQuant and stored by **DigiChat or shared DB**; add **`GET /runs/{run_id}`** only if DigiQuant is source of truth. |
+| **Options** | (A) **digichat DB** tables `quant_runs` — UI-native. (B) **digiquant-owned** `results/` SQLite/Postgres — better for non-chat clients. (C) **Blob + checksum** per `ARCHITECTURE.md` “opaque URI”. |
+| **Direction** | Define **canonical run record** (Pydantic) emitted by digiquant and stored by **digichat or shared DB**; add **`GET /runs/{run_id}`** only if digiquant is source of truth. |
 
 ### 3.8 Export: Python script, Pine, QuantConnect, brokers
 
@@ -182,12 +182,12 @@ For each area: **goal**, **today**, **gap**, **leverage existing code**, **optio
 | **Options** | (A) **Template-based codegen** per strategy class — maintainable. (B) **LLM writes Pine** — inconsistent; use only with **lint + simulator gate**. |
 | **Direction** | **Per-target milestones:** (1) Nautilus **zip** with strategy file + `config.yaml`. (2) Pine for **EMA + RSI** only. (3) QC template. Broker adapters **after** paper trading story. |
 
-### 3.9 MCP vs HTTP for DigiGraph
+### 3.9 MCP vs HTTP for digigraph
 
 | | |
 |--|--|
 | **Goal** | Discoverable tools with schemas for LLM tool-calling. |
-| **Today** | **HTTP** from `backtest_node`; DigiGraph **MCP server** may expose other tools — DigiQuant is **not** yet a first-class MCP server in this repo. |
+| **Today** | **HTTP** from `backtest_node`; digigraph **MCP server** may expose other tools — digiquant is **not** yet a first-class MCP server in this repo. |
 | **Gap** | Duplication risk if both HTTP and MCP drift. |
 | **Leverage** | Implement **`digiquant/mcp_server.py`** (or shared **thin wrapper**) calling the **same** functions as FastAPI handlers: `run_backtest`, `run_optimize`, `run_export`, `list_strategies`, `get_strategy_spec`. |
 | **Options** | (A) MCP-only to graph — **clean** for agents. (B) HTTP for ops + MCP for graph — **pragmatic**; generate MCP schemas from Pydantic. |
@@ -208,7 +208,7 @@ For each area: **goal**, **today**, **gap**, **leverage existing code**, **optio
 |--|--|
 | **Goal** | No arbitrary code execution from chat; least privilege; audit trail. |
 | **Today** | **`EXPORT_OUTPUT_DIR`** path confinement; optional **API key**; strategies are **repo-controlled**. |
-| **Gap** | Uploaded data **PII/market data licensing**; **tenant isolation** on shared DigiQuant instance; **secrets** in export artifacts. |
+| **Gap** | Uploaded data **PII/market data licensing**; **tenant isolation** on shared digiquant instance; **secrets** in export artifacts. |
 | **Direction** | Tenant-scoped **`DATA_ROOT`**, per-tenant API keys, **no secrets in export JSON**, **SSE/job IDs** not enumerable across tenants without auth. |
 
 ---
@@ -216,7 +216,7 @@ For each area: **goal**, **today**, **gap**, **leverage existing code**, **optio
 ## 4. Refactor candidates (reduce duplication, clarify boundaries)
 
 1. **`service` module** — Extract `backtest_service`, `optimize_service`, `export_service`, `catalog_service` from `server.py`/`cli.py` entrypoints so **CLI, HTTP, and MCP** share one path.
-2. **Strategy discovery API** — Expose `list_strategies()` + param JSON Schema (generate via Pydantic v2) for **tool definitions** and **DigiChat** docs.
+2. **Strategy discovery API** — Expose `list_strategies()` + param JSON Schema (generate via Pydantic v2) for **tool definitions** and **digichat** docs.
 3. **Align registry vs `_KNOWN_STRATEGIES`** — `backtest.py` uses `strategy_specs` keys; **`get_strategy`** uses `registry`. Ensure **every** registered strategy has specs (or explicit “no optimize” flag).
 4. **Workflow state typing** — Replace raw `dict` for `backtest_result` with **serialized `BacktestResult`** validation on load (optional) to catch drift.
 5. **Async symmetry** — Backtest has v1 jobs; optimize/pipeline do not — add when UX needs it.
@@ -229,20 +229,20 @@ For each area: **goal**, **today**, **gap**, **leverage existing code**, **optio
 
 1. Add **`strategy_params`** to **`BacktestRequest`** + async job body; thread through `_run_backtest_job`.
 2. Extend **`WorkflowState`** + **`backtest_node`** to pass **`strategy_params`**, optional **`data_path`**, optional **`tearsheet_path`** (off by default for speed).
-3. Add **DigiGraph tool or node** `optimize` calling **`POST /run_optimize`** with constraints from **`TradingProfile`** (new model).
-4. Document **symbol ↔ file** convention for GOLD (e.g. `XAUUSD.csv`) in **`digiquant/ARCHITECTURE.md`** and DigiChat onboarding.
+3. Add **digigraph tool or node** `optimize` calling **`POST /run_optimize`** with constraints from **`TradingProfile`** (new model).
+4. Document **symbol ↔ file** convention for GOLD (e.g. `XAUUSD.csv`) in **`digiquant/ARCHITECTURE.md`** and digichat onboarding.
 
 ### Phase B — “Catalog + research bridge”
 
 1. HTTP **`GET /strategies`** or MCP **`digiquant_list_strategies`** (+ optional JSON Schema per strategy).
-2. **DigiSearch** collection tags aligned with **`StrategySpec`** tags.
-3. **Profile builder subgraph** in DigiGraph before first backtest.
+2. **digisearch** collection tags aligned with **`StrategySpec`** tags.
+3. **Profile builder subgraph** in digigraph before first backtest.
 
 ### Phase C — “Compare + persistence”
 
-1. **Run record** schema + storage (prefer DigiChat Postgres or shared DB).
-2. **DigiChat UI**: comparison table component for `BacktestResult[]`.
-3. Optional **DigiQuant `GET /runs/{id}`** if multi-client.
+1. **Run record** schema + storage (prefer digichat Postgres or shared DB).
+2. **digichat UI**: comparison table component for `BacktestResult[]`.
+3. Optional **digiquant `GET /runs/{id}`** if multi-client.
 
 ### Phase D — “Export that is actually deployable”
 
@@ -256,7 +256,7 @@ VectorBT Pro sweeps, Qlib/FinRL, remote workers — per original `digiquant/ARCH
 
 ---
 
-## 6. Suggested MCP tool surface (for DigiGraph)
+## 6. Suggested MCP tool surface (for digigraph)
 
 Names are illustrative; align with `digigraph` orchestration registry conventions.
 
@@ -268,7 +268,7 @@ Names are illustrative; align with `digigraph` orchestration registry convention
 | `digiquant_run_optimize` | same + `method`, `n_trials`, `constraints`, `param_grid?` | `OptimizeResult` |
 | `digiquant_run_pipeline` | profile-minimal subset | `{ backtest, optimize, export }` |
 | `digiquant_export` | `strategy_name`, `params`, `target` | `ExportResult` |
-| `digiquant_compare_runs` | `run_ids[]` *(may live in DigiChat/BFF if store is there)* | comparison DTO |
+| `digiquant_compare_runs` | `run_ids[]` *(may live in digichat/BFF if store is there)* | comparison DTO |
 
 **Implementation note:** Prefer **one** Pydantic request model per tool shared with HTTP `POST` bodies to prevent schema drift.
 
@@ -276,11 +276,11 @@ Names are illustrative; align with `digigraph` orchestration registry convention
 
 ## 7. How operators integrate the stack (reference deployment)
 
-1. **Compose / k8s**: DigiQuant **service** on **8001**; mount **volume** for `DIGIQUANT_DATA_DIR` (or per-tenant subdirs).  
-2. **DigiGraph** env: **`DIGIQUANT_URL`**, **`DIGIQUANT_DATA_DIR`**, **`DIGI_API_KEY`** aligned with DigiQuant middleware.  
-3. **DigiChat**: set **`digiquantUrl`** in ecosystem config; health badge green.  
-4. **DigiSearch**: index papers/docs; DigiGraph **research** tool points here — **not** DigiQuant HTTP.  
-5. **Observability**: propagate **`X-Request-ID`** from DigiChat (`X-Digichat-Session` / session id) through DigiGraph to DigiQuant for support correlating traces (`digibase` OTEL optional).
+1. **Compose / k8s**: digiquant **service** on **8001**; mount **volume** for `DIGIQUANT_DATA_DIR` (or per-tenant subdirs).  
+2. **digigraph** env: **`DIGIQUANT_URL`**, **`DIGIQUANT_DATA_DIR`**, **`DIGI_API_KEY`** aligned with digiquant middleware.  
+3. **digichat**: set **`digiquantUrl`** in ecosystem config; health badge green.  
+4. **digisearch**: index papers/docs; digigraph **research** tool points here — **not** digiquant HTTP.  
+5. **Observability**: propagate **`X-Request-ID`** from digichat (`X-Digichat-Session` / session id) through digigraph to digiquant for support correlating traces (`digibase` OTEL optional).
 
 ---
 
@@ -302,7 +302,7 @@ Names are illustrative; align with `digigraph` orchestration registry convention
 | **Strategy catalog HTTP/MCP** | **Resolved:** `GET /strategies`, `digiquant.mcp_server` tools calling `digiquant.service`. |
 | **Export bundle** | **Partial:** `nautilus_bundle` zip for `ema_cross` only; expand strategies later. |
 | **Pipeline vs full profiling** | **Open:** `run_pipeline` still does not thread full `TradingProfile` into every step (use workflow body fields). |
-| **Research vs metrics** | **Open:** enforce wording templates in DigiGraph prompts so RAG never implies live performance. |
+| **Research vs metrics** | **Open:** enforce wording templates in digigraph prompts so RAG never implies live performance. |
 
 ---
 

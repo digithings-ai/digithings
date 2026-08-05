@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "digillm"
 version = "0.1.0"
-description = "DigiLLM – provider-agnostic OpenAI-compatible LLM client (routing, retry, cache, tools, structured output) for DigiThings"
+description = "digillm – provider-agnostic OpenAI-compatible LLM client (routing, retry, cache, tools, structured output) for digithings"
 readme = "ARCHITECTURE.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }

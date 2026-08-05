@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Sync the DigiVault-managed ``docs/vision`` vault → Supabase ``public.architecture_notes``.
+"""Sync the digivault-managed ``docs/vision`` vault → Supabase ``public.architecture_notes``.
 
-Dogfoods two DigiThings modules:
+Dogfoods two digithings modules:
 
 * **digivault** — parses the Obsidian vault (YAML frontmatter, body, ``[[wikilinks]]``)
   via the core ``Vault`` index. It is the single source of truth for note structure.
@@ -59,7 +59,7 @@ def _summary_from_body(body: str) -> str:
 
 
 def build_rows(vault_dir: str) -> list[dict[str, Any]]:
-    """Parse the vault with DigiVault and map each note to an architecture_notes row."""
+    """Parse the vault with digivault and map each note to an architecture_notes row."""
     vault = Vault(vault_dir)
     rows: list[dict[str, Any]] = []
     for note in vault.list_notes():

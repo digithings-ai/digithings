@@ -1,4 +1,4 @@
-"""Graph nodes: research (LLM), backtest (DigiQuant). Phase 1."""
+"""Graph nodes: research (LLM), backtest (digiquant). Phase 1."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def supervisor_node(state: WorkflowState, config: dict | None = None) -> dict:
 
 
 def strategy_validator_node(state: WorkflowState, config: dict | None = None) -> dict:
-    """Ensure quant backtest inputs exist before calling DigiQuant."""
+    """Ensure quant backtest inputs exist before calling digiquant."""
     if state.get("error"):
         return {}
     cb = _resolve_stream_callback(state, config)
@@ -120,11 +120,11 @@ def strategy_validator_node(state: WorkflowState, config: dict | None = None) ->
 
 
 def backtest_node(state: WorkflowState) -> dict:
-    """Call DigiQuant backtest; write result or error into state. Requires strategy_name and symbols.
+    """Call digiquant backtest; write result or error into state. Requires strategy_name and symbols.
 
     Prefers **POST /v1/jobs/backtest** + **GET /v1/jobs/{id}/status** polling, then
     **GET /backtest/{job_id}/result**. Otherwise uses /backtest/start + SSE progress, then
-    synchronous **POST /run_backtest** for minimal DigiQuant deployments.
+    synchronous **POST /run_backtest** for minimal digiquant deployments.
     Progress events are logged at DEBUG level.
     """
     if state.get("error"):
@@ -233,7 +233,7 @@ def backtest_node(state: WorkflowState) -> dict:
 
 
 def optimize_node(state: WorkflowState) -> dict:
-    """Call DigiQuant POST /run_optimize after a successful backtest. Requires strategy_name, symbols, DIGIQUANT_DATA_DIR."""
+    """Call digiquant POST /run_optimize after a successful backtest. Requires strategy_name, symbols, DIGIQUANT_DATA_DIR."""
     if state.get("error"):
         return {"optimize_result": None, "optimize_error": None}
     strategy_name = state.get("strategy_name")

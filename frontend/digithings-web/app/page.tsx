@@ -17,7 +17,7 @@ import { DtNav } from "@/components/DtNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ModuleManifest } from "@/components/landing/ModuleManifest";
 
-// v8 landing for the DigiThings platform — 100% reference-sourced + expressive
+// v8 landing for the digithings platform — 100% reference-sourced + expressive
 // (#1450). A mouse-following mesh-gradient hero (HeroMesh + reveal-field
 // HeroGraph) opens, then every visual block is a promoted @digithings/web
 // primitive or token-backed utility: a drifting Marquee stack strip, a
@@ -266,13 +266,13 @@ export default function Home() {
             <div className="mt-[2rem] flex flex-wrap justify-center gap-[0.8rem]">
               <a
                 className="btn btn-primary"
-                href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20inquiry`}
+                href={`mailto:${DT_CONTACT_EMAIL}?subject=digithings%20inquiry`}
               >
                 Email us <span aria-hidden="true">→</span>
               </a>
               <a
                 className="btn btn-ghost"
-                href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20enterprise`}
+                href={`mailto:${DT_CONTACT_EMAIL}?subject=digithings%20enterprise`}
               >
                 Enterprise
               </a>

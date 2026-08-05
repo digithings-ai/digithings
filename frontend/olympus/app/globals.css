@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/* ── DigiThings design canon ─────────────────────────────────────────────
+/* ── digithings design canon ─────────────────────────────────────────────
    tokens.css declares the [data-theme] semantic tokens; web-theme.css is THE
    Tailwind v4 bridge (`@theme inline`) that turns them into utilities
    (text-ink, bg-surface, border-hair, text-up/down, font-mono, …). Olympus

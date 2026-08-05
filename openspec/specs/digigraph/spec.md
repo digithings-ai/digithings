@@ -1,4 +1,4 @@
-# DigiGraph — Spec
+# digigraph — Spec
 
 **Port:** 8000  
 **Role:** LangGraph orchestration brain — MCP tool router, OpenAI-compatible API, multi-turn thread manager.

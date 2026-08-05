@@ -1,5 +1,5 @@
 /**
- * DigiThings code-sample-band — accessible tabbed code snippets (WAI-ARIA
+ * digithings code-sample-band — accessible tabbed code snippets (WAI-ARIA
  * "Tabs with Automatic Activation" pattern) with a copy-to-clipboard button
  * on the active panel.
  *

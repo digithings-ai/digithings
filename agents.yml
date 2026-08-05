@@ -208,7 +208,7 @@ agent_capabilities:
     make_target: task
 
   - id: parse-traceback
-    description: "Parse a Python stack trace and identify the DigiThings component"
+    description: "Parse a Python stack trace and identify the digithings component"
     script: scripts/parse_traceback.py
     make_target: parse-error
 
@@ -239,7 +239,7 @@ claude_code_surface:
       purpose: "Red/green/refactor TDD loop bound to the component test command"
     - name: security-reviewer
       path: .claude/agents/security-reviewer.md
-      purpose: "OWASP + DigiThings security sweep before auth/crypto PRs"
+      purpose: "OWASP + digithings security sweep before auth/crypto PRs"
   skills:
     - name: triage
       path: .claude/skills/triage/SKILL.md

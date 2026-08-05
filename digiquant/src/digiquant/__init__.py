@@ -1,5 +1,5 @@
-# DigiQuant – high-perf Nautilus + Polars pipeline (Digi Ecosystem).
-# See digiquant/ARCHITECTURE.md. MCP tools for DigiGraph; no pandas.
+# digiquant – high-perf Nautilus + Polars pipeline (Digi Ecosystem).
+# See digiquant/ARCHITECTURE.md. MCP tools for digigraph; no pandas.
 
 __version__ = "0.1.0"
 

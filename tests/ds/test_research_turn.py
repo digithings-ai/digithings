@@ -1,4 +1,4 @@
-"""DigiSearch composite research turn (agent graph + HTTP)."""
+"""digisearch composite research turn (agent graph + HTTP)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Call DigiSearch ``POST /v1/research_turn`` from the hub."""
+"""Call digisearch ``POST /v1/research_turn`` from the hub."""
 
 from __future__ import annotations
 
@@ -35,10 +35,10 @@ def call_research_turn(
             detail: Any = e.response.json()
         except (json.JSONDecodeError, ValueError, TypeError):
             detail = e.response.text
-        logger.warning("DigiSearch research_turn HTTP %s: %s", e.response.status_code, detail)
+        logger.warning("digisearch research_turn HTTP %s: %s", e.response.status_code, detail)
         return {"ok": False, "status_code": e.response.status_code, "error": detail}
     except httpx.RequestError as e:
-        logger.warning("DigiSearch research_turn request error: %s", e)
+        logger.warning("digisearch research_turn request error: %s", e)
         return {"ok": False, "status_code": None, "error": str(e)}
     if isinstance(body, dict):
         body.setdefault("ok", True)

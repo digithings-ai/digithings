@@ -33,7 +33,7 @@ git rev-list --count origin/module/<component>..origin/develop   # 0 = current; 
 |--------|---------|------------|
 | `main` | What is actually deployed / released. | PR required (1 approval), no force-push, no deletion. Linear history is **not** enforced. |
 | `develop` | Integration branch — merge target for module sprints and cross-cutting work. Also the repo's **default branch**. | PR required (0 approvals), no force-push, no deletion. |
-| `module/<component>` | Per-module integration branch. One per DigiThings module. PRs into develop. | No force-push, no deletion, PR required (0 approvals) — the `module-branch-protection` ruleset on `refs/heads/module/**`. |
+| `module/<component>` | Per-module integration branch. One per digithings module. PRs into develop. | No force-push, no deletion, PR required (0 approvals) — the `module-branch-protection` ruleset on `refs/heads/module/**`. |
 
 Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
 (belt-and-suspenders on top of the PR gate).

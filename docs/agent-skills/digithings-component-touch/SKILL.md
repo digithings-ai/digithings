@@ -1,9 +1,9 @@
 ---
 name: digithings-component-touch
-description: Before editing a DigiThings component, load the right DIGIxxx.md and test commands.
+description: Before editing a digithings component, load the right DIGIxxx.md and test commands.
 ---
 
-# DigiThings component touch skill
+# digithings component touch skill
 
 ## When to use
 

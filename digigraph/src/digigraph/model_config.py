@@ -1,4 +1,4 @@
-"""DigiGraph model configuration & request-model routing.
+"""digigraph model configuration & request-model routing.
 
 Relocated from the former monolithic ``digigraph.llm`` (decommissioned in #632
 P2). Owns everything about *which model string* a request should use:

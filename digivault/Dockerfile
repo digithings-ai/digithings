@@ -1,6 +1,6 @@
-# DigiVault – Obsidian-style markdown vault management for the Digi ecosystem
+# digivault – Obsidian-style markdown vault management for the Digi ecosystem
 # Build from repo root: docker compose build digivault (context: .)
-# See digivault/ARCHITECTURE.md. HTTP API + MCP tooling for DigiGraph.
+# See digivault/ARCHITECTURE.md. HTTP API + MCP tooling for digigraph.
 
 FROM python:3.12-slim
 

@@ -5,9 +5,9 @@ Production-grade test layout for Phase 0+. See CONTRIBUTING.md for requirements.
 ## Layout
 
 - **`tests/`** (root) – All tests.
-  - **`tests/dq/`** – Unit + API tests for DigiQuant (models, backtest, data, optimize, export, pipeline, brokers, FastAPI). Phase 2 complete.
-  - **`tests/dg/`** – Unit + API tests for DigiGraph (models, workflow, graph, LLM, FastAPI).
-  - **`tests/dc/`** – Unit tests for DigiClaw (audit). Phase 3.
+  - **`tests/dq/`** – Unit + API tests for digiquant (models, backtest, data, optimize, export, pipeline, brokers, FastAPI). Phase 2 complete.
+  - **`tests/dg/`** – Unit + API tests for digigraph (models, workflow, graph, LLM, FastAPI).
+  - **`tests/dc/`** – Unit tests for digiclaw (audit). Phase 3.
   - **`tests/test_e2e.py`** – E2E tests (require stack: `docker compose up` or local servers).
 
 ## Markers
@@ -16,7 +16,7 @@ Production-grade test layout for Phase 0+. See CONTRIBUTING.md for requirements.
 |---------------|--------|
 | `unit`        | No network, no Docker. Safe to run anywhere. |
 | `integration` | Uses HTTP (TestClient or live server). |
-| `e2e`         | Full stack: DigiGraph + DigiQuant must be up (LiteLLM checked on **127.0.0.1:4000** or **`LITELLM_URL`**). |
+| `e2e`         | Full stack: digigraph + digiquant must be up (LiteLLM checked on **127.0.0.1:4000** or **`LITELLM_URL`**). |
 | `slow`        | Slow tests (e.g. full Nautilus backtest). |
 
 ## Run tests
@@ -41,10 +41,10 @@ pytest -v
 Per package:
 
 ```bash
-# DigiQuant only
+# digiquant only
 pytest tests/dq -v
 
-# DigiGraph only
+# digigraph only
 pytest tests/dg -v
 ```
 

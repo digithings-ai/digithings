@@ -1,24 +1,24 @@
-# DigiQuant — Project Planning Brief
+# digiquant — Project Planning Brief
 > For agent execution: generate GitHub Issues, Milestones, and Project Board from this document.
 
 ---
 
 ## Overview
 
-DigiQuant is the quantitative finance toolkit module within the DigiThings platform. It is **not a standalone product** — it is a service layer that exposes capabilities as MCP tools and CLI commands, consumed by DigiGraph (the agent orchestration brain) and surfaced through DigiChat (the chat UI).
+digiquant is the quantitative finance toolkit module within the digithings platform. It is **not a standalone product** — it is a service layer that exposes capabilities as MCP tools and CLI commands, consumed by digigraph (the agent orchestration brain) and surfaced through digichat (the chat UI).
 
-The primary use case is **interactive strategy development via chat**: a user describes a trading idea, an agent taps into DigiQuant's tools to research, build, backtest, and iterate on a strategy — no coding expertise required.
+The primary use case is **interactive strategy development via chat**: a user describes a trading idea, an agent taps into digiquant's tools to research, build, backtest, and iterate on a strategy — no coding expertise required.
 
 **Primary flow:**
 ```
-User (DigiChat) → DigiGraph agent → DigiQuant MCP tools → Results back to chat
+User (digichat) → digigraph agent → digiquant MCP tools → Results back to chat
 ```
 
 ---
 
 ## Four-Stage Architecture
 
-DigiQuant is organized into four sequential stages. Everything maps to one of these:
+digiquant is organized into four sequential stages. Everything maps to one of these:
 
 ### Stage 1 — Ideation
 Research and strategy discovery. Agents explore the strategy library to find candidates, understand what's available, and prompt the user with targeted questions to define a strategy for a given use case.
@@ -43,7 +43,7 @@ Connecting to execution venues (Interactive Brokers, Alpaca, QuantConnect) or ex
   - A **markdown document** — thesis, objective, use case, asset fit, limitations, conceptual explanation for agents
   - A **Python (or Rust) implementation** — actual strategy logic
 - Library lives locally for built-in strategies; custom strategies stored in Supabase (digiquant project/schema)
-- DigiSearch indexes the markdown documents for agent-driven exploration and semantic search
+- digisearch indexes the markdown documents for agent-driven exploration and semantic search
 - Seed library: classic technical strategies (mean reversion, momentum, trend following, stat arb stubs)
 - Grows organically over time as strategies are developed and saved
 
@@ -55,9 +55,9 @@ Connecting to execution venues (Interactive Brokers, Alpaca, QuantConnect) or ex
 - Exposed as MCP tools so agents can call them programmatically
 
 ### 3. Price Data Engine (migrated from Atlas)
-- Migrate the existing Atlas Yahoo Finance pipeline into DigiQuant
-- DigiQuant becomes the **source of truth** for price data across the platform
-- Atlas taps into DigiQuant instead of maintaining its own pipeline
+- Migrate the existing Atlas Yahoo Finance pipeline into digiquant
+- digiquant becomes the **source of truth** for price data across the platform
+- Atlas taps into digiquant instead of maintaining its own pipeline
 - Phase 1: Yahoo Finance (already exists), expand to free sources (Alpha Vantage, Twelve Data, CoinGecko for crypto)
 - Price data stored in Supabase (digiquant schema — OHLCV tables per asset/timeframe)
 - Background job that keeps price tables updated on a schedule
@@ -82,21 +82,21 @@ Connecting to execution venues (Interactive Brokers, Alpaca, QuantConnect) or ex
 - Output: HTML file (downloadable) + structured JSON metrics (for agent consumption)
 
 ### 7. PineScript Converter
-- Converts a DigiQuant strategy config + indicator composition into valid PineScript v5/v6
+- Converts a digiquant strategy config + indicator composition into valid PineScript v5/v6
 - Output: `.pine` file the user can copy into TradingView
 - Future: import PineScript from TradingView → convert to Python strategy (Phase 2)
 
 ### 8. MCP + CLI Interface
-- Every DigiQuant capability exposed as an MCP tool (DigiGraph can call it)
+- Every digiquant capability exposed as an MCP tool (digigraph can call it)
 - Also exposed as CLI commands (direct use, scripting, agent coding tools)
 - OpenAPI spec generated from the MCP tool definitions
-- Authentication via DigiKey (JWT + API keys, consistent with rest of DigiThings)
+- Authentication via digikey (JWT + API keys, consistent with rest of digithings)
 
-### 9. DigiSearch Integration
-- DigiSearch indexes the strategy library markdown documents
+### 9. digisearch Integration
+- digisearch indexes the strategy library markdown documents
 - Enables agents to semantically search: "find me momentum strategies that work on crypto"
 - Phase 1: assess whether Supabase's built-in vector search (pgvector) is sufficient — avoids a separate vector DB dependency
-- If pgvector is sufficient, configure DigiSearch to use it as the backend for the strategy index
+- If pgvector is sufficient, configure digisearch to use it as the backend for the strategy index
 
 ---
 
@@ -116,16 +116,16 @@ Tables needed:
 ### Phase 1 — Foundation (Target: ~2 weeks)
 **Goal: end-to-end working path from chat prompt → backtest result.**
 
-Everything needed for a user to say "build me a mean-reversion strategy on BTC using RSI and Bollinger Bands, backtest it on the last 2 years" and get a result back through DigiChat.
+Everything needed for a user to say "build me a mean-reversion strategy on BTC using RSI and Bollinger Bands, backtest it on the last 2 years" and get a result back through digichat.
 
 **Milestones:**
 1. **Data Engine** — Migrate Atlas pipeline. Supabase schema. Price update job. MCP tools for price data.
 2. **Indicator Library** — Wrap ta-lib/pandas-ta. Polars interface. 10 core indicators exposed as MCP tools.
-3. **Strategy Library (seed)** — File structure defined. 3–5 seed strategies documented and implemented. DigiSearch indexing configured.
+3. **Strategy Library (seed)** — File structure defined. 3–5 seed strategies documented and implemented. digisearch indexing configured.
 4. **Backtesting (MVP)** — NautilusTrader wrapper. Single-strategy backtest via MCP tool. Structured output.
 5. **Tear Sheet (MVP)** — Basic HTML tear sheet from backtest results. Quantstats baseline.
-6. **MCP + CLI scaffold** — All Phase 1 tools registered. CLI commands wired. DigiGraph integration tested.
-7. **DigiChat smoke test** — End-to-end: chat prompt → agent → DigiQuant tools → result in chat.
+6. **MCP + CLI scaffold** — All Phase 1 tools registered. CLI commands wired. digigraph integration tested.
+7. **digichat smoke test** — End-to-end: chat prompt → agent → digiquant tools → result in chat.
 
 ### Phase 2 — Strategy Development Loop (Target: ~4–6 weeks post Phase 1)
 **Goal: interactive, iterative strategy development via chat.**
@@ -136,13 +136,13 @@ Everything needed for a user to say "build me a mean-reversion strategy on BTC u
 - PineScript export (basic conversion for indicator-based strategies)
 - TradingView PineScript import → Python conversion (experimental)
 - Expand price data sources (Alpha Vantage, crypto)
-- DigiSearch semantic search over strategy library (assess pgvector)
+- digisearch semantic search over strategy library (assess pgvector)
 
 ### Phase 3 — Agentic Strategy Research (Longer term)
 **Goal: agents autonomously research opportunities and propose/build strategies.**
 
-- Atlas integration: Atlas identifies macro opportunities → DigiQuant agent builds a strategy to capitalize
-- Example: Atlas flags oil supply disruption → DigiQuant agent proposes long oil futures or VIX trade, builds and backtests it
+- Atlas integration: Atlas identifies macro opportunities → digiquant agent builds a strategy to capitalize
+- Example: Atlas flags oil supply disruption → digiquant agent proposes long oil futures or VIX trade, builds and backtests it
 - Self-iterating strategy agent: runs optimization rounds, evaluates results, proposes improvements
 - Multi-strategy portfolio construction
 - Broker connections: Alpaca first (simplest API), then Interactive Brokers, then QuantConnect
@@ -157,11 +157,11 @@ Everything needed for a user to say "build me a mean-reversion strategy on BTC u
 | Dataframe | Polars only — no pandas | Performance, memory efficiency, required for optimization rounds |
 | Backtesting | NautilusTrader | Already decided. Rust-core, institutional grade |
 | Indicators | ta-lib / pandas-ta wrapped with Polars interface | Don't reinvent the wheel; wrap and optimize |
-| Database | Supabase (digiquant schema) | Already used in DigiThings, MCP connector available, free tier, pgvector built in |
+| Database | Supabase (digiquant schema) | Already used in digithings, MCP connector available, free tier, pgvector built in |
 | Vector search | Supabase pgvector (assess first) | Avoids external vector DB dependency if sufficient |
 | Strategy format | YAML/TOML config + Markdown doc + Python impl | Machine-readable config, human/agent-readable docs, typed implementation |
 | Tear sheets | Quantstats baseline + custom HTML layer | Don't maintain a metrics library; customize the presentation layer |
-| Auth | DigiKey (JWT + API keys) | Consistent with rest of DigiThings |
+| Auth | digikey (JWT + API keys) | Consistent with rest of digithings |
 
 ---
 
@@ -180,11 +180,11 @@ Everything needed for a user to say "build me a mean-reversion strategy on BTC u
 
 ### Milestone: Data Engine
 
-**[MIGRATION] Migrate Atlas price pipeline into DigiQuant**
+**[MIGRATION] Migrate Atlas price pipeline into digiquant**
 - Priority: Critical | Complexity: M | Phase: 1
 - Move Yahoo Finance ingestion job from Atlas into `digiquant/data/`
 - Create Supabase `digiquant` schema with `assets` and `price_ohlcv` tables
-- Atlas updated to call DigiQuant data MCP tools instead of its own pipeline
+- Atlas updated to call digiquant data MCP tools instead of its own pipeline
 - Background scheduler for price updates
 
 **[FEATURE] MCP tools: price data**
@@ -229,10 +229,10 @@ Everything needed for a user to say "build me a mean-reversion strategy on BTC u
 - Dual Moving Average
 - Each with full config + markdown doc + Python implementation
 
-**[INTEGRATION] DigiSearch indexing for strategy library**
+**[INTEGRATION] digisearch indexing for strategy library**
 - Priority: Medium | Complexity: M | Phase: 1
 - Assess Supabase pgvector as the index backend (prefer to avoid external vector DB)
-- Configure DigiSearch to index strategy README.md files
+- Configure digisearch to index strategy README.md files
 - MCP tool: `search_strategies(query)` → ranked strategy matches
 
 ---
@@ -242,7 +242,7 @@ Everything needed for a user to say "build me a mean-reversion strategy on BTC u
 **[FEATURE] NautilusTrader backtest wrapper**
 - Priority: Critical | Complexity: L | Phase: 1
 - Wrapper that accepts: strategy_id, param overrides, asset, timeframe, start/end dates
-- Pulls price data from DigiQuant data engine
+- Pulls price data from digiquant data engine
 - Runs backtest, captures: equity curve, trade log, performance metrics
 - Returns structured Pydantic v2 `BacktestResult` model
 
@@ -250,7 +250,7 @@ Everything needed for a user to say "build me a mean-reversion strategy on BTC u
 - Priority: Critical | Complexity: S | Phase: 1
 - `run_backtest(strategy_id, params, asset, timeframe, start, end)` → BacktestResult
 - Saves result to Supabase `backtest_runs` table
-- Streams progress updates (for DigiChat to show live feedback)
+- Streams progress updates (for digichat to show live feedback)
 
 ---
 
@@ -260,18 +260,18 @@ Everything needed for a user to say "build me a mean-reversion strategy on BTC u
 - Priority: High | Complexity: M | Phase: 1
 - Input: BacktestResult model
 - Use Quantstats for metric computation (Sharpe, Sortino, max drawdown, CAGR, win rate, etc.)
-- Output: standalone HTML file (downloadable via DigiChat)
+- Output: standalone HTML file (downloadable via digichat)
 - Standard sections: summary metrics, equity curve chart, monthly returns heatmap, drawdown chart
 
 ---
 
 ### Milestone: MCP + CLI Scaffold
 
-**[INFRA] DigiQuant MCP server setup**
+**[INFRA] digiquant MCP server setup**
 - Priority: Critical | Complexity: M | Phase: 1
-- FastAPI + MCP server following DigiThings patterns (see DigiQuant ARCHITECTURE.md)
+- FastAPI + MCP server following digithings patterns (see digiquant ARCHITECTURE.md)
 - Register all Phase 1 tools
-- Auth via DigiKey
+- Auth via digikey
 - Port: 8001 (consistent with docker-compose.yml)
 
 **[INFRA] CLI commands**
@@ -281,10 +281,10 @@ Everything needed for a user to say "build me a mean-reversion strategy on BTC u
 - `digiquant data update ...`
 - `digiquant strategy list / search ...`
 
-**[INTEGRATION] DigiGraph agent integration**
+**[INTEGRATION] digigraph agent integration**
 - Priority: Critical | Complexity: M | Phase: 1
-- Register DigiQuant MCP tools with DigiGraph
-- End-to-end test: chat prompt → DigiGraph calls DigiQuant tool → result returned to DigiChat
+- Register digiquant MCP tools with digigraph
+- End-to-end test: chat prompt → digigraph calls digiquant tool → result returned to digichat
 - Smoke test script in `tests/e2e/`
 
 ---
@@ -292,7 +292,7 @@ Everything needed for a user to say "build me a mean-reversion strategy on BTC u
 ## Notes for Agent Executing This Brief
 
 1. Read `ARCHITECTURE.md`, `AGENTS.md`, and `digiquant/ARCHITECTURE.md` before touching any code.
-2. Follow existing DigiThings patterns: Pydantic v2 models, Polars only (no pandas), ruff linting, mypy strict.
+2. Follow existing digithings patterns: Pydantic v2 models, Polars only (no pandas), ruff linting, mypy strict.
 3. All new capabilities must be exposed as both MCP tools and CLI commands.
 4. Store all results in Supabase under the `digiquant` schema — not in local files except for the strategy library source.
 5. Phase 1 issues are ordered by dependency: Data Engine → Indicator Library → Strategy Library → Backtest → Tear Sheet → MCP/CLI → Integration test.

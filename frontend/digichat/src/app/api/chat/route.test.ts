@@ -223,7 +223,7 @@ describe("POST /api/chat", () => {
     expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
   });
 
-  it("routes OpenRouter BYOK through DigiGraph with BYOK headers", async () => {
+  it("routes OpenRouter BYOK through digigraph with BYOK headers", async () => {
     const res = await POST(
       new Request("http://localhost/api/chat", {
         method: "POST",
@@ -387,7 +387,7 @@ describe("external-relay embed tenants", () => {
     resetEmbedTenantRegistryForTests();
   });
 
-  it("streams from the configured relay without touching DigiGraph auth", async () => {
+  it("streams from the configured relay without touching digigraph auth", async () => {
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", RELAY_REGISTRY);
     resetEmbedTenantRegistryForTests();
     const fetchMock = vi.fn().mockResolvedValue(

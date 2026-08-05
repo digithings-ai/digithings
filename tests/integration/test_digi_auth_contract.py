@@ -1,4 +1,4 @@
-"""DigiAuth middleware contract: JWT required for protected routes; health exempt."""
+"""digiauth middleware contract: JWT required for protected routes; health exempt."""
 
 from __future__ import annotations
 

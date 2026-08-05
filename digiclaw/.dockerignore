@@ -1,4 +1,4 @@
-# DigiClaw – keep build context small and fast
+# digiclaw – keep build context small and fast
 .git
 .pytest_cache
 *.egg-info

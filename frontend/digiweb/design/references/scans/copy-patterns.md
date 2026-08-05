@@ -12,7 +12,7 @@ Extracted from live site copy on Graphite, Cursor, and x.ai — 2026-06-29.
 | Cursor | "Cursor is your coding agent for building ambitious software." | [Product] is [role] for [ambition] |
 | x.ai | "Frontier AI models for everything you build." | [Quality] + [category] for [builder outcome] |
 
-**DigiThings equivalents (draft):**
+**digithings equivalents (draft):**
 
 - digithings: "Build agents on infrastructure you own." (ownership — already live)
 - digiquant: "A quant hedge fund. *In a box you own.*" (category + twist)
@@ -67,7 +67,7 @@ Extracted from live site copy on Graphite, Cursor, and x.ai — 2026-06-29.
 - Contact Sales
 - All posts / Read More
 
-### DigiThings mapping
+### digithings mapping
 
 | Their pattern | Our literal CTA |
 |---------------|-----------------|
@@ -90,7 +90,7 @@ Extracted from live site copy on Graphite, Cursor, and x.ai — 2026-06-29.
 | Cursor (Hobby) | "No credit card required" + "Limited Agent requests" |
 | x.ai | "Usage-based pricing" / "Automatically increasing rate limits" |
 
-**DigiThings draft:**
+**digithings draft:**
 
 > open core · self-hosted · BYOK · audit-on by default
 
@@ -168,7 +168,7 @@ Examples:
 | Cursor | Product · Resources · Company · Legal · Connect |
 | x.ai | Minimal + news links |
 
-**DigiThings:** Architecture · Docs · Contact · digiquant.io · GitHub · digichat
+**digithings:** Architecture · Docs · Contact · digiquant.io · GitHub · digichat
 
 ---
 
@@ -183,7 +183,7 @@ Examples:
 
 ---
 
-## 11. DigiThings copy guide (draft)
+## 11. digithings copy guide (draft)
 
 ### Voice
 
