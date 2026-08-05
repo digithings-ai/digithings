@@ -64,6 +64,13 @@ export type EmbedTenantConfig = {
    * guessable by an unrelated caller either.
    */
   token: string;
+  /**
+   * Optional server-side quota provider. When set, /api/chat spends one message per request
+   * against this endpoint instead of trusting the client-asserted unlock header. Tenants without
+   * it keep the in-memory free-turn behaviour unchanged — this must stay opt-in, since digichat
+   * serves tenants that have no such service.
+   */
+  gate?: { consumeUrl: string };
 };
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -160,6 +167,15 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: gateMode must be "turn_limited", "ungated", or "trial_form"`);
   }
 
+  let gate: EmbedTenantConfig["gate"];
+  if (v.gate !== undefined) {
+    const consumeUrl = (v.gate as { consumeUrl?: unknown } | null)?.consumeUrl;
+    if (typeof consumeUrl !== "string" || !consumeUrl.startsWith("https://")) {
+      throw new Error(`${ctx}: gate.consumeUrl must be an https URL`);
+    }
+    gate = { consumeUrl };
+  }
+
   if (v.theme !== undefined && v.theme !== "dark" && v.theme !== "light") {
     throw new Error(`${ctx}: theme must be "dark" or "light"`);
   }
@@ -244,6 +260,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
     showStatusBar: typeof v.showStatusBar === "boolean" ? v.showStatusBar : undefined,
     layout: v.layout === "page" || v.layout === "embed" ? v.layout : undefined,
+    gate,
   };
 }
 

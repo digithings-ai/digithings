@@ -428,6 +428,51 @@ describe("parseEmbedTenants", () => {
     expect(t.showStatusBar).toBeUndefined();
     expect(t.layout).toBeUndefined();
   });
+
+  it("accepts a gate block with an https consumeUrl", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "dev.datatap.stream": {
+          slug: "datatap",
+          backend: { type: "digigraph" },
+          gateMode: "trial_form",
+          token: "t",
+          gate: { consumeUrl: "https://api.test/consume" },
+        },
+      }),
+    );
+    expect(reg.get("dev.datatap.stream")?.gate?.consumeUrl).toBe("https://api.test/consume");
+  });
+
+  it("rejects a gate whose consumeUrl is not https", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "dev.datatap.stream": {
+            slug: "datatap",
+            backend: { type: "digigraph" },
+            gateMode: "trial_form",
+            token: "t",
+            gate: { consumeUrl: "http://api.test/consume" },
+          },
+        }),
+      ),
+    ).toThrow(/consumeUrl/);
+  });
+
+  it("leaves gate undefined when absent", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "dev.datatap.stream": {
+          slug: "datatap",
+          backend: { type: "digigraph" },
+          gateMode: "trial_form",
+          token: "t",
+        },
+      }),
+    );
+    expect(reg.get("dev.datatap.stream")?.gate).toBeUndefined();
+  });
 });
 
 describe("resolveEmbedTenantByHost", () => {

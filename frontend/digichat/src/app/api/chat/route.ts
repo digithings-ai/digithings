@@ -33,6 +33,7 @@ import {
   isOverEmbedTrialLimit,
   unlockEmbedTrial,
 } from "@/lib/embed-turn-quota";
+import { consumeChatAccess } from "@/lib/embed-gate-provider";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import {
   embedConfigOf,
@@ -129,34 +130,56 @@ export async function POST(req: Request) {
   // trial form) rather than the BYOK/contact card. Enforced per client IP in
   // memory — best-effort anti-abuse per the design spec. Fail open on any internal
   // error so an infra hiccup never blocks a legitimate visitor.
+  // When the tenant configures gate.consumeUrl and the client presents a chat
+  // token, server-side quota supersedes the unlock header and the IP quota.
+  let quotaSatisfied = false;
   if (embedConfig?.gateMode === "trial_form") {
-    try {
-      const ip = clientIpForRateLimit(req);
-      // "unknown" is what clientIpForRateLimit returns when the ingress fails
-      // to set cf-connecting-ip/x-forwarded-for — it is not an identity (see
-      // that module's own doc comment). Treating it as one would collapse
-      // every visitor behind a broken/missing IP header into a single shared
-      // quota bucket, permanently gating everyone after the first 3 turns
-      // total. Skip the quota entirely in that case and fail open, consistent
-      // with this module's "best-effort, not an authorization boundary"
-      // philosophy (embed-turn-quota.ts).
-      if (ip !== "unknown") {
-        if (req.headers.get("x-embed-trial-unlock") === "1") {
-          unlockEmbedTrial(ip);
-        }
-        if (isOverEmbedTrialLimit(ip)) {
-          return new Response(
-            JSON.stringify({
-              error: "trial_gate",
-              message: "Complete the free trial form to keep chatting.",
-            }),
-            { status: 402, headers: { "content-type": "application/json" } },
-          );
-        }
-        recordEmbedTrialTurn(ip);
+    const chatToken = req.headers.get("x-embed-chat-token");
+    if (embedConfig.gate && chatToken) {
+      // Server-side quota supersedes the client-asserted unlock header for this request, and
+      // replaces the IP quota entirely — a token-bearing visitor must not be gated twice.
+      const verdict = await consumeChatAccess(embedConfig.gate.consumeUrl, chatToken);
+      if (verdict === "deny") {
+        return new Response(
+          JSON.stringify({
+            error: "trial_gate",
+            message: "Complete the free trial form to keep chatting.",
+          }),
+          { status: 402, headers: { "content-type": "application/json" } },
+        );
       }
-    } catch (e) {
-      console.warn("[trial-gate] quota error, failing open:", e);
+      quotaSatisfied = true;
+    }
+
+    if (!quotaSatisfied) {
+      try {
+        const ip = clientIpForRateLimit(req);
+        // "unknown" is what clientIpForRateLimit returns when the ingress fails
+        // to set cf-connecting-ip/x-forwarded-for — it is not an identity (see
+        // that module's own doc comment). Treating it as one would collapse
+        // every visitor behind a broken/missing IP header into a single shared
+        // quota bucket, permanently gating everyone after the first 3 turns
+        // total. Skip the quota entirely in that case and fail open, consistent
+        // with this module's "best-effort, not an authorization boundary"
+        // philosophy (embed-turn-quota.ts).
+        if (ip !== "unknown") {
+          if (req.headers.get("x-embed-trial-unlock") === "1") {
+            unlockEmbedTrial(ip);
+          }
+          if (isOverEmbedTrialLimit(ip)) {
+            return new Response(
+              JSON.stringify({
+                error: "trial_gate",
+                message: "Complete the free trial form to keep chatting.",
+              }),
+              { status: 402, headers: { "content-type": "application/json" } },
+            );
+          }
+          recordEmbedTrialTurn(ip);
+        }
+      } catch (e) {
+        console.warn("[trial-gate] quota error, failing open:", e);
+      }
     }
   }
 

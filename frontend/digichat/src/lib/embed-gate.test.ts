@@ -8,6 +8,8 @@ import {
   resolveEmbedHost,
   writeTrialUnlocked,
   writeTurns,
+  writeChatAccessToken,
+  readChatAccessToken,
 } from "./embed-gate";
 
 type Store = Map<string, string>;
@@ -172,5 +174,21 @@ describe("embed-gate constants + analytics", () => {
       console.log = originalLog;
     }
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe("chat access token", () => {
+  beforeEach(() => {
+    installLocalStorage();
+  });
+
+  it("round-trips a token per host", () => {
+    writeChatAccessToken("https://dev.datatap.stream", "abc.def");
+    expect(readChatAccessToken("https://dev.datatap.stream")).toBe("abc.def");
+    expect(readChatAccessToken("https://other.example")).toBeNull();
+  });
+
+  it("returns null when nothing was stored", () => {
+    expect(readChatAccessToken("https://dev.datatap.stream")).toBeNull();
   });
 });
