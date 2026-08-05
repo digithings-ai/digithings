@@ -5,10 +5,12 @@ import {
   NumberedStages,
   OdometerStrip,
   Reveal,
+  StackRow,
   WordReveal,
   type MarqueeItem,
   type NumberedStage,
   type OdometerStat,
+  type StackItem,
 } from "@digithings/web";
 import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "./_nav";
 import { DtNav } from "@/components/DtNav";
@@ -39,16 +41,73 @@ const STACK: MarqueeItem[] = [
   { name: "Docker", icon: "docker" },
 ];
 
-// Real, honest facts — each figure is a property of the stack, not a
-// projection. "10 modules" matches the architecture head + the manifest total.
+// Every figure here is countable in the repo — no projections, no asterisks
+// (#1846). Each one is checked against the code, and the band must not
+// contradict the manifest right below it, which self-discloses "8 online · 2 on
+// the roadmap":
+//   8  — non-roadmap modules in the shared `modules` registry (2 are roadmap:
+//        digistore, digilink). This deliberately does NOT say "10", which is
+//        what used to sit 14 lines under "no asterisks".
+//   16 — services under `services:` in the single 460-line docker-compose.yml.
+//   2  — live vector backends behind one client: Chroma and Azure AI Search
+//        (digisearch/src/digisearch/server.py fails startup unless one is
+//        configured).
+//   0  — BYOK keys stored: the key arrives per-request in `x-byok-key` and is
+//        forwarded upstream, never persisted or logged
+//        (frontend/digichat/src/app/api/chat/route.ts).
 // Rendered by the OdometerStrip (#1452 promotion): each digit is a 0–9 reel
 // that rolls to its value on arrival; reduced motion and no-JS ship the
 // settled final figures.
 const METRICS: OdometerStat[] = [
-  { value: "10", label: "modules" },
-  { value: "100%", label: "self-hosted" },
-  { value: "0", label: "data retained" },
-  { value: "1", label: "compose file" },
+  { value: "8", label: "modules shipping" },
+  { value: "16", label: "compose services" },
+  { value: "2", label: "vector backends" },
+  { value: "0", label: "keys stored" },
+];
+
+// The packages the stack is actually assembled from, shown deliberately rather
+// than only drifting past in the marquee (#1846) — compatibility is the
+// differentiator, so the dependency list IS the pitch. Rendered by the shared
+// StackRow/StackLogo primitives (@digithings/web): a slug present in the logos
+// registry gets its real vendor mark, anything else degrades to a monogram
+// chip. NautilusTrader, LiteLLM, Chroma and Azure AI Search publish no
+// single-path monochrome SVG, so they read as monograms — expected, not a bug.
+// Every slug below is verified against components/logos.ts.
+const INTEGRATIONS: { label: string; items: StackItem[] }[] = [
+  {
+    label: "orchestration & models",
+    items: [
+      { name: "LangGraph", icon: "langgraph" },
+      { name: "LiteLLM", icon: null, mono: "LL" },
+      { name: "MCP", icon: "modelcontextprotocol" },
+      { name: "OpenAI SDK", icon: "openai" },
+      { name: "Pydantic", icon: "pydantic" },
+      { name: "FastAPI", icon: "fastapi" },
+    ],
+  },
+  {
+    label: "quant, data & retrieval",
+    items: [
+      { name: "NautilusTrader", icon: null, mono: "NT" },
+      { name: "Optuna", icon: "optuna" },
+      { name: "Polars", icon: "polars" },
+      { name: "Chroma", icon: null, mono: "Ch" },
+      { name: "Azure AI Search", icon: null, mono: "AZ" },
+      { name: "Supabase", icon: "supabase" },
+      { name: "Postgres", icon: "postgresql" },
+    ],
+  },
+  {
+    label: "runtime, surface & observability",
+    items: [
+      { name: "Docker", icon: "docker" },
+      { name: "OpenTelemetry", icon: "opentelemetry" },
+      { name: "Prometheus", icon: "prometheus" },
+      { name: "Redis", icon: "redis" },
+      { name: "Next.js", icon: "nextdotjs" },
+      { name: "React", icon: "react" },
+    ],
+  },
 ];
 
 // The four properties of every module — verbatim from the prior principles grid,
@@ -57,7 +116,7 @@ const PRINCIPLES: NumberedStage[] = [
   {
     num: "01",
     title: "Self-hosted by default",
-    mech: "One docker-compose file runs the whole stack on a laptop, a VM, or a cluster.",
+    mech: "One docker-compose file — 16 services — runs the whole stack on a laptop, a VM, or any host you own.",
   },
   {
     num: "02",
@@ -67,12 +126,12 @@ const PRINCIPLES: NumberedStage[] = [
   {
     num: "03",
     title: "Audit-on by default",
-    mech: "Immutable JSONL audit, correlation IDs across every span, PII redacted before logs hit disk.",
+    mech: "Append-only JSONL audit and a correlation ID on every service hop. Events record a prompt's length, never its text — tail events.jsonl and check.",
   },
   {
     num: "04",
     title: "Backend-swappable",
-    mech: "Swap vector DB or storage backend without touching business code.",
+    mech: "Two live vector backends — Chroma and Azure AI Search — behind one client, swappable without touching business code.",
   },
 ];
 
@@ -85,7 +144,7 @@ export default function Home() {
         <HeroMesh>
           <h1 className="dqhero-h1">
             <span className="ln">
-              <span>Build agents on infrastructure</span>
+              <span>AI infrastructure in a glass box</span>
             </span>
             <span className="ln">
               <span>
@@ -94,8 +153,8 @@ export default function Home() {
             </span>
           </h1>
           <p className="dqhero-lede">
-            An open-core agentic stack — research, retrieval, and chat behind one supervisor.
-            Self-hosted, BYOK, audit-on by default. No vendor lock-in, no opaque pipelines.
+            Ten open-source modules that plug into the stack you already run — not a replacement
+            for it. Self-hosted anywhere, your own keys and providers, every step traceable.
           </p>
           <div className="dqhero-cta">
             <p className="dqhero-scroll-label">Scroll to explore</p>
@@ -119,8 +178,8 @@ export default function Home() {
               <span className="kicker">{"// by the numbers"}</span>
               <h2>The platform, in four numbers.</h2>
               <p>
-                No asterisks. Every figure is a real property of the stack — count them as you
-                arrive.
+                No asterisks — every figure is countable in the repo. Eight modules ship today and
+                two are still on the roadmap; the manifest below names which.
               </p>
             </Reveal>
             <Reveal>
@@ -142,6 +201,30 @@ export default function Home() {
               </p>
             </Reveal>
             <ModuleManifest />
+          </div>
+        </section>
+
+        {/* Integrations: the dependency list as the pitch. Uses the shared
+            StackRow primitive — no app-local component, no new class family. */}
+        <section className="section" id="integrations">
+          <div className="wrap">
+            <Reveal className="section-head center">
+              <span className="kicker">{"// integrations"}</span>
+              <h2>Built on what you already run.</h2>
+              <p>
+                Every module is assembled from open-source libraries you can name, version, and
+                swap — no forks, no reimplementations. That is why this drops into an existing
+                deployment instead of asking you to replace one.
+              </p>
+            </Reveal>
+            {INTEGRATIONS.map((group) => (
+              <Reveal key={group.label} className="mx-auto mt-[1.7rem] max-w-[880px]">
+                <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-ink-mute">
+                  {group.label}
+                </div>
+                <StackRow items={group.items} />
+              </Reveal>
+            ))}
           </div>
         </section>
 
@@ -176,8 +259,9 @@ export default function Home() {
               Questions, enterprise, or partnership.
             </h2>
             <p className="mx-auto mt-[0.8rem] max-w-[60ch] leading-[1.6] text-ink-soft">
-              The stack is open core — reach out for managed deployments, on-prem setups, or
-              anything else about the platform.
+              The whole monorepo is MIT-licensed and public — take it and run it yourself. What we
+              sell is the integration work: fitting these modules to the stack you already have,
+              on your own infrastructure.
             </p>
             <div className="mt-[2rem] flex flex-wrap justify-center gap-[0.8rem]">
               <a
