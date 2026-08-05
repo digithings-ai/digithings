@@ -1,9 +1,13 @@
-# Housekeeping — Copilot Tier 1 Automation Index
+# Housekeeping — Scheduled Automation Index
 
-Tier 1 (Copilot / scheduled automation) owns all the repo's housekeeping.
-Every item here runs on a cron, event, or reaction — no human trigger
-required. This document is the single index of what's covered, so gaps
-get noticed.
+Scheduled automation owns all the repo's housekeeping. Every item here runs
+on a cron, event, or reaction — no human trigger required. This document is
+the single index of what's covered, so gaps get noticed.
+
+This used to be titled "Copilot Tier 1". That tier was retired on 2026-08-05
+(#1904); the sweeps below never depended on it — they are plain GitHub Actions
+workflows. Where one of them *files an issue* for an agent to pick up, that
+issue goes to `exec:cursor`.
 
 Source: `.github/workflows/` — see `docs/agents/EXECUTION_TIERS.md` for
 the broader delegation framework.
@@ -43,7 +47,7 @@ the broader delegation framework.
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
 | Scheduled-workflow failure digest | `scheduled-maintenance.yml` — `workflow-health` job | weekly Mon 08:00 UTC | Aggregates failed scheduled runs from the past 7 days, one tracker issue grouped by workflow name |
-| PR-branch CI failures | `ci-failure-triage.yml` | on workflow_run failure | Files a Copilot triage issue per failed PR-branch workflow |
+| PR-branch CI failures | `agent-ci-failure-triage.yml` | on workflow_run failure | Files an `exec:cursor` triage issue per failed PR-branch workflow |
 | digiquant prices pipeline | `digiquant-prices.yml` — tracker update on failure | per-run | Maintains one persistent tracker issue per job instead of new issue each failure |
 | Stale branches | `scheduled-maintenance.yml` — `stale-branches` job | weekly | Identifies branches merged into develop >14d ago, files a cleanup issue |
 
@@ -51,9 +55,9 @@ the broader delegation framework.
 
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
-| Weekly improvement digest | `continuous-improvement.yml` | weekly Sun 22:00 UTC | Collects past-7d PR activity + reviews + scheduled-workflow failures + commit msgs. Feeds to Claude with a pattern-recognition prompt. Files/updates one tracker issue per week with 3-5 prioritized suggestions categorized by tier (copilot/cursor/claude) and effort (S/M/L). Humans review Monday and decide which suggestions become backlog issues via `/spec`. Labeled `exec:claude` — synthesis is judgment work |
+| Weekly improvement digest | `pipeline-continuous-improvement.yml` | weekly Sun 22:00 UTC | Collects past-7d PR activity + reviews + scheduled-workflow failures + commit msgs. Feeds to Claude with a pattern-recognition prompt. Files/updates one tracker issue per week with 3-5 prioritized suggestions categorized by tier (cursor/claude) and effort (S/M/L). Humans review Monday and decide which suggestions become backlog issues via `/spec`. Labeled `exec:claude` — synthesis is judgment work |
 
-**Why Claude, not Copilot**: pattern recognition across a week of PRs is judgment work, Copilot Chat isn't reachable from scheduled workflows the same way, and the cost (1 Claude invocation/week) is trivial. Output is always suggestions for human review — never automated changes.
+**Why Claude**: pattern recognition across a week of PRs is judgment work, and the cost (1 Claude invocation/week) is trivial. Output is always suggestions for human review — never automated changes.
 
 ## Code review
 
@@ -74,7 +78,10 @@ the broader delegation framework.
 
 Any housekeeping finding can escalate up a tier by changing its label:
 
-- **Default**: housekeeping issues carry `exec:copilot` — scheduled automation or Copilot chat-agent-assigned human resolves
+- **Default**: housekeeping issues carry `exec:cursor` — this used to be `exec:copilot`,
+  but that tier was retired on 2026-08-05 (#1904) and nothing dispatches it, so an issue
+  filed there would sit unworked. `pipeline-maintenance.yml` already labels the issues it
+  opens `exec:cursor`
 - **Escalated**: if the finding needs judgment (e.g., CVE patch breaks dependency constraints) the scheduled job labels the issue `exec:claude` + `risk:high` directly
 - **Human gate**: issues labeled `needs-human` are never auto-merged; require explicit human approval on the PR
 
