@@ -52,6 +52,36 @@ app builds, the digithings deploy build-check. (See #1310.)
 - New external service dependency or network exposure change
 - Novel architecture decision not covered by any existing `ARCHITECTURE.md`
 
+## Review coverage (the gate before production)
+
+PR review runs on **Cursor Bugbot, invoked by hand** — comment `bugbot run` (or
+`cursor review`) once a diff is final, and again only if scope changes mid-PR.
+Never at PR open, and never per push: Bugbot went usage-based in June 2026 at
+roughly $1.00–$1.50 a run, so a review on every push is a real monthly cost. The
+Copilot request job was removed from `ci.yml` when that subscription lapsed
+(#1894) — it had been reporting success while attaching no reviewer.
+
+Reviewing the *promotion* is the wrong moment: a promotion diff is an accumulation
+of already-merged work (PR #1877 was 52 files, 12k lines), so it is the priciest
+review Cursor will quote and the least actionable, since a finding needs a fresh
+task PR plus another promotion. So `ci-review-coverage.yml` asserts the cheaper
+invariant on every PR into `main` — **each commit in the range was reviewed at its
+own task PR** — via `scripts/check_review_coverage.py`. A commit clears it with a
+completed Bugbot run, a human approval, or the `risk:low` label; merge commits and
+bot-authored commits are exempt by nature.
+
+Note what is deliberately *not* done: `Cursor Bugbot` is **not** a required status
+check on `main`. It reports `neutral` on a usage-limit skip and a required check
+must report success, so on 2026-08-05 that would have made all ten promotions
+unmergeable — including the one carrying a fix for false copy already live. Never
+let a metered third-party service hold a veto over deploys; this gate reads only
+the repo's own history, labels and reviews, and a label always clears it.
+
+Do not gate on Cursor's Low/Medium/High risk label. It measures code blast radius:
+PR #1891 was rated **Low** at 2 files and +14/−8, and it shipped two false public
+claims to production. Gate on paths (`digikey/`, brokers, migrations, workflows)
+and on whether behaviour or a public factual claim changed.
+
 ## Dependency version bounds
 
 **Tools whose output gates CI carry an upper bound; runtime libraries do not.**
