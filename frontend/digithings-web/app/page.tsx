@@ -116,7 +116,10 @@ const PRINCIPLES: NumberedStage[] = [
   {
     num: "01",
     title: "Self-hosted by default",
-    mech: "One docker-compose file — 16 services — runs the whole stack on a laptop, a VM, or any host you own.",
+    mech:
+      "One docker-compose file, sixteen services, on a laptop or any host you own — eight up by " +
+      "default and the rest behind named profiles you turn on: digichat, digivault, the search MCP, " +
+      "the heartbeat, observability, and the LiteLLM cache.",
   },
   {
     num: "02",
@@ -199,8 +202,9 @@ export default function Home() {
                   phones, where forcing one line would shrink it to nothing. */}
               <h2 className="md:whitespace-nowrap">Ten modules. One toolkit.</h2>
               <p>
-                Each runs standalone or composes with the rest — retrieval, quant research and
-                chat, plus the auth, tracing and audit any deployment needs.
+                The eight that ship run standalone or compose with the rest — retrieval, quant
+                research and chat, plus the auth, tracing and audit any deployment needs. Two more
+                are on the roadmap; the manifest below marks which.
               </p>
             </Reveal>
             <ModuleManifest />
