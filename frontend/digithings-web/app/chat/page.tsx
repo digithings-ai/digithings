@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { DtNav } from "@/components/DtNav";
-import { ChatEmbedShell } from "@/components/ChatEmbedShell";
+import { DigiChatSession } from "@/components/DigiChatSession";
 
 export const metadata: Metadata = {
   title: "digichat — the digithings assistant",
@@ -9,12 +9,17 @@ export const metadata: Metadata = {
     "running on a free model pool. No sign-up.",
 };
 
-/** /chat — DtNav outside; digichat /embed iframe fills the content pane (Phase 3). */
+/**
+ * /chat — full-screen DigiChat via shared digichat-ui + Pages Function digivault
+ * backend (free Cloudflare plan; no Containers / iframe).
+ */
 export default function ChatPage() {
   return (
     <>
       <DtNav />
-      <ChatEmbedShell />
+      <main className="dc-page">
+        <DigiChatSession />
+      </main>
     </>
   );
 }

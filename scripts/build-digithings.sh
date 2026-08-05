@@ -54,18 +54,18 @@ grep -q 'aria-label="digithings module manifest"' dist/index.html || { echo "ERR
 [ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
 # Cloudflare Pages Functions live at the PROJECT ROOT (this script's CWD = repo root),
-# NOT inside the static output dir. Mirror any remaining Functions from
-# frontend/digithings-web/functions/ (Phase 3 retired /api/chat).
-echo "--- mirroring Pages Functions to repo root (if any) ---"
+# NOT inside the static output dir. Mirror from frontend/digithings-web/functions/
+# (Phase 3: digivault /api/chat + /api/byok on free Pages — no Containers).
+echo "--- mirroring Pages Functions to repo root ---"
 rm -rf functions
 if [ -d frontend/digithings-web/functions ] && [ -n "$(find frontend/digithings-web/functions -type f 2>/dev/null | head -1)" ]; then
   cp -r frontend/digithings-web/functions functions
 else
-  echo "No Pages Functions to mirror (Phase 3: /api/chat retired)."
+  echo "ERROR: expected frontend/digithings-web/functions (digivault /api/chat)" >&2
+  exit 1
 fi
-# Must NOT reintroduce the retired chat Function
-if [ -f functions/api/chat.ts ]; then
-  echo "ERROR: functions/api/chat.ts must stay deleted (Phase 3)" >&2
+if [ ! -f functions/api/chat.ts ]; then
+  echo "ERROR: functions/api/chat.ts missing after mirror" >&2
   exit 1
 fi
 

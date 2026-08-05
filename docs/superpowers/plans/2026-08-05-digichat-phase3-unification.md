@@ -1,27 +1,28 @@
 # DigiChat Phase 3 Unification Implementation Plan
 
+> **AMENDED 2026-08-05 evening:** Phase 3 no longer targets iframe → Cloudflare Containers.
+> DigiThings marketing chat is **native digichat-ui + digivault Pages Function** (Workers Free).
+> Canonical spec: `docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md`.
+> Tasks below that describe `ChatEmbedShell` / Containers / deleting `useStackChat` are
+> **superseded** — restore/keep the native stack instead. Digichat `/embed` work for
+> DataTap remains valid and unrelated to digithings marketing `/chat`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Cut digithings.ai `/chat` over to a digichat `/embed` iframe (digithings-owned digichat runtime), land `digichat:ready` → `digichat:seed` handoff, first-party host auth (no token), independent tenant UI flags, and delete the Cloudflare Function + `useStackChat` + `chatStream` in **one PR**.
+**Goal (amended):** Ship digithings.ai `/chat` as native `@digithings/digichat-ui` + Pages Function digivault (`useStackChat` / `chatStream` / `functions/api/chat.ts`), with BYOK + handoff, on the free Cloudflare plan. No Containers merge gate.
 
-**Architecture:** digithings-web keeps URL `/chat` and `DtNav` outside the iframe. The pane is digichat `/embed?host=https://digithings.ai` on `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (prod: `https://digithings.ai` — same-origin path; CF routes `/embed*` to DigiThings-owned DigiChat Node). First-party allowlisted hosts skip embed tokens; customer tenants still require tokens. Landing `writeHandoff` stays localStorage on digithings.ai; the parent `readAndClearHandoff`s and posts seed after ready. Digithings digichat is a DigiThings-owned GHCR install with digivault env-name refs (Phase 2), not DataTap’s ACA and not `chat.digithings.ai`.
+**Architecture (amended):** `DtNav` + `DigiChatSession` on Pages; `POST /api/chat` Pages Function; same-origin `chatHandoff`. DigiThings has **no Azure**. Containers scaffold is deferred.
 
-**Tech Stack:** TypeScript, Next.js 16 (digichat App Router + digithings-web static export), Vitest, `@digithings/digichat-ui`, Cloudflare Pages `_headers` CSP, postMessage origin checks.
+**Tech Stack:** TypeScript, digithings-web static export + Pages Functions, Vitest, `@digithings/digichat-ui`.
 
 ## Global Constraints
 
-- Spec: `docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md`. Do not relitigate Phase 1/2, DataTap `gateMode` / trial_form, or the accent bug.
-- **One PR** covers digichat + digithings-web cutover + deletes. No iframe-first / delete-later sequence; no long-lived dual path.
-- **Hostname (locked here):** DigiChat on Cloudflare Containers at `https://digithings.ai` path `/embed` (`frontend/digichat-cloudflare`). digithings.ai `/chat` remains the Pages shell. Env: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai`. Asset prefix `/_dtchat`. DigiThings has **no Azure**. Do **not** use DataTap ACA or `chat.digithings.ai`. CSP: `frame-src 'self'`.
-- **First-party allowlist (prod only):** hostnames `digithings.ai` and `www.digithings.ai`. Preview `*.pages.dev` is **not** allowlisted. Do not add preview hosts in this phase.
-- **UI flags:** `showByok`, `showStatusBar`, `layout` live on `EmbedTenantConfig` (tenant JSON), projected to the client via `/api/embed/tenant-config`. Never derive `showByok = !ungated`. Defaults when omitted: `showByok: false`, `showStatusBar: false`, `layout: "embed"`.
-- Digithings tenant (ops JSON): `slug: "digithings"`, `gateMode: "ungated"`, `showByok: true`, `showStatusBar: true`, `layout: "page"`, `activityDetail: "full"`, `backend.type: "digivault"` with `*Env` name refs, `aliases: ["www.digithings.ai"]`, `token` still required in schema (skipped at request time for first-party hosts only).
-- postMessage types: `digichat:ready` and `digichat:seed` only (parallel to DataTap `datatap:gated` / `datatap:unlocked` — leave DataTap alone). Never `targetOrigin: "*"`.
-- Seed payload caps: `MAX_SEED_MESSAGES = 40`, `MAX_SEED_CONTENT_CHARS = 8000`, `MAX_SEED_PENDING_CHARS = 4000`, `MAX_SEED_AGE_MS = 5 * 60 * 1000`. Ready wait: `READY_TIMEOUT_MS = 8000`. Timeout / load-failure copy: `"Chat is taking too long to load. Refresh to try again."`
-- Digivault secrets remain env **names** only; missing → fail-closed `chat_not_configured` 503.
-- ACR automation is out of scope; rollout checklist must mention manual GHCR→ACR mirror if the digithings install pulls from ACR.
-- Run digichat tests: `cd frontend/digichat && npx vitest run <path>`. Run digithings-web tests: `cd frontend/digithings-web && npx vitest run <path>` (vitest added in Task 8).
-- Presentation-only digithings-web CSS/shell changes are exempt from `make score` Python rubrics; digichat TypeScript still needs green Vitest.
+- Spec: `docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md` (evening amendment).
+- DigiThings marketing chat: **Pages Function**, not Containers. CSP: `frame-src 'none'`.
+- DigiThings has **no Azure**. Do **not** use DataTap ACA or `chat.digithings.ai` for marketing.
+- UI: `showByok: true`, `showStatusBar: true`, `layout: "page"` on digithings-web DigiChatSession.
+- Run digithings-web tests: `cd frontend/digithings-web && npx vitest run`.
+- Presentation-only digithings-web CSS/shell changes are exempt from `make score` Python rubrics.
 
 ---
 

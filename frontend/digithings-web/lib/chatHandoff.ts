@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Cross-tab / landing→/chat handoff. Landing quick-ask writes here; the /chat
- * parent reads-and-clears and posts digichat:seed into the digichat iframe
- * (cross-origin iframes cannot read digithings.ai localStorage).
+ * Cross-tab / landing→/chat handoff. Landing quick-ask writes here; /chat
+ * DigiChatSession reads-and-clears and seeds the controller (same-origin —
+ * no iframe / postMessage required).
  *
  * Uses `localStorage`, NOT `sessionStorage`: a `window.open`'d tab gets a fresh
  * session storage, so the handoff would silently vanish. localStorage is shared

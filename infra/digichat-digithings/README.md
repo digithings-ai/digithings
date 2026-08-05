@@ -1,9 +1,10 @@
-# Digithings DigiChat hosting — DEPRECATED for Azure
+# Digithings DigiChat hosting
 
-DigiThings DigiChat runs on **Cloudflare Containers**, not Azure.
+DigiThings **marketing** chat runs on **Cloudflare Pages** (native digichat-ui +
+digivault Function). See Phase 3 ops checklist.
 
-See [`frontend/digichat-cloudflare/README.md`](../../frontend/digichat-cloudflare/README.md)
-and [`docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`](../../docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md).
+[`frontend/digichat-cloudflare/`](../../frontend/digichat-cloudflare/README.md) is a
+**deferred** Workers Paid / Containers option — not required for `/chat`.
 
 ## Hard constraint
 
@@ -12,5 +13,4 @@ and [`docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`](../
 - **2026-08-05:** a DigiThings misdeploy on DataTap WebSite was torn down.
 
 Scripts in this directory (`build-image.sh`, `import-ghcr.sh`, `apply-secrets.sh`)
-targeted Azure ACA and must **not** be used for DigiThings. Prefer Cloudflare
-Containers deploy from `frontend/digichat-cloudflare`.
+targeted Azure ACA and must **not** be used for DigiThings.
