@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * /chat — full-screen DigiChat via shared digichat-ui + Pages Function digivault
+ * /chat — full-screen digichat via shared digichat-ui + Pages Function digivault
  * backend (free Cloudflare plan; no Containers / iframe).
  */
 export default function ChatPage() {
