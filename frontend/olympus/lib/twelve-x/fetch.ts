@@ -14,6 +14,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { isTwelveXConfigured, twelveXSupabase } from './supabase';
 import { isSupabaseConfigured, supabase } from '../supabase';
 import { MATRIX_COLUMNS } from './types';
+import {
+  assembleConsensusDivergence,
+  SMART_BIAS_SLUG,
+  type SmartBiasJoinRow,
+} from './divergence';
 import type {
   ConfluenceCatalyst,
   ConsensusDelta,
@@ -22,6 +27,7 @@ import type {
   FxBriefRow,
   FxConfluenceSnapshotRow,
   FxConsensusSnapshotRow,
+  FxConsensusDivergence,
   FxDailyDigestRow,
   FxEconomicCalendarRow,
   FxEventSnapshotRow,
@@ -974,3 +980,58 @@ export function eventLocalDateKey(row: {
   if (!inst) return row.event_date;
   return localDateKey(inst);
 }
+
+/* ------------------------------------------------------------------ *
+ * P5 — Consensus × Smart Bias divergence join (spec D6)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Assembled consensus×PMT divergence map for a run_date. Internally reads
+ * `fx_consensus_snapshot`, `fx_smart_bias`, and the newest `fx_market_snapshots`
+ * row for `smart-bias-tracker`, then joins via `assembleConsensusDivergence`.
+ * Returns `{}` when unconfigured or no consensus exists — never exposes raw PMT rows.
+ */
+export async function getConsensusDivergence(
+  runDate: string,
+): Promise<Record<string, FxConsensusDivergence>> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return {};
+  if (!runDate) return {};
+
+  const [consensus, biasRows, snapshotRows] = await Promise.all([
+    querySupabase<FxConsensusSnapshotRow[]>((sb) =>
+      sb
+        .from('fx_consensus_snapshot')
+        .select(
+          'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks',
+        )
+        .eq('weighted', true)
+        .eq('timeframe', 'medium')
+        .eq('run_date', runDate),
+    ),
+    querySupabase<SmartBiasJoinRow[]>((sb) =>
+      sb
+        .from('fx_smart_bias')
+        .select('currency, overall_sentiment, week_first_date')
+        .lte('week_first_date', runDate)
+        .order('week_first_date', { ascending: false }),
+    ),
+    querySupabase<{ id: string; payload: unknown }[]>((sb) =>
+      sb
+        .from('fx_market_snapshots')
+        .select('id, payload')
+        .eq('source_slug', SMART_BIAS_SLUG)
+        .eq('instrument', '')
+        .order('captured_at', { ascending: false })
+        .limit(1),
+    ),
+  ]);
+
+  if (!consensus?.length) return {};
+
+  const snapshot = snapshotRows?.[0]
+    ? { id: String(snapshotRows[0].id), payload: snapshotRows[0].payload }
+    : null;
+
+  return assembleConsensusDivergence(consensus, biasRows ?? [], snapshot);
+}
+
