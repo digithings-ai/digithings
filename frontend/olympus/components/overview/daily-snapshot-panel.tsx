@@ -130,7 +130,7 @@ export function SnapshotSkeleton({ flat = false }: SnapshotPresentationProps) {
   return (
     <SkeletonGroup
       data-testid="snapshot-loading"
-      aria-label="Loading daily snapshot"
+      aria-label="Loading daily investment brief"
       className={flat
         ? 'flex flex-col gap-4 border-y border-hair bg-surface px-5 py-6'
         : 'glass-card p-6 flex flex-col gap-4'}
@@ -165,9 +165,9 @@ export function SnapshotErrorBanner({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           {flat ? (
-            <h3 className="mb-3 font-display text-xl text-warn">Snapshot unavailable</h3>
+            <h3 className="mb-3 font-display text-xl text-warn">Brief unavailable</h3>
           ) : (
-            <SectionTitle className="text-down">Snapshot unavailable</SectionTitle>
+            <SectionTitle className="text-down">Brief unavailable</SectionTitle>
           )}
           <p className="text-sm text-ink-soft break-words">{message}</p>
         </div>
@@ -195,7 +195,7 @@ export function SnapshotEmptyBanner({
   const message =
     reason === 'unconfigured'
       ? 'Supabase credentials are not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
-      : 'No snapshot has been published for today or yesterday yet. Check back after the next pipeline run.';
+      : 'No Atlas daily investment brief has been published for today or yesterday yet. Check back after the next pipeline run.';
   return (
     <section
       data-testid="snapshot-empty"
@@ -205,9 +205,9 @@ export function SnapshotEmptyBanner({
         : 'glass-card p-5 border-hair bg-term-bg/40'}
     >
       {flat ? (
-        <h3 className="mb-3 font-display text-xl text-ink">No snapshot available</h3>
+        <h3 className="mb-3 font-display text-xl text-ink">No brief available</h3>
       ) : (
-        <SectionTitle>No snapshot available</SectionTitle>
+        <SectionTitle>No brief available</SectionTitle>
       )}
       <p className="text-sm text-ink-soft">{message}</p>
     </section>
@@ -240,9 +240,10 @@ function SnapshotContent({
           className="glass-card p-4 border-warn/40 bg-warn/5 flex items-center justify-between gap-3"
         >
           <div>
-            <p className="text-sm font-semibold text-warn">Stale snapshot</p>
+            <p className="text-sm font-semibold text-warn">Stale brief</p>
             <p className="text-xs text-ink-soft">
-              Published {age ?? 'unknown'} (older than {DEFAULT_SNAPSHOT_STALENESS_HOURS}h).
+              This run&apos;s Atlas digest was published {age ?? 'unknown'} (older than{' '}
+              {DEFAULT_SNAPSHOT_STALENESS_HOURS}h).
             </p>
           </div>
           <Badge variant="amber">stale</Badge>
@@ -253,11 +254,14 @@ function SnapshotContent({
         <header className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
-              Daily snapshot
+              Daily investment brief
+            </p>
+            <p className="mt-0.5 text-xs text-ink-mute">
+              Atlas research digest for this run — regime, risks, and recommended actions.
             </p>
             <h2
               data-testid="snapshot-headline"
-              className="text-xl font-semibold leading-snug text-ink"
+              className="mt-2 text-xl font-semibold leading-snug text-ink"
             >
               {digest.headline}
             </h2>
