@@ -1,4 +1,5 @@
-const DEFAULT_ORIGIN = "https://chat.digithings.ai";
+/** Same-origin path mount: DigiChat is routed at digithings.ai/embed (not chat.). */
+const DEFAULT_ORIGIN = "https://digithings.ai";
 
 export function getDigichatEmbedOrigin(): string {
   const raw = process.env.NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN?.trim();

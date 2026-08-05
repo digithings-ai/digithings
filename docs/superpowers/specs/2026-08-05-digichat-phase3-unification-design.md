@@ -39,14 +39,14 @@ Also inherited:
 - Shared backend means **pluggable providers**, not one assistant — digithings tenant uses `backend: { type: "digivault", … }` with per-tenant env-name refs from Phase 2.
 - Presentation allowlist is `ActivitySpan` / `sanitizeActivitySpan`.
 - `activityDetail` is gated **server-side** before write.
-- Landing quick-ask handoff survives via **parent postMessage** (cross-origin iframes do not share `localStorage`).
+- Landing quick-ask handoff survives via **parent postMessage** (keep even for same-origin iframe — required protocol; DataTap stays cross-origin).
 
 ## Locked decisions
 
 Recorded from the Phase 3 brainstorm (2026-08-05). Status: **Approved**.
 
 1. **Architecture: iframe** — digithings.ai keeps URL `/chat` and `DtNav`; the chat pane is digichat `/embed` in a full-height iframe. Hard redirect away from digithings.ai and dual-path forever are rejected.
-2. **Runtime: digithings-owned digichat** — install from the same DigiChat GitHub/GHCR release DataTap uses. **Not** sharing DataTap’s ACA (see non-goals). Exact public hostname (e.g. `chat.digithings.ai` vs raw ACA URL) is an **implementation-plan** detail.
+2. **Runtime: DigiThings-owned DigiChat Node behind CF path** — same GHCR release family DataTap uses. Public surface: **`https://digithings.ai/embed`** (Cloudflare route → DigiThings-owned container). **Not** DataTap’s ACA. **Not** `chat.digithings.ai` as marketing embed origin. Leave `DIGICHAT_BASE_PATH` unset.
 3. **Cutover: ONE PR** — iframe shell + delete Cloudflare Function, `useStackChat`, and `chatStream` together. No sequenced “iframe first, delete later” and no long-lived feature-flag dual path in this phase.
 4. **gateMode: `ungated`**; **`showByok: true`** — independent flags. Do **not** derive `showByok = !ungated` (today’s embed/page.tsx bug relative to this design).
 5. **activityDetail: `full`** — rich chain including documents/brief for digithings marketing chat.

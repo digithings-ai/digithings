@@ -19,7 +19,7 @@ export function normalizeOpenRouterModel(raw: string): string {
 
 export function createOpenRouterByokProvider(apiKey: string) {
   const referer =
-    process.env.DIGICHAT_SITE_URL?.trim() || "https://chat.digithings.ai";
+    process.env.DIGICHAT_SITE_URL?.trim() || "https://digithings.ai";
   return createOpenAI({
     name: "openrouter-byok",
     baseURL: OPENROUTER_API_BASE,

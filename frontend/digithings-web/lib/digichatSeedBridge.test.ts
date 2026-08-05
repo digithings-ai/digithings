@@ -19,14 +19,14 @@ describe("digichatSeedBridge", () => {
   it("accepts ready only from digichat origin", () => {
     expect(
       shouldAcceptReady(
-        { origin: "https://chat.digithings.ai", data: { type: "digichat:ready" } } as MessageEvent,
-        "https://chat.digithings.ai",
+        { origin: "https://digithings.ai", data: { type: "digichat:ready" } } as MessageEvent,
+        "https://digithings.ai",
       ),
     ).toBe(true);
     expect(
       shouldAcceptReady(
         { origin: "https://evil.example", data: { type: "digichat:ready" } } as MessageEvent,
-        "https://chat.digithings.ai",
+        "https://digithings.ai",
       ),
     ).toBe(false);
   });

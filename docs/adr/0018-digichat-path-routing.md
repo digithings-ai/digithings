@@ -1,32 +1,40 @@
-# ADR 0018 — DigiChat served at `digithings.ai/chat` (path), not a separate `chat.` deploy
+# ADR 0018 — DigiChat served on digithings.ai (path), not a separate `chat.` deploy
 
-Status: Accepted · Supersedes the `chat.digithings.ai` subdomain decision in [ADR-0002](0002-domain-unification.md)
+Status: Accepted · Amended 2026-08-05 · Supersedes the `chat.digithings.ai` subdomain decision in [ADR-0002](0002-domain-unification.md)
 
 ## Context
 
-ADR-0002 planned DigiChat as `chat.digithings.ai` — a separate production deployment target. In practice this reads as "DigiChat has its own pipeline / its own site," which is not desired: DigiChat should be part of the digithings.ai surface, reachable at **`digithings.ai/chat`**, with a single web presence.
+ADR-0002 planned DigiChat as `chat.digithings.ai` — a separate production deployment target. In practice this reads as "DigiChat has its own pipeline / its own site," which is not desired: DigiChat should be part of the digithings.ai surface, with a single web presence.
 
-DigiChat is, however, a **stateful Next.js standalone server** (`output: "standalone"`, a Dockerfile running `node server.js`): NextAuth sessions, a Postgres/Drizzle database, streaming LLM responses through its BFF, and an `/embed` route. It therefore **cannot** be a static page under the Cloudflare-Pages static digithings.ai — it needs a server runtime.
+DigiChat is, however, a **stateful Next.js standalone server** (`output: "standalone"`, a Dockerfile running `node server.js`): NextAuth sessions, a Postgres/Drizzle database, streaming LLM responses through its BFF, and an `/embed` route. It therefore **cannot** be a static page under the Cloudflare-Pages static digithings.ai — it needs a DigiThings-owned server runtime (never DataTap Azure).
 
-## Decision
+## Decision (amended 2026-08-05)
 
-Serve DigiChat under the path **`digithings.ai/chat`** via a Cloudflare route to the DigiChat container, rather than a `chat.` subdomain:
+Split marketing chrome from DigiChat app surface on the same hostname:
 
-- digithings.ai stays a static Cloudflare Pages site (`frontend/digithings-web`); a Cloudflare route forwards `digithings.ai/chat/*` to the DigiChat container origin.
-- DigiChat runs as the existing container/service in the monorepo stack (`make up-digichat`) — **not** a separate website pipeline or domain.
-- DigiChat gains an **env-gated `basePath`** so it serves correctly under the subpath:
-  - `next.config.ts` → `basePath: process.env.DIGICHAT_BASE_PATH || undefined`.
-  - `src/lib/base-path.ts` exposes `BASE_PATH`/`p()`; raw `fetch("/api/...")`, NextAuth `SessionProvider basePath`, and `signIn`/`signOut`/`window.location` callbacks are prefixed (Next `<Link>`/router and server `redirect()` apply basePath automatically — verified).
-  - Unset env → root (self-host, local dev, and the legacy deploy are unchanged: zero regression).
+| Path | Owner | Role |
+|---|---|---|
+| `digithings.ai/chat` | Cloudflare Pages (`frontend/digithings-web`) | Marketing shell: `DtNav` + iframe |
+| `digithings.ai/embed` (+ DigiChat `/api` / `/_next` as routed) | Cloudflare route → DigiThings-owned DigiChat Node | DigiChat app / embed target |
+
+- Iframe is **same-origin**: `src=https://digithings.ai/embed?host=https://digithings.ai`.
+- DigiChat runs with **`DIGICHAT_BASE_PATH` unset** (app at root behind the path route). Do **not** use `basePath=/chat` for this cutover — Pages already owns `/chat`.
+- DigiChat container is DigiThings-owned only (GHCR image). DataTap Azure hosts only DataTap’s own digichat ACA.
+- Do **not** use `chat.digithings.ai` as the marketing embed origin.
+
+### Historical note (original 0018 text)
+
+The first revision routed the full DigiChat app under `digithings.ai/chat/*` with `DIGICHAT_BASE_PATH=/chat`. Phase 3 unification keeps visitor URL `/chat` as the Pages shell and moves the DigiChat surface to `/embed` so the shell can embed without reclaiming `/chat` for the Node app.
 
 ## Production configuration (Cloudflare + env)
 
-- Cloudflare route: `digithings.ai/chat/*` → DigiChat container origin.
-- DigiChat build/runtime env for that deploy: `DIGICHAT_BASE_PATH=/chat`, `NEXT_PUBLIC_DIGICHAT_BASE_PATH=/chat`, `AUTH_URL=https://digithings.ai/chat`.
-- The marketing site's "Try Chat" link points at `/chat`.
+- Cloudflare Pages: digithings-web static export; `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai`.
+- Cloudflare route: `digithings.ai/embed*` (and DigiChat API/asset paths required by the embed) → DigiThings DigiChat container origin.
+- DigiChat runtime: digivault env name refs + digithings tenant; `AUTH_URL` / `DIGICHAT_SITE_URL` as appropriate for the DigiThings host; no `DIGICHAT_BASE_PATH`.
+- Marketing "Try Chat" link points at `/chat`.
 
 ## Consequences
 
-- One domain, one website pipeline; DigiChat is a service behind a path, not a second site.
-- DigiChat still requires a server host for its container (inherent to an auth + DB + streaming app) — this is a stack service, not a separate product deploy.
-- Verified: with `basePath=/chat`, `GET /chat` → 307 `/chat/login`, `/chat/login` → 200, `/login` → 404; default build stays at root.
+- One domain, one visitor-facing website; DigiChat is a path-routed DigiThings service, not a second product site and not DataTap infrastructure.
+- DigiChat still requires a DigiThings-owned Node host (auth + DB + streaming) — stack service, not a Pages Function.
+- Merge of the CF Function delete must wait until `https://digithings.ai/embed` is live.

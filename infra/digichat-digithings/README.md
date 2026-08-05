@@ -10,24 +10,20 @@
 - **2026-08-05:** a misdeploy (`digithings-rg` / CAE / ACR / digichat ACA) into
   DataTap WebSite was torn down. Do not recreate DigiThings stack there.
 
-## Product direction (owner)
+## Product direction (locked)
 
-- Prefer DigiChat as a **path on the DigiThings website**, with `/chat` embedding
-  that path with config.
-- **Pause** building a separate `chat.digithings.ai` ACA until DigiThings-owned
-  hosting is decided.
-- Do **not** provision DigiThings DigiChat Azure resources from this tree until
-  a DigiThings-owned subscription (or website-path host) is confirmed via
-  `az account show` (name/id must not be DataTap*).
+- DigiChat is a **path on digithings.ai**: CF route `digithings.ai/embed*` →
+  DigiThings-owned DigiChat Node; Pages `/chat` iframes that path (same-origin).
+- Do **not** use `chat.digithings.ai` as the marketing embed origin.
+- Leave `DIGICHAT_BASE_PATH` unset for this cutover.
+- Scripts in this tree are DigiThings-subscription only; they must refuse DataTap
+  accounts (`az account show`).
 
 ## Scripts
 
-`build-image.sh`, `import-ghcr.sh`, and `apply-secrets.sh` refuse to run when
-the active Azure account name matches DataTap. They are for DigiThings-owned
-infra only, if/when Azure hosting is chosen.
+`build-image.sh`, `import-ghcr.sh`, and `apply-secrets.sh` refuse DataTap Azure
+accounts. Use only after DigiThings-owned subscription is confirmed.
 
 ## Tenant / secrets shape
 
 See `docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`.
-Digivault secrets stay as env vars / secret refs; tenant JSON holds env **name**
-refs only.

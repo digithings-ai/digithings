@@ -479,7 +479,8 @@ Activity is emitted only as `data-digichatActivity` (sanitized +
 messages. The Cloudflare Pages Function at
 `frontend/digithings-web/functions/api/chat.ts` is **retired in Phase 3** —
 digithings.ai `/chat` is a Pages shell (`DtNav` + iframe) pointing at
-digichat `/embed` on `https://chat.digithings.ai` (see
+digichat `/embed` on the same origin (`https://digithings.ai/embed`, CF route
+to DigiThings-owned DigiChat Node — see
 `docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md`
 and `docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`).
 Accent URL/theme handling is

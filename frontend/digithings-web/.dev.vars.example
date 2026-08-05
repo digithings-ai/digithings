@@ -2,10 +2,11 @@
 # Copy to `.dev.vars` (gitignored) and fill in. NEVER commit `.dev.vars`.
 #
 # Phase 3: digithings.ai /chat is an iframe shell — digivault + OpenRouter secrets
-# live on the digichat runtime (chat.digithings.ai), not as Pages Function env.
+# live on the DigiThings-owned DigiChat Node behind CF route digithings.ai/embed*,
+# not as Pages Function env.
 # See docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md.
 #
 # Optional local Pages Function remnants (none required for /chat after Phase 3):
 
 # Build-time (Next.js public env) — set in Pages/CI, not secrets:
-# NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://chat.digithings.ai
+# NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai

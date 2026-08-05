@@ -112,34 +112,38 @@ For a week-long unattended run:
 
 ## Public domain routing
 
-One public domain serves the marketing site; DigiChat Phase 3 reclaims
-`chat.digithings.ai` as the **iframe embed origin** (digithings-owned digichat
-install), while visitor-facing chat remains `digithings.ai/chat` (Pages shell +
-iframe). ADR-0018 path-routing to a DigiChat container under `/chat/*` is
-superseded for the marketing chat pane by this cutover — see
-`docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md` and
-`docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`.
+One public domain serves marketing + DigiChat. Phase 3 cutover:
+
+- **Visitor chat:** `digithings.ai/chat` — Cloudflare Pages shell (`DtNav` + iframe).
+- **DigiChat surface:** `digithings.ai/embed` — Cloudflare route to a **DigiThings-owned**
+  DigiChat Node container (same GHCR image family as DataTap). Same-origin iframe;
+  `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai`. Leave `DIGICHAT_BASE_PATH` unset.
+- **Do not** use DataTap Azure for DigiThings DigiChat. Do not use `chat.digithings.ai`
+  as the marketing embed origin.
+- Spec/ops: `docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md`,
+  `docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`.
+  ADR-0018 amended for `/chat` shell + `/embed` DigiChat path.
 
 ### digithings.ai — static landing page
 
 - **Source:** `frontend/digithings-web/` (Next.js static export; and shared `frontend/digiweb/design/`, `frontend/digiweb/web/` assets).
 - **Deployment:** **Cloudflare Pages** via `scripts/build-digithings.sh` (CI: Cloudflare Pages project `digithings-ai`).
 - **Legacy:** the `static.yml` GitHub Pages workflow and the pre-migration `frontend/digithings/` static HTML tree were both **removed** — the former in the 2026-06 workflow cleanup, the latter in #1240 once `frontend/digithings-web` (Next.js) fully replaced it as the build source; do not use GitHub Pages for this domain.
-- **Nav link:** the landing page links to `/chat` (Pages shell + iframe to digichat; build with `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://chat.digithings.ai`).
+- **Nav link:** the landing page links to `/chat` (Pages shell + same-origin iframe to `/embed`; build with `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai`).
 - **Deploy freshness (#1759):** `scripts/build-digithings.sh` writes `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) via `scripts/write-build-info.sh`, and hard-fails the build if it is absent. A Pages project that stops producing deployments keeps serving the last good build with a `200` and no `last-modified` header, so the asset probes below pass throughout a freeze; the `freshness-digithings` job in `smoke-site.yml` reads the live stamp through `scripts/check_deploy_freshness.py` and fails when it is missing or older than 7 days. This is **detection only** — *why* a Pages project stopped building is visible only in the Cloudflare dashboard (deployment list, build log, production branch, watch paths).
 
 To update the landing page: edit `frontend/digithings-web/`, run the build script locally, and let Cloudflare Pages deploy from the connected branch.
 
 ### digithings.ai/chat — DigiChat marketing pane (Phase 3)
 
-> **Status:** DigiChat hosting is DigiThings-owned only (website path preferred;
-> pause `chat.digithings.ai` ACA). DataTap Azure must not host DigiThings digichat
-> — see the Phase 3 ops checklist. A DataTap-sub misdeploy was torn down.
+> **Status:** DigiChat Node must run on DigiThings-owned infra only, behind CF path
+> `digithings.ai/embed*`. DataTap Azure must not host DigiThings digichat —
+> see the Phase 3 ops checklist. A DataTap-sub misdeploy was torn down.
 
 - **Shell:** Cloudflare Pages serves `/chat` with `DtNav` + iframe (`ChatEmbedShell`).
-- **Iframe target:** `{NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}/embed?host=https://digithings.ai` (no embed token for first-party hosts).
-- **Runtime:** digithings-owned DigiChat container (same GHCR image family as DataTap), digivault backend, `gateMode: ungated`, `showByok: true`.
-- **Retired:** Cloudflare Pages Function `functions/api/chat.ts`, `useStackChat`, `chatStream`.
+- **Iframe target:** `https://digithings.ai/embed?host=https://digithings.ai` (no embed token for first-party hosts).
+- **Runtime:** DigiThings-owned DigiChat container (GHCR), digivault backend, `gateMode: ungated`, `showByok: true`.
+- **Retired:** Cloudflare Pages Function `functions/api/chat.ts`, `useStackChat`, `chatStream` (after `/embed` is live).
 
 ### Verifying the routing
 
@@ -147,12 +151,12 @@ To update the landing page: edit `frontend/digithings-web/`, run the build scrip
 # Confirm digithings.ai resolves (Cloudflare)
 dig +short A digithings.ai
 
-# Confirm /chat is the Pages shell (200 HTML with iframe; /api/chat must 404)
+# Confirm /chat is the Pages shell (200 HTML with iframe; /api/chat must 404 after cutover)
 curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/chat
 curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/api/chat
 
-# Confirm digichat embed origin (ops-dependent)
-curl -s -o /dev/null -w '%{http_code}\n' https://chat.digithings.ai/embed
+# Confirm DigiChat path route (ops-dependent — DigiThings Node behind CF)
+curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/embed
 
 # Check the Cloudflare Pages deployment in the dashboard (digithings-ai project)
 ```

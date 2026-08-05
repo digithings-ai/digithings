@@ -533,7 +533,7 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
           Bring your own key
         </Button>
         <a
-          href="https://chat.digithings.ai"
+          href="https://digithings.ai/chat"
           target="_blank"
           rel="noreferrer noopener"
           onClick={() => emit("embed_open_full_chat", {})}

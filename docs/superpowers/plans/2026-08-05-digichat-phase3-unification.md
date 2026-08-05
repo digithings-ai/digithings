@@ -4,7 +4,7 @@
 
 **Goal:** Cut digithings.ai `/chat` over to a digichat `/embed` iframe (digithings-owned digichat runtime), land `digichat:ready` → `digichat:seed` handoff, first-party host auth (no token), independent tenant UI flags, and delete the Cloudflare Function + `useStackChat` + `chatStream` in **one PR**.
 
-**Architecture:** digithings-web keeps URL `/chat` and `DtNav` outside the iframe. The pane is digichat `/embed?host=https://digithings.ai` on `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (prod: `https://chat.digithings.ai`). First-party allowlisted hosts skip embed tokens; customer tenants still require tokens. Landing `writeHandoff` stays localStorage on digithings.ai; the parent `readAndClearHandoff`s and posts seed after ready. Digithings digichat is a separate GHCR install with digivault env-name refs (Phase 2), not DataTap’s ACA.
+**Architecture:** digithings-web keeps URL `/chat` and `DtNav` outside the iframe. The pane is digichat `/embed?host=https://digithings.ai` on `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (prod: `https://digithings.ai` — same-origin path; CF routes `/embed*` to DigiThings-owned DigiChat Node). First-party allowlisted hosts skip embed tokens; customer tenants still require tokens. Landing `writeHandoff` stays localStorage on digithings.ai; the parent `readAndClearHandoff`s and posts seed after ready. Digithings digichat is a DigiThings-owned GHCR install with digivault env-name refs (Phase 2), not DataTap’s ACA and not `chat.digithings.ai`.
 
 **Tech Stack:** TypeScript, Next.js 16 (digichat App Router + digithings-web static export), Vitest, `@digithings/digichat-ui`, Cloudflare Pages `_headers` CSP, postMessage origin checks.
 
@@ -12,7 +12,7 @@
 
 - Spec: `docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md`. Do not relitigate Phase 1/2, DataTap `gateMode` / trial_form, or the accent bug.
 - **One PR** covers digichat + digithings-web cutover + deletes. No iframe-first / delete-later sequence; no long-lived dual path.
-- **Hostname (locked here):** digithings digichat public origin is `https://chat.digithings.ai` (CNAME → digithings-owned ACA or equivalent). digithings.ai `/chat` remains the Pages shell (DtNav + iframe). This reclaims the subdomain as the **iframe target**, not as the visitor-facing chat URL. Env var: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (no trailing slash).
+- **Hostname (locked here):** DigiChat public origin is `https://digithings.ai` with path `/embed` (Cloudflare route → DigiThings-owned Node). digithings.ai `/chat` remains the Pages shell (DtNav + iframe). Env var: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai` (no trailing slash). Do **not** use `chat.digithings.ai`. Leave `DIGICHAT_BASE_PATH` unset. CSP: `frame-src 'self'`.
 - **First-party allowlist (prod only):** hostnames `digithings.ai` and `www.digithings.ai`. Preview `*.pages.dev` is **not** allowlisted. Do not add preview hosts in this phase.
 - **UI flags:** `showByok`, `showStatusBar`, `layout` live on `EmbedTenantConfig` (tenant JSON), projected to the client via `/api/embed/tenant-config`. Never derive `showByok = !ungated`. Defaults when omitted: `showByok: false`, `showStatusBar: false`, `layout: "embed"`.
 - Digithings tenant (ops JSON): `slug: "digithings"`, `gateMode: "ungated"`, `showByok: true`, `showStatusBar: true`, `layout: "page"`, `activityDetail: "full"`, `backend.type: "digivault"` with `*Env` name refs, `aliases: ["www.digithings.ai"]`, `token` still required in schema (skipped at request time for first-party hosts only).
