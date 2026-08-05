@@ -126,7 +126,7 @@ const PRINCIPLES: NumberedStage[] = [
   {
     num: "03",
     title: "Audit-on by default",
-    mech: "Immutable JSONL audit and a correlation ID on every service hop. Events record a prompt's length, never its text — tail events.jsonl and check.",
+    mech: "Append-only JSONL audit and a correlation ID on every service hop. Events record a prompt's length, never its text — tail events.jsonl and check.",
   },
   {
     num: "04",

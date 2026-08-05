@@ -80,7 +80,7 @@ export const subsystems: Subsystem[] = [
     role: "Backtest & optimize on NautilusTrader · no venue wired",
     tagline: "Execution that stops at the audit log until you wire a venue.",
     summary: [
-      "The execution stage runs Hermes signals through a real NautilusTrader engine — backtest and Optuna-driven optimization over your own OHLCV data, with a tearsheet and an immutable audit trail per run.",
+      "The execution stage runs Hermes signals through a real NautilusTrader engine — backtest and Optuna-driven optimization over your own OHLCV data, with a tearsheet and an append-only audit trail per run.",
       "It reaches no live venue: the shipped IB, Alpaca, and QuantConnect adapters are declared stubs that raise NotImplementedError on connect and submit. Connecting a broker is your own deliberate integration, not a flag we flip.",
     ],
     stack: [

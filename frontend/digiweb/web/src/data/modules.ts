@@ -59,9 +59,9 @@ export const modules: ModuleNode[] = [
     graph: { x: 460, y: 280, r: 34, hub: true },
     emblem: "digigraph",
     role: "Orchestration · LangGraph state machine",
-    tagline: "One supervisor decides which specialist runs — when you switch it on.",
+    tagline: "A declarative graph decides what runs next — profile in, path out.",
     summary: [
-      "A LangGraph state machine routes each request to the right sub-graph — quant research, retrieval, or chat — through a declarative tool registry. Set DIGI_SUPERVISOR=1 and a supervisor node makes that call; leave it unset and requests enter the research graph directly.",
+      "A LangGraph state machine routes each request to the right sub-graph — quant research, retrieval, or chat — through conditional edges keyed on the request profile and the run's state. DIGI_SUPERVISOR=1 adds an entry node that stamps the run and enforces a recursion budget; it does not pick the branch, and unset, requests enter the research graph directly.",
       "Speaks the OpenAI API so existing clients work unchanged; LiteLLM handles routing, caching, and checkpointed state across hops.",
     ],
     stack: [
@@ -95,7 +95,7 @@ export const modules: ModuleNode[] = [
     tagline: "Strategy research that ends in a reproducible backtest, not a markdown file.",
     summary: [
       "Atlas runs scheduled research and Hermes turns it into signals; backtests run on a real NautilusTrader engine with Optuna driving the parameter search.",
-      "Every run writes an immutable audit trail and a tearsheet. No broker adapter ships wired — the IB, Alpaca, and QuantConnect adapters are declared stubs, so reaching a live venue is your own deliberate integration.",
+      "Every run writes an append-only audit trail and a tearsheet. No broker adapter ships wired — the IB, Alpaca, and QuantConnect adapters are declared stubs, so reaching a live venue is your own deliberate integration.",
     ],
     stack: [
       { name: "NautilusTrader", icon: null, mono: "NT" },
@@ -249,10 +249,10 @@ export const modules: ModuleNode[] = [
     graph: { x: 250, y: 475, r: 20 },
     emblem: "digiclaw",
     role: "Always-on runtime · heartbeat · audit",
-    tagline: "The always-on agent runtime — heartbeats, scheduling, immutable audit.",
+    tagline: "The always-on agent runtime — heartbeats, scheduling, append-only audit.",
     summary: [
       "A heartbeat service that keeps agents running: Atlas runner scheduling and drift detection, calling digigraph over HTTP on an interval.",
-      "Every action lands in an immutable audit log, and it runs no LLM of its own.",
+      "Every action lands in an append-only audit log, and it runs no LLM of its own.",
     ],
     stack: [
       { name: "HTTPx", icon: null, mono: "hx" },
