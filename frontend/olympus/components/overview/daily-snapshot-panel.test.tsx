@@ -105,7 +105,7 @@ describe('DailySnapshotPanel — present envelope', () => {
       createElement(DailySnapshotPanel, { fetchResult: fresh, now: FIXED_NOW }),
     );
     expect(html).not.toContain('snapshot-stale-banner');
-    expect(html).not.toContain('Stale snapshot');
+    expect(html).not.toContain('Stale brief');
   });
 
   it('shows the stale banner when published_at is older than 48h', () => {
@@ -118,7 +118,7 @@ describe('DailySnapshotPanel — present envelope', () => {
       createElement(DailySnapshotPanel, { fetchResult: stale, now: FIXED_NOW }),
     );
     expect(html).toContain('snapshot-stale-banner');
-    expect(html).toContain('Stale snapshot');
+    expect(html).toContain('Stale brief');
   });
 
   it('asserts no leftover mock/stub strings appear in the rendered output', () => {
@@ -141,7 +141,7 @@ describe('DailySnapshotPanel — empty / error states', () => {
       }),
     );
     expect(html).toContain('snapshot-empty');
-    expect(html).toContain('No snapshot');
+    expect(html).toContain('No brief');
   });
 
   it('shows the empty banner with the unconfigured reason', () => {
