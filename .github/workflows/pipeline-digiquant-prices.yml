@@ -1,4 +1,4 @@
-name: "Pipeline: DigiQuant prices"
+name: "Pipeline: digiquant prices"
 
 # Scheduled price + technicals ingest via the migrated digiquant.data.prices
 # package (issue #149, Wave 1 Unit E). Three separate jobs:

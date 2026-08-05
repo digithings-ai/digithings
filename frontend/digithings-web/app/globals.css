@@ -48,7 +48,7 @@
 }
 
 /* ---- Neutral platform palette (digithings.ai only) ----
-   DigiThings is the platform; accent flavoring belongs to individual modules,
+   digithings is the platform; accent flavoring belongs to individual modules,
    not the platform shell. The shared design tokens (tokens.css) define a teal
    accent that digiquant.io legitimately uses for its green-candle identity — we
    must NOT change that file (digiquant-web + olympus consume it). Instead we

@@ -302,4 +302,40 @@ describe('AllocationsPositionsTable', () => {
     expect(html).toContain('20.0% target');
     expect(html.match(/<col/g)).toHaveLength(6); // colgroup plus five columns
   });
+
+  // #1850: the owner's rule — show +/- for an add or a trim, but a brand-new or removed position
+  // has no rate of change, so nothing is shown rather than a fabricated 0.0pp or full-size delta.
+  describe('weight-change badge', () => {
+    // Signed percentage-point badge, e.g. "+5.1pp" / "\u22124.9pp". Matched by shape because a
+    // bare 'pp' substring occurs elsewhere in the markup.
+    const BADGE = /[+\u2212-]\d+\.\d+pp/;
+
+    it('shows a signed delta for a trim', () => {
+      expect(row({ weight_delta: -4.8616 })).toContain('4.9pp');
+    });
+
+    it('shows a plus for an add', () => {
+      const html = row({ weight_delta: 5.0793 });
+      expect(html).toContain('+');
+      expect(html).toContain('5.1pp');
+    });
+
+    it('renders nothing for a brand-new or removed position', () => {
+      // weight_delta is null in exactly those cases (lib/holding-weight-change.ts).
+      expect(row({ weight_delta: null })).not.toMatch(BADGE);
+    });
+
+    it('renders nothing for a hold that did not move', () => {
+      expect(row({ weight_delta: 0 })).not.toMatch(BADGE);
+    });
+
+    it('does not colour the badge with P&L tokens', () => {
+      // tokens.css reserves --up/--down for P&L; a position getting bigger is not a gain, and
+      // HoldingsActivityTable's weight-change column is neutral for the same reason.
+      const html = row({ weight_delta: 5.0793 });
+      const badge = html.slice(html.indexOf('5.1pp') - 260, html.indexOf('5.1pp'));
+      expect(badge).not.toContain('text-up');
+      expect(badge).not.toContain('text-down');
+    });
+  });
 });

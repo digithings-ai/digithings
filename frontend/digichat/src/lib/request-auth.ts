@@ -19,7 +19,7 @@ export async function requireDigiChatAuth(
       JSON.stringify({
         error: "unauthorized",
         message:
-          "Sign in or send Authorization: Bearer digi_live_… (DigiChat machine key). DigiKey dgk_live_… keys are exchanged after auth — see ARCHITECTURE.md §Machine API key prefixes.",
+          "Sign in or send Authorization: Bearer digi_live_… (digichat machine key). digikey dgk_live_… keys are exchanged after auth — see ARCHITECTURE.md §Machine API key prefixes.",
       }),
       { status: 401, headers: { "content-type": "application/json" } }
     );

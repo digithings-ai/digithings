@@ -1,4 +1,4 @@
-"""Hub HTTP connectors to DigiSearch / DigiQuant composite endpoints."""
+"""Hub HTTP connectors to digisearch / digiquant composite endpoints."""
 
 from __future__ import annotations
 

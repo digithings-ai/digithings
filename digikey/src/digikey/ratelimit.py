@@ -1,4 +1,4 @@
-"""In-process token-bucket rate limiter for DigiKey auth-sensitive routes.
+"""In-process token-bucket rate limiter for digikey auth-sensitive routes.
 
 Applied selectively (via FastAPI dependency) to the key-issuance and
 JWT-mint endpoints. Exempt routes — ``/health``, ``/healthz``,
@@ -13,7 +13,7 @@ Design
 * An :class:`asyncio.Lock` guards bucket mutation so concurrent awaits on
   the same event loop stay consistent.
 * Pure in-process. Cross-process sharing (multi-worker / multi-instance)
-  is a documented follow-up; a Redis- or DigiBase-backed store is the
+  is a documented follow-up; a Redis- or digibase-backed store is the
   intended upgrade path (see ``ARCHITECTURE.md`` §"Rate limiting").
 * On breach: HTTP 429, JSON body ``{"detail": "rate_limited",
   "retry_after": N}``, plus a ``Retry-After: N`` header.
@@ -87,7 +87,7 @@ class TokenBucketRateLimiter:
     def client_ip(request: Request) -> str:
         """Best-effort client IP extraction.
 
-        ``X-Forwarded-For`` is trusted only because DigiKey sits behind a
+        ``X-Forwarded-For`` is trusted only because digikey sits behind a
         loopback-bound deployment; in production the reverse proxy should be
         the only thing setting this header.
         """

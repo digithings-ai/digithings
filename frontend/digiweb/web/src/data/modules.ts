@@ -1,8 +1,8 @@
 /**
- * Single source of truth for DigiThings modules — drives the landing cards,
+ * Single source of truth for digithings modules — drives the landing cards,
  * the architecture/scrollytelling graph, the per-module detail pages, and the
  * stack rows. Content is codebase-accurate (real packages, docker
- * commands, init snippets). DigiStore/DigiLink are tier "roadmap".
+ * commands, init snippets). digistore/digilink are tier "roadmap".
  */
 
 export type Tier = "core" | "support" | "roadmap";
@@ -58,10 +58,10 @@ export const modules: ModuleNode[] = [
     graphOrder: 0,
     graph: { x: 460, y: 280, r: 34, hub: true },
     emblem: "digigraph",
-    role: "Orchestration · LangGraph supervisor",
-    tagline: "One supervisor decides which specialist runs. Every time.",
+    role: "Orchestration · LangGraph state machine",
+    tagline: "A declarative graph decides what runs next — profile in, path out.",
     summary: [
-      "A LangGraph supervisor inspects each request and routes it to the right sub-graph — quant, retrieval, or chat — through a declarative tool registry.",
+      "A LangGraph state machine routes each request to the right sub-graph — quant research, retrieval, or chat — through conditional edges keyed on the request profile and the run's state. DIGI_SUPERVISOR=1 adds an entry node that stamps the run and enforces a recursion budget; it does not pick the branch, and unset, requests enter the research graph directly.",
       "Speaks the OpenAI API so existing clients work unchanged; LiteLLM handles routing, caching, and checkpointed state across hops.",
     ],
     stack: [
@@ -92,14 +92,14 @@ export const modules: ModuleNode[] = [
     graph: { x: 300, y: 175, r: 26 },
     emblem: "digiquant",
     role: "Quant engine · NautilusTrader",
-    tagline: "Strategy research that ends in an order, not a markdown file.",
+    tagline: "Strategy research that ends in a reproducible backtest, not a markdown file.",
     summary: [
-      "Atlas runs scheduled research, Hermes turns it into signals, Kairos executes on a NautilusTrader core, with Optuna driving optimization.",
-      "Every step writes an immutable audit trail; live trading stays loopback-only until a human flips the gate.",
+      "Atlas runs scheduled research and Hermes turns it into signals; backtests run on a real NautilusTrader engine with Optuna driving the parameter search.",
+      "Every run writes an append-only audit trail and a tearsheet. No broker adapter ships wired — the IB, Alpaca, and QuantConnect adapters are declared stubs, so reaching a live venue is your own deliberate integration.",
     ],
     stack: [
       { name: "NautilusTrader", icon: null, mono: "NT" },
-      { name: "Optuna", icon: null, mono: "Op" },
+      { name: "Optuna", icon: "optuna" },
       { name: "LangGraph", icon: "langchain" },
       { name: "Polars", icon: "polars" },
       { name: "yfinance", icon: null, mono: "yf" },
@@ -108,9 +108,11 @@ export const modules: ModuleNode[] = [
     dockerCmd: "docker compose up -d digiquant",
     initSnippet: {
       lang: "python",
-      code: 'from digiquant.server import app\n# register a strategy\nregister("strategy", cls, cfg)',
+      code: "from digiquant.strategies.registry import register\nregister(name, StrategyCls, ConfigCls, default_params)",
     },
-    api: [{ label: "Register a strategy", code: 'register("strategy", cls, cfg)' }],
+    api: [
+      { label: "Register a strategy", code: "register(name, StrategyCls, ConfigCls, default_params)" },
+    ],
     links: [
       { label: "digiquant.io", href: "https://digiquant.io" },
       { label: "Source", href: "https://github.com/digithings-ai" },
@@ -132,6 +134,7 @@ export const modules: ModuleNode[] = [
     ],
     stack: [
       { name: "Chroma", icon: null, mono: "Ch" },
+      { name: "Azure AI Search", icon: null, mono: "AZ" },
       { name: "OpenAI", icon: "openai" },
       { name: "BeautifulSoup", icon: null, mono: "BS4" },
       { name: "pdfplumber", icon: null, mono: "PDF" },
@@ -217,11 +220,11 @@ export const modules: ModuleNode[] = [
     graphOrder: 5,
     graph: { x: 95, y: 300, r: 20 },
     emblem: "digismith",
-    role: "Observability · spans · PII redaction",
-    tagline: "Correlation IDs across every span; PII redacted before logs hit disk.",
+    role: "Observability · spans · correlation IDs",
+    tagline: "Correlation IDs across every hop — and prompts logged by length, never by text.",
     summary: [
       "Structured logging, Prometheus metrics, and OpenTelemetry spans thread through every request so a multi-hop run is traceable end to end.",
-      "PII is redacted before anything is written, with optional LangSmith trace export.",
+      "Audit events record a prompt's length and its IDs, never the prompt itself — tail events.jsonl and check. Optional LangSmith export runs a regex PII redactor on the way out.",
     ],
     stack: [
       { name: "LangSmith", icon: null, mono: "LS" },
@@ -232,9 +235,9 @@ export const modules: ModuleNode[] = [
     dockerCmd: "docker compose up -d digismith",
     initSnippet: {
       lang: "python",
-      code: "from digismith.server import app\napp.add_middleware(DigiSmithRequestIdMiddleware)",
+      code: "from digibase.http import install_request_id_middleware\ninstall_request_id_middleware(app)",
     },
-    api: [{ label: "Middleware", code: "DigiSmithRequestIdMiddleware" }],
+    api: [{ label: "Middleware", code: "install_request_id_middleware(app)" }],
     links: [{ label: "Source", href: "https://github.com/digithings-ai" }],
     related: ["digigraph", "digiclaw", "digibase"],
   },
@@ -246,10 +249,10 @@ export const modules: ModuleNode[] = [
     graph: { x: 250, y: 475, r: 20 },
     emblem: "digiclaw",
     role: "Always-on runtime · heartbeat · audit",
-    tagline: "The always-on agent runtime — heartbeats, scheduling, immutable audit.",
+    tagline: "The always-on agent runtime — heartbeats, scheduling, append-only audit.",
     summary: [
       "A heartbeat service that keeps agents running: Atlas runner scheduling and drift detection, calling digigraph over HTTP on an interval.",
-      "Every action lands in an immutable audit log, and it runs no LLM of its own.",
+      "Every action lands in an append-only audit log, and it runs no LLM of its own.",
     ],
     stack: [
       { name: "HTTPx", icon: null, mono: "hx" },
@@ -271,8 +274,8 @@ export const modules: ModuleNode[] = [
     role: "Shared HTTP + audit library",
     tagline: "The shared Python library every service builds on — and nothing more.",
     summary: [
-      "Not a service but a deliberately minimal library: auth middleware, error handlers, request-ID logging, and a Prometheus metrics endpoint.",
-      "Imported by every other module so they all behave consistently, with optional OpenTelemetry setup.",
+      "Not a service but a deliberately minimal library: request-ID middleware and logging, CORS and error handlers, an audit redaction helper, and a Prometheus metrics endpoint.",
+      "Imported by every other module so they all behave consistently, with optional OpenTelemetry setup. Auth middleware is digikey's job, not digibase's.",
     ],
     stack: [
       { name: "Pydantic", icon: "pydantic" },
@@ -283,7 +286,7 @@ export const modules: ModuleNode[] = [
     dockerCmd: null,
     initSnippet: {
       lang: "python",
-      code: "from digibase.audit import redact_mapping\nfrom digibase.middleware import DigiAuthMiddleware",
+      code: "from digibase.audit import redact_mapping\nfrom digibase.http import install_request_id_middleware",
     },
     api: [{ label: "Import", code: "from digibase.audit import redact_mapping" }],
     links: [{ label: "Source", href: "https://github.com/digithings-ai" }],
@@ -309,8 +312,8 @@ export const modules: ModuleNode[] = [
       { name: "MinIO", icon: null, mono: "Mi" },
     ],
     dockerCmd: null,
-    initSnippet: { lang: "python", code: 'DigiStore.configure(backend="s3")  # planned' },
-    api: [{ label: "Configure backend", code: 'DigiStore.configure(backend="s3")' }],
+    initSnippet: { lang: "python", code: 'digistore.configure(backend="s3")  # planned' },
+    api: [{ label: "Configure backend", code: 'digistore.configure(backend="s3")' }],
     links: [{ label: "Roadmap", href: "https://github.com/digithings-ai" }],
     related: ["digiquant", "digisearch"],
   },

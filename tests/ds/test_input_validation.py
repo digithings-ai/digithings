@@ -1,4 +1,4 @@
-"""Pydantic v2 HTTP input-validation tests for DigiSearch request bodies."""
+"""Pydantic v2 HTTP input-validation tests for digisearch request bodies."""
 
 from __future__ import annotations
 

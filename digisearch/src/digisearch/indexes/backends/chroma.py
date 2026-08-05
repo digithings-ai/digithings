@@ -1,4 +1,4 @@
-"""ChromaDB backend for DigiSearch. Implements DigiIndex."""
+"""ChromaDB backend for digisearch. Implements DigiIndex."""
 
 from __future__ import annotations
 

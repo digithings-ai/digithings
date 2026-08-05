@@ -1,4 +1,4 @@
-"""Pydantic v2 models for the DigiVault core.
+"""Pydantic v2 models for the digivault core.
 
 These are the typed result objects the vault returns — never bare dicts. The
 service and MCP layers serialize these directly.

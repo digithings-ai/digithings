@@ -1,19 +1,19 @@
-# DigiChat activity protocol — design
+# digichat activity protocol — design
 
 **Date:** 2026-08-01
 **Status:** Approved
-**Scope:** Phase 1 of the DigiChat unification program. Entirely within `frontend/digichat`.
+**Scope:** Phase 1 of the digichat unification program. Entirely within `frontend/digichat`.
 
 ## Problem
 
-DigiChat renders in two places that look different, and the difference is not styling.
+digichat renders in two places that look different, and the difference is not styling.
 
 `digithings-web` serves `/chat` as a native React page whose backend is a 983-line
 Cloudflare Pages Function running its own agentic loop over digivault (RAG) on the
 OpenRouter free pool. It streams NDJSON events — `status`, `tool_call`, `tool_result`
 (with vault hits), `reasoning` — producing a layered "thinking chain".
 
-`datatap-web` reaches DigiChat through the `/embed` iframe served by the `digichat`
+`datatap-web` reaches digichat through the `/embed` iframe served by the `digichat`
 container, whose backend is an Azure AI Foundry agent. Every provider in that
 container (`foundry`, `external-relay`, `digigraph`) emits exactly one data-part
 shape: `data-digigraphTrace` with `{label, status}`. `uiMessageToDigiChat` can

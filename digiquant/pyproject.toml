@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "digiquant"
 version = "0.1.0"
-description = "DigiQuant – high-perf Nautilus + Polars quant pipeline (Digi Ecosystem)"
+description = "digiquant – high-perf Nautilus + Polars quant pipeline (Digi Ecosystem)"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }

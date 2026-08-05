@@ -1,4 +1,4 @@
-"""DigiSmith HTTP API: health and non-sensitive tracing status."""
+"""digismith HTTP API: health and non-sensitive tracing status."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ from digismith.config import (
 )
 
 app = FastAPI(
-    title="DigiSmith",
-    description="LangSmith-aligned observability control plane (DigiThings)",
+    title="digismith",
+    description="LangSmith-aligned observability control plane (digithings)",
     version=__version__,
 )
 install_metrics(app, service="digismith", version=__version__)

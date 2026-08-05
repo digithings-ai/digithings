@@ -1,4 +1,4 @@
-# Legacy DigiGraph mode defaults (test / medium / best) + optional per-phase overrides.
+# Legacy digigraph mode defaults (test / medium / best) + optional per-phase overrides.
 #
 # Atlas/Hermes phase routing is centralized in config/olympus_models.yaml
 # (capability tier × OLYMPUS_MODEL_TIER). Entries here override that policy when

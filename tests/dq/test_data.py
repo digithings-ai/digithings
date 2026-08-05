@@ -1,4 +1,4 @@
-"""Unit tests for DigiQuant data layer (Polars)."""
+"""Unit tests for digiquant data layer (Polars)."""
 
 from __future__ import annotations
 

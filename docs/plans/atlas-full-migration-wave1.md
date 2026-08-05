@@ -2,10 +2,10 @@
 
 > **Historical note (2026-06):** Written for the pre-migration `apps/digiquant-atlas/` layout. Runtime Atlas code is `digiquant/src/digiquant/olympus/atlas/`; the UI is `frontend/olympus/`. Paths below are archival.
 
-**Scope:** Complete the Atlas → DigiGraph migration (research + portfolio + deliberation), add LiteLLM batch-API optimization, add GitHub Actions scheduling, migrate price pipeline to DigiQuant, and deploy to production.
+**Scope:** Complete the Atlas → digigraph migration (research + portfolio + deliberation), add LiteLLM batch-API optimization, add GitHub Actions scheduling, migrate price pipeline to digiquant, and deploy to production.
 
 **Confirmed decisions:**
-- Scheduling: GitHub Actions first. DigiClaw/OpenClaw deferred.
+- Scheduling: GitHub Actions first. digiclaw/OpenClaw deferred.
 - Persistence: **new first-class tables** for thesis + deliberation (migration 024).
 - Batching: LiteLLM Anthropic Batches pass-through. Provider-independent deferred.
 - Scope: research + thesis validation + vehicle mapping + deliberation + PM memo + rebalance + deep-dive recess.
@@ -22,7 +22,7 @@
 
 **Dual persistence rationale:** keep `documents` for rich blob retrieval + backward-compat with current frontend; add first-class tables for indexed queries (dashboards, historical thesis tracking, deliberation analytics).
 
-**DigiGraph LLM client** (`digigraph/src/digigraph/llm.py`, 601 lines) already routes through LiteLLM with `cache_control: ephemeral`. No batch API yet.
+**digigraph LLM client** (`digigraph/src/digigraph/llm.py`, 601 lines) already routes through LiteLLM with `cache_control: ephemeral`. No batch API yet.
 
 **No Atlas-scheduled workflows exist.** CI workflows exist; cron workflows are org-maintenance only.
 
@@ -119,7 +119,7 @@ Every unit targets its own module branch. Each unit ends with a PR to its module
 
 ---
 
-### UNIT W1-E — Atlas price pipeline → DigiQuant (#149)
+### UNIT W1-E — Atlas price pipeline → digiquant (#149)
 
 **Branch:** `module/digiquant` → `task/w1e-price-pipeline-migration`
 **Module:** `digiquant/`

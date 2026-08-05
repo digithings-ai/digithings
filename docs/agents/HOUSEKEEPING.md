@@ -44,7 +44,7 @@ the broader delegation framework.
 |---|---|---|---|
 | Scheduled-workflow failure digest | `scheduled-maintenance.yml` — `workflow-health` job | weekly Mon 08:00 UTC | Aggregates failed scheduled runs from the past 7 days, one tracker issue grouped by workflow name |
 | PR-branch CI failures | `ci-failure-triage.yml` | on workflow_run failure | Files a Copilot triage issue per failed PR-branch workflow |
-| DigiQuant prices pipeline | `digiquant-prices.yml` — tracker update on failure | per-run | Maintains one persistent tracker issue per job instead of new issue each failure |
+| digiquant prices pipeline | `digiquant-prices.yml` — tracker update on failure | per-run | Maintains one persistent tracker issue per job instead of new issue each failure |
 | Stale branches | `scheduled-maintenance.yml` — `stale-branches` job | weekly | Identifies branches merged into develop >14d ago, files a cleanup issue |
 
 ## Continuous improvement

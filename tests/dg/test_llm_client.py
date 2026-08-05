@@ -142,7 +142,7 @@ class TestRunTools:
 def test_llm_client_wires_digillm_usage_observer() -> None:
     """Importing llm_client registers digigraph.usage.record as digillm's usage observer.
 
-    This seam lets digillm (a leaf lib) feed DigiGraph's per-run usage accumulator
+    This seam lets digillm (a leaf lib) feed digigraph's per-run usage accumulator
     without importing it — covering completions inside run_tools' loop too.
     """
     import digillm.client as _digillm_client

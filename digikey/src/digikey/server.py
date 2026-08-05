@@ -1,4 +1,4 @@
-"""DigiKey FastAPI service."""
+"""digikey FastAPI service."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from digikey.settings import KEY_PREFIX_LEN, admin_token, allow_dev_global_keys,
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="DigiKey", version=__version__)
+app = FastAPI(title="digikey", version=__version__)
 register_rate_limit_handler(app)
 install_metrics(app, service="digikey", version=__version__)
 install_cors(app, service="digikey")
@@ -86,7 +86,7 @@ def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
     Returns HTTP 200 with ``{"ok": true}``. Intended for load-balancer and
-    k8s liveness checks. For richer cross-service diagnostics, call DigiSmith's
+    k8s liveness checks. For richer cross-service diagnostics, call digismith's
     ``/v1/status``.
     """
     return {"ok": True}

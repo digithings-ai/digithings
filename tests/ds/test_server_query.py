@@ -1,4 +1,4 @@
-"""Unit tests for DigiSearch POST /query API (filter, columns, response_mode, summary)."""
+"""Unit tests for digisearch POST /query API (filter, columns, response_mode, summary)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Unit tests for Atlas research-document ingest into DigiSearch.
+"""Unit tests for Atlas research-document ingest into digisearch.
 
 Validates the contract surfaced by ``digisearch.atlas_ingest`` and the
 ``search_strategies`` MCP tool: chunks land in the configured index with

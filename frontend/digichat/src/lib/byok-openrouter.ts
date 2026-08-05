@@ -26,7 +26,7 @@ export function createOpenRouterByokProvider(apiKey: string) {
     apiKey,
     headers: {
       "HTTP-Referer": referer,
-      "X-OpenRouter-Title": "DigiChat",
+      "X-OpenRouter-Title": "digichat",
     },
   });
 }

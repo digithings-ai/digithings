@@ -1,4 +1,4 @@
-"""DigiSkills — compiles a codebase/docs source into an installable Agent Skill.
+"""digiskills — compiles a codebase/docs source into an installable Agent Skill.
 
 Pipeline: :class:`SkillSource` (what to compile) -> a *corpus builder*
 (:class:`~digiskills.ingest.LocalPathCorpusBuilder` for a local path,

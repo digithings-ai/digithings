@@ -1,5 +1,5 @@
 /**
- * Security response headers for DigiChat (REM-077).
+ * Security response headers for digichat (REM-077).
  * Consumed by `next.config.ts` — keep in sync with README / ARCHITECTURE.
  */
 

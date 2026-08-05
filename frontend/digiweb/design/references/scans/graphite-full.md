@@ -302,12 +302,12 @@ Text links end with `→` or trailing arrow icon — "Learn about agentic develo
 
 ---
 
-## 9. Adopt / Adapt / Avoid (DigiThings)
+## 9. Adopt / Adapt / Avoid (digithings)
 
 | Adopt | Adapt | Avoid |
 |-------|-------|-------|
 | Scroll-pinned **one** flagship section | Olympus pipeline, not PR UI | Orange/zinc palette literally |
-| Product UI frames with labels | DigiChat, tearsheets, Olympus | 5 separate 400vh scroll sections |
+| Product UI frames with labels | digichat, tearsheets, Olympus | 5 separate 400vh scroll sections |
 | Glide motion token | `--ease-glide` in tokens.css | Nine breakpoints day one |
 | Friction reducer under CTA | "open core · self-hosted · BYOK" | Fake "limited AI" tiers |
 | Case study `{X} × digiquant` format | Real adopters when available | Announcement bar without real news |

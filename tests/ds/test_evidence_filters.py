@@ -1,4 +1,4 @@
-"""DigiSearch evidence metadata helpers (unit)."""
+"""digisearch evidence metadata helpers (unit)."""
 
 from __future__ import annotations
 

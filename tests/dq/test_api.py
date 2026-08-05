@@ -1,4 +1,4 @@
-"""API tests for DigiQuant FastAPI app (integration with TestClient)."""
+"""API tests for digiquant FastAPI app (integration with TestClient)."""
 
 from __future__ import annotations
 

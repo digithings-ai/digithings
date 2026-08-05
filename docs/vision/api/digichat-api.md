@@ -21,7 +21,7 @@ A Next.js and React BFF streaming digigraph through the Vercel AI SDK, your key 
 NextAuth handles identity; Postgres and Drizzle persist sessions for humans and agents alike.
 
 ## Authentication
-The deployed digithings.ai chat is an agentic Cloudflare Pages Function (no login) that grounds answers in the digivault docs. The full Docker BFF additionally authenticates users via NextAuth and exchanges a BFF session for a digikey JWT to call DigiGraph.
+The deployed digithings.ai chat is an agentic Cloudflare Pages Function (no login) that grounds answers in the digivault docs. The full Docker BFF additionally authenticates users via NextAuth and exchanges a BFF session for a digikey JWT to call digigraph.
 
 
 ## Run locally

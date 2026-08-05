@@ -104,7 +104,7 @@ describe("Input / Label", () => {
     const chat = renderToStaticMarkup(<Input dress="chat" aria-invalid readOnly value="x" />);
     expect(chat).toContain("ctl-input-chat");
     expect(chat).toContain('aria-invalid="true"');
-    const label = renderToStaticMarkup(<Label htmlFor="dg">DigiGraph base URL</Label>);
+    const label = renderToStaticMarkup(<Label htmlFor="dg">digigraph base URL</Label>);
     expect(label).toContain("ctl-label-ref");
     expect(label).toContain('for="dg"');
     expect(renderToStaticMarkup(<Label dress="chat" />)).toContain("ctl-label-chat");

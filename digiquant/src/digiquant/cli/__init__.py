@@ -1,4 +1,4 @@
-"""DigiQuant CLI: backtest, optimize, export. No fallbacks; raises on failure."""
+"""digiquant CLI: backtest, optimize, export. No fallbacks; raises on failure."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def _parse_params(
 
 @click.group()
 def main() -> None:
-    """DigiQuant – high-perf quant pipeline. Backtest, optimize, export."""
+    """digiquant – high-perf quant pipeline. Backtest, optimize, export."""
 
 
 # Register subcommand groups.

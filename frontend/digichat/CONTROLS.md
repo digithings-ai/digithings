@@ -1,4 +1,4 @@
-# DigiChat controls ledger (#1419)
+# digichat controls ledger (#1419)
 
 State of `src/components/ui/*` after the E4 adoption: which wrappers became
 thin re-exports of the shared `@digithings/web` controls layer, which stayed

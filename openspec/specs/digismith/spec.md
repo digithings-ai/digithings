@@ -1,4 +1,4 @@
-# DigiSmith — Spec
+# digismith — Spec
 
 **Port:** 8003  
 **Role:** LangSmith-aligned observability library and operator status API.

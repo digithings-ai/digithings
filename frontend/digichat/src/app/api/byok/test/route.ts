@@ -147,7 +147,7 @@ async function testOpenRouterKey(key: string, model: string): Promise<TestResult
         Authorization: `Bearer ${key}`,
         "content-type": "application/json",
         "HTTP-Referer": referer,
-        "X-OpenRouter-Title": "DigiChat",
+        "X-OpenRouter-Title": "digichat",
       },
       body: JSON.stringify({
         model,

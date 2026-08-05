@@ -6,7 +6,7 @@ line-length = 100
 target-version = "py312"
 
 # Trees we don't want linted as part of the main stack.
-#   apps/                       — downstream applications built on DigiThings.
+#   apps/                       — downstream applications built on digithings.
 #   digiquant/scripts/atlas/    — legacy operator scripts (pandas/yfinance), exempted
 #                                 from the Polars-only policy. Migrated from
 #                                 apps/digiquant-atlas/scripts/ in issue #316; not

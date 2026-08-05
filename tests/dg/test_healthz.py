@@ -1,4 +1,4 @@
-"""DigiGraph ``/healthz`` liveness contract.
+"""digigraph ``/healthz`` liveness contract.
 
 Contract (see AGENTS.md "Liveness vs status"):
 * returns HTTP 200 with ``{"ok": true}``

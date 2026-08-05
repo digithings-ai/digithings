@@ -37,7 +37,7 @@ docker compose up --build
 | Project | Description |
 |---------|-------------|
 | `local/` | **Local dev / testing.** Basic chat via local Ollama. No external deps. Start here. |
-| `sitaas/` | Orchestration + DigiSearch (Azure). No DigiQuant. |
+| `sitaas/` | Orchestration + digisearch (Azure). No digiquant. |
 
 ## Security
 

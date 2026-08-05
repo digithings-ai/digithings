@@ -1,4 +1,4 @@
-"""Shared utility helpers for DigiThings services."""
+"""Shared utility helpers for digithings services."""
 
 from __future__ import annotations
 

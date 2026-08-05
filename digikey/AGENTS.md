@@ -1,8 +1,8 @@
-# Agent Guide: DigiKey
+# Agent Guide: digikey
 
 ## Purpose
 
-DigiKey is the single authentication and authorization control plane for DigiThings. It manages opaque API keys (bcrypt-hashed, shown once), issues short-lived RS256 JWTs via token exchange, publishes a JWKS endpoint so consumers verify tokens locally, and enforces scope-based access. Every protected route on every service refuses traffic without a valid DigiKey-issued JWT.
+digikey is the single authentication and authorization control plane for digithings. It manages opaque API keys (bcrypt-hashed, shown once), issues short-lived RS256 JWTs via token exchange, publishes a JWKS endpoint so consumers verify tokens locally, and enforces scope-based access. Every protected route on every service refuses traffic without a valid digikey-issued JWT.
 
 ---
 
@@ -40,7 +40,7 @@ Beyond root `AGENTS.md`:
 - **bcrypt only for key storage**: Never store raw keys or use a weaker hash (MD5, SHA-256). The bcrypt column in `ApiKeyRow` is immutable after creation.
 - **Raw key shown once**: The plaintext `dgk_live_` key is returned from `POST /v1/admin/keys` and never retrievable again. This is by design — do not add a "show key" endpoint.
 - **RS256, not HS256**: JWTs are signed with the RSA private key. Never accept or emit HS256 tokens. The `crypto_keys.py` module enforces the key type.
-- **Short-lived JWTs, JWKS caching**: Default JWT TTL should remain short (minutes, not hours). JWKS consumers cache the public key — DigiKey can be down without affecting in-flight request verification.
+- **Short-lived JWTs, JWKS caching**: Default JWT TTL should remain short (minutes, not hours). JWKS consumers cache the public key — digikey can be down without affecting in-flight request verification.
 - **JWT revocation (Redis blocklist)**: When `DIGIKEY_BLOCKLIST_REDIS_URL` is set, `POST /v1/admin/keys/{key_id}/revoke` blocklists live `jti` values until token `exp`. Consumers must call `blocklist.is_blocked(jti)` (via `DigiAuthMiddleware`) for fail-closed revocation. When Redis is unset, revocation only blocks **new** token exchanges (`revoked_at` on the key) — already-issued JWTs remain valid until `exp` (see `ARCHITECTURE.md` Section 5).
 - **Scope downscoping only**: Callers requesting a JWT can only request a **subset** of their granted scopes. `scopes.py` enforces this. Never issue a JWT with scopes beyond what the key was granted.
 - **`DIGIKEY_ALLOW_DEV_GLOBAL=1` is dev-only**: `dev_global` keys (`scopes=["*"]`) must never be created in production. The guard in `server.py` must not be weakened.

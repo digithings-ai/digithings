@@ -18,8 +18,8 @@ export const DQ_CONTACT_EMAIL = "contact@digiquant.io";
 // cells wide and closes up below ~64px, well above nav height.
 export const Brand = () => (
   <>
-    <TerminalMark size={24} variant="compact" />
-    <span className="brand-word">digiquant</span>
+    <TerminalMark size={24} variant="compact" className="hidden max-[880px]:block" />
+    <span className="brand-word max-[880px]:hidden">digiquant</span>
   </>
 );
 

@@ -1,6 +1,6 @@
 # Deployment
 
-How to run DigiThings for a small firm or single-operator deployment. For the security posture, see [SECURITY.md](../SECURITY.md). For strategy/vision, see [VISION.md](VISION.md). For local-stack specifics, see [LOCAL_STACK.md](LOCAL_STACK.md).
+How to run digithings for a small firm or single-operator deployment. For the security posture, see [SECURITY.md](../SECURITY.md). For strategy/vision, see [VISION.md](VISION.md). For local-stack specifics, see [LOCAL_STACK.md](LOCAL_STACK.md).
 
 ## One-command run (Docker)
 
@@ -16,17 +16,17 @@ Endpoints (all bind to `127.0.0.1`):
 
 | Service | URL |
 |---------|-----|
-| DigiGraph | http://127.0.0.1:8000 |
-| DigiQuant | http://127.0.0.1:8001 |
-| DigiSearch | http://127.0.0.1:8002 |
-| DigiSmith | http://127.0.0.1:8003 |
+| digigraph | http://127.0.0.1:8000 |
+| digiquant | http://127.0.0.1:8001 |
+| digisearch | http://127.0.0.1:8002 |
+| digismith | http://127.0.0.1:8003 |
 | LiteLLM | http://127.0.0.1:4000 |
-| DigiKey | http://127.0.0.1:8005 |
-| DigiChat (profile `digichat`) | http://127.0.0.1:3005 |
+| digikey | http://127.0.0.1:8005 |
+| digichat (profile `digichat`) | http://127.0.0.1:3005 |
 
 Use **Tailscale** or **Cloudflare Tunnel** for remote access. Never expose ports publicly. See [SECURITY.md](../SECURITY.md).
 
-**DigiQuant build flag:** The default DigiQuant image includes NautilusTrader. Set `NAUTILUS=0` to exclude it (backtest/optimize/pipeline then return 503).
+**digiquant build flag:** The default digiquant image includes NautilusTrader. Set `NAUTILUS=0` to exclude it (backtest/optimize/pipeline then return 503).
 
 ## With heartbeat (unattended monitoring)
 
@@ -38,14 +38,14 @@ Adds the `heartbeat` service. Audit events are appended to the path defined by `
 
 See [digiclaw/docs/HEARTBEAT.md](../digiclaw/docs/HEARTBEAT.md) for the checklist the heartbeat agent follows.
 
-## DigiChat
+## digichat
 
 ```bash
-make up-digichat     # core stack + DigiChat (Docker profile digichat, host port 3005)
+make up-digichat     # core stack + digichat (Docker profile digichat, host port 3005)
 make down-digichat
 ```
 
-DigiChat needs `AUTH_SECRET`, `AUTH_URL`, and `DIGIKEY_BFF_TOKEN` in `.env`. Auto-migration runs on startup (`DIGICHAT_AUTO_MIGRATE=1`). Full docs: `digichat/ARCHITECTURE.md` (nested repo).
+digichat needs `AUTH_SECRET`, `AUTH_URL`, and `DIGIKEY_BFF_TOKEN` in `.env`. Auto-migration runs on startup (`DIGICHAT_AUTO_MIGRATE=1`). Full docs: `digichat/ARCHITECTURE.md` (nested repo).
 
 ## LiteLLM
 
@@ -54,19 +54,19 @@ LiteLLM is the only LLM router. Compose uses `docker.litellm.ai/berriai/litellm:
 **Auth modes:**
 
 - **No `LITELLM_MASTER_KEY`:** acceptable on loopback/trusted networks only. The proxy may accept requests without a Bearer.
-- **With `LITELLM_MASTER_KEY`:** required for anything beyond local dev. Set `LITELLM_PROXY_API_KEY` on DigiGraph to the same value (or issue virtual keys via DigiKey).
+- **With `LITELLM_MASTER_KEY`:** required for anything beyond local dev. Set `LITELLM_PROXY_API_KEY` on digigraph to the same value (or issue virtual keys via digikey).
 
 See [config/MODELS.md](../config/MODELS.md) for model lists, modes (`test` / `medium` / `best`), caching, and fallbacks.
 
 ## Metrics and observability
 
-Every HTTP service in the core stack exposes a `/health` endpoint. DigiSmith additionally exposes `/v1/status` (public — keep secret-free). Full Prometheus dashboards are a roadmap item (see [epic #4](https://github.com/digithings-ai/digithings/issues/4)).
+Every HTTP service in the core stack exposes a `/health` endpoint. digismith additionally exposes `/v1/status` (public — keep secret-free). Full Prometheus dashboards are a roadmap item (see [epic #4](https://github.com/digithings-ai/digithings/issues/4)).
 
 Current audit artifacts:
 
 - `digiclaw/audit.py` — append-only JSONL; single source of truth for the heartbeat/audit flow.
 - `digigraph/src/digigraph/audit.py` + `digiquant/src/digiquant/audit.py` — per-component audit sinks; to be consolidated into `digibase.audit` (Phase 5 of the cleanup epic [#31](https://github.com/digithings-ai/digithings/issues/31)).
-- Optional `AUDIT_SINK_URL` on DigiClaw for NDJSON POST mirror.
+- Optional `AUDIT_SINK_URL` on digiclaw for NDJSON POST mirror.
 
 ## Tests
 
@@ -107,19 +107,19 @@ For a week-long unattended run:
 
 - **Ports already in use:** check for prior `docker compose up` instances (`docker ps`) or conflicting host services on 8000–8005, 4000, 3005.
 - **`make test-cov` fails to import:** requires editable installs — `pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digismith"`.
-- **DigiChat shows "auth not configured":** set `AUTH_SECRET`, `AUTH_URL`, `DIGIKEY_BFF_TOKEN` in `.env` and recreate the container.
-- **DigiGraph returns 503 on `/v1/backtest`:** image was built with `NAUTILUS=0`. Rebuild without the flag or use `/workflow` (research-only).
+- **digichat shows "auth not configured":** set `AUTH_SECRET`, `AUTH_URL`, `DIGIKEY_BFF_TOKEN` in `.env` and recreate the container.
+- **digigraph returns 503 on `/v1/backtest`:** image was built with `NAUTILUS=0`. Rebuild without the flag or use `/workflow` (research-only).
 
 ## Public domain routing
 
-One public domain serves marketing + DigiChat UI. Phase 3 (amended):
+One public domain serves marketing + digichat UI. Phase 3 (amended):
 
 - **Visitor chat:** `digithings.ai/chat` — Cloudflare Pages native `@digithings/digichat-ui`
   + digivault Pages Function (`functions/api/chat.ts`). Free plan; **no** Containers / iframe.
 - **Do not** use DataTap Azure for DigiThings. Do not use `chat.digithings.ai` as the marketing host.
 - Spec/ops: `docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md`,
   `docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`. ADR-0018 amended.
-- Customer DigiChat `/embed` (DataTap etc.) is separate from digithings marketing chat.
+- Customer digichat `/embed` (DataTap etc.) is separate from digithings marketing chat.
   DigiThings Containers scaffold is **deferred** ([`frontend/digichat-cloudflare`](../frontend/digichat-cloudflare/README.md)).
 
 ### digithings.ai — static landing page
@@ -132,10 +132,10 @@ One public domain serves marketing + DigiChat UI. Phase 3 (amended):
 
 To update the landing page: edit `frontend/digithings-web/`, run the build script locally, and let Cloudflare Pages deploy from the connected branch.
 
-### digithings.ai/chat — DigiChat marketing pane (Phase 3)
+### digithings.ai/chat — digichat marketing pane (Phase 3)
 
 > DigiThings has **no Azure**. Marketing chat runs on **Cloudflare Pages** (Function +
-> digichat-ui). DataTap Azure DigiChat is client-only.
+> digichat-ui). DataTap Azure digichat is client-only.
 
 - **UI:** `DtNav` + `DigiChatSession` (`showByok` / `showStatusBar` / `layout: page`).
 - **API:** Pages Functions `POST /api/chat`, `POST /api/byok/test` (secrets: `OPENROUTER_API_KEY`, `CORE_SUPABASE_URL`, `CORE_SUPABASE_ANON_KEY`).
@@ -180,7 +180,7 @@ curl -sL --max-time 20 https://digithings.ai/build-info.json
 
 Expected: `home` and `docs` return `200` with a `text/html` content-type; `og` returns `200` with `image/png`. A `200 text/html` on `og` means the SPA fallback is masking a missing asset (**fail**, cf. #671); any `404`/`5xx` is a **fail**; `curl -sSfI` exits `0`. A `403`/`429` is an inconclusive Cloudflare bot challenge (warn, not fail). Check 5 should print a JSON object whose `built_at` matches this deploy; a `404` or an HTML body means the live deploy predates the stamp (the daily probe reports that as `UNSTAMPED`).
 
-### digithings.ai/chat — DigiChat production
+### digithings.ai/chat — digichat production
 
 > Not deployed yet — see the status note above. Once live, run:
 
@@ -195,9 +195,9 @@ curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/chat
 Browser steps (no one-liner equivalent):
 
 - **Login smoke:** open `https://digithings.ai/chat` in a private window, complete the Auth.js sign-in flow, and confirm the authenticated chat shell renders without console errors.
-- **DigiGraph round-trip:** from the authenticated UI, submit the known-good prompt `Build me a mean-reversion stat-arb on tech` and confirm a structured workflow response returns within the usual latency budget. This mirrors the loopback smoke in the "Smoke test" section above, but end-to-end through the BFF.
+- **digigraph round-trip:** from the authenticated UI, submit the known-good prompt `Build me a mean-reversion stat-arb on tech` and confirm a structured workflow response returns within the usual latency budget. This mirrors the loopback smoke in the "Smoke test" section above, but end-to-end through the BFF.
 
-If any check fails, roll back per the deployment target's standard procedure (static landing: revert the offending commit and let Cloudflare Pages redeploy from the connected branch; DigiChat: redeploy the previous green build).
+If any check fails, roll back per the deployment target's standard procedure (static landing: revert the offending commit and let Cloudflare Pages redeploy from the connected branch; digichat: redeploy the previous green build).
 
 ## Legacy URL Redirects
 
@@ -211,7 +211,7 @@ digithings.ai is served by **Cloudflare Pages, which natively supports a `_redir
 /index.html           /                 301
 ```
 
-Format is `<from> <to> <status>`, one rule per line, first match wins (`#` starts a comment). `/chat` is **not** a redirect target — per [ADR-0018](adr/0018-digichat-path-routing.md) it is the live DigiChat path (Cloudflare route to the container), so it must never appear here.
+Format is `<from> <to> <status>`, one rule per line, first match wins (`#` starts a comment). `/chat` is **not** a redirect target — per [ADR-0018](adr/0018-digichat-path-routing.md) it is the live digichat path (Cloudflare route to the container), so it must never appear here.
 
 ### Adding a redirect
 
@@ -225,7 +225,7 @@ See also [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md) f
 
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — full service topology and flows.
 - [LOCAL_STACK.md](LOCAL_STACK.md) — no-Docker dev loop details.
-- [frontend/digichat/ARCHITECTURE.md](../frontend/digichat/ARCHITECTURE.md) — DigiChat module architecture.
-- [docs/adr/0018-digichat-path-routing.md](adr/0018-digichat-path-routing.md) — DigiChat path-routing decision (supersedes the `chat.digithings.ai` subdomain plan).
+- [frontend/digichat/ARCHITECTURE.md](../frontend/digichat/ARCHITECTURE.md) — digichat module architecture.
+- [docs/adr/0018-digichat-path-routing.md](adr/0018-digichat-path-routing.md) — digichat path-routing decision (supersedes the `chat.digithings.ai` subdomain plan).
 - [digiclaw/docs/HEARTBEAT.md](../digiclaw/docs/HEARTBEAT.md) — heartbeat checklist.
 - [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md) — two-domain strategy and migration plan.

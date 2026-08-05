@@ -1,4 +1,4 @@
-"""Integration-style tests for DigiClaw heartbeat (Phase 3)."""
+"""Integration-style tests for digiclaw heartbeat (Phase 3)."""
 
 from __future__ import annotations
 

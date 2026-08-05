@@ -222,7 +222,7 @@ export async function POST(req: Request) {
     }) as Omit<UIMessage, "id">[]
   );
 
-  // OpenRouter BYOK requires a model slug before forwarding to DigiGraph.
+  // OpenRouter BYOK requires a model slug before forwarding to digigraph.
   if (byokKey && byokProvider === "openrouter" && !byokModel) {
     return new Response(
       JSON.stringify({
@@ -268,7 +268,7 @@ export async function POST(req: Request) {
     upstreamHeaders["X-LiteLLM-Proxy-Key"] = litellmProxyApiKey;
   }
 
-  // BYOK: forward per-request key to DigiGraph; never log or persist.
+  // BYOK: forward per-request key to digigraph; never log or persist.
   if (byokKey) {
     upstreamHeaders["X-BYOK-Key"] = byokKey;
     if (byokProvider) {

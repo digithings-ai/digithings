@@ -1,10 +1,10 @@
-# DigiChat Embed: Pluggable External Backends + DataTapStream Migration — Implementation Plan
+# digichat Embed: Pluggable External Backends + DataTapStream Migration — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make DigiChat's `/embed` surface support per-tenant external backends (starting with DataTapStream's Azure Foundry relay) and per-tenant access policy, then migrate the DataTapStream site from its custom `ChatPanel` to the embedded digichat.
+**Goal:** Make digichat's `/embed` surface support per-tenant external backends (starting with DataTapStream's Azure Foundry relay) and per-tenant access policy, then migrate the DataTapStream site from its custom `ChatPanel` to the embedded digichat.
 
-**Architecture:** One env-var JSON registry (`DIGICHAT_EMBED_TENANTS`) drives embed host→tenant resolution, backend routing (DigiGraph vs external SSE relay), gate mode, theme, accent, attribution, and CSP frame-ancestors. `/api/chat` grows one branch: external-relay tenants stream through a new adapter that translates the relay's SSE contract into AI SDK UI message stream parts. The DataTapStream site's `/chat` page becomes an iframe of `/embed`.
+**Architecture:** One env-var JSON registry (`DIGICHAT_EMBED_TENANTS`) drives embed host→tenant resolution, backend routing (digigraph vs external SSE relay), gate mode, theme, accent, attribution, and CSP frame-ancestors. `/api/chat` grows one branch: external-relay tenants stream through a new adapter that translates the relay's SSE contract into AI SDK UI message stream parts. The DataTapStream site's `/chat` page becomes an iframe of `/embed`.
 
 **Tech Stack:** Next.js 16 App Router, AI SDK v6 (`createUIMessageStream`), vitest; datatap-web side: Next.js 14 static export, vitest + @testing-library/react.
 
@@ -14,9 +14,9 @@
 
 - "digichat" and "digithings" are ALWAYS lowercase in user-facing copy (both repos, hard rule).
 - digithings repo: every PR links a GitHub issue (`task/<N>-slug` branch); PRs go into `module/digichat`, never directly into `develop`; run `make score` on staged changes before the PR; the implementing PR **always requires human review** (new external network dependency, per CLAUDE.md); update `frontend/digichat/ARCHITECTURE.md` after interface changes; never hand-edit `.claude/`.
-- Legacy embed behavior must be byte-compatible when the registry is empty or the host is unknown: `{tenantSlug: "embed", ownerUserSub: "embed:anonymous"}`, `DIGICHAT_EMBED_ENABLED`/`X-Embed-Token` gating, DigiGraph backend, turn-limited client gate.
+- Legacy embed behavior must be byte-compatible when the registry is empty or the host is unknown: `{tenantSlug: "embed", ownerUserSub: "embed:anonymous"}`, `DIGICHAT_EMBED_ENABLED`/`X-Embed-Token` gating, digigraph backend, turn-limited client gate.
 - Backend config (relay URLs) is NEVER sent to the client; the tenant-config endpoint returns only `{slug, gateMode, theme, accent, attribution}`.
-- The external-relay path must not call `resolveDigigraphUpstreamAuth` or require any DigiGraph/DigiKey env.
+- The external-relay path must not call `resolveDigigraphUpstreamAuth` or require any digigraph/digikey env.
 - Both rate limiters (per-IP embed limiter + shared BFF bucket) run BEFORE the backend branch and apply to external tenants.
 - The relay SSE contract is frozen: events `conversation | text-delta | trace | done | error`, frames `event: <type>\ndata: <json>\n\n`; request `POST {conversationId: string|null, message: string}`.
 - datatap-web repo: keep the `api/` relay and `scripts/` knowledge-sync pipeline intact; `npm run build` (static export) must keep passing; work continues on the existing `feat/digichat` branch (PR #5).
@@ -1042,7 +1042,7 @@ describe("external-relay embed tenants", () => {
     resetEmbedTenantRegistryForTests();
   });
 
-  it("streams from the configured relay without touching DigiGraph auth", async () => {
+  it("streams from the configured relay without touching digigraph auth", async () => {
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", RELAY_REGISTRY);
     resetEmbedTenantRegistryForTests();
     const fetchMock = vi.fn().mockResolvedValue(
@@ -1089,7 +1089,7 @@ Additionally (spec requirement): add one test asserting the **per-IP embed limit
 - [ ] **Step 3: Run to verify failure**
 
 Run: `npx vitest run src/app/api/chat/route.test.ts`
-Expected: the new test FAILS (route still routes embed tenants to DigiGraph and errors on upstream auth).
+Expected: the new test FAILS (route still routes embed tenants to digigraph and errors on upstream auth).
 
 - [ ] **Step 4: Implement the branch.** In `route.ts`, add the import:
 
@@ -1097,7 +1097,7 @@ Expected: the new test FAILS (route still routes embed tenants to DigiGraph and 
 import { createExternalRelayStreamResponse } from "@/lib/external-relay-stream";
 ```
 
-Then insert immediately **after** the `responseHeaders` object is built (after the `X-Digichat-Session`/`X-Request-Id` lines, currently ~line 103-107 on `module/digichat`) and **before** `convertToModelMessages` — i.e., after both rate-limit checks and the `messages` validation, before any BYOK/DigiGraph work:
+Then insert immediately **after** the `responseHeaders` object is built (after the `X-Digichat-Session`/`X-Request-Id` lines, currently ~line 103-107 on `module/digichat`) and **before** `convertToModelMessages` — i.e., after both rate-limit checks and the `messages` validation, before any BYOK/digigraph work:
 
 ```ts
   const embedConfig = "embedConfig" in tenantCtx ? tenantCtx.embedConfig : null;
@@ -1112,7 +1112,7 @@ Then insert immediately **after** the `responseHeaders` object is built (after t
   }
 ```
 
-Nothing else in the route changes — the DigiGraph path below the branch stays byte-identical.
+Nothing else in the route changes — the digigraph path below the branch stays byte-identical.
 
 - [ ] **Step 5: Run the full route suite**
 
@@ -1541,7 +1541,7 @@ useEffect(() => {
 - [ ] **Step 4: Lint + unit suite + legacy smoke**
 
 Run: `npm run lint && npx vitest run`
-Then `npm run dev` → `http://127.0.0.1:3005/embed`: legacy embed still renders and chats (markdown now active on assistant bubbles; no activity box appears for tenants whose stream carries no trace parts... note DigiGraph traces WILL now render in the embed too — that is intended per the spec: "This benefits digithings' own embeds too").
+Then `npm run dev` → `http://127.0.0.1:3005/embed`: legacy embed still renders and chats (markdown now active on assistant bubbles; no activity box appears for tenants whose stream carries no trace parts... note digigraph traces WILL now render in the embed too — that is intended per the spec: "This benefits digithings' own embeds too").
 
 - [ ] **Step 5: Commit**
 
@@ -1572,7 +1572,7 @@ client-safe `GET /api/embed/tenant-config` endpoint, and the `/embed`
 CSP frame-ancestors (`src/lib/security-headers.ts` — which means the env
 var must be present at build time, not just runtime).
 
-`external-relay` tenants bypass DigiGraph entirely: `/api/chat` proxies to
+`external-relay` tenants bypass digigraph entirely: `/api/chat` proxies to
 the configured relay via `src/lib/external-relay-stream.ts`, translating
 the relay's SSE contract (`conversation`, `text-delta`, `trace`, `done`,
 `error`) into AI SDK UI message stream parts. Conversation state lives on

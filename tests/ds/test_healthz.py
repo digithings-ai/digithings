@@ -1,4 +1,4 @@
-"""DigiSearch ``/healthz`` liveness contract.
+"""digisearch ``/healthz`` liveness contract.
 
 Contract (see AGENTS.md "Liveness vs status"):
 * returns HTTP 200 with ``{"ok": true}``

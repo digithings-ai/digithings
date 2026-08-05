@@ -5,7 +5,7 @@
 -- Docs-chat retrieval quality (#1087), from the live anon-key RPC test on the seeded
 -- vault. Two fixes:
 --   (1) Weight the FTS vector — title = A, tags + summary = B, body = C — so an on-topic
---       note (e.g. DigiKey for "authentication") outranks the broad ecosystem overview.
+--       note (e.g. digikey for "authentication") outranks the broad ecosystem overview.
 --   (2) OR the query terms. websearch_to_tsquery ANDs by default, so a natural multi-
 --       keyword question ("backtesting and optimizing quant trading strategies") matched
 --       ZERO notes (no single note carried all five stems). We loosen the top-level AND

@@ -3,9 +3,9 @@
 ## Recap
 
 SITAAS (Stock-Idea-To-Actionable-Strategy, per the user's flagship-pilot framing) is the
-first vertical pilot on DigiThings. As described in [docs/VISION.md](../VISION.md), the
-SITAAS deployment runs DigiGraph orchestration over DigiSearch's unified content index
-(emails, Teams, SharePoint) via LiteLLM — no DigiQuant in the SITAAS data path. Phase 2's
+first vertical pilot on digithings. As described in [docs/VISION.md](../VISION.md), the
+SITAAS deployment runs digigraph orchestration over digisearch's unified content index
+(emails, Teams, SharePoint) via LiteLLM — no digiquant in the SITAAS data path. Phase 2's
 goal is to turn the working POC into a demo-ready multi-turn research assistant by
 unblocking multi-turn flows (exposing stored-dataset state to the LLM and orchestrator
 tools), improving search quality, and polishing the frontend + configuration story.
@@ -23,7 +23,7 @@ the architecture and the POC-to-pilot transition.
 - [ ] Surface `stored_datasets` to the LLM in the research-node prompt so follow-up turns
       can reference previously fetched data without re-ingestion.
 - [ ] Expose `digistore_list` and `digistore_profile` as first-class orchestrator tools
-      in the DigiGraph MCP registry (`digigraph/orchestration/registry.py`).
+      in the digigraph MCP registry (`digigraph/orchestration/registry.py`).
 - [ ] Refresh `projects/sitaas/README.md` and config samples so they match current
       behavior (tool names, env vars, checkpointer defaults).
 
@@ -40,21 +40,21 @@ the architecture and the POC-to-pilot transition.
 
 - [ ] Configurable limits: max rows per `fetch_all`, dataset size caps, and a
       `data_engineer` node timeout — all surfaced via env/config rather than hard-coded.
-- [ ] Natural-language → filter hints (let the LLM propose DigiSearch filters from
+- [ ] Natural-language → filter hints (let the LLM propose digisearch filters from
       free-text user intent).
 
 ### Gaps not in the issue body (inferred — confirm with PM)
 
-- [ ] Latency budget + profiling pass across the research loop (DigiGraph node timings,
-      DigiSearch query latency, LiteLLM round-trips) with a target p95 per turn.
+- [ ] Latency budget + profiling pass across the research loop (digigraph node timings,
+      digisearch query latency, LiteLLM round-trips) with a target p95 per turn.
 - [ ] User-feedback capture (thumbs-up/down per answer, free-text comment) wired into
       the audit JSONL so we can iterate on prompt + ranking.
 - [ ] Demo polish: recorded walkthrough, screenshot set, and a scripted happy-path
       prompt sequence for pilot stakeholders.
-- [ ] Integration-test suite covering the SITAAS workflow end-to-end (DigiGraph →
-      DigiSearch → LiteLLM), runnable under `make test-e2e`.
+- [ ] Integration-test suite covering the SITAAS workflow end-to-end (digigraph →
+      digisearch → LiteLLM), runnable under `make test-e2e`.
 - [ ] Cost-per-request tracking — token + vector-query counters attached to each
-      `workflow_id` via DigiSmith spans, surfaced on `/v1/status` or an internal
+      `workflow_id` via digismith spans, surfaced on `/v1/status` or an internal
       dashboard.
 
 ## Done-criteria for the epic

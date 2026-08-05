@@ -1,4 +1,4 @@
-"""Unit tests for DigiKey per-IP token-bucket rate limiter."""
+"""Unit tests for digikey per-IP token-bucket rate limiter."""
 
 from __future__ import annotations
 

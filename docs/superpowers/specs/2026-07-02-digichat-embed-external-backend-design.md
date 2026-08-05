@@ -1,38 +1,38 @@
-# DigiChat embed: pluggable external backends (design)
+# digichat embed: pluggable external backends (design)
 
 - **Date:** 2026-07-02
 - **Status:** Draft — awaiting review
-- **Related:** Epic #1248 (DigiChat-as-gateway), ADR-0018 (path routing), PR #1280 (per-IP embed rate limiting), PR #1171 (streaming + agentic activity UI), datatap-web PR #5 (the first external consumer)
-- **Human gate:** This design adds a new external network dependency (DigiChat BFF → a non-DigiThings relay endpoint). Per CLAUDE.md, the implementing PR always requires human review regardless of score.
+- **Related:** Epic #1248 (digichat-as-gateway), ADR-0018 (path routing), PR #1280 (per-IP embed rate limiting), PR #1171 (streaming + agentic activity UI), datatap-web PR #5 (the first external consumer)
+- **Human gate:** This design adds a new external network dependency (digichat BFF → a non-digithings relay endpoint). Per CLAUDE.md, the implementing PR always requires human review regardless of score.
 
 ## Problem
 
-DigiChat is meant to be the single source of truth for all chat frontends in the DigiThings ecosystem — but today its `/embed` surface is hardwired to one backend (DigiGraph) and one access model (3 free turns, then a BYOK paywall). The first real external consumer, DataTapStream's marketing site, needs the opposite on both axes: its chat is powered by an Azure AI Foundry agent behind DataTapStream's own relay, paid centrally by DataTapStream, with no turn limit and no key prompt — ever. DataTapStream currently ships its own bespoke `ChatPanel` React code to get this, which is exactly the duplication DigiChat exists to eliminate.
+digichat is meant to be the single source of truth for all chat frontends in the digithings ecosystem — but today its `/embed` surface is hardwired to one backend (digigraph) and one access model (3 free turns, then a BYOK paywall). The first real external consumer, DataTapStream's marketing site, needs the opposite on both axes: its chat is powered by an Azure AI Foundry agent behind DataTapStream's own relay, paid centrally by DataTapStream, with no turn limit and no key prompt — ever. DataTapStream currently ships its own bespoke `ChatPanel` React code to get this, which is exactly the duplication digichat exists to eliminate.
 
 ## Goal
 
 Make `/embed`'s backend and access policy **per-tenant configuration** rather than hardcoded, so that:
 
-1. `digithings.ai` / `digiquant.io` embeds keep today's exact behavior (DigiGraph, turn-limited, BYOK unlock) with zero migration.
+1. `digithings.ai` / `digiquant.io` embeds keep today's exact behavior (digigraph, turn-limited, BYOK unlock) with zero migration.
 2. DataTapStream embeds the same `/embed` page in an iframe and gets: its own Azure Foundry agent (via its existing relay), no gate, its own accent color, and a "powered by digichat — a digithings product." attribution line.
 3. Any future external site follows the same path by adding one config entry — no new code.
 
 ## Non-goals
 
 - **No datatap-web changes in this spec.** Migrating DataTapStream's site (replace `ChatPanel` with the iframe, retire its custom chat components, keep its relay + knowledge-sync pipeline) is a follow-up in the datatap-web repo.
-- **No direct Azure Foundry integration.** DigiChat talks to DataTapStream's already-built, tested Azure Function relay over a simple SSE contract; it learns nothing about Foundry's SDK, auth, or `agent_reference` protocol. (Decided: the relay owns that complexity and already works.)
-- **No backend pluggability for the authenticated app.** Signed-in DigiChat users stay on DigiGraph. External backends are an embed-tenant concept only.
+- **No direct Azure Foundry integration.** digichat talks to DataTapStream's already-built, tested Azure Function relay over a simple SSE contract; it learns nothing about Foundry's SDK, auth, or `agent_reference` protocol. (Decided: the relay owns that complexity and already works.)
+- **No backend pluggability for the authenticated app.** Signed-in digichat users stay on digigraph. External backends are an embed-tenant concept only.
 - **No BYOK on external-relay tenants.** `X-BYOK-*` headers are ignored on that path (the relay accepts no keys).
 - **No database-backed tenant admin.** Config is an env-var JSON registry for v1 (see Alternatives).
 - **No per-tenant suggestion chips, model selectors, or other embed feature flags.** One new axis (backend) and one new policy (gate mode); everything else stays shared.
 
 ## Current state (what this builds on)
 
-**DigiChat side** (`frontend/digichat`):
+**digichat side** (`frontend/digichat`):
 
 - `/embed` (`src/app/embed/page.tsx`): iframe-ready unauthenticated chat. Client-side free-turn gate (`src/lib/embed-gate.ts`, `EMBED_FREE_TURN_LIMIT = 3`, localStorage per host origin) with a BYOK paywall card. Accent is a closed enum (`digithings | digiquant | digichat`) via `?accent=` query param. Messages render as plain-text bubbles — no markdown, no trace parts.
-- `POST /api/chat` (`src/app/api/chat/route.ts`): resolves embed requests via `resolveEmbedChatTenant()` (`src/lib/embed-chat-tenant.ts`) to the fixed identity `{tenantSlug: "embed", ownerUserSub: "embed:anonymous"}`, then unconditionally builds a DigiGraph client. Rate limiting: shared BFF bucket (30/min) plus per-IP embed limiter (10/min, PR #1280).
-- Trace streaming (`src/lib/stream-digigraph-trace.ts`): re-emits DigiGraph SSE as AI SDK UI message stream parts; activity events travel as `data-digigraphTrace` parts carrying `DigigraphTracePayload {v?, type, service?, payload?, ...}`. Only the main app's `chat-panel.tsx` renders them today.
+- `POST /api/chat` (`src/app/api/chat/route.ts`): resolves embed requests via `resolveEmbedChatTenant()` (`src/lib/embed-chat-tenant.ts`) to the fixed identity `{tenantSlug: "embed", ownerUserSub: "embed:anonymous"}`, then unconditionally builds a digigraph client. Rate limiting: shared BFF bucket (30/min) plus per-IP embed limiter (10/min, PR #1280).
+- Trace streaming (`src/lib/stream-digigraph-trace.ts`): re-emits digigraph SSE as AI SDK UI message stream parts; activity events travel as `data-digigraphTrace` parts carrying `DigigraphTracePayload {v?, type, service?, payload?, ...}`. Only the main app's `chat-panel.tsx` renders them today.
 - CSP (`src/lib/security-headers.ts`): `EMBED_FRAME_ANCESTORS = ['self', https://digithings.ai, https://digiquant.io]`, applied to `/embed` routes by `next.config.ts`.
 - Host detection: the embed page resolves the embedding page's origin client-side (`resolveEmbedHost()`, from `document.referrer`) and sends it as `X-Embed-Host` on every chat request.
 
@@ -89,17 +89,17 @@ New module `src/lib/embed-tenants.ts`:
 
 - Read `X-Embed-Host` (fallback: referer), normalize, look up the registry.
 - **Known tenant:** return `{tenantSlug: config.slug, ownerUserSub: "embed:anonymous", embedConfig: config}`. Presence in the registry *is* the embed allowance — `isEmbedAllowed()`'s env-token check is skipped for registered hosts.
-- **Unknown host (or no registry):** exactly today's behavior — `{tenantSlug: "embed", ownerUserSub: "embed:anonymous"}` gated by `DIGICHAT_EMBED_ENABLED`/`X-Embed-Token`, DigiGraph backend, turn-limited client gate. `digithings.ai`/`digiquant.io` need no registry entries; they ride this legacy default unchanged.
+- **Unknown host (or no registry):** exactly today's behavior — `{tenantSlug: "embed", ownerUserSub: "embed:anonymous"}` gated by `DIGICHAT_EMBED_ENABLED`/`X-Embed-Token`, digigraph backend, turn-limited client gate. `digithings.ai`/`digiquant.io` need no registry entries; they ride this legacy default unchanged.
 
 The route then branches once, immediately after tenant resolution and rate-limit checks:
 
 ```
 embedConfig?.backend.type === "external-relay"
   → createExternalRelayStreamResponse(...)      // new, section 3
-  : existing DigiGraph path                     // byte-for-byte untouched
+  : existing digigraph path                     // byte-for-byte untouched
 ```
 
-Spoofing analysis: `X-Embed-Host` is attacker-settable from curl, but it only *selects among preconfigured* tenants — the relay URL always comes from config, never from the request, so DigiChat cannot be used as an open proxy (no SSRF surface). A spoofer selecting the DataTapStream tenant reaches an endpoint that is already public, minus nothing — and still passes through DigiChat's per-IP limiter. The client-side turn gate was never a security boundary (documented as UX-only in #241).
+Spoofing analysis: `X-Embed-Host` is attacker-settable from curl, but it only *selects among preconfigured* tenants — the relay URL always comes from config, never from the request, so digichat cannot be used as an open proxy (no SSRF surface). A spoofer selecting the DataTapStream tenant reaches an endpoint that is already public, minus nothing — and still passes through digichat's per-IP limiter. The client-side turn gate was never a security boundary (documented as UX-only in #241).
 
 ### 3. External relay stream adapter
 
@@ -108,19 +108,19 @@ New `src/lib/external-relay-stream.ts`, a sibling of `createDigigraphTraceStream
 `createExternalRelayStreamResponse({ relayUrl, messages, conversationId, responseHeaders, signal })`
 
 - **Request mapping:** the relay takes a single message per turn (Foundry holds history server-side), while `useChat` posts the full `UIMessage[]`. The adapter extracts the **last user message's** text parts and POSTs `{conversationId, message}` to `relayUrl`, forwarding `signal` so a client disconnect aborts the relay's upstream Foundry call (the relay handles this correctly today).
-- **SSE parsing:** the relay's frames are `event:`-typed (unlike DigiGraph's OpenAI-style `data:`-only frames), so the adapter includes its own small typed-event parser (exported for unit tests) rather than reusing `iterateOpenAiSse`.
+- **SSE parsing:** the relay's frames are `event:`-typed (unlike digigraph's OpenAI-style `data:`-only frames), so the adapter includes its own small typed-event parser (exported for unit tests) rather than reusing `iterateOpenAiSse`.
 - **Translation table:**
 
 | relay event | UI message stream output |
 |---|---|
 | `conversation` | `data-externalConversation` part, `data: {conversationId}` — the client persists and echoes it (below) |
-| `text-delta` | `text-delta` (one `text-start` before the first delta, `text-end` at stream close — mirroring the DigiGraph trace path) |
-| `trace` | `data-digigraphTrace` part with payload `{v: 1, type: "external_activity", service: "external", payload: {label, status}}` — same part vocabulary as DigiGraph traces, so one renderer serves both |
+| `text-delta` | `text-delta` (one `text-start` before the first delta, `text-end` at stream close — mirroring the digigraph trace path) |
+| `trace` | `data-digigraphTrace` part with payload `{v: 1, type: "external_activity", service: "external", payload: {label, status}}` — same part vocabulary as digigraph traces, so one renderer serves both |
 | `done` | close the text block; stream finish |
 | `error` | AI SDK error part → surfaces through `useChat`'s existing `error` state and the embed's existing retry card |
 
 - **Conversation continuity:** the client stores the conversation id in `sessionStorage` (`digichat_embed_conversation:<host>`, matching the existing `digichat_embed_turns:` prefix style) and sends it back as `X-External-Conversation` on subsequent turns. Session-scoped persistence matches what DataTapStream's current panel does.
-- **Upstream failure:** non-200 or empty-body relay responses produce a readable in-stream error (same pattern as the DigiGraph path's "Upstream error: ..." handling).
+- **Upstream failure:** non-200 or empty-body relay responses produce a readable in-stream error (same pattern as the digigraph path's "Upstream error: ..." handling).
 - `X-BYOK-*` headers are ignored on this path.
 
 ### 4. Tenant config endpoint for the client
@@ -136,11 +136,11 @@ The embed page needs `gateMode`, `accent`, and `attribution` before the first me
 
 - Fetch tenant config on mount (one GET; until it resolves, render the legacy defaults — a flash of the gated default is acceptable, a flash of an ungated default is not, so default-closed).
 - **Gate bypass:** when `gateMode === "ungated"`, the turn counter, `useEmbedGate` lock, and `PaywallCard` never engage; the header shows no `n/3 free` badge.
-- **Accent:** when config provides `accent`, apply it as `--accent`/`--accent-foreground` CSS vars (overriding the enum-based classes). The `?accent=` query param and its three first-party values keep working for digithings/digiquant embeds. This refines the earlier "add a 4th enum accent" idea: external brand colors live in config, not in DigiThings source.
+- **Accent:** when config provides `accent`, apply it as `--accent`/`--accent-foreground` CSS vars (overriding the enum-based classes). The `?accent=` query param and its three first-party values keep working for digithings/digiquant embeds. This refines the earlier "add a 4th enum accent" idea: external brand colors live in config, not in digithings source.
 - **Theme:** the wrapper's hardcoded `dark` class becomes conditional on the tenant's `theme` — `"dark"` (default, today's behavior) keeps it, `"light"` drops it so the standard light token set applies. DataTapStream's host page is light-themed; a dark iframe would reintroduce exactly the boxed-widget look its site just moved away from.
 - **Markdown:** assistant bubbles render through `react-markdown` + `remark-gfm` (both already dependencies) instead of plain text. User bubbles stay plain.
 - **Activity/trace box:** render `data-digigraphTrace` parts in a collapsed-by-default activity box under the assistant message — reusing the main app's activity component from `chat-panel.tsx` if it extracts cleanly, otherwise a minimal list styled like it (`… label` in progress, `✓ label` completed). This benefits digithings' own embeds too — they gain the trace UI the main app already has.
-- **Attribution:** when `attribution: true`, a footer line — exactly `powered by digichat — a digithings product.` with "digithings" linking to `https://digithings.ai` — all lowercase (repo convention per PR #1158; the header's current "DigiChat" label is normalized to "digichat" in passing, same convention).
+- **Attribution:** when `attribution: true`, a footer line — exactly `powered by digichat — a digithings product.` with "digithings" linking to `https://digithings.ai` — all lowercase (repo convention per PR #1158; the header's current "digichat" label is normalized to "digichat" in passing, same convention).
 - **Conversation echo:** the chat transport's `prepareSendMessagesRequest` adds `X-External-Conversation` from sessionStorage when present, and a small effect stores the id when a `data-externalConversation` part arrives.
 
 ### 6. CSP / frame-ancestors
@@ -149,7 +149,7 @@ The embed page needs `gateMode`, `accent`, and `attribution` before the first me
 
 ### 7. Rate limiting and abuse
 
-- The per-IP embed limiter (10/min, PR #1280) applies to **all** embed tenants including external-relay ones — unchanged, deliberately. Worth noting: DataTapStream removed its Turnstile gate earlier today, leaving its relay with no abuse protection; routing its traffic through DigiChat's BFF **restores a real per-IP limit** in front of its Foundry spend.
+- The per-IP embed limiter (10/min, PR #1280) applies to **all** embed tenants including external-relay ones — unchanged, deliberately. Worth noting: DataTapStream removed its Turnstile gate earlier today, leaving its relay with no abuse protection; routing its traffic through digichat's BFF **restores a real per-IP limit** in front of its Foundry spend.
 - The shared BFF bucket key already includes the tenant slug (`chat:<slug>:embed:anonymous`), so each external tenant gets its own 30/min bucket instead of sharing the `embed` pool — a free improvement from resolving real slugs.
 
 ## Sequencing dependency (important)
@@ -176,6 +176,6 @@ Per repo rules: file a new GitHub issue (this is explicitly outside Epic #1248's
 ## Alternatives considered
 
 - **Store tenant config in the existing `tenants` Drizzle table** (the shape initially floated). Rejected for v1: the embed path is deliberately DB-free today (anonymous public traffic never touches Postgres), CSP frame-ancestors must be derivable at build time where the DB isn't reachable, and the existing embed knobs (`DIGICHAT_EMBED_ENABLED`, `DIGICHAT_EMBED_TOKEN`, `EMBED_FREE_TURN_LIMIT`) are already env-based. The env registry delivers the same generalized abstraction with one storage mechanism instead of two. Revisit when an admin UI or double-digit tenant count exists — the `EmbedTenantConfig` type is the stable interface either way.
-- **DigiChat speaks to Azure Foundry directly** (native Foundry provider inside digichat). Rejected: duplicates the Foundry client, auth, and `agent_reference` protocol work already built, deployed, and live-debugged in datatap-web's relay; DigiChat stays agent-platform-agnostic behind one small SSE contract.
+- **digichat speaks to Azure Foundry directly** (native Foundry provider inside digichat). Rejected: duplicates the Foundry client, auth, and `agent_reference` protocol work already built, deployed, and live-debugged in datatap-web's relay; digichat stays agent-platform-agnostic behind one small SSE contract.
 - **Extract only the chat UI into a shared package** and let each site bring its own backend glue. Rejected by decision: it leaves every consumer maintaining transport/state code, which is the duplication this work exists to remove.
 - **Special-case DataTapStream in the route** (carve-out now, generalize later). Rejected by decision in favor of the full per-tenant abstraction.
