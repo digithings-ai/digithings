@@ -31,11 +31,13 @@ import {
   resolveEmbedHost,
   useEmbedGate,
   writeTrialUnlocked,
+  writeChatAccessToken,
   EMBED_FREE_TURN_LIMIT,
 } from "@/lib/embed-gate";
 import {
   buildGatedMessage,
   isUnlockedMessage,
+  readUnlockToken,
   PARENT_GATE_TIMEOUT_MS,
   resolveGateFallbackCard,
 } from "@/lib/embed-trial-messages";
@@ -354,6 +356,10 @@ function EmbedChat({
     if (!isTrialForm) return;
     const onMessage = (event: MessageEvent) => {
       if (isUnlockedMessage(event, host)) {
+        const unlockToken = readUnlockToken(event);
+        if (unlockToken && host) {
+          writeChatAccessToken(resolveEmbedHost(host), unlockToken);
+        }
         unlockTrial();
         setServerGated(false);
       }

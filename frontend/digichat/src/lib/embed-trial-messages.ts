@@ -18,6 +18,22 @@ export function isUnlockedMessage(
   return !!data && data.type === UNLOCKED_MESSAGE_TYPE;
 }
 
+/** Max token length accepted off the wire — {32-hex id}.{44-char base64 secret} plus slack. */
+const MAX_UNLOCK_TOKEN_CHARS = 512;
+
+/**
+ * The chat-access token carried on an unlock message, or null when absent or implausible.
+ * Call ONLY after isUnlockedMessage() has verified the origin — this performs no origin check,
+ * so the origin rule stays in exactly one place.
+ */
+export function readUnlockToken(event: MessageEvent): string | null {
+  const data = event.data as { token?: unknown } | null;
+  if (!data || typeof data.token !== "string") return null;
+  const token = data.token.trim();
+  if (!token || token.length > MAX_UNLOCK_TOKEN_CHARS) return null;
+  return token;
+}
+
 /** Caps mirrored by datatap-web's sanitizer and re-validated by the trial backend. */
 export const MAX_GATED_SESSION_ID_CHARS = 200;
 export const MAX_GATED_QUESTIONS = 3;
