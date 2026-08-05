@@ -10,8 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/olympus/',
     scope: '/olympus/',
     display: 'standalone',
-    background_color: '#0A0E0C',
-    theme_color: '#0A0E0C',
+    background_color: '#0A0E0C', // canon-allow: manifests cannot reference CSS tokens
+    theme_color: '#0A0E0C', // canon-allow: manifests cannot reference CSS tokens
     icons: [
       {
         src: '/olympus/icons/olympus-app-192.png',
