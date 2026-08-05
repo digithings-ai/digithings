@@ -144,17 +144,20 @@ export default function Home() {
         <HeroMesh>
           <h1 className="dqhero-h1">
             <span className="ln">
-              <span>AI infrastructure in a glass box</span>
+              <span>AI infrastructure</span>
+            </span>
+            <span className="ln">
+              <span>in a glass box</span>
             </span>
             <span className="ln">
               <span>
-                <em>you own.</em>
+                <em>you own</em>
               </span>
             </span>
           </h1>
           <p className="dqhero-lede">
-            Ten open-source modules that plug into the stack you already run — not a replacement
-            for it. Self-hosted anywhere, your own keys and providers, every step traceable.
+            Open-source agent infrastructure that runs in your environment, with your models and
+            your data.
           </p>
           <div className="dqhero-cta">
             <p className="dqhero-scroll-label">Scroll to explore</p>

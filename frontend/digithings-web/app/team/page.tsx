@@ -9,8 +9,8 @@ import { DtNav } from "@/components/DtNav";
 export const metadata: Metadata = {
   title: "team — who builds digithings",
   description:
-    "The people behind DigiThings, the open-source modular AI infrastructure stack. Founded and " +
-    "maintained in public on GitHub.",
+    "Meet the current maintainer of digithings and follow the project's work in the public " +
+    "GitHub repository.",
 };
 
 // /team — a roster template with one entry. Adding a member is one object in
@@ -28,22 +28,11 @@ export const metadata: Metadata = {
 // plain <img> and the explicit width/height are the intrinsic dimensions; the
 // h-/w- utilities set the rendered box, giving a 2x-density 112px avatar.
 //
-// IDENTITY VERIFIED, BIOGRAPHY NOT INVENTED. The GitHub API confirms user
+// The GitHub API confirms user
 // 34689321 is login `chrizefan`, display name "Chris", company "digithings.ai" —
-// so the handle, the link and the avatar belong to the same account. Nothing
-// beyond that is asserted: no employers, no credentials, no dates, no prior
-// roles, because none of that is in the repository and this page will not make
-// it up.
-//
-// >>> OWNER TO CONFIRM: the `blurb` string below is PLACEHOLDER COPY. It was
-// >>> drafted from the repository's own evidence only — the design decisions
-// >>> that are visible in the code (MIT licence, self-hosting, per-request
-// >>> provider keys, published residual risks) — and from the role the brief
-// >>> supplied ("founder"). It is a plausible description of the work, not a
-// >>> statement Chris has approved. Replace or approve before launch. The same
-// >>> applies to `role`: "Founder" is the title given in the brief; if the
-// >>> public-facing title should be different, this is the one place to change
-// >>> it.
+// so the handle, link and avatar belong to the same account. The page limits
+// itself to the maintainer role and work visible in the repository; it makes no
+// claims about employment history, credentials, or private biography.
 type Member = {
   name: string;
   role: string;
@@ -59,12 +48,10 @@ type Member = {
 const MEMBERS: Member[] = [
   {
     name: "Chris",
-    role: "Founder",
+    role: "Maintainer",
     blurb:
-      "Sets the direction of the stack and writes most of it in public. The decisions that shape " +
-      "DigiThings are visible in the repository rather than in a pitch: MIT from the first commit, " +
-      "self-hosting as the default rather than an enterprise tier, provider credentials the stack " +
-      "never persists, and a threat model that publishes its residual risks alongside its controls.",
+      "Chris maintains digithings in public. Current code, design decisions, open issues, and " +
+      "release history are available in the GitHub repository.",
     avatar: "/team/chris.png",
     avatarSize: 460,
     github: "https://github.com/chrizefan",
@@ -82,12 +69,12 @@ export default function TeamPage() {
           kicker={"// team"}
           title={
             <>
-              Built <em>in the open.</em>
+              Meet the <em>maintainer.</em>
             </>
           }
         >
-          One name on the roster today, and a repository anyone can read. The work is public commit
-          by commit, so the most useful introduction to whoever builds this is the history itself.
+          digithings is currently maintained by Chris. The project is developed in public, so its
+          code, decisions, and progress can be reviewed directly.
         </PageHead>
 
         <section className="section">
@@ -98,7 +85,7 @@ export default function TeamPage() {
                 while the roster is one entry long. */}
             <Reveal className="section-head">
               <span className="kicker">{"// roster"}</span>
-              <h2>Who that is.</h2>
+              <h2>Current maintainer.</h2>
             </Reveal>
             <div className="grid gap-[1.1rem] md:grid-cols-2">
               {MEMBERS.map((m) => (
@@ -138,8 +125,8 @@ export default function TeamPage() {
               <h2>Contributions and conversations.</h2>
               <p>
                 The stack is MIT-licensed and developed in public: issues, pull requests and design
-                notes all live in the repository. If you want to build on it with help, that is a
-                different conversation and it has its own page.
+                notes all live in the repository. You can contribute there or contact us for help
+                integrating the stack and building on it.
               </p>
             </Reveal>
             <div className="flex flex-wrap gap-[0.8rem]">
@@ -152,13 +139,13 @@ export default function TeamPage() {
                 Contribute on GitHub <span aria-hidden="true">→</span>
               </a>
               <Link className="btn btn-ghost" href="/services">
-                Work with us
+                View services
               </Link>
               <a
                 className="btn btn-ghost"
                 href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20inquiry`}
               >
-                Email
+                Contact digithings
               </a>
             </div>
           </div>

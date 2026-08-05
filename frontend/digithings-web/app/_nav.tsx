@@ -33,9 +33,8 @@ export const Brand = () => (
  *  Team, Security, Quality) are a small index, not four more top-level slots —
  *  NavShell renders a group as a dropdown on the wide bar and as a labelled
  *  section inside the narrow sheet. "Contact" left the bar with them: it is an
- *  anchor on the home page and it lives in the footer. The legal pages
- *  (terms, privacy, disclaimer) are footer-only by design — nobody navigates
- *  to a disclaimer from a top bar. */
+ *  anchor on the home page and it lives in the footer. The website privacy
+ *  notice is footer-only by design. */
 export const DT_NAV_PRIMARY: NavItem[] = [
   { label: "Docs", href: "/docs" },
   { label: "Architecture", href: "/#architecture" },
@@ -53,7 +52,10 @@ export const DT_NAV_PRIMARY: NavItem[] = [
 ];
 
 /** Footer stays a flat NavLink[] — <Footer/> takes links, not groups — and it
- *  is where the long tail lives: the company pages again, then the legal set. */
+ *  is where the long tail lives: the company pages and the website privacy
+ *  notice. Software use is governed by the repository's MIT licence; paid
+ *  services use their own signed agreement, so neither needs generic site
+ *  terms. */
 export const DT_FOOTER: NavLink[] = [
   { label: "Architecture", href: "/#architecture" },
   { label: "Docs", href: "/docs" },
@@ -64,9 +66,7 @@ export const DT_FOOTER: NavLink[] = [
   { label: "Quality", href: "/quality" },
   { label: "Contact", href: "/#contact" },
   { label: "digichat", href: "/chat" },
-  { label: "Terms", href: "/legal/terms" },
   { label: "Privacy", href: "/legal/privacy" },
-  { label: "Disclaimer", href: "/legal/disclaimer" },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
 ];
