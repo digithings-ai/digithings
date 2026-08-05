@@ -132,9 +132,9 @@ To update the landing page: edit `frontend/digithings-web/`, run the build scrip
 
 ### digithings.ai/chat — DigiChat marketing pane (Phase 3)
 
-> **Status:** digithings-owned ACA is live (interim FQDN in
-> `infra/digichat-digithings/README.md`); `chat.digithings.ai` DNS + ACA hostname
-> bind remain human steps — see the ops checklist.
+> **Status:** DigiChat hosting is DigiThings-owned only (website path preferred;
+> pause `chat.digithings.ai` ACA). DataTap Azure must not host DigiThings digichat
+> — see the Phase 3 ops checklist. A DataTap-sub misdeploy was torn down.
 
 - **Shell:** Cloudflare Pages serves `/chat` with `DtNav` + iframe (`ChatEmbedShell`).
 - **Iframe target:** `{NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}/embed?host=https://digithings.ai` (no embed token for first-party hosts).

@@ -1,14 +1,10 @@
-// Digithings DigiChat ACA + ACR + CAE (Phase 3).
-// Prefer applying via the live az CLI bootstrap already run; this module
-// documents the desired state for re-create / disaster recovery.
+// DigiThings DigiChat — placeholder only.
+// Do NOT deploy into DataTap subscriptions (e.g. DataTap WebSite
+// fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0). Hosting direction is website-path
+// first; pause chat.digithings.ai ACA until DigiThings-owned infra is chosen.
 
-@description('Azure region')
+@description('Azure region — DigiThings subscription only')
 param location string = 'eastus2'
 
-@description('Digichat image (ACR)')
-param digichatImage string = 'digithingschatregistry.azurecr.io/digichat:phase3-preview'
-
-output interimFqdn string = 'digichat.agreeablepebble-8440dc16.eastus2.azurecontainerapps.io'
-output publicHostname string = 'chat.digithings.ai'
-output image string = digichatImage
+output note string = 'Do not deploy DigiThings digichat into DataTap Azure. See infra/digichat-digithings/README.md'
 output locationOut string = location

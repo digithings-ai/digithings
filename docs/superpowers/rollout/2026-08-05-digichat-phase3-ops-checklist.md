@@ -1,25 +1,32 @@
 # DigiChat Phase 3 — digithings ops checklist
 
-## Hostname
-- Public digichat origin: `https://chat.digithings.ai`
-- DNS: CNAME `chat` → digithings-owned Azure Container App hostname
-- digithings.ai `/chat` stays on Cloudflare Pages (shell + iframe)
+## Hostname / hosting direction (updated)
 
-## Image
-- Pull same DigiChat GHCR release DataTap uses: `ghcr.io/digithings-ai/digichat:<tag>`
-- If this install pulls via ACR: after each digichat release run
-  `./infra/digichat-digithings/import-ghcr.sh vX.Y.Z` (not automated in Phase 3)
-- **Bootstrap (2026-08-05):** GHCR `v0.5.0` predates Phase 2 digivault + Phase 3 flags.
-  Digithings ACR currently serves `digichat:phase3-preview` built from
-  `task/1866-digichat-phase3-unification` via `./infra/digichat-digithings/build-image.sh`.
-  After #1868 merges and a digichat release is cut on `main`, switch ACA to that tag.
+- Visitor-facing chat remains `digithings.ai/chat` (Pages shell + embed config).
+- **Product direction (owner):** DigiChat should be hosted as a **path on the DigiThings website**, then `/chat` embeds that path with config — **not** a separate DigiThings DigiChat ACA under DataTap Azure, and **pause** standing up `chat.digithings.ai` ACA until DigiThings-owned hosting is decided.
+- digithings.ai `/chat` stays on Cloudflare Pages (shell + iframe / path embed).
+
+## Hard constraint — Azure ownership
+
+**DigiThings DigiChat MUST NOT run in any DataTap Azure subscription.**
+
+- Forbidden: **DataTap WebSite** `fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0` (and any other DataTap sub).
+- DataTap is a **client**. DigiThings may only touch DataTap Azure for DataTap’s own website DigiChat ACA.
+- **2026-08-05 misdeploy (torn down):** `digithings-rg` containing `digithings-cae`, `digithingschatregistry`, `digichat` ACA, and Log Analytics workspace was created on DataTap WebSite by mistake. That entire resource group was deleted. Do **not** recreate DigiThings stack there.
+- Do **not** create replacement DigiThings DigiChat Azure resources until DigiThings-owned subscription / website-path hosting is available.
+
+## Image (when DigiThings-owned runtime exists)
+
+- Same DigiChat GHCR release family DataTap uses: `ghcr.io/digithings-ai/digichat:<tag>`
+- GHCR `v0.5.0` predates Phase 2 digivault + Phase 3 flags — need a newer digichat release after #1868 (or equivalent) for digivault embed.
+- ACR mirror helpers under `infra/digichat-digithings/` are DigiThings-sub only; they must refuse DataTap accounts.
 
 ## Runtime env (names must match tenant JSON)
+
 - `DIGITHINGS_SUPABASE_URL`, `DIGITHINGS_SUPABASE_ANON_KEY`, `DIGITHINGS_OPENROUTER_API_KEY`
 - `DIGICHAT_EMBED_TENANTS` includes digithings entry below
 - `DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai,...` at **build** for CSP
 - Do **not** put tenant `token` values in Docker build-args
-- Rotate with `./infra/digichat-digithings/apply-secrets.sh` (reads env; never prints secrets)
 
 ## Tenant JSON fragment
 ```json
@@ -45,57 +52,17 @@
 ```
 
 ## digithings-web build
-- `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://chat.digithings.ai`
 
-## Provisioned (2026-08-05, DataTap WebSite subscription)
+- Embed origin env (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`) must point at the **DigiThings-owned** DigiChat origin once hosting is decided (website path or DigiThings Azure — **not** DataTap ACA). Pause assuming `https://chat.digithings.ai` until that decision lands.
 
-| Resource | Name |
-|---|---|
-| RG | `digithings-rg` (eastus2) |
-| CAE | `digithings-cae` |
-| ACR | `digithingschatregistry` |
-| ACA | `digichat` |
+## Ops remaining
 
-- **Interim URL (TLS live):**
-  `https://digichat.agreeablepebble-8440dc16.eastus2.azurecontainerapps.io`
-- Smoke (verified): `/embed` → 200; `GET /api/embed/tenant-config` with
-  `X-Embed-Host: https://digithings.ai` → 200
-  (`gateMode=ungated`, `showByok=true`, `showStatusBar=true`, `layout=page`);
-  CSP `frame-ancestors` includes digithings.ai / www.
-- Digivault secrets are ACA secret refs (not embedded in tenant JSON values).
-- Docs/scripts: `infra/digichat-digithings/`
-
-## Ops remaining (human — Cloudflare DNS + hostname bind)
-
-`chat.digithings.ai` does **not** resolve yet (no CF API token / wrangler auth for DNS on this machine).
-
-1. In Cloudflare DNS for `digithings.ai`, add (**DNS only / grey cloud** until ACA cert binds):
-
-   | Type | Name | Content |
-   |---|---|---|
-   | TXT | `asuid.chat` | `3D78E96D5F0BC83AAC23C568E61CBF1C59F7B7368FF8B9D3276C04A6533E2CA8` |
-   | CNAME | `chat` | `digichat.agreeablepebble-8440dc16.eastus2.azurecontainerapps.io` |
-
-2. Bind + managed cert:
-
-   ```bash
-   az containerapp hostname add -n digichat -g digithings-rg --hostname chat.digithings.ai
-   az containerapp update -n digichat -g digithings-rg \
-     --set-env-vars "AUTH_URL=https://chat.digithings.ai"
-   ```
-
-3. Cloudflare Pages (digithings-ai project): set production
-   `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://chat.digithings.ai` (or rebuild after #1868 lands on `main`).
-
-4. After digichat release on `main`: `./infra/digichat-digithings/import-ghcr.sh vX.Y.Z` and point ACA at that tag (retire `phase3-preview`).
-
-5. Smoke prod: landing quick-ask → `/chat` iframe → seeded turn; BYOK + status bar visible.
+1. DigiThings-owned hosting decision: website path vs DigiThings Azure (not DataTap).
+2. Provision DigiChat only on DigiThings-owned infra; set digivault env + tenant registry.
+3. Wire digithings-web `/chat` embed origin to that DigiThings origin.
+4. Smoke: landing quick-ask → `/chat` seeded turn; BYOK + status bar.
 
 ## Merge gate for #1868
 
-- **Code PR:** can merge once reviewers are happy — iframe origin defaults to
-  `https://chat.digithings.ai`; until DNS step 1–2 complete, prod `/chat` iframe will fail to load.
-- **Safe to merge for code:** yes, if you accept interim downtime on marketing chat
-  until DNS binds (rollback = revert PR restores CF Function path).
-- **Safe for zero-downtime cutover:** **no** — finish DNS + hostname + Pages env first,
-  then merge (or merge and immediately complete DNS).
+- Do **not** merge for zero-downtime until DigiThings-owned DigiChat origin exists for the iframe/path embed.
+- ACA-on-DataTap was a mistake and has been removed — it is not a merge blocker beyond correcting docs.

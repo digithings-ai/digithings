@@ -2,6 +2,17 @@
 # Rotate digithings DigiChat ACA secrets + env. Never prints secret values.
 set -euo pipefail
 
+# Refuse DataTap Azure — DigiThings digichat must not land in client subs.
+_acct_name=DataTap WebSite
+_acct_id=fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0
+case "|" in
+  *DataTap*|fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0)
+    echo "ERROR: active Azure account is DataTap ( ). DigiThings digichat must use DigiThings-owned infra only." >&2
+    exit 1
+    ;;
+esac
+
+
 : "${AUTH_SECRET:?set AUTH_SECRET}"
 : "${DIGITHINGS_SUPABASE_URL:?set DIGITHINGS_SUPABASE_URL}"
 : "${DIGITHINGS_SUPABASE_ANON_KEY:?set DIGITHINGS_SUPABASE_ANON_KEY}"
