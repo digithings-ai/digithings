@@ -8,6 +8,7 @@ import { getEmbedTenantRegistry } from "./embed-tenants";
 const FIRST_PARTY_FRAME_ANCESTORS = [
   "'self'",
   "https://digithings.ai",
+  "https://www.digithings.ai",
   "https://digiquant.io",
 ] as const;
 
