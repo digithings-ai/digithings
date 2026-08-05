@@ -15,14 +15,15 @@ been reviewed at all — the exact failure it is built to catch. Equally load-be
 is that a label or a human approval always clears the gate, so an outage at Cursor
 can never freeze a deploy.
 
-The subject-parsing tests pin real commit subjects from this repository's history,
-because the squash format ("subject (#1234)") is the only link a commit has back
-to its pull request.
+The subject-parsing tests pin real commit subjects from this repository's history.
+Merge-style child commits retain their original subjects, so the gate falls back
+to GitHub's commit-to-PR association for those commits.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any  # score:allow untyped any — dynamically loaded module
@@ -51,7 +52,13 @@ crc = _load()
 
 
 def _state(**over: Any) -> dict[str, Any]:
-    base: dict[str, Any] = {"labels": set(), "approvals": [], "bugbot": None, "title": ""}
+    base: dict[str, Any] = {
+        "labels": set(),
+        "approvals": [],
+        "bugbot": None,
+        "title": "",
+        "owner_review": None,
+    }
     base.update(over)
     return base
 
@@ -99,6 +106,68 @@ def test_nothing_at_all_is_not_a_review() -> None:
     assert "no completed Bugbot run" in why
 
 
+# ── the reviewed:owner hatch ─────────────────────────────────────────────────
+#
+# Added because the gate's own first run had no honest hatch: a solo maintainer
+# cannot self-approve, Bugbot was out of quota, and the only remaining option was
+# to label a blocking CI change `risk:low`. A gate that pressures you into
+# mislabelling is worse than no gate.
+
+
+def test_reviewed_owner_is_a_review() -> None:
+    reviewed, _ = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}))
+    assert reviewed
+
+
+def test_reviewed_owner_names_the_actor_and_date_not_just_the_label() -> None:
+    """A self-applicable hatch is only worth having if it leaves a record."""
+    reviewed, why = crc.verdict_for(
+        _state(
+            labels={crc.OWNER_REVIEW_LABEL},
+            owner_review={"actor": "chrizefan", "at": "2026-08-05T18:00:00Z"},
+        )
+    )
+    assert reviewed
+    assert "chrizefan" in why
+    assert "2026-08-05T18:00:00Z" in why
+
+
+def test_reviewed_owner_still_clears_when_the_timeline_lookup_failed() -> None:
+    """A GitHub API hiccup must not turn a real claim into a blocked deploy."""
+    reviewed, why = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}, owner_review=None))
+    assert reviewed
+    assert crc.OWNER_REVIEW_LABEL in why
+
+
+def test_reviewed_owner_clears_the_gate_despite_a_neutral_bugbot() -> None:
+    reviewed, _ = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}, bugbot="NEUTRAL"))
+    assert reviewed
+
+
+def test_the_two_labels_are_distinct_and_report_distinct_reasons() -> None:
+    """`risk:low` means it did not need reading; `reviewed:owner` means it was read.
+
+    Conflating them is the failure mode the hatch exists to prevent, so the verdict
+    strings must not be interchangeable.
+    """
+    assert crc.OWNER_REVIEW_LABEL != crc.SKIP_LABEL
+    _, owner_why = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}))
+    _, skip_why = crc.verdict_for(_state(labels={crc.SKIP_LABEL}))
+    assert owner_why != skip_why
+    assert "not to warrant" in skip_why
+
+
+def test_a_completed_bugbot_run_outranks_a_self_applied_label() -> None:
+    """Strongest evidence first: Bugbot is the one hatch nobody can self-grant."""
+    _, why = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}, bugbot="SUCCESS"))
+    assert "Bugbot completed" in why
+
+
+def test_an_approval_outranks_a_self_applied_label() -> None:
+    _, why = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}, approvals=["someone-else"]))
+    assert "someone-else" in why
+
+
 def test_a_bot_approval_does_not_count_as_human() -> None:
     """cursor[bot] approving its own router pass is not a human reading the diff."""
     assert "cursor[bot]" in crc.BOT_AUTHORS
@@ -130,6 +199,49 @@ def test_a_trailing_issue_reference_is_not_mistaken_for_the_pr() -> None:
 def test_merge_commits_are_detected_by_parent_count() -> None:
     assert crc.is_merge_commit("aaa bbb")
     assert not crc.is_merge_commit("aaa")
+
+
+def test_unnumbered_commit_uses_its_merged_github_pr_association(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Merge-style PR child commits do not carry ``(#1234)`` in their subjects."""
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(
+        crc,
+        "_gh_json",
+        lambda _args: [
+            {"number": 1900, "merged_at": None},
+            {"number": 1899, "merged_at": "2026-08-05T19:51:00Z"},
+        ],
+    )
+
+    assert crc.associated_pr_number("a7bf7721") == 1899
+
+
+def test_open_promotion_pr_does_not_legitimize_a_direct_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only an already-merged source PR can supply review evidence."""
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(
+        crc,
+        "_gh_json",
+        lambda _args: [{"number": 1900, "merged_at": None}],
+    )
+
+    assert crc.associated_pr_number("direct123") is None
+
+
+def test_github_association_failure_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A transient API failure must not crash or approve an unlinked commit."""
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+
+    def fail(_args: list[str]) -> list[dict[str, Any]]:
+        raise subprocess.CalledProcessError(1, "gh api")
+
+    monkeypatch.setattr(crc, "_gh_json", fail)
+
+    assert crc.associated_pr_number("unknown123") is None
 
 
 # ── workflow wiring: a gate that never runs gates nothing ────────────────────
