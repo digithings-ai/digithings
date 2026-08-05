@@ -11,7 +11,8 @@
  * Uses the shared @digithings/digichat-ui DigiChatSession widget.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { DigiChatSession } from "@digithings/digichat-ui";
 import { Key, ExternalLink, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -73,35 +74,29 @@ function resolveAccent(raw: string | null | undefined): Accent {
   return "digichat";
 }
 
-type EmbedPageProps = {
-  searchParams:
-    | Promise<{ accent?: string; token?: string; host?: string }>
-    | { accent?: string; token?: string; host?: string };
-};
+/**
+ * useSearchParams() (not the searchParams page prop) is required for this
+ * "use client" page — the prop never delivered ?token=/?host= in production
+ * (#1379), silently breaking per-tenant embeds. Suspense is mandatory.
+ */
+export default function EmbedPage() {
+  return (
+    <Suspense fallback={null}>
+      <EmbedPageInner />
+    </Suspense>
+  );
+}
 
-export default function EmbedPage({ searchParams }: EmbedPageProps) {
-  const [accent, setAccent] = useState<Accent>("digichat");
-  const [token, setToken] = useState<string | undefined>(undefined);
-  const [host, setHost] = useState<string | undefined>(undefined);
+function EmbedPageInner() {
+  const searchParams = useSearchParams();
+  const accent = resolveAccent(searchParams.get("accent"));
+  const token = searchParams.get("token") ?? undefined;
+  const host = searchParams.get("host") ?? undefined;
   const tenantCfg = useEmbedTenantConfig(token, host);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.resolve(searchParams).then((sp) => {
-      if (cancelled) return;
-      setAccent(resolveAccent(sp?.accent));
-      setToken(sp?.token);
-      setHost(sp?.host);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [searchParams]);
 
   useEffect(() => {
     emit("embed_loaded", { accent });
   }, [accent]);
-
   // Tenant theme drives the canon [data-theme] on <html> — the semantic
   // tokens are scoped :root[data-theme="…"] (tokens.css), so a subtree class
   // alone no longer flips the palette. Default stays dark like the pre-canon
@@ -201,14 +196,14 @@ function EmbedChat({
 
   // trialUnlocked persists across reloads (localStorage, keyed by host) —
   // mirrors how embed-gate.ts persists the turn counter (see readTrialUnlocked/
-  // writeTrialUnlocked). `host` arrives asynchronously (resolved from a
-  // searchParams Promise in the parent EmbedPage), so this can't be a one-shot
-  // lazy useState initializer: it must react to resolvedHost changing, exactly
-  // like useEmbedGate's own turnsFor pattern below. Adjusting state DURING
-  // RENDER (rather than in a useEffect) means the corrected value is already
-  // in place before the gated-postMessage effect ever runs — an effect-based
-  // fix would still let one wrong postMessage go out on the initial mount's
-  // effect flush, using the stale (false) value.
+  // writeTrialUnlocked). `host` can change when the iframe URL updates, so this
+  // can't be a one-shot lazy useState initializer: it must react to
+  // resolvedHost changing, exactly like useEmbedGate's own turnsFor pattern
+  // below. Adjusting state DURING RENDER (rather than in a useEffect) means
+  // the corrected value is already in place before the gated-postMessage
+  // effect ever runs — an effect-based fix would still let one wrong
+  // postMessage go out on the initial mount's effect flush, using the stale
+  // (false) value.
   const [trialUnlockedFor, setTrialUnlockedFor] = useState<{ host: string; unlocked: boolean }>(
     () => ({ host: resolvedHost, unlocked: readTrialUnlocked(resolvedHost) }),
   );
