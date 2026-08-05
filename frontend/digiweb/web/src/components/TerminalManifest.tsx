@@ -31,7 +31,9 @@ export type TerminalManifestRow = {
 };
 
 export type TerminalManifestProps = {
-  /** Head-line command, e.g. `digithings ps`. */
+  /** Head line, e.g. `modules`. Pair a non-shell `prompt` with a non-shell
+   *  label: with the default `$` mark this reads as a command the visitor can
+   *  type, so it must name one that exists. */
   command: string;
   rows: TerminalManifestRow[];
   /** Head-line prompt mark. */
