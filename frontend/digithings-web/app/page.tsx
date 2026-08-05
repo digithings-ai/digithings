@@ -144,17 +144,20 @@ export default function Home() {
         <HeroMesh>
           <h1 className="dqhero-h1">
             <span className="ln">
-              <span>AI infrastructure in a glass box</span>
+              <span>AI infrastructure</span>
+            </span>
+            <span className="ln">
+              <span>in a glass box</span>
             </span>
             <span className="ln">
               <span>
-                <em>you own.</em>
+                <em>you own</em>
               </span>
             </span>
           </h1>
           <p className="dqhero-lede">
-            Ten open-source modules that plug into the stack you already run — not a replacement
-            for it. Self-hosted anywhere, your own keys and providers, every step traceable.
+            Build and ship AI applications on infrastructure you own — your hosts, your keys, your
+            choice of model.
           </p>
           <div className="dqhero-cta">
             <p className="dqhero-scroll-label">Scroll to explore</p>
@@ -232,7 +235,14 @@ export default function Home() {
           <div className="wrap">
             <Reveal className="section-head">
               <span className="kicker">{"// why digithings"}</span>
-              <h2>Four properties of every module.</h2>
+              <h2>Nobody knows which vendor wins.</h2>
+              <p>
+                The field moves faster than any bet you could place on it, so this architecture
+                declines to place one. Nothing here is married to a provider: the stack is
+                self-hosted, keys arrive per request, and models and vector backends are
+                configuration rather than code. When the leader changes, you change one setting —
+                not the application on top.
+              </p>
             </Reveal>
             <NumberedStages stages={PRINCIPLES} className="max-w-[760px]" />
           </div>
@@ -241,11 +251,15 @@ export default function Home() {
         {/* No .section padding here: the WordReveal track is its own breathing
             room (the line rides in, pins at mid-viewport for a beat, and the
             page flows on) — section padding on top of it read as a dead gap. */}
-        <section id="claim" aria-label="Own the whole stack">
+        <section id="claim" aria-label="You own the stack, the keys, and the infrastructure">
           <div className="wrap">
+            {/* The owner's own line, and the one claim the whole page exists to
+                support. Three sentences on purpose: WordReveal fills word by
+                word, so the repetition lands as three separate beats rather
+                than one clause. */}
             <WordReveal
               id="claim-reveal"
-              text="Own the whole stack. No vendor lock-in. No opaque pipelines."
+              text="You own the stack. You own the keys. You own the infra."
             />
           </div>
         </section>

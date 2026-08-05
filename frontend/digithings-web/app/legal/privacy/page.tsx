@@ -2,101 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Footer } from "@digithings/web";
 import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "../../_nav";
-import { PageHead } from "../../_company/prose";
-import {
-  DraftBanner,
-  DraftFooterNote,
-  DraftOutline,
-  type DraftSection,
-} from "../_draft";
+import { Mono, PageHead, RuledList, RuledRow } from "../../_company/prose";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
-  // Kept out of search results until real reviewed text lands. The visible
-  // DraftBanner stops a *visitor* mistaking the outline for a policy, but a
-  // search result for "digithings terms" that opens a draft misleads before the
-  // banner is ever read — and the fix is one line, not a copy argument.
-  robots: { index: false, follow: true },
-  title: "privacy — draft outline",
+  title: "privacy — how digithings.ai handles data",
   description:
-    "Draft outline of the DigiThings privacy notice. Not in force, not legal advice, pending " +
-    "review by counsel.",
+    "What digithings.ai stores in your browser, what the optional chat sends to providers, and " +
+    "how to ask a privacy question.",
 };
 
-// /legal/privacy — SKELETON. See ../_draft.tsx: NEEDS REAL COUNSEL.
-//
-// A privacy notice makes representations about processing, and a wrong
-// representation is a regulatory exposure, so nothing here states what is
-// collected, why, on what basis, or for how long. Each `note` names the subject
-// matter of a missing section only.
-//
-// The distinction that whoever drafts this must get right — and that engineers
-// should NOT pre-empt in copy — is between:
-//   (a) this website, a static export with its own request logs and whatever the
-//       hosting edge records; and
-//   (b) a self-hosted deployment of the stack, which runs on the operator's own
-//       infrastructure with the operator's own provider keys. In that case the
-//       operator is the controller and we are not in the data path at all.
-// Stating that split loosely would be worse than leaving it to counsel, so the
-// outline only marks it as a section that must exist.
-const SECTIONS: DraftSection[] = [
-  {
-    heading: "Who is responsible",
-    note: "The identity and contact details of the controller for this website, and the legal entity behind it.",
-  },
-  {
-    heading: "Scope: website versus self-hosted deployments",
-    note: "The boundary between this website and a deployment of the software running on someone else's infrastructure, and who is responsible in each case.",
-  },
-  {
-    heading: "What the website collects",
-    note: "The categories of data the site and its hosting layer receive, and how they arise.",
-  },
-  {
-    heading: "Why, and on what basis",
-    note: "The purposes of processing and the lawful basis relied on for each.",
-  },
-  {
-    heading: "Cookies and similar technologies",
-    note: "Any cookies, local storage, or analytics the site uses, and how a visitor can control them.",
-  },
-  {
-    heading: "Provider keys and prompt content",
-    note: "How model-provider credentials and the content sent to providers are handled, and by whom.",
-  },
-  {
-    heading: "Processors and sub-processors",
-    note: "The third parties involved in operating the site and the services, and their role.",
-  },
-  {
-    heading: "International transfers",
-    note: "Where data is processed and the mechanism relied on for any transfer out of its origin jurisdiction.",
-  },
-  {
-    heading: "Retention",
-    note: "How long each category of data is kept, and what determines that period.",
-  },
-  {
-    heading: "Your rights",
-    note: "The rights available to individuals and the process for exercising them, including how to complain.",
-  },
-  {
-    heading: "Security",
-    note: "The technical and organisational measures relevant to the data described above.",
-  },
-  {
-    heading: "Children",
-    note: "The position on use by minors.",
-  },
-  {
-    heading: "Changes to this notice",
-    note: "How revisions are made and how they are communicated.",
-  },
-  {
-    heading: "Contact",
-    note: "Where to send privacy questions and formal requests.",
-  },
-];
+const EFFECTIVE_DATE = "August 5, 2026";
 
 export default function PrivacyPage() {
   return (
@@ -104,45 +20,168 @@ export default function PrivacyPage() {
       <DtNav />
 
       <main className="pt-[var(--dq-nav-h)]">
-        <PageHead kicker={"// legal · draft"} title="Privacy">
-          The outline of a privacy notice for this website. A notice makes binding representations
-          about how data is handled, so this one stays an outline until counsel has written it rather
-          than borrowing language that sounds right.
+        <PageHead kicker={"// privacy"} title="How this website handles data.">
+          This notice explains what the digithings.ai website stores in your browser and what
+          happens when you use its optional chat. It does not cover a copy of the open-source
+          software that you or another organization operate on separate infrastructure.
         </PageHead>
 
         <section className="section">
-          <div className="wrap">
-            <DraftBanner />
+          <div className="wrap grid gap-[3rem] lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.42fr)]">
+            <div className="max-w-[72ch]">
+              <span className="kicker">{"// what the website handles"}</span>
+              <h2 className="mt-[0.8rem] text-[clamp(1.8rem,4vw,3rem)] leading-[1.08] text-ink">
+                No ad tracking. No account required.
+              </h2>
+              <p className="mt-[1.1rem] text-[1rem] leading-[1.75] text-ink-soft">
+                We do not use advertising pixels or third-party analytics on this website. You can
+                read the site without creating an account. Like most hosted websites, our hosting
+                provider receives ordinary request data needed to deliver and protect the site,
+                such as your IP address, requested URL, browser information, and request time.
+              </p>
+              <p className="mt-[1rem] text-[1rem] leading-[1.75] text-ink-soft">
+                The site stores a small number of preferences in your browser using local storage:
+                your colour theme and, if you choose to configure chat, your selected provider,
+                model, and API key. Those values remain in your browser until you clear them. The
+                provider key is sent to our Cloudflare Function only when you test it or send a chat
+                request; the function forwards it to the provider you selected and does not persist
+                it in an application database.
+              </p>
+            </div>
+
+            <aside className="border-t border-hair pt-[1.2rem] lg:border-l lg:border-t-0 lg:pl-[1.6rem] lg:pt-0">
+              <span className="block font-mono text-[0.7rem] uppercase tracking-[0.14em] text-ink-mute">
+                Notice details
+              </span>
+              <dl className="mt-[1rem] grid gap-[1rem] text-[0.88rem] leading-[1.6]">
+                <div>
+                  <dt className="font-mono text-ink-mute">Effective</dt>
+                  <dd className="mt-[0.2rem] text-ink">{EFFECTIVE_DATE}</dd>
+                </div>
+                <div>
+                  <dt className="font-mono text-ink-mute">Contact</dt>
+                  <dd className="mt-[0.2rem]">
+                    <a
+                      className="text-accent [text-underline-offset:2px] hover:text-ink"
+                      href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20privacy%20question`}
+                    >
+                      {DT_CONTACT_EMAIL}
+                    </a>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-mono text-ink-mute">Software</dt>
+                  <dd className="mt-[0.2rem] text-ink-soft">
+                    Self-hosted deployments are controlled by their operators, not by this website.
+                  </dd>
+                </div>
+              </dl>
+            </aside>
           </div>
         </section>
 
-        <section className="section pt-0">
+        <section className="section section-alt">
           <div className="wrap">
-            <DraftOutline sections={SECTIONS} />
-            <DraftFooterNote>
-              One thing worth saying plainly while the rest is drafted, because it is an
-              architectural fact rather than a policy commitment: the stack is built to be
-              self-hosted, and a deployment you run sits on your infrastructure with your provider
-              keys. In that arrangement the data path does not pass through us.{" "}
-              <Link className="text-accent [text-underline-offset:2px] hover:text-ink" href="/about">
-                What the software is
-              </Link>{" "}
-              and{" "}
-              <Link
-                className="text-accent [text-underline-offset:2px] hover:text-ink"
-                href="/security"
-              >
-                how it handles credentials and audit data
-              </Link>{" "}
-              are both documented. For a question this outline cannot answer, ask:{" "}
-              <a
-                className="text-accent [text-underline-offset:2px] hover:text-ink"
-                href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20privacy%20question`}
-              >
-                {DT_CONTACT_EMAIL}
-              </a>
-              .
-            </DraftFooterNote>
+            <span className="kicker">{"// optional chat"}</span>
+            <h2 className="mt-[0.8rem] max-w-[18ch] text-[clamp(1.8rem,4vw,3rem)] leading-[1.08] text-ink">
+              What leaves your browser.
+            </h2>
+            <div className="mt-[2rem]">
+              <RuledList>
+                <RuledRow term="Messages">
+                  <p>
+                    When you use digichat, your message and the recent conversation are sent through
+                    our Cloudflare Function to the selected model provider. The provider processes
+                    that content under its own terms and privacy policy. Do not submit confidential,
+                    personal, or regulated information that you do not want processed by that
+                    provider.
+                  </p>
+                </RuledRow>
+                <RuledRow term="Documentation search">
+                  <p>
+                    Questions about digithings may also be sent to our hosted documentation search
+                    so the assistant can retrieve relevant public project documentation. Search
+                    results are then included in the request sent to the model provider.
+                  </p>
+                </RuledRow>
+                <RuledRow term="Provider keys">
+                  <p>
+                    If you bring your own key, it is stored in local storage in your browser. Each
+                    chat or key-test request sends it through our Function to OpenRouter, OpenAI,
+                    Anthropic, or Google, according to your selection. We do not write the key to an
+                    application database.
+                  </p>
+                </RuledRow>
+                <RuledRow term="Abuse prevention">
+                  <p>
+                    Chat requests are rate-limited by IP address in one-minute windows. The counter
+                    uses either Cloudflare KV with a two-minute expiry or a best-effort in-memory
+                    fallback. Cloudflare may separately process and retain request data according to
+                    its own policies as our hosting and security provider.
+                  </p>
+                </RuledRow>
+              </RuledList>
+            </div>
+          </div>
+        </section>
+
+        <section className="section">
+          <div className="wrap grid gap-[3rem] lg:grid-cols-2">
+            <div>
+              <span className="kicker">{"// browser storage"}</span>
+              <h2 className="mt-[0.8rem] text-[clamp(1.8rem,4vw,3rem)] leading-[1.08] text-ink">
+                You control local data.
+              </h2>
+              <div className="mt-[1.2rem] grid gap-[1rem] text-[1rem] leading-[1.75] text-ink-soft">
+                <p>
+                  Theme and chat-provider settings remain until you remove them through your browser
+                  or clear the saved key in chat settings. Chat messages normally remain in the
+                  current page&rsquo;s memory and disappear when that page is closed or refreshed.
+                </p>
+                <p>
+                  When the homepage opens a conversation in the full chat page, it temporarily puts
+                  that conversation in local storage. The chat page reads and deletes it once. If
+                  the stored handoff is more than five minutes old when read, it is discarded; if
+                  the chat page never opens, it remains until you clear the site&rsquo;s local data.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <span className="kicker">{"// questions and changes"}</span>
+              <h2 className="mt-[0.8rem] text-[clamp(1.8rem,4vw,3rem)] leading-[1.08] text-ink">
+                Ask us directly.
+              </h2>
+              <div className="mt-[1.2rem] grid gap-[1rem] text-[1rem] leading-[1.75] text-ink-soft">
+                <p>
+                  To ask what data we hold about you, request deletion of data we control, or raise
+                  another privacy question, email{" "}
+                  <a
+                    className="text-accent [text-underline-offset:2px] hover:text-ink"
+                    href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20privacy%20request`}
+                  >
+                    {DT_CONTACT_EMAIL}
+                  </a>
+                  . We may need enough information to verify and act on the request.
+                </p>
+                <p>
+                  We will update this notice when the website&rsquo;s data flows change and revise
+                  the effective date above. For the software&rsquo;s security model and current
+                  limitations, read the{" "}
+                  <Link
+                    className="text-accent [text-underline-offset:2px] hover:text-ink"
+                    href="/security"
+                  >
+                    security page
+                  </Link>
+                  .
+                </p>
+                <p>
+                  The source for this website is public. The relevant implementation lives in{" "}
+                  <Mono>frontend/digithings-web</Mono> in the digithings repository.
+                </p>
+              </div>
+            </div>
           </div>
         </section>
       </main>
