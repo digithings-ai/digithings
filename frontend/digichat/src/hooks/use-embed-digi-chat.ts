@@ -133,7 +133,7 @@ export function useEmbedDigiChat({
   trialUnlocked,
   onGated,
 }: UseEmbedDigiChatOptions): DigiChatController & {
-  seed: (msgs: DigiChatMessage[]) => void;
+  seed: (msgs: readonly DigiChatMessage[]) => void;
 } {
   const transport = useMemo(
     () =>
@@ -227,7 +227,7 @@ export function useEmbedDigiChat({
   const digiMessages = useMemo(() => messages.map(uiMessageToDigiChat), [messages]);
 
   const seed = useCallback(
-    (msgs: DigiChatMessage[]) => {
+    (msgs: readonly DigiChatMessage[]) => {
       setMessages(
         msgs.map((m) => ({
           id: crypto.randomUUID(),
