@@ -6,7 +6,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { p } from "@/lib/base-path";
-import { readTrialUnlocked, resolveEmbedHost } from "@/lib/embed-gate";
+import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
 import {
   ACTIVITY_PART_TYPE,
   sanitizeActivitySpan,
@@ -37,6 +37,15 @@ export function isEmbedTrialUnlockedAtSend(
   propFallback?: boolean,
 ): boolean {
   return !!propFallback || readTrialUnlocked(resolvedHost);
+}
+
+/**
+ * The chat-access token for this host, read at send time. Same freeze reason as
+ * isEmbedTrialUnlockedAtSend (#1339): a token closed over by DefaultChatTransport would be null
+ * forever, because it is written after the transport is created.
+ */
+export function chatAccessTokenAtSend(resolvedHost: string): string | null {
+  return readChatAccessToken(resolvedHost);
 }
 
 const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
@@ -174,6 +183,10 @@ export function useEmbedDigiChat({
           // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
           if (isEmbedTrialUnlockedAtSend(resolvedHost, trialUnlocked)) {
             headers["X-Embed-Trial-Unlock"] = "1";
+          }
+          const chatToken = chatAccessTokenAtSend(resolvedHost);
+          if (chatToken) {
+            headers["X-Embed-Chat-Token"] = chatToken;
           }
           try {
             const conversationId = window.sessionStorage.getItem(
