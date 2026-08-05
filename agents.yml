@@ -35,16 +35,13 @@ execution_tiers:
   # Minimum-capability ceiling: a lower tier must NEVER pick up a higher-tier task.
   # A human on Claude Code can take anything. See docs/agents/EXECUTION_TIERS.md.
   - label: "exec:copilot"
-    name: "Tier 1 — GitHub Copilot"
-    scope: "Triggered automation — fixed rule, no judgment. Housekeeping only."
+    name: "Tier 1 — GitHub Copilot (retired)"
+    scope: "Historical label only — no workflow dispatches or assigns this tier."
     examples:
-      - "Dependabot bumps, pip-audit, gitleaks, type-check reports"
-      - "Stale issue/PR cleanup, formatting autofix, coverage PR comments"
-      - "Structured CI-failure triage comments (no code fixes)"
+      - "Closed issues and PRs created before retirement on 2026-08-05"
+    dispatch: "retired"
     never:
-      - "Judgment calls about correctness"
-      - "Changes spanning more than a few files"
-      - "Anything touching live-trading or auth code"
+      - "New task assignment or automated dispatch"
   - label: "exec:cursor"
     name: "Tier 2 — Cursor Cloud Agent"
     scope: "One-paragraph spec, clear acceptance criteria, no mid-task dialogue."
@@ -74,8 +71,8 @@ execution_tiers:
 
 # Heuristics for default tier when a creator hasn't classified explicitly.
 # risk:high OR matches a human_gate → exec:claude.
-# risk:low + housekeeping (deps, lint, stale) → exec:copilot.
-# Everything else → exec:cursor.
+# risk:low + housekeeping (deps, lint, stale) → exec:cursor.
+# Everything not human-gated → exec:cursor.
 tier_routing:
   claude_triggers:
     - "risk:high"
@@ -83,11 +80,6 @@ tier_routing:
     - "component:digikey (auth/JWT changes)"
     - "live-trading paths"
     - "cross-component integration"
-  copilot_triggers:
-    - "label:security:finding (pip-audit/gitleaks CVE bumps)"
-    - "label:housekeeping:deps"
-    - "label:housekeeping:format"
-    - "label:stale"
   cursor_default: true
 
 human_gates:

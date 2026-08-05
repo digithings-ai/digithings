@@ -172,13 +172,13 @@ def evaluate_pr(repo: str, pr: dict, *, fetch_base: bool) -> PrAction:
             "needs_fix",
             "merge conflicts",
             issue_number=issue_num,
-            fix_via="cursor" if branch.startswith("cursor/") else "copilot",
+            fix_via="cursor" if branch.startswith("cursor/") else "none",
         )
 
     checks = pr.get("statusCheckRollup") or []
     ci_failed, ci_pending = _ci_pending_or_failed(checks)
     if ci_failed:
-        via = "cursor" if branch.startswith("cursor/") else "copilot"
+        via = "cursor" if branch.startswith("cursor/") else "none"
         return PrAction(
             number,
             branch,
@@ -259,7 +259,7 @@ def main() -> int:
     parser.add_argument(
         "--cursor-only",
         action="store_true",
-        help="Only evaluate cursor/* PRs (copilot/* handled by gh-aw lifecycle)",
+        help="Only evaluate cursor/* PRs",
     )
     args = parser.parse_args()
 
