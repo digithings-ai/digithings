@@ -6,7 +6,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { p } from "@/lib/base-path";
-import { resolveEmbedHost } from "@/lib/embed-gate";
+import { readTrialUnlocked, resolveEmbedHost } from "@/lib/embed-gate";
 import {
   ACTIVITY_PART_TYPE,
   sanitizeActivitySpan,
@@ -24,6 +24,19 @@ function readEmbedUrlAuth(): { token?: string; host?: string } {
     token: token || undefined,
     host: host || undefined,
   };
+}
+
+/**
+ * Whether this embed host is trial-unlocked, read at send time.
+ * Same freeze reason as readEmbedUrlAuth (#1339): a `trialUnlocked` prop closed
+ * over by DefaultChatTransport stays false after datatap:unlocked arrives, so
+ * the client counter can show 100 while the server still returns trial_gate.
+ */
+export function isEmbedTrialUnlockedAtSend(
+  resolvedHost: string,
+  propFallback?: boolean,
+): boolean {
+  return !!propFallback || readTrialUnlocked(resolvedHost);
 }
 
 const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
@@ -157,7 +170,11 @@ export function useEmbedDigiChat({
               headers["X-BYOK-Model"] = byokModel.trim();
             }
           }
-          if (trialUnlocked) headers["X-Embed-Trial-Unlock"] = "1";
+          // Send-time unlock check — transport is frozen on first render (#1339),
+          // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
+          if (isEmbedTrialUnlockedAtSend(resolvedHost, trialUnlocked)) {
+            headers["X-Embed-Trial-Unlock"] = "1";
+          }
           try {
             const conversationId = window.sessionStorage.getItem(
               conversationStorageKey(resolvedHost),
@@ -175,6 +192,8 @@ export function useEmbedDigiChat({
           };
         },
       }),
+    // trialUnlocked stays in the deps for the rare case useChat starts honoring
+    // transport identity; the send-time read is what actually unlocks today.
     [accent, token, host, embedHost, byokKey, byokProvider, byokModel, trialUnlocked],
   );
 
