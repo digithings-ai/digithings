@@ -142,7 +142,7 @@ function HoldingsPanel({
 }
 
 /**
- * Compact realized read under the live band: the headline above marks the
+ * Compact realized read under the return band: the headline above marks the
  * whole book (unrealized included, per NAV); this strip is the recorded-exits
  * record only, deliberately smaller so the two are never confused.
  */
@@ -212,8 +212,8 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
       >
         <dl className="m-0 grid grid-cols-1 sm:grid-cols-3">
           <Metric label="NAV" value={data.currentNav} format="number" />
-          <Metric label="Portfolio return · live" value={data.netReturnPct} />
-          <Metric label="Active return · live" value={data.relativeReturnPct} />
+          <Metric label="Portfolio return" value={data.netReturnPct} />
+          <Metric label="Active return" value={data.relativeReturnPct} />
         </dl>
         <div className="flex min-w-[11rem] flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute md:items-end md:border-l md:border-t-0">
           <span>{hasReturns ? 'as of' : 'status'}</span>

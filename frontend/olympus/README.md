@@ -20,10 +20,14 @@ finance-tearsheet grammars directly in `app/globals.css`:
 
 The performance tear sheet (`/portfolio/performance`) renders persisted NAV and
 return metrics, base-zero portfolio and position paths, and open/closed position
-outcomes. The separate attribution workspace (`/portfolio/attribution`) owns the
-latest rolling position decomposition and the resolved-decision calibration
-scorecard. Olympus keeps its finance-tearsheet variants and shell print rules
-app-side at the bottom of `globals.css`.
+outcomes. Persisted returns are labeled with their metrics date and source; they
+must not be presented as live quotes. The separate attribution workspace
+(`/portfolio/attribution`) owns the latest rolling position decomposition and the
+resolved-decision calibration scorecard. CASH remains outside holding counts and
+position charts, but its allocation effect is included in headline active return
+so the decomposition reconciles to portfolio return minus benchmark return.
+Olympus keeps its finance-tearsheet variants and shell print rules app-side at the
+bottom of `globals.css`.
 
 The root layout scopes the page to the digiquant accent and blueprint
 background:
@@ -96,6 +100,13 @@ ledgers carry positions, activity, research, and decision history. Holdings owns
 an exposure command band plus switchable position/activity ledgers; Theses uses
 a conviction-ranked research spine; thesis and ticker detail routes use editorial
 main/context compositions rather than nested card stacks.
+
+Every book surface derives invested exposure and displayed weights from the same
+effective `positions` snapshot. An independently latest `portfolio_metrics` row
+must not rescale those positions: the tables already store percent-of-NAV weights,
+and an explicit CASH row is presentation-excluded by `reconcileBook`. This contract
+applies equally to the Brief book strip, its Holdings doorway, and Portfolio
+Holdings.
 
 `/portfolio/performance` applies the same flat grammar to the shared
 finance-tearsheet primitives. Its command band, asymmetric NAV workspace, bounded

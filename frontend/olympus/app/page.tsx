@@ -159,13 +159,11 @@ export default function OverviewPage() {
 
         <BookStrip
           positions={positions}
-          investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
           asOfDate={bookAsOf}
         />
 
         <TodaySummaries
           positions={positions}
-          investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
           theses={strategy.theses ?? []}
           readSummary={strategy.summary ?? null}
           asOfDate={latestDate}
