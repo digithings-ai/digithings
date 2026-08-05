@@ -22,8 +22,9 @@ import { MetricsOdometer } from "@/components/landing/MetricsOdometer";
 // subsystem count from the shared subsystems registry (Atlas · Hermes ·
 // Kairos), trade count summed live from the Supabase strategy index (inside
 // <MetricsOdometer/>), the 7 pipeline stages from ResearchPipeline's FLOW
-// (01 research → 07 execution), and the zero is Kairos's loopback-only
-// default — nothing reaches a live venue until a human flips the gate.
+// (01 research → 07 export), and the zero is literal: there is no execution
+// path at all — every broker adapter under digiquant/src/digiquant/brokers/
+// raises NotImplementedError, so no order can be submitted, gated or not.
 
 // v7 scroll-driven landing, now wearing the flagship expressive grammar
 // (#1450): mesh hero → live market ticker → digit-roll OdometerStrip →
@@ -38,7 +39,7 @@ export default function Home() {
         <HeroMesh>
           <h1 className="dqhero-h1">
             <span className="ln">
-              <span>A quant hedge fund.</span>
+              <span>A quant research desk.</span>
             </span>
             <span className="ln">
               <span>
@@ -47,9 +48,9 @@ export default function Home() {
             </span>
           </h1>
           <p className="dqhero-lede">
-            The research-to-execution stack an institutional desk would build — <b>Atlas</b>{" "}
-            researches, <b>Hermes</b> sizes the risk, <b>Kairos</b> executes. Open-source and
-            self-hosted, so a fund that once needed a team now runs for one.
+            The research stack an institutional desk would build — <b>Atlas</b> researches and{" "}
+            <b>Hermes</b> sizes the risk, through backtest to a tearsheet. Open-source and
+            self-hosted, so work that once needed a team runs for one.
           </p>
           <div className="dqhero-cta dqhero-scrollcue">
             <span className="dqhero-scroll-label">Scroll to explore</span>
@@ -72,8 +73,8 @@ export default function Home() {
                 <h2 className="dq-title">The desk, in four numbers.</h2>
                 <p className="dq-sub" style={{ marginInline: "auto" }}>
                   No projections — every figure is a property of the shipped stack: the
-                  subsystems, the pipeline, and the published tearsheets. Live stays zero until a
-                  human flips the gate.
+                  subsystems, the pipeline, and the published tearsheets. Live stays zero because
+                  there is no execution path: every broker adapter is a stub.
                 </p>
               </div>
             </Reveal>
@@ -99,9 +100,9 @@ export default function Home() {
             page flows on) — section padding on top of it reads as a dead gap.
             The claim reuses the hero's own words ("In a box you own") — one
             voice, no re-voicing. */}
-        <section id="claim" aria-label="Research to execution, in a box you own">
+        <section id="claim" aria-label="Research to a tested strategy, in a box you own">
           <div className="wrap">
-            <WordReveal id="claim-reveal" text="Research to execution. In a box you own." />
+            <WordReveal id="claim-reveal" text="Research to conviction. In a box you own." />
           </div>
         </section>
 

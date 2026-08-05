@@ -63,7 +63,7 @@ export default function PrivacyPage() {
                   <dd className="mt-[0.2rem]">
                     <a
                       className="text-accent [text-underline-offset:2px] hover:text-ink"
-                      href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20privacy%20question`}
+                      href={`mailto:${DT_CONTACT_EMAIL}?subject=digithings%20privacy%20question`}
                     >
                       {DT_CONTACT_EMAIL}
                     </a>
@@ -158,7 +158,7 @@ export default function PrivacyPage() {
                   another privacy question, email{" "}
                   <a
                     className="text-accent [text-underline-offset:2px] hover:text-ink"
-                    href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20privacy%20request`}
+                    href={`mailto:${DT_CONTACT_EMAIL}?subject=digithings%20privacy%20request`}
                   >
                     {DT_CONTACT_EMAIL}
                   </a>

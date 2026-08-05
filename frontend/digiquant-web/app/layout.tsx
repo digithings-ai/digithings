@@ -20,7 +20,7 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digiquant.io"),
-  title: "digiquant — a quant hedge fund, in a box you own",
+  title: "digiquant — a quant research desk, in a box you own",
   description:
     "The research-to-execution stack an institutional desk would build — Atlas researches, Hermes sizes the risk, Kairos executes. Open-source and self-hosted, so a fund that once needed a team now runs for one.",
   // Scheme-aware favicon tiles: the light tile on dark browser chrome and vice
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    title: "digiquant — a quant hedge fund, in a box you own",
+    title: "digiquant — a quant research desk, in a box you own",
     description:
       "Atlas researches, Hermes sizes the risk, Kairos executes. Open-source, self-hosted, human-gated.",
     url: "https://digiquant.io",
