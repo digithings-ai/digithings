@@ -24,7 +24,6 @@ it("does not stream the upstream error body to the browser", async () => {
     responseHeaders: {},
     upstreamBearer: "tok",
     activityDetail: "full",
-    emitLegacyTracePart: true,
   });
   const body = await new Response(res.body).text();
 
@@ -34,14 +33,8 @@ it("does not stream the upstream error body to the browser", async () => {
   expect(errorLog).toHaveBeenCalled();
 });
 
-// The authenticated (non-embed) chat surface renders data-digigraphTrace via
-// chat-panel.tsx's DigigraphTraceBlock, which Task 6 broke by switching this
-// provider to emit only data-digichatActivity. The fix is to dual-emit on the
-// authenticated path: the legacy part carries the original full
-// DigigraphTracePayload (ungated, as it always did before Task 6) alongside
-// the new gated activity span, so chat-panel.tsx keeps working unchanged. The
-// legacy part is NOT emitted on the embed path (where emitLegacyTracePart:false).
-it("dual-emits both the legacy digigraphTrace part and the new gated activity span on the authenticated path", async () => {
+// The authenticated path emits only data-digichatActivity spans from the typed mapper.
+it("never emits data-digigraphTrace on the authenticated path", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(
       [
@@ -72,17 +65,13 @@ it("dual-emits both the legacy digigraphTrace part and the new gated activity sp
     responseHeaders: {},
     upstreamBearer: "tok",
     activityDetail: "full",
-    emitLegacyTracePart: true,
   });
   const body = await new Response(res.body).text();
 
-  // Legacy part: full original payload, present on authenticated path.
-  expect(body).toContain('"type":"data-digigraphTrace"');
-  expect(body).toContain('"workflow_id":"wf-1"');
-  expect(body).toContain('"label":"Searching…"');
-  // New part: gated span alongside it.
+  expect(body).not.toContain('"type":"data-digigraphTrace"');
   expect(body).toContain('"type":"data-digichatActivity"');
   expect(body).toContain('"operation":"chat"');
+  expect(body).not.toContain('"workflow_id"');
 });
 
 // On the embed path with activityDetail: "off", neither the legacy part nor
@@ -120,7 +109,6 @@ it("suppresses both parts on the embed path with activityDetail off", async () =
     responseHeaders: {},
     upstreamBearer: "tok",
     activityDetail: "off",
-    emitLegacyTracePart: false,
   });
   const body = await new Response(res.body).text();
 
@@ -168,7 +156,6 @@ it("emits the activity span but not the legacy part on the embed path with activ
     responseHeaders: {},
     upstreamBearer: "tok",
     activityDetail: "full",
-    emitLegacyTracePart: false,
   });
   const body = await new Response(res.body).text();
 
@@ -178,4 +165,51 @@ it("emits the activity span but not the legacy part on the embed path with activ
   // But legacy part is NOT emitted on embed path.
   expect(body).not.toContain('"type":"data-digigraphTrace"');
   expect(body).not.toContain('"workflow_id"');
+});
+
+it("emits rich retrieve activity for rag_sources on the gated path", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "rag_sources",
+                  payload: {
+                    sources: [
+                      {
+                        source_id: "doc-1",
+                        snippet: "hello",
+                        metadata: { title: "Auth", evidence_tier: "tier_a", publication_year: 2023 },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+  expect(body).toContain('"type":"data-digichatActivity"');
+  expect(body).toContain('"operation":"retrieve"');
+  expect(body).toContain('"tier":"tier_a"');
+  expect(body).toContain('"year":2023');
+  expect(body).not.toContain('"type":"data-digigraphTrace"');
 });

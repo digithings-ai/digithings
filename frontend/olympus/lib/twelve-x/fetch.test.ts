@@ -10,6 +10,7 @@ import {
   normalizeKeyThemes,
   sortTodayBriefs,
   filterEventsToDay,
+  getTradeIdeas,
 } from './fetch';
 import type {
   FxBriefRow,
@@ -31,6 +32,41 @@ const calendarDb = vi.hoisted(() => ({
   gte: [] as [string, string][],
   lte: [] as [string, string][],
 }));
+
+const tradeIdeasDb = vi.hoisted(() => ({
+  selectColumns: '',
+}));
+
+vi.mock('./supabase', () => {
+  type Payload = { data: unknown[] | null; error: unknown };
+  interface TradeIdeasBuilder {
+    select: (columns: string) => TradeIdeasBuilder;
+    eq: (column: string, value: string) => TradeIdeasBuilder;
+    order: (column: string, options?: unknown) => TradeIdeasBuilder;
+    then: <T>(onFulfilled: (payload: Payload) => T) => Promise<T>;
+  }
+  const makeBuilder = (): TradeIdeasBuilder => {
+    const builder: TradeIdeasBuilder = {
+      select: (columns) => {
+        tradeIdeasDb.selectColumns = columns;
+        return builder;
+      },
+      eq: () => builder,
+      order: () => builder,
+      then: (onFulfilled) => Promise.resolve(onFulfilled({ data: [], error: null })),
+    };
+    return builder;
+  };
+  return {
+    isTwelveXConfigured: () => true,
+    twelveXSupabase: {
+      from: (table: string): TradeIdeasBuilder => {
+        if (table !== 'fx_trade_ideas_snapshot') throw new Error(`unexpected table: ${table}`);
+        return makeBuilder();
+      },
+    },
+  };
+});
 
 vi.mock('../supabase', () => {
   type Payload = { data: { event_date: string }[] | null; error: unknown };
@@ -87,6 +123,17 @@ vi.mock('../supabase', () => {
  * columns. Olympus owns this rule outright, so this table is the authoritative
  * statement of it — keep it exhaustive.
  */
+describe('getTradeIdeas', () => {
+  it('selects trade_levels and evidence alongside the core trade-idea columns', async () => {
+    tradeIdeasDb.selectColumns = '';
+    await getTradeIdeas('2026-06-24');
+    expect(tradeIdeasDb.selectColumns).toContain('trade_levels');
+    expect(tradeIdeasDb.selectColumns).toContain('evidence');
+    expect(tradeIdeasDb.selectColumns).toContain('citations');
+    expect(tradeIdeasDb.selectColumns).toContain('as_of');
+  });
+});
+
 describe('boardColumn (currency consolidation)', () => {
   it('files a single G10 currency under itself', () => {
     expect(boardColumn('USD')).toBe('USD');

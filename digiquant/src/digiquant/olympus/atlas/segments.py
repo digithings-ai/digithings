@@ -15,6 +15,7 @@ to read, and leaves room for richer per-segment fields in sub-classes.
 from __future__ import annotations
 
 import logging
+import time as _time
 from collections.abc import Mapping
 from datetime import date as _date
 from types import UnionType
@@ -229,12 +230,71 @@ class Finding(BaseModel):
         description="Short noun phrase labeling the finding (e.g. 'Breakout above 200-DMA')",
     )
     summary: str = Field(
-        description="1-3 sentence description in analyst voice. Quantified where possible.",
+        description=(
+            "1-3 sentence description in analyst voice. Quantified where possible. "
+            "When you quote a number, date it — either inline ('SPY flat at $738.93 (Jul 24)') "
+            "or in the 'as_of' field."
+        ),
     )
     source_ids: list[str] = Field(
         default_factory=list,
         description="Source IDs from the sources list this finding cites.",
     )
+    as_of: str | None = Field(
+        default=None,
+        description=(
+            "ISO date (YYYY-MM-DD) the quoted numbers describe. REQUIRED whenever this finding "
+            "states a price, percentage, or other market figure; omit only for a purely "
+            "qualitative finding. This is the date of the DATA, not the date of the run."
+        ),
+    )
+
+    @field_validator("as_of", mode="before")
+    @classmethod
+    def _normalize_as_of(cls, v: object) -> object:
+        """Coerce a loose date to ISO, and NEVER raise on one that will not parse.
+
+        Two hard constraints shape this field, both learned the expensive way.
+
+        **It must stay optional.** ``merge_document_patch`` re-validates the *materialized* body
+        — which is derived from the PRIOR published row — through
+        ``spec.output_model.model_validate``. Every one of the ~660 existing ``documents`` rows
+        has findings with no ``as_of``, so a required field would raise ValidationError on every
+        edit-mode merge, and #1641 turns that into a full regeneration. Making this mandatory
+        would quietly triple the run's LLM bill.
+
+        **It must not be strict.** #1740's lesson verbatim: a hard schema constraint on an
+        informational field discarded the ENTIRE ``DocumentPatch`` when the model overran a
+        240-char ``reason``, costing 1-4 researched segments per run and once the master digest
+        itself. A model writing "Jul 24" must not cost a segment. So a value that parses is
+        normalized to ISO; one that does not is kept verbatim as human-readable disclosure,
+        because "Jul 24" still tells a reader more than silence. Consumers wanting to compare
+        dates should check for the ISO shape rather than assume it.
+        """
+        if v is None:
+            return None
+        if isinstance(v, _date):
+            return v.isoformat()
+        if not isinstance(v, str):
+            return None
+        raw = v.strip()
+        if not raw:
+            return None
+        try:
+            return _date.fromisoformat(raw).isoformat()
+        except ValueError:
+            pass
+        for fmt in ("%b %d %Y", "%b %d, %Y", "%d %b %Y", "%Y/%m/%d", "%m/%d/%Y"):
+            try:
+                # ``time.strptime`` rather than ``datetime.strptime``: this is a calendar date,
+                # so a timezone is meaningless and attaching one to satisfy DTZ007 would imply a
+                # precision the value does not have.
+                parsed = _time.strptime(raw, fmt)
+            except ValueError:
+                continue
+            return _date(parsed.tm_year, parsed.tm_mon, parsed.tm_mday).isoformat()
+        # Unparseable but non-empty: keep it, capped. Disclosure beats silence.
+        return raw[:32]
 
 
 class Source(BaseModel):

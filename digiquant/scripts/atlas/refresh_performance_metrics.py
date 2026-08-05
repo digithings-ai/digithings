@@ -482,12 +482,29 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
         # Always populate current_price from the freshest available close (#814).
         # Try the exact metrics_date first; fall back to the most recent prior close
         # so weekends / holidays still produce a non-NULL price.
+        #
+        # ``price_date`` tracks WHICH close won, because that — not the book date — is what
+        # ``metrics_as_of`` must record (#1833). Migration 012 already defines the column as
+        # "Date of close used for metrics (usually last trading day)", so this is the code
+        # catching up to its own schema. Before this, every Saturday row claimed
+        # ``metrics_as_of`` = the Saturday while carrying Friday's close: a row asserting a
+        # close existed on a day the market never opened.
         c_now = closes.get(metrics_date)
+        price_date: Optional[str] = metrics_date if c_now is not None else None
+        carried = False
         if c_now is None and prev_d:
             c_now = closes.get(prev_d)
+            if c_now is not None:
+                price_date = prev_d
+                carried = True
         c_prev = closes.get(prev_d) if prev_d else None
         day_ch = None
-        if c_now is not None and c_prev is not None and c_prev > 0:
+        # On a carried day ``c_now`` IS ``closes[prev_d]`` and so is ``c_prev`` — the identical
+        # number — which used to yield a fabricated 0.0% day change on every non-trading day
+        # (all 11 non-CASH rows on 2026-08-01 carried 0.0). A carried mark has no measurable
+        # one-session move, so the honest value is NULL. ``refresh_nav_point`` already takes
+        # this line: on a non-trading day it skips the term rather than reporting a measured 0%.
+        if not carried and c_now is not None and c_prev is not None and c_prev > 0:
             day_ch = (c_now - c_prev) / c_prev * 100.0
         # Sanity-check entry_price vs current close — flag implausible entries like SPY@750 (#814).
         if entry is not None and c_now is not None and c_now > 0:
@@ -510,15 +527,26 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
                 c_entry = c_entry_map.get(ed)
             if c_entry and c_entry > 0:
                 since = (c_now - c_entry) / c_entry * 100.0
-        patch = {
-            "unrealized_pnl_pct": unreal,
-            "day_change_pct": day_ch,
-            "since_entry_return_pct": since,
-            "metrics_as_of": metrics_date,
-            # current_price: always set from the latest close available (today or prev trading day).
-            # This replaces any stale/NULL value stored from a prior run or initial materialization.
-            "current_price": c_now if c_now is not None else r.get("current_price"),
-        }
+        if c_now is None:
+            # No close resolved for EITHER candidate date — a genuinely unmarkable row (real
+            # case: XRT's price_history lagged a day behind its peers). Previously the stale
+            # stored `current_price` was retained while `metrics_as_of` was stamped with the
+            # book date anyway, producing the worst of the three states: an old price under a
+            # fresh provenance label with NULL percentages beside it. Clear all of them
+            # together instead. `valuePosition` needs BOTH `current_price` and `metrics_as_of`
+            # to take its close branch, so nulling both renders an em-dash — a blank, which is
+            # honest, rather than a number that is wrong.
+            patch: Dict[str, Any] = dict.fromkeys(_METRIC_CLEAR)
+            patch["current_price"] = None
+        else:
+            patch = {
+                "unrealized_pnl_pct": unreal,
+                "day_change_pct": day_ch,
+                "since_entry_return_pct": since,
+                # The date of the close actually used, NOT the book date (#1833).
+                "metrics_as_of": price_date,
+                "current_price": c_now,
+            }
         sb.table("positions").update(patch).eq("date", metrics_date).eq("ticker", t).execute()
         updated += 1
     return updated

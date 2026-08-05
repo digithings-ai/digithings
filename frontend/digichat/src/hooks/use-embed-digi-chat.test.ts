@@ -152,11 +152,8 @@ describe("uiMessageToDigiChat activity parts", () => {
     ]);
   });
 
-  // stream-digigraph-trace.ts dual-emits both parts for every trace (see
-  // item 1 of the fix wave): the legacy data-digigraphTrace part (ungated,
-  // for chat-panel.tsx) and the new data-digichatActivity span (gated, for
-  // the embed) describing the SAME upstream step. The embed hook must render
-  // that step once, not twice.
+  // When both legacy trace and activity parts appear in one message (e.g. rolling
+  // deploy), activity parts win — the embed hook must render that step once.
   it("renders a step once, not twice, when the same step arrives as both a legacy and an activity part", () => {
     const msg = {
       id: "a6",

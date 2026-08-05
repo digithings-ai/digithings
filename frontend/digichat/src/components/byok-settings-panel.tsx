@@ -125,7 +125,7 @@ function ByokSettingsForm({
           Provider
         </Label>
         <div className="flex gap-2">
-          {(["openrouter", "openai", "anthropic"] as BYOKProvider[]).map((p) => (
+          {(["openrouter", "openai", "anthropic", "gemini"] as BYOKProvider[]).map((p) => (
             <Button
               key={p}
               type="button"
@@ -134,7 +134,13 @@ function ByokSettingsForm({
               className="flex-1 capitalize"
               onClick={() => handleProviderChange(p)}
             >
-              {p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "OpenRouter"}
+              {p === "openai"
+                ? "OpenAI"
+                : p === "anthropic"
+                  ? "Anthropic"
+                  : p === "gemini"
+                    ? "Gemini"
+                    : "OpenRouter"}
             </Button>
           ))}
         </div>
@@ -160,7 +166,9 @@ function ByokSettingsForm({
                 ? "sk-…"
                 : inputProvider === "anthropic"
                   ? "sk-ant-…"
-                  : "sk-or-v1-…"
+                  : inputProvider === "gemini"
+                    ? "AIza…"
+                    : "sk-or-v1-…"
             }
             autoComplete="off"
             spellCheck={false}
@@ -190,7 +198,9 @@ function ByokSettingsForm({
           ? "OpenAI keys start with sk- (from platform.openai.com/api-keys)"
           : inputProvider === "anthropic"
             ? "Anthropic keys start with sk-ant- (from console.anthropic.com/settings/keys)"
-            : "OpenRouter keys start with sk-or- (from openrouter.ai/keys)"}
+            : inputProvider === "gemini"
+              ? "Gemini keys start with AI (from aistudio.google.com/apikey)"
+              : "OpenRouter keys start with sk-or- (from openrouter.ai/keys)"}
       </p>
 
       {inputProvider === "openrouter" ? (

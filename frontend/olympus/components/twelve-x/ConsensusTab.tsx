@@ -20,10 +20,11 @@ import {
   currencyColor,
 } from '@/lib/twelve-x/consensus-bar';
 import { useChartColors, withAlpha } from '@/lib/chart-colors';
-import type { ConsensusDeltaSet, FxConsensusSnapshotRow, FxBriefRow, IntelligenceWhy } from '@/lib/twelve-x/types';
+import type { ConsensusDeltaSet, FxBriefRow, FxConsensusDivergence, FxConsensusSnapshotRow, IntelligenceWhy } from '@/lib/twelve-x/types';
 import { deriveConsensusRows, type ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
 import { ConsensusDataTable } from './ConsensusDataTable';
 import CurrencyDrilldownPanel from './CurrencyDrilldownPanel';
+import DivergencePanel from './DivergencePanel';
 import { augmentWithStaleSeries } from '@/lib/twelve-x/consensus-chart';
 import { useTwelveX } from './context';
 
@@ -59,6 +60,7 @@ export default function ConsensusTab({
   latest,
   latestDate,
   deltas,
+  divergenceByCurrency = {},
   focusCcy,
   intelligenceWhy,
   researchBriefs,
@@ -68,6 +70,7 @@ export default function ConsensusTab({
   latest: FxConsensusSnapshotRow[];
   latestDate: string | null;
   deltas: ConsensusDeltaSet;
+  divergenceByCurrency?: Record<string, FxConsensusDivergence>;
   focusCcy?: string | null;
   intelligenceWhy: IntelligenceWhy;
   researchBriefs: FxBriefRow[];
@@ -77,6 +80,7 @@ export default function ConsensusTab({
   const { openBrief } = useTwelveX();
   const [view, setView] = useState<ConsensusView>(initialView);
   const [drilldownCcy, setDrilldownCcy] = useState<string | null>(null);
+  const [divergenceCcy, setDivergenceCcy] = useState<string | null>(null);
 
   const consensusRows = useMemo<ConsensusCurrencyRow[]>(
     () => deriveConsensusRows(series),
@@ -116,6 +120,7 @@ export default function ConsensusTab({
 
   const drilldownRow = consensusRows.find((r) => r.currency === drilldownCcy) ?? null;
   const drilldownIntelligence = intelligenceWhy.items.find((item) => item.currency === drilldownCcy) ?? null;
+  const divergencePanelItem = divergenceCcy ? divergenceByCurrency[divergenceCcy] ?? null : null;
 
   const relevantBriefs = useMemo<FxBriefRow[]>(() => {
     if (!drilldownCcy) return [];
@@ -192,6 +197,8 @@ export default function ConsensusTab({
           series={series}
           latest={latest}
           deltas={deltas}
+          divergenceByCurrency={divergenceByCurrency}
+          onDivergenceClick={(ccy) => setDivergenceCcy(ccy)}
           onRowClick={(ccy) => setDrilldownCcy(ccy)}
         />
       ) : null}
@@ -330,6 +337,12 @@ export default function ConsensusTab({
         intelligenceItem={drilldownIntelligence}
         relevantBriefs={relevantBriefs}
         onOpenBrief={openBrief}
+      />
+
+      <DivergencePanel
+        open={!!divergenceCcy}
+        divergence={divergencePanelItem}
+        onClose={() => setDivergenceCcy(null)}
       />
     </div>
   );

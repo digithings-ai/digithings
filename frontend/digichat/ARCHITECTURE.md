@@ -24,8 +24,9 @@ server.
 | Machine API key auth (`digi_live_…`, hashed in Postgres) | Built |
 | Conversation persistence — localStorage (always on) | Built |
 | Conversation persistence — Postgres (optional) | Built |
-| DigiGraph trace stream (`data-digigraphTrace` parts) | Built |
-| RAG sources card + Research brief card | Built |
+| DigiGraph activity stream (`data-digichatActivity` parts) | Built |
+| Shared activity UI (rich vault hits + research brief) | Built |
+| Digivault embed backend (env-name secrets, AI SDK stream) | Built |
 | Quant comparison strip (inline `BacktestResult` parsing) | Built |
 | Quant run persistence (`quant_runs` table) | Built |
 | Ecosystem side panel (service URLs + health badges) | Built |
@@ -144,7 +145,12 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/lib/digigraph-messages.ts` | Content coercion for DigiGraph OpenAI body |
 | `src/lib/digigraph-upstream.ts` | `resolveDigigraphUpstreamAuth` — JWT resolution |
 | `src/lib/digikey-exchange.ts` | DigiKey token exchange (both grant types) |
-| `src/lib/stream-digigraph-trace.ts` | Trace-aware SSE → UI message stream |
+| `src/lib/stream-digigraph-trace.ts` | DigiGraph SSE → `data-digichatActivity` via typed mapper |
+| `src/lib/digigraph-activity-map.ts` | `rag_sources` / `graph_update` → `ActivitySpan` |
+| `src/lib/digivault-stream.ts` | Digivault agentic loop → AI SDK UI message stream |
+| `src/lib/digivault-env.ts` | Per-tenant env-name secret resolution (fail closed) |
+| `src/lib/digivault-ip-rate-limit.ts` | Digivault 60/min per-IP limiter |
+| `src/lib/chat-activity.ts` | Activity allowlist, detail gate, projector |
 | `src/lib/conversations-repo.ts` | Drizzle query helpers (conversations + quant runs) |
 | `src/lib/thread-local.ts` | localStorage read/write/merge |
 | `src/lib/ecosystem.ts` | Endpoint resolution + SSRF guard |
@@ -158,7 +164,6 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/components/chat-panel.tsx` | `useChat` + message list + composer |
 | `src/components/connections-sheet.tsx` | Ecosystem side sheet |
 | `src/components/quant-comparison-strip.tsx` | Backtest metrics table |
-| `src/components/digigraph-trace.tsx` | Trace card components |
 | `src/components/providers.tsx` | Client providers wrapper |
 | `src/components/local-bootstrap-gate.tsx` | Dev auto-sign-in gate |
 
@@ -176,7 +181,7 @@ probe).
 - Auth: Auth.js session cookie or `Authorization: Bearer <machine-key>`.
 - Request body: `{ messages: UIMessage[] }` (AI SDK UI message format).
 - Notable request headers: `X-Digichat-Session` / `X-Session-Id` (stable UUID for upstream tracing), `X-Request-ID` (propagated to DigiGraph), `X-Digichat-Trace: 0` (opt out of trace stream).
-- Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus optional `data-digigraphTrace` parts.
+- Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus optional `data-digichatActivity` parts.
 - The route resolves upstream auth, builds a `createDigiGraphClient`, then either (a) calls `createDigigraphTraceStreamResponse` for the trace path or (b) calls `streamText` with `smoothStream` for the legacy path.
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
 - **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). IP is read from `cf-connecting-ip`, falling back to the first `X-Forwarded-For` hop — both are spoofable by the client unless a proxy in front strips/overwrites them (true of Cloudflare in the ADR-0018 production deployment, not guaranteed elsewhere). DigiGraph closed the equivalent gap with a `DIGI_TRUSTED_PROXIES` allowlist (`digigraph/ARCHITECTURE.md` §12.8, REM-027); DigiChat has no equivalent yet — acceptable for now since this is a rate-limiting decision, not an authorization one, but tracked as a follow-up.
@@ -257,8 +262,9 @@ entire message set (delete all + re-insert by sequence index). No incremental ap
 
 Messages conform to AI SDK v6 `UIMessage`: `{ id: string, role: "user"|"assistant",
 parts: UIPart[] }`. Parts include `TextUIPart`, `ReasoningUIPart`, `ToolInvocationUIPart`,
-and the custom `data-digigraphTrace` part emitted by the trace stream. Messages are
-stored verbatim as JSONB in `conversation_messages.payload`.
+and the custom `data-digichatActivity` part emitted by digigraph / digivault /
+foundry streams. Messages are stored verbatim as JSONB in
+`conversation_messages.payload`.
 
 ### BacktestResult parsing
 
@@ -327,7 +333,7 @@ BFF route handler
   │   ├─ POST {base}/v1/chat/completions  (raw fetch, no AI SDK client)
   │   ├─ iterateOpenAiSse: parse SSE frames
   │   │   ├─ delta.content  → text-delta parts
-  │   │   └─ delta.digigraph_trace → data-digigraphTrace parts
+  │   │   └─ delta.digigraph_trace → data-digichatActivity parts (typed mapper)
   │   └─ createUIMessageStreamResponse → SSE to browser
   │
   └─ Legacy path (DIGICHAT_TRACE_UI=0 or X-Digichat-Trace: 0)
@@ -402,13 +408,18 @@ anonymous request before any read/write — so no Postgres row can be created fo
 
 `DIGICHAT_EMBED_TENANTS` (JSON, keyed by hostname) declares embed tenants:
 per-host `slug`, `backend` (`digigraph` | `external-relay` + https URL |
-`foundry` + https `projectEndpoint` + `agentName`),
-`gateMode` (`turn_limited` | `ungated`), `theme` (`dark` | `light`),
-optional `accent` hex pair, `attribution` flag, `aliases`, and a required
-`token`. Parsed fail-fast in `src/lib/embed-tenants.ts`; the same registry
-feeds `/api/chat` tenant resolution (`src/lib/embed-chat-tenant.ts`) and the
-client-safe `GET /api/embed/tenant-config` endpoint — both runtime-only,
-reading `process.env.DIGICHAT_EMBED_TENANTS` fresh per request.
+`foundry` + https `projectEndpoint` + `agentName` | `digivault` + env-name
+refs `supabaseUrlEnv` / `supabaseAnonKeyEnv` / `openRouterKeyEnv`),
+`gateMode` (`turn_limited` | `ungated` | `trial_form`), `theme` (`dark` | `light`),
+optional `accent` hex pair, `activityDetail` (`off` | `labels` | `full`),
+`attribution` flag, `aliases`, and a required `token`. Digivault backends
+store only env **names** (pattern `/^[A-Z][A-Z0-9_]{0,127}$/`) — raw URLs/keys
+are rejected at parse time; values resolve via `process.env` at request time
+(`src/lib/digivault-env.ts`) and fail closed with a safe 503. Parsed fail-fast
+in `src/lib/embed-tenants.ts`; the same registry feeds `/api/chat` tenant
+resolution (`src/lib/embed-chat-tenant.ts`) and the client-safe
+`GET /api/embed/tenant-config` endpoint — both runtime-only, reading
+`process.env.DIGICHAT_EMBED_TENANTS` fresh per request.
 
 The `/embed` CSP frame-ancestors (`src/lib/security-headers.ts`) is
 different: Next.js evaluates `next.config.ts`'s `headers()` during `next
@@ -455,6 +466,18 @@ same search step) are both intentionally unmapped, so neither the answer nor
 the "Searching…" trace is duplicated. `external-relay` stays available as the
 generic option for tenants whose backend isn't reachable via this container's
 own managed identity.
+
+`digivault` tenants run the digivault RAG + OpenRouter free-pool / BYOK agentic
+loop inside the digichat container (`src/lib/digivault-stream.ts`), peer to
+Foundry. Secrets are per-tenant env-name refs (above). An additional IP rate
+limit of **60 req / 60 s** (`checkDigivaultIpRateLimit`, wording
+`"rate limit exceeded — slow down a moment"`) runs before the stream.
+Activity is emitted only as `data-digichatActivity` (sanitized +
+`activityDetail`-gated); vault `body_markdown` stays server-side in tool
+messages. The Cloudflare Pages Function at
+`frontend/digithings-web/functions/api/chat.ts` remains live until Phase 3
+iframe cutover — Phase 2 does not retire it. Accent URL/theme handling is
+out of scope for this provider (separate fix).
 
 **`X-Embed-Host` alone is not sufficient authorization (#1339).** A tenant's
 host string is its own public domain, so `resolveEmbedTenantByHost` never
@@ -728,9 +751,11 @@ coerces AI SDK `ModelMessage` content to plain strings to avoid DigiGraph's stri
 `422` validation). In the legacy path, the AI SDK OpenAI provider constructs the body.
 
 DigiGraph SSE frames carry an optional `digigraph_trace` field on each
-`choices[0].delta`. The trace path extracts this field and emits
-`data-digigraphTrace` parts with type `rag_sources`, `graph_update`, `code_block`,
-`span`, etc.
+`choices[0].delta`. The trace path maps typed payloads (`rag_sources`,
+`graph_update`, and opaque labels) through `mapDigigraphTraceToSpans` and emits
+only `data-digichatActivity` parts (legacy `data-digigraphTrace` dual-emit was
+removed in Phase 2). Auth `chat-panel` and embed both render via
+`@digithings/digichat-ui` `ChatActivities` (rich hits + `brief`).
 
 Session correlation: `X-Session-Id` (conversation UUID), `X-Request-ID` (per-request
 UUID), `X-Digichat-Tenant`, `X-Digi-Caller: digichat` are forwarded to DigiGraph and

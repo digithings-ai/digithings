@@ -163,11 +163,35 @@ def _fake_yahoo_long_frame():
     pandas multi-index into this shape, so tests work with Polars only."""
     import polars as pl
 
+    symbols = [
+        "EURUSD=X",
+        "GBPUSD=X",
+        "JPY=X",
+        "CAD=X",
+        "AUDUSD=X",
+        "USDCHF=X",
+        "NZDUSD=X",
+    ]
     return pl.DataFrame(
         {
-            "obs_date": ["2025-04-01"] * 4 + ["2025-04-02"] * 4,
-            "yahoo_symbol": ["EURUSD=X", "GBPUSD=X", "JPY=X", "CAD=X"] * 2,
-            "close": [1.0820, 1.2685, 150.10, 1.3540, 1.0835, 1.2702, 149.95, 1.3525],
+            "obs_date": ["2025-04-01"] * 7 + ["2025-04-02"] * 7,
+            "yahoo_symbol": symbols * 2,
+            "close": [
+                1.0820,
+                1.2685,
+                150.10,
+                1.3540,
+                0.6620,
+                0.8810,
+                0.5920,
+                1.0835,
+                1.2702,
+                149.95,
+                1.3525,
+                0.6635,
+                0.8795,
+                0.5910,
+            ],
         }
     )
 
@@ -176,15 +200,23 @@ def _fake_yahoo_long_frame():
 def test_yahoo_fx_payload_to_rows_emits_one_row_per_symbol_per_day() -> None:
     payload = _fake_yahoo_long_frame()
     rows = yahoo_fx_payload_to_rows(payload, YAHOO_FX_DEFAULT)
-    # 4 symbols × 2 days = 8 rows
-    assert len(rows) == 8
+    # 7 symbols × 2 days = 14 rows
+    assert len(rows) == 14
     # Schema parity with the macro_series_observations contract
     sample = rows[0]
     assert set(sample.keys()) >= {"source", "series_id", "obs_date", "value", "unit", "meta"}
     assert all(r["source"] == "yahoo" for r in rows)
     assert all(r["unit"] == "fx" for r in rows)
     # Series IDs match the existing FX scheme (no rename — historical continuity)
-    assert {r["series_id"] for r in rows} == {"FX/EUR", "FX/GBP", "FX/JPY", "FX/CAD"}
+    assert {r["series_id"] for r in rows} == {
+        "FX/EUR",
+        "FX/GBP",
+        "FX/JPY",
+        "FX/CAD",
+        "FX/AUD",
+        "FX/CHF",
+        "FX/NZD",
+    }
     # Quote convention is stamped so downstream consumers can disambiguate
     # vs the legacy Frankfurter rows (which were USD-base / foreign-quote).
     eur_row = next(r for r in rows if r["series_id"] == "FX/EUR" and r["obs_date"] == "2025-04-01")
@@ -194,6 +226,15 @@ def test_yahoo_fx_payload_to_rows_emits_one_row_per_symbol_per_day() -> None:
     jpy_row = next(r for r in rows if r["series_id"] == "FX/JPY" and r["obs_date"] == "2025-04-02")
     assert jpy_row["meta"]["quote_convention"] == "JPY_per_USD"
     assert jpy_row["value"] == pytest.approx(149.95)
+    aud_row = next(r for r in rows if r["series_id"] == "FX/AUD" and r["obs_date"] == "2025-04-01")
+    assert aud_row["meta"]["quote_convention"] == "USD_per_AUD"
+    assert aud_row["meta"]["yahoo_symbol"] == "AUDUSD=X"
+    chf_row = next(r for r in rows if r["series_id"] == "FX/CHF" and r["obs_date"] == "2025-04-01")
+    assert chf_row["meta"]["quote_convention"] == "CHF_per_USD"
+    assert chf_row["meta"]["yahoo_symbol"] == "USDCHF=X"
+    nzd_row = next(r for r in rows if r["series_id"] == "FX/NZD" and r["obs_date"] == "2025-04-02")
+    assert nzd_row["meta"]["quote_convention"] == "USD_per_NZD"
+    assert nzd_row["meta"]["yahoo_symbol"] == "NZDUSD=X"
 
 
 @pytest.mark.unit
@@ -233,10 +274,18 @@ def test_fetch_fx_yahoo_returns_correct_schema(monkeypatch) -> None:
     monkeypatch.setattr(mi, "_yahoo_fx_download", fake_download)
     rows = fetch_fx_yahoo(start="2025-04-01", end="2025-04-03")
 
-    # All four default pairs were requested
-    assert set(captured["symbols"]) == {"EURUSD=X", "GBPUSD=X", "JPY=X", "CAD=X"}
+    # All seven default pairs were requested
+    assert set(captured["symbols"]) == {
+        "EURUSD=X",
+        "GBPUSD=X",
+        "JPY=X",
+        "CAD=X",
+        "AUDUSD=X",
+        "USDCHF=X",
+        "NZDUSD=X",
+    }
     # Schema matches macro_series_observations
-    assert len(rows) == 8
+    assert len(rows) == 14
     for r in rows:
         assert r["source"] == "yahoo"
         assert r["series_id"].startswith("FX/")

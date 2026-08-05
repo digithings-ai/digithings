@@ -34,6 +34,8 @@ import {
   renderRiskDebateMarkdown,
 } from './render-pipeline-payloads';
 import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tickers';
+import { buildRebalanceActions } from './rebalance-actions';
+import { holdingWeightChange } from './holding-weight-change';
 import {
   digestItemsToStrings,
   extractDigestContextBullets,
@@ -1109,9 +1111,17 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     type: 'LONG' as const,
     weight_actual: Number(p.weight_pct ?? 0),
     weight_target: targetWeightByTicker.has(p.ticker) ? targetWeightByTicker.get(p.ticker)! : null,
+    // `prevWeightByTicker.get(...) ?? 0` used to make a brand-new 10% position report `+10.0pp`
+    // — a rate of change for something with no prior size to change from, which reads as
+    // "added 10 points to an existing holding" rather than "opened a position" (#1850). A
+    // ticker missing from the prior book is `undefined`, and `holdingWeightChange` keeps that
+    // distinct from a held-but-0% sleeve, which genuinely can move.
     weight_delta:
       latestPosDate && prevPosDate
-        ? Number(p.weight_pct ?? 0) - (prevWeightByTicker.get(p.ticker) ?? 0)
+        ? holdingWeightChange(
+            Number(p.weight_pct ?? 0),
+            prevWeightByTicker.has(p.ticker) ? prevWeightByTicker.get(p.ticker) : null,
+          ).deltaPp
         : null,
     current_price: p.current_price != null ? Number(p.current_price) : latestClose(p.ticker).curr,
     entry_price: resolvedEntryPrice(p),
@@ -1171,21 +1181,9 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     if (pmRebDateMatches && pmRebPayload) {
       const acts = pmRebPayload.actions;
       if (Array.isArray(acts) && acts.length > 0) {
-        return acts
-          .map((a) => {
-            if (!a || typeof a !== 'object') return null;
-            const o = a as Record<string, unknown>;
-            const ticker = String(o.ticker || '').trim().toUpperCase();
-            if (!ticker) return null;
-            const current_pct = Number(o.current_pct ?? 0);
-            // Live shape: `target_pct`; fixture / test payloads: `recommended_pct`.
-            const recommended_pct = Number(o.target_pct ?? o.recommended_pct ?? 0);
-            const action = String(o.action || 'HOLD').toUpperCase();
-            // Carry rationale so downstream UI can render it without another fetch.
-            const rationale = o.rationale != null ? String(o.rationale) : undefined;
-            return { ticker, current_pct, recommended_pct, action, rationale };
-          })
-          .filter(Boolean) as { ticker: string; current_pct: number; recommended_pct: number; action: string; rationale?: string }[];
+        // buildRebalanceActions resolves the prior weight from the PREVIOUS book date (#1850);
+        // see that module for why the CURRENT book is the wrong source.
+        return buildRebalanceActions(acts, prevWeightByTicker);
       }
     }
     // Fallback: derive action from proposed vs current weight delta.
