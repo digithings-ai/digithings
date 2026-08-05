@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { DtNav } from "@/components/DtNav";
-import { DigiChatSession } from "@/components/DigiChatSession";
+import { ChatEmbedShell } from "@/components/ChatEmbedShell";
 
 export const metadata: Metadata = {
   title: "digichat — the digithings assistant",
@@ -9,16 +9,12 @@ export const metadata: Metadata = {
     "running on a free model pool. No sign-up.",
 };
 
-// The /chat route is the full-screen signature DigiChat experience. The marketing
-// that used to live here (hero + canned transcript + feature cards) now streams as
-// the bot's own self-introduction inside DigiChatSession — the chat IS the pitch.
+/** /chat — DtNav outside; digichat /embed iframe fills the content pane (Phase 3). */
 export default function ChatPage() {
   return (
     <>
       <DtNav />
-      <main className="dc-page">
-        <DigiChatSession />
-      </main>
+      <ChatEmbedShell />
     </>
   );
 }
