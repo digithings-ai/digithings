@@ -178,6 +178,14 @@ one place a mark cannot inherit ink — wired through `metadata.icons` with
 that Next.js file convention overrides `metadata.icons` and would drop the
 queries silently.
 
+Each product app also owns explicit 32px fallback, 180px Apple touch, and
+192/512px web-app PNGs plus a maskable 512px variant. DigiThings and DigiQuant
+use the compact terminal mark; Olympus uses the canonical four-stroke mark.
+Tab and Apple metadata publish light/dark pairs with media queries. Web App
+Manifest icons use one contrast-safe default because installed icons are cached
+by the operating system and the manifest standard has no live colour-scheme
+selector; changing those assets requires removing and reinstalling the shortcut.
+
 The older text `Wordmark` (`symbols/marks.tsx`) and `Colophon`
 (`components/chrome.tsx`) are superseded for new work but not retired — the
 surfaces already using them still do.
