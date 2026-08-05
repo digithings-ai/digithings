@@ -24,6 +24,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
@@ -182,19 +183,42 @@ function NavShellGroup({
     } else if (e.key === "Home") {
       e.preventDefault();
       setFocusIndex(0);
+    } else if (e.key === " ") {
+      // A menuitem activates on Space as well as Enter — but this one is an <a>,
+      // where the browser's default for Space is to scroll the page, and no
+      // click is synthesised. So synthesise it and swallow the scroll. Read the
+      // focused element rather than focusIndex: focus is the source of truth
+      // here, and the index is still null after a pointer open.
+      const item = (e.target as HTMLElement).closest<HTMLAnchorElement>("a.nav-shell-menu-item");
+      if (item) {
+        e.preventDefault();
+        item.click();
+      }
     } else if (e.key === "End") {
       e.preventDefault();
       setFocusIndex(last);
-    } else if (e.key === "Tab") {
-      // Tab leaves the menu: close it, but let focus move naturally.
-      onClose();
     }
     // Escape is handled by the document listener above (one code path for
-    // "close and return focus", wherever focus currently sits).
+    // "close and return focus", wherever focus currently sits). Tab is handled
+    // by onFocusLeave below, not here — closing on keydown would re-hide the
+    // panel *before* the browser picks the next tab stop.
+  };
+
+  // Tab out of the group — from the trigger or from an item — closes it. Doing
+  // this on focusout rather than on the Tab keydown means focus has already
+  // landed before the panel re-hides, and it catches every other way focus can
+  // leave (a click that focuses something else, a screen reader's own
+  // navigation). React's onBlur is focusout, so it bubbles from the children.
+  // A null relatedTarget (the window itself lost focus) also closes: returning
+  // to the tab with a menu still hanging open is the worse of the two.
+  const onFocusLeave = (e: ReactFocusEvent<HTMLDivElement>) => {
+    if (!open) return;
+    if (wrapRef.current?.contains(e.relatedTarget as Node | null)) return;
+    onClose();
   };
 
   return (
-    <div className="nav-shell-group" ref={wrapRef} data-open={open}>
+    <div className="nav-shell-group" ref={wrapRef} data-open={open} onBlur={onFocusLeave}>
       <button
         type="button"
         ref={triggerRef}
