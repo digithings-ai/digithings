@@ -132,7 +132,9 @@ export function useEmbedDigiChat({
   byokModel,
   trialUnlocked,
   onGated,
-}: UseEmbedDigiChatOptions): DigiChatController {
+}: UseEmbedDigiChatOptions): DigiChatController & {
+  seed: (msgs: DigiChatMessage[]) => void;
+} {
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -176,7 +178,7 @@ export function useEmbedDigiChat({
     [accent, token, host, embedHost, byokKey, byokProvider, byokModel, trialUnlocked],
   );
 
-  const { messages, sendMessage, status, error, regenerate } = useChat<UIMessage>({
+  const { messages, sendMessage, status, error, regenerate, setMessages } = useChat<UIMessage>({
     transport,
   });
 
@@ -224,11 +226,25 @@ export function useEmbedDigiChat({
 
   const digiMessages = useMemo(() => messages.map(uiMessageToDigiChat), [messages]);
 
+  const seed = useCallback(
+    (msgs: DigiChatMessage[]) => {
+      setMessages(
+        msgs.map((m) => ({
+          id: crypto.randomUUID(),
+          role: m.role,
+          parts: [{ type: "text" as const, text: m.content }],
+        })),
+      );
+    },
+    [setMessages],
+  );
+
   return {
     messages: digiMessages,
     busy,
     error: chatError,
     send,
     onRetry: () => regenerate(),
+    seed,
   };
 }
