@@ -20,9 +20,9 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digithings.ai"),
-  title: "digithings — an open-core agentic stack",
+  title: "digithings — AI infrastructure in a glass box",
   description:
-    "An open-core agentic stack — research, retrieval, and chat behind one supervisor. Self-hosted, BYOK, audit-on by default. No vendor lock-in.",
+    "Open-source, MIT-licensed AI infrastructure: ten modules that plug into the stack you already run — not a replacement for it. Self-hosted anywhere, your own keys and providers, every step traceable.",
   // Scheme-aware favicon tiles, mirroring digiquant-web: the light tile on a
   // dark browser chrome and vice versa, so the mark never reads as a flat box.
   // The `d` + block-cursor reduction, not the full `digi` lockup — five character
@@ -36,8 +36,8 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    title: "digithings — an open-core agentic stack",
-    description: "Open-core agentic stack — research, retrieval, chat behind one supervisor. Self-hosted, BYOK, audit-on by default.",
+    title: "digithings — AI infrastructure in a glass box",
+    description: "Open-source AI infrastructure you self-host: ten MIT-licensed modules that drop into the stack you already run. Your own keys and providers, every step traceable.",
     url: "https://digithings.ai",
     images: ["/design/assets/og.png"],
     type: "website",

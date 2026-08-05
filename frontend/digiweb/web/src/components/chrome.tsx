@@ -10,6 +10,25 @@ import { type ModuleNode } from "../data/modules";
 
 export interface NavLink { label: string; href: string; external?: boolean; cta?: boolean; }
 
+/** A labelled set of destinations — a dropdown menu on <NavShell/>'s wide bar,
+ *  a labelled section of links in its narrow sheet. A group is a *sibling* type
+ *  rather than an optional `items?` on NavLink because a group trigger has no
+ *  destination of its own: making `href` optional to model that would widen it
+ *  to `string | undefined` for every existing consumer and reader (the
+ *  `key={l.href + l.label}` in this file included). A separate interface keeps
+ *  `href` required where it belongs and makes "link or group" a real
+ *  discriminated choice. */
+export interface NavGroup { label: string; items: NavLink[]; }
+
+/** One top-bar entry. `NavLink[]` stays assignable to `NavItem[]`, so every
+ *  consumer that passes a flat link array today keeps compiling untouched. */
+export type NavItem = NavLink | NavGroup;
+
+/** Discriminates the NavItem union on the one field only a group carries. */
+export function isNavGroup(item: NavItem): item is NavGroup {
+  return "items" in item;
+}
+
 export function Nav({ brand, links, mark }: { brand: ReactNode; links: NavLink[]; mark?: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
