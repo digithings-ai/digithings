@@ -53,6 +53,14 @@ export const metadata: Metadata = {
       "Atlas researches, Hermes sizes the risk, and the deliberation stays on the record. Open-source, "
       + "self-hosted, with a decision log per run.",
     url: "https://digiquant.io",
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "digiquant — a quant research desk in a glass box you own.",
+      },
+    ],
     type: "website",
   },
 };

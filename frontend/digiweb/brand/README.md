@@ -26,7 +26,11 @@ not the full `digi` lockup, which closes up below about 64px.
 avatar/
   digithings-avatar-dark.svg    digithings-avatar-dark.png    (1024)  -500.png
   digithings-avatar-light.svg   digithings-avatar-light.png   (1024)  -500.png
-build-avatar.py                 regenerates all six from the favicon tile
+og/
+  digithings-og.svg             digithings-og.png             (1200x630)
+  digiquant-og.svg              digiquant-og.png              (1200x630)
+build-avatar.py                 regenerates the six avatars from the favicon tile
+build-og.py                     regenerates both cards, wordmark outlined from Geist Mono
 ```
 
 **The avatar is derived, never drawn.** `build-avatar.py` reads the `d` glyph path
@@ -53,7 +57,7 @@ radius in the PNG shows as a seam inside its frame.
 | asset | canonical path | notes |
 |---|---|---|
 | **Chris Stefan avatar** | `frontend/digithings-web/public/team/chris.png` | 460×460. Under the 500×500 GitHub recommends — re-export larger from the source if you need it for a profile |
-| **Open Graph card** | `frontend/digithings-web/public/design/assets/og.png` | 1200×630, and **stale in four ways** — see below |
+| **Open Graph cards** | `frontend/digithings-web/public/og.png`, `frontend/digiquant-web/public/og.png` | 1200×630, generated — see below |
 | **digithings.ai favicons** | `frontend/digithings-web/public/favicon-dg{,-light}.svg` | one per theme polarity; a tile bakes its own background so it cannot inherit ink |
 | **digiquant.io favicons** | `frontend/digiquant-web/public/favicon-dg{,-light}.svg` | byte-identical to digithings' — the mark is monochrome, nothing site-specific differs |
 | **favicon specimens** | `frontend/digiweb/reference/public/{,digiquant-}favicon-dg{,-light}.svg` | copies for the design-reference specimen page only; not served to users |
@@ -63,19 +67,35 @@ radius in the PNG shows as a seam inside its frame.
 There is no build step syncing the three `public/` directories. If you change a
 favicon tile, change all copies, then re-run `build-avatar.py`.
 
-### og.png needs redrawing
+### The Open Graph cards
 
-It is the image every social share of digithings.ai renders, and it was last
-touched in #731 — before the identity work. Opening it shows four problems:
+`og/` holds the two link-preview cards, and `build-og.py` generates them:
 
-1. the wordmark reads **“DigiThings”**, capitalised, which the brand never is;
-2. the tagline is **“An open-core agentic stack”** — superseded by the glass-box
-   positioning;
-3. the frame is **blue**, and the identity is monochrome;
-4. there is **no mark on it at all** — neither the terminal lockup nor the tile.
+```bash
+python3 frontend/digiweb/brand/build-og.py           # rebuild both
+python3 frontend/digiweb/brand/build-og.py --check    # verify, write nothing
+```
 
-Redrawing it is open work. Until then, a link preview of digithings.ai shows copy
-and colour the site itself no longer uses.
+The rendered PNGs are copied into each app's `public/og.png` and wired through
+`openGraph.images` with explicit width, height and alt.
+
+**The wordmark is outlined to paths, not set as SVG `<text>`.** There is no Geist
+installed for librsvg, so a `<text>` element would rasterise in whatever fallback
+face the machine happens to have — which is exactly how an off-brand card ships
+without anyone noticing. `build-og.py` reads the glyphs out of
+`node_modules/geist/dist/fonts/geist-mono/GeistMono-Regular.ttf` at weight 400 and
+embeds them, and it asserts Geist Mono's advance is still 0.6em so a font update
+cannot silently knock the cursor off its cell.
+
+What this replaced is worth recording, because it is how brand art goes stale
+quietly. The old digithings card, last touched in #731, had drifted four ways at
+once: the wordmark read **"DigiThings"** capitalised, the tagline was the
+superseded **"An open-core agentic stack"**, the frame was **blue** against a
+monochrome identity, and it carried **no mark at all**. digiquant.io had no
+`images` key in its `openGraph` block, so its links unfurled with no card image.
+
+The copy on each card lives in `HEADLINES` in `build-og.py` and must track that
+site's own hero. A card is not a place to invent a new tagline.
 
 ## Colours
 
