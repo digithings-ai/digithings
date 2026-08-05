@@ -3,33 +3,33 @@
 ## Hostname / hosting (locked)
 
 - **Visitor chat:** `digithings.ai/chat` — Pages shell (`DtNav` + iframe).
-- **DigiChat surface:** `digithings.ai/embed` — Cloudflare route → DigiThings-owned DigiChat Node.
-- **Embed origin env:** `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai` (same-origin; `frame-src 'self'`).
-- **Leave `DIGICHAT_BASE_PATH` unset** (DigiChat at root behind the path route).
-- Do **not** use `chat.digithings.ai` as the marketing embed origin.
+- **DigiChat surface:** `digithings.ai/embed` — **Cloudflare Containers** + Worker routes (DigiThings CF account).
+- **Embed origin:** `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai` (same-origin; `frame-src 'self'`).
+- DigiChat build: `DIGICHAT_ASSET_PREFIX=/_dtchat` (avoids Pages `/_next` collision); leave `DIGICHAT_BASE_PATH` unset.
+- DigiThings has **no Azure**. Do **not** use DataTap’s DigiChat ACA for DigiThings. Do **not** use `chat.digithings.ai` as marketing embed origin.
 
-## Hard constraint — Azure ownership
+## Hard constraint — Azure
 
-**DigiThings DigiChat MUST NOT run in any DataTap Azure subscription.**
+**DigiThings DigiChat MUST NOT run in any Azure subscription** (DigiThings is not on Azure).
 
-- Forbidden: **DataTap WebSite** `fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0` (and any other DataTap sub).
-- DataTap is a **client**. DigiThings may only touch DataTap Azure for DataTap’s own website DigiChat ACA.
-- **2026-08-05 misdeploy (torn down):** `digithings-rg` (CAE / ACR / digichat ACA) was created on DataTap WebSite by mistake and deleted. Do **not** recreate DigiThings stack there.
+- DataTap’s DigiChat ACA is **client-only** (DataTap website). Leave it alone.
+- **2026-08-05 misdeploy:** DigiThings resources on DataTap WebSite were torn down. Do not recreate.
 
-## DigiThings-owned DigiChat Node
+## DigiThings DigiChat = Cloudflare Containers
 
-1. Provision ACA (+ ACR if needed) in a **DigiThings** Azure subscription only (`az account show` must not be DataTap*).
-2. Image: `ghcr.io/digithings-ai/digichat:<tag>` (post–Phase 2 digivault + Phase 3 flags; release after #1868 or build from this branch).
-3. Env: digivault name refs + tenant registry below; `DIGICHAT_EMBED_HOSTS` at **build** includes digithings.ai / www.
-4. Cloudflare: route `digithings.ai/embed*` (and DigiChat `/api` / `/_next` paths the embed needs) → that ACA origin.
-5. Pages: set `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai`.
+Scaffold: [`frontend/digichat-cloudflare/`](../../../frontend/digichat-cloudflare/README.md)
 
-## Runtime env (names must match tenant JSON)
+1. `npx wrangler login` on DigiThings Cloudflare account (zone digithings.ai).
+2. Put secrets: `AUTH_SECRET` (stub), `DIGITHINGS_SUPABASE_*`, `DIGITHINGS_OPENROUTER_API_KEY`, `DIGICHAT_EMBED_TENANTS`.
+3. From `frontend/digichat-cloudflare`: `npx wrangler deploy` (builds [`Dockerfile.digichat-cloudflare`](../../../Dockerfile.digichat-cloudflare)).
+4. Attach zone routes: `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/_dtchat*`.
+5. Pages env: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai`.
 
-- `DIGITHINGS_SUPABASE_URL`, `DIGITHINGS_SUPABASE_ANON_KEY`, `DIGITHINGS_OPENROUTER_API_KEY`
-- `DIGICHAT_EMBED_TENANTS` includes digithings entry below
-- `DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai,...` at **build** for CSP
-- Do **not** put vault/OpenRouter secret **values** in tenant JSON
+### Embed-only runtime
+
+- Omit `DIGICHAT_DATABASE_URL` / `DIGICHAT_AUTO_MIGRATE` (no Postgres).
+- `DIGICHAT_ENABLED_SERVICES=` empty; no DigiKey/Foundry/Azure env.
+- Prefer `DIGICHAT_EMBED_ENABLED=1` plus digithings tenant + first-party hosts.
 
 ## Tenant JSON fragment
 ```json
@@ -59,10 +59,8 @@
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/embed
 curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/chat
-# Browser: landing quick-ask → /chat seeded turn; BYOK + status bar
 ```
 
 ## Merge gate for #1868
 
-- Do **not** merge the CF Function delete cutover until `https://digithings.ai/embed` returns 200 from DigiThings-owned DigiChat.
-- Code/docs origin retarget (`chat.` → same-origin `/embed`) can land on the PR branch anytime.
+Do **not** merge the CF Function delete until `https://digithings.ai/embed` returns 200 from the DigiThings Cloudflare Container.

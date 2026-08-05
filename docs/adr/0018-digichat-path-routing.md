@@ -15,11 +15,12 @@ Split marketing chrome from DigiChat app surface on the same hostname:
 | Path | Owner | Role |
 |---|---|---|
 | `digithings.ai/chat` | Cloudflare Pages (`frontend/digithings-web`) | Marketing shell: `DtNav` + iframe |
-| `digithings.ai/embed` (+ DigiChat `/api` / `/_next` as routed) | Cloudflare route → DigiThings-owned DigiChat Node | DigiChat app / embed target |
+| `digithings.ai/embed` (+ DigiChat `/api` / `/_dtchat` assets as routed) | Cloudflare Worker → DigiThings DigiChat **Container** | DigiChat app / embed target |
+
 
 - Iframe is **same-origin**: `src=https://digithings.ai/embed?host=https://digithings.ai`.
-- DigiChat runs with **`DIGICHAT_BASE_PATH` unset** (app at root behind the path route). Do **not** use `basePath=/chat` for this cutover — Pages already owns `/chat`.
-- DigiChat container is DigiThings-owned only (GHCR image). DataTap Azure hosts only DataTap’s own digichat ACA.
+- DigiChat runs with **`DIGICHAT_BASE_PATH` unset** and **`DIGICHAT_ASSET_PREFIX=/_dtchat`** so DigiChat static assets do not collide with Pages `/_next`.
+- DigiChat runs on **Cloudflare Containers** (DigiThings CF account). DigiThings has **no Azure**. DataTap Azure DigiChat ACA is client-only.
 - Do **not** use `chat.digithings.ai` as the marketing embed origin.
 
 ### Historical note (original 0018 text)
@@ -29,8 +30,8 @@ The first revision routed the full DigiChat app under `digithings.ai/chat/*` wit
 ## Production configuration (Cloudflare + env)
 
 - Cloudflare Pages: digithings-web static export; `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai`.
-- Cloudflare route: `digithings.ai/embed*` (and DigiChat API/asset paths required by the embed) → DigiThings DigiChat container origin.
-- DigiChat runtime: digivault env name refs + digithings tenant; `AUTH_URL` / `DIGICHAT_SITE_URL` as appropriate for the DigiThings host; no `DIGICHAT_BASE_PATH`.
+- Cloudflare route: `digithings.ai/embed*`, DigiChat APIs, and `/_dtchat*` → DigiChat Container Worker ([`frontend/digichat-cloudflare/`](../frontend/digichat-cloudflare/README.md)).
+- DigiChat Container: digivault env + digithings tenant; stub `AUTH_SECRET`; no Postgres required for embed-only; no Azure.
 - Marketing "Try Chat" link points at `/chat`.
 
 ## Consequences

@@ -142,7 +142,7 @@ To update the landing page: edit `frontend/digithings-web/`, run the build scrip
 
 - **Shell:** Cloudflare Pages serves `/chat` with `DtNav` + iframe (`ChatEmbedShell`).
 - **Iframe target:** `https://digithings.ai/embed?host=https://digithings.ai` (no embed token for first-party hosts).
-- **Runtime:** DigiThings-owned DigiChat container (GHCR), digivault backend, `gateMode: ungated`, `showByok: true`.
+- **Runtime:** DigiChat on **Cloudflare Containers** ([`frontend/digichat-cloudflare`](../frontend/digichat-cloudflare/README.md)), digivault backend, `gateMode: ungated`, `showByok: true`. DigiThings has no Azure; DataTap ACA is client-only.
 - **Retired:** Cloudflare Pages Function `functions/api/chat.ts`, `useStackChat`, `chatStream` (after `/embed` is live).
 
 ### Verifying the routing

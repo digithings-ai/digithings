@@ -46,7 +46,8 @@ Also inherited:
 Recorded from the Phase 3 brainstorm (2026-08-05). Status: **Approved**.
 
 1. **Architecture: iframe** — digithings.ai keeps URL `/chat` and `DtNav`; the chat pane is digichat `/embed` in a full-height iframe. Hard redirect away from digithings.ai and dual-path forever are rejected.
-2. **Runtime: DigiThings-owned DigiChat Node behind CF path** — same GHCR release family DataTap uses. Public surface: **`https://digithings.ai/embed`** (Cloudflare route → DigiThings-owned container). **Not** DataTap’s ACA. **Not** `chat.digithings.ai` as marketing embed origin. Leave `DIGICHAT_BASE_PATH` unset.
+2. **Runtime: DigiChat on Cloudflare Containers** — DigiThings CF account; path `https://digithings.ai/embed` (+ APIs / `/_dtchat` assets). **Not** Azure (DigiThings has none). **Not** DataTap’s ACA. **Not** `chat.digithings.ai`. Leave `DIGICHAT_BASE_PATH` unset; use `DIGICHAT_ASSET_PREFIX=/_dtchat`.
+
 3. **Cutover: ONE PR** — iframe shell + delete Cloudflare Function, `useStackChat`, and `chatStream` together. No sequenced “iframe first, delete later” and no long-lived feature-flag dual path in this phase.
 4. **gateMode: `ungated`**; **`showByok: true`** — independent flags. Do **not** derive `showByok = !ungated` (today’s embed/page.tsx bug relative to this design).
 5. **activityDetail: `full`** — rich chain including documents/brief for digithings marketing chat.

@@ -1,29 +1,16 @@
-# Digithings DigiChat (Phase 3) — hosting notes
+# Digithings DigiChat hosting — DEPRECATED for Azure
 
-## Hard constraint — subscription ownership
+DigiThings DigiChat runs on **Cloudflare Containers**, not Azure.
 
-**DigiThings DigiChat MUST NOT run in any DataTap Azure subscription.**
+See [`frontend/digichat-cloudflare/README.md`](../../frontend/digichat-cloudflare/README.md)
+and [`docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`](../../docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md).
 
-- Forbidden: **DataTap WebSite** `fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0`.
-- DataTap is a client. DigiThings operators may only touch DataTap Azure for
-  DataTap’s own website DigiChat ACA.
-- **2026-08-05:** a misdeploy (`digithings-rg` / CAE / ACR / digichat ACA) into
-  DataTap WebSite was torn down. Do not recreate DigiThings stack there.
+## Hard constraint
 
-## Product direction (locked)
+- DigiThings has **no Azure**.
+- DataTap DigiChat ACA is **client-only** — do not use for DigiThings.
+- **2026-08-05:** a DigiThings misdeploy on DataTap WebSite was torn down.
 
-- DigiChat is a **path on digithings.ai**: CF route `digithings.ai/embed*` →
-  DigiThings-owned DigiChat Node; Pages `/chat` iframes that path (same-origin).
-- Do **not** use `chat.digithings.ai` as the marketing embed origin.
-- Leave `DIGICHAT_BASE_PATH` unset for this cutover.
-- Scripts in this tree are DigiThings-subscription only; they must refuse DataTap
-  accounts (`az account show`).
-
-## Scripts
-
-`build-image.sh`, `import-ghcr.sh`, and `apply-secrets.sh` refuse DataTap Azure
-accounts. Use only after DigiThings-owned subscription is confirmed.
-
-## Tenant / secrets shape
-
-See `docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`.
+Scripts in this directory (`build-image.sh`, `import-ghcr.sh`, `apply-secrets.sh`)
+targeted Azure ACA and must **not** be used for DigiThings. Prefer Cloudflare
+Containers deploy from `frontend/digichat-cloudflare`.
