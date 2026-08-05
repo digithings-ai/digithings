@@ -1,10 +1,16 @@
 import { describe, it, expect } from "vitest";
+import type { UIMessage } from "ai";
 import {
   sanitizeActivitySpan,
   applyActivityDetail,
   toDigiChatActivity,
+  messageActivities,
+  ACTIVITY_PART_TYPE,
   MAX_LABEL_CHARS,
   MAX_DOCUMENTS,
+  MAX_SNIPPET_CHARS,
+  MAX_BRIEF_THEMES,
+  MAX_BRIEF_QUESTIONS,
   type ActivitySpan,
 } from "./chat-activity";
 
@@ -403,4 +409,215 @@ describe("toDigiChatActivity — documentsWithheld (labels detail)", () => {
       },
     ]);
   });
+});
+
+describe("Phase 2 document fields + brief allowlist", () => {
+  it("keeps tier, year, snippet on documents and drops undeclared doc keys", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "retrieve",
+        status: "completed",
+        documents: [
+          {
+            title: "Auth",
+            path: "https://x/auth",
+            tier: "peer_reviewed",
+            year: 2024,
+            snippet: "hello",
+            source_id: "leak",
+            score: 0.99,
+            body_markdown: "# secret",
+          },
+        ],
+      }),
+    );
+    expect(out!.documents).toEqual([
+      {
+        title: "Auth",
+        path: "https://x/auth",
+        tier: "peer_reviewed",
+        year: 2024,
+        snippet: "hello",
+      },
+    ]);
+  });
+
+  it("caps snippet length", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "retrieve",
+        status: "completed",
+        documents: [
+          {
+            title: "T",
+            path: "p",
+            snippet: "s".repeat(MAX_SNIPPET_CHARS + 40),
+          },
+        ],
+      }),
+    );
+    expect(out!.documents![0].snippet).toHaveLength(MAX_SNIPPET_CHARS);
+  });
+
+  it("rejects non-finite year and non-string tier/snippet without dropping the doc", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "retrieve",
+        status: "completed",
+        documents: [{ title: "T", path: "p", tier: 1, year: "2024", snippet: 9 }],
+      }),
+    );
+    expect(out!.documents).toEqual([{ title: "T", path: "p" }]);
+  });
+
+  it("allowlists brief themes/questions and drops undeclared brief keys", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "chat",
+        status: "completed",
+        brief: {
+          themes: [
+            { label: "Auth", summary: "RS256", internal: true },
+            ...Array.from({ length: MAX_BRIEF_THEMES + 3 }, (_, i) => ({
+              label: `t${i}`,
+              summary: `s${i}`,
+            })),
+          ],
+          questions: Array.from({ length: MAX_BRIEF_QUESTIONS + 2 }, (_, i) => `q${i}`),
+          model: "gpt",
+        },
+      }),
+    );
+    expect(out!.brief!.themes).toHaveLength(MAX_BRIEF_THEMES);
+    expect(out!.brief!.questions).toHaveLength(MAX_BRIEF_QUESTIONS);
+    expect(Object.keys(out!.brief!).sort()).toEqual(["questions", "themes"]);
+    expect(Object.keys(out!.brief!.themes[0]).sort()).toEqual(["label", "summary"]);
+  });
+
+  it("strips documents and brief at labels; preserves documentsWithheld honesty", () => {
+    const full: ActivitySpan = {
+      operation: "retrieve",
+      status: "completed",
+      label: "Sources",
+      documents: [{ title: "A", path: "p", tier: "t", year: 2020, snippet: "x" }],
+      brief: { themes: [{ label: "T", summary: "S" }], questions: ["Q"] },
+      reasoningDelta: "think",
+    };
+    const out = applyActivityDetail(full, "labels")!;
+    expect(out.documents).toBeUndefined();
+    expect(out.brief).toBeUndefined();
+    expect(out.reasoningDelta).toBeUndefined();
+    expect(out.documentsWithheld).toBe(true);
+    expect("briefWithheld" in out).toBe(false);
+  });
+
+  it("brief-only span at labels becomes label row without themes", () => {
+    const full: ActivitySpan = {
+      operation: "chat",
+      status: "completed",
+      label: "Research brief",
+      brief: { themes: [{ label: "T", summary: "S" }] },
+    };
+    const out = applyActivityDetail(full, "labels")!;
+    expect(out).toEqual({
+      operation: "chat",
+      status: "completed",
+      label: "Research brief",
+    });
+  });
+});
+
+describe("toDigiChatActivity — Phase 2 rich hits + brief", () => {
+  it("passes tier/year/snippet through tool_result hits", () => {
+    const rows = toDigiChatActivity([
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "Sources",
+        toolName: "file_search",
+        query: "auth",
+        documents: [
+          {
+            title: "Auth",
+            path: "p",
+            tier: "peer_reviewed",
+            year: 2024,
+            snippet: "JWT",
+          },
+        ],
+      },
+    ]);
+    expect(rows).toEqual([
+      {
+        kind: "tool_result",
+        name: "file_search",
+        query: "auth",
+        hits: [
+          {
+            title: "Auth",
+            path: "p",
+            tier: "peer_reviewed",
+            year: 2024,
+            snippet: "JWT",
+          },
+        ],
+        count: 1,
+      },
+    ]);
+  });
+
+  it("projects brief spans onto kind brief", () => {
+    const rows = toDigiChatActivity([
+      {
+        operation: "chat",
+        status: "completed",
+        label: "Research brief",
+        brief: {
+          themes: [{ label: "Auth", summary: "RS256" }],
+          questions: ["Which tenant?"],
+        },
+      },
+    ]);
+    expect(rows).toEqual([
+      {
+        kind: "brief",
+        themes: [{ label: "Auth", summary: "RS256" }],
+        questions: ["Which tenant?"],
+      },
+    ]);
+  });
+
+  it("projects label-only chat (brief stripped) as trace", () => {
+    expect(
+      toDigiChatActivity([
+        { operation: "chat", status: "completed", label: "Research brief" },
+      ]),
+    ).toEqual([{ kind: "trace", label: "Research brief", done: true }]);
+  });
+});
+
+it("messageActivities projects activity parts and ignores digigraphTrace", () => {
+  const message = {
+    id: "a1",
+    role: "assistant",
+    parts: [
+      {
+        type: ACTIVITY_PART_TYPE,
+        data: {
+          operation: "retrieve",
+          status: "completed",
+          label: "Sources",
+          toolName: "rag_sources",
+          documents: [{ title: "Auth", path: "doc-1", tier: "t", year: 2024 }],
+        },
+      },
+      {
+        type: "data-digigraphTrace",
+        data: { type: "rag_sources", payload: { sources: [{ source_id: "should-not-render" }] } },
+      },
+    ],
+  } as unknown as UIMessage;
+  const rows = messageActivities(message);
+  expect(rows.some((r) => r.kind === "tool_result")).toBe(true);
+  expect(JSON.stringify(rows)).not.toContain("should-not-render");
 });

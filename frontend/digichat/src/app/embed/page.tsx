@@ -496,7 +496,7 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
       {showBYOK && (
         <div className="mt-4 space-y-3">
           <div className="flex gap-2">
-            {(["openrouter", "openai", "anthropic"] as BYOKProvider[]).map((p) => (
+            {(["openrouter", "openai", "anthropic", "gemini"] as BYOKProvider[]).map((p) => (
               <Button
                 key={p}
                 type="button"
@@ -505,7 +505,13 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
                 className="flex-1 capitalize"
                 onClick={() => setProvider(p)}
               >
-                {p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "OpenRouter"}
+                {p === "openai"
+                  ? "OpenAI"
+                  : p === "anthropic"
+                    ? "Anthropic"
+                    : p === "gemini"
+                      ? "Gemini"
+                      : "OpenRouter"}
               </Button>
             ))}
           </div>
@@ -527,7 +533,9 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
                     ? "sk-…"
                     : provider === "anthropic"
                       ? "sk-ant-…"
-                      : "sk-or-v1-…"
+                      : provider === "gemini"
+                        ? "AIza…"
+                        : "sk-or-v1-…"
                 }
                 autoComplete="off"
                 spellCheck={false}

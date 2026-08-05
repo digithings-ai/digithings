@@ -9,11 +9,13 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
+import type { DigivaultBackendConfig } from "@/lib/digivault-env";
 
 export type EmbedBackendConfig =
   | { type: "digigraph" }
   | { type: "external-relay"; url: string }
-  | { type: "foundry"; projectEndpoint: string; agentName: string };
+  | { type: "foundry"; projectEndpoint: string; agentName: string }
+  | DigivaultBackendConfig;
 
 export type EmbedTenantConfig = {
   slug: string;
@@ -60,6 +62,14 @@ export type EmbedTenantConfig = {
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
+export const EMBED_ENV_NAME = /^[A-Z][A-Z0-9_]{0,127}$/;
+
+function requireEnvName(ctx: string, field: string, value: unknown): string {
+  if (typeof value !== "string" || !EMBED_ENV_NAME.test(value)) {
+    throw new Error(`${ctx}: digivault "${field}" must be an env var name (A-Z[A-Z0-9_]*)`);
+  }
+  return value;
+}
 
 export function normalizeEmbedHost(input: string | null | undefined): string | null {
   if (!input) return null;
@@ -124,8 +134,20 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       throw new Error(`${ctx}: foundry backend requires an "agentName"`);
     }
     backendCfg = { type: "foundry", projectEndpoint: backend.projectEndpoint, agentName: backend.agentName };
+  } else if (backend?.type === "digivault") {
+    for (const banned of ["supabaseUrl", "supabaseAnonKey", "openRouterKey", "url"]) {
+      if (banned in backend) {
+        throw new Error(`${ctx}: digivault must not include raw "${banned}" — use *Env name refs`);
+      }
+    }
+    backendCfg = {
+      type: "digivault",
+      supabaseUrlEnv: requireEnvName(ctx, "supabaseUrlEnv", backend.supabaseUrlEnv),
+      supabaseAnonKeyEnv: requireEnvName(ctx, "supabaseAnonKeyEnv", backend.supabaseAnonKeyEnv),
+      openRouterKeyEnv: requireEnvName(ctx, "openRouterKeyEnv", backend.openRouterKeyEnv),
+    };
   } else {
-    throw new Error(`${ctx}: backend.type must be "digigraph", "external-relay", or "foundry"`);
+    throw new Error(`${ctx}: backend.type must be "digigraph", "external-relay", "foundry", or "digivault"`);
   }
 
   if (v.gateMode !== "turn_limited" && v.gateMode !== "ungated" && v.gateMode !== "trial_form") {
