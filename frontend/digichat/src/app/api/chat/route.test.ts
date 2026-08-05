@@ -24,6 +24,23 @@ vi.mock("@/lib/foundry-stream", () => ({
   createFoundryStreamResponse: vi.fn(async () => new Response("foundry", { status: 200 })),
 }));
 
+vi.mock("@/lib/digivault-stream", () => ({
+  createDigivaultStreamResponse: vi.fn(async () => new Response("digivault", { status: 200 })),
+}));
+
+vi.mock("@/lib/digivault-ip-rate-limit", () => ({
+  checkDigivaultIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+  DIGIVAULT_RATE_LIMIT_MESSAGE: "rate limit exceeded — slow down a moment",
+}));
+
+vi.mock("@/lib/digivault-env", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/digivault-env")>("@/lib/digivault-env");
+  return {
+    ...actual,
+    resolveDigivaultEnv: vi.fn(actual.resolveDigivaultEnv),
+  };
+});
+
 vi.mock("@/lib/digigraph-upstream", () => ({
   resolveDigigraphUpstreamAuth: vi.fn(),
   DigigraphUpstreamAuthError: class DigigraphUpstreamAuthError extends Error {},
@@ -67,6 +84,9 @@ import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
 import { createFoundryStreamResponse } from "@/lib/foundry-stream";
+import { createDigivaultStreamResponse } from "@/lib/digivault-stream";
+import { checkDigivaultIpRateLimit } from "@/lib/digivault-ip-rate-limit";
+import { resolveDigivaultEnv, DigivaultEnvError } from "@/lib/digivault-env";
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { streamText } from "ai";
@@ -84,8 +104,11 @@ describe("POST /api/chat", () => {
     });
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkDigivaultIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     resetEmbedTrialQuotaForTests();
     vi.mocked(createFoundryStreamResponse).mockClear();
+    vi.mocked(createDigivaultStreamResponse).mockClear();
+    vi.mocked(resolveDigivaultEnv).mockReset();
   });
 
   afterEach(() => {
@@ -428,5 +451,88 @@ describe("external-relay embed tenants", () => {
 
     expect(res.status).toBe(429);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/chat digivault backend", () => {
+  const digivaultCtx = {
+    tenantSlug: "docs",
+    ownerUserSub: "embed:anonymous",
+    embedConfig: {
+      slug: "docs",
+      gateMode: "ungated",
+      theme: "dark",
+      attribution: true,
+      token: "tok",
+      backend: {
+        type: "digivault",
+        supabaseUrlEnv: "CORE_SUPABASE_URL",
+        supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
+        openRouterKeyEnv: "OPENROUTER_API_KEY",
+      },
+      activityDetail: "full",
+    },
+  };
+
+  function digivaultReq(): Request {
+    return new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-embed-host": "https://docs.example.com" },
+      body: JSON.stringify({
+        messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "ports?" }] }],
+      }),
+    });
+  }
+
+  beforeEach(() => {
+    process.env = { ...process.env, DIGICHAT_TRACE_UI: "0" };
+    vi.mocked(requireDigiChatAuth).mockResolvedValue(mockAuthCtx);
+    vi.mocked(resolveChatTenantContext).mockResolvedValue(digivaultCtx as never);
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkDigivaultIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(resolveDigivaultEnv).mockReturnValue({
+      supabaseUrl: "https://example.supabase.co",
+      supabaseAnonKey: "anon",
+      openRouterKey: "sk-or-pool",
+    });
+    vi.mocked(createDigivaultStreamResponse).mockClear();
+  });
+
+  it("routes digivault backend to createDigivaultStreamResponse", async () => {
+    const res = await POST(digivaultReq());
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("digivault");
+    expect(createDigivaultStreamResponse).toHaveBeenCalledTimes(1);
+    expect(createDigivaultStreamResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activityDetail: "full",
+        env: {
+          supabaseUrl: "https://example.supabase.co",
+          supabaseAnonKey: "anon",
+          openRouterKey: "sk-or-pool",
+        },
+      }),
+    );
+  });
+
+  it("returns 429 with digivault rate-limit wording", async () => {
+    vi.mocked(checkDigivaultIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 12 });
+    const res = await POST(digivaultReq());
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.message).toBe("rate limit exceeded — slow down a moment");
+    expect(res.headers.get("retry-after")).toBe("12");
+    expect(createDigivaultStreamResponse).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 when digivault env names are unresolved", async () => {
+    vi.mocked(resolveDigivaultEnv).mockImplementation(() => {
+      throw new DigivaultEnvError("digivault backend is not configured");
+    });
+    const res = await POST(digivaultReq());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "chat_not_configured" });
+    expect(createDigivaultStreamResponse).not.toHaveBeenCalled();
   });
 });

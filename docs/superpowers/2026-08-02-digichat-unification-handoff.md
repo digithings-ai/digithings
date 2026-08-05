@@ -43,12 +43,12 @@ richer data (`RagSourcesTrace`: source id, evidence tier, year, snippet; `Resear
 flat `chat`-operation span can currently express. Converting `chat-panel.tsx` needs the digigraph mapping
 extended first — see Phase 2 below.
 
-**Phase 2 — NOT STARTED.**
-**Phase 3 — NOT STARTED.**
+**Phase 2 — DESIGN WRITTEN (awaiting user review of the spec).** Spec:
+`docs/superpowers/specs/2026-08-05-digichat-phase2-unification-design.md`. Next: user review →
+`superpowers:writing-plans` → implement. Do not skip to code.
+**Phase 3 — NOT STARTED** (still needs brainstorming → design → plan).
 
-Neither has a spec yet. Both need `superpowers:brainstorming` → design → `superpowers:writing-plans` →
-`superpowers:subagent-driven-development`, the same process Phase 1 went through — don't skip straight to
-code. The scope below is a starting brief, not an approved design.
+The Phase 2 scope below is the pre-brainstorm brief; the written spec above is authoritative.
 
 ### Phase 2 scope (draft)
 

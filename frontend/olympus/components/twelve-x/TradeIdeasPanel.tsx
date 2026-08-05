@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { FxTradeIdeaRow, FxConfluenceSnapshotRow } from '@/lib/twelve-x/types';
+import { buildIdeaDetailModel } from '@/lib/twelve-x/trade-levels';
 import { useTwelveX } from './context';
 import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
@@ -35,13 +36,59 @@ function contributingDesks(citations: unknown[]): string[] {
   return [...new Set(citations.map(citationLabel).filter((v): v is string => !!v))];
 }
 
+function ProvenanceChip({ label }: { label: string }) {
+  return (
+    <span className="rounded border border-hair bg-surface/50 px-1 font-mono text-[10px] text-ink-mute">
+      {label}
+    </span>
+  );
+}
+
 function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
+  const { status, riskReward, levelRows, evidenceRows } = buildIdeaDetailModel(idea);
   const desks = contributingDesks(idea.citations);
+  const showLevels = levelRows.length > 0;
+  const showEvidence = evidenceRows.length > 0;
+
   return (
     <div className="mt-2 space-y-2 border-t border-hair pt-2 text-left">
       {idea.thesis ? <p className="text-xs leading-relaxed text-ink-soft">{idea.thesis}</p> : null}
       {idea.catalyst ? (
         <p className="text-[11px] text-ink-mute">Catalyst: {idea.catalyst}</p>
+      ) : null}
+      {showLevels ? (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-ink-soft">Levels</span>
+            {status && status !== 'complete' ? (
+              <span className="font-mono text-[10px] text-ink-mute">{status}</span>
+            ) : null}
+          </div>
+          {levelRows.map((row) => (
+            <div key={`${row.label}-${row.value}`} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+              <span className="text-ink-mute">{row.label}</span>
+              <span className="font-mono tabular-nums text-ink">{row.value}</span>
+              <ProvenanceChip label={row.chip} />
+            </div>
+          ))}
+          {riskReward != null ? (
+            <p className="font-mono text-[10px] text-ink-mute">R:R {riskReward}</p>
+          ) : null}
+        </div>
+      ) : null}
+      {showEvidence ? (
+        <div className="space-y-1">
+          <p className="text-[11px] text-ink-soft">Market evidence</p>
+          {evidenceRows.map((row) => (
+            <div
+              key={row.statement}
+              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]"
+            >
+              <span className={row.className}>{row.statement}</span>
+              <span className="font-mono text-[10px] text-ink-mute">{row.stance}</span>
+            </div>
+          ))}
+        </div>
       ) : null}
       {desks.length > 0 ? (
         <p className="text-[11px] text-ink-mute">
@@ -55,14 +102,21 @@ function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
 export default function TradeIdeasPanel({
   ideas,
   confluence,
+  highlightRanks,
 }: {
   ideas: FxTradeIdeaRow[];
   confluence: FxConfluenceSnapshotRow[];
+  highlightRanks?: ReadonlySet<number>;
 }) {
   const { crossLink } = useTwelveX();
   const [expanded, setExpanded] = useState(false);
   const [openRank, setOpenRank] = useState<number | null>(null);
   const toggleIdea = (rank: number) => setOpenRank((v) => (v === rank ? null : rank));
+
+  const highlightClass = (rank: number, base: string) =>
+    highlightRanks?.has(rank)
+      ? `${base} ring-2 ring-warn/50 ring-offset-1 ring-offset-surface`
+      : base;
 
   if (ideas.length === 0) {
     return (
@@ -96,7 +150,10 @@ export default function TradeIdeasPanel({
           must not read as green. Direction lives in its own colored label. */}
       <button
         type="button"
-        className="rounded-lg border border-accent/30 bg-accent/[0.06] p-4 text-left transition-colors hover:border-accent/50"
+        className={highlightClass(
+          top.rank,
+          'rounded-lg border border-accent/30 bg-accent/[0.06] p-4 text-left transition-colors hover:border-accent/50',
+        )}
         onClick={() => toggleIdea(top.rank)}
         aria-expanded={openRank === top.rank}
       >
@@ -121,7 +178,10 @@ export default function TradeIdeasPanel({
         <button
           key={`${idea.run_date}-${idea.rank}`}
           type="button"
-          className="rounded-md border border-hair px-3 py-2 text-left text-xs transition-colors hover:border-accent/50"
+          className={highlightClass(
+            idea.rank,
+            'rounded-md border border-hair px-3 py-2 text-left text-xs transition-colors hover:border-accent/50',
+          )}
           onClick={() => toggleIdea(idea.rank)}
           aria-expanded={openRank === idea.rank}
         >

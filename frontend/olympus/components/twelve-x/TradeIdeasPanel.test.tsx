@@ -33,6 +33,40 @@ const IDEAS: FxTradeIdeaRow[] = [
   },
 ];
 
+const LEVELS_IDEA: FxTradeIdeaRow = {
+  ...IDEAS[0],
+  trade_levels: {
+    entry_low: {
+      value: '1.15',
+      provenance: 'computed',
+      source_ref: 'computed:vol20@2026-07-31|k=1.5|rr=1.5',
+    },
+    entry_high: {
+      value: '1.16',
+      provenance: 'computed',
+      source_ref: 'computed:vol20@2026-07-31|k=1.5|rr=1.5',
+    },
+    stop: {
+      value: '1.14',
+      provenance: 'computed',
+      source_ref: 'computed:vol20@2026-07-31|k=1.5|rr=1.5',
+    },
+    targets: [{ value: '1.18', provenance: 'broker_quoted', source_ref: 'ING.pdf' }],
+    risk_reward: 1.5,
+    status: 'partial',
+  },
+  evidence: [
+    {
+      source_slug: 'dmx-overview',
+      instrument: 'USD/JPY',
+      as_of: '2026-08-01T00:00:00Z',
+      statement: 'Retail 78% long USD/JPY',
+      stance: 'contradicts',
+      snapshot_id: '00000000-0000-0000-0000-000000000002',
+    },
+  ],
+};
+
 function render(ideas: FxTradeIdeaRow[]): string {
   return renderToStaticMarkup(
     createElement(
@@ -71,5 +105,17 @@ describe('TradeIdeasPanel', () => {
     const html = render(IDEAS);
     expect(html).not.toContain('text-up');
     expect(html).not.toContain('text-down');
+  });
+
+  it('does not show levels/evidence while collapsed', () => {
+    const html = render([LEVELS_IDEA, IDEAS[1]]);
+    expect(html).not.toContain('ING target');
+    expect(html).not.toContain('Retail 78% long');
+  });
+
+  it('omits Levels header when trade_levels are empty', () => {
+    const html = render(IDEAS);
+    expect(html).not.toContain('Levels');
+    expect(html).not.toContain('Market evidence');
   });
 });

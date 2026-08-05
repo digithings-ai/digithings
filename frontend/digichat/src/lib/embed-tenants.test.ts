@@ -88,6 +88,69 @@ describe("parseEmbedTenants", () => {
     ).toThrow(/https/);
   });
 
+  it("accepts digivault backend with env-name refs", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "docs.example.com": {
+          slug: "docs",
+          token: "tok",
+          gateMode: "ungated",
+          theme: "dark",
+          attribution: true,
+          backend: {
+            type: "digivault",
+            supabaseUrlEnv: "CORE_SUPABASE_URL",
+            supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
+            openRouterKeyEnv: "OPENROUTER_API_KEY",
+          },
+        },
+      })
+    );
+    expect(reg.get("docs.example.com")?.backend).toEqual({
+      type: "digivault",
+      supabaseUrlEnv: "CORE_SUPABASE_URL",
+      supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
+      openRouterKeyEnv: "OPENROUTER_API_KEY",
+    });
+  });
+
+  it("rejects digivault env names that look like URLs or keys", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            token: "tok",
+            gateMode: "ungated",
+            backend: {
+              type: "digivault",
+              supabaseUrlEnv: "https://x.supabase.co",
+              supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
+              openRouterKeyEnv: "OPENROUTER_API_KEY",
+            },
+          },
+        })
+      )
+    ).toThrow(/env/i);
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            token: "tok",
+            gateMode: "ungated",
+            backend: {
+              type: "digivault",
+              supabaseUrlEnv: "CORE_SUPABASE_URL",
+              supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
+              openRouterKeyEnv: "sk-or-v1-abc",
+            },
+          },
+        })
+      )
+    ).toThrow(/env/i);
+  });
+
   it("parses a foundry backend", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({

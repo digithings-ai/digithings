@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any  # score:allow untyped any — used for fake-client payload dict shape
@@ -523,6 +524,53 @@ class TestContinuityLoaders:
         client = FakeSupabaseClient(canned_reads={"theses": rows})
         active = load_active_theses_rows(client, date(2026, 6, 19))
         assert [r["thesis_id"] for r in active] == ["shy-duration"]
+
+    def test_load_active_theses_rows_is_not_capped_across_dates(self) -> None:
+        """The register must not thin out as history accumulates (#1835).
+
+        The old shape was ``.order("date", desc=True).limit(row_cap)`` followed by a client-side
+        filter to the newest date present, so rows from OLDER dates consumed the cap and could
+        crowd out the date actually wanted. Here the newest date has 3 theses and the two older
+        dates have 40 between them, against ``row_cap=5`` — the old query would have returned
+        five rows all from 2026-06-18/17 ordering and yielded an arbitrary slice. The date is now
+        resolved first, so the cap applies to one date only.
+        """
+        newest = [
+            {"date": "2026-06-18", "thesis_id": f"live-{i}", "name": f"T{i}", "status": "ACTIVE"}
+            for i in range(3)
+        ]
+        older = [
+            {"date": "2026-06-17", "thesis_id": f"old-{i}", "name": f"O{i}", "status": "ACTIVE"}
+            for i in range(40)
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": newest + older})
+        active = load_active_theses_rows(client, date(2026, 6, 19), row_cap=5)
+        assert sorted(r["thesis_id"] for r in active) == ["live-0", "live-1", "live-2"]
+
+    def test_load_active_theses_rows_warns_when_it_hits_the_cap(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A truncated register admits the duplicate theses it exists to prevent, and the caller
+        cannot tell a complete register from a clipped one. So say so out loud."""
+        rows = [
+            {"date": "2026-06-18", "thesis_id": f"t-{i}", "name": f"T{i}", "status": "ACTIVE"}
+            for i in range(6)
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": rows})
+        with caplog.at_level(logging.WARNING):
+            load_active_theses_rows(client, date(2026, 6, 19), row_cap=3)
+        assert any("row_cap" in r.message for r in caplog.records)
+
+    def test_load_active_theses_rows_is_quiet_when_well_under_the_cap(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        rows = [
+            {"date": "2026-06-18", "thesis_id": "t-1", "name": "T1", "status": "ACTIVE"},
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": rows})
+        with caplog.at_level(logging.WARNING):
+            load_active_theses_rows(client, date(2026, 6, 19), row_cap=100)
+        assert not [r for r in caplog.records if "row_cap" in r.message]
 
     def test_load_portfolio_performance_snapshot(self) -> None:
         client = FakeSupabaseClient(

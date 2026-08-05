@@ -28,12 +28,43 @@ function ActivityRow({ activity }: { activity: DigiChatActivity }) {
               {activity.hits.map((h) => (
                 <li key={h.path}>
                   <span className="dc-act-hit-title">{h.title}</span>
+                  {h.tier ? <span className="dc-act-hit-tier">{h.tier}</span> : null}
+                  {typeof h.year === "number" ? (
+                    <span className="dc-act-hit-year">{h.year}</span>
+                  ) : null}
                   <span className="dc-act-hit-path">{h.path}</span>
+                  {h.snippet ? <p className="dc-act-hit-snippet">{h.snippet}</p> : null}
                 </li>
               ))}
             </ul>
           ) : null}
         </div>
+      );
+    case "brief":
+      return (
+        <details className="dc-act-brief">
+          <summary>research brief</summary>
+          {activity.themes.length > 0 ? (
+            <ul className="dc-act-brief-themes">
+              {activity.themes.map((t, i) => (
+                <li key={`${t.label}-${i}`}>
+                  <span className="dc-act-brief-label">{t.label}</span>
+                  {t.summary ? ` — ${t.summary}` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {activity.questions?.length ? (
+            <div className="dc-act-brief-questions">
+              <p className="dc-act-brief-q-heading">Next questions</p>
+              <ol>
+                {activity.questions.map((q, i) => (
+                  <li key={i}>{q}</li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
+        </details>
       );
     case "reasoning":
       return <ReasoningBlock text={activity.text} />;

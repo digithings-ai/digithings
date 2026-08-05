@@ -9,10 +9,23 @@ name: "Pipeline: Atlas metrics refresh"
 # Before this cron, these scripts ran nowhere, so portfolio_metrics +
 # position_attribution stayed empty in prod and the Performance / Attribution
 # dashboard tabs showed no data (post-audit fix, #786).
+#
+# SEVEN days a week since #1833. It was MON-SAT, but the book cron
+# (pipeline-olympus.yml, `0 12 * * *`) is daily — so a Sunday book was written and then never
+# enriched, keeping current_price / unrealized_pnl_pct / metrics_as_of NULL *permanently*
+# rather than until the next run. Measured in prod: both Sundays in the window (2026-07-26,
+# 2026-08-02) had 0 of N rows marked, while trading days had 8-11 of 9-12. The live-price
+# overlay (#1834) cannot cover it either — markets are closed, so prices_live has no fresh
+# quote and the badge correctly degrades to unavailable. Sunday was the one state with no path
+# to a number at all.
+#
+# A Sunday run marks the book at the last available close and records THAT date in
+# metrics_as_of, so the carry is visible rather than disguised as a Sunday close. See
+# refresh_performance_metrics.refresh_positions_metrics.
 
 on:
   schedule:
-    - cron: "0 22 * * MON-SAT"
+    - cron: "0 22 * * *"
   workflow_dispatch:
     inputs:
       date:
