@@ -69,7 +69,7 @@ Full rubric criteria: [`docs/scoring/`](docs/scoring/)
 - `make new-task` — Create a GitHub Issue for the agent backlog (agent-task label) (`scripts/create_issue.sh`)
 - `make status` — List open agent-task issues, filterable by component (`scripts/list_tasks.sh`)
 - `make task` — Execute a backlog task end-to-end in an isolated git worktree (`scripts/run_task.sh`)
-- `make parse-error` — Parse a Python stack trace and identify the DigiThings component (`scripts/parse_traceback.py`)
+- `make parse-error` — Parse a Python stack trace and identify the digithings component (`scripts/parse_traceback.py`)
 
 ---
 
@@ -84,7 +84,7 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 - `spec-writer` — Emits GitHub Issue bodies matching .github/ISSUE_TEMPLATE/agent_task.yml
 - `pr-reviewer` — Rubric-aware PR review mirroring docs/scoring/ dimensions
 - `test-first-implementer` — Red/green/refactor TDD loop bound to the component test command
-- `security-reviewer` — OWASP + DigiThings security sweep before auth/crypto PRs
+- `security-reviewer` — OWASP + digithings security sweep before auth/crypto PRs
 
 **Skills** (prompted workflows — invoke by name or when the trigger fits):
 

@@ -15,6 +15,7 @@ import { SubpageStickyTabBar, subpageTabButtonClass } from '@/components/subpage
 import PageSkeleton from '@/components/page-skeleton';
 import {
   computeConsensusDeltaSet,
+  getConsensusDivergence,
   getConsensusTimeSeries,
   getEventOpinions,
   getIntelligence,
@@ -32,6 +33,7 @@ import { isTwelveXConfigured } from '@/lib/twelve-x/supabase';
 import type {
   FxBriefRow,
   FxConfluenceSnapshotRow,
+  FxConsensusDivergence,
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
   FxEventSnapshotRow,
@@ -132,6 +134,7 @@ interface TwelveXData {
   todayBriefs: FxBriefRow[];
   todayEvents: FxEconomicCalendarRow[];
   researchBriefs: FxBriefRow[];
+  divergenceByCurrency: Record<string, FxConsensusDivergence>;
 }
 
 export function resolveTab(urlTab: string | null): TwelveXTab {
@@ -260,9 +263,14 @@ export default function TwelveXClient() {
           getIntelligenceWhy(intelRunDate),
         ]);
         const canonical = intelligence[0]?.run_date ?? digest?.run_date ?? null;
-        const [tradeIdeas, todayBriefs, todayEvents] = canonical
-          ? await Promise.all([getTradeIdeas(canonical), getTodayBriefs(canonical), getTodayEvents()])
-          : [[], [], await getTodayEvents()];
+        const [tradeIdeas, todayBriefs, todayEvents, divergenceByCurrency] = canonical
+          ? await Promise.all([
+              getTradeIdeas(canonical),
+              getTodayBriefs(canonical),
+              getTodayEvents(),
+              getConsensusDivergence(canonical),
+            ])
+          : [[], [], await getTodayEvents(), {}];
         if (cancelled) return;
         const latestConsensus = selectLatestCompleteConsensus(consensusSeries);
         setData({
@@ -278,6 +286,7 @@ export default function TwelveXClient() {
           todayBriefs,
           todayEvents,
           researchBriefs,
+          divergenceByCurrency,
         });
       } catch (err) {
         if (cancelled) return;
@@ -366,6 +375,7 @@ export default function TwelveXClient() {
             latest={data?.latestConsensus ?? []}
             latestDate={latestConsensusDate}
             deltas={consensusDeltas}
+            divergenceByCurrency={data?.divergenceByCurrency ?? {}}
             focusCcy={consensusFocusCcy}
             intelligenceWhy={data?.intelligenceWhy ?? { runDate: null, items: [] }}
             researchBriefs={data?.researchBriefs ?? []}
@@ -394,6 +404,7 @@ export default function TwelveXClient() {
             briefs={data?.todayBriefs ?? []}
             events={data?.todayEvents ?? []}
             series={data?.consensusSeries ?? []}
+            divergenceByCurrency={data?.divergenceByCurrency ?? {}}
             onSeeAllBriefs={openBriefsIndex}
           />
         );

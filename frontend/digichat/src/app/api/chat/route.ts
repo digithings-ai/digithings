@@ -15,6 +15,12 @@ import {
 import { createDigigraphTraceStreamResponse } from "@/lib/stream-digigraph-trace";
 import { createExternalRelayStreamResponse } from "@/lib/external-relay-stream";
 import { createFoundryStreamResponse } from "@/lib/foundry-stream";
+import { createDigivaultStreamResponse } from "@/lib/digivault-stream";
+import { resolveDigivaultEnv, DigivaultEnvError } from "@/lib/digivault-env";
+import {
+  checkDigivaultIpRateLimit,
+  DIGIVAULT_RATE_LIMIT_MESSAGE,
+} from "@/lib/digivault-ip-rate-limit";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
@@ -160,6 +166,7 @@ export async function POST(req: Request) {
       messages,
       conversationId: req.headers.get("x-external-conversation"),
       responseHeaders,
+      activityDetail: embedConfig.activityDetail,
       signal: req.signal,
     });
   }
@@ -171,6 +178,38 @@ export async function POST(req: Request) {
       messages,
       conversationId: req.headers.get("x-external-conversation"),
       responseHeaders,
+      activityDetail: embedConfig.activityDetail,
+      signal: req.signal,
+    });
+  }
+
+  if (embedConfig?.backend.type === "digivault") {
+    const ip = clientIpForRateLimit(req);
+    const rl = checkDigivaultIpRateLimit(ip);
+    if (!rl.allowed) {
+      return rateLimitResponse(DIGIVAULT_RATE_LIMIT_MESSAGE, rl.retryAfterSec);
+    }
+    let digivaultEnv;
+    try {
+      digivaultEnv = resolveDigivaultEnv(embedConfig.backend);
+    } catch (e) {
+      if (e instanceof DigivaultEnvError) {
+        console.error("[digivault] env resolution failed");
+        return new Response(JSON.stringify({ error: "chat_not_configured" }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw e;
+    }
+    return createDigivaultStreamResponse({
+      messages,
+      env: digivaultEnv,
+      responseHeaders,
+      activityDetail: embedConfig.activityDetail,
+      byokKey: byokKey || undefined,
+      byokProvider: byokProvider || undefined,
+      byokModel: byokModel || undefined,
       signal: req.signal,
     });
   }
@@ -183,7 +222,7 @@ export async function POST(req: Request) {
     }) as Omit<UIMessage, "id">[]
   );
 
-  // OpenRouter BYOK requires a model slug before forwarding to DigiGraph.
+  // OpenRouter BYOK requires a model slug before forwarding to digigraph.
   if (byokKey && byokProvider === "openrouter" && !byokModel) {
     return new Response(
       JSON.stringify({
@@ -229,7 +268,7 @@ export async function POST(req: Request) {
     upstreamHeaders["X-LiteLLM-Proxy-Key"] = litellmProxyApiKey;
   }
 
-  // BYOK: forward per-request key to DigiGraph; never log or persist.
+  // BYOK: forward per-request key to digigraph; never log or persist.
   if (byokKey) {
     upstreamHeaders["X-BYOK-Key"] = byokKey;
     if (byokProvider) {
@@ -251,6 +290,7 @@ export async function POST(req: Request) {
       upstreamHeaders,
       responseHeaders,
       upstreamBearer,
+      activityDetail: embedConfig?.activityDetail ?? "full",
     });
   }
 

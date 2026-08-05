@@ -26,6 +26,10 @@ jobs:
       digiquant: ${{ steps.filter.outputs.digiquant }}
       digisearch: ${{ steps.filter.outputs.digisearch }}
       digigraph: ${{ steps.filter.outputs.digigraph }}
+      # Added by hand (#1788): generate_ci_path_filters.py only rewrites the
+      # block between the CI_PATH_FILTERS markers below, not this outputs map.
+      digillm: ${{ steps.filter.outputs.digillm }}
+      digifetch: ${{ steps.filter.outputs.digifetch }}
       digichat: ${{ steps.filter.outputs.digichat }}
       olympus: ${{ steps.filter.outputs.olympus }}
       web: ${{ steps.filter.outputs.web }}
@@ -34,6 +38,7 @@ jobs:
       nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
       atlas_graph: ${{ steps.filter.outputs.atlas_graph }}
       ruff_and_scripts: ${{ steps.filter.outputs.ruff_and_scripts }}
+      workflows: ${{ steps.filter.outputs.workflows }}
       compose: ${{ steps.filter.outputs.compose }}
       pip_audit: ${{ steps.filter.outputs.pip_audit }}
     steps:
@@ -67,6 +72,7 @@ jobs:
               - 'digiquant/**'
               - 'tests/dq/**'
               - '.github/workflows/test-digiquant.yml'
+              - 'frontend/digiquant-web/lib/live/**'
             digisearch:
               - 'digisearch/**'
               - 'tests/ds/**'
@@ -75,6 +81,12 @@ jobs:
               - 'digigraph/**'
               - 'tests/dg/**'
               - '.github/workflows/test-digigraph.yml'
+            digillm:
+              - 'digillm/**'
+              - '.github/workflows/test-digillm.yml'
+            digifetch:
+              - 'digifetch/**'
+              - '.github/workflows/test-digifetch.yml'
             digichat:
               - 'frontend/digichat/**'
               - 'frontend/digiweb/design/**'
@@ -133,6 +145,7 @@ jobs:
               - 'digiquant/scripts/atlas/**'
               - 'digiquant/supabase/**'
               - 'tests/dq/atlas/**'
+              - 'digiquant/src/digiquant/olympus/edit_mode/**'
               - 'digiquant/src/digiquant/olympus/hermes/**'
               - 'digiquant/src/digiquant/olympus/learning/**'
               - 'tests/dq/hermes/**'
@@ -153,6 +166,12 @@ jobs:
               - 'agents/**'
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
+              - '.github/workflows/pipeline-digiquant-prices.yml'
+              - '.github/workflows/db-migrate.yml'
+              - '.github/workflows/pipeline-olympus.yml'
+            workflows:
+              - '.github/workflows/**'
+              - '.github/actionlint.yaml'
             compose:
               - 'docker-compose.yml'
               - '.env.example'
@@ -224,6 +243,20 @@ jobs:
     needs: changes
     if: needs.changes.outputs.digigraph == 'true'
     uses: ./.github/workflows/test-digigraph.yml
+
+  # digillm and digifetch (#1788). Both suites ran in no lane before this — and
+  # a combined `pytest` could not even collect them, because their tests/
+  # directories carried an __init__.py that claimed the repo-root `tests` package
+  # name. The __init__.py files are gone; these two jobs are the CI half.
+  digillm:
+    needs: changes
+    if: needs.changes.outputs.digillm == 'true'
+    uses: ./.github/workflows/test-digillm.yml
+
+  digifetch:
+    needs: changes
+    if: needs.changes.outputs.digifetch == 'true'
+    uses: ./.github/workflows/test-digifetch.yml
 
   digichat:
     needs: changes
@@ -325,6 +358,123 @@ jobs:
         # the Polars-only rule. Left as-is here because fixing it is a digiquant
         # code change, not a dependency-management one — tracked separately.
         run: bash scripts/check_pandas_boundary.sh
+
+  # ── GitHub Actions workflow lint (repo-wide) ────────────────────────────────
+  # Gated on `.github/workflows/**`, so it fires on any workflow edit — including
+  # edits to ci.yml itself. The predecessor was a job inside test-atlas-graph.yml
+  # with `files: ".github/workflows/pipeline-olympus.yml"`, invoked only from the
+  # atlas_graph lane; a workflow-only PR skipped that lane entirely and got no
+  # actionlint at all. Suppressions live in .github/actionlint.yaml.
+  actionlint:
+    name: actionlint
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      # actionlint shells out to shellcheck for every `run:` block, so shellcheck
+      # is half this gate's rule set and its version is part of the gate's
+      # contract. Left to the action, it takes whatever `apt-get install
+      # shellcheck` yields on the runner image — which is how this job first went
+      # red: the image's 0.9.x reported SC2002 + SC2015 ×4 that 0.11.0 dropped
+      # after upstream relaxed both. Unpinned tool, output gates CI, verdict
+      # changes under an unchanged tree: CLAUDE.md § "Dependency version bounds".
+      # 0.11.0 is also what `brew install shellcheck` gives, so local == CI.
+      # (Those 5 findings were fixed, not pinned away — see this PR's diff.)
+      SHELLCHECK_VERSION: "0.11.0"
+      # sha256 of shellcheck-v<version>.linux.x86_64.tar.xz. Recompute on bump.
+      SHELLCHECK_SHA256: "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same pinned-tarball + checksum pattern as security-gitleaks.yml. Putting
+      # shellcheck on PATH here makes the action's own `which shellcheck` probe
+      # succeed, so it skips the apt install entirely.
+      - name: Install shellcheck (pinned release tarball)
+        run: |
+          set -euo pipefail
+          url="https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          curl -fsSL -o /tmp/shellcheck.tar.xz "$url"
+          actual="$(sha256sum /tmp/shellcheck.tar.xz | awk '{print $1}')"
+          if [ "$actual" != "$SHELLCHECK_SHA256" ]; then
+            echo "checksum mismatch: expected $SHELLCHECK_SHA256 got $actual" >&2
+            exit 1
+          fi
+          tar -xJf /tmp/shellcheck.tar.xz -C /tmp "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          sudo install -m 755 "/tmp/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version
+
+      - name: Run actionlint
+        id: actionlint
+        uses: raven-actions/actionlint@v2
+        with:
+          # No `files:` input — actionlint with no path arguments discovers and
+          # lints every workflow under .github/workflows. Re-pinning it to a
+          # single file is what this job exists to undo.
+          #
+          # `version` is pinned rather than left at `latest` because actionlint
+          # SILENTLY IGNORES config keys it does not recognise: on a build
+          # without `paths:` support, .github/actionlint.yaml would be accepted
+          # and applied as nothing, and this job would go red with ~43 findings
+          # and no diagnostic. Bumping it is a deliberate PR, same rule as the
+          # ruff/mypy/pytest bounds in CLAUDE.md § "Dependency version bounds".
+          version: "1.7.12"
+          # shellcheck + pyflakes default to true. 39 of the 43 findings this job
+          # first surfaced came from the shellcheck integration, so it is
+          # load-bearing — and the step above pins the binary it calls.
+
+      - name: Assert every workflow was linted
+        env:
+          LINTED: ${{ steps.actionlint.outputs.total-files }}
+        # Coverage guard. A lint that quietly narrows its own scope reads exactly
+        # like a passing one — which is how the single-file pin above survived.
+        # `total-files` is parsed by the action from actionlint's own verbose
+        # summary, so this compares what ran against what is on disk.
+        run: |
+          set -euo pipefail
+          ON_DISK=$(find .github/workflows -maxdepth 1 \( -name '*.yml' -o -name '*.yaml' \) | wc -l)
+          echo "actionlint linted ${LINTED:-0} file(s); ${ON_DISK} workflow file(s) on disk."
+          if [ "${LINTED:-0}" -lt "${ON_DISK}" ]; then
+            echo "::error::actionlint covered ${LINTED:-0} of ${ON_DISK} workflow files — scope regression."
+            exit 1
+          fi
+
+      - name: Assert SC2129 is live
+        # The step above counts files, not rules. SC2129 was un-suppressed once
+        # every repeated `>> "$GITHUB_OUTPUT"` was grouped, so it is now the only
+        # thing keeping that convention — and a rule that stops firing leaves a
+        # green build indistinguishable from one that checked. Two ways it can go
+        # dormant, one probe each. Same coverage-guard reasoning as above.
+        run: |
+          set -euo pipefail
+
+          # 1. Does the pinned shellcheck still emit SC2129? Upstream has relaxed
+          #    checks before — 0.11.0 dropped the SC2002/SC2015 this job first
+          #    went red on — so a bump could silently retire this one too.
+          printf '%s\n' \
+            '#!/usr/bin/env bash' \
+            'echo a >> /tmp/sc2129-target' \
+            'echo b >> /tmp/sc2129-target' \
+            'echo c >> /tmp/sc2129-target' > /tmp/sc2129-canary.sh
+          # Capture before grepping: shellcheck exits non-zero *because* it found
+          # the finding, and under `pipefail` that failure would propagate out of
+          # `shellcheck | grep` and read as "rule dormant" on a healthy rule.
+          CANARY_OUT=$(shellcheck -f gcc /tmp/sc2129-canary.sh 2>&1 || true)
+          if ! grep -q SC2129 <<<"$CANARY_OUT"; then
+            echo "::error::shellcheck ${SHELLCHECK_VERSION} no longer reports SC2129 — the rule is dormant and the grouping convention is unenforced. Re-check it before accepting the bump."
+            exit 1
+          fi
+          echo "shellcheck ${SHELLCHECK_VERSION} reports SC2129 on the canary — rule is live."
+
+          # 2. Has the ignore been re-added? Prose mentioning SC2129 is fine; an
+          #    actual list entry is not.
+          if grep -Eq "^[[:space:]]*-[[:space:]]*'shellcheck reported issue in this script: SC2129:" .github/actionlint.yaml; then
+            echo "::error::SC2129 is suppressed again in .github/actionlint.yaml. Group the appends into a single { ... } >> \"\$GITHUB_OUTPUT\" block instead of re-adding the ignore."
+            exit 1
+          fi
+          echo "no SC2129 entry in .github/actionlint.yaml — rule is enforced."
 
   # ── Request Copilot PR review (Tier 1 primary reviewer) — REM-098 ───────────
   # Single PR review path: this job only (no copilot-pr-review.yml). Issue dispatch

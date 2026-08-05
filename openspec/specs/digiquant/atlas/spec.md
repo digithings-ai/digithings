@@ -1,4 +1,4 @@
-# DigiQuant / Atlas — Spec
+# digiquant / Atlas — Spec
 
 **Sub-graph of digiquant (port 8001)**  
 **Role:** Portfolio management, strategy optimization, and backtest orchestration sub-graph.

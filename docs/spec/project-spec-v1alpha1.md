@@ -7,7 +7,7 @@
 
 ## Overview
 
-A *DigiProject* is a self-contained deployment of the DigiThings stack customised for a specific use-case (tenant, domain, or product). The project YAML (`config.yaml` or `digiproject.yaml`) is the single source of truth for all runtime tunables that differ from the defaults.
+A *DigiProject* is a self-contained deployment of the digithings stack customised for a specific use-case (tenant, domain, or product). The project YAML (`config.yaml` or `digiproject.yaml`) is the single source of truth for all runtime tunables that differ from the defaults.
 
 The spec is intentionally minimal for Phase 1: every field is optional, and every default produces a valid (if uncustomised) deployment.
 
@@ -15,7 +15,7 @@ The spec is intentionally minimal for Phase 1: every field is optional, and ever
 
 ## Loading
 
-DigiGraph loads the project config from:
+digigraph loads the project config from:
 
 1. `DIGI_PROJECT_CONFIG` env var (absolute path or path relative to the working directory)
 2. Fallback: `config/digi_project.yaml` in the working directory
@@ -49,7 +49,7 @@ agents:
   research_system_prompt: |
     # Custom system prompt for the research node.
     # Replaces the default quant-extraction prompt.
-    # When set, the node runs in document-mode RAG (tool loop + DigiSearch).
+    # When set, the node runs in document-mode RAG (tool loop + digisearch).
     # When omitted, quant strategy extraction is used.
 
 run_data_dir: string      # Absolute path to session dataset storage (default: null — disables Digistore).
@@ -60,7 +60,7 @@ run_data_dir: string      # Absolute path to session dataset storage (default: n
                           #   data_engineer_agent (+ DIGI_ALLOW_CODE_EXEC=1 for data_engineer).
 
 indexes_dir: string       # Directory of index *.yaml files (default: null — no indexes).
-                          # Each file becomes one DigiSearch index tool.
+                          # Each file becomes one digisearch index tool.
                           # Path is relative to DIGI_PROJECT_CONFIG's parent directory.
 
 mcp:
@@ -70,9 +70,9 @@ mcp:
     - digigraph_workflow
 
 services:
-  digisearch_url: string  # DigiSearch base URL (default: env DIGISEARCH_URL)
+  digisearch_url: string  # digisearch base URL (default: env DIGISEARCH_URL)
   litellm_url: string     # LiteLLM / LLM proxy URL (default: env OPENAI_API_BASE)
-  digiquant_url: string   # DigiQuant base URL (default: env DIGIQUANT_URL)
+  digiquant_url: string   # digiquant base URL (default: env DIGIQUANT_URL)
 ```
 
 ---
@@ -145,7 +145,7 @@ services:
 | `mcp.enabled` | — | YAML only |
 | `indexes_dir` | — | YAML only |
 
-DigiGraph reads the project config on every request (cached by mtime). No restart required for non-secret field changes.
+digigraph reads the project config on every request (cached by mtime). No restart required for non-secret field changes.
 
 ---
 
@@ -155,7 +155,7 @@ DigiGraph reads the project config on every request (cached by mtime). No restar
 |---|---|---|
 | Custom research prompt (document RAG) | Set `agents.research_system_prompt` | Remove field → quant mode |
 | Digistore + delegate tools | Set `run_data_dir` | Remove field or set to `null` |
-| DigiSearch tool | Set `DIGISEARCH_URL` | Unset env var |
+| digisearch tool | Set `DIGISEARCH_URL` | Unset env var |
 | Code execution (`data_engineer_agent`) | `run_data_dir` + `DIGI_ALLOW_CODE_EXEC=1` | Remove env var |
 | MCP server | `mcp.enabled: true` | `mcp.enabled: false` or remove |
 | Specific tools only | `agents.allowed_tools: [...]` | Remove field → all tools available |
@@ -207,7 +207,7 @@ destination.
 # projects/sitaas/config.yaml (gitignored — local only)
 project:
   name: sitas
-  description: "Sitaas: orchestration agent with DigiSearch document context."
+  description: "Sitaas: orchestration agent with digisearch document context."
   version: "0.1.0"
 
 agents:

@@ -9,12 +9,15 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any
 
 import click
 import polars as pl
+
+# Module-level so `patch("digiquant.cli.prices._fetch_trading_days", ...)` keeps working;
+# `_utils` pulls only stdlib + polars, both already imported here, so it costs nothing.
+from digiquant.data.prices._utils import fetch_trading_days as _fetch_trading_days
 
 _logger = logging.getLogger(__name__)
 
@@ -29,50 +32,38 @@ def prices() -> None:
     """Price / technicals / macro pipeline (migrated from Atlas scripts)."""
 
 
-# ─── Trading-calendar helpers ─────────────────────────────────────────────
+# ─── Shared helpers ───────────────────────────────────────────────────────
 
 
-def _fetch_trading_days(client: Any, venue: str, *, page_size: int = 1000) -> pl.Series | None:
-    """Fetch all trading days for ``venue`` from the ``trading_calendar`` table.
-
-    Returns a :class:`polars.Series` of :class:`datetime.date` values for rows
-    where ``is_trading_day=True``, or ``None`` on error.  Paginates automatically
-    so callers are not limited by Supabase's default 1 000-row cap.
-
-    ``page_size`` must be <= PostgREST's max-rows cap (1 000). A larger value
-    silently returns only the first 1 000 rows, so ``len(batch) < page_size``
-    is true on page 1 and pagination stops after one page — which previously
-    yielded only the *oldest* 1 000 days and dropped every recent session from
-    the technicals trading-day filter. ``.order("date")`` makes paging
-    deterministic.
-    """
-    all_dates: list[date] = []
-    offset = 0
+def _parse_iso_option(value: str | None, flag: str) -> date | None:
+    """Parse an optional ISO-date CLI option, surfacing a UsageError (not a traceback)."""
+    if value is None or not value.strip():
+        return None
     try:
-        while True:
-            resp = (
-                client.table("trading_calendar")
-                .select("date")
-                .eq("venue", venue)
-                .eq("is_trading_day", True)
-                .order("date")
-                .range(offset, offset + page_size - 1)
-                .execute()
-            )
-            batch = resp.data or []
-            for row in batch:
-                raw = row.get("date")
-                if raw:
-                    all_dates.append(date.fromisoformat(str(raw)[:10]))
-            if len(batch) < page_size:
-                break
-            offset += page_size
-    except Exception as exc:
-        _logger.warning("trading_calendar query failed for venue %s: %s", venue, exc)
-        return None
-    if not all_dates:
-        return None
-    return pl.Series("trading_days", all_dates)
+        return date.fromisoformat(value.strip())
+    except ValueError as exc:
+        raise click.UsageError(f"{flag} must be ISO YYYY-MM-DD ({exc})") from exc
+
+
+def _resolve_universe(tickers: str, watchlist: Path | None, include_sectors: bool) -> list[str]:
+    """Shared universe resolution for the Supabase-sourced commands."""
+    from digiquant.data.prices.fetchers import parse_watchlist
+
+    if tickers:
+        universe = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    elif watchlist:
+        universe = parse_watchlist(watchlist)
+    else:
+        raise click.UsageError("Provide --watchlist or --tickers.")
+    if include_sectors:
+        from digiquant.olympus.atlas.sectors_config import sector_universe
+
+        present = {t.upper() for t in universe}
+        for ticker in sector_universe():
+            if ticker not in present:
+                present.add(ticker)
+                universe.append(ticker)
+    return universe
 
 
 # ─── fetch-quotes ────────────────────────────────────────────────────────
@@ -117,7 +108,6 @@ def fetch_quotes_cmd(
     include_sectors: bool,
 ) -> None:
     """Fetch latest OHLCV for watchlist tickers, update cache, optionally upsert."""
-    from digiquant.data.prices.fetchers import parse_watchlist
     from digiquant.data.prices.history_cache import incremental_update
     from digiquant.data.prices.supabase_writer import (
         build_supabase_client,
@@ -126,21 +116,7 @@ def fetch_quotes_cmd(
         upsert_price_history,
     )
 
-    if tickers:
-        universe = [t.strip().upper() for t in tickers.split(",") if t.strip()]
-    elif watchlist:
-        universe = parse_watchlist(watchlist)
-    else:
-        raise click.UsageError("Provide --watchlist or --tickers.")
-
-    if include_sectors:
-        from digiquant.olympus.atlas.sectors_config import sector_universe
-
-        present = {t.upper() for t in universe}
-        for ticker in sector_universe():
-            if ticker not in present:
-                present.add(ticker)
-                universe.append(ticker)
+    universe = _resolve_universe(tickers, watchlist, include_sectors)
 
     click.echo(f"fetch-quotes: {len(universe)} tickers | dry_run={dry_run}")
     frames = incremental_update(universe, cache_dir=cache_dir, bulk_period=period, dry_run=dry_run)
@@ -326,6 +302,107 @@ def compute_technicals_cmd(
             click.echo(f"  warning: upsert skipped — {exc}", err=True)
     if supabase and not dry_run:
         click.echo(f"  upserted {total} rows into price_technicals")
+
+
+# ─── recompute-technicals ────────────────────────────────────────────────
+
+
+@prices.command("recompute-technicals")
+@click.option("--tickers", type=str, default="", help="Comma-separated tickers.")
+@click.option(
+    "--watchlist",
+    type=click.Path(path_type=Path, exists=True),
+    required=False,
+    help="Path to watchlist.md (used when --tickers is empty).",
+)
+@click.option(
+    "--include-sectors",
+    is_flag=True,
+    help="Union the sector config's ETF + single-name tickers into the universe.",
+)
+@click.option(
+    "--as-of",
+    "as_of",
+    type=str,
+    default=None,
+    help="ISO upper bound on the OHLCV read (default: today UTC). Look-ahead guard.",
+)
+@click.option(
+    "--since",
+    type=str,
+    default=None,
+    help=(
+        "ISO earliest date to WRITE. Earlier rows are read as indicator warm-up but never "
+        "upserted. Default: as-of minus 30 days."
+    ),
+)
+@click.option(
+    "--warmup-days",
+    type=int,
+    default=None,
+    help="Calendar days of extra history read before --since (default: 320, ≈200 sessions).",
+)
+@click.option("--dry-run", is_flag=True, help="Compute and report; skip the upsert.")
+def recompute_technicals_cmd(
+    tickers: str,
+    watchlist: Path | None,
+    include_sectors: bool,
+    as_of: str | None,
+    since: str | None,
+    warmup_days: int | None,
+    dry_run: bool,
+) -> None:
+    """Recompute price_technicals from Supabase price_history — no network fetch.
+
+    The repair path for #1752: ``compute-technicals`` derives indicators from an ephemeral
+    CSV cache and rewrites that whole window, so its ~200-bar warm-up prefix overwrites
+    valid long-window values with NULL. This command reads the *full* stored history, so
+    every row it writes carries a real warm-up behind it.
+
+    ``--since`` bounds the **write**, not the read. Repairing a long span is one big
+    transaction-free upsert stream — run ``--dry-run`` first and window the span.
+    """
+    from digiquant.data.prices.refresh import (
+        DEFAULT_WRITE_WINDOW_DAYS,
+        WARMUP_CALENDAR_DAYS,
+        recompute_technicals_from_history,
+    )
+    from digiquant.data.prices.supabase_writer import build_supabase_client
+
+    universe = _resolve_universe(tickers, watchlist, include_sectors)
+    as_of_d = _parse_iso_option(as_of, "--as-of") or datetime.now(UTC).date()
+    since_d = _parse_iso_option(since, "--since")
+    if since_d is not None and since_d > as_of_d:
+        raise click.UsageError(f"--since ({since_d}) must be on or before --as-of ({as_of_d})")
+
+    client = build_supabase_client(
+        os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL")),
+        os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY")),
+    )
+    if client is None:
+        raise click.ClickException("Supabase credentials not set.")
+
+    write_from = since_d or (as_of_d - timedelta(days=DEFAULT_WRITE_WINDOW_DAYS))
+    click.echo(
+        f"recompute-technicals: {len(universe)} tickers | write {write_from}..{as_of_d} "
+        f"| dry_run={dry_run}"
+    )
+    result = recompute_technicals_from_history(
+        client=client,
+        tickers=universe,
+        as_of=as_of_d,
+        since=since_d,
+        warmup_days=WARMUP_CALENDAR_DAYS if warmup_days is None else warmup_days,
+        dry_run=dry_run,
+    )
+    click.echo(
+        f"  read {result.history_rows_read} OHLCV bars "
+        f"(dropped {result.non_trading_rows_dropped} non-session)"
+    )
+    click.echo(
+        f"  {result.tickers_processed}/{len(universe)} tickers → {result.rows_computed} rows"
+    )
+    click.echo(f"  upserted {result.rows_upserted} rows into price_technicals")
 
 
 # ─── fetch-macro ─────────────────────────────────────────────────────────

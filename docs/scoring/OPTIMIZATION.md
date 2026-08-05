@@ -19,7 +19,7 @@ Score one point per criterion you fully satisfy. This rubric has a lower bar tha
 | 7 | **No synchronous blocking in async routes** — FastAPI route handlers do not call `time.sleep()`, synchronous file I/O, or synchronous DB operations; use `asyncio.sleep`, `aiofiles`, async DB clients | 1 | Search diff for `time.sleep`, `open(` in `async def` route handlers | Use `asyncio.to_thread()` for unavoidable blocking calls |
 | 8 | **Token efficiency** — New prompt templates use the minimum context needed; no raw document bodies in prompts (use `ResearchBrief` summaries, chunk previews, or tool results); avoids repeating system prompt on every turn | 1 | Estimate token count of any new prompt vs the content's actual information density | Summarize or filter before injection; use structured outputs to reduce round trips |
 | 9 | **Result caching where stable** — Expensive deterministic operations (e.g. strategy manifest fetch, JWKS fetch) are cached in-process or via LiteLLM; cache invalidation is explicit | 1 | Look for repeated `requests.get(DIGIKEY_JWKS_URL)` or `POST /v1/orchestrator_tools` in loops | Cache with `functools.lru_cache` or a TTL dict; existing JWKS caching is the pattern |
-| 10 | **Backtest performance target maintained** — Changes to DigiQuant data loading or strategy execution do not degrade the 10M-row < 2s backtest target; if uncertain, run a benchmark | 1 | Run `digiquant backtest -s ema_cross -S BTC-USD -d data/BTC-USD.csv` and check elapsed time | Profile with `py-spy` or `cProfile`; revert Polars to lazy mode; avoid Python loops over rows |
+| 10 | **Backtest performance target maintained** — Changes to digiquant data loading or strategy execution do not degrade the 10M-row < 2s backtest target; if uncertain, run a benchmark | 1 | Run `digiquant backtest -s ema_cross -S BTC-USD -d data/BTC-USD.csv` and check elapsed time | Profile with `py-spy` or `cProfile`; revert Polars to lazy mode; avoid Python loops over rows |
 
 ---
 
@@ -50,5 +50,5 @@ for chunk in chunks:
 
 ## Notes
 
-- Criterion 10 only applies to DigiQuant changes. For other components, score it 1 automatically.
+- Criterion 10 only applies to digiquant changes. For other components, score it 1 automatically.
 - Criterion 8 is subjective — use judgment. "Minimum context needed" means no full 50-page document in a prompt when a 500-char summary suffices.

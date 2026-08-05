@@ -7,7 +7,7 @@
  * (equity with log/linear toggle, drawdown, dual-axis per-trade & cumulative
  * P&L — all sharing one zoom/pan time window), a returns heatmap, and the trade
  * log. "Download PDF" opens the system print dialog with a light-mode,
- * full-span export layout (all charts and tables, DigiQuant branding).
+ * full-span export layout (all charts and tables, digiquant branding).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -22,6 +22,7 @@ import {
   PRINT_FULL_VIEW,
   ReturnsMatrix,
   SegToggle,
+  TerminalMark,
   TimeSeries,
   TradeLogTable,
   TradeReturnChart,
@@ -212,7 +213,7 @@ export function TearsheetView({ slug }: { slug: string }) {
       printTitleRef.current = document.title;
       document.documentElement.setAttribute("data-theme", "light");
       document.documentElement.classList.add("ts-printing");
-      document.title = `${sheetTitle} — DigiQuant`;
+      document.title = `${sheetTitle} — digiquant`;
       setPrinting(true);
     };
     const onAfterPrint = () => {
@@ -289,7 +290,7 @@ export function TearsheetView({ slug }: { slug: string }) {
   const chartScale = printing ? "linear" : scale;
 
   const handlePrint = () => {
-    runTearsheetPrint({ documentTitle: `${title} — DigiQuant`, setPrinting });
+    runTearsheetPrint({ documentTitle: `${title} — digiquant`, setPrinting });
   };
 
   const zoomed = !viewsNear(view, presetView);
@@ -344,7 +345,10 @@ export function TearsheetView({ slug }: { slug: string }) {
   return (
     <div className="ts-print-root">
       <div className="ts-print-brand" aria-hidden="true">
-        <img src="/favicon-qr-mark-dark.svg" alt="" width={22} height={22} className="ts-print-brand-mark" />
+        {/* The mark, not an <img>: the old QR tile was hardcoded to the dark
+            variant with no theme switch, so it printed a black square. In
+            currentColor it follows the print ink like the word beside it. */}
+        <TerminalMark size={22} variant="compact" className="ts-print-brand-mark" />
         <span className="ts-print-brand-word">digiquant</span>
         <a className="ts-print-brand-link" href="https://digiquant.io">digiquant.io</a>
       </div>

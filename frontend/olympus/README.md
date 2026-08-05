@@ -1,6 +1,6 @@
 # Olympus dashboard
 
-Next.js 15 investment-intelligence dashboard for **DigiQuant Olympus** — the unified product surfacing both Atlas (research) and Hermes (analysis + PM). Joins the root npm workspace at `frontend/olympus/` and consumes the shared design system via
+Next.js 15 investment-intelligence dashboard for **digiquant Olympus** — the unified product surfacing both Atlas (research) and Hermes (analysis + PM). Joins the root npm workspace at `frontend/olympus/` and consumes the shared design system via
 `@digithings/design` as a workspace dependency.
 
 ## Quant-native visual layer
@@ -25,7 +25,7 @@ latest rolling position decomposition and the resolved-decision calibration
 scorecard. Olympus keeps its finance-tearsheet variants and shell print rules
 app-side at the bottom of `globals.css`.
 
-The root layout scopes the page to the DigiQuant accent and blueprint
+The root layout scopes the page to the digiquant accent and blueprint
 background:
 
 ```tsx
@@ -90,7 +90,7 @@ primitive instead of hand-rolling sort state.
 
 ### Portfolio workspace grammar
 
-The Portfolio routes follow DigiWeb's canonical `PortfolioWorkspaceReference`:
+The Portfolio routes follow digiweb's canonical `PortfolioWorkspaceReference`:
 one flat command band establishes book or dossier state, then hairline-divided
 ledgers carry positions, activity, research, and decision history. Holdings owns
 an exposure command band plus switchable position/activity ledgers; Theses uses
@@ -134,6 +134,17 @@ would never apply in production (#674).
 The dashboard CSP is scoped to `/olympus*`; landing pages keep Google Fonts working.
 Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
 
+**Deploy freshness (#1759):** `scripts/write-build-info.sh` writes
+`dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) into the
+export root on every build. A Cloudflare Pages project that stops producing
+deployments keeps serving the last good build with a 200 and no `last-modified`
+header, so the asset probes in `smoke-site.yml` pass throughout a deploy freeze.
+The `freshness` job in that workflow reads the live stamp through
+`scripts/check_deploy_freshness.py` and fails when it is missing or older than 7
+days. Why the *cause* of a freeze is not detectable here: Pages' deployment list,
+build log, production branch and watch-path config are visible only in the
+Cloudflare dashboard.
+
 ## Running
 
 ```bash
@@ -162,11 +173,20 @@ builds (`CF_PAGES=1`) both vars are **required** — `scripts/build-digiquant.sh
 aborts rather than shipping a bundle whose every page shows the unconfigured
 error (#674).
 
-**Thesis detail routes:** `/portfolio/theses/[thesisId]` is statically exported, so
-only ids returned by `lib/thesis-static-params.ts` get HTML files. With Supabase env
-present at build time the real ids are fetched from the `theses` table; without it
-only the `_unlinked` fallback is exported. Theses created after a deploy 404 on
-direct load until the next deploy.
+**Thesis detail routes (#1760):** a thesis detail view is `/portfolio/theses?thesis=<id>`
+— one statically exported page that reads the id from the query string at runtime.
+It replaced a `[thesisId]` dynamic segment whose `generateStaticParams` enumerated
+the `theses` table at build time: under `output: 'export'` only enumerated ids get
+an HTML file, so every thesis the daily pipeline created after the last deploy
+hard-404ed (five live links on 2026-08-01). Build a thesis href with
+`thesisDetailHref()` from `lib/portfolio-url-state.ts`, never by interpolating a
+path segment — `lib/thesis-route-canon.test.ts` fails the build if either the
+dynamic segment or a path-form href comes back. The `?ticker=` dossier route
+(`app/portfolio/tickers/page.tsx`) is the same pattern for the same reason.
+
+Path-form URLs (`/portfolio/theses/<id>`) are no longer served; old bookmarks land
+on the Olympus 404. Every in-app link, the command palette, and the legacy
+`/strategy?thesis=` redirect all emit the query form.
 
 ## Brief workspace
 
@@ -187,14 +207,14 @@ passes those truth contracts into the presentational modules under
   Theses columns with no independent card surfaces.
 
 The four modules are enclosed by one page-level hairline frame, adapting the
-DigiWeb `DashboardWorkspaceReference` command-band and ledger composition.
+digiweb `DashboardWorkspaceReference` command-band and ledger composition.
 Loading uses `PageSkeleton`; failures use the shared `EmptyState`; missing book
 or research values render local quiet copy; stale research and book dates use
 the shared `AsOfBadge` treatment.
 
 ## Pipeline and Why workspaces
 
-Pipeline and Why extend the same DigiWeb workspace grammar across the
+Pipeline and Why extend the same digiweb workspace grammar across the
 reasoning workflow without replacing their domain interactions:
 
 - **Pipeline** owns one command band for the run headline, stage/document

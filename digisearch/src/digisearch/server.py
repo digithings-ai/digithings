@@ -1,4 +1,4 @@
-"""DigiSearch HTTP API for DigiGraph and DigiFlow (query, ingest, Azure/Chroma backends)."""
+"""digisearch HTTP API for digigraph and digiflow (query, ingest, Azure/Chroma backends)."""
 
 from __future__ import annotations
 
@@ -47,8 +47,8 @@ def _resolve_fetch_all_max(requested: int | None) -> int:
 
 
 app = FastAPI(
-    title="DigiSearch",
-    description="RAG, document search for Digi ecosystem. MCP tools for DigiGraph/DigiFlow.",
+    title="digisearch",
+    description="RAG, document search for Digi ecosystem. MCP tools for digigraph/digiflow.",
     version=__version__,
 )
 install_metrics(app, service="digisearch", version=__version__)
@@ -65,7 +65,7 @@ def _require_real_search_backend() -> None:
         "yes",
     )
     if allow_stub:
-        logger.warning("DigiSearch: DIGISEARCH_ALLOW_STUB=1 — in-memory stub allowed (tests only).")
+        logger.warning("digisearch: DIGISEARCH_ALLOW_STUB=1 — in-memory stub allowed (tests only).")
         return
     from digisearch.indexes.backends import azure_search as _az
 
@@ -78,7 +78,7 @@ def _require_real_search_backend() -> None:
     chroma_ok = bool(os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"))
     if not azure_ok and not chroma_ok:
         raise RuntimeError(
-            "DigiSearch requires a real backend: set AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
+            "digisearch requires a real backend: set AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
             "or DIGISEARCH_ALLOW_STUB=1 for tests only."
         )
 
@@ -266,7 +266,7 @@ class ResearchTurnRequest(BaseModel):
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Legacy health check for Docker and DigiGraph (kept for back-compat)."""
+    """Legacy health check for Docker and digigraph (kept for back-compat)."""
     return {"status": "ok", "service": "digisearch"}
 
 
@@ -274,7 +274,7 @@ def health() -> dict[str, str]:
 def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
-    Returns HTTP 200 with ``{"ok": true}``. Pair with DigiSmith's ``/v1/status``
+    Returns HTTP 200 with ``{"ok": true}``. Pair with digismith's ``/v1/status``
     for richer diagnostics.
     """
     return {"ok": True}
@@ -438,7 +438,7 @@ def _research_turn_available() -> bool:
 
 @app.post("/v1/orchestrator_tools")
 def api_orchestrator_tools(req: OrchestratorToolsRequest) -> OrchestratorToolsResponse:
-    """Return OpenAI-style tool definitions owned by DigiSearch (for DigiGraph orchestration)."""
+    """Return OpenAI-style tool definitions owned by digisearch (for digigraph orchestration)."""
     from digisearch.orchestrator_tools import build_orchestrator_tool_manifest
 
     tools = build_orchestrator_tool_manifest(
@@ -489,7 +489,7 @@ def _query_request_from_digisearch_args(
 
 @app.post("/v1/orchestrator_invoke")
 def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
-    """Execute one DigiSearch orchestrator tool by name (hub dispatch)."""
+    """Execute one digisearch orchestrator tool by name (hub dispatch)."""
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
     default_idx = (
@@ -618,7 +618,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
 
 @app.post("/v1/research_turn", response_model=ResearchTurnOutput)
 def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
-    """Run one DigiSearch-owned research turn (LangGraph: plan → retrieve → aggregate)."""
+    """Run one digisearch-owned research turn (LangGraph: plan → retrieve → aggregate)."""
     try:
         from digisearch.agent.pipeline import run_research_turn
     except ImportError as e:
@@ -711,7 +711,7 @@ def delete_document(name: str, doc_id: str) -> dict:
     """Delete document from index (not implemented)."""
     raise HTTPException(
         status_code=501,
-        detail="Per-document delete is not implemented for this DigiSearch deployment",
+        detail="Per-document delete is not implemented for this digisearch deployment",
     )
 
 

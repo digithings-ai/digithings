@@ -1,4 +1,4 @@
-"""PII redaction for DigiSmith trace payloads before LangSmith submission.
+"""PII redaction for digismith trace payloads before LangSmith submission.
 
 ``PiiRedactor`` walks arbitrary dict / list / tuple structures and replaces
 PII-looking substrings inside string values with opaque sentinels. Built-in

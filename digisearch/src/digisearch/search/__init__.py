@@ -1,4 +1,4 @@
-"""DigiSearch query logic. Stub, Azure, Chroma backends."""
+"""digisearch query logic. Stub, Azure, Chroma backends."""
 
 from __future__ import annotations
 

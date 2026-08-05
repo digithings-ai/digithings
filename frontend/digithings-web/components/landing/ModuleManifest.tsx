@@ -9,7 +9,7 @@ import {
 import { writeHandoff } from "@/lib/chatHandoff";
 
 /**
- * Terminal-manifest display of the ten DigiThings modules — a `digithings ps`
+ * Terminal-manifest display of the ten digithings modules — a `// modules`
  * process list rendered by the shared <TerminalManifest> primitive
  * (@digithings/web, promoted from this component in #1415). Each row: a
  * status dot (online vs roadmap), the lowercase two-tone name (`digi` ink +
@@ -55,7 +55,8 @@ export function ModuleManifest() {
   return (
     <TerminalManifest
       className="mx-auto max-w-[980px]"
-      command="digithings ps"
+      prompt="//"
+      command="modules"
       meta={`· ${online} online · ${road} on the roadmap`}
       rows={rows}
       namePrefix="digi"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-parse_traceback.py — Parse a Python stack trace and identify the DigiThings component.
+parse_traceback.py — Parse a Python stack trace and identify the digithings component.
 
 Usage:
   python3 scripts/parse_traceback.py                  # read from stdin
@@ -49,7 +49,7 @@ COMPONENT_PATHS: list[tuple[str, str]] = [
 
 
 def identify_component(file_path: str) -> str:
-    """Map a file path to a DigiThings component name."""
+    """Map a file path to a digithings component name."""
     # Normalize: strip leading slashes and repo root prefix
     path = file_path.replace("\\", "/")
     # Try to strip repo root so we get relative path

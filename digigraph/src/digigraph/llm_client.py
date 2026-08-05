@@ -1,7 +1,7 @@
-"""DigiGraph's thin LLM entry point over digillm.
+"""digigraph's thin LLM entry point over digillm.
 
-Relocated from the former monolithic ``digigraph.llm`` (#632 P2). DigiGraph calls
-LLMs exclusively through these two wrappers, which add the DigiGraph-specific glue
+Relocated from the former monolithic ``digigraph.llm`` (#632 P2). digigraph calls
+LLMs exclusively through these two wrappers, which add the digigraph-specific glue
 on top of the provider-agnostic digillm client:
 
 - :func:`completion` resolves the requested model via
@@ -40,8 +40,8 @@ from digigraph.model_config import resolve_request_model
 
 logger = logging.getLogger(__name__)
 
-# Public surface. ``web_search`` / ``x_search`` are re-exported from digillm so DigiGraph
-# and DigiQuant consumers import every LLM entry point from this one module.
+# Public surface. ``web_search`` / ``x_search`` are re-exported from digillm so digigraph
+# and digiquant consumers import every LLM entry point from this one module.
 __all__ = [
     "completion",
     "completion_text",
@@ -51,9 +51,9 @@ __all__ = [
     "x_search",
 ]
 
-# Route digillm's usage telemetry into DigiGraph's per-run accumulator. No-op until
+# Route digillm's usage telemetry into digigraph's per-run accumulator. No-op until
 # digigraph.usage.start() activates a run; registered here because llm_client is the
-# module every DigiGraph LLM call imports.
+# module every digigraph LLM call imports.
 _set_usage_observer(_usage.record)
 
 
@@ -139,7 +139,7 @@ def run_tools(
     on_tool_step: Callable[[str, Any], None] | None = None,
     search_parameters: dict[str, Any] | None = None,
 ) -> str:
-    """Run digillm's agentic tool-calling loop with DigiGraph's parallel-safe set + streaming.
+    """Run digillm's agentic tool-calling loop with digigraph's parallel-safe set + streaming.
 
     Streams each assistant turn (``stream_deltas``) whenever ``on_tool_step`` is
     supplied, so the callback also receives ``("content", delta)`` / ``("reasoning",

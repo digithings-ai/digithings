@@ -1,4 +1,4 @@
-"""Unit tests for the DigiQuant strategy store accessor (#1064)."""
+"""Unit tests for the digiquant strategy store accessor (#1064)."""
 
 from __future__ import annotations
 

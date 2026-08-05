@@ -1,4 +1,4 @@
-"""DigiSearch core data contracts. Shared across DigiFlow, DigiGraph, and MCP."""
+"""digisearch core data contracts. Shared across digiflow, digigraph, and MCP."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 
 @dataclass
 class Document:
-    """Document ingested into DigiSearch. Passed between modules (DigiFlow, DigiGraph)."""
+    """Document ingested into digisearch. Passed between modules (digiflow, digigraph)."""
 
     id: str
     content: str

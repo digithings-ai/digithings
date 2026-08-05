@@ -11,7 +11,8 @@
  * Uses the shared @digithings/digichat-ui DigiChatSession widget.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { DigiChatSession } from "@digithings/digichat-ui";
 import { Key, ExternalLink, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -39,12 +40,21 @@ import {
   resolveGateFallbackCard,
 } from "@/lib/embed-trial-messages";
 import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
-import { readEmbedUiParams } from "@/lib/embed-ui-params";
+import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
+import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
+import type { EmbedUiParams } from "@/lib/embed-ui-params";
 import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
 import {
   useEmbedTenantConfig,
   type EmbedTenantClientConfig,
 } from "@/hooks/use-embed-tenant-config";
+import { resolveEmbedUiFlags } from "@/lib/embed-ui-flags";
+import { applyEmbedSeed } from "@/lib/embed-seed-apply";
+import {
+  READY_MESSAGE,
+  isAllowedSeedParentOrigin,
+  parseSeedMessage,
+} from "@/lib/embed-seed-messages";
 
 type Accent = "digithings" | "digiquant" | "digichat";
 
@@ -64,35 +74,29 @@ function resolveAccent(raw: string | null | undefined): Accent {
   return "digichat";
 }
 
-type EmbedPageProps = {
-  searchParams:
-    | Promise<{ accent?: string; token?: string; host?: string }>
-    | { accent?: string; token?: string; host?: string };
-};
+/**
+ * useSearchParams() (not the searchParams page prop) is required for this
+ * "use client" page — the prop never delivered ?token=/?host= in production
+ * (#1379), silently breaking per-tenant embeds. Suspense is mandatory.
+ */
+export default function EmbedPage() {
+  return (
+    <Suspense fallback={null}>
+      <EmbedPageInner />
+    </Suspense>
+  );
+}
 
-export default function EmbedPage({ searchParams }: EmbedPageProps) {
-  const [accent, setAccent] = useState<Accent>("digichat");
-  const [token, setToken] = useState<string | undefined>(undefined);
-  const [host, setHost] = useState<string | undefined>(undefined);
+function EmbedPageInner() {
+  const searchParams = useSearchParams();
+  const accent = resolveAccent(searchParams.get("accent"));
+  const token = searchParams.get("token") ?? undefined;
+  const host = searchParams.get("host") ?? undefined;
   const tenantCfg = useEmbedTenantConfig(token, host);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.resolve(searchParams).then((sp) => {
-      if (cancelled) return;
-      setAccent(resolveAccent(sp?.accent));
-      setToken(sp?.token);
-      setHost(sp?.host);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [searchParams]);
 
   useEffect(() => {
     emit("embed_loaded", { accent });
   }, [accent]);
-
   // Tenant theme drives the canon [data-theme] on <html> — the semantic
   // tokens are scoped :root[data-theme="…"] (tokens.css), so a subtree class
   // alone no longer flips the palette. Default stays dark like the pre-canon
@@ -128,30 +132,35 @@ export default function EmbedPage({ searchParams }: EmbedPageProps) {
   // channel it already uses for welcome/placeholder. A validated URL color
   // wins over the tenant-registry accent; both are inline `--accent` so they
   // override the preset `.accent-*` class either way.
-  const urlColors = useMemo(() => {
-    if (typeof window === "undefined") return {} as { accent?: string; accentForeground?: string };
-    const { accent: c, accentForeground: fg } = readEmbedUiParams(window.location.search);
-    return { accent: c, accentForeground: fg };
-  }, []);
-
-  const accentColor = urlColors.accent ?? tenantCfg.accent?.color;
-  const accentForeground = urlColors.accentForeground ?? tenantCfg.accent?.foreground;
-  const accentStyle = accentColor
-    ? ({
-        "--accent": accentColor,
-        ...(accentForeground ? { "--accent-foreground": accentForeground } : {}),
-      } as React.CSSProperties)
-    : undefined;
+  //
+  // Read via useEmbedUiParams (post-mount), not useMemo+window — the latter
+  // left style=null after SSR/hydration while location.search still had the hex
+  // (DataTap terracotta #b5562b regression).
+  const urlColors = useEmbedUiParams();
+  const accentStyle = buildEmbedAccentStyle(
+    urlColors.accent ?? tenantCfg.accent?.color,
+    urlColors.accentForeground ?? tenantCfg.accent?.foreground,
+  );
+  // When a brand hex is active, drop the named `.accent-*` class — ACCENT_CSS
+  // paints `.accent-digichat { --accent: #1f1f1f }`, which is exactly the
+  // wrong color observers saw when the inline style failed to attach.
+  const brandAccentActive = accentStyle != null;
 
   return (
     <>
       <style>{ACCENT_CSS}</style>
       <div className="dc-grain" aria-hidden />
       <div
-        className={`${tenantCfg.theme === "light" ? "light" : "dark"} accent-${accent} relative z-10 flex min-h-0 flex-1 flex-col bg-background text-foreground`}
+        className={`${tenantCfg.theme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col bg-background text-foreground`}
         style={accentStyle}
       >
-        <EmbedChat accent={accent} tenantCfg={tenantCfg} token={token} host={host} />
+        <EmbedChat
+          accent={accent}
+          tenantCfg={tenantCfg}
+          token={token}
+          host={host}
+          uiParams={urlColors}
+        />
       </div>
     </>
   );
@@ -162,17 +171,21 @@ function EmbedChat({
   tenantCfg,
   token,
   host,
+  uiParams,
 }: {
   accent: Accent;
   tenantCfg: EmbedTenantClientConfig;
   token?: string;
   host?: string;
+  uiParams: EmbedUiParams;
 }) {
   const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } =
     useBYOKKey();
   const ungated = tenantCfg.gateMode === "ungated";
   const isTrialForm = tenantCfg.gateMode === "trial_form";
-  const showByok = !ungated && !isTrialForm; // trial_form defers unlock to the parent form, not BYOK
+  const uiFlags = resolveEmbedUiFlags(tenantCfg);
+  // trial_form still hides BYOK until parent unlock — product rule for DataTap only
+  const showByok = isTrialForm ? false : uiFlags.showByok;
 
   // Mirrors useEmbedGate's own host resolution (resolveEmbedHost(host)) so the
   // persisted trial-unlock flag is keyed identically to the persisted turn
@@ -183,14 +196,14 @@ function EmbedChat({
 
   // trialUnlocked persists across reloads (localStorage, keyed by host) —
   // mirrors how embed-gate.ts persists the turn counter (see readTrialUnlocked/
-  // writeTrialUnlocked). `host` arrives asynchronously (resolved from a
-  // searchParams Promise in the parent EmbedPage), so this can't be a one-shot
-  // lazy useState initializer: it must react to resolvedHost changing, exactly
-  // like useEmbedGate's own turnsFor pattern below. Adjusting state DURING
-  // RENDER (rather than in a useEffect) means the corrected value is already
-  // in place before the gated-postMessage effect ever runs — an effect-based
-  // fix would still let one wrong postMessage go out on the initial mount's
-  // effect flush, using the stale (false) value.
+  // writeTrialUnlocked). `host` can change when the iframe URL updates, so this
+  // can't be a one-shot lazy useState initializer: it must react to
+  // resolvedHost changing, exactly like useEmbedGate's own turnsFor pattern
+  // below. Adjusting state DURING RENDER (rather than in a useEffect) means
+  // the corrected value is already in place before the gated-postMessage
+  // effect ever runs — an effect-based fix would still let one wrong
+  // postMessage go out on the initial mount's effect flush, using the stale
+  // (false) value.
   const [trialUnlockedFor, setTrialUnlockedFor] = useState<{ host: string; unlocked: boolean }>(
     () => ({ host: resolvedHost, unlocked: readTrialUnlocked(resolvedHost) }),
   );
@@ -247,6 +260,48 @@ function EmbedChat({
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
   });
+
+  const [seedApplied, setSeedApplied] = useState(false);
+  const [hideIntroForSeed, setHideIntroForSeed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !host) return;
+    let parentOrigin: string;
+    try {
+      parentOrigin = host.includes("://") ? new URL(host).origin : `https://${host}`;
+    } catch {
+      return;
+    }
+    window.parent.postMessage(READY_MESSAGE, parentOrigin);
+  }, [host]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || seedApplied) return;
+    const allowed = new Set<string>();
+    if (host) {
+      try {
+        allowed.add(host.includes("://") ? new URL(host).origin : `https://${host}`);
+      } catch {
+        /* ignore */
+      }
+    }
+    for (const h of ["https://digithings.ai", "https://www.digithings.ai"]) {
+      if (isAllowedSeedParentOrigin(h)) allowed.add(h);
+    }
+
+    const onMessage = (event: MessageEvent) => {
+      const parsed = parseSeedMessage(event, allowed);
+      if (!parsed) return;
+      applyEmbedSeed(
+        { messages: parsed.messages, pending: parsed.pending },
+        { seed: chat.seed, send: chat.send },
+      );
+      setSeedApplied(true);
+      setHideIntroForSeed(true);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [host, seedApplied, chat.seed, chat.send]);
 
   // The upstream conversation id is the useful handle (it maps to the real backend
   // conversation); fall back to nothing rather than blocking the gate.
@@ -306,11 +361,6 @@ function EmbedChat({
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [isTrialForm, host, unlockTrial]);
-
-  const uiParams = useMemo(() => {
-    if (typeof window === "undefined") return {};
-    return readEmbedUiParams(window.location.search);
-  }, []);
 
   const welcomeIntro = useMemo(() => {
     if (uiParams.welcome) return uiParams.welcome;
@@ -385,8 +435,8 @@ function EmbedChat({
       suggestions={suggestions}
       placeholder={placeholder}
       showByok={showByok}
-      showStatusBar={false}
-      layout="embed"
+      showStatusBar={uiFlags.showStatusBar}
+      layout={uiFlags.layout}
       chat={{ ...chat, send: wrappedSend }}
       headerSlot={headerSlot}
       footerSlot={footerSlot}
@@ -401,7 +451,7 @@ function EmbedChat({
           <PaywallCard lockedContact={tenantCfg.lockedContact} />
         ) : undefined
       }
-      showIntro={!gate.locked && !trialLocked}
+      showIntro={!gate.locked && !trialLocked && !hideIntroForSeed}
       ariaLabel={headerTitle ?? "digichat embed"}
     />
   );
@@ -464,7 +514,7 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
       </p>
       <p className="mb-3 text-xs text-muted-foreground">
         Bring your own OpenRouter, OpenAI, or Anthropic key for unlimited chat — your key is
-        stored only in your browser. Or open the full DigiChat app.
+        stored only in your browser. Or open the full digichat app.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -478,21 +528,21 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
           Bring your own key
         </Button>
         <a
-          href="https://chat.digithings.ai"
+          href="https://digithings.ai/chat"
           target="_blank"
           rel="noreferrer noopener"
           onClick={() => emit("embed_open_full_chat", {})}
           className="inline-flex items-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium hover:bg-muted"
         >
           <ExternalLink className="mr-1.5 size-3.5" />
-          Open DigiChat
+          Open digichat
         </a>
       </div>
 
       {showBYOK && (
         <div className="mt-4 space-y-3">
           <div className="flex gap-2">
-            {(["openrouter", "openai", "anthropic"] as BYOKProvider[]).map((p) => (
+            {(["openrouter", "openai", "anthropic", "gemini"] as BYOKProvider[]).map((p) => (
               <Button
                 key={p}
                 type="button"
@@ -501,7 +551,13 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
                 className="flex-1 capitalize"
                 onClick={() => setProvider(p)}
               >
-                {p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "OpenRouter"}
+                {p === "openai"
+                  ? "OpenAI"
+                  : p === "anthropic"
+                    ? "Anthropic"
+                    : p === "gemini"
+                      ? "Gemini"
+                      : "OpenRouter"}
               </Button>
             ))}
           </div>
@@ -523,7 +579,9 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
                     ? "sk-…"
                     : provider === "anthropic"
                       ? "sk-ant-…"
-                      : "sk-or-v1-…"
+                      : provider === "gemini"
+                        ? "AIza…"
+                        : "sk-or-v1-…"
                 }
                 autoComplete="off"
                 spellCheck={false}

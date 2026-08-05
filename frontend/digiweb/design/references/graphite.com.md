@@ -140,12 +140,12 @@ fallback (`frontend/digiweb/design/scroll-trigger.js`).
 
 ---
 
-## 9. Adopt / Adapt / Avoid (DigiThings)
+## 9. Adopt / Adapt / Avoid (digithings)
 
 | Adopt | Adapt | Avoid |
 |-------|-------|-------|
 | Scroll-pinned **one** flagship section per landing | Use digiquant Olympus pipeline, not PR UI | Copying orange/zinc palette wholesale |
-| Product UI in flat dark frames | Our tearsheets, DigiChat, Olympus clips | Glass + mesh **on top of** product mocks |
+| Product UI in flat dark frames | Our tearsheets, digichat, Olympus clips | Glass + mesh **on top of** product mocks |
 | Glide easing token in `tokens.css` | Map to `--ease-glide` alongside `--ease` | Five separate 400vh scroll sections |
 | Container-query product scaling | `ProductFrame` primitive | Nine breakpoints — start with 3–4 |
 | Nav link opacity hover | Already close in `site.css` nav | Category rainbow in main chrome |

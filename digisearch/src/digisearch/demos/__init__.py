@@ -1,1 +1,1 @@
-"""Demo entrypoints for DigiSearch."""
+"""Demo entrypoints for digisearch."""

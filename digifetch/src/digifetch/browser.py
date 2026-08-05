@@ -118,7 +118,9 @@ class BrowserConfig:
     launch_args: Mapping[str, Any] | None = None
 
 
-def _import_sync_playwright(browser: str = "chromium") -> Any:  # playwright is an optional dep, untyped here
+def _import_sync_playwright(
+    browser: str = "chromium",
+) -> Any:  # playwright is an optional dep, untyped here
     """Import ``sync_playwright`` lazily; raise an actionable error if absent.
 
     ``browser`` only shapes the install hint so a ``firefox``/``webkit`` config

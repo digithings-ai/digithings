@@ -1,4 +1,4 @@
-"""Unit tests for DigiQuant LangGraph pipeline (mocked service layer)."""
+"""Unit tests for digiquant LangGraph pipeline (mocked service layer)."""
 
 from __future__ import annotations
 
@@ -49,13 +49,15 @@ def test_pipeline_skips_optimize_and_export_when_disabled(monkeypatch: pytest.Mo
         patch("digiquant.graph.pipeline.service_run_optimize") as m_opt,
         patch("digiquant.graph.pipeline.service_run_export") as m_exp,
     ):
-        raw = run_quant_workflow({
-            "strategy_name": "ema_cross",
-            "symbols": ["AAPL"],
-            "data_dir": "/data",
-            "run_optimize": False,
-            "run_export": False,
-        })
+        raw = run_quant_workflow(
+            {
+                "strategy_name": "ema_cross",
+                "symbols": ["AAPL"],
+                "data_dir": "/data",
+                "run_optimize": False,
+                "run_export": False,
+            }
+        )
     m_opt.assert_not_called()
     m_exp.assert_not_called()
     assert raw.get("error") is None
@@ -74,11 +76,13 @@ def test_pipeline_runs_full_chain_when_export_allowed(monkeypatch: pytest.Monkey
         patch("digiquant.graph.pipeline.service_run_optimize", return_value=_opt()),
         patch("digiquant.graph.pipeline.service_run_export", return_value=_exp()),
     ):
-        raw = run_quant_workflow({
-            "strategy_name": "ema_cross",
-            "symbols": ["AAPL"],
-            "data_dir": "/data",
-        })
+        raw = run_quant_workflow(
+            {
+                "strategy_name": "ema_cross",
+                "symbols": ["AAPL"],
+                "data_dir": "/data",
+            }
+        )
     assert raw.get("error") is None
     assert raw.get("backtest") and raw.get("optimize") and raw.get("export")
     assert any(t.get("step") == "export" and t.get("status") == "ok" for t in raw["trace"])
@@ -91,11 +95,13 @@ def test_pipeline_validates_constraints_dict() -> None:
         patch("digiquant.graph.pipeline.service_run_optimize", return_value=_opt()),
         patch("digiquant.graph.pipeline.service_run_export", return_value=_exp()),
     ):
-        raw = run_quant_workflow({
-            "strategy_name": "ema_cross",
-            "symbols": ["AAPL"],
-            "data_dir": "/data",
-            "constraints": {"min_trades": 5},
-        })
+        raw = run_quant_workflow(
+            {
+                "strategy_name": "ema_cross",
+                "symbols": ["AAPL"],
+                "data_dir": "/data",
+                "constraints": {"min_trades": 5},
+            }
+        )
     assert raw.get("error") is None
     assert raw.get("optimize") is not None

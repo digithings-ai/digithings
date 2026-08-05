@@ -1,4 +1,4 @@
-name: "Pipeline: DigiQuant tearsheets"
+name: "Pipeline: digiquant tearsheets"
 
 # Daily Slapper tearsheet regeneration for digiquant.io (#1068, #1069).
 #

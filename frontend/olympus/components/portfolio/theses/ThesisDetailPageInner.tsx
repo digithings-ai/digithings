@@ -23,6 +23,14 @@ import type { TableRow } from '@/lib/database.types';
 
 const CONFIDENCE_PIPS = 4;
 
+/**
+ * "Back to Theses" target. Points at the tab directly rather than
+ * `/portfolio/theses`, which since #1760 is the very route this detail view is
+ * rendered on — linking there would bounce through the hub redirect and cost a
+ * second navigation to reach the same place.
+ */
+const THESES_TAB_HREF = '/portfolio?tab=theses';
+
 function confidenceToPips(confidence: number | null): number {
   if (confidence == null) return 0;
   return Math.max(0, Math.min(CONFIDENCE_PIPS, Math.round(confidence * CONFIDENCE_PIPS)));
@@ -118,7 +126,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
         <PortfolioSectionNav active="theses" />
         <div className={`${SUBPAGE_MAX} space-y-4 py-8`}>
           <Link
-            href="/portfolio/theses"
+            href={THESES_TAB_HREF}
             className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
           >
             <ArrowLeft size={16} /> Back to Theses
@@ -139,7 +147,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
         <div className={`${SUBPAGE_MAX} flex-1 space-y-8 py-6 md:py-8`}>
           <div className="space-y-3">
             <Link
-              href="/portfolio/theses"
+              href={THESES_TAB_HREF}
               className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
             >
               <ArrowLeft size={16} /> Back to Theses
@@ -166,7 +174,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
       <PortfolioSectionNav active="theses" />
       <div className={`${SUBPAGE_MAX} flex-1 space-y-6 py-6 md:py-8`}>
         <Link
-          href="/portfolio/theses"
+          href={THESES_TAB_HREF}
           className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
         >
           <ArrowLeft size={16} /> Back to Theses

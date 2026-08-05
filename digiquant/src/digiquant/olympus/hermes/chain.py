@@ -82,6 +82,42 @@ class DiagnosticsDeps:
     client: Any
     run_id: str
     model: str | None = None
+    # Outer-retry attempt number (#1762). ``pipeline-olympus.yml`` retries the chain up to 3
+    # times inside ONE job, so ``GITHUB_RUN_ID`` — and therefore ``run_id`` — is identical
+    # across attempts. Before this was part of the diagnostics key, the last attempt's upsert
+    # replaced the previous attempt's tokens and cost, which is why 28 of 54 production rows
+    # carry a ``created_at`` that predates their own ``started_at``. Defaults to 1 so a local
+    # run without the env var is a plausible first attempt rather than the legacy 0 sentinel.
+    attempt: int = 1
+
+
+OUTER_ATTEMPT_ENV = "OLYMPUS_ATTEMPT"
+
+
+def _outer_attempt() -> int:
+    """The CI outer-retry attempt number, from ``OLYMPUS_ATTEMPT``.
+
+    ``pipeline-olympus.yml``'s retry loop exports it per attempt (#1762). Falls back to 1 —
+    a local or single-shot run genuinely is the first attempt, and 1 keeps it distinct from
+    the ``0`` sentinel migration 065 stamped on rows written before per-attempt keying.
+
+    Tolerant of a malformed value on purpose: this feeds telemetry, and a bad env var must
+    never be the reason a research run dies. A non-numeric or non-positive value is logged
+    and treated as attempt 1, which at worst re-collides two attempts the way the pre-#1762
+    code always did.
+    """
+    raw = os.environ.get(OUTER_ATTEMPT_ENV)
+    if raw is None or not raw.strip():
+        return 1
+    try:
+        attempt = int(raw)
+    except ValueError:
+        _logger.warning("%s=%r is not an integer; recording attempt 1", OUTER_ATTEMPT_ENV, raw)
+        return 1
+    if attempt < 1:
+        _logger.warning("%s=%r is not >= 1; recording attempt 1", OUTER_ATTEMPT_ENV, raw)
+        return 1
+    return attempt
 
 
 def _coerce_atlas_state(result: Any) -> AtlasResearchState:
@@ -143,6 +179,17 @@ def _degraded_run_pct() -> float:
         return 50.0
 
 
+def _retry_worthy_summary(summary: _diagnostics.RunSummary) -> bool:
+    """:func:`_retry_worthy` for a :class:`RunSummary` already in hand (avoids re-deriving it).
+
+    Keys on ``retry_signal``, **not** ``status``: since #1736 ``status`` also flips on damage
+    that is honest to report but not worth re-running (a lost research segment on a day whose
+    book committed). ``retry_signal`` is the frozen pre-#1736 gate, so CI's behaviour here is
+    byte-for-byte what it was.
+    """
+    return summary.retry_signal and not summary.book_committed
+
+
 def _retry_worthy(state: AtlasResearchState, *, degraded_pct: float) -> bool:
     """Whether the CI outer-retry should fire for this run.
 
@@ -156,12 +203,10 @@ def _retry_worthy(state: AtlasResearchState, *, degraded_pct: float) -> bool:
     skip) is NOT durable work — it must retry. A book-less degraded run (Atlas failed / Hermes
     skipped) still retries as before.
     """
-    if not _diagnostics.is_degraded(state, degraded_pct=degraded_pct):
-        return False
-    return not _diagnostics.book_committed(state)
+    return _retry_worthy_summary(_diagnostics.summarize_run(state, degraded_pct=degraded_pct))
 
 
-def _record_chain_error(state: AtlasResearchState, label: str, exc: Exception) -> None:
+def _record_chain_error(state: AtlasResearchState, label: str, exc: BaseException) -> None:
     """Append a PhaseError marking a chain-level failure (``phase="chain"``, ``node=label``)
     so the diagnostics degraded gate sees it: ``summarize_run`` marks the run *failed* when a
     core engine (atlas/hermes) crashed and *degraded* on any other chain-level crash
@@ -211,6 +256,28 @@ def _run_terminal_phase(
         return state
 
 
+def _run_beliefs_fold(state: AtlasResearchState, deps: ChainDeps, atlas_input: AtlasInput) -> None:
+    """Fold the beliefs backlog, fail-soft (#1737).
+
+    Beliefs distillation is an *optional* on-demand backlog fold (spec §11.1), not a run
+    deliverable — yet both call sites were bare, so an LLM/Supabase error inside it escaped
+    ``run_atlas_then_hermes`` and killed a run that had already committed a book. Record it as
+    a chain-level error (so the run reports ``degraded``, not ``ok``) and continue: the
+    diagnostics row and the caller's exit code then describe what actually happened.
+    """
+    if deps.atlas.preflight.client is None:
+        return
+    try:
+        run_beliefs_distillation_if_triggered(
+            client=deps.atlas.preflight.client,
+            atlas_input=atlas_input,
+            run_type=_legacy_run_type(atlas_input.refresh_scope),
+        )
+    except Exception as exc:  # an optional backlog fold must never kill a booked run
+        _logger.exception("chain: beliefs distillation failed; continuing")
+        _record_chain_error(state, "beliefs", exc)
+
+
 def run_atlas_then_hermes(
     *,
     atlas_input: AtlasInput,
@@ -252,12 +319,7 @@ def run_atlas_then_hermes(
     try:
         # Operator escape hatch: beliefs-only run (no Atlas/Hermes research).
         if atlas_input.refresh_scope == "beliefs":
-            if deps.atlas.preflight.client is not None:
-                run_beliefs_distillation_if_triggered(
-                    client=deps.atlas.preflight.client,
-                    atlas_input=atlas_input,
-                    run_type=_legacy_run_type(atlas_input.refresh_scope),
-                )
+            _run_beliefs_fold(state, deps, atlas_input)
             return state
 
         # Atlas: research only, no publish.
@@ -309,13 +371,17 @@ def run_atlas_then_hermes(
         state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
 
         # Automatic beliefs backlog fold (on-demand — not a daily graph node).
-        if deps.atlas.preflight.client is not None:
-            run_beliefs_distillation_if_triggered(
-                client=deps.atlas.preflight.client,
-                atlas_input=atlas_input,
-                run_type=_legacy_run_type(atlas_input.refresh_scope),
-            )
+        _run_beliefs_fold(state, deps, atlas_input)
         return state
+    except BaseException as exc:
+        # Last-resort recorder (#1733/#1763). The diagnostics row is written by the ``finally``
+        # below, but a *terminating* exception — SystemExit, KeyboardInterrupt, a job timeout's
+        # SIGTERM, an unexpected raise from a helper outside the fail-soft wrappers — used to
+        # reach that block with an error-free state, so the row said "ok" (or the process died
+        # before the row said anything at all). Record the crash first, then re-raise
+        # untouched: the caller's exit code and CI's view of the job are unchanged.
+        _record_chain_error(state, "terminal", exc)
+        raise
     finally:
         if deps.diagnostics is not None:
             finished_at = datetime.now(tz=timezone.utc)
@@ -323,6 +389,7 @@ def run_atlas_then_hermes(
                 deps.diagnostics.client,
                 state=state,
                 run_id=deps.diagnostics.run_id,
+                attempt=deps.diagnostics.attempt,
                 run_type=_legacy_run_type(atlas_input.refresh_scope),
                 run_date=atlas_input.run_date,
                 model=deps.diagnostics.model,
@@ -482,7 +549,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         atlas=atlas_deps,
         hermes=hermes_deps,
         publish=PublishDeps(client=client),
-        diagnostics=DiagnosticsDeps(client=client, run_id=run_id),
+        diagnostics=DiagnosticsDeps(client=client, run_id=run_id, attempt=_outer_attempt()),
     )
     # Checkpoint/resume (#665): durable per-graph threads when DIGI_CHECKPOINTER is set
     # (DIGI_CHECKPOINTER=postgres + DIGI_CHECKPOINTER_POSTGRES_URI in prod). thread_base is
@@ -517,15 +584,20 @@ def cli_main(argv: list[str] | None = None) -> int:
     # run that already materialized a valid sized book must NOT retry — that wasted ~20 min of
     # backoff sleeps on a good book (#809). The diagnostics row, written inside
     # run_atlas_then_hermes, records the why. Monthly runs (no research segments) don't trip it.
-    degraded = _diagnostics.is_degraded(final_state, degraded_pct=_degraded_run_pct())
-    retry_worthy = _retry_worthy(final_state, degraded_pct=_degraded_run_pct())
-    summary["degraded"] = degraded
+    run_summary = _diagnostics.summarize_run(final_state, degraded_pct=_degraded_run_pct())
+    retry_worthy = _retry_worthy_summary(run_summary)
+    # ``degraded`` keeps its pre-#1736 meaning (= the retry signal) so nothing parsing run.log
+    # changes shape; ``status`` is the honest health verdict that lands in
+    # ``atlas_run_diagnostics``. Both are printed because they legitimately disagree — a day
+    # that lost segments but committed its book is ``status=degraded, degraded=false`` (#1736).
+    summary["degraded"] = run_summary.retry_signal
+    summary["status"] = run_summary.status
     summary["book_materialized"] = final_state.phase_hermes.sized_book is not None
     # #1555: a green run must be *provably* a committed run. ``book_committed`` sits beside
     # ``book_materialized`` so an operator never again reads ``ok:true, book_materialized:true``
     # and assumes the book persisted — the silent H4→H9 freeze (2026-06-26) presented exactly
     # that shape while nothing committed for weeks.
-    summary["book_committed"] = _diagnostics.book_committed(final_state)
+    summary["book_committed"] = run_summary.book_committed
     json.dump({"ok": not retry_worthy, "summary": summary}, sys.stdout, default=str)
     sys.stdout.write("\n")
     return 1 if retry_worthy else 0

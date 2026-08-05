@@ -32,7 +32,9 @@ class TestRunOptimize:
         pytest.importorskip("nautilus_trader")
         with tempfile.TemporaryDirectory() as tmp:
             generate_synthetic_ohlcv(["AAPL"], freq="1d").write_csv(Path(tmp) / "AAPL.csv")
-            r = run_optimize(strategy_name="ema_cross", symbols=["AAPL"], param_grid=[{}, {}], data_dir=tmp)
+            r = run_optimize(
+                strategy_name="ema_cross", symbols=["AAPL"], param_grid=[{}, {}], data_dir=tmp
+            )
         assert r.num_evaluations == 2
 
 
@@ -63,7 +65,9 @@ class TestRunSweep:
         pytest.importorskip("nautilus_trader")
         with tempfile.TemporaryDirectory() as tmp:
             generate_synthetic_ohlcv(["AAPL"], freq="1d").write_csv(Path(tmp) / "AAPL.csv")
-            results = run_sweep(strategy_name="ema_cross", symbols=["AAPL"], param_grid=[{}, {}], data_dir=tmp)
+            results = run_sweep(
+                strategy_name="ema_cross", symbols=["AAPL"], param_grid=[{}, {}], data_dir=tmp
+            )
         assert len(results) == 2
         assert all(hasattr(r, "run_id") for r in results)
 

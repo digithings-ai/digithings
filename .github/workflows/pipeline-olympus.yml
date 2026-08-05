@@ -186,6 +186,12 @@ jobs:
           while : ; do
             sleep "${OUTER_BACKOFF[$((attempt-1))]}"
             echo "── Pipeline attempt ${attempt}/${MAX_OUTER_ATTEMPTS} (daily refresh_scope=${REFRESH_SCOPE}) ──"
+            # Thread the loop counter into the process so each attempt's diagnostics row is
+            # keyed per-attempt instead of overwriting the previous one (#1762). GITHUB_RUN_ID
+            # is identical across these attempts and stays the resume handle, so the attempt
+            # number is the only thing that can distinguish them. Exported (not an assignment
+            # prefix on CMD) because CMD is invoked through a pipe into `tee`.
+            export OLYMPUS_ATTEMPT="${attempt}"
             CMD=(uv run --frozen --no-sync python -m digiquant.olympus.hermes.chain
                  --cadence daily
                  --run-date "${RUN_DATE}"
@@ -210,16 +216,28 @@ jobs:
           path: artifacts/
           retention-days: ${{ needs.resolve.outputs.refresh_scope == 'all' && 90 || 30 }}
 
-      - name: Report pipeline failure
-        if: failure()
+      # `if: failure() || cancelled()` — NOT `if: failure()` (#1733/#1763). A job that blows
+      # the 240-minute `timeout-minutes` is *cancelled*, not failed, so for every silent
+      # timeout this step never ran and nothing was ever reported: the run simply vanished.
+      # `job.status` distinguishes the two so one step serves both, and the failure title is
+      # byte-identical to before, keeping the exact-title issue dedupe below working.
+      - name: Report pipeline outcome
+        if: failure() || cancelled()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           RUN_ID: ${{ github.run_id }}
           WORKFLOW_NAME: ${{ github.workflow }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          JOB_STATUS: ${{ job.status }}
         run: |
-          TITLE="olympus-daily-failure"
+          # Anything that is not an explicit cancellation is reported as a failure — an
+          # unrecognised status must degrade to today's behaviour, never to silence.
+          case "${JOB_STATUS:-}" in
+            cancelled) OUTCOME="cancelled" ;;
+            *)         OUTCOME="failure" ;;
+          esac
+          TITLE="olympus-daily-${OUTCOME}"
           mkdir -p artifacts
           if [ -f artifacts/run.log ]; then
             tail -n 200 artifacts/run.log > artifacts/tail.log
@@ -227,8 +245,37 @@ jobs:
             printf '(no log captured)\n' > artifacts/tail.log
           fi
 
+          # Best-effort read of the chain CLI's final JSON summary. This workflow runs from the
+          # default branch while the code is pinned to `main` above, so the summary may be an
+          # older shape (no `status` key) or absent entirely on an early crash / timeout.
+          # Never fail the job over it.
+          cat > "${RUNNER_TEMP:-/tmp}/read_outcome.py" <<'PY'
+          """Print the chain CLI's final JSON summary as `key=value` pairs, or nothing."""
+          import json
+          import pathlib
+
+          log = pathlib.Path("artifacts/run.log")
+          if log.is_file():
+              for line in reversed(log.read_text(errors="replace").splitlines()):
+                  line = line.strip()
+                  if not (line.startswith("{") and line.endswith("}")):
+                      continue
+                  try:
+                      payload = json.loads(line)
+                  except ValueError:
+                      continue
+                  summary = payload.get("summary") if isinstance(payload, dict) else None
+                  if not isinstance(summary, dict):
+                      continue
+                  keys = ("status", "degraded", "book_materialized", "book_committed")
+                  print(" ".join(f"{k}={summary[k]}" for k in keys if k in summary))
+                  break
+          PY
+          OUTCOME_LINE=$(python3 "${RUNNER_TEMP:-/tmp}/read_outcome.py" 2>/dev/null || true)
+          [ -n "${OUTCOME_LINE// /}" ] || OUTCOME_LINE="(no structured outcome recorded)"
+
           FAILED_STEP=$(gh run view "$RUN_ID" --json jobs \
-            --jq '[.jobs[] | select(.conclusion == "failure") | .steps[]? | select(.conclusion == "failure") | .name][0] // "unknown"' \
+            --jq '[.jobs[] | select(.conclusion == "failure" or .conclusion == "cancelled") | .steps[]? | select(.conclusion == "failure" or .conclusion == "cancelled") | .name][0] // "unknown"' \
             2>/dev/null || echo "unknown")
           LAST_OK=$(gh run list --workflow="$WORKFLOW_NAME" --status=success --limit=1 \
             --json updatedAt --jq '.[0].updatedAt // "unknown"' 2>/dev/null || echo "unknown")
@@ -247,9 +294,17 @@ jobs:
             fi
           fi
 
+          if [ "$OUTCOME" = "cancelled" ]; then
+            LEAD='Olympus daily run was CANCELLED on %s (refresh_scope=%s) — most likely the 240-minute job timeout, otherwise an operator cancel.\n\n'
+          else
+            LEAD='Olympus daily run failed on %s (refresh_scope=%s).\n\n'
+          fi
+
           {
-            printf 'Olympus daily run failed on %s (refresh_scope=%s).\n\n' "$RUN_DATE" "$REFRESH_SCOPE"
-            printf '**Failing step:** %s\n' "$FAILED_STEP"
+            # shellcheck disable=SC2059  # LEAD is a trusted local format string
+            printf "$LEAD" "$RUN_DATE" "$REFRESH_SCOPE"
+            printf '**Last step reached:** %s\n' "$FAILED_STEP"
+            printf '**Chain outcome:** %s\n' "$OUTCOME_LINE"
             printf '**Last successful run:** %s (%s)\n' "$LAST_OK" "$LAST_OK_REL"
             printf '**Workflow run:** %s\n\n' "$RUN_URL"
             printf '**On-call:** see [RUNBOOK](%s/blob/develop/digiquant/src/digiquant/olympus/atlas/docs/RUNBOOK.md) §"Atlas job failure triage".\n\n' "$REPO_URL"
@@ -260,9 +315,12 @@ jobs:
 
           EXISTING=$(gh issue list --state open --search "$TITLE in:title" \
             --json number,title --jq '[.[] | select(.title == "'"$TITLE"'")][0].number' || echo "")
+          # Fail-soft: reporting an outcome must never itself decide the job's conclusion.
           if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body-file artifacts/issue-body.md
+            gh issue comment "$EXISTING" --body-file artifacts/issue-body.md \
+              || echo "::warning::could not comment on #${EXISTING}; outcome report dropped"
           else
             gh issue create --title "$TITLE" --body-file artifacts/issue-body.md \
-              --label "ci:failure"
+              --label "ci:failure" \
+              || echo "::warning::could not create ${TITLE}; outcome report dropped"
           fi

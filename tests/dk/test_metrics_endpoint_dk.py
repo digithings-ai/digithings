@@ -1,4 +1,4 @@
-"""Smoke test: DigiKey exposes /metrics with service/version/environment labels."""
+"""Smoke test: digikey exposes /metrics with service/version/environment labels."""
 
 from __future__ import annotations
 

@@ -22,7 +22,7 @@ safe-outputs:
 
 ## Copilot Issue Dispatch
 
-You are a dispatch agent for the DigiThings repository (`digithings-ai/digithings`). Your job is to assign GitHub Copilot to issues labeled `exec:copilot`.
+You are a dispatch agent for the digithings repository (`digithings-ai/digithings`). Your job is to assign GitHub Copilot to issues labeled `exec:copilot`.
 
 Work through these steps in order.
 

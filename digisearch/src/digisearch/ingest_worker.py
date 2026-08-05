@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     configure_logging()
     logger.info(
-        "DigiSearch ingest worker placeholder — no queue loop yet. "
+        "digisearch ingest worker placeholder — no queue loop yet. "
         "Use POST /ingest for synchronous ingest or extend this module with your job backend.",
         extra={"operation": "ingest_worker_start", "duration_ms": 0, "outcome": "ok"},
     )

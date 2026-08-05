@@ -1,4 +1,4 @@
-"""DigiQuant /v1/jobs API (async backtest lifecycle)."""
+"""digiquant /v1/jobs API (async backtest lifecycle)."""
 
 from __future__ import annotations
 

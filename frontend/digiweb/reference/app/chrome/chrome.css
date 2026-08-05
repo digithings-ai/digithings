@@ -70,6 +70,15 @@
   border-bottom-color: var(--hair);
 }
 
+/* Nav menu — the dropdown specimen (nav-menu-reference.tsx) reuses the frame
+   above verbatim; it only needs headroom, because its panel opens *below* the
+   bar and .nsr-frame's 10.5rem would clip it away (the frame is `overflow:
+   clip`). Sized for the page's loosest typeface, not the default: the switcher
+   can put a serif in the panel and add ~1.2× to every row. */
+.nmr-frame {
+  height: 20rem;
+}
+
 /* Announcement bar — promoted to @digithings/web (#1450): the
    <AnnouncementBar/> primitive (components/effects-chrome/AnnouncementBar.tsx)
    carries the bar; .annc-bar/.annc-link live in

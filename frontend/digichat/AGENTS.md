@@ -1,8 +1,8 @@
-# Agent Guide: DigiChat
+# Agent Guide: digichat
 
 ## Purpose
 
-DigiChat is the user-facing interface to the DigiThings ecosystem. It is a Next.js 16 App Router application acting as a **Backend-for-Frontend (BFF)**: the browser never calls DigiGraph or any Python service directly. All LLM calls, auth token exchanges, and upstream probes run in Next.js Route Handlers on the server.
+digichat is the user-facing interface to the digithings ecosystem. It is a Next.js 16 App Router application acting as a **Backend-for-Frontend (BFF)**: the browser never calls digigraph or any Python service directly. All LLM calls, auth token exchanges, and upstream probes run in Next.js Route Handlers on the server.
 
 ---
 
@@ -25,7 +25,7 @@ Before making any change to `frontend/digichat/`:
 - [ ] Read `ARCHITECTURE.md` sections for the area you're touching (auth, chat route, conversations, ecosystem, DB schema)
 - [ ] Run `npm run test` from `frontend/digichat/` — passes before and after
 - [ ] Run `npm run lint` from `frontend/digichat/` — zero errors
-- [ ] Confirm browser **never** holds a DigiGraph JWT or `DIGIKEY_BFF_TOKEN` — all upstream auth is server-side only
+- [ ] Confirm browser **never** holds a digigraph JWT or `DIGIKEY_BFF_TOKEN` — all upstream auth is server-side only
 - [ ] Confirm `isAllowedServiceUrl()` is called on any user-supplied endpoint URL before fetching it (SSRF guard)
 - [ ] Confirm `AUTH_SECRET` / `NEXTAUTH_SECRET` never appears in client bundle or API responses
 - [ ] Confirm any new API route requires `requireDigiChatAuth()` unless it is explicitly a public endpoint (only `GET /api/health` is public)
@@ -37,7 +37,7 @@ Before making any change to `frontend/digichat/`:
 
 Beyond root `AGENTS.md`:
 
-- **BFF pattern is non-negotiable**: No DigiGraph URL, DigiKey token, or upstream service credential may ever reach the browser. All upstream calls go through Next.js Route Handlers.
+- **BFF pattern is non-negotiable**: No digigraph URL, digikey token, or upstream service credential may ever reach the browser. All upstream calls go through Next.js Route Handlers.
 - **Auth on every route except health**: Every `src/app/api/` route handler must call `requireDigiChatAuth()`. `GET /api/health` is the only exception.
 - **SSRF guard on ecosystem endpoints**: Any user-supplied service URL must pass `isAllowedServiceUrl()` before being fetched. Never construct a fetch URL from raw user input.
 - **No raw Next.js version assumptions**: Next.js 16 App Router has breaking changes. Read `node_modules/next/dist/docs/` before writing route handlers, server actions, or middleware.

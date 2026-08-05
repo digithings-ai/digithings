@@ -516,6 +516,50 @@
 .dc-act-check {
   color: var(--accent);
 }
+.dc-act-hit-tier,
+.dc-act-hit-year {
+  margin-left: 0.35rem;
+  color: var(--ink-mute);
+  font-size: 0.88em;
+}
+.dc-act-hit-snippet {
+  margin: 0.2rem 0 0;
+  color: var(--ink-mute);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dc-act-brief {
+  margin: 0.15rem 0 0;
+}
+.dc-act-brief summary {
+  cursor: pointer;
+  color: var(--ink-mute);
+  font-weight: 500;
+}
+.dc-act-brief-themes {
+  margin: 0.35rem 0 0;
+  padding-left: 1rem;
+}
+.dc-act-brief-label {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.dc-act-brief-questions {
+  margin-top: 0.4rem;
+}
+.dc-act-brief-q-heading {
+  margin: 0 0 0.2rem;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+}
+.dc-act-brief-questions ol {
+  margin: 0;
+  padding-left: 1.1rem;
+}
 
 .dc-inline-link {
   font: inherit;

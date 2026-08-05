@@ -73,7 +73,7 @@ sectors:
         tickers: [XOM, CVX]
         driver: Free cash flow, buybacks, capex discipline
       - name: E&P
-        tickers: [XOP, EOG, FANG, PXD]
+        tickers: [XOP, EOG, FANG]
         driver: WTI price, rig count, breakeven economics
       - name: Services
         tickers: [OIH, SLB, HAL, BKR]

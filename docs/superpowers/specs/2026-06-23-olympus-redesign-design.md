@@ -101,6 +101,14 @@ Both ordered **synthesized → raw**; the owner drops only as deep as the questi
 - **Theses** — tracker (claim, vehicle, status: confirmed/monitor/invalid) with
   expressing positions. → `/portfolio/theses/[id]` (claim, evidence for/against,
   vehicles, status history). Reuses `[thesisId]` page + `thesis-pipeline-snapshot`.
+  > **Superseded 2026-08** by [#1784](https://github.com/digithings-ai/digithings/pull/1784)
+  > (Fixes #1760): thesis detail is now `/portfolio/theses?thesis=<id>`, a single
+  > static page reading the id at runtime, with hrefs built by `thesisDetailHref()`
+  > in `lib/portfolio-url-state.ts`. The `[thesisId]` page and
+  > `lib/thesis-static-params.ts` are gone. Under `output: 'export'` a dynamic
+  > segment only pre-builds the ids enumerated at build time and hard-404s on
+  > every other one — do **not** reintroduce a `[thesisId]`-style dynamic segment
+  > under `/portfolio/theses`. Guarded by `lib/thesis-route-canon.test.ts`.
 - **Performance** — NAV curve (windows), vs benchmark, drawdown, Sharpe/vol
   (`performance-series`, `portfolio-risk-metrics`) **+ Decision quality**: the
   conviction scorecard (`decision-scorecard`) — "high-conviction calls returned

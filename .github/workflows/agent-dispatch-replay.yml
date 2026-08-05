@@ -103,10 +103,15 @@ jobs:
                   f.write(f\"{issue['number']}\n\")
           print(f'Found {len(stuck)} issue(s)', flush=True)
           "
-            cat /tmp/copilot-stuck.txt 2>/dev/null | while read -r num; do
-              [[ -z "${num:-}" ]] && continue
-              bounce_label "$num" "exec:copilot"
-            done
+            # Redirect rather than `cat file | while` (SC2002). The -f guard
+            # replaces the old `2>/dev/null`, which was what tolerated a missing
+            # file — a bare `done < file` would abort the step under `set -e`.
+            if [[ -f /tmp/copilot-stuck.txt ]]; then
+              while read -r num; do
+                [[ -z "${num:-}" ]] && continue
+                bounce_label "$num" "exec:copilot"
+              done < /tmp/copilot-stuck.txt
+            fi
           fi
 
           if [[ "$TIER" == "all" || "$TIER" == "cursor" ]]; then

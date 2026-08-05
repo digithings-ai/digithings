@@ -96,10 +96,18 @@ def technicals_to_rows(
         obs_date = ts.date().isoformat() if hasattr(ts, "date") else str(ts)[:10]
         row: dict[str, Any] = {"date": obs_date, "ticker": ticker}
         for col in TECHNICAL_COLUMNS:
-            if col in ind:
-                row[col] = _safe_float(ind[col])
+            if col not in ind:
+                continue
+            value = _safe_float(ind[col])
+            # Omit rather than write NULL (#1752). A daily run fetches only a
+            # trailing window, so long-window indicators (sma_200, zscore_200)
+            # are None throughout their warmup. Emitting them as NULL upserts
+            # over the previously-computed value and erases history; omitting
+            # the key leaves the stored value untouched.
+            if value is not None:
+                row[col] = value
         # Drop rows where every indicator column is None (leading NaN window).
-        if any(row.get(c) is not None for c in TECHNICAL_COLUMNS):
+        if any(col in row for col in TECHNICAL_COLUMNS):
             rows.append(row)
     return rows
 
@@ -149,9 +157,17 @@ def upsert_price_technicals(
     if not rows:
         return UpsertResult(table="price_technicals", rows=0)
     total = 0
-    for batch in _chunks(rows, chunk):
-        _call_with_retry(lambda b=batch: client.table("price_technicals").upsert(b).execute())
-        total += len(batch)
+    # technicals_to_rows omits indicator keys whose value is None (#1752), so a
+    # batch can hold rows with differing key sets. PostgREST derives the column
+    # list for a bulk upsert from the payload and rejects heterogeneous objects
+    # (PGRST102), so group by key set and upsert each group on its own.
+    groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    for row in rows:
+        groups.setdefault(tuple(sorted(row)), []).append(row)
+    for group in groups.values():
+        for batch in _chunks(group, chunk):
+            _call_with_retry(lambda b=batch: client.table("price_technicals").upsert(b).execute())
+            total += len(batch)
     _emit_audit("price_technicals", total)
     return UpsertResult(table="price_technicals", rows=total)
 

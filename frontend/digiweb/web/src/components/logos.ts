@@ -3,11 +3,12 @@
  * manifests. Named imports (not `import * as`) keep this tree-shakeable so only
  * these ~18 icons ship — not the whole simple-icons set. Any slug NOT in this
  * map falls back to a monogram chip in StackLogo (e.g. coingecko, and the
- * no-mark names like NautilusTrader, LiteLLM, LangSmith).
+ * no-mark names like NautilusTrader, LiteLLM, LangSmith — those three publish no
+ * single-path monochrome SVG, which is what StackLogo needs).
  */
 import {
   siDocker, siDrizzle, siFastapi, siLangchain, siLanggraph,
-  siModelcontextprotocol, siNextdotjs, siOpenai, siOpentelemetry,
+  siModelcontextprotocol, siNextdotjs, siOpenai, siOpentelemetry, siOptuna,
   siPolars, siPostgresql, siPrometheus, siPydantic, siReact, siRedis,
   siSqlite, siSupabase, siVercel,
 } from "simple-icons";
@@ -24,6 +25,7 @@ export const ICONS: Record<string, SimpleIcon> = {
   nextdotjs: siNextdotjs,
   openai: siOpenai,
   opentelemetry: siOpentelemetry,
+  optuna: siOptuna,
   polars: siPolars,
   postgresql: siPostgresql,
   prometheus: siPrometheus,

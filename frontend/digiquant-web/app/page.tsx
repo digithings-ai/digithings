@@ -112,7 +112,8 @@ export default function Home() {
                 <span className="kicker">{"// pricing"}</span>
                 <h2 className="dq-title">Own it, or have it run for you.</h2>
                 <p className="dq-sub" style={{ marginInline: "auto" }}>
-                  digiquant is open core. Self-host the whole stack at no cost, join the waitlist for
+                  digiquant is open core, and it is built on the same digithings modules you can
+                  deploy yourself. Self-host the whole stack at no cost, join the waitlist for
                   managed Olympus, or talk to us about enterprise — the same engine either way.
                 </p>
               </div>

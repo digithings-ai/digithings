@@ -1,15 +1,15 @@
-# Wave 2 — DigiGraph graph sketch (Atlas)
+# Wave 2 — digigraph graph sketch (Atlas)
 
-This file is the **implementation anchor** for [MIGRATION-ROADMAP-DIGITHINGS.md](MIGRATION-ROADMAP-DIGITHINGS.md) **§ P1b — DigiGraph scheduled operations**. It does not replace the roadmap; it **narrows** how scheduled Cowork work becomes **LangGraph** runs inside **DigiGraph** (`digithings/digraph/`).
+This file is the **implementation anchor** for [MIGRATION-ROADMAP-DIGITHINGS.md](MIGRATION-ROADMAP-DIGITHINGS.md) **§ P1b — digigraph scheduled operations**. It does not replace the roadmap; it **narrows** how scheduled Cowork work becomes **LangGraph** runs inside **digigraph** (`digithings/digraph/`).
 
-**DigiThings on disk:** sibling repo `../digithings` (see roadmap). **DigiGraph** = LangGraph orchestration service; extend it with new compiled graphs or nodes that call Atlas.
+**digithings on disk:** sibling repo `../digithings` (see roadmap). **digigraph** = LangGraph orchestration service; extend it with new compiled graphs or nodes that call Atlas.
 
 ---
 
 ## Principles
 
 1. **One publish path** — Nodes that persist state should prefer **subprocess or import** of existing Atlas entrypoints: `scripts/publish_document.py`, `scripts/materialize_snapshot.py`, `scripts/run_db_first.py`, `scripts/validate_db_first.py` ([`RUNBOOK.md`](../RUNBOOK.md), [`docs/ops/SCRIPTS.md`](SCRIPTS.md)).
-2. **LLM where the skill already assumes it** — Research segments match today’s **agent + skill** model; a graph can wrap **one prompt = one node** or a **research subgraph** (DigiGraph already has research patterns — see `digithings/digraph/ARCHITECTURE.md`).
+2. **LLM where the skill already assumes it** — Research segments match today’s **agent + skill** model; a graph can wrap **one prompt = one node** or a **research subgraph** (digigraph already has research patterns — see `digithings/digraph/ARCHITECTURE.md`).
 3. **Idempotency** — Schedule triggers include stable keys: `(graph_name, date, run_type)`; workers skip or no-op duplicate success for the same key.
 4. **Cowork becomes manual** — ``cowork/tasks/`` stay the **spec** for behavior and prompts until copied into graph node configs; **scheduled** jobs no longer depend on Cowork’s calendar.
 
@@ -29,7 +29,7 @@ Optional later graphs: monthly synthesis, document-deltas fold, portfolio PM reb
 
 ## High-level flow (daily research)
 
-Logical order only; DigiGraph may parallelize where safe.
+Logical order only; digigraph may parallelize where safe.
 
 ```mermaid
 flowchart TD
@@ -63,25 +63,25 @@ Avoid reimplementing SQL writes in TypeScript for Wave 2; keep Python authoritat
 
 ## Environment (worker / graph runner)
 
-Mirror today’s operator machine; inject from DigiThings env or secrets store:
+Mirror today’s operator machine; inject from digithings env or secrets store:
 
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (or name used in Atlas scripts)
 - `CRON_SECRET` or internal auth for **trigger** endpoints only
-- Provider keys for LLM nodes (LiteLLM in DigiThings or BYOK later)
+- Provider keys for LLM nodes (LiteLLM in digithings or BYOK later)
 - `ATLAS_ROOT` or monorepo path to **`scripts/`** if subprocess uses relative imports
 
-Document the exact variable names in the **DigiThings** deployment template when Wave 1 lands; keep `config/supabase.env` (Atlas repo) as the local operator reference.
+Document the exact variable names in the **digithings** deployment template when Wave 1 lands; keep `config/supabase.env` (Atlas repo) as the local operator reference.
 
 ---
 
-## DigiGraph extension (where code lives)
+## digigraph extension (where code lives)
 
-Implementation belongs in **`digithings/digigraph/`** (new graph module or registration in `orchestration/`, compiled graph in `graph/` — follow `digigraph/ARCHITECTURE.md` in the DigiThings repo). Atlas repo **does not** need a second orchestrator; it keeps **skills + scripts + schemas**.
+Implementation belongs in **`digithings/digigraph/`** (new graph module or registration in `orchestration/`, compiled graph in `graph/` — follow `digigraph/ARCHITECTURE.md` in the digithings repo). Atlas repo **does not** need a second orchestrator; it keeps **skills + scripts + schemas**.
 
 ---
 
 ## Acceptance cross-check
 
-Matches roadmap **P1b**: a **dated** daily run and a **post-mortem** run complete **without Cowork**; Supabase rows and logs match a manual script-driven run; failures surface in DigiGraph / worker observability.
+Matches roadmap **P1b**: a **dated** daily run and a **post-mortem** run complete **without Cowork**; Supabase rows and logs match a manual script-driven run; failures surface in digigraph / worker observability.
 
 When this sketch is outdated after implementation, update this file **and** the checklist rows in [MIGRATION-ROADMAP-DIGITHINGS.md](MIGRATION-ROADMAP-DIGITHINGS.md) § P1b.

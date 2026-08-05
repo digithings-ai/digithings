@@ -28,6 +28,7 @@ import { useAppShell } from '@/components/app-shell-context';
 import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
 import { buildDocumentSearchItems } from '@/lib/document-search';
 import { fetchAllTickers } from '@/lib/queries';
+import { thesisDetailHref } from '@/lib/portfolio-url-state';
 import type { Doc } from '@/lib/types';
 
 export type CmdItem = {
@@ -133,7 +134,7 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     id: `thesis-${t.id}`,
     title: `Thesis — ${t.name}`,
     hint: t.id,
-    href: `/portfolio/theses/${encodeURIComponent(t.id)}`,
+    href: thesisDetailHref(t.id),
     icon: Brain,
   }));
 

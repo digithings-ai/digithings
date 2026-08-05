@@ -1,6 +1,6 @@
-"""OpenAI-style orchestrator tool definitions for DigiSearch.
+"""OpenAI-style orchestrator tool definitions for digisearch.
 
-Hubs (e.g. DigiGraph) fetch these via ``POST /v1/orchestrator_tools`` and execute
+Hubs (e.g. digigraph) fetch these via ``POST /v1/orchestrator_tools`` and execute
 via ``POST /v1/orchestrator_invoke`` so search tooling is owned by this service.
 """
 
@@ -253,7 +253,7 @@ def build_digisearch_research_delegate_tool() -> OpenAIToolDict:
         "type": "function",
         "function": {
             "name": TOOL_DIGISEARCH_RESEARCH_DELEGATE,
-            "description": "Delegated research turn on DigiSearch (HTTP composite). Returns citations and formatted context.",
+            "description": "Delegated research turn on digisearch (HTTP composite). Returns citations and formatted context.",
             "parameters": {
                 "type": "object",
                 "properties": {

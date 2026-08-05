@@ -1,4 +1,4 @@
-# DigiThings copy & information architecture guide
+# digithings copy & information architecture guide
 
 **Status:** Living document · **Last updated:** 2026-06-30
 
@@ -81,7 +81,7 @@ Examples from references: Graphite "Review faster, ship sooner"; Cursor "Agents 
 
 ### Per-surface matrix
 
-| Pattern | digithings.ai | digiquant.io | DigiChat | Olympus |
+| Pattern | digithings.ai | digiquant.io | digichat | Olympus |
 |---------|---------------|--------------|----------|---------|
 | Primary | `ask digichat` | `open olympus` | `sign in` / `new chat` | context action |
 | Secondary | `read docs` → | `browse strategies` → | `view on github` → | `export` / `run` |
@@ -112,7 +112,7 @@ Place directly under the primary CTA (muted, `--text-secondary`).
 |---------|------------|
 | digithings.ai | `open core · self-hosted · MCP-first · BYOK` |
 | digiquant.io | `MIT license · NautilusTrader · tearsheets from real backtests` |
-| DigiChat | `bring your own key · audit log on by default` |
+| digichat | `bring your own key · audit log on by default` |
 
 ---
 
@@ -151,7 +151,7 @@ Minimal — no marketing columns. Literal nav labels only; document in Olympus s
 4. Content panels — flat surface, hairline
 5. No marketing sections, no mesh, no announcement bar
 
-### DigiChat (product-as-hero)
+### digichat (product-as-hero)
 
 1. Nav — minimal: brand · sign in · theme
 2. Chat chrome = hero — no marketing h1 above terminal
@@ -197,7 +197,7 @@ Minimal — no marketing columns. Literal nav labels only; document in Olympus s
 - **sub:** "Backtest · optimize · paper · live — NautilusTrader under the hood."
 - **primary:** `open olympus` · **secondary:** `browse strategies` →
 
-### DigiChat (#1218)
+### digichat (#1218)
 
 See §9 product-as-hero template. Marketing route = full chat chrome; embed route stays minimal (no marketing chrome in iframe).
 

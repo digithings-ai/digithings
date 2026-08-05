@@ -1,4 +1,4 @@
-"""Azure AI Search backend for DigiSearch."""
+"""Azure AI Search backend for digisearch."""
 
 from __future__ import annotations
 

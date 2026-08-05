@@ -1,4 +1,4 @@
-"""CORS allowlist tests for DigiSmith (uses shared digibase.cors helper)."""
+"""CORS allowlist tests for digismith (uses shared digibase.cors helper)."""
 
 from __future__ import annotations
 

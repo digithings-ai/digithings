@@ -16,7 +16,12 @@ describe("security-headers", () => {
 
   it("allows only marketing origins on embed frame-ancestors", () => {
     const csp = embedFrameAncestorsCsp();
-    const firstPartyOrigins = ["'self'", "https://digithings.ai", "https://digiquant.io"];
+    const firstPartyOrigins = [
+      "'self'",
+      "https://digithings.ai",
+      "https://www.digithings.ai",
+      "https://digiquant.io",
+    ];
     for (const origin of firstPartyOrigins) {
       expect(csp).toContain(origin);
     }
@@ -45,7 +50,14 @@ describe("registry-derived frame-ancestors", () => {
     const list = embedFrameAncestors();
     expect(list).toContain("'self'");
     expect(list).toContain("https://digithings.ai");
+    expect(list).toContain("https://www.digithings.ai");
     expect(list).toContain("https://digiquant.io");
+  });
+
+  it("includes www.digithings.ai in first-party frame-ancestors", () => {
+    const list = embedFrameAncestors();
+    expect(list).toContain("https://www.digithings.ai");
+    expect(list).toContain("https://digithings.ai");
   });
 
   it("appends https origins for every registry host and alias", () => {

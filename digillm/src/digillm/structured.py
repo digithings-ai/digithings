@@ -109,7 +109,7 @@ def resolve_model(
     Resolution is fully caller-driven — digillm hardcodes no config location.
     Provide either an explicit ``modes`` mapping or a YAML ``path`` whose top
     level is a ``mode -> model`` mapping (or contains a ``defaults:`` sub-mapping,
-    matching DigiThings' ``model_modes.yaml`` shape). ``modes`` wins over ``path``.
+    matching digithings' ``model_modes.yaml`` shape). ``modes`` wins over ``path``.
 
     Args:
         mode:    Desired mode (case-insensitive); typically one of test/medium/best.

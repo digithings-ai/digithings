@@ -1,4 +1,4 @@
-"""Unit tests for DigiQuant data layer (Polars)."""
+"""Unit tests for digiquant data layer (Polars)."""
 
 from __future__ import annotations
 
@@ -20,7 +20,9 @@ class TestGenerateSyntheticOhlcv:
     """generate_synthetic_ohlcv returns Polars DataFrame with OHLCV + symbol."""
 
     def test_returns_dataframe_with_expected_columns(self) -> None:
-        df = generate_synthetic_ohlcv(symbols=["AAPL", "MSFT"], start_date="2024-01-01", end_date="2024-01-10")
+        df = generate_synthetic_ohlcv(
+            symbols=["AAPL", "MSFT"], start_date="2024-01-01", end_date="2024-01-10"
+        )
         assert df.shape[0] > 0
         for col in OHLCV_COLUMNS:
             assert col in df.columns
@@ -31,8 +33,12 @@ class TestGenerateSyntheticOhlcv:
         assert df["symbol"].unique().to_list() == ["X"]
 
     def test_deterministic_with_seed(self) -> None:
-        a = generate_synthetic_ohlcv(symbols=["A"], start_date="2024-01-01", end_date="2024-01-03", seed=1)
-        b = generate_synthetic_ohlcv(symbols=["A"], start_date="2024-01-01", end_date="2024-01-03", seed=1)
+        a = generate_synthetic_ohlcv(
+            symbols=["A"], start_date="2024-01-01", end_date="2024-01-03", seed=1
+        )
+        b = generate_synthetic_ohlcv(
+            symbols=["A"], start_date="2024-01-01", end_date="2024-01-03", seed=1
+        )
         assert a["close"].to_list() == b["close"].to_list()
 
 
@@ -50,7 +56,9 @@ class TestLoadOhlcvCsv:
             df = load_ohlcv_csv(path)
             assert len(df) == 2
             required = {"open", "high", "low", "close", "volume"}
-            assert required.issubset(set(df.columns)), f"Missing columns: {required - set(df.columns)}"
+            assert required.issubset(set(df.columns)), (
+                f"Missing columns: {required - set(df.columns)}"
+            )
             assert "close" in df.columns
             assert df["close"][0] == 100.5
         finally:

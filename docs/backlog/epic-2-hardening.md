@@ -17,10 +17,10 @@ platform-level controls already landed.
 
 Already in place and out of scope for this epic:
 
-- **DigiKey RS256 JWTs + JWKS** protect DigiGraph, DigiQuant, and DigiSearch on
+- **digikey RS256 JWTs + JWKS** protect digigraph, digiquant, and digisearch on
   non-exempt routes (see [SECURITY.md](../../SECURITY.md) §"Non-negotiable
   defaults" item 2). No legacy static `DIGI_API_KEY` fallback.
-- **Scoped API keys** issued via DigiKey, with tenant-scope enforcement at the
+- **Scoped API keys** issued via digikey, with tenant-scope enforcement at the
   key layer.
 - **Audit redaction** — every `audit.jsonl` writer routes through
   `digibase.audit.redact_mapping`; prompts, JWTs, API keys, and document bodies
@@ -43,17 +43,17 @@ Each item below is sized for a single PR under ~120 lines of diff.
   allowlist for known fixtures under `tests/`. Fail the job on any new finding.
   — PR #68.
 - [x] **Rate-limit middleware on auth paths.** Apply a per-IP token-bucket
-  limiter to DigiKey's key-issuance and JWT-mint endpoints, and to DigiGraph's
+  limiter to digikey's key-issuance and JWT-mint endpoints, and to digigraph's
   authenticated entry points. Default limits configurable via env; document in
   [SECURITY.md](../../SECURITY.md). — PR #70.
 - [x] **CORS allowlist audit.** Enumerate every FastAPI app's CORS config
-  (DigiGraph, DigiSearch, DigiQuant, DigiKey, DigiSmith, DigiChat BFF). Replace
+  (digigraph, digisearch, digiquant, digikey, digismith, digichat BFF). Replace
   any `*` origin with an explicit allowlist driven by env. Add a unit test per
   service asserting disallowed origins are rejected. — PR #74.
 - [x] **Pydantic v2 input validation at HTTP boundaries.** Sweep every
   `@app.post` / `@app.get` handler for untyped `dict` bodies or query params;
-  replace with a Pydantic v2 model. Covers DigiGraph `/workflow`, DigiSearch
-  query/ingest, DigiQuant backtest, and the DigiChat BFF proxy routes. — PR #72.
+  replace with a Pydantic v2 model. Covers digigraph `/workflow`, digisearch
+  query/ingest, digiquant backtest, and the digichat BFF proxy routes. — PR #72.
 - [x] **Dependency-audit CI (`pip-audit`).** Add a scheduled + PR-triggered
   `pip-audit` job against each component's lockfile. Fail on `HIGH`/`CRITICAL`;
   warn on `MEDIUM`. Include Node audit for `digichat/` (`npm audit --omit=dev`).
@@ -64,7 +64,7 @@ Each item below is sized for a single PR under ~120 lines of diff.
   unbounded hangs on upstream LLM or broker calls. — PR #73.
 - [x] **`/healthz` vs `/v1/status` separation.** Carve a minimal
   auth-exempt `/healthz` returning `{"ok": true}` for liveness probes on every
-  service; keep `/v1/status` (DigiSmith) for richer, still-secret-free
+  service; keep `/v1/status` (digismith) for richer, still-secret-free
   diagnostics. Document the contract so load balancers stop pinging `/v1/status`.
   — PR #75.
 - [x] **Documented threat model.** Expand [SECURITY.md](../../SECURITY.md)

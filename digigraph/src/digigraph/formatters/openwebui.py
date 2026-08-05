@@ -34,7 +34,7 @@ def _cell_safe(v: object, max_chars: int | None = None) -> str:
 
 
 def _results_to_markdown_table(results: list[dict]) -> str:
-    """Format raw DigiSearch-style results as markdown table: all columns, top MAX_TABLE_ROWS rows, cells truncated to MAX_CELL_CHARS."""
+    """Format raw digisearch-style results as markdown table: all columns, top MAX_TABLE_ROWS rows, cells truncated to MAX_CELL_CHARS."""
     if not results:
         return "No results."
     all_keys: set[str] = set()

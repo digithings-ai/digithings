@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# create_issue.sh — Create a GitHub Issue for the DigiThings agent backlog.
+# create_issue.sh — Create a GitHub Issue for the digithings agent backlog.
 #
 # Usage:
 #   scripts/create_issue.sh --component COMP --type TYPE --title "..." [options]
@@ -54,8 +54,8 @@ EXEC_TIER=""
 VALID_COMPONENTS="digigraph digiquant digisearch digismith digiclaw digibase digivault digikey digichat website root"
 VALID_TYPES="feat fix refactor docs test chore style perf"
 VALID_RISKS="low med high"
-VALID_PHASES="Phase 2 — Hardening|Phase 3 — Domain unification|SITAAS pilot|Phase 4 — Atlas on DigiGraph|Phase 5 — Atlas tiering"
-VALID_AREAS="Cross-cutting|DigiGraph|DigiQuant|DigiSearch|DigiSmith|DigiKey|DigiChat|DigiBase|DigiClaw|Website|SITAAS|Docs|Atlas"
+VALID_PHASES="Phase 2 — Hardening|Phase 3 — Domain unification|SITAAS pilot|Phase 4 — Atlas on digigraph|Phase 5 — Atlas tiering"
+VALID_AREAS="Cross-cutting|digigraph|digiquant|digisearch|digismith|digikey|digichat|digibase|digiclaw|Website|SITAAS|Docs|Atlas"
 VALID_KINDS="Epic Feature Task Bug Chore Research"
 VALID_PRIORITIES="P0 P1 P2 P3"
 VALID_MODELS="sonnet opus"

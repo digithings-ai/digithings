@@ -60,11 +60,17 @@ class SegmentFreshness(BaseModel):
     """Per-segment provenance marker used by the dashboard.
 
     Mirrors :class:`digiquant.olympus.atlas.phases.phase7_synthesis.SegmentFreshness`.
+
+    ``frozen`` (#1749): regenerated today, but the edit merge changed nothing, so ``as_of`` is
+    the date the content last materially changed. This model is the READ-path validator and is
+    ``extra="forbid"`` — a value the writer can emit but this ``Literal`` does not list is a
+    ``ValidationError`` on every subsequent read of the row, not a soft ignore. Widen both
+    copies in the same change.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    source: Literal["today", "baseline"]
+    source: Literal["today", "baseline", "frozen"]
     as_of: str = Field(description="ISO date string ('' if unknown)")
 
 

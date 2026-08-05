@@ -1,4 +1,4 @@
-# DigiSkills – Architecture
+# digiskills – Architecture
 
 `digiskills` compiles a source — a local codebase/docs path, or a list of
 remote docs/OpenAPI URLs — into a standard, installable **Agent Skill**
@@ -259,7 +259,7 @@ still caught by the post-fetch host re-check, the byte cap trips via
 `download()`, secrets get redacted, injection phrasing gets flagged not
 stripped).
 
-`tests/dsk/test_dogfood.py` (P2) compiles every DigiThings module's real
+`tests/dsk/test_dogfood.py` (P2) compiles every digithings module's real
 `ARCHITECTURE.md`/`AGENTS.md` (digigraph, digiquant, digisearch, digismith,
 digiclaw, digibase, digikey, digivault, digifetch, digillm, digiskills,
 digichat) through the full pipeline with `TemplateSynthesizer`, asserting a
@@ -285,7 +285,7 @@ Per ADR-0023's phase plan:
 
 | Gap | Phase | Notes |
 |-----|-------|-------|
-| Dogfood against DigiThings' own modules | P2 (done) | `tests/dsk/test_dogfood.py` compiles `ARCHITECTURE.md`/`AGENTS.md` from every module as a known-good validation corpus. MCP tool manifests (live `/v1/orchestrator_tools` responses) are **not** included — that needs running services, not a static-file corpus; still a gap. |
+| Dogfood against digithings' own modules | P2 (done) | `tests/dsk/test_dogfood.py` compiles `ARCHITECTURE.md`/`AGENTS.md` from every module as a known-good validation corpus. MCP tool manifests (live `/v1/orchestrator_tools` responses) are **not** included — that needs running services, not a static-file corpus; still a gap. |
 | External pilot against a real client's docs/API | P3 | Pre-flight hardening done (see "Security hardening" above: SSRF, memory cap, redaction, untrusted/injection flagging). Actually running a real client source through the pipeline is still pending a go/no-go decision on which builder/source to use. |
 | digisearch-backed corpus builder | Follow-up | For corpora that outgrow naive ingestion (huge codebases/doc sites) — chunk/embed/retrieve instead of "ingest everything under a cap." |
 | Hosted platform / registry / live MCP distribution | P4 (unscoped) | Explicitly deferred in ADR-0023; revisit only after the static package format is proven useful. |

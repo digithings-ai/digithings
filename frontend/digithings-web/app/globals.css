@@ -35,6 +35,7 @@
 @source "../../digiweb/web/src/components/data-layout";
 @source "../../digiweb/web/src/components/typography";
 @source "../../digiweb/web/src/components/marquee";
+@source "../../digiweb/web/src/components/symbols";
 
 /* Point the token font families at the self-hosted next/font variables. */
 :root[data-theme] {
@@ -47,7 +48,7 @@
 }
 
 /* ---- Neutral platform palette (digithings.ai only) ----
-   DigiThings is the platform; accent flavoring belongs to individual modules,
+   digithings is the platform; accent flavoring belongs to individual modules,
    not the platform shell. The shared design tokens (tokens.css) define a teal
    accent that digiquant.io legitimately uses for its green-candle identity — we
    must NOT change that file (digiquant-web + olympus consume it). Instead we
@@ -76,13 +77,6 @@
    page shading always reaches the top border. (The shared file also feeds
    digiquant.io, so we don't touch it.) */
 .glow { animation: none; transform: none; }
-
-/* brand QR mark: transparent, theme-inverted (dark modules in light mode, white
-   in dark) — two <img>s swapped by [data-theme] (Lightning CSS drops mask-image,
-   so a single recolorable mark isn't reliable). */
-.brand-mark { display: inline-block; }
-[data-theme="light"] .brand-mark-dark { display: none; }
-[data-theme="dark"] .brand-mark-light { display: none; }
 
 /* ==========================================================================
    v7 LANDING CHROME — originally ported from digiquant-web/app/globals.css
@@ -213,6 +207,9 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dc-settings-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
 .dc-settings-error { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--down); }
 .dc-settings-test-ok { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--up); }
+
+
+/* Landing / module cards continue below */
 
 /* ---- /docs API reference — app-owned CONTENT chrome only. The shell
    (responsive sidebar + scroll-spy + mobile disclosure), hero, code blocks,

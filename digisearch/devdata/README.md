@@ -1,4 +1,4 @@
-# Dev data (DigiSearch)
+# Dev data (digisearch)
 
 ## `edgar_sample/`
 
@@ -12,8 +12,8 @@ Generated files `edgar_*.md` / `edgar_*.yaml` are **not committed** (see repo ro
 
 2. **Ingest** into Chroma index `edgar_dev`:  
    - Docker: `make seed-digisearch-edgar-dev`  
-   - Host DigiSearch (`make stack-local`): `make seed-digisearch-edgar-dev-host`
+   - Host digisearch (`make stack-local`): `make seed-digisearch-edgar-dev-host`
 
-3. Set **`DIGISEARCH_INDEX=edgar_dev`** for DigiGraph (see `docs/LOCAL_STACK.md`).
+3. Set **`DIGISEARCH_INDEX=edgar_dev`** for digigraph (see `docs/LOCAL_STACK.md`).
 
 **Corpus:** Loukas et al., *EDGAR-CORPUS*, ECONLP 2021 — public SEC filings. Dev/testing only; see `SECURITY.md`.

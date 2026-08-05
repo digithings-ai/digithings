@@ -1,7 +1,7 @@
 """Supabase adapter for the Atlas sub-graph.
 
 Replaces the legacy ``scripts/publish_document.py`` and
-``scripts/materialize_snapshot.py`` write paths from inside the DigiGraph
+``scripts/materialize_snapshot.py`` write paths from inside the digigraph
 sub-graph. Same tables, same unique keys — the legacy scripts will be frozen
 in commit 9 so both paths can never write concurrently.
 
@@ -187,7 +187,7 @@ def _audit(event_type: str, payload: dict[str, Any]) -> None:
       doc_type, run_type). Never pass raw LLM payloads, response bodies,
       or ``content``/``payload``/``snapshot`` blobs — those may contain
       PII or prompt text that the shallow redactor will not scrub.
-    - This logger.info call emits to the standard logger; DigiGraph's
+    - This logger.info call emits to the standard logger; digigraph's
       ``audit.py`` wraps that into structured JSONL downstream.
     """
     logger.info("atlas_io audit: %s %s", event_type, redact_mapping(payload))
@@ -521,6 +521,32 @@ def load_active_theses_rows(
 
     Excludes terminal statuses (``CLOSED``, ``INVALIDATED``). Empty on first run.
     """
+    # Resolved in TWO steps — find the date, then fetch that date — rather than one ordered,
+    # capped query filtered in Python (#1835). The old shape was
+    # ``.order("date", desc=True).limit(100)`` then a client-side filter to the newest date
+    # present, which fails as the register grows: ``LIMIT`` spans dates, so rows from OLDER
+    # dates consume the cap and can crowd out the date actually wanted; and ``ORDER BY date``
+    # has no secondary key, so *which* rows survive a truncation is not stable between runs.
+    # Peak was 54 rows on one date against a cap of 100 — a 1.85x margin.
+    #
+    # This register is what the thesis-writing step is shown so it can update an existing thesis
+    # instead of creating a near-duplicate, and what ``validate_market_thesis_proposals`` dedupes
+    # against. A register missing entries admits the duplicates it exists to prevent, silently.
+    # ``row_cap`` now bounds ONE date's rows, so the same number is a far larger allowance.
+    date_resp = (
+        client.table("theses")
+        .select("date")
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    date_rows = list(getattr(date_resp, "data", None) or [])
+    if not date_rows:
+        return []
+    top_date = str(date_rows[0].get("date") or "")
+    if not top_date:
+        return []
     resp = (
         client.table("theses")
         .select(
@@ -528,21 +554,22 @@ def load_active_theses_rows(
             "confidence, validation_criteria, invalidation_criteria, horizon, "
             "thesis_kind, linked_market_thesis_id, topic_key"
         )
-        .lt("date", run_date.isoformat())
-        .order("date", desc=True)
+        .eq("date", top_date)
         .limit(row_cap)
         .execute()
     )
     rows: list[dict[str, Any]] = list(getattr(resp, "data", None) or [])
-    if not rows:
-        return []
-    rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
-    top_date = str(rows[0].get("date") or "")
+    if len(rows) >= row_cap:
+        # Loud rather than silent: the caller cannot tell a complete register from a clipped one.
+        logger.warning(
+            "load_active_theses_rows: %d rows for %s hit row_cap=%d — the thesis register may be "
+            "truncated, which lets duplicate theses through (#1835)",
+            len(rows),
+            top_date,
+            row_cap,
+        )
     return [
-        r
-        for r in rows
-        if str(r.get("date") or "") == top_date
-        and str(r.get("status") or "ACTIVE").upper() not in _TERMINAL_THESIS_STATUSES
+        r for r in rows if str(r.get("status") or "ACTIVE").upper() not in _TERMINAL_THESIS_STATUSES
     ]
 
 

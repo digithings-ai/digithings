@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { G10_CURRENCIES } from '@/lib/twelve-x/types';
 import type {
   FxBriefRow,
+  FxConsensusDivergence,
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
+  FxTradeIdeaRow,
 } from '@/lib/twelve-x/types';
 import { TwelveXProvider, type TwelveXContextValue } from './context';
 import TodayTab from './TodayTab';
@@ -148,16 +150,20 @@ function eventsFixture(): FxEconomicCalendarRow[] {
   ];
 }
 
-function render(): string {
+function render(
+  divergenceByCurrency: Record<string, FxConsensusDivergence> = {},
+  tradeIdeas: FxTradeIdeaRow[] = [],
+): string {
   return renderToStaticMarkup(
     <TwelveXProvider value={ctx}>
       <TodayTab
         digest={null}
-        tradeIdeas={[]}
+        tradeIdeas={tradeIdeas}
         confluence={[]}
         briefs={briefsFixture()}
         events={eventsFixture()}
         series={tenCurrencySeries()}
+        divergenceByCurrency={divergenceByCurrency}
         onSeeAllBriefs={() => {}}
       />
     </TwelveXProvider>,
@@ -219,5 +225,44 @@ describe('TodayTab layout (Task 2.2)', () => {
     const idx21 = html.indexOf('2026-06-21');
     expect(idx22).toBeGreaterThan(0);
     expect(idx21).toBeGreaterThan(idx22);
+  });
+
+  it('shows the disputes line when trade ideas touch divergent currencies', () => {
+    const tradeIdeas: FxTradeIdeaRow[] = [
+      {
+        run_date: '2026-06-22',
+        rank: 1,
+        pair: 'EUR/USD',
+        direction: 'short',
+        title: 'EUR short',
+        thesis: '',
+        catalyst: '',
+        levels: [],
+        citations: [],
+        as_of: '2026-06-22T12:00:00Z',
+      },
+    ];
+    const html = render(
+      {
+        EUR: {
+          currency: 'EUR',
+          consensusScore: 1.5,
+          consensusTilt: 0.8,
+          consensusAsOf: '2026-06-22T12:00:00Z',
+          pmtSentiment: 'bearish',
+          pmtScore: -1.25,
+          pmtAsOf: '2026-06-15',
+          gap: 2.75,
+          isDivergent: true,
+          snapshotId: null,
+          rawSnapshot: null,
+          streetStatement: 'Street score +1.50',
+          pmtStatement: 'PMT Smart Bias Overall_Sentiment=bearish',
+        },
+      },
+      tradeIdeas,
+    );
+    expect(html).toContain('data-disputes-line="true"');
+    expect(html).toContain('The data disputes 1 of today');
   });
 });

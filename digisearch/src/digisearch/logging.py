@@ -1,9 +1,9 @@
-"""Structured JSON logging for DigiSearch.
+"""Structured JSON logging for digisearch.
 
 Single source of truth for the process-wide logging config. Every entrypoint
 (:mod:`digisearch.server`, :mod:`digisearch.mcp_server`, :mod:`digisearch.ingest_worker`)
 calls :func:`configure_logging` at startup so that operators get the same shape
-on stdout regardless of how DigiSearch is invoked.
+on stdout regardless of how digisearch is invoked.
 
 Record shape (all keys present on every INFO/WARNING/ERROR record):
 
@@ -21,7 +21,7 @@ Record shape (all keys present on every INFO/WARNING/ERROR record):
 Config:
 
 * Level from ``DIGI_LOG_LEVEL`` (default ``INFO``). Accepts standard names.
-* Idempotent — safe to call on hot-reload; only the DigiSearch JSON handler is
+* Idempotent — safe to call on hot-reload; only the digisearch JSON handler is
   replaced, other test/framework handlers (e.g. pytest's ``caplog``) are kept.
 """
 
@@ -58,9 +58,9 @@ def _build_formatter() -> jsonlogger.JsonFormatter:
 
 
 def configure_logging() -> None:
-    """Install the DigiSearch JSON handler + request-id filter on the root logger.
+    """Install the digisearch JSON handler + request-id filter on the root logger.
 
-    Idempotent. Re-entrant calls replace only the DigiSearch handler so tests
+    Idempotent. Re-entrant calls replace only the digisearch handler so tests
     that use ``caplog`` (which adds its own handler) remain functional.
     """
     level_name = os.environ.get("DIGI_LOG_LEVEL", "INFO").upper()

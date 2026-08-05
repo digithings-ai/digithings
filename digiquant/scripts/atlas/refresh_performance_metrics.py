@@ -11,11 +11,21 @@ Uses Supabase price_history closes + positions snapshot rows to populate:
   - portfolio_metrics: one row per calendar day for continuity (computed_from=refresh_script).
     Rows from update_tearsheet.py (computed_from=tearsheet) are never overwritten.
 
-Daily pipeline policy (--fill-calendar-through):
+Scheduled cron policy (no flags — .github/workflows/pipeline-atlas-metrics.yml):
+  Processes **today (UTC)** only, and exits 3 when no positions book exists for that
+  date instead of silently re-processing the previous one. Re-processing upserts
+  on_conflict='date', so it re-stamps generated_at on a row whose as_of_date never
+  moved: 22 of the 33 green runs between 2026-06-22 and 2026-07-31 advanced no date,
+  and the 2026-06-26 row was rewritten on 2026-07-16 — twenty days later (#1746).
+
+Operator densification (--fill-calendar-through — run_db_first.py / manual only):
   Refreshes the latest existing positions date, then for each calendar day until the
   target date: clones the prior day's positions if missing (carry-forward), recomputes
   per-position metrics, NAV, and a portfolio_metrics row so timelines stay dense even
-  when no digest ran.
+  when no digest ran.  Deliberately **not** passed by any workflow: carry-forward
+  clones the prior book into dates where the book never materialized, which destroys
+  the absent-positions signal a missing-book detector needs (#1746, #1766).  It also
+  only advances *forward* from max(positions.date), so it cannot repair earlier holes.
 
 Does not replace update_tearsheet.py NAV simulation history; it aligns end-of-day
 metrics with stored closes so the dashboard matches market data.
@@ -24,6 +34,7 @@ Usage:
   python3 scripts/refresh_performance_metrics.py --supabase
   python3 scripts/refresh_performance_metrics.py --supabase --date YYYY-MM-DD
   python3 scripts/refresh_performance_metrics.py --supabase --fill-calendar-through YYYY-MM-DD
+Exit codes: 0 clean · 1 hard failure · 3 stale book (scheduled path found no fresh book)
 Environment: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (see config/supabase.env)
 """
 
@@ -106,8 +117,58 @@ def _max_positions_date(sb) -> Optional[date]:
     return datetime.strptime(str(data[0]["date"])[:10], "%Y-%m-%d").date()
 
 
+_EXIT_STALE_BOOK = 3
+
+
+class StaleBookError(RuntimeError):
+    """The scheduled run found no ``positions`` book for the date it targets.
+
+    Raised instead of falling back to ``max(positions.date)``: ``portfolio_metrics``
+    is upserted ``on_conflict='date'``, so re-processing an older date rewrites that
+    row's ``generated_at`` while its ``as_of_date`` never moves. The dashboard then
+    serves a stale date behind a green cron (#1746).
+    """
+
+
+def resolve_scheduled_metrics_date(sb: Any, target: date) -> str:
+    """ISO date the scheduled (flagless) run must process, or raise ``StaleBookError``.
+
+    The cron fires at 22:00 UTC, ten hours after the Olympus book for ``target``
+    (today UTC) materializes, so on a healthy day ``max(positions.date) == target``.
+    An older maximum means the book never landed and there is nothing new to compute.
+    Returns ``max(positions.date)`` — identical to ``target`` on a healthy day, and
+    never earlier, so the processed date is no earlier than today's book.
+
+    Calibrated against prod over the 35 scheduled days 2026-06-22..2026-07-31: this
+    raises on exactly the 22 green runs that created no ``portfolio_metrics`` row (21
+    stale-book days plus 2026-06-22, which had no ``positions`` rows at all) and on
+    none of the 11 that did. The only two other rowless days are 2026-06-23 and
+    2026-06-25, where the step already failed red for an unrelated reason.
+    """
+    latest = _max_positions_date(sb)
+    if latest is None:
+        raise StaleBookError(
+            f"no positions rows at all — no book to compute metrics for {target.isoformat()}"
+        )
+    if latest < target:
+        raise StaleBookError(
+            f"stale book: latest positions date {latest.isoformat()} is "
+            f"{(target - latest).days} day(s) before the target {target.isoformat()}. "
+            "Refusing to re-stamp the older portfolio_metrics row — that silent rewrite is "
+            "what hid 22 no-op runs behind a green cron (#1746). Repair the upstream Olympus "
+            f"book for {target.isoformat()} and re-run; to recompute the last real book "
+            f"instead, pass --date {latest.isoformat()}. Do NOT pass "
+            f"--date {target.isoformat()} — that date has no book, so carry-forward would "
+            "clone the previous one and hide the gap."
+        )
+    return latest.isoformat()
+
+
 def carry_forward_positions(sb, as_of: str) -> int:
     """If no rows exist for ``as_of``, clone the latest prior day's positions.
+
+    Reachable only via ``--fill-calendar-through``: on the scheduled path ``as_of`` is
+    always a date whose book exists, so the probe below always hits and returns 0.
 
     Weights and static fields carry forward; performance fields are cleared and
     filled by ``refresh_positions_metrics``. Returns rows inserted (0 if skipped).
@@ -421,12 +482,29 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
         # Always populate current_price from the freshest available close (#814).
         # Try the exact metrics_date first; fall back to the most recent prior close
         # so weekends / holidays still produce a non-NULL price.
+        #
+        # ``price_date`` tracks WHICH close won, because that — not the book date — is what
+        # ``metrics_as_of`` must record (#1833). Migration 012 already defines the column as
+        # "Date of close used for metrics (usually last trading day)", so this is the code
+        # catching up to its own schema. Before this, every Saturday row claimed
+        # ``metrics_as_of`` = the Saturday while carrying Friday's close: a row asserting a
+        # close existed on a day the market never opened.
         c_now = closes.get(metrics_date)
+        price_date: Optional[str] = metrics_date if c_now is not None else None
+        carried = False
         if c_now is None and prev_d:
             c_now = closes.get(prev_d)
+            if c_now is not None:
+                price_date = prev_d
+                carried = True
         c_prev = closes.get(prev_d) if prev_d else None
         day_ch = None
-        if c_now is not None and c_prev is not None and c_prev > 0:
+        # On a carried day ``c_now`` IS ``closes[prev_d]`` and so is ``c_prev`` — the identical
+        # number — which used to yield a fabricated 0.0% day change on every non-trading day
+        # (all 11 non-CASH rows on 2026-08-01 carried 0.0). A carried mark has no measurable
+        # one-session move, so the honest value is NULL. ``refresh_nav_point`` already takes
+        # this line: on a non-trading day it skips the term rather than reporting a measured 0%.
+        if not carried and c_now is not None and c_prev is not None and c_prev > 0:
             day_ch = (c_now - c_prev) / c_prev * 100.0
         # Sanity-check entry_price vs current close — flag implausible entries like SPY@750 (#814).
         if entry is not None and c_now is not None and c_now > 0:
@@ -449,15 +527,26 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
                 c_entry = c_entry_map.get(ed)
             if c_entry and c_entry > 0:
                 since = (c_now - c_entry) / c_entry * 100.0
-        patch = {
-            "unrealized_pnl_pct": unreal,
-            "day_change_pct": day_ch,
-            "since_entry_return_pct": since,
-            "metrics_as_of": metrics_date,
-            # current_price: always set from the latest close available (today or prev trading day).
-            # This replaces any stale/NULL value stored from a prior run or initial materialization.
-            "current_price": c_now if c_now is not None else r.get("current_price"),
-        }
+        if c_now is None:
+            # No close resolved for EITHER candidate date — a genuinely unmarkable row (real
+            # case: XRT's price_history lagged a day behind its peers). Previously the stale
+            # stored `current_price` was retained while `metrics_as_of` was stamped with the
+            # book date anyway, producing the worst of the three states: an old price under a
+            # fresh provenance label with NULL percentages beside it. Clear all of them
+            # together instead. `valuePosition` needs BOTH `current_price` and `metrics_as_of`
+            # to take its close branch, so nulling both renders an em-dash — a blank, which is
+            # honest, rather than a number that is wrong.
+            patch: Dict[str, Any] = dict.fromkeys(_METRIC_CLEAR)
+            patch["current_price"] = None
+        else:
+            patch = {
+                "unrealized_pnl_pct": unreal,
+                "day_change_pct": day_ch,
+                "since_entry_return_pct": since,
+                # The date of the close actually used, NOT the book date (#1833).
+                "metrics_as_of": price_date,
+                "current_price": c_now,
+            }
         sb.table("positions").update(patch).eq("date", metrics_date).eq("ticker", t).execute()
         updated += 1
     return updated
@@ -596,7 +685,7 @@ def fill_calendar_through(sb, end: date) -> None:
         d += timedelta(days=1)
 
 
-def main() -> None:
+def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     mx = ap.add_mutually_exclusive_group()
     mx.add_argument("--date", help="Single metrics date (YYYY-MM-DD)")
@@ -614,19 +703,24 @@ def main() -> None:
     sb = _sb()
     if args.fill_through:
         fill_calendar_through(sb, datetime.strptime(args.fill_through, "%Y-%m-%d").date())
-    elif args.date:
+        return 0
+    if args.date:
         run_one_day(sb, args.date)
-    else:
-        latest = _max_positions_date(sb)
-        if not latest:
-            print("No positions rows — nothing to do")
-            sys.exit(0)
-        run_one_day(sb, latest.isoformat())
+        return 0
+    # Scheduled path: assert the book is fresh before writing anything (#1746). Exiting
+    # non-zero is the point — a run that advanced no date must not report success.
+    try:
+        metrics_date = resolve_scheduled_metrics_date(sb, datetime.now(tz=timezone.utc).date())
+    except StaleBookError as exc:
+        print(f"❌ {exc}", file=sys.stderr)
+        return _EXIT_STALE_BOOK
+    run_one_day(sb, metrics_date)
+    return 0
 
 
 if __name__ == "__main__":
     try:
-        main()
+        sys.exit(main())
     except Exception as ex:
         print(f"❌ {ex}", file=sys.stderr)
         sys.exit(1)

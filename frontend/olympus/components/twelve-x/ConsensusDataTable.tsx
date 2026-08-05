@@ -8,10 +8,11 @@ import {
   scoreColorClass,
   scoreLabel,
 } from '@/lib/twelve-x/consensus-bar';
-import type { ConsensusDeltaSet, FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
+import type { ConsensusDeltaSet, FxConsensusDivergence, FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
 import { deriveConsensusRows, type ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
 import { ConsensusScoreBar } from './ConsensusScoreBars';
 import DeltaChip from './DeltaChip';
+import DivergenceChip from './DivergenceChip';
 
 export type RowFilter = 'all' | 'bullish' | 'bearish' | 'strong';
 export type SortDir = 'asc' | 'desc';
@@ -41,6 +42,8 @@ export interface ConsensusDataTableProps {
   series: FxConsensusSnapshotRow[];
   latest: FxConsensusSnapshotRow[];
   deltas: ConsensusDeltaSet;
+  divergenceByCurrency?: Record<string, FxConsensusDivergence>;
+  onDivergenceClick?: (ccy: string) => void;
   onRowClick?: (ccy: string) => void;
   initialFilter?: RowFilter;
 }
@@ -49,6 +52,8 @@ export function ConsensusDataTable({
   series,
   latest,
   deltas,
+  divergenceByCurrency = {},
+  onDivergenceClick,
   onRowClick,
   initialFilter = 'all',
 }: ConsensusDataTableProps) {
@@ -195,6 +200,9 @@ export function ConsensusDataTable({
                   Score
                 </th>
                 <th className="px-3.5 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
+                  Bias
+                </th>
+                <th className="px-3.5 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
                   Details
                 </th>
               </tr>
@@ -206,6 +214,7 @@ export function ConsensusDataTable({
                 const colorClass = scoreColorClass(score);
                 const n_views = latestRow?.n_views ?? 0;
                 const agreement = latestRow?.agreement ?? 0;
+                const divergence = divergenceByCurrency[row.currency];
                 return (
                   <tr
                     key={row.currency}
@@ -240,6 +249,16 @@ export function ConsensusDataTable({
                       <div className="flex min-w-[120px]">
                         <ConsensusScoreBar value={score} />
                       </div>
+                    </td>
+                    <td className="px-3.5 py-2.5 text-center">
+                      {divergence?.isDivergent ? (
+                        <DivergenceChip
+                          gap={divergence.gap}
+                          onClick={() => onDivergenceClick?.(row.currency)}
+                        />
+                      ) : (
+                        <span className="font-mono text-[11px] text-ink-mute">—</span>
+                      )}
                     </td>
                     <td className="px-3.5 py-2.5 text-center">
                       <button

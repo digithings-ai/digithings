@@ -984,4 +984,11 @@ class TestDigestFailureVisibility:
         digest = final.phase7_digest
         assert digest is not None
         assert not digest.get("carried_from"), "fresh synthesis must not be marked carried"
-        assert diagnostics.summarize_run(final).status == "ok"
+        # This asserted a global ``status == "ok"`` until #1736. It cannot any more: the
+        # fixture is Atlas-only, so it commits no book and the no-book gate degrades it. The
+        # claim under test is *digest* health, so assert that directly — the synthesis left
+        # no failure marker and no error behind.
+        summary = diagnostics.summarize_run(final)
+        assert "master_digest_failed" not in summary.breakdown
+        assert summary.error_summary == ""
+        assert summary.breakdown["degraded_reasons"] == ["no_committed_book"]

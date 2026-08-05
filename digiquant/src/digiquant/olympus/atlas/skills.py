@@ -49,6 +49,63 @@ def _skill_edit_path(slug: str) -> Path:
     return _atlas_data_root() / "skills" / slug / f"{slug}-edit.md"
 
 
+# Limits the DocumentPatch schema enforces but that none of the 17 *-edit.md
+# skills stated (#1740). The model overran the 240-char `reason` cap regularly,
+# and because it is a hard schema constraint a single long reason raised
+# ValidationError and discarded the WHOLE patch — costing 1-4 researched
+# segments per run, and the master digest itself on 2026-07-28.
+#
+# Appended at the single load chokepoint rather than copied into 17 heterogeneous
+# files, so it cannot drift between them. Keep the numbers in sync with
+# digiquant.olympus.edit_mode.models.PatchOp / DocumentPatch — there is a test
+# asserting they match.
+EDIT_SCHEMA_CONSTRAINTS = """## Output constraints (schema-enforced)
+
+These are hard limits. Exceeding one previously discarded the entire patch:
+
+- `ops[].reason` — **240 characters maximum**. One short sentence. Over-long
+  values are now truncated rather than rejected, so anything past 240 chars is
+  silently lost; keep it brief instead.
+- `ops[].path` — 512 characters maximum; an RFC 6901 JSON Pointer starting `/`.
+- `one_line_summary` — 400 characters maximum."""
+
+
+# Appended to EVERY skill, full and edit alike (#1750). Deliberately at the single load
+# chokepoint rather than copied into 20 heterogeneous SKILL.md files, for the same reason
+# EDIT_SCHEMA_CONSTRAINTS is: it cannot drift between them.
+#
+# Both variants get it because the defect appeared on the FULL path. The frozen
+# `sector-healthcare` block that opened #1750 — "XLV is at $162.16, up 5.46% from its 50-day
+# SMA" — was produced by the 2026-07-26 *baseline* run, which forces `resolve_edit_mode → full`
+# and never calls `merge_document_patch`. An edit-only rule would have missed it entirely.
+#
+# Two separate failures are being addressed, and only the first is fixable here:
+#   * a number quoted with no date, so a reader cannot tell a current figure from one carried
+#     for eleven publication dates;
+#   * a number that was never in the data at all — $162.16 was not an XLV close or intraday
+#     print on 2026-07-23 when it first appeared, and the payload attributed it to
+#     `price_technicals:XLV` via `source_ids`, which is worse than no attribution. Dating a
+#     fabricated number does not make it true. Detecting that needs a numeric-fidelity
+#     validator cross-checking prose against `price_technicals`; the instruction below only
+#     makes the claim auditable.
+QUANTITATIVE_FINDING_RULES = """## Dating your numbers (required)
+
+Every figure you quote must carry the date of the DATA — not the date of this run.
+
+- Set `material_findings[].as_of` to the ISO date (`YYYY-MM-DD`) the numbers describe, and
+  name it inline too when it reads naturally: `SPY flat at $738.93 (Jul 24)`.
+- `as_of` is the date of the row you read from the tool. If the latest `price_technicals` row
+  is 2026-07-30 because today's close has not landed yet, write `2026-07-30` — do NOT write
+  today's date.
+- Omit `as_of` only for a purely qualitative finding that quotes no figure.
+- **Never carry a number forward from the prior document without re-reading it.** If you cannot
+  re-verify a figure from a tool on this run, either drop the finding or state the older date it
+  came from. A stale number under a fresh date is the specific failure this rule exists to stop.
+- Quote only figures you actually read from a tool this run. `source_ids` is an assertion that
+  the named source contains the number — attributing an unverified figure to a database table
+  is worse than leaving it unsourced."""
+
+
 class MalformedFrontmatterError(ValueError):
     """Raised when a SKILL.md starts with ``---`` but has a broken YAML block."""
 
@@ -83,13 +140,16 @@ def load_skill(slug: str) -> str:
     """Return the Markdown body of ``skills/<slug>/SKILL.md``.
 
     Cached — skill bodies are static per process.
+
+    :data:`QUANTITATIVE_FINDING_RULES` is appended (#1750). The full path needs it as much as
+    the edit path does: the frozen XLV block that opened #1750 was produced by a *baseline* run.
     """
     path = _skill_path(slug)
     if not path.is_file():
         raise SkillNotFoundError(f"skill not found: {slug!r} (expected at {path})")
     raw = path.read_text(encoding="utf-8")
     _, body = _split_frontmatter(raw)
-    return body.strip()
+    return f"{body.strip()}\n\n{QUANTITATIVE_FINDING_RULES}"
 
 
 @lru_cache(maxsize=64)
@@ -98,13 +158,16 @@ def load_skill_edit(slug: str) -> str:
 
     Used by Atlas edit-mode nodes (spec §5.6). Separate cache from
     :func:`load_skill` so full and edit variants can coexist.
+
+    :data:`EDIT_SCHEMA_CONSTRAINTS` is appended to every edit skill (#1740), and
+    :data:`QUANTITATIVE_FINDING_RULES` to every skill of either kind (#1750).
     """
     path = _skill_edit_path(slug)
     if not path.is_file():
         raise SkillNotFoundError(f"edit skill not found: {slug!r} (expected at {path})")
     raw = path.read_text(encoding="utf-8")
     _, body = _split_frontmatter(raw)
-    return body.strip()
+    return f"{body.strip()}\n\n{EDIT_SCHEMA_CONSTRAINTS}\n\n{QUANTITATIVE_FINDING_RULES}"
 
 
 def load_skill_with_frontmatter(slug: str) -> tuple[dict[str, object], str]:

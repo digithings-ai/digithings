@@ -1,4 +1,4 @@
-# DigiThings Repository Janitor Audit — June 2026
+# digithings Repository Janitor Audit — June 2026
 
 **Date:** 2026-06-05  
 **Scope:** Read-only inventory of top-level and component folders, git hygiene, stale references, generated artifacts.  
@@ -31,7 +31,7 @@
 | `digikey/` | JWT/API keys | Compose `:8005`, all services | **Keep** | High |
 | `digibase/` | Shared HTTP/audit/OTel | Imported by all Python services | **Keep** | High |
 | `digiclaw/` | Heartbeat + audit MCP | `make up-heartbeat`, CI | **Keep** | High |
-| `frontend/` | Web umbrella: design, landings, DigiChat, Olympus | npm workspaces, Cloudflare/build scripts | **Keep** | High |
+| `frontend/` | Web umbrella: design, landings, digichat, Olympus | npm workspaces, Cloudflare/build scripts | **Keep** | High |
 | `tests/` | Cross-component pytest suites | `make test`, CI | **Keep** | High |
 | `scripts/` | Agent kit, stack runners, build/deploy assembly | Makefile, hooks, GHA | **Keep** (trim stale — see JAN) | High |
 | `docs/` | ADRs, agents, scoring, plans, reviews | `make doc-check`, humans/agents | **Keep** | High |
@@ -45,7 +45,7 @@
 | `digiquant/data/` | OHLCV samples for backtests/Docker | Compose mount, `run_stack_local.sh`, tests/docs | **Keep README in git**; CSVs **gitignored** (correct) | High |
 | `data/` (repo root) | Atlas **price-history** CSV cache + agent-cache paths in scripts | `history_cache`, frozen `scripts/atlas/compute-technicals.py` | **Gitignore** entire tree; document as runtime cache | Medium |
 | `projects/` | Confidential per-project Docker stacks (SITAAS, twelve_x, local) | Operators; **entire tree gitignored** | **Keep locally**; never commit contents; optional allowlist `projects/README.md` (JAN-014) | High |
-| `docs/projects/` | Public dogfood project specs | DigiGraph indexing, guides | **Keep** | High |
+| `docs/projects/` | Public dogfood project specs | digigraph indexing, guides | **Keep** | High |
 | `docs/superpowers/` | Ad-hoc agent specs/plans | Human/agent planning only | **Keep**; commit untracked June 2026 files or move to issues | Medium |
 | `package.json` + `package-lock.json` | npm workspaces `frontend/*` | CI, local frontend builds | **Keep** lockfiles; **regenerate** to drop stale `apps/digiquant-atlas` entries (JAN-003) | High |
 | `conftest.py` | Root pytest hooks | `pytest` from repo root | **Keep** | High |

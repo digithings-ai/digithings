@@ -27,7 +27,7 @@ OPT = {
     "phase": {
         "Phase 2 — Hardening": "31ed826c",
         "Phase 3 — Domain unification": "af0cc88d",
-        "Phase 4 — Atlas on DigiGraph": "5c4138a8",
+        "Phase 4 — Atlas on digigraph": "5c4138a8",
         "Phase 5 — Atlas tiering": "dac4d6ce",
         "Phase 6 — Platform": "1ecee05a",
         "SITAAS pilot": "cea67c2c",
@@ -45,14 +45,14 @@ OPT = {
 }
 
 COMPONENT_TO_AREA = {
-    "component:digigraph":  "DigiGraph",
-    "component:digisearch": "DigiSearch",
-    "component:digiquant":  "DigiQuant",
-    "component:digichat":   "DigiChat",
-    "component:digikey":    "DigiKey",
-    "component:digiclaw":   "DigiClaw",
-    "component:digismith":  "DigiSmith",
-    "component:digibase":   "DigiBase",
+    "component:digigraph":  "digigraph",
+    "component:digisearch": "digisearch",
+    "component:digiquant":  "digiquant",
+    "component:digichat":   "digichat",
+    "component:digikey":    "digikey",
+    "component:digiclaw":   "digiclaw",
+    "component:digismith":  "digismith",
+    "component:digibase":   "digibase",
     "component:website":    "Website",
 }
 PRIO_MAP = {"priority:critical": "P0", "priority:high": "P1",
@@ -144,7 +144,7 @@ def derive_phase(labels, title):
     if "phase-3" in ls:
         return "Phase 3 — Domain unification"
     if "phase-4" in ls:
-        return "Phase 4 — Atlas on DigiGraph"
+        return "Phase 4 — Atlas on digigraph"
     if "phase-5" in ls:
         return "Phase 5 — Atlas tiering"
     if "phase-2" in ls:

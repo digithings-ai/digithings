@@ -15,6 +15,7 @@ from typing import (  # score:allow untyped any — heterogeneous node-update di
     Any,
     Callable,
     Literal,
+    NamedTuple,
 )
 
 from digigraph.graph.research_agent import run_research_agent
@@ -31,6 +32,13 @@ from digiquant.olympus.atlas.state import (
     SegmentSlot,
     refresh_scope_forces_full,
 )
+
+# Imported for its registration side effect (#1741): ``telemetry`` registers the
+# merge-fallback ``breakdown`` contributor (#1736 seam) at import time. This module writes
+# ``state.merge_fallbacks`` and every phase module imports it, so the contributor is wired
+# on any compiled graph. Keep the import here rather than in ``diagnostics.py`` — the seam
+# exists so a new key costs one module plus one line, not an edit to the gate rules.
+from digiquant.olympus.atlas.telemetry import merge_fallback_breakdown  # noqa: F401
 from digiquant.olympus.atlas.triage import triage_decision_to_signal
 from digiquant.olympus.edit_mode import (
     DocumentPatch,
@@ -38,6 +46,12 @@ from digiquant.olympus.edit_mode import (
     PriorPublished,
     artifact_document_key,
     resolve_edit_mode,
+)
+from digiquant.olympus.edit_mode.content_identity import (
+    UNCHANGED_SINCE_KEY,
+    clear_unchanged,
+    mark_unchanged,
+    prior_content_date,
 )
 from digiquant.olympus.edit_mode.merge import MergeError, merge_document_patch, section_index
 
@@ -625,6 +639,10 @@ class _StatePriorLoader:
             date=published,
             document_key=doc_key,
             payload=dict(payload),
+            # The content clock, distinct from the publish date (#1749). ``prior_content_date``
+            # returns ``published`` when the row carries no ``unchanged_since`` marker, so a
+            # pre-marker row resolves exactly as it did before.
+            content_date=prior_content_date(payload, published),
         )
 
 
@@ -674,6 +692,55 @@ def _edit_phase_inputs(
     }
 
 
+class EditSegmentResult(NamedTuple):
+    """Outcome of one edit-mode segment attempt.
+
+    ``slot is None`` ⇒ the patch could not be merged and the caller must regenerate in
+    full mode (#1641). ``merge_fallback_reason`` carries the *why* for the non-gating
+    telemetry that #1641 omitted (#1741) and is set only in that case.
+
+    ``content_changed`` / ``unchanged_since`` are the content-identity outcome (#1749). They
+    default to "changed" so every early return — a failed patch call, a non-``SegmentPayload``
+    body, a merge fallback — is treated as a real edit rather than silently reported as a
+    freeze. Read them by attribute, not by tuple unpacking: the caller used to destructure
+    four values positionally and that is now brittle.
+    """
+
+    slot: SegmentSlot | None
+    errors: list[PhaseError]
+    delta: DocumentPatch | None
+    merge_fallback_reason: str | None = None
+    content_changed: bool = True
+    unchanged_since: str | None = None
+
+
+# Cap on the stored merge-failure reason. A Pydantic ValidationError message carries the
+# full offending body; ``atlas_run_diagnostics.breakdown`` is an operator-facing jsonb
+# column, not a log sink, and the same cap is applied to ``master_digest_failed``.
+_MERGE_FALLBACK_REASON_MAX = 300
+
+
+def _delta_row(result: EditSegmentResult) -> dict[str, Any]:
+    """The published ``document-deltas/<key>`` payload, plus the deterministic merge outcome.
+
+    The delta row is the audit artifact for an edit-mode segment, and on a no-op merge it was
+    the most misleading thing the pipeline wrote: production's 2026-07-31
+    ``document-deltas/sector-healthcare`` row advertised ``status="updated"`` with six ``set``
+    ops and a per-op ``reason`` each, over a body byte-identical to 07-29's. Every op set a
+    value that was already present — the row asserted six specific changes that did not happen.
+
+    ``content_changed`` is derived by the pipeline, never by the model, which is why it is
+    attached to the dumped row here rather than added as a ``DocumentPatch`` field — there it
+    would become part of the LLM's output schema. Nothing re-validates a published delta row
+    back into ``DocumentPatch``, so the extra keys are safe despite ``extra="forbid"``.
+    """
+    row = result.delta.model_dump(mode="json") if result.delta is not None else {}
+    row["content_changed"] = result.content_changed
+    if result.unchanged_since:
+        row[UNCHANGED_SINCE_KEY] = result.unchanged_since
+    return row
+
+
 def _run_edit_segment(
     *,
     state: AtlasResearchState,
@@ -686,7 +753,7 @@ def _run_edit_segment(
     tools: list[dict[str, Any]] | None,
     execute_tool: Callable[[str, dict[str, Any]], str] | None,
     model: str | None,
-) -> tuple[SegmentSlot | None, list[PhaseError], DocumentPatch | None]:
+) -> EditSegmentResult:
     """Run one segment in edit mode. A ``None`` slot means the patch merge failed and
     the caller must fall back to full-mode regeneration (#1641)."""
     skill_text = load_skill_edit(spec.skill_slug)
@@ -720,11 +787,11 @@ def _run_edit_segment(
         baseline_date=prior.date,
     )
     if errors:
-        return patch_slot, errors, None
+        return EditSegmentResult(patch_slot, errors, None)
 
     payload = patch_slot.payload
     if not isinstance(payload, SegmentPayload):
-        return patch_slot, errors, None
+        return EditSegmentResult(patch_slot, errors, None)
     patch_model = DocumentPatch.model_validate(payload.body)
 
     try:
@@ -739,17 +806,28 @@ def _run_edit_segment(
         # can't be researched today. Mirrors the digest edit path's fallback. No
         # PhaseError here — a successful full run must not leave the run degraded;
         # the full path's own fail-soft covers a second failure.
+        reason = f"{type(exc).__name__}: {exc}"
         logger.warning(
-            "edit-mode merge failed for segment %r (%s: %s); falling back to full generation",
+            "edit-mode merge failed for segment %r (%s); falling back to full generation",
             spec.segment_slug,
-            type(exc).__name__,
-            exc,
+            reason,
         )
-        return None, [], None
+        return EditSegmentResult(None, [], None, reason[:_MERGE_FALLBACK_REASON_MAX].strip())
 
     merged_body = dict(merge_result.materialized)
     merged_body.setdefault("segment", spec.segment_slug)
     merged_body["date"] = state.run_date.isoformat()
+    # Content-identity provenance (#1749/#1751). The body above is about to be published
+    # under the run date with source="today" whether or not the merge changed anything, so
+    # stamp what actually happened. ``mark_unchanged`` PROPAGATES the prior chain's
+    # ``unchanged_since`` rather than resetting it, which is what lets ``gap_days`` accumulate
+    # and §5.3.2's hard cap eventually fire; ``clear_unchanged`` is the matching reset, needed
+    # because ``apply_ops`` copies the prior body and would otherwise carry a stale marker
+    # forward through every subsequent real edit.
+    if merge_result.merge_stats.content_changed:
+        clear_unchanged(merged_body)
+    else:
+        mark_unchanged(merged_body, prior=prior.payload, prior_date=prior.date)
     slot = SegmentSlot(
         payload=SegmentPayload(
             segment=spec.segment_slug,
@@ -757,7 +835,13 @@ def _run_edit_segment(
             as_of=state.run_date,
         )
     )
-    return slot, [], merge_result.delta
+    return EditSegmentResult(
+        slot,
+        [],
+        merge_result.delta,
+        content_changed=merge_result.merge_stats.content_changed,
+        unchanged_since=merged_body.get(UNCHANGED_SINCE_KEY),
+    )
 
 
 def build_segment_node(
@@ -772,6 +856,9 @@ def build_segment_node(
 
     def _node(state: AtlasResearchState) -> dict[str, Any]:
         carried: Carried | None = None
+        # Non-gating: an edit→full fallback that then succeeds must still leave the run
+        # `ok`, but it must stop being invisible (#1741).
+        merge_fallbacks: dict[str, str] = {}
         if triage_gate is not None:
             carried = triage_gate(state, spec.segment_slug)
         else:
@@ -818,7 +905,7 @@ def build_segment_node(
             if prior is None:
                 edit_mode = "full"
             else:
-                slot, errors, delta = _run_edit_segment(
+                edit_result = _run_edit_segment(
                     state=state,
                     spec=spec,
                     inputs=inputs,
@@ -830,17 +917,27 @@ def build_segment_node(
                     execute_tool=execute_tool,
                     model=model,
                 )
+                slot, errors = edit_result.slot, edit_result.errors
+                fallback_reason = edit_result.merge_fallback_reason
                 if slot is not None:
                     update = write_adapter(spec, slot)
-                    if delta is not None:
-                        update["document_deltas"] = {
-                            spec.segment_slug: delta.model_dump(mode="json")
+                    if edit_result.delta is not None:
+                        update["document_deltas"] = {spec.segment_slug: _delta_row(edit_result)}
+                    if not edit_result.content_changed:
+                        # Run-level tally for the diagnostics breakdown (#1751). Written here
+                        # rather than derived at summarize time because the merge outcome is
+                        # only known at the node, and the published body's marker is the only
+                        # other record of it.
+                        update["content_freezes"] = {
+                            spec.segment_slug: edit_result.unchanged_since or ""
                         }
                     if errors:
                         update["errors"] = errors
                     return update
                 # slot is None ⇒ patch merge failed (#1641) — regenerate from scratch
                 # via the full path below rather than carrying + degrading the run.
+                # Record it so a cost audit can count the segments that paid twice.
+                merge_fallbacks = {spec.segment_slug: fallback_reason or "merge_failed"}
 
         skill_text = load_skill(spec.skill_slug)
 
@@ -867,6 +964,8 @@ def build_segment_node(
         update = write_adapter(spec, slot)
         if errors:
             update["errors"] = errors
+        if merge_fallbacks:
+            update["merge_fallbacks"] = merge_fallbacks
         return update
 
     return _node
@@ -874,6 +973,7 @@ def build_segment_node(
 
 __all__ = [
     "DataLayerScope",
+    "EditSegmentResult",
     "InputsBuilder",
     "SegmentNodeSpec",
     "WriteAdapter",

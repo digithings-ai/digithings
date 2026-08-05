@@ -1,6 +1,6 @@
-# DigiThings Design System
+# digithings Design System
 
-The shared visual language for every DigiThings public surface:
+The shared visual language for every digithings public surface:
 `digithings.ai`, `digiquant.io`, and `digithings.ai/chat`. A simple,
 utilitarian, dark-first aesthetic with per-module accent colors and a
 cross-brand starfield signature.
@@ -46,7 +46,7 @@ All tokens are declared as CSS custom properties on `:root` in
 | `--fg`               | `#ffffff`   | Emphasis / highlight foreground       |
 
 These match the dark-mode values in `digichat/src/app/globals.css`, so
-DigiChat and the marketing site render at identical contrast.
+digichat and the marketing site render at identical contrast.
 
 ### Typography
 
@@ -121,20 +121,20 @@ value; component rules always reference `var(--accent)`.
 
 | Module      | Token                   | Swatch                                                                                        | Hex       |
 | ----------- | ----------------------- | --------------------------------------------------------------------------------------------- | --------- |
-| DigiGraph   | `--accent-digigraph`    | ![](https://readme-swatches.vercel.app/e5b765?style=round)                                     | `#e5b765` |
-| DigiQuant   | `--accent-digiquant`    | ![](https://readme-swatches.vercel.app/3dd6c4?style=round)                                     | `#3dd6c4` |
+| digigraph   | `--accent-digigraph`    | ![](https://readme-swatches.vercel.app/e5b765?style=round)                                     | `#e5b765` |
+| digiquant   | `--accent-digiquant`    | ![](https://readme-swatches.vercel.app/3dd6c4?style=round)                                     | `#3dd6c4` |
 | Atlas       | `--accent-atlas`        | ![](https://readme-swatches.vercel.app/6fbf94?style=round)                                     | `#6fbf94` |
 | Hermes      | `--accent-hermes`       | ![](https://readme-swatches.vercel.app/4a8f7b?style=round)                                     | `#4a8f7b` |
 | Kairos      | `--accent-kairos`       | ![](https://readme-swatches.vercel.app/2f7a65?style=round)                                     | `#2f7a65` |
-| DigiSearch  | `--accent-digisearch`   | ![](https://readme-swatches.vercel.app/5aa3c4?style=round)                                     | `#5aa3c4` |
-| DigiChat    | `--accent-digichat`     | ![](https://readme-swatches.vercel.app/e2708a?style=round)                                     | `#e2708a` |
-| DigiKey     | `--accent-digikey`      | ![](https://readme-swatches.vercel.app/d97a5a?style=round)                                     | `#d97a5a` |
-| DigiSmith   | `--accent-digismith`    | ![](https://readme-swatches.vercel.app/6fa3a3?style=round)                                     | `#6fa3a3` |
-| DigiClaw    | `--accent-digiclaw`     | ![](https://readme-swatches.vercel.app/b87840?style=round)                                     | `#b87840` |
-| DigiBase    | `--accent-digibase`     | ![](https://readme-swatches.vercel.app/9ea0a5?style=round)                                     | `#9ea0a5` |
-| DigiStore   | `--accent-digistore`    | ![](https://readme-swatches.vercel.app/7b7fc7?style=round)                                     | `#7b7fc7` |
-| DigiLink    | `--accent-digilink`     | ![](https://readme-swatches.vercel.app/4fa39b?style=round)                                     | `#4fa39b` |
-| DigiVault   | `--accent-digivault`    | ![](https://readme-swatches.vercel.app/9d8fc9?style=round)                                     | `#9d8fc9` |
+| digisearch  | `--accent-digisearch`   | ![](https://readme-swatches.vercel.app/5aa3c4?style=round)                                     | `#5aa3c4` |
+| digichat    | `--accent-digichat`     | ![](https://readme-swatches.vercel.app/e2708a?style=round)                                     | `#e2708a` |
+| digikey     | `--accent-digikey`      | ![](https://readme-swatches.vercel.app/d97a5a?style=round)                                     | `#d97a5a` |
+| digismith   | `--accent-digismith`    | ![](https://readme-swatches.vercel.app/6fa3a3?style=round)                                     | `#6fa3a3` |
+| digiclaw    | `--accent-digiclaw`     | ![](https://readme-swatches.vercel.app/b87840?style=round)                                     | `#b87840` |
+| digibase    | `--accent-digibase`     | ![](https://readme-swatches.vercel.app/9ea0a5?style=round)                                     | `#9ea0a5` |
+| digistore   | `--accent-digistore`    | ![](https://readme-swatches.vercel.app/7b7fc7?style=round)                                     | `#7b7fc7` |
+| digilink    | `--accent-digilink`     | ![](https://readme-swatches.vercel.app/4fa39b?style=round)                                     | `#4fa39b` |
+| digivault   | `--accent-digivault`    | ![](https://readme-swatches.vercel.app/9d8fc9?style=round)                                     | `#9d8fc9` |
 
 ### Scoped override pattern
 
@@ -197,7 +197,7 @@ border + heading pick up the module color automatically.
 ```html
 <div class="accent-digiquant">
   <article class="module-card">
-    <h3>DigiQuant</h3>
+    <h3>digiquant</h3>
     <p>NautilusTrader-powered quant engine.</p>
   </article>
 </div>
@@ -232,14 +232,14 @@ Two-column grid, collapses to one column on mobile.
 
 ### `.chat-embed-slot`
 
-Drop-in mount point for the DigiChat widget. The accent stripe at the top
+Drop-in mount point for the digichat widget. The accent stripe at the top
 picks up the surrounding `--accent`.
 
 ```html
 <div class="accent-digichat">
   <div class="chat-embed-slot">
     <iframe src="https://digithings.ai/chat/embed?session=demo"
-            title="DigiChat"></iframe>
+            title="digichat"></iframe>
   </div>
 </div>
 ```
@@ -303,7 +303,7 @@ consumes it — see the `data-direction="bottom|left|right|zoom"` rules in
 
 ### `digichat/` (Next.js)
 
-DigiChat already uses the same base palette in `digichat/src/app/globals.css`.
+digichat already uses the same base palette in `digichat/src/app/globals.css`.
 To formally adopt the design system:
 
 1. Vendor the tokens. Add a make target that copies `frontend/digiweb/design/tokens.css`
@@ -321,22 +321,22 @@ To formally adopt the design system:
    ```
 
 3. Replace any hardcoded hex values in Next.js components with
-   `var(--bg-secondary)`, `var(--accent)`, etc. Scope DigiChat surfaces
+   `var(--bg-secondary)`, `var(--accent)`, etc. Scope digichat surfaces
    with the `.accent-digichat` class at the root.
 
-Do not import the full `components.css` into DigiChat — its React
+Do not import the full `components.css` into digichat — its React
 components have their own primitives. Tokens alone keep the two surfaces
 visually coherent without forcing layout collisions.
 
 ### `frontend/digiquant/`
 
-DigiQuant.io will be a subdirectory of the main site (or a sibling static
+digiquant.io will be a subdirectory of the main site (or a sibling static
 site sharing the same CSS). It will:
 
 1. `@import './tokens.css'` and `@import './components.css'` directly
    (no vendoring — same deployment).
 2. Wrap the page root in `<body class="accent-digiquant">` so all
-   `var(--accent)` references resolve to the DigiQuant color.
+   `var(--accent)` references resolve to the digiquant color.
 3. Reuse `.hero`, `.module-card`, `.feature-grid`, `.chat-embed-slot`,
    `.terminal` without overrides.
 4. Load the same `starfield.js` for cross-brand continuity.

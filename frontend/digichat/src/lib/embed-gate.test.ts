@@ -4,6 +4,7 @@ import {
   emit,
   readTrialUnlocked,
   readTurns,
+  resetLiveTrialUnlockedForTests,
   resolveEmbedHost,
   writeTrialUnlocked,
   writeTurns,
@@ -34,6 +35,7 @@ function installLocalStorage(store: Store = new Map()): Store {
 describe("embed-gate storage", () => {
   beforeEach(() => {
     installLocalStorage();
+    resetLiveTrialUnlockedForTests();
   });
 
   it("returns 0 when no entry exists", () => {
@@ -79,6 +81,7 @@ describe("embed-gate storage", () => {
 describe("embed-gate trial-unlock persistence", () => {
   beforeEach(() => {
     installLocalStorage();
+    resetLiveTrialUnlockedForTests();
   });
 
   it("defaults to false when nothing is stored", () => {
@@ -89,6 +92,7 @@ describe("embed-gate trial-unlock persistence", () => {
     writeTrialUnlocked("https://digithings.ai", true);
     // A "remount" is just re-reading storage from scratch — there's no React
     // state left over, exactly like a fresh page load after a reload.
+    resetLiveTrialUnlockedForTests();
     expect(readTrialUnlocked("https://digithings.ai")).toBe(true);
   });
 
@@ -103,7 +107,7 @@ describe("embed-gate trial-unlock persistence", () => {
     expect(readTrialUnlocked("https://digiquant.io")).toBe(false);
   });
 
-  it("swallows storage errors (private-mode safety)", () => {
+  it("keeps unlock in the live mirror when localStorage is blocked", () => {
     // @ts-expect-error — deliberately broken storage
     globalThis.localStorage = {
       getItem: () => {
@@ -118,6 +122,8 @@ describe("embed-gate trial-unlock persistence", () => {
     };
     expect(readTrialUnlocked("x")).toBe(false);
     expect(() => writeTrialUnlocked("x", true)).not.toThrow();
+    // Same-tab unlock must still work so a frozen transport can send the header.
+    expect(readTrialUnlocked("x")).toBe(true);
   });
 });
 

@@ -1,4 +1,4 @@
-"""DigiSearch configuration. YAML/TOML loader with env var substitution."""
+"""digisearch configuration. YAML/TOML loader with env var substitution."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def load_config(path: str | Path) -> dict[str, Any]:
 
 
 class DigiSearchConfig:
-    """DigiSearch configuration. Built from YAML/TOML or defaults."""
+    """digisearch configuration. Built from YAML/TOML or defaults."""
 
     def __init__(self, data: dict[str, Any] | None = None) -> None:
         data = data or {}

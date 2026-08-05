@@ -1,4 +1,4 @@
-# DigiBase — Spec
+# digibase — Spec
 
 **Port:** none (shared library)  
 **Role:** Shared Python library providing error envelopes, HTTP helpers, and OTel instrumentation used by all services.

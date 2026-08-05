@@ -1,4 +1,4 @@
-"""DigiSmith – LangSmith-aligned observability for the DigiThings stack."""
+"""digismith – LangSmith-aligned observability for the digithings stack."""
 
 from __future__ import annotations
 

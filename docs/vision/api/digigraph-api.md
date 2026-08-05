@@ -39,8 +39,8 @@ uvicorn digigraph.server:app
 MCP: `FastMCP streamable-http (workflow, chat, thread_state, list_orchestrator_tools)`
 
 ## Configuration
-- `DIGIQUANT_URL`: DigiQuant base URL (defaults to the compose service URL).
-- `DIGISEARCH_URL`: DigiSearch base URL; empty disables retrieval.
+- `DIGIQUANT_URL`: digiquant base URL (defaults to the compose service URL).
+- `DIGISEARCH_URL`: digisearch base URL; empty disables retrieval.
 - `DIGIKEY_JWKS_URL`: JWT public-key (JWKS) endpoint.
 - `OPENAI_API_BASE`: LiteLLM proxy base URL.
 - `DIGI_LLM_MODE` (default `test`): Model tier: test / medium / best.
@@ -88,7 +88,7 @@ curl $DIGIGRAPH_URL/v1/status
 ```
 
 ### POST /workflow
-Run the full research + backtest graph (DigiClaw custom skill).
+Run the full research + backtest graph (digiclaw custom skill).
 
 auth: digigraph:workflow (optional) · rate: 10/min/IP
 
@@ -96,13 +96,13 @@ Request:
 - `prompt` (string) — required: The user request to route through the supervisor.
 - `session_id` (string): Conversation/session correlation id.
 - `allowed_tools` (string[]): Tool allowlist override for this run.
-- `digi_bearer` (string): JWT forwarded downstream to DigiSearch/DigiQuant.
+- `digi_bearer` (string): JWT forwarded downstream to digisearch/digiquant.
 
 Response:
 - `success` (boolean): Whether the workflow completed.
 - `message` (string): Human-readable summary or full RAG answer.
-- `backtest_result` (object | null): DigiQuant BacktestResult, if a backtest ran.
-- `rag_sources` (object[] | null): Aggregated DigiSearch citations.
+- `backtest_result` (object | null): digiquant BacktestResult, if a backtest ran.
+- `rag_sources` (object[] | null): Aggregated digisearch citations.
 
 ```bash
 curl -X POST $DIGIGRAPH_URL/workflow \

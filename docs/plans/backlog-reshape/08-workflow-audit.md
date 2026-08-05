@@ -15,10 +15,10 @@ Snapshot taken during project-management reorg session.
 **Docs + deploys (3):**
 - `docs.yml` — doc-links + agents-init-idempotent.
 - `static.yml` — Pages deploy for digithings.ai.
-- `reindex-digithings-guide.yml` — DigiSearch index rebuild for docs.
+- `reindex-digithings-guide.yml` — digisearch index rebuild for docs.
 
 **Scheduled jobs (3):**
-- `digiquant-prices.yml` — DigiQuant prices pipeline (scheduled intraday + EOD).
+- `digiquant-prices.yml` — digiquant prices pipeline (scheduled intraday + EOD).
 - `scheduled-maintenance.yml` — stale branches, doc-links, agents-drift, dep-audit (daily).
 - `agent-backlog-snapshot.yml` — scheduled backlog export.
 

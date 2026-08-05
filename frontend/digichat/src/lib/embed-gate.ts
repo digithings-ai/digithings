@@ -11,6 +11,15 @@ const STORAGE_PREFIX = "digichat_embed_turns:";
 const TRIAL_UNLOCK_STORAGE_PREFIX = "digichat_embed_trial_unlocked:";
 
 /**
+ * Session-local mirror of the trial-unlock flag. Needed because `useChat`
+ * freezes its transport on first render (#1339): `prepareSendMessagesRequest`
+ * cannot see a React `trialUnlocked` prop that flips later. Reading this map
+ * (and localStorage) at send time is the same pattern as `readEmbedUrlAuth`.
+ * Survives private-mode localStorage failures for the current tab only.
+ */
+const liveTrialUnlocked = new Set<string>();
+
+/**
  * Resolve the host-origin key this embed is running under.
  *
  * @param explicitHost - The embedding page's own origin, passed via the
@@ -78,6 +87,7 @@ function trialUnlockStorageKey(host: string): string {
  * that raised the limit is gone, permanently re-gating them (see page.tsx).
  */
 export function readTrialUnlocked(host: string): boolean {
+  if (liveTrialUnlocked.has(host)) return true;
   try {
     return localStorage.getItem(trialUnlockStorageKey(host)) === "1";
   } catch (err) {
@@ -87,6 +97,11 @@ export function readTrialUnlocked(host: string): boolean {
 }
 
 export function writeTrialUnlocked(host: string, value: boolean): void {
+  if (value) {
+    liveTrialUnlocked.add(host);
+  } else {
+    liveTrialUnlocked.delete(host);
+  }
   try {
     if (value) {
       localStorage.setItem(trialUnlockStorageKey(host), "1");
@@ -96,6 +111,11 @@ export function writeTrialUnlocked(host: string, value: boolean): void {
   } catch (err) {
     logStorageFailure("writeTrialUnlocked", err);
   }
+}
+
+/** Test hook — clears the in-memory unlock mirror (localStorage is per-test). */
+export function resetLiveTrialUnlockedForTests(): void {
+  liveTrialUnlocked.clear();
 }
 
 export type EmbedGate = {

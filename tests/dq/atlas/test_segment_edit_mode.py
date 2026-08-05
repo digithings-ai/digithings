@@ -424,3 +424,78 @@ class TestEditMergeFallback:
         slot = out["phase3_output"]
         assert isinstance(slot.payload, SegmentPayload)
         assert slot.payload.body["headline"] == "fresh full headline"
+
+        # #1741 — non-gating, but no longer invisible: the segment paid for a patch call
+        # AND a full regeneration, and nothing else in the run record says so.
+        fallbacks = out.get("merge_fallbacks")
+        assert fallbacks is not None, "the fallback must be recorded, not just logged"
+        assert set(fallbacks) == {"macro"}
+        assert "MergeError" in fallbacks["macro"]
+        assert len(fallbacks["macro"]) <= 300, "reason must stay jsonb-sized"
+
+    def test_successful_merge_records_no_fallback(self) -> None:
+        """The counter must stay empty on the happy path, or every row reads as degraded."""
+        state = _macro_state_with_prior(triage_decision="regenerate")
+        spec = SegmentNodeSpec(
+            segment_slug="macro",
+            skill_slug="macro",
+            output_model=MacroRegimeReport,
+            phase_outputs_field="phase3_output",
+        )
+        node = build_segment_node(spec, write_adapter=scalar_slot_write_adapter)
+        good_patch = DocumentPatch(
+            schema_version="1.0",
+            date=date(2026, 4, 27),
+            prior_date=date(2026, 4, 26),
+            target_document_key="macro",
+            status="updated",
+            ops=[PatchOp(op="set", path="/regime_label", value="Edited", reason="shift")],
+        )
+
+        with patch(
+            "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+            return_value=good_patch,
+        ):
+            out = node(state)
+
+        assert not out.get("merge_fallbacks")
+
+
+# ─── #1740: schema limits must reach the model ─────────────────────────
+
+
+@pytest.mark.unit
+class TestEditSchemaConstraintsReachTheModel:
+    """Regression for #1740.
+
+    The 240-char `reason` cap was enforced by the schema but stated in none of
+    the 17 *-edit.md skills, so the model was never told the limit it kept
+    breaking. Appended at the single load chokepoint so it cannot drift between
+    17 heterogeneous files.
+    """
+
+    @pytest.mark.parametrize("slug", _ATLAS_EDIT_SKILL_SLUGS)
+    def test_every_atlas_edit_skill_states_the_limits(self, slug: str) -> None:
+        body = load_skill_edit(slug)
+        assert "240 characters maximum" in body
+        assert "Output constraints (schema-enforced)" in body
+        # The skill's own content must survive the append.
+        assert "DocumentPatch" in body
+
+    def test_hermes_edit_skills_get_them_too(self) -> None:
+        from digiquant.olympus.hermes.skills import load_skill_edit as hermes_load_edit
+
+        body = hermes_load_edit("asset-analyst")
+        assert "240 characters maximum" in body
+
+    def test_stated_cap_matches_the_schema(self) -> None:
+        """Drift guard: change PatchOp.reason's cap and this fails loudly."""
+        from annotated_types import MaxLen
+        from digiquant.olympus.atlas.skills import EDIT_SCHEMA_CONSTRAINTS
+        from digiquant.olympus.edit_mode.models import PatchOp
+
+        caps = [
+            m.max_length for m in PatchOp.model_fields["reason"].metadata if isinstance(m, MaxLen)
+        ]
+        assert caps == [240], f"unexpected schema cap: {caps}"
+        assert f"{caps[0]} characters maximum" in EDIT_SCHEMA_CONSTRAINTS

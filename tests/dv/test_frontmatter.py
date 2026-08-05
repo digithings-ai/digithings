@@ -16,10 +16,10 @@ def test_split_no_frontmatter() -> None:
 
 
 def test_split_basic_frontmatter() -> None:
-    text = "---\ntitle: DigiGraph\ntags: [module, shipped]\n---\n# DigiGraph\n\nbody\n"
+    text = "---\ntitle: digigraph\ntags: [module, shipped]\n---\n# digigraph\n\nbody\n"
     fm, body = split_frontmatter(text)
-    assert fm == {"title": "DigiGraph", "tags": ["module", "shipped"]}
-    assert body == "# DigiGraph\n\nbody\n"
+    assert fm == {"title": "digigraph", "tags": ["module", "shipped"]}
+    assert body == "# digigraph\n\nbody\n"
 
 
 def test_unterminated_fence_is_body() -> None:

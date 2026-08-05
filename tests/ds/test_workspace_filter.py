@@ -1,4 +1,4 @@
-"""Workspace filter enforcement for DigiSearch query paths."""
+"""Workspace filter enforcement for digisearch query paths."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
-"""DigiSearch HTTP client helpers for DigiGraph (direct ``POST /query``).
+"""digisearch HTTP client helpers for digigraph (direct ``POST /query``).
 
-Orchestrator tool *definitions* and hub dispatch live in DigiSearch
+Orchestrator tool *definitions* and hub dispatch live in digisearch
 (``/v1/orchestrator_tools``, ``/v1/orchestrator_invoke``). This module keeps
 thin ``POST /query`` helpers for code paths that call search without the
 orchestrator manifest (e.g. research node utilities).
@@ -58,7 +58,7 @@ def digisearch(
     request_id: str | None = None,
     authorization_bearer: str | None = None,
 ) -> dict[str, Any] | None:
-    """Search DigiSearch. Returns raw response dict (results, query, index_name, total, summary?, facets?) or None."""
+    """Search digisearch. Returns raw response dict (results, query, index_name, total, summary?, facets?) or None."""
     base_url = os.environ.get("DIGISEARCH_URL", "").strip()
     if not base_url:
         return None

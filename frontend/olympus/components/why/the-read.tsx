@@ -10,15 +10,52 @@ import {
   SnapshotSkeleton,
   useLatestSnapshot,
 } from '@/components/overview/daily-snapshot-panel';
-import type { DigestPayload } from '@/lib/snapshot-types';
+import type { DigestPayload, SegmentFreshness } from '@/lib/snapshot-types';
 
 /**
  * "The read" — the full research digest, structured so it is not eleven equal
  * walls of text. Leads with what Today summarizes (regime + actionable + risk
  * radar); the deeper segments are collapsed `<details>` the owner opens on
- * demand. Per-segment freshness badges mark what's from today vs carried from
- * the last baseline.
+ * demand. Per-segment freshness badges mark what's from today vs frozen vs
+ * carried from the last baseline.
  */
+
+/**
+ * How one freshness marker renders. Three-way, because `today` used to absorb a fourth
+ * state it had no business claiming (#1749): a segment that was regenerated and whose edit
+ * merge changed nothing published a byte-identical body under the run date, and this chip
+ * showed `today` with an accent dot and "Refreshed in the latest run" over content up to six
+ * days old. `frozen` is not `baseline` either — the segment did run, it just produced nothing
+ * new — so it gets its own label carrying the date the content last actually moved.
+ *
+ * An unrecognized `source` falls through to the frozen/carried styling rather than the
+ * accent: if the backend adds a fourth state before this file learns about it, the failure
+ * should be a vague badge, not a false freshness claim.
+ */
+function freshnessChip(f: SegmentFreshness): { label: string; title: string; dot: string } {
+  const stamp = f.as_of ? ` ${f.as_of}` : '';
+  if (f.source === 'today') {
+    return {
+      label: 'today',
+      title: 'Refreshed in the latest run',
+      dot: 'bg-accent',
+    };
+  }
+  if (f.source === 'frozen') {
+    return {
+      label: `unchanged${stamp}`,
+      title: f.as_of
+        ? `Ran in the latest run but produced no change — content unchanged since ${f.as_of}`
+        : 'Ran in the latest run but produced no change',
+      dot: 'bg-warn',
+    };
+  }
+  return {
+    label: `baseline${stamp}`,
+    title: 'Carried from the last baseline',
+    dot: 'bg-ink-mute/50',
+  };
+}
 
 const DEEP_SECTIONS: { key: keyof DigestPayload; title: string }[] = [
   { key: 'alt_data_dashboard', title: 'Alt data' },
@@ -46,21 +83,16 @@ export function TheReadBody({ digest }: { digest: DigestPayload }) {
         {freshEntries.length ? (
           <div className="flex flex-wrap gap-1.5" data-testid="read-freshness">
             {freshEntries.map(([seg, f]) => {
-              const isToday = f.source === 'today';
+              const chip = freshnessChip(f);
               return (
                 <span
                   key={seg}
                   className="inline-flex items-center gap-1 rounded-md border border-hair bg-ink/[0.04] px-1.5 py-0.5 text-xs text-ink-mute"
-                  title={isToday ? 'Refreshed in the latest run' : 'Carried from the last baseline'}
+                  title={chip.title}
                 >
-                  <span
-                    className={`h-1 w-1 rounded-full ${isToday ? 'bg-accent' : 'bg-ink-mute/50'}`}
-                    aria-hidden
-                  />
+                  <span className={`h-1 w-1 rounded-full ${chip.dot}`} aria-hidden />
                   {seg}
-                  <span className="text-ink-mute/70">
-                    {isToday ? 'today' : `baseline${f.as_of ? ` ${f.as_of}` : ''}`}
-                  </span>
+                  <span className="text-ink-mute/70">{chip.label}</span>
                 </span>
               );
             })}

@@ -1,6 +1,6 @@
 # External design references
 
-Curated deep scans of frontends we treat as **north stars** for DigiThings
+Curated deep scans of frontends we treat as **north stars** for digithings
 public surfaces. These are not copy targets — they are pattern libraries for
 navigation, layout rhythm, typography roles, motion, and product framing.
 
@@ -46,7 +46,7 @@ Each scan documents (where observable from live site + public design analyses):
 - Spacing, grid, and container widths
 - Component inventory (buttons, cards, hero, social proof, etc.)
 - Motion and scroll behavior
-- **Adopt / Adapt / Avoid** for DigiThings
+- **Adopt / Adapt / Avoid** for digithings
 
 Scans are **living notes**. Re-audit when a reference site ships a major redesign.
 Last full pass: **2026-06-29** (deep layer in [`scans/`](scans/INDEX.md)).
@@ -59,7 +59,7 @@ Last full pass: **2026-06-29** (deep layer in [`scans/`](scans/INDEX.md)).
 |---------|------|-------------|
 | digithings.ai | `frontend/digithings-web/` | Marketing + architecture story |
 | digiquant.io | `frontend/digiquant-web/` | Marketing + quant product proof |
-| DigiChat | `frontend/digichat/` | Product-as-landing (terminal chat) |
+| digichat | `frontend/digichat/` | Product-as-landing (terminal chat) |
 | Olympus | `frontend/olympus/` | Professional dashboard |
 | twelve-x | `frontend/olympus/components/twelve-x/` | Data-dense research utility |
 | Shared system | `frontend/digiweb/design/`, `frontend/digiweb/web/` | Tokens, primitives, motion |

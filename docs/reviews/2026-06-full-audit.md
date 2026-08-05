@@ -1,4 +1,4 @@
-# DigiThings Full Monorepo Audit — June 2026
+# digithings Full Monorepo Audit — June 2026
 
 **Date:** 2026-06-05  
 **Scope:** Read-only synthesis of nine parallel module reviews plus prior monorepo and production-CI deep dives.  
@@ -9,18 +9,18 @@
 
 ## 1. Executive summary
 
-1. **MCP servers bind `0.0.0.0` without auth** on DigiGraph (`:8766`) and DigiSearch (`:8767`); tools bypass HTTP middleware and can invoke workflows directly when the port is reachable.
-2. **DigiSearch ingest is broken for real backends** — `POST /ingest` writes only to the in-memory stub; Chroma/Azure paths return 200 but data is never queryable; path traversal on ingest accepts any server-readable file.
+1. **MCP servers bind `0.0.0.0` without auth** on digigraph (`:8766`) and digisearch (`:8767`); tools bypass HTTP middleware and can invoke workflows directly when the port is reachable.
+2. **digisearch ingest is broken for real backends** — `POST /ingest` writes only to the in-memory stub; Chroma/Azure paths return 200 but data is never queryable; path traversal on ingest accepts any server-readable file.
 3. **Most scheduled GitHub workflows are red** for fixable reasons: `printf` flag parsing, missing `claude` CLI, org policy blocking bot PRs, Polars Date/Datetime bug in `compute-technicals`, and LLM rate limits on Atlas cron.
 4. **`make score` is policy-only** — enforced on `task/*` via `create_pr.sh` and agent dispatch, but **never runs in GHA**; e2e, integration, baseline, contracts, and provider_review pytest suites are also absent from CI.
-5. **DigiKey JWT revocation is implemented** (`blocklist.py`, revoke endpoint) but **docs still say absent**; default Compose never wires `DIGIKEY_BLOCKLIST_REDIS_URL`, so revoke is a no-op and live JWTs survive.
-6. **DigiClaw heartbeat is auth-blocked** — drift check and `/run_optimize` require DigiKey scopes but send no `Authorization` header; failures are swallowed silently.
+5. **digikey JWT revocation is implemented** (`blocklist.py`, revoke endpoint) but **docs still say absent**; default Compose never wires `DIGIKEY_BLOCKLIST_REDIS_URL`, so revoke is a no-op and live JWTs survive.
+6. **digiclaw heartbeat is auth-blocked** — drift check and `/run_optimize` require digikey scopes but send no `Authorization` header; failures are swallowed silently.
 7. **Olympus has no CI** and reads Supabase via public anon key with `USING (true)` RLS on all core tables; ~284 KB committed `dashboard-data.json` ships as a public artifact.
-8. **DigiChat embed/auth mismatch** — `/embed` posts to auth-gated `/api/chat` without session; SSRF allowlist has no unit tests and allows single-label hostnames.
-9. **LangGraph recompiled every request** in DigiGraph (`workflow.py`) and DigiQuant (`graph/pipeline.py`); model_modes YAML re-read per call — hot-path performance debt.
+8. **digichat embed/auth mismatch** — `/embed` posts to auth-gated `/api/chat` without session; SSRF allowlist has no unit tests and allows single-label hostnames.
+9. **LangGraph recompiled every request** in digigraph (`workflow.py`) and digiquant (`graph/pipeline.py`); model_modes YAML re-read per call — hot-path performance debt.
 10. **pandas drift outside Nautilus boundary** — strategies, `data/prices/fetchers.py`, `tearsheet.py`, and ruff-excluded `scripts/atlas/` contradict Polars-only AGENTS rule.
 
-**Bottom line:** Core Python services are reasonably tested and auth-aware at HTTP boundaries, but **production automation, governance, and integration seams** lag application code. Highest ROI: fix broken cron jobs, wire DigiKey blocklist + heartbeat auth, repair DigiSearch ingest, and tighten MCP defaults — mostly without touching business logic.
+**Bottom line:** Core Python services are reasonably tested and auth-aware at HTTP boundaries, but **production automation, governance, and integration seams** lag application code. Highest ROI: fix broken cron jobs, wire digikey blocklist + heartbeat auth, repair digisearch ingest, and tighten MCP defaults — mostly without touching business logic.
 
 ---
 
@@ -109,7 +109,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | **High** | `digibase/otel.py` has zero tests | `otel.py:12-40` |
 | **High** | LangSmith redaction silently skipped on older SDK | `digismith/trace.py:54-63` |
 | **Medium** | No W3C traceparent on outbound httpx | `digibase/otel.py:34-39` |
-| **Medium** | DigiSmith Dockerfile omits `digibase[otel]` | `digismith/Dockerfile:20` |
+| **Medium** | digismith Dockerfile omits `digibase[otel]` | `digismith/Dockerfile:20` |
 | **Medium** | `tests/integration/test_request_id_hops.py` not in digibase CI | workflow gap |
 | **Low** | ARCHITECTURE stale: file inventory, healthcheck path, "no Prometheus" claim | both ARCHITECTURE.md |
 
@@ -121,7 +121,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 |-----|---------|----------|
 | **Critical** | Docs say "no JWT revocation" — code implements ADR-0007 blocklist | `digikey/AGENTS.md:44`, `ARCHITECTURE.md` |
 | **Critical** | Compose never sets `DIGIKEY_BLOCKLIST_REDIS_URL` — revoke is no-op | `docker-compose.yml:18-25` |
-| **Critical** | DigiClaw heartbeat calls protected DigiQuant routes without JWT | `heartbeat_runner.py:62-93` |
+| **Critical** | digiclaw heartbeat calls protected digiquant routes without JWT | `heartbeat_runner.py:62-93` |
 | **High** | BFF session tokens get `jti` but no `JtiIssuedRow` — no revocation path | `digikey/server.py:197-211` |
 | **High** | Redis blocklist not repopulated from `jti_issued` on restart | `blocklist.py` |
 | **High** | ADDM "stub" doc drift; `HEARTBEAT.md` path wrong for Docker | `digiclaw/AGENTS.md`, `ARCHITECTURE.md` |
@@ -136,7 +136,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | **Critical** | `/embed` posts to auth-gated `/api/chat` — broken in production iframe | `embed/page.tsx:114`, `api/chat/route.ts:24-31` |
 | **High** | SSRF allowlist permits any single-label hostname; **zero tests** | `lib/ecosystem.ts:53` |
 | **High** | `replaceConversationMessages` not transactional — data loss risk | `conversations-repo.ts:123-134` |
-| **Medium** | Fresh DigiKey exchange on every chat message | `digigraph-upstream.ts:23-70` |
+| **Medium** | Fresh digikey exchange on every chat message | `digigraph-upstream.ts:23-70` |
 | **Medium** | Machine key prefix doc drift (`digi_live_` vs `dgk_live_`) | `request-auth.ts:21`, docs |
 | **Medium** | No CSP on main app; markdown XSS risk | `chat-panel.tsx:41-42` |
 | **Medium** | ~0% API route test coverage (9 handlers) | `src/app/api/**` |
@@ -199,8 +199,8 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | AUDIT-001 | P0 | digisearch | `server.py:614` | Ingest writes stub only; Chroma/Azure never indexed | Route ingest through backend `add()` mirroring query router | L |
 | AUDIT-002 | P0 | digigraph | `mcp_server.py:193-213` | MCP on `0.0.0.0:8766` without auth | Default `127.0.0.1`; require gateway auth/TLS | M |
 | AUDIT-003 | P0 | digisearch | `mcp_server.py:212-214` | MCP on `0.0.0.0` without auth | Default loopback; document ACL | S |
-| AUDIT-004 | P0 | digiclaw | `heartbeat_runner.py:62-93` | No JWT on protected DigiQuant calls | Machine API key + Bearer on drift/optimize | M |
-| AUDIT-005 | P0 | digikey | `docker-compose.yml:18-25` | `DIGIKEY_BLOCKLIST_REDIS_URL` never wired | Add Redis + env on DigiKey and consumers | M |
+| AUDIT-004 | P0 | digiclaw | `heartbeat_runner.py:62-93` | No JWT on protected digiquant calls | Machine API key + Bearer on drift/optimize | M |
+| AUDIT-005 | P0 | digikey | `docker-compose.yml:18-25` | `DIGIKEY_BLOCKLIST_REDIS_URL` never wired | Add Redis + env on digikey and consumers | M |
 | AUDIT-006 | P0 | workflows | `enforce-project-assignment.yml` | Daily cron 10/10 red — `printf` flag bug | Use `printf '%s\n'` or heredoc for list lines | S |
 | AUDIT-007 | P0 | workflows | `project-fields-coverage.yml` | Daily cron 10/10 red — bad TSV + unbound `pilot` | Fix model column values; initialize `pilot` | S |
 | AUDIT-008 | P0 | workflows | `provider-review.yml` | Weekly cron 5/5 red — `claude` CLI missing | Use `claude-code-action` or install CLI | S |
@@ -254,7 +254,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | AUDIT-056 | P2 | digiquant | `server.py:276` | Job TTL documented but never enforced | Prune stale `_backtest_jobs` | S |
 | AUDIT-057 | P2 | digiquant | `AGENTS.md:30,45-46` | pandas boundary docs stale | Update allowlist or migrate code | M |
 | AUDIT-058 | P2 | digiquant | `scripts/atlas/*.py` | pandas-heavy; ruff excluded | Migrate to `data/prices` Polars path | L |
-| AUDIT-059 | P2 | digiquant | `hermes/chain.py:106-110` | Hard runtime dep on DigiGraph | Extract minimal pipeline builder | L |
+| AUDIT-059 | P2 | digiquant | `hermes/chain.py:106-110` | Hard runtime dep on digigraph | Extract minimal pipeline builder | L |
 | AUDIT-060 | P2 | digiquant | `tests/dq/test_constraints.py:8` | Wrong import path — likely ImportError | Import from `digiquant.constraints` | S |
 | AUDIT-061 | P2 | digisearch | `search/_stub.py:67-75` | `CHROMA_HOST` gate but no HTTP client | Implement or remove env var | M |
 | AUDIT-062 | P2 | digisearch | `server.py:582-633` | Ingest skips embedding step | Wire `BatchEmbedder` on ingest | M |
@@ -407,12 +407,12 @@ Consolidated doc-vs-code mismatches that mislead operators or agents.
 |----------|-------|
 | P0 security | AUDIT-001, 002, 003, 011, 012 — ingest, MCP bind, path traversal, sandbox |
 | Auth plane | AUDIT-005, 013–019 — Redis blocklist, docs, BFF jti, fail-closed revoke |
-| DigiSearch tenant | AUDIT-020, 021, 024 — workspace_id, MCP fail-closed, fetch cap |
-| DigiGraph isolation | AUDIT-025, 026, 027 — thread binding, rate limit XFF |
+| digisearch tenant | AUDIT-020, 021, 024 — workspace_id, MCP fail-closed, fetch cap |
+| digigraph isolation | AUDIT-025, 026, 027 — thread binding, rate limit XFF |
 | Frontend | AUDIT-010, 032, 033, 035, 036 — embed, SSRF, Supabase RLS decision |
 | Shared audit | AUDIT-039, 040 — nested redaction, LangSmith SDK pin |
 
-**Exit criteria:** MCP defaults loopback in Compose; ingest round-trip test passes on Chroma; DigiKey revoke works in dev stack with Redis; embed either works with token or is disabled in prod; Supabase RLS threat model documented or tightened.
+**Exit criteria:** MCP defaults loopback in Compose; ingest round-trip test passes on Chroma; digikey revoke works in dev stack with Redis; embed either works with token or is disabled in prod; Supabase RLS threat model documented or tightened.
 
 ---
 
@@ -441,7 +441,7 @@ Consolidated doc-vs-code mismatches that mislead operators or agents.
 |----------|-------|
 | Performance | AUDIT-047, 048, 052, 075 — graph singleton, YAML cache, JWT cache |
 | Polars / pandas | AUDIT-057, 058 — strategy migration; shrink atlas script exclude |
-| DigiSearch quality | AUDIT-062, 063, 065 — embeddings on ingest; filter allowlist |
+| digisearch quality | AUDIT-062, 063, 065 — embeddings on ingest; filter allowlist |
 | Frontend hardening | AUDIT-076, 077, 080, 081, 082, 083 — sanitize markdown/HTML |
 | Docs sweep | DOC-01 through DOC-25 batch PRs by component |
 | Backlog P3 | AUDIT-099–105 |

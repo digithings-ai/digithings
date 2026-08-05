@@ -139,7 +139,7 @@ jobs:
             --max-turns 100
             --allowedTools "Read,Glob,Grep,WebSearch,WebFetch,Write,Edit,Bash(uv run:*),Bash(git checkout:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*)"
           prompt: |
-            You are performing the weekly LLM provider review for the DigiThings project.
+            You are performing the weekly LLM provider review for the digithings project.
 
             Your context package is in /tmp/review/:
             - snapshots.json: current provider snapshots (update these)

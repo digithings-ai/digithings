@@ -1,4 +1,4 @@
-"""DigiKey ``/healthz`` liveness contract.
+"""digikey ``/healthz`` liveness contract.
 
 Contract (see AGENTS.md "Liveness vs status"):
 * returns HTTP 200 with ``{"ok": true}``

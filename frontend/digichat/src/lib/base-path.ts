@@ -1,5 +1,5 @@
 /**
- * Base path prefix for serving DigiChat under a subpath (e.g. digithings.ai/chat).
+ * Base path prefix for serving digichat under a subpath (e.g. digithings.ai/chat).
  *
  * Empty by default → the app serves at root (self-host `make up-digichat`, local
  * dev, and the legacy chat.digithings.ai deploy are all unaffected). Set

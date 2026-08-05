@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Seed DigiSearch by POSTing files from digisearch/seeds to /ingest.
+"""Seed digisearch by POSTing files from digisearch/seeds to /ingest.
 
-Requires a DigiKey-issued API key with digisearch:ingest (or *).
+Requires a digikey-issued API key with digisearch:ingest (or *).
 
 Examples:
   DIGISEARCH_SEED_API_KEY=dgk_live_... python scripts/seed_digisearch_local.py
 
-  # DigiSearch runs in Docker (seeds copied to /app/digisearch/seeds in image):
+  # digisearch runs in Docker (seeds copied to /app/digisearch/seeds in image):
   DIGISEARCH_SEED_REMOTE_PREFIX=/app/digisearch/seeds DIGISEARCH_URL=http://127.0.0.1:8002 \\
     DIGISEARCH_SEED_API_KEY=dgk_live_... python scripts/seed_digisearch_local.py
 """
@@ -47,7 +47,7 @@ def _oauth_token(digikey_url: str, api_key: str) -> str:
     )
     token = out.get("access_token")
     if not token:
-        raise SystemExit(f"No access_token in DigiKey response: {out}")
+        raise SystemExit(f"No access_token in digikey response: {out}")
     return str(token)
 
 

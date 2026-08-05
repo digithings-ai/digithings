@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "digisearch"
 version = "0.1.0"
-description = "DigiSearch – RAG, vectorization, document search for Digi ecosystem"
+description = "digisearch – RAG, vectorization, document search for Digi ecosystem"
 readme = "ARCHITECTURE.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -26,7 +26,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Server / runtime stack: FastAPI HTTP app, uvicorn, MCP server, Typer CLI, and
-# the DigiKey auth middleware. python-json-logger backs digisearch.logging,
+# the digikey auth middleware. python-json-logger backs digisearch.logging,
 # which only the entrypoints (server, mcp_server, ingest_worker) import.
 server = [
     "fastapi>=0.115",

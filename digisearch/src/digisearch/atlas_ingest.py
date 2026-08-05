@@ -1,4 +1,4 @@
-"""Atlas ``documents`` row → DigiSearch index (pull-based; idempotent chunk IDs).
+"""Atlas ``documents`` row → digisearch index (pull-based; idempotent chunk IDs).
 
 :func:`ingest_atlas_payload` indexes a pre-fetched row; :func:`ingest_atlas_document`
 fetches via Supabase then delegates. Chunk ids are ``(document_key, date, index)`` —
@@ -57,7 +57,7 @@ class _AtlasRowSource(Protocol):
 
 @dataclass(frozen=True)
 class IndexedDocument:
-    """Result of ingesting one Atlas document into DigiSearch."""
+    """Result of ingesting one Atlas document into digisearch."""
 
     document_key: str
     date: str
@@ -172,7 +172,7 @@ def ingest_atlas_payload(
     index_name: str | None = None,
     chunker: RecursiveChunker | None = None,
 ) -> IndexedDocument:
-    """Index one Atlas ``documents`` row into DigiSearch (pure function).
+    """Index one Atlas ``documents`` row into digisearch (pure function).
 
     Parameters
     ----------
@@ -182,7 +182,7 @@ def ingest_atlas_payload(
         ``sector``, ``run_type``, ``category``, and ``title`` are honored when
         present.
     index_name:
-        DigiSearch index to write into. Defaults to
+        digisearch index to write into. Defaults to
         :data:`ATLAS_INDEX_NAME` (``"atlas"`` unless the
         ``DIGISEARCH_ATLAS_INDEX`` env override is set).
     chunker:

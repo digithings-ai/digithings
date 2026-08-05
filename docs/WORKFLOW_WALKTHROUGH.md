@@ -6,7 +6,7 @@ Step-by-step flow from user prompt to final response. Run with stack up: `docker
 
 ## Step 1: User prompt (entrypoint)
 
-**What happens:** User (or DigiClaw/API client) sends a natural-language request to DigiGraph.
+**What happens:** User (or digiclaw/API client) sends a natural-language request to digigraph.
 
 **Example:** `"Build me a mean-reversion stat-arb on tech"`
 
@@ -17,14 +17,14 @@ curl -s -X POST http://127.0.0.1:8000/workflow \
   -d '{"prompt":"Build me a mean-reversion stat-arb on tech","session_id":"walkthrough"}'
 ```
 
-**Behind the scenes:** DigiGraph `POST /workflow` receives the body, maps it to `WorkflowRequest`, and calls `run_digigraph_workflow(req)`.
+**Behind the scenes:** digigraph `POST /workflow` receives the body, maps it to `WorkflowRequest`, and calls `run_digigraph_workflow(req)`.
 
 ---
 
 ## Step 2: Audit and graph invocation
 
 **What happens:**
-- `workflow_start` is written to the audit log (DigiGraph or shared audit volume).
+- `workflow_start` is written to the audit log (digigraph or shared audit volume).
 - The LangGraph workflow is built: **START → research → backtest → END**.
 - The graph is invoked with initial state: `{ "prompt", "session_id" }`.
 
@@ -36,7 +36,7 @@ curl -s -X POST http://127.0.0.1:8000/workflow \
 
 **What happens:**
 - The **research** node (Data Science Family) runs.
-- DigiGraph calls the LLM via `chat_completion()` (OpenAI-compatible: LiteLLM → Ollama Cloud, OpenAI, etc.).
+- digigraph calls the LLM via `chat_completion()` (OpenAI-compatible: LiteLLM → Ollama Cloud, OpenAI, etc.).
 - **System prompt:** Ask for a JSON with `strategy_name` and `symbols` inferred from the user message.
 - **User message:** The original prompt.
 - If the LLM returns valid JSON, it is parsed and `strategy_name` and `symbols` are taken from it (`research_note = "LLM-extracted"`).
@@ -48,18 +48,18 @@ curl -s -X POST http://127.0.0.1:8000/workflow \
 
 ---
 
-## Step 4: Backtest node → DigiQuant (data & strategy testing)
+## Step 4: Backtest node → digiquant (data & strategy testing)
 
 **What happens:**
 - The **backtest** node runs with state from the research node.
-- DigiGraph sends **HTTP POST** to DigiQuant: `POST {DIGIQUANT_URL}/run_backtest` with body `{ "strategy_name", "symbols" }`.
-- DigiQuant receives the request and calls `run_backtest(strategy_name, symbols)`.
+- digigraph sends **HTTP POST** to digiquant: `POST {DIGIQUANT_URL}/run_backtest` with body `{ "strategy_name", "symbols" }`.
+- digiquant receives the request and calls `run_backtest(strategy_name, symbols)`.
 
-**Inside DigiQuant:**
-- **Data:** Nautilus loads bundled test data (e.g. ETHUSDT). Nautilus is required; if unavailable, DigiQuant returns 503.
+**Inside digiquant:**
+- **Data:** Nautilus loads bundled test data (e.g. ETHUSDT). Nautilus is required; if unavailable, digiquant returns 503.
 - **Strategy testing:** A real NautilusTrader backtest runs. No stub; install `digiquant[nautilus]` and ensure test data.
-- **Audit:** DigiQuant writes `run_backtest` to the audit log (run_id, strategy_name, symbols).
-- DigiQuant returns the `BacktestResult` (JSON) to DigiGraph.
+- **Audit:** digiquant writes `run_backtest` to the audit log (run_id, strategy_name, symbols).
+- digiquant returns the `BacktestResult` (JSON) to digigraph.
 
 **Code:** `digigraph/graph/nodes.py` → `backtest_node()` (httpx POST); `digiquant/server.py` → `api_run_backtest()`; `digiquant/backtest.py` → `run_backtest()`.
 
@@ -94,8 +94,8 @@ curl -s -X POST http://127.0.0.1:8001/run_pipeline \
 
 **What happens:**
 - The graph finishes; final state contains `backtest_result` (and possibly `error`).
-- If there was an error (e.g. DigiQuant down), `workflow_end` is logged with `success: false` and the user gets a failure message.
-- Otherwise, DigiGraph builds a success message string (strategy name, symbols, return %, trades), logs `workflow_end` with `success: true` and `run_id`, and returns a **WorkflowResult**: `success`, `message`, `backtest_result` (the full backtest JSON).
+- If there was an error (e.g. digiquant down), `workflow_end` is logged with `success: false` and the user gets a failure message.
+- Otherwise, digigraph builds a success message string (strategy name, symbols, return %, trades), logs `workflow_end` with `success: true` and `run_id`, and returns a **WorkflowResult**: `success`, `message`, `backtest_result` (the full backtest JSON).
 
 **API response:** HTTP 200 with JSON body:
 - `success`: boolean
@@ -130,9 +130,9 @@ Then inspect the audit log (if configured):
 
 | Step | Action | Result |
 |------|--------|--------|
-| 1 | User prompt: "Pairs trade SPY and QQQ with 2-day lookback" | Request hits DigiGraph `POST /workflow`. |
+| 1 | User prompt: "Pairs trade SPY and QQQ with 2-day lookback" | Request hits digigraph `POST /workflow`. |
 | 2 | Audit + graph | `workflow_start` logged; graph invoked. |
 | 3 | Research node | LLM (or heuristic) extracts `strategy_name`, `symbols` → e.g. `mean_reversion_stat_arb`, `["SPY","QQQ"]`. |
-| 4 | Backtest node | DigiGraph → DigiQuant `POST /run_backtest`; DigiQuant returns real Nautilus BacktestResult (`run_id` starts with `nautilus-`). |
-| 5 | (Optional) | `POST /run_optimize` or `POST /run_pipeline` on DigiQuant for optimize/export. |
+| 4 | Backtest node | digigraph → digiquant `POST /run_backtest`; digiquant returns real Nautilus BacktestResult (`run_id` starts with `nautilus-`). |
+| 5 | (Optional) | `POST /run_optimize` or `POST /run_pipeline` on digiquant for optimize/export. |
 | 6 | Response | HTTP 200 with `success`, `message`, `backtest_result` (strategy, symbols, return %, trades). |

@@ -1,4 +1,4 @@
-"""DigiLLM — the single home for provider-agnostic LLM client code in DigiThings.
+"""digillm — the single home for provider-agnostic LLM client code in digithings.
 
 Speaks to any OpenAI-compatible endpoint (LiteLLM proxy, Ollama, OpenRouter,
 OpenAI direct, or a registered external provider). No FastAPI, no service

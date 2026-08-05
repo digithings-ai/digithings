@@ -1,4 +1,4 @@
-# DigiThings — Cursor Legacy Rules
+# digithings — Cursor Legacy Rules
 #
 # Cursor Agent uses .cursor/rules/digithings.mdc (alwaysApply: true).
 # Regenerate with: make agents-init
