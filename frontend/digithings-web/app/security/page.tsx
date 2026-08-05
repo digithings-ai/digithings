@@ -140,14 +140,16 @@ const PIPELINE: { term: string; body: string }[] = [
   {
     term: "pip-audit",
     body:
-      "Every Python component is resolved with its dev extras and audited against the OSV " +
-      "database weekly, and whenever a change to a dependency manifest lands — in a pull request, or " +
-      "in a push to develop or main. HIGH and " +
+      "Seven Python components — DigiBase, DigiGraph, DigiQuant, DigiSearch, DigiSmith, DigiKey and " +
+      "DigiClaw — have their locked dependency closure exported and audited against the OSV " +
+      "database weekly, and whenever a change to a dependency manifest lands. HIGH and " +
       "CRITICAL findings block the merge; MEDIUM and LOW are warn-only annotations. Accepting a " +
-      "CVE requires an entry with a rationale and a re-evaluation trigger. Two boundaries on that: " +
-      "a pull request that adds Python code without touching a manifest does not trigger the audit, " +
-      "and the scope is Python only — there is no Node or JavaScript dependency audit in CI at all, " +
-      "so the frontend and DigiChat dependency trees are unaudited.",
+      "CVE requires an entry with a rationale and a re-evaluation trigger. Three boundaries on " +
+      "that. The workspace has eleven members, so DigiFetch, DigiLLM, DigiSkills and DigiVault are " +
+      "outside the matrix and their dependencies are not audited. A pull request that adds Python " +
+      "code without touching a manifest does not trigger the audit at all. And the scope is Python " +
+      "only — there is no Node or JavaScript dependency audit in CI, so the frontend and DigiChat " +
+      "dependency trees are unaudited.",
   },
   {
     term: "Loopback by default",

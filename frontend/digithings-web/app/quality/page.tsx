@@ -53,16 +53,22 @@ export const metadata: Metadata = {
 // the stricter 8 / 8 / 7 / 9 that score.py, the README and CLAUDE.md agree on.
 // The doc fix belongs in a docs change; do not silently paper over it here.
 
-const COUNTED_AT = "4 August 2026";
+const COUNTED_AT = "5 August 2026";
 
-// find tests -name 'test_*.py' | wc -l                                  → 319
+// Every figure below is the output of the command above it, run on a clean
+// checkout of develop. Re-run them when you touch this block: the page invites
+// the reader to, so a number that does not reproduce is worse than no number.
+// (The python count read 319 here until 2026-08-05 while the command returned
+// 321 — it never reproduced, including at the commit it was written on.)
+//
+// find tests -name 'test_*.py' | wc -l                                  → 321
 // find frontend -path '*/node_modules' -prune -o \( -name '*.test.ts*'
-//   -o -name '*.spec.ts*' -o -name '*.test.js' -o -name '*.test.mjs' \)  → 158
+//   -o -name '*.spec.ts*' -o -name '*.test.js' -o -name '*.test.mjs' \)  → 180
 // ls .github/workflows/ | grep -c '\.yml$'                              → 63
 // ls .github/workflows/ | grep -c '^test-'                              → 17
 const METRICS: OdometerStat[] = [
-  { value: "319", label: "python test files" },
-  { value: "158", label: "frontend test files" },
+  { value: "321", label: "python test files" },
+  { value: "180", label: "frontend test files" },
   { value: "63", label: "ci workflows" },
   { value: "17", label: "test lanes" },
 ];
