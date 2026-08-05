@@ -129,9 +129,8 @@ export default function Sidebar() {
           <div
             className={`flex items-center justify-between gap-2 w-full ${sidebarCollapsed ? 'md:hidden' : ''}`}
           >
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center gap-2.5 min-w-0" aria-label="digiquant">
               <AtlasMark className="shrink-0" />
-              <span className="text-base font-medium tracking-tight truncate">Olympus</span>
             </div>
             <button
               type="button"
