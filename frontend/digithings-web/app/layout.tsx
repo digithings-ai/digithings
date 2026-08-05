@@ -43,7 +43,14 @@ export const metadata: Metadata = {
       "Open-source AI infrastructure you self-host: eight MIT-licensed modules that drop into the "
       + "stack you already run. Your own keys and providers, every step traceable.",
     url: "https://digithings.ai",
-    images: ["/design/assets/og.png"],
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "digithings — AI infrastructure in a glass box you own.",
+      },
+    ],
     type: "website",
   },
 };
