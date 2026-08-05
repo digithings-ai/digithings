@@ -68,7 +68,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BASELINE_SHA = "e03c7095"
 
 # Squash merges land as "subject (#1234)"; GitHub merge commits as
-# "Merge pull request #1234 from ...". Both are how a commit names its PR here.
+# "Merge pull request #1234 from ...". Child commits preserved by a merge commit
+# name no PR, so those fall back to GitHub's commit association.
 _SQUASH_PR = re.compile(r"\(#(\d+)\)\s*$")
 _MERGE_PR = re.compile(r"^Merge pull request #(\d+)\b")
 
@@ -111,6 +112,15 @@ def parse_pr_number(subject: str) -> int | None:
         found = pattern.search(subject)
         if found:
             return int(found.group(1))
+    return None
+
+
+def associated_pr_number(sha: str) -> int | None:
+    """Return the merged source PR associated with an unnumbered commit."""
+    pulls = _gh_json(["api", f"repos/{_repo_slug()}/commits/{sha}/pulls"])
+    for pull in pulls if isinstance(pulls, list) else []:
+        if pull.get("merged_at") and pull.get("number") is not None:
+            return int(pull["number"])
     return None
 
 
@@ -273,9 +283,11 @@ def main() -> int:
 
         number = parse_pr_number(commit["subject"])
         if number is None:
+            number = associated_pr_number(commit["sha"])
+        if number is None:
             row.update(
                 reviewed=False,
-                why="names no pull request — pushed straight to the branch?",
+                why="has no merged source pull request — pushed straight to the branch?",
             )
             unreviewed.append(row)
             checked.append(row)
