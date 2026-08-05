@@ -59,7 +59,7 @@ VALID_AREAS="Cross-cutting|digigraph|digiquant|digisearch|digismith|digikey|digi
 VALID_KINDS="Epic Feature Task Bug Chore Research"
 VALID_PRIORITIES="P0 P1 P2 P3"
 VALID_MODELS="sonnet opus"
-VALID_EXEC="copilot cursor claude"
+VALID_EXEC="cursor claude"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -157,8 +157,11 @@ derive_exec_tier() {
   if [[ "$risk" == "high" ]] || [[ "$comp" == "digikey" ]]; then
     echo "claude"; return
   fi
+  # chore/style at risk:low used to route to exec:copilot. That tier lost its
+  # dispatcher when the Copilot subscription lapsed (#1904), so deriving it here
+  # minted issues onto a queue with no consumer.
   if [[ "$type" == "chore" || "$type" == "style" ]] && [[ "$risk" == "low" ]]; then
-    echo "copilot"; return
+    echo "cursor"; return
   fi
   echo "cursor"
 }
