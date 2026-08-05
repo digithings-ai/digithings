@@ -39,11 +39,14 @@ export default function Home() {
         <HeroMesh>
           <h1 className="dqhero-h1">
             <span className="ln">
-              <span>A quant research desk.</span>
+              <span>A quant research desk</span>
+            </span>
+            <span className="ln">
+              <span>in a glass box</span>
             </span>
             <span className="ln">
               <span>
-                <em>In a box you own.</em>
+                <em>you own</em>
               </span>
             </span>
           </h1>
@@ -100,9 +103,9 @@ export default function Home() {
             page flows on) — section padding on top of it reads as a dead gap.
             The claim reuses the hero's own words ("In a box you own") — one
             voice, no re-voicing. */}
-        <section id="claim" aria-label="Research to a tested strategy, in a box you own">
+        <section id="claim" aria-label="Research to conviction, in a glass box you own">
           <div className="wrap">
-            <WordReveal id="claim-reveal" text="Research to conviction. In a box you own." />
+            <WordReveal id="claim-reveal" text="Research to conviction. In a glass box you own." />
           </div>
         </section>
 
