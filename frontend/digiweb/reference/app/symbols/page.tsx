@@ -4,6 +4,7 @@ import { Emblem, emblems, StackRow, type StackItem } from "@digithings/web";
 import { Glyph, glyphNames } from "@/components/symbols/glyph";
 import { OlympusMark, Wordmark } from "@/components/symbols/marks";
 import {
+  AnimatedLockup,
   HairlineWordmark,
   TerminalMark,
   TerminalWordmark,
@@ -18,6 +19,7 @@ const REGISTRY_STACK: StackItem[] = [
   { name: "Next.js", icon: "nextdotjs" },
   { name: "OpenAI", icon: "openai" },
   { name: "OpenTelemetry", icon: "opentelemetry" },
+  { name: "Optuna", icon: "optuna" },
   { name: "Polars", icon: "polars" },
   { name: "PostgreSQL", icon: "postgresql" },
   { name: "Prometheus", icon: "prometheus" },
@@ -33,7 +35,6 @@ const REGISTRY_STACK: StackItem[] = [
 const FALLBACK_STACK: StackItem[] = [
   { name: "NautilusTrader", icon: null, mono: "NT" },
   { name: "LiteLLM", icon: null, mono: "LL" },
-  { name: "Optuna", icon: null, mono: "Op" },
 ];
 
 /* Brand favicon tiles. One artwork — the compact `d` + block cursor — in the two
@@ -141,6 +142,12 @@ export default function SymbolsPage() {
           </figure>
         </div>
         <div className="sym-grid sym-grid--wide">
+          <figure className="sym-cell sym-cell--wide">
+            <AnimatedLockup className="block text-[2.6rem]" />
+            <figcaption className="sym-label">
+              animated lockup · types every module, pure CSS
+            </figcaption>
+          </figure>
           <figure className="sym-cell sym-cell--wide">
             <HairlineWordmark word="things" className="sym-hairline" />
             <figcaption className="sym-label">hairline wordmark · display only</figcaption>
