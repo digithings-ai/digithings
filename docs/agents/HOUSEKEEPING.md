@@ -80,8 +80,9 @@ Any housekeeping finding can escalate up a tier by changing its label:
 
 - **Default**: housekeeping issues carry `exec:cursor` — this used to be `exec:copilot`,
   but that tier was retired on 2026-08-05 (#1904) and nothing dispatches it, so an issue
-  filed there would sit unworked. `pipeline-maintenance.yml` already labels the issues it
-  opens `exec:cursor`
+  filed there would sit unworked. `pipeline-maintenance.yml` already labels the
+  *housekeeping* issues it opens `exec:cursor`; its `security:finding` issues go to
+  `exec:claude`, per the row below
 - **Escalated**: if the finding needs judgment (e.g., CVE patch breaks dependency constraints) the scheduled job labels the issue `exec:claude` + `risk:high` directly
 - **Human gate**: issues labeled `needs-human` are never auto-merged; require explicit human approval on the PR
 
