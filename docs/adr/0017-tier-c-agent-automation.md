@@ -1,5 +1,17 @@
 # ADR 0017 — Tier C Agent Automation: gh-aw + Cursor Automations
 
+> **Superseded 2026-08-05.** The GitHub Copilot subscription lapsed. Every workflow
+> this ADR describes — `copilot-issue-dispatch`, `copilot-pr-lifecycle`,
+> `copilot-pr-mark-ready`, `copilot-pr-targeted-ci`, `copilot-quota-gate` — has been
+> deleted, along with `scripts/copilot_pr_suites.py` and the dispatch smoke test. PR
+> review moved to Cursor Bugbot, invoked by hand; see `docs/agents/EXECUTION_TIERS.md`
+> and the review-coverage gate in `.github/workflows/ci-review-coverage.yml`. The
+> record below is kept as history — do not treat it as current architecture. The
+> `exec:copilot` sites in `pipeline-maintenance.yml` and `pipeline-digiquant-prices.yml`
+> were retargeted at `exec:cursor` in the same change, and the five issues stranded on
+> the dead tier were migrated. The `exec:copilot` label survives, marked RETIRED, so
+> the 19 closed issues carrying it keep their history.
+
 **Status:** Accepted  
 **Date:** 2026-06-06  
 **Issue:** [#613](https://github.com/digithings-ai/digithings/issues/613)

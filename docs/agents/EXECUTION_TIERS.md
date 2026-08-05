@@ -14,29 +14,29 @@ Triggered automation. Fixed rule, no judgment. Runs on a schedule or event insid
 
 **Full coverage index:** see `docs/agents/HOUSEKEEPING.md` — every scheduled sweep, its cadence, and what it escalates.
 
-**Dispatch — how `exec:copilot` actually fires (Tier C):**
-Copilot is triggered by being **assigned** to an issue, not by a label alone. The bridge is:
+**Copilot execution is retired (2026-08-05).** The subscription lapsed, and with it
+`copilot-issue-dispatch`, `copilot-pr-lifecycle`, `copilot-pr-mark-ready`,
+`copilot-pr-targeted-ci` and `copilot-quota-gate` were deleted. Nothing dispatches
+`exec:copilot`, so every site that applied it was retargeted at `exec:cursor` (5 in
+`pipeline-maintenance.yml`, 2 in `pipeline-digiquant-prices.yml`), the now-meaningless
+bare `copilot` label was dropped from 8 issue-creation sites, and the five issues
+already stranded on the dead tier were migrated. The label itself is kept, marked
+RETIRED in its description — 19 closed issues carry it and deleting a label strips it
+from their history too.
 
-1. Apply `exec:copilot` label to an issue (or create the issue with that label).
-2. `.github/workflows/copilot-issue-dispatch.lock.yml` (compiled from `copilot-issue-dispatch.md`) fires via the [GitHub Agentic Workflows](https://github.github.com/gh-aw/) runtime. The gh-aw agent checks quota-state issue #387 and calls the `assign-to-agent` safe output with Copilot's custom instructions.
-3. GitHub Copilot coding agent picks up the assignment and starts working.
+**Caveat worth knowing before relying on `exec:cursor`:** it has 68 open issues, the
+oldest from 2026-04-19, and 1 closed in the last 30 days. Retargeting stops new work
+being stranded on a tier with no consumer at all; it does not by itself mean the work
+gets done. Whether the Cursor Automation is actually running is a separate question.
 
-If Copilot is not already assigned and the issue has `exec:copilot`, the agent calls `assign-to-agent`. If quota is exhausted, the Copilot session will fail naturally — the issue and any in-progress PR simply remain incomplete until quota resets.
-
-**PR code review:** every PR that opens/becomes ready triggers `ci.yml → request-copilot-review`, which requests a Copilot code review via `gh pr edit --add-reviewer "Copilot"`. Copilot is the **primary** reviewer; Claude is a secondary opt-in (see below).
+**PR code review:** Cursor Bugbot, invoked by hand with a `bugbot run` comment once a
+diff is final. Never at PR open and never per push — Bugbot went usage-based in June
+2026 at roughly $1.00–$1.50 a run. `ci.yml`'s `request-copilot-review` job was removed
+in #1894; it had been reporting success while attaching no reviewer. Claude review
+remains a secondary opt-in (see below). Every commit reaching `main` must clear
+`ci-review-coverage.yml`, which is a required status check.
 
 **PR auto-merge (low-risk agent PRs):** when CI is green on a `cursor/*` or `copilot/*` branch linked to a non-`risk:high` issue, `agent-pr-autolabel.yml` adds `automerge-agent`. `automerge-agent-prs.yml` verifies paths (no `digikey/`, workflows, scoring rubrics) and enables squash auto-merge. Human-gated issues keep the `needs-human` or `risk:high` label to block merge.
-
-**Copilot PR lifecycle (end-to-end, Tier C):** GitHub's **Skip approval for Copilot coding agent Actions workflows** repo setting is enabled so main `CI` runs directly on Copilot PRs. `.github/workflows/copilot-pr-lifecycle.lock.yml` (compiled from `copilot-pr-lifecycle.md`) drives the full loop:
-
-1. Patch `Fixes #N` when missing (inferred from branch/title)
-2. Mark draft PRs ready when they have changes and are ≥10 min old
-3. Check CI status — dispatch `copilot-pr-targeted-ci.yml` only when main CI is still missing/action_required
-4. Request Copilot code review
-5. Re-assign Copilot on review/CI failures (max 3 rounds)
-6. Add `automerge-agent` + enable squash merge when CI passes
-
-`copilot-pr-targeted-ci.yml` is kept as a fallback — triggered by the lifecycle only when main CI has not run.
 
 **Daily PR finalizer:** `agent-pr-finalizer.yml` runs at 07:00 UTC as backstop for `cursor/*` PRs.
 
@@ -115,12 +115,12 @@ See `docs/agents/CURSOR_AGENT_ONBOARDING.md` for the full agent operating protoc
 
 ## Copilot setup (one-time)
 
-1. Go to repo **Settings → Copilot → Coding agent** — enable it.
-2. Enable **Settings → Actions → General → Skip approval for Copilot coding agent Actions workflows**.
-3. Confirm `@Copilot` appears as an assignable user on issues.
-4. Confirm `DIGITHINGS_PROJECT_TOKEN` secret is set (needed for maintenance workflows).
+1. Confirm `DIGITHINGS_PROJECT_TOKEN` secret is set (needed for maintenance workflows).
+2. Raise the Cursor spend limit if Bugbot reports `usage limit reached`, and set
+   `manualTriggerOnly: true` on the repo so it does not fire on every PR.
 
-The `copilot-issue-dispatch.lock.yml` workflow fires automatically on `exec:copilot` label application.
+The Copilot coding-agent setup steps that used to be here are gone with the
+subscription — there is no `@Copilot` assignment bridge any more.
 
 ## Project-board status automation
 

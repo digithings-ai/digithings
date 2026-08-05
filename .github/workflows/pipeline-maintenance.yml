@@ -78,7 +78,7 @@ jobs:
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,security:finding,maintenance,component:root,risk:high,exec:claude" \
+            --label "security:finding,maintenance,component:root,risk:high,exec:claude" \
             --body "## Security Finding
 
           pip-audit found **${COUNT}** CVE(s) in Python dependencies.
@@ -174,7 +174,7 @@ jobs:
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,cleanup,housekeeping,maintenance,component:root,risk:low,exec:copilot" \
+            --label "cleanup,housekeeping,maintenance,component:root,risk:low,exec:cursor" \
             --body "## Stale Branch Cleanup
 
           Found **${COUNT}** branches that are merged into \`develop\` and have not been updated in 14+ days.
@@ -237,7 +237,7 @@ jobs:
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,housekeeping,maintenance,component:root,risk:low,exec:cursor" \
+            --label "housekeeping,maintenance,component:root,risk:low,exec:cursor" \
             --body "## Broken Internal Doc Links
 
           \`python3 scripts/check_doc_links.py\` found broken markdown links in the repository.
@@ -303,7 +303,7 @@ jobs:
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot" \
+            --label "housekeeping,maintenance,component:root,risk:low,exec:cursor" \
             --body "## agents-init Drift
 
           Generated files in \`.claude/\` are out of sync with \`agents.yml\` + \`agents/sources/\`.
@@ -575,7 +575,7 @@ jobs:
           else:
               r = subprocess.run(["gh", "issue", "create", "--repo", os.environ["REPO"],
                                   "--title", title,
-                                  "--label", "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot",
+                                  "--label", "housekeeping,maintenance,component:root,risk:low,exec:cursor",
                                   "--body", body],
                                  capture_output=True, text=True)
               print(r.stdout.strip())
@@ -671,7 +671,7 @@ jobs:
           else:
               r = subprocess.run(["gh", "issue", "create", "--repo", os.environ["REPO"],
                                   "--title", title,
-                                  "--label", "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot",
+                                  "--label", "housekeeping,maintenance,component:root,risk:low,exec:cursor",
                                   "--body", body],
                                  capture_output=True, text=True)
               print(r.stdout.strip())
@@ -772,7 +772,7 @@ jobs:
               r = subprocess.run([
                   "gh", "issue", "create", "--repo", os.environ["REPO"],
                   "--title", title,
-                  "--label", "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot",
+                  "--label", "housekeeping,maintenance,component:root,risk:low,exec:cursor",
                   "--body", body,
               ], capture_output=True, text=True)
               print(r.stdout.strip())

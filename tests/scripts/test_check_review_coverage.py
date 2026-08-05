@@ -58,6 +58,7 @@ def _state(**over: Any) -> dict[str, Any]:
         "bugbot": None,
         "title": "",
         "owner_review": None,
+        "agent_review": None,
     }
     base.update(over)
     return base
@@ -171,6 +172,70 @@ def test_an_approval_outranks_a_self_applied_label() -> None:
 def test_a_bot_approval_does_not_count_as_human() -> None:
     """cursor[bot] approving its own router pass is not a human reading the diff."""
     assert "cursor[bot]" in crc.BOT_AUTHORS
+
+
+# ── the reviewed:agent hatch (in-session review) ─────────────────────────────
+#
+# Every line in this repo is written by a coding agent, so an agent reviewing it is
+# not weaker in kind than Bugbot — which is also an agent. What this hatch insists
+# on is an ARTIFACT: the label without a posted findings comment is refused, so
+# claiming it costs an actual review rather than a click.
+
+
+def test_reviewed_agent_with_a_posted_review_is_a_review() -> None:
+    reviewed, why = crc.verdict_for(
+        _state(
+            labels={crc.AGENT_REVIEW_LABEL},
+            agent_review={
+                "actor": "chrizefan",
+                "at": "2026-08-05T22:00:00Z",
+                "url": "https://github.com/o/r/pull/1#issuecomment-1",
+            },
+        )
+    )
+    assert reviewed
+    assert "in-session review" in why
+    assert "issuecomment-1" in why, "the verdict must link the findings, not just assert them"
+
+
+def test_reviewed_agent_WITHOUT_the_comment_is_refused() -> None:
+    """The whole point of this hatch: the label alone claims a review that never ran."""
+    reviewed, why = crc.verdict_for(_state(labels={crc.AGENT_REVIEW_LABEL}, agent_review=None))
+    assert not reviewed
+    assert crc.AGENT_REVIEW_MARKER in why
+
+
+def test_reviewed_agent_clears_a_neutral_bugbot() -> None:
+    """The case this exists for — Bugbot out of quota, so review happened in session."""
+    reviewed, _ = crc.verdict_for(
+        _state(
+            labels={crc.AGENT_REVIEW_LABEL},
+            bugbot="NEUTRAL",
+            agent_review={"actor": "a", "at": "t", "url": "u"},
+        )
+    )
+    assert reviewed
+
+
+def test_a_completed_bugbot_run_outranks_an_in_session_review() -> None:
+    _, why = crc.verdict_for(
+        _state(
+            labels={crc.AGENT_REVIEW_LABEL},
+            bugbot="SUCCESS",
+            agent_review={"actor": "a", "at": "t", "url": "u"},
+        )
+    )
+    assert "Bugbot completed" in why
+
+
+def test_the_three_self_served_hatches_are_distinct_labels() -> None:
+    assert len({crc.AGENT_REVIEW_LABEL, crc.OWNER_REVIEW_LABEL, crc.SKIP_LABEL}) == 3
+
+
+def test_a_missing_agent_review_does_not_block_the_other_hatches() -> None:
+    """A PR with risk:low and no agent label must not be dragged into the new branch."""
+    reviewed, _ = crc.verdict_for(_state(labels={crc.SKIP_LABEL}, agent_review=None))
+    assert reviewed
 
 
 # ── linking a commit back to its pull request ────────────────────────────────

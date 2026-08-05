@@ -113,6 +113,29 @@ export function writeTrialUnlocked(host: string, value: boolean): void {
   }
 }
 
+const CHAT_ACCESS_TOKEN_PREFIX = "digichat_embed_chat_token:";
+
+function chatAccessTokenKey(host: string): string {
+  return `${CHAT_ACCESS_TOKEN_PREFIX}${host}`;
+}
+
+/** Chat-access token for this embed host. Same storage discipline as the unlock flag. */
+export function readChatAccessToken(host: string): string | null {
+  try {
+    return localStorage.getItem(chatAccessTokenKey(host));
+  } catch {
+    return null;
+  }
+}
+
+export function writeChatAccessToken(host: string, token: string): void {
+  try {
+    localStorage.setItem(chatAccessTokenKey(host), token);
+  } catch {
+    // Blocked storage — the send-time read returns null and the free quota applies.
+  }
+}
+
 /** Test hook — clears the in-memory unlock mirror (localStorage is per-test). */
 export function resetLiveTrialUnlockedForTests(): void {
   liveTrialUnlocked.clear();

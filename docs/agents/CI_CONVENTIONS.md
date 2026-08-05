@@ -31,10 +31,6 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `agent-claude-review.yml` | Agent: Claude review | PR (opened/sync/ready/reopened) | Auto PR review via Claude `/code-review`; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | paths-ignore: `**.md`, `docs/**`, issue templates |
 | `agent-claude.yml` | Agent: Claude Code | issue_comment, PR review comment, issues | Respond to `@claude` mentions from repo members | Working | none |
 | `pipeline-continuous-improvement.yml` | Pipeline: continuous improvement | schedule (Sun 22:00), dispatch | Weekly Claude-synthesized digest of activity patterns; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
-| `copilot-quota-gate.yml` | Copilot: quota gate | issues assigned | Intercept `@Copilot` assignment when `quota:copilot-exhausted` is set; escalate or park | Working | none |
-| `copilot-issue-dispatch.lock.yml` | Copilot: issue dispatch | issues labeled/opened | Assign `@Copilot` via `assign-to-agent` safe output when quota allows | Working | none |
-| `copilot-pr-lifecycle.lock.yml` | Copilot: PR lifecycle | schedule (10 min), dispatch | End-to-end `copilot/*` loop: issue link, mark-ready, CI, review, fix rounds, automerge | Working | none |
-| `copilot-pr-mark-ready.yml` | Copilot: PR mark ready | workflow_dispatch (dispatched by lifecycle) | Marks a draft `copilot/*` PR ready for review | Working | none |
 | `test-digibase.yml` | Test: digibase | workflow_call | digibase unit tests | Working | `digibase/**`, `tests/db/**` |
 | `test-digichat.yml` | Test: digichat | workflow_call | digichat (Next.js) lint + tests | Working | `frontend/digichat/**`, `frontend/digiweb/design/**`, `package.json` |
 | `release-please-digichat.yml` | Release please: digichat | push (`module/digichat`) | Track digichat version + changelog from Conventional Commits on `module/digichat` (decoupled from image publish, #1343) | Working | `frontend/digichat/**`, release-please config/manifest |
@@ -72,7 +68,6 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `agent-pr-automerge.yml` | Agent: PR auto-merge | pull_request, workflow_run (CI, Copilot targeted CI) | Enable squash auto-merge for PRs labeled `automerge-agent` | Working | none |
 | `agent-pr-finalizer.yml` | Agent: PR finalizer | schedule (daily 07:00), dispatch | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path (copilot/* handled by gh-aw lifecycle) | Working | none |
 | `agent-dispatch-replay.yml` | Agent: dispatch replay | dispatch only | Re-fire `exec:*` dispatch for issues labeled at creation time (GitHub skips `issues:labeled` for `gh issue create` labels) | Working (on-demand) | none |
-| `copilot-pr-targeted-ci.yml` | Copilot: targeted CI | dispatch only (by lifecycle) | Trusted-actor CI for `copilot/*` PRs; bypasses the bot `pull_request` action_required gate | Working | none |
 
 ---
 
@@ -80,7 +75,6 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 
 | Secret / Variable | Used by | Required or optional |
 |-------------------|---------|---------------------|
-| `DIGITHINGS_PROJECT_TOKEN` | project-status-automation, enforce-project-assignment, ci-failure-triage, route-issues-to-projects, scheduled-maintenance, agent-quota-reset, copilot-quota-gate, continuous-improvement, auto-stub-project-fields, agent-pr-finalizer | Required for project-board mutations; workflows degrade gracefully when absent |
 | `CLAUDE_CODE_OAUTH_TOKEN` | agent-claude.yml, agent-claude-review.yml, agent-claude-dispatch.yml, pipeline-continuous-improvement.yml, pipeline-provider-review.yml | Optional — features disabled when absent |
 | `CURSOR_API_KEY` | agent-pr-finalizer.yml | Optional — Cursor fix dispatch skipped when absent |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | atlas-baseline, atlas-delta, atlas-monthly, digiquant-prices | Required for production runs |
@@ -263,7 +257,6 @@ Current watched workflows in `agent-ci-failure-triage.yml`:
 | `project-enforce-assignment.yml` | Was producing a YAML parse error (heredoc content with `⚠️` at column 0 inside `run: |`). Fixed in #292 using `printf` + `--body-file`. | Resolved. |
 | `security-gitleaks.yml` | Runs full history scan on every push to `develop` — this can fail if any historical commit contains a pattern matching the ruleset. False positives should be added to `.gitleaks.toml` allowlist. | Operational — not a workflow defect. |
 | `DIGITHINGS_PROJECT_TOKEN` | Several workflows degrade gracefully when this token is absent, but project-board mutations (routing, status automation, enforce-project-assignment) will not work. | Ensure the token is configured as an org secret with `project` + `repo` scopes. Token rotation is a manual operation. |
-| `copilot-pr-review.yml` | Removed (REM-098). **PR review:** `ci.yml` → `request-copilot-review` only (idempotent `gh pr edit --add-reviewer Copilot`). **Issue dispatch:** `copilot-issue-dispatch.lock.yml` (gh-aw) + `copilot-quota-gate.yml`. **Cursor dispatch:** Cursor Automation (cloud). **Secondary review:** `agent-claude-review.yml` when `ENABLE_CLAUDE_PR_REVIEW=true`. | Do not add a second Copilot PR-review workflow. |
 
 ---
 

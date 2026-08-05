@@ -67,23 +67,41 @@ review Cursor will quote and the least actionable, since a finding needs a fresh
 task PR plus another promotion. So `ci-review-coverage.yml` asserts the cheaper
 invariant on every PR into `main` — **each commit in the range was reviewed at its
 own task PR** — via `scripts/check_review_coverage.py`. Merge commits and bot-authored
-commits are exempt by nature; every other commit clears it four ways, strongest
+commits are exempt by nature; every other commit clears it five ways, strongest
 first:
 
 | hatch | claim | self-grantable? |
 |-------|-------|-----------------|
 | `Cursor Bugbot` concluded **success** | a machine reviewed it | **no** |
 | an **APPROVED** review | someone else read it | no |
+| label **`reviewed:agent`** + a findings comment | an in-session review ran | yes, but it costs a real review — the label without the comment is refused |
 | label **`reviewed:owner`** | "I read this myself" | yes — so the verdict names who applied it and when |
 | label **`risk:low`** | "this did not warrant a review" | yes |
+
+**When Bugbot is unavailable, review in-session — do not skip.** Bugbot reports
+`neutral` on a usage-limit skip, and that is not a review. Run `/review <N>`
+instead: it fans out over independent lenses in **fresh-context subagents** (the
+session that wrote the code must not review its own work), verifies each finding
+with a command, puts it through a refuter, then posts the surviving findings as a PR
+comment opening with `<!-- in-session-review -->` and applies `reviewed:agent`.
+
+Every line here is written by a coding agent, so an agent reviewing it is not weaker
+in kind than Bugbot — which is also an agent. What matters is that the reviewer did
+not write the code and that its output is on the record.
+`scripts/check_review_coverage.py` therefore looks for the comment, not just the
+label, and **refuses `reviewed:agent` when the findings are missing**. Fix what the
+review finds on the same branch before merge; that is the whole reason review
+belongs at the task PR and not at the promotion.
 
 `reviewed:owner` exists because the gate's own first run had no honest hatch: a
 solo maintainer cannot self-approve, Bugbot was out of quota, and the only
 remaining option was to label a blocking CI change `risk:low`. **Never use
 `risk:low` to mean `reviewed:owner`** — "I read it" and "it needed no reading" are
 different claims, and collapsing them destroys the only signal worth having. With
-one account holding write access these two are accountability records rather than
-enforcement; a completed Bugbot run is the only hatch nobody can grant themselves.
+one account holding write access, the three label hatches are accountability records
+rather than enforcement — though `reviewed:agent` at least cannot be claimed without
+posting a review. A completed Bugbot run is the only hatch nobody can grant
+themselves.
 
 Note what is deliberately *not* done: `Cursor Bugbot` is **not** a required status
 check on `main`. It reports `neutral` on a usage-limit skip and a required check
