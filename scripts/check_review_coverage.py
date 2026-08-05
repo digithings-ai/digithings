@@ -25,14 +25,22 @@ This gate depends on nothing outside the repository's own history and labels.
      count, which is the whole reason this script exists. This is the only hatch
      that cannot be self-granted;
   2. an APPROVED review from a human other than a bot;
-  3. the label ``reviewed:owner`` — "I read this myself." For a solo maintainer,
+  3. the label ``reviewed:agent`` PLUS a comment carrying ``AGENT_REVIEW_MARKER`` —
+     an in-session review ran against the diff and posted its findings. Every line
+     in this repo is written by a coding agent, so an agent reviewing it is not
+     weaker in kind than Bugbot, which is also an agent; what matters is that the
+     reviewer did not write the code, and that its output is on the record. The
+     label without the comment is REFUSED, which is what makes this one cost
+     something to claim. It does not outrank a human reading the diff — it is
+     simply the one self-served hatch that leaves a verifiable artifact;
+  4. the label ``reviewed:owner`` — "I read this myself." For a solo maintainer,
      who cannot approve their own PR, this is the only honest way to record having
      read something that did warrant reading. The verdict names who applied it and
      when, so the claim is attributed rather than silent;
-  4. the label ``risk:low`` — "this did not warrant a review." Reusing the label
+  5. the label ``risk:low`` — "this did not warrant a review." Reusing the label
      the repo already has rather than minting a ``review:skip`` synonym.
 
-Do not use (4) to mean (3): the whole point of splitting them is that
+Do not use (5) to mean (4): the whole point of splitting them is that
 "I read it" and "it needed no reading" are different claims, and collapsing them
 loses the only signal worth having.
 
@@ -77,7 +85,14 @@ BOT_AUTHORS = frozenset({"github-actions[bot]", "dependabot[bot]", "cursor[bot]"
 
 SKIP_LABEL = "risk:low"
 OWNER_REVIEW_LABEL = "reviewed:owner"
+AGENT_REVIEW_LABEL = "reviewed:agent"
 BUGBOT_CHECK = "Cursor Bugbot"
+
+# The marker an in-session review posts in its findings comment. `reviewed:agent`
+# alone does NOT clear the gate — the comment has to exist. That is the point: a
+# bare label is free to apply, whereas this hatch costs you an actual review whose
+# output anyone can read afterwards.
+AGENT_REVIEW_MARKER = "<!-- in-session-review -->"
 
 # `reviewed:owner` exists because of a hole the gate's own first run exposed. In a
 # single-maintainer org every PR is authored by the same account, so GitHub blocks
@@ -177,10 +192,34 @@ def _pr_review_state(number: int) -> dict:
         "title": data.get("title") or "",
         "owner_review": None,
     }
-    # Only pay for the timeline when the claim is actually being made.
+    state["agent_review"] = None
+    # Only pay for the extra calls when the claim is actually being made.
     if OWNER_REVIEW_LABEL in labels:
         state["owner_review"] = label_provenance(number, OWNER_REVIEW_LABEL)
+    if AGENT_REVIEW_LABEL in labels:
+        state["agent_review"] = agent_review_comment(number)
     return state
+
+
+def agent_review_comment(number: int) -> dict | None:
+    """The most recent in-session review comment on this PR, or None.
+
+    Looked up rather than trusted, because `reviewed:agent` claims a review *ran*.
+    Without the comment the claim has no artifact and the gate must refuse it.
+    """
+    try:
+        comments = _gh_json(["api", "--paginate", f"repos/{_repo_slug()}/issues/{number}/comments"])
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        return None
+    latest = None
+    for comment in comments if isinstance(comments, list) else []:
+        if AGENT_REVIEW_MARKER in (comment.get("body") or ""):
+            latest = {
+                "actor": (comment.get("user") or {}).get("login") or "unknown",
+                "at": comment.get("created_at") or "",
+                "url": comment.get("html_url") or "",
+            }
+    return latest
 
 
 def label_provenance(number: int, label: str) -> dict | None:
@@ -227,6 +266,18 @@ def verdict_for(state: dict) -> tuple[bool, str]:
         return True, "Cursor Bugbot completed"
     if state["approvals"]:
         return True, f"approved by {', '.join(state['approvals'])}"
+    agent = state.get("agent_review")
+    if AGENT_REVIEW_LABEL in state["labels"]:
+        if agent:
+            return True, (
+                f"{AGENT_REVIEW_LABEL}: in-session review by {agent['actor']} "
+                f"at {agent['at']} — {agent['url']}"
+            )
+        return False, (
+            f"{AGENT_REVIEW_LABEL} is set but no comment carries "
+            f"{AGENT_REVIEW_MARKER!r} — the label claims a review ran, so the "
+            "findings have to be posted"
+        )
     if OWNER_REVIEW_LABEL in state["labels"]:
         who = state.get("owner_review") or {}
         if who.get("actor"):

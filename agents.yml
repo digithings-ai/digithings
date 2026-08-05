@@ -264,6 +264,8 @@ claude_code_surface:
       path: .claude/commands/opsx-apply.md
     - name: /opsx-archive
       path: .claude/commands/opsx-archive.md
+    - name: /review
+      path: .claude/commands/review.md
 
 orchestration:
   workflow_doc: docs/agents/AGENT_WORKFLOW.md
