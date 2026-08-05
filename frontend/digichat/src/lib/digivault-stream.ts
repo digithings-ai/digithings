@@ -2,7 +2,12 @@
  * Digivault backend adapter — ports the Cloudflare agentic digivault loop into
  * a Node route handler that emits the AI SDK UI message stream (not NDJSON).
  */
-import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  type UIMessage,
+  type UIMessageStreamWriter,
+} from "ai";
 import {
   ACTIVITY_PART_TYPE,
   applyActivityDetail,
@@ -51,12 +56,8 @@ type NdjsonLike =
   | { type: "error"; message: string }
   | { type: "done" };
 
-type StreamWriter = {
-  write: (part: Record<string, unknown>) => void;
-};
-
 function writeActivity(
-  writer: StreamWriter,
+  writer: UIMessageStreamWriter,
   span: ActivitySpan,
   detail: ActivityDetail,
   seq: { n: number },
@@ -72,7 +73,7 @@ function writeActivity(
 }
 
 function emitNdjsonAsUi(
-  writer: StreamWriter,
+  writer: UIMessageStreamWriter,
   event: NdjsonLike,
   detail: ActivityDetail,
   seq: { n: number },
