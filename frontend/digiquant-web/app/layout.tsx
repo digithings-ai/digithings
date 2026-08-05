@@ -20,20 +20,31 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digiquant.io"),
+  applicationName: "DigiQuant",
   title: "digiquant — a quant research desk in a glass box you own",
   description:
     "The research stack an institutional desk would build — Atlas researches, Hermes sizes the risk, "
     + "and every run writes a decision log under its own run id, redacted on the way out. Open-source "
     + "and self-hosted, so work that once needed a team runs for one.",
-  // Scheme-aware favicon tiles: the light tile on dark browser chrome and vice
-  // versa. The `d` + block-cursor reduction, not the full `digi` lockup — five
-  // character cells are illegible at 16px. Deliberately NOT an app/icon.svg:
-  // that file convention would override this block and drop the media queries.
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "DigiQuant",
+    statusBarStyle: "black-translucent",
+  },
+  // Cache-busting paths ensure browsers leave the retired QR mark behind.
+  // Tabs follow the OS scheme; install/touch PNGs use the same compact `d` +
+  // cursor artwork rather than a browser-generated initial.
   icons: {
     icon: [
-      { url: "/favicon-dg-light.svg", media: "(prefers-color-scheme: dark)" },
-      { url: "/favicon-dg.svg", media: "(prefers-color-scheme: light)" },
-      { url: "/favicon-dg.svg" },
+      { url: "/icons/digi-app-dark.svg", type: "image/svg+xml", media: "(prefers-color-scheme: dark)" },
+      { url: "/icons/digi-app-light.svg", type: "image/svg+xml", media: "(prefers-color-scheme: light)" },
+      { url: "/icons/digi-app-32.png", type: "image/png", sizes: "32x32" },
+    ],
+    shortcut: "/icons/digi-app-32.png",
+    apple: [
+      { url: "/icons/digi-app-touch-dark.png", type: "image/png", sizes: "180x180", media: "(prefers-color-scheme: dark)" },
+      { url: "/icons/digi-app-touch-light.png", type: "image/png", sizes: "180x180", media: "(prefers-color-scheme: light)" },
     ],
   },
   openGraph: {
