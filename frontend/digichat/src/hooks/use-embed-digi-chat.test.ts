@@ -1,7 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import type { UIMessage } from "ai";
-import { uiMessageToDigiChat } from "./use-embed-digi-chat";
+import { isEmbedTrialUnlockedAtSend, uiMessageToDigiChat } from "./use-embed-digi-chat";
 import { ACTIVITY_PART_TYPE } from "@/lib/chat-activity";
+import {
+  resetLiveTrialUnlockedForTests,
+  writeTrialUnlocked,
+} from "@/lib/embed-gate";
 
 function tracePart(label: string, status: string, id: string) {
   return {
@@ -14,6 +18,39 @@ function tracePart(label: string, status: string, id: string) {
 function assistantMessage(parts: UIMessage["parts"]): UIMessage {
   return { id: "m1", role: "assistant", parts } as UIMessage;
 }
+
+describe("isEmbedTrialUnlockedAtSend", () => {
+  beforeEach(() => {
+    const store = new Map<string, string>();
+    // @ts-expect-error — minimal localStorage for the helper under test
+    globalThis.localStorage = {
+      getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+    };
+    resetLiveTrialUnlockedForTests();
+  });
+
+  it("is false when nothing has unlocked this host", () => {
+    expect(isEmbedTrialUnlockedAtSend("https://datatap.stream")).toBe(false);
+  });
+
+  it("reads unlock written after the frozen transport was created", () => {
+    // Simulates: transport closed over trialUnlocked=false, then parent posted
+    // datatap:unlocked which called writeTrialUnlocked.
+    expect(isEmbedTrialUnlockedAtSend("https://datatap.stream", false)).toBe(false);
+    writeTrialUnlocked("https://datatap.stream", true);
+    expect(isEmbedTrialUnlockedAtSend("https://datatap.stream", false)).toBe(true);
+  });
+
+  it("honors an explicit prop fallback when storage is empty", () => {
+    expect(isEmbedTrialUnlockedAtSend("https://datatap.stream", true)).toBe(true);
+  });
+});
 
 describe("uiMessageToDigiChat trace de-duplication", () => {
   it("collapses repeated identical trace labels into one activity", () => {

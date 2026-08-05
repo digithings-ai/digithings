@@ -116,7 +116,10 @@ const PRINCIPLES: NumberedStage[] = [
   {
     num: "01",
     title: "Self-hosted by default",
-    mech: "One docker-compose file — 16 services — runs the whole stack on a laptop, a VM, or any host you own.",
+    mech:
+      "One docker-compose file, sixteen services, on a laptop or any host you own — eight up by " +
+      "default and the rest behind named profiles you turn on: digichat, digivault, the search MCP, " +
+      "the heartbeat, observability, and the LiteLLM cache.",
   },
   {
     num: "02",
@@ -144,17 +147,20 @@ export default function Home() {
         <HeroMesh>
           <h1 className="dqhero-h1">
             <span className="ln">
-              <span>AI infrastructure in a glass box</span>
+              <span>AI infrastructure</span>
+            </span>
+            <span className="ln">
+              <span>in a glass box</span>
             </span>
             <span className="ln">
               <span>
-                <em>you own.</em>
+                <em>you own</em>
               </span>
             </span>
           </h1>
           <p className="dqhero-lede">
-            Ten open-source modules that plug into the stack you already run — not a replacement
-            for it. Self-hosted anywhere, your own keys and providers, every step traceable.
+            Build and ship AI applications on infrastructure you own — your hosts, your keys, your
+            choice of model.
           </p>
           <div className="dqhero-cta">
             <p className="dqhero-scroll-label">Scroll to explore</p>
@@ -196,8 +202,9 @@ export default function Home() {
                   phones, where forcing one line would shrink it to nothing. */}
               <h2 className="md:whitespace-nowrap">Ten modules. One toolkit.</h2>
               <p>
-                Each runs standalone or composes with the rest — retrieval, quant research and
-                chat, plus the auth, tracing and audit any deployment needs.
+                The eight that ship run standalone or compose with the rest — retrieval, quant
+                research and chat, plus the auth, tracing and audit any deployment needs. Two more
+                are on the roadmap; the manifest below marks which.
               </p>
             </Reveal>
             <ModuleManifest />
@@ -232,7 +239,14 @@ export default function Home() {
           <div className="wrap">
             <Reveal className="section-head">
               <span className="kicker">{"// why digithings"}</span>
-              <h2>Four properties of every module.</h2>
+              <h2>Nobody knows which vendor wins.</h2>
+              <p>
+                The field moves faster than any bet you could place on it, so this architecture
+                declines to place one. Nothing here is married to a provider: the stack is
+                self-hosted, keys arrive per request, and models and vector backends are
+                configuration rather than code. When the leader changes, you change one setting —
+                not the application on top.
+              </p>
             </Reveal>
             <NumberedStages stages={PRINCIPLES} className="max-w-[760px]" />
           </div>
@@ -241,11 +255,15 @@ export default function Home() {
         {/* No .section padding here: the WordReveal track is its own breathing
             room (the line rides in, pins at mid-viewport for a beat, and the
             page flows on) — section padding on top of it read as a dead gap. */}
-        <section id="claim" aria-label="Own the whole stack">
+        <section id="claim" aria-label="You own the stack, the keys, and the infrastructure">
           <div className="wrap">
+            {/* The owner's own line, and the one claim the whole page exists to
+                support. Three sentences on purpose: WordReveal fills word by
+                word, so the repetition lands as three separate beats rather
+                than one clause. */}
             <WordReveal
               id="claim-reveal"
-              text="Own the whole stack. No vendor lock-in. No opaque pipelines."
+              text="You own the stack. You own the keys. You own the infra."
             />
           </div>
         </section>
