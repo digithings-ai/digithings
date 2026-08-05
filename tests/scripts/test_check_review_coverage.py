@@ -23,6 +23,7 @@ to GitHub's commit-to-PR association for those commits.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any  # score:allow untyped any — dynamically loaded module
@@ -229,6 +230,18 @@ def test_open_promotion_pr_does_not_legitimize_a_direct_commit(
     )
 
     assert crc.associated_pr_number("direct123") is None
+
+
+def test_github_association_failure_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A transient API failure must not crash or approve an unlinked commit."""
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+
+    def fail(_args: list[str]) -> list[dict[str, Any]]:
+        raise subprocess.CalledProcessError(1, "gh api")
+
+    monkeypatch.setattr(crc, "_gh_json", fail)
+
+    assert crc.associated_pr_number("unknown123") is None
 
 
 # ── workflow wiring: a gate that never runs gates nothing ────────────────────

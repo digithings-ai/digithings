@@ -117,7 +117,10 @@ def parse_pr_number(subject: str) -> int | None:
 
 def associated_pr_number(sha: str) -> int | None:
     """Return the merged source PR associated with an unnumbered commit."""
-    pulls = _gh_json(["api", f"repos/{_repo_slug()}/commits/{sha}/pulls"])
+    try:
+        pulls = _gh_json(["api", f"repos/{_repo_slug()}/commits/{sha}/pulls"])
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        return None
     for pull in pulls if isinstance(pulls, list) else []:
         if pull.get("merged_at") and pull.get("number") is not None:
             return int(pull["number"])
