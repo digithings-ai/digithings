@@ -16,8 +16,20 @@ export async function GET(req: Request): Promise<Response> {
         suggestions: cfg.suggestions ?? getTenantSuggestionPool(cfg.slug),
         placeholder: cfg.placeholder,
         lockedContact: cfg.lockedContact,
+        showByok: cfg.showByok ?? false,
+        showStatusBar: cfg.showStatusBar ?? false,
+        layout: cfg.layout ?? "embed",
       }
-    : { slug: "embed", gateMode: "turn_limited", theme: "dark", accent: null, attribution: false };
+    : {
+        slug: "embed",
+        gateMode: "turn_limited",
+        theme: "dark",
+        accent: null,
+        attribution: false,
+        showByok: false,
+        showStatusBar: false,
+        layout: "embed",
+      };
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: { "content-type": "application/json", "cache-control": "no-store" },

@@ -1,6 +1,12 @@
 /** NDJSON wire format for POST /api/chat. */
 
-export type VaultHitSummary = { title: string; path: string };
+export type VaultHitSummary = {
+  title: string;
+  path: string;
+  tier?: string;
+  year?: number;
+  snippet?: string;
+};
 
 export type ChatActivity =
   | { kind: "status"; message: string }

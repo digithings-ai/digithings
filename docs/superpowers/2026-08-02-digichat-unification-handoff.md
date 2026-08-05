@@ -43,12 +43,16 @@ richer data (`RagSourcesTrace`: source id, evidence tier, year, snippet; `Resear
 flat `chat`-operation span can currently express. Converting `chat-panel.tsx` needs the digigraph mapping
 extended first — see Phase 2 below.
 
-**Phase 2 — DESIGN WRITTEN (awaiting user review of the spec).** Spec:
-`docs/superpowers/specs/2026-08-05-digichat-phase2-unification-design.md`. Next: user review →
-`superpowers:writing-plans` → implement. Do not skip to code.
-**Phase 3 — NOT STARTED** (still needs brainstorming → design → plan).
+**Phase 2 — SHIPPED.** [PR #1859](https://github.com/digithings-ai/digithings/pull/1859), squash-merged to
+`develop` at `8f56e178`. Spec:
+`docs/superpowers/specs/2026-08-05-digichat-phase2-unification-design.md`. Plan:
+`docs/superpowers/plans/2026-08-05-digichat-phase2-unification.md`.
 
-The Phase 2 scope below is the pre-brainstorm brief; the written spec above is authoritative.
+**Phase 3 — DESIGN APPROVED.** Spec:
+`docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md`.
+Next: `superpowers:writing-plans` → implement. Do not skip to code.
+
+The Phase 2/3 scope drafts below are historical context; the written specs above are authoritative.
 
 ### Phase 2 scope (draft)
 
@@ -124,6 +128,7 @@ In a new session, in the `digithings` repo on `develop`:
 git log --oneline -1        # should show 32f8e926 or later
 ```
 
-Then invoke `superpowers:brainstorming` for whichever of Phase 2, Phase 3, or the accent bug you want to
-tackle next — each is independent and can go in either order. The accent bug is a `systematic-debugging`
-task, not a brainstorm, since the design isn't in question, the cause is unknown.
+Then invoke `superpowers:writing-plans` for Phase 3 (design approved at
+`docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md`), or
+tackle remaining ops hand-offs (Storage Task 5, ACR mirror). The accent bug is
+fixed on develop (`720f96c8`).

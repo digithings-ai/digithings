@@ -412,6 +412,8 @@ per-host `slug`, `backend` (`digigraph` | `external-relay` + https URL |
 refs `supabaseUrlEnv` / `supabaseAnonKeyEnv` / `openRouterKeyEnv`),
 `gateMode` (`turn_limited` | `ungated` | `trial_form`), `theme` (`dark` | `light`),
 optional `accent` hex pair, `activityDetail` (`off` | `labels` | `full`),
+optional UI flags `showByok` / `showStatusBar` / `layout` (`page` | `embed`) —
+independent of `gateMode` (never derive `showByok = !ungated`),
 `attribution` flag, `aliases`, and a required `token`. digivault backends
 store only env **names** (pattern `/^[A-Z][A-Z0-9_]{0,127}$/`) — raw URLs/keys
 are rejected at parse time; values resolve via `process.env` at request time
@@ -475,17 +477,34 @@ limit of **60 req / 60 s** (`checkdigivaultIpRateLimit`, wording
 Activity is emitted only as `data-digichatActivity` (sanitized +
 `activityDetail`-gated); vault `body_markdown` stays server-side in tool
 messages. The Cloudflare Pages Function at
-`frontend/digithings-web/functions/api/chat.ts` remains live until Phase 3
-iframe cutover — Phase 2 does not retire it. Accent URL/theme handling is
+`frontend/digithings-web/functions/api/chat.ts` is **retired in Phase 3** —
+digithings.ai `/chat` is a Pages shell (`DtNav` + iframe) pointing at
+digichat `/embed` on the same origin (`https://digithings.ai/embed`, CF route
+to DigiThings-owned DigiChat Node — see
+`docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md`
+and `docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`).
+Accent URL/theme handling is
 out of scope for this provider (separate fix).
+
+**First-party digithings hosts (Phase 3).** Prod hostnames `digithings.ai`
+and `www.digithings.ai` (`src/lib/embed-first-party.ts`) may embed without
+presenting `X-Embed-Token` when registered in `DIGICHAT_EMBED_TENANTS`.
+Customer embeds (e.g. DataTap) still require a matching token. Preview
+`*.pages.dev` hosts are **not** allowlisted.
+
+**postMessage seed (Phase 3).** Embed emits `{ type: "digichat:ready" }` to
+the parent origin; the digithings.ai parent posts
+`{ type: "digichat:seed", messages, pending, ts }` after origin checks.
+Validators and caps live in `src/lib/embed-seed-messages.ts`. DataTap's
+`datatap:gated` / `datatap:unlocked` channel is unchanged.
 
 **`X-Embed-Host` alone is not sufficient authorization (#1339).** A tenant's
 host string is its own public domain, so `resolveEmbedTenantByHost` never
 grants embed access by itself — `resolveVerifiedEmbedTenant`
 (`src/lib/embed-chat-tenant.ts`) additionally requires the request's
 `X-Embed-Token` header to match that tenant's own registry-configured
-`token`. Both `/api/chat` and `GET /api/embed/tenant-config` resolve
-through this verified path; without a matching token a request is treated
+`token` **unless** the host is on the first-party allowlist (above). Both `/api/chat` and `GET /api/embed/tenant-config` resolve
+through this verified path; without a matching token a non-first-party request is treated
 exactly like an unregistered host (generic gated defaults, or the legacy
 `DIGICHAT_EMBED_ENABLED`/`DIGICHAT_EMBED_TOKEN` path), never the specific
 tenant's config or relay. The token is not secret from that tenant's own
