@@ -1,4 +1,4 @@
-# DigiThings DigiChat on Cloudflare Containers.
+# digithings digichat on Cloudflare Containers.
 # Deploy from this directory; image builds via Dockerfile at monorepo root path.
 name = "digithings-digichat"
 main = "src/index.ts"

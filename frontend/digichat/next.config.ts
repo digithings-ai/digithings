@@ -11,8 +11,8 @@ const nextConfig: NextConfig = {
   // root, so self-host (`make up-digichat`), local dev, and the legacy deploy are
   // unchanged. Must match NEXT_PUBLIC_DIGICHAT_BASE_PATH (see src/lib/base-path.ts).
   basePath: process.env.DIGICHAT_BASE_PATH || undefined,
-  // When DigiChat shares digithings.ai with Pages (static export also uses /_next),
-  // set DIGICHAT_ASSET_PREFIX=/_dtchat so CF can route DigiChat assets without
+  // When digichat shares digithings.ai with Pages (static export also uses /_next),
+  // set DIGICHAT_ASSET_PREFIX=/_dtchat so CF can route digichat assets without
   // colliding with the marketing site's /_next. Unset → default root assets.
   assetPrefix: process.env.DIGICHAT_ASSET_PREFIX || undefined,
   // Pin the tracing root to the monorepo root so the standalone tree is always

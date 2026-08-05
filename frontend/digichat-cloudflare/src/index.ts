@@ -1,6 +1,6 @@
 /**
- * DigiThings DigiChat — Worker fronting a Cloudflare Container.
- * Proxies /embed, DigiChat APIs, and /_dtchat assets to the DigiChat Node image.
+ * digithings digichat — Worker fronting a Cloudflare Container.
+ * Proxies /embed, digichat APIs, and /_dtchat assets to the digichat Node image.
  */
 import { Container, getContainer } from "@cloudflare/containers";
 
@@ -14,7 +14,7 @@ export interface Env {
   DIGICHAT: DurableObjectNamespace<DigiChatContainer>;
 }
 
-/** Paths DigiChat owns on digithings.ai (Pages owns /chat and the rest). */
+/** Paths digichat owns on digithings.ai (Pages owns /chat and the rest). */
 function shouldProxyToDigiChat(pathname: string): boolean {
   return (
     pathname === "/embed" ||
@@ -33,7 +33,7 @@ export default {
     const url = new URL(request.url);
     if (!shouldProxyToDigiChat(url.pathname)) {
       return new Response(
-        "DigiChat Worker: path not routed. Use Pages for marketing routes.",
+        "digichat Worker: path not routed. Use Pages for marketing routes.",
         { status: 404 },
       );
     }

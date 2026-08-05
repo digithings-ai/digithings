@@ -8,7 +8,7 @@ import { DtNav } from "@/components/DtNav";
 export const metadata: Metadata = {
   title: "about — open AI infrastructure you can host",
   description:
-    "DigiThings is a modular, MIT-licensed AI infrastructure repository: self-hostable anywhere, " +
+    "digithings is a modular, MIT-licensed AI infrastructure repository: self-hostable anywhere, " +
     "bring your own provider keys, every step traceable. Built to compose with the stack you " +
     "already run — not to replace it.",
 };
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 // single compose file (root docker-compose.yml), provider credentials the stack
 // does not persist, and the traceability surfaces (X-Request-ID middleware in
 // digibase.http, the JSONL audit trail written by each service's audit_log() and
-// redacted through digibase.audit, DigiSmith spans). No adjectives standing in
+// redacted through digibase.audit, digismith spans). No adjectives standing in
 // for evidence — where a boundary exists, /security states it.
 //
 // "Bring your own tokens" says the stack PERSISTS no provider credentials, and
@@ -66,7 +66,7 @@ const POSITION: { title: string; body: string }[] = [
     title: "A glass box, not a black box",
     body:
       "A correlation ID enters at the edge and rides every hop; workflow steps land in a local " +
-      "JSONL audit trail — appended, never rewritten — and in DigiSmith spans. You can read what " +
+      "JSONL audit trail — appended, never rewritten — and in digismith spans. You can read what " +
       "the system did, step by step, after the fact.",
   },
 ];
@@ -76,8 +76,8 @@ const POSITION: { title: string; body: string }[] = [
 // names, sourced from the root CLAUDE.md non-negotiables.
 const COMPOSES_WITH: { name: string; role: string }[] = [
   { name: "LangGraph", role: "supervisor + sub-graph orchestration" },
-  { name: "NautilusTrader", role: "every backtest, optimise, and live path" },
-  { name: "Polars", role: "dataframes — no pandas anywhere in the stack" },
+  { name: "NautilusTrader", role: "every backtest and optimise path" },
+  { name: "Polars", role: "dataframes by rule; pandas only at the Nautilus and yfinance edges" },
   { name: "Pydantic v2", role: "typed models at every boundary" },
   { name: "LiteLLM", role: "provider routing and response caching" },
   { name: "MCP", role: "every capability exposed as a discoverable tool" },
@@ -98,7 +98,7 @@ export default function AboutPage() {
             </>
           }
         >
-          DigiThings is an open-source, modular AI infrastructure repository. Eight shipping modules
+          digithings is an open-source, modular AI infrastructure repository. Eight shipping modules
           — orchestration, quant research, retrieval, chat, auth, tracing, heartbeat and audit, and
           the shared library the rest sit on — plus two more marked roadmap in the registry rather
           than quietly counted as built. You run them on your own
@@ -133,7 +133,7 @@ export default function AboutPage() {
               <span className="kicker">{"// compatibility"}</span>
               <h2>It plugs into what you already run.</h2>
               <p>
-                Compatibility is a design goal, not a migration story. DigiThings is not a
+                Compatibility is a design goal, not a migration story. digithings is not a
                 replacement for your orchestration framework, your data stack, your model provider,
                 or your execution venue — it is the wiring between them, and it uses the same tools
                 you would have reached for.
@@ -151,9 +151,9 @@ export default function AboutPage() {
               ))}
             </ul>
             <p className="mt-[1.6rem] max-w-[62ch] text-[0.95rem] leading-[1.7] text-ink-soft">
-              The corollary is that you can take a piece and leave the rest. The vector store, the
-              object store, and the LLM provider are all behind interfaces; swapping one is a
-              configuration change, not a fork.
+              The corollary is that you can take a piece and leave the rest. The vector store and
+              the LLM provider are both behind interfaces; swapping one is a configuration change,
+              not a fork.
             </p>
           </div>
         </section>
@@ -212,8 +212,8 @@ export default function AboutPage() {
               <span className="kicker">{"// read the source"}</span>
               <h2>Start where you like.</h2>
               <p>
-                The API reference is generated from the same module data this site is built on. The
-                repository is the rest of the answer.
+                The API reference is written from the codebase and merged with the same module data
+                this site is built on. The repository is the rest of the answer.
               </p>
             </Reveal>
             <div className="flex flex-wrap gap-[0.8rem]">

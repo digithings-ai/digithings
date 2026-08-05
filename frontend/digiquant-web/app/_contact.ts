@@ -1,15 +1,15 @@
 /** Contact tier copy for the standalone /contact route. */
 
 export const CONTACT_SELF_FEATURES = [
-  "The complete stack — research, portfolio management, and execution",
-  "MIT / Apache-licensed; clone, fork, and run it on hardware you own",
+  "The full research and portfolio-construction stack — execution is not built yet",
+  "MIT-licensed; clone, fork, and run it on hardware you own",
   "Atlas research, Hermes deliberation, and the backtest pipeline",
   "Your data, your machines, your keys — nothing leaves your infra",
   "Community support on GitHub",
 ] as const;
 
 export const CONTACT_MANAGED_FEATURES = [
-  "A hosted Olympus runner, operated for you with an SLA",
+  "A hosted Olympus runner, operated for you — in development",
   "Onboarding and custom strategy setup",
   "Priority fixes and a say in the roadmap",
   "Optional on-prem / VPC deployment",
