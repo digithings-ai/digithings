@@ -18,15 +18,23 @@ would have been unmergeable, including the one carrying a fix for false copy
 already live. A metered third-party service must never hold a veto over deploys.
 This gate depends on nothing outside the repository's own history and labels.
 
-"Reviewed" means any one of, on the source pull request:
+"Reviewed" means any one of, on the source pull request, strongest first:
 
   1. a completed Cursor Bugbot run — check run "Cursor Bugbot" concluded
      ``success``. A ``neutral`` conclusion is the usage-limit skip and does NOT
-     count, which is the whole reason this script exists;
-  2. an APPROVED review from a human;
-  3. the label ``risk:low`` — an explicit, auditable decision that the change did
-     not warrant one. Reusing the label the repo already has rather than minting a
-     ``review:skip`` synonym.
+     count, which is the whole reason this script exists. This is the only hatch
+     that cannot be self-granted;
+  2. an APPROVED review from a human other than a bot;
+  3. the label ``reviewed:owner`` — "I read this myself." For a solo maintainer,
+     who cannot approve their own PR, this is the only honest way to record having
+     read something that did warrant reading. The verdict names who applied it and
+     when, so the claim is attributed rather than silent;
+  4. the label ``risk:low`` — "this did not warrant a review." Reusing the label
+     the repo already has rather than minting a ``review:skip`` synonym.
+
+Do not use (4) to mean (3): the whole point of splitting them is that
+"I read it" and "it needed no reading" are different claims, and collapsing them
+loses the only signal worth having.
 
 Commits that are exempt by nature, not by decision:
 
@@ -67,7 +75,26 @@ _MERGE_PR = re.compile(r"^Merge pull request #(\d+)\b")
 BOT_AUTHORS = frozenset({"github-actions[bot]", "dependabot[bot]", "cursor[bot]"})
 
 SKIP_LABEL = "risk:low"
+OWNER_REVIEW_LABEL = "reviewed:owner"
 BUGBOT_CHECK = "Cursor Bugbot"
+
+# `reviewed:owner` exists because of a hole the gate's own first run exposed. In a
+# single-maintainer org every PR is authored by the same account, so GitHub blocks
+# self-approval; with Bugbot out of quota the only satisfiable hatch was
+# `risk:low`, which would have trained the maintainer to label a blocking CI
+# change "low risk" to get past it. Mislabelling under pressure from your own gate
+# is worse than having no gate.
+#
+# The two labels assert DIFFERENT things and must not be conflated:
+#   risk:low       — "this did not warrant a review"
+#   reviewed:owner — "I read this myself", whatever its risk
+#
+# Be honest about its strength: with one account holding write access, this is an
+# ACCOUNTABILITY record, not an enforcement mechanism — whoever can merge can also
+# apply it. What it buys is a timestamped, attributed claim in the timeline instead
+# of a silent bypass, which is why the verdict below names the actor and the date
+# rather than just returning true. A completed Bugbot run remains the only hatch
+# that cannot be self-granted.
 
 
 def _run(args: list[str]) -> str:
@@ -130,29 +157,79 @@ def _pr_review_state(number: int) -> dict:
         if (check.get("name") or check.get("context")) == BUGBOT_CHECK:
             bugbot = (check.get("conclusion") or check.get("status") or "").upper()
             break
-    return {
+    state = {
         "labels": labels,
         "approvals": approvals,
         "bugbot": bugbot,
         "title": data.get("title") or "",
+        "owner_review": None,
     }
+    # Only pay for the timeline when the claim is actually being made.
+    if OWNER_REVIEW_LABEL in labels:
+        state["owner_review"] = label_provenance(number, OWNER_REVIEW_LABEL)
+    return state
+
+
+def label_provenance(number: int, label: str) -> dict | None:
+    """Who applied `label` to this PR and when — the last application wins.
+
+    A bare "the label is present" would let the hatch read as a silent bypass.
+    Naming the actor and the date puts the claim on the record, which is the only
+    thing a self-applicable hatch can honestly offer.
+    """
+    try:
+        events = _gh_json(
+            [
+                "api",
+                "--paginate",
+                f"repos/{_repo_slug()}/issues/{number}/timeline",
+            ]
+        )
+    except subprocess.CalledProcessError:
+        return None
+    latest = None
+    for event in events if isinstance(events, list) else []:
+        if event.get("event") != "labeled":
+            continue
+        if ((event.get("label") or {}).get("name")) != label:
+            continue
+        latest = {
+            "actor": (event.get("actor") or {}).get("login") or "unknown",
+            "at": event.get("created_at") or "",
+        }
+    return latest
+
+
+def _repo_slug() -> str:
+    return _run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
 
 
 def verdict_for(state: dict) -> tuple[bool, str]:
-    """(reviewed, why) for one PR's review state."""
+    """(reviewed, why) for one PR's review state.
+
+    Order is strongest-evidence-first, so `why` reports the best claim available
+    rather than the first one that happens to match.
+    """
     if state["bugbot"] == "SUCCESS":
         return True, "Cursor Bugbot completed"
     if state["approvals"]:
         return True, f"approved by {', '.join(state['approvals'])}"
+    if OWNER_REVIEW_LABEL in state["labels"]:
+        who = state.get("owner_review") or {}
+        if who.get("actor"):
+            return True, f"{OWNER_REVIEW_LABEL} applied by {who['actor']} at {who['at']}"
+        return True, f"labelled {OWNER_REVIEW_LABEL}"
     if SKIP_LABEL in state["labels"]:
-        return True, f"labelled {SKIP_LABEL}"
+        return True, f"labelled {SKIP_LABEL} — judged not to warrant a review"
     if state["bugbot"] == "NEUTRAL":
         return False, (
             f"{BUGBOT_CHECK} reported neutral — that is the usage-limit skip, not a review"
         )
     if state["bugbot"]:
         return False, f"{BUGBOT_CHECK} reported {state['bugbot'].lower()}"
-    return False, "no completed Bugbot run, no human approval, no risk:low label"
+    return False, (
+        f"no completed Bugbot run, no approval, and neither {OWNER_REVIEW_LABEL} nor {SKIP_LABEL}"
+    )
 
 
 def main() -> int:
@@ -231,12 +308,16 @@ def main() -> int:
             print(f"❌  {pr}: {row['why']}", file=sys.stderr)
         print(
             "\nFix, per commit, whichever is true:\n"
-            f"  • it needs a review  → comment `bugbot run` on its PR, wait for the "
-            f"{BUGBOT_CHECK} check to conclude success\n"
-            f"  • it did not need one → label the PR `{SKIP_LABEL}`, which records the "
-            "decision and who made it\n"
-            "  • a human read it     → approve the PR\n"
-            "\nThis gate never fails because an external service is unavailable: a "
+            f"  • it needs a machine review → comment `bugbot run` on its PR and wait "
+            f"for the {BUGBOT_CHECK} check to conclude success\n"
+            f"  • you read it yourself      → label the PR `{OWNER_REVIEW_LABEL}`; the "
+            "actor and timestamp are recorded in the verdict\n"
+            f"  • it did not warrant one    → label the PR `{SKIP_LABEL}`\n"
+            "  • someone else read it      → approve the PR\n"
+            "\nThe two labels claim different things: "
+            f"`{OWNER_REVIEW_LABEL}` means you read it, `{SKIP_LABEL}` means it did "
+            "not need reading. Do not use the second to mean the first.\n"
+            "This gate never fails because an external service is unavailable — a "
             "label or an approval always clears it.",
             file=sys.stderr,
         )
