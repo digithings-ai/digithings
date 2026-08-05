@@ -30,7 +30,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO:     ${{ github.repository }}
         run: |
-          for LABEL in "quota:cursor-exhausted" "quota:copilot-exhausted"; do
+          for LABEL in "quota:cursor-exhausted"; do
             gh issue edit "$QUOTA_STATE_ISSUE" --repo "$REPO" --remove-label "$LABEL" 2>/dev/null || true
           done
           gh issue comment "$QUOTA_STATE_ISSUE" --repo "$REPO" --body "\
@@ -50,18 +50,4 @@ jobs:
             gh issue edit "$N" --repo "$REPO" --remove-label "pending:quota"
             gh issue edit "$N" --repo "$REPO" --remove-label "exec:cursor"
             gh issue edit "$N" --repo "$REPO" --add-label "exec:cursor"
-          done
-
-      - name: Re-dispatch parked copilot tasks
-        env:
-          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
-          REPO:     ${{ github.repository }}
-        run: |
-          ISSUES=$(gh issue list --repo "$REPO" --state open --label "pending:quota" --label "exec:copilot" --json number --jq '.[].number')
-          for N in $ISSUES; do
-            echo "Re-dispatching copilot task #$N"
-            gh issue edit "$N" --repo "$REPO" --remove-label "pending:quota"
-            gh issue edit "$N" --repo "$REPO" --remove-label "exec:copilot" 2>/dev/null || true
-            sleep 1
-            gh issue edit "$N" --repo "$REPO" --add-label "exec:copilot"
           done

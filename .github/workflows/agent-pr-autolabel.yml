@@ -3,7 +3,7 @@ name: "Agent: PR autolabel"
 
 on:
   workflow_run:
-    workflows: [CI, "Copilot: targeted CI"]
+    workflows: [CI]
     types: [completed]
 
 permissions:
