@@ -1,5 +1,5 @@
 provider: groq
-last_checked: 2026-07-19
+last_checked: 2026-07-26
 source: agent-research
 
 free_tier:
@@ -17,8 +17,8 @@ free_tier:
       max_output_tokens: 32768
       status: active
       verified: true
-      last_verified: 2026-07-19
-      last_verified_latency_ms: 307
+      last_verified: 2026-07-26
+      last_verified_latency_ms: 248
       verification_error: null
     - name: llama-4-scout-17b-16e-instruct
       context_window: 131072
@@ -129,4 +129,4 @@ verification:
   probe_model_alias: groq-llama-70b
   github_secret_key: GROQ_API_KEY
 
-notes: "PROBE 2026-07-19: llama-3.3-70b-versatile verified ok (307ms). MATERIAL CHANGE: llama-4-scout-17b-16e-instruct deprecated for free/developer tier 2026-06-17 (enterprise committed-spend contracts unaffected); Groq recommends migrating to openai/gpt-oss-120b or qwen/qwen3.6-27b (added to free roster this cycle). TPM CORRECTION: llama-3.3-70b-versatile free-tier TPM is 12,000, not 6,000 as previously recorded (6,000 actually belongs to llama-3.1-8b-instant — was mixed up). ACQUISITION CLARIFIED: the Nvidia deal (announced May 2026, ~$20B) is structured as a non-exclusive inference-tech licensing deal + acquihire (founder, president, much of engineering moved to Nvidia), not a straight acquisition — GroqCloud continues operating nominally independently under new CEO Simon Edwards; deal is under Senate/FTC antitrust scrutiny for allegedly evading merger review. No evidence this has changed free-tier limits or pricing beyond the llama-4-scout deprecation above. RPD 1,000 remains the binding free-tier constraint. TPM 12k on llama-3.3-70b-versatile still below Atlas extraction phase needs (41k/run)."
+notes: "PROBE 2026-07-26: llama-3.3-70b-versatile verified ok (248ms, faster than 307ms last cycle). No new material changes found this cycle beyond re-confirming last week's findings below. MATERIAL CHANGE: llama-4-scout-17b-16e-instruct deprecated for free/developer tier 2026-06-17 (enterprise committed-spend contracts unaffected); Groq recommends migrating to openai/gpt-oss-120b or qwen/qwen3.6-27b (added to free roster this cycle). TPM CORRECTION: llama-3.3-70b-versatile free-tier TPM is 12,000, not 6,000 as previously recorded (6,000 actually belongs to llama-3.1-8b-instant — was mixed up). ACQUISITION CLARIFIED: the Nvidia deal (announced May 2026, ~$20B) is structured as a non-exclusive inference-tech licensing deal + acquihire (founder, president, much of engineering moved to Nvidia), not a straight acquisition — GroqCloud continues operating nominally independently under new CEO Simon Edwards; deal is under Senate/FTC antitrust scrutiny for allegedly evading merger review. No evidence this has changed free-tier limits or pricing beyond the llama-4-scout deprecation above. RPD 1,000 remains the binding free-tier constraint. TPM 12k on llama-3.3-70b-versatile still below Atlas extraction phase needs (41k/run)."

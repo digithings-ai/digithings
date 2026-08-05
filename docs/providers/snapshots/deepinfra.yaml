@@ -1,5 +1,5 @@
 provider: deepinfra
-last_checked: 2026-07-19
+last_checked: 2026-07-26
 source: agent-research
 
 free_tier:
@@ -103,4 +103,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "2026-07-19 UPDATE: all four tracked model prices dropped further — Llama-3.3-70B renamed to -Turbo variant at $0.10/$0.32 (was $0.23/$0.40), DeepSeek-V4-Pro down to $1.30/$2.60 (was $1.74/$3.48), DeepSeek-V3.2 down to $0.26/$0.38 (was $0.28/$0.56); DeepSeek-V3 input ticked up slightly to $0.32 while output dropped to $0.89 (was $0.27/$1.10). Confirmed still no standing free tier — DeepInfra's own pricing page states a card or prepay is required; third-party '$1 free credit, no CC' claims are stale/unreliable. A DeepStart program offers free credits to qualifying startups via separate application, not a standing free tier. DeepInfra raised $107M Series B May 2026 (25× volume growth since Series A). Still cheapest open-weight hosting for Llama 3.3 70B. No key configured yet; no probe run (method: skipped)."
+notes: "2026-07-19 UPDATE: all four tracked model prices dropped further — Llama-3.3-70B renamed to -Turbo variant at $0.10/$0.32 (was $0.23/$0.40), DeepSeek-V4-Pro down to $1.30/$2.60 (was $1.74/$3.48), DeepSeek-V3.2 down to $0.26/$0.38 (was $0.28/$0.56); DeepSeek-V3 input ticked up slightly to $0.32 while output dropped to $0.89 (was $0.27/$1.10). Confirmed still no standing free tier — DeepInfra's own pricing page states a card or prepay is required; third-party '$1 free credit, no CC' claims are stale/unreliable. A DeepStart program offers free credits to qualifying startups via separate application, not a standing free tier. DeepInfra raised $107M Series B May 2026 (25× volume growth since Series A). Still cheapest open-weight hosting for Llama 3.3 70B. No key configured yet; no probe run (method: skipped). 2026-07-26: no targeted re-research this cycle — no contradicting signals surfaced incidentally; treat prior-cycle figures as still current but unconfirmed."

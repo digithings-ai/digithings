@@ -1,5 +1,5 @@
 provider: cloudflare
-last_checked: 2026-07-19
+last_checked: 2026-07-26
 source: agent-research
 
 free_tier:
@@ -65,7 +65,7 @@ paid_tier:
       context_window: 131072    # unconfirmed context; carried over from glm-4.7-flash pending direct check
       max_input_tokens: 131072
       max_output_tokens: null
-      cost_per_1m_input: null
+      cost_per_1m_input: null   # a 2026-07-26 pricing-comparison source cites ~$1.40/1M for GLM-5.2 generally, but could not confirm this is Cloudflare's specific per-token rate (vs. cross-provider comparison) — not applied pending direct developers.cloudflare.com/workers-ai/models/glm-5.2/ check
       cost_per_1m_input_long: null
       cost_per_1m_output: null
       cost_per_1m_output_long: null
@@ -112,4 +112,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "10k neurons/day free (core llama-3.3-70b-fp8-fast; confirmed explicitly excluded from the May 30 2026 deprecation wave that removed 18 older models). New large models (Kimi K2.6, Gemma 4, GLM-5.2) added March-June 2026 — these use per-token pricing, not neurons. GLM-5.2 added June 16 2026, superseding GLM-4.7-flash as the newer Zhipu flagship (pricing/context unconfirmed this cycle — carried placeholder values from glm-4.7-flash). Tool calling and structured output now supported on new models via OpenAI-compatible endpoint (capabilities updated from false). Kimi K2.5 auto-aliases to K2.6 since May 30 2026 (cost impact for anyone still pinned to K2.5). Best from inside Workers runtime. 8k context on free-tier model — not suitable for 100k+ research. No key configured yet; no probe run (method: skipped)."
+notes: "10k neurons/day free (core llama-3.3-70b-fp8-fast; confirmed explicitly excluded from the May 30 2026 deprecation wave that removed 18 older models). New large models (Kimi K2.6, Gemma 4, GLM-5.2) added March-June 2026 — these use per-token pricing, not neurons. GLM-5.2 added June 16 2026, superseding GLM-4.7-flash as the newer Zhipu flagship (pricing/context still unconfirmed as Cloudflare-specific this cycle — a 2026-07-26 search found a ~$1.40/1M cross-provider comparison figure but it's ambiguous whether that's Cloudflare's own rate; not applied, carried placeholder values from glm-4.7-flash pending a direct docs check). Tool calling and structured output now supported on new models via OpenAI-compatible endpoint (capabilities updated from false). Kimi K2.5 auto-aliases to K2.6 since May 30 2026 (cost impact for anyone still pinned to K2.5). Best from inside Workers runtime. 8k context on free-tier model — not suitable for 100k+ research. No key configured yet; no probe run (method: skipped)."

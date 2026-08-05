@@ -10,7 +10,7 @@ free_tier_type: credit-based
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-07-19
+verified_at: 2026-07-26
 source_urls:
   - https://build.nvidia.com/explore/discover
   - https://docs.api.nvidia.com/nim/reference/llm-apis
@@ -30,7 +30,7 @@ NVIDIA NIM offers access to 80–200+ optimized open-weight models via a single 
 
 | Model ID | Context Window | Max Output | Notes |
 |---|---|---|---|
-| `meta/llama-3.3-70b-instruct` | 128,000 | 4,096 | ⚠️ Request timed out. |
+| `meta/llama-3.3-70b-instruct` | 128,000 | 4,096 | active |
 | `nvidia/llama-3.3-nemotron-super-49b-v1` | 131,072 | 4,096 | active |
 | `deepseek-ai/deepseek-r1` | 163,840 | 32,768 | active |
 | `nvidia/nemotron-3-ultra-550b-a55b` | 1,000,000 | — | active |
@@ -112,3 +112,4 @@ NVIDIA NIM API pay-per-token after credits. Pricing varies by model. Enterprise 
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
+| 2026-07-26 | Automated snapshot sync | provider-review scan |
