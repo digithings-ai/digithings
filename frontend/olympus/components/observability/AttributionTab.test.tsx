@@ -44,11 +44,11 @@ describe('AttributionTab — empty state', () => {
   });
 });
 
-describe('AttributionTab — CASH exclusion from active return', () => {
+describe('AttributionTab — CASH drag in active return', () => {
   /**
    * Portfolio: AAPL (+2.00 total), MSFT (+1.00 total), CASH (-0.50 total).
-   * activeReturn should be AAPL + MSFT = +3.00, NOT +2.50 (which includes CASH).
-   * portfolioReturn = activeReturn + benchmarkReturn = 3.00 + 1.00 = +4.00.
+  * activeReturn must include CASH drag: 2.00 + 1.00 - 0.50 = +2.50.
+  * portfolioReturn = activeReturn + benchmarkReturn = 2.50 + 1.00 = +3.50.
    */
   const rows: AttributionRow[] = [
     makeRow('AAPL', { total_attribution_pct: 2.0, benchmark_return_pct: 1.0 }),
@@ -60,18 +60,16 @@ describe('AttributionTab — CASH exclusion from active return', () => {
     }),
   ];
 
-  it('activeReturn excludes the CASH row total_attribution_pct', () => {
+  it('activeReturn includes the CASH row total_attribution_pct', () => {
     const html = render(rows);
-    // activeReturn = 2.0 + 1.0 = 3.00; would be 2.50 if CASH were included
-    expect(html).toContain('+3.00%');
-    expect(html).not.toContain('+2.50%');
+    expect(html).toContain('+2.50%');
+    expect(html).not.toContain('+3.00%');
   });
 
-  it('portfolioReturn = activeReturn + benchmarkReturn (CASH excluded)', () => {
+  it('portfolioReturn = activeReturn + benchmarkReturn with CASH drag', () => {
     const html = render(rows);
-    // portfolioReturn = 3.00 + 1.00 = 4.00; would be 3.50 if CASH were included
-    expect(html).toContain('+4.00%');
-    expect(html).not.toContain('+3.50%');
+    expect(html).toContain('+3.50%');
+    expect(html).not.toContain('+4.00%');
   });
 
   it('holdings count excludes CASH', () => {

@@ -15,7 +15,6 @@ const position = (over: Partial<Position>): Position => ({
 const base = {
   lastUpdated: '2026-06-23',
   positions: [position({ ticker: 'NVDA' }), position({ ticker: 'EWT', sector_bucket: 'International' })],
-  investedPct: 75,
   decisions: [{ ticker: 'IWM', run_date: '2026-06-23', stance: 'buy', conviction: 2, status: 'pending' } as unknown as TableRow<'decision_log'>],
   positionHistory: [], positionEvents: [], thesisById: new Map<string, Thesis>(),
   effHistoryDate: '2026-06-23', onSelectHistoryDate: () => {}, onClearHistoryDate: () => {},
@@ -24,10 +23,11 @@ const base = {
 };
 
 describe('AllocationsTab', () => {
-  it('renders one normalized exposure metric', () => {
+  it('derives exposure from the displayed position book, not stale metrics', () => {
     const html = renderToStaticMarkup(createElement(AllocationsTab, base));
     expect(html).toContain('invested');
-    expect(html).toContain('75.0%');
+    expect(html).toContain('60.0%');
+    expect(html).not.toContain('75.0%');
     expect(html).not.toContain('cash');
   });
 

@@ -27,9 +27,6 @@ export interface TodayThesis {
 
 export interface TodaySummariesProps {
   positions: Position[];
-  /** Authoritative invested split (server_portfolio_metrics.invested_pct) — the
-   *  same input the book strip and portfolio table pass to `reconcileBook`. */
-  investedPct: number | null;
   theses: TodayThesis[];
   /** The digest headline (`strategy.summary`) — the read doorway's teaser. */
   readSummary: string | null;
@@ -79,14 +76,13 @@ function Doorway({
 
 export function TodaySummaries({
   positions,
-  investedPct,
   theses,
   readSummary,
   asOfDate,
 }: TodaySummariesProps) {
   // One reconciliation basis with the book strip / portfolio table (% of NAV,
   // CASH excluded — it lives in the invested/cash split, not a holdings row).
-  const held = heldByWeight(reconcileBook(positions, { investedPct }).rows).slice(0, 6);
+  const held = heldByWeight(reconcileBook(positions).rows).slice(0, 6);
   return (
     <section
       data-brief-section="doorways"
