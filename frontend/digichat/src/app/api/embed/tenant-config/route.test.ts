@@ -42,6 +42,9 @@ describe("GET /api/embed/tenant-config", () => {
       accent: { color: "#b5562b", foreground: "#fff7f2" },
       attribution: true,
       suggestions: [...DATATAPSTREAM_SUGGESTION_POOL],
+      showByok: false,
+      showStatusBar: false,
+      layout: "embed",
     });
     expect(JSON.stringify(body)).not.toContain("relay.example.com");
   });
@@ -61,6 +64,9 @@ describe("GET /api/embed/tenant-config", () => {
       theme: "dark",
       accent: null,
       attribution: false,
+      showByok: false,
+      showStatusBar: false,
+      layout: "embed",
     });
   });
 
@@ -72,6 +78,9 @@ describe("GET /api/embed/tenant-config", () => {
       theme: "dark",
       accent: null,
       attribution: false,
+      showByok: false,
+      showStatusBar: false,
+      layout: "embed",
     });
   });
 
@@ -103,5 +112,38 @@ describe("GET /api/embed/tenant-config", () => {
     const body = await res.json();
     expect(body.slug).toBe("digithings");
     expect(body.gateMode).toBe("ungated");
+  });
+
+  it("projects showByok, showStatusBar, layout to the client body", async () => {
+    vi.stubEnv(
+      "DIGICHAT_EMBED_TENANTS",
+      JSON.stringify({
+        "digithings.ai": {
+          slug: "digithings",
+          backend: {
+            type: "digivault",
+            supabaseUrlEnv: "A_URL",
+            supabaseAnonKeyEnv: "A_ANON",
+            openRouterKeyEnv: "A_OR",
+          },
+          gateMode: "ungated",
+          showByok: true,
+          showStatusBar: true,
+          layout: "page",
+          activityDetail: "full",
+          token: "t",
+        },
+      }),
+    );
+    resetEmbedTenantRegistryForTests();
+    const res = await GET(
+      new Request("https://chat.example.com/api/embed/tenant-config", {
+        headers: { "X-Embed-Host": "https://digithings.ai" },
+      }),
+    );
+    const body = await res.json();
+    expect(body.showByok).toBe(true);
+    expect(body.showStatusBar).toBe(true);
+    expect(body.layout).toBe("page");
   });
 });
