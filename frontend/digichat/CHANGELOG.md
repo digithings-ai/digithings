@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.7.0...digichat-v0.8.0) (2026-08-06)
+
+
+### Features
+
+* **digichat-ui:** render the canon transcript grammar in the embed — tool chain, reasoning, sources
+* **digiweb:** render mermaid and LaTeX in the shared chat markdown
+* **digichat:** centre the embed transcript instead of running it full-bleed
+
 ## [0.7.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.6.0...digichat-v0.7.0) (2026-08-06)
 
 
