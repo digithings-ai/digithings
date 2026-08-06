@@ -187,3 +187,33 @@ describe("currency in prose", () => {
     expect(html).toContain("katex");
   });
 });
+
+// Regression: block code was decided by guessing from the child string, so a bare
+// one-line fence — the commonest shape of model output — had no language and no
+// newline and fell through to inline <code>, losing its block frame and copy
+// button. Indented blocks lost leading whitespace for the same reason.
+describe("code blocks", () => {
+  it("gives a bare one-line fence the block frame, not inline code", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown source={"```\nnpm install digithings\n```"} />
+    );
+    expect(html).toContain("chat-md-code");
+    expect(html).toContain("<pre>");
+  });
+
+  it("keeps genuine inline code inline", () => {
+    const html = renderToStaticMarkup(<ChatMarkdown source={"use `npm ci` here"} />);
+    expect(html).not.toContain("chat-md-code");
+    expect(html).toContain("<code>npm ci</code>");
+  });
+
+  // KaTeX echoes the raw source in its MathML <annotation>, so the string itself
+  // survives legitimately. What must not survive is an inline style built from it.
+  it("bounds a hostile \\rule so it cannot blow out the page", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown source={"$$\\rule{99999em}{99999em}$$"} />
+    );
+    const styles = html.match(/style="[^"]*"/g) ?? [];
+    expect(styles.filter((s) => s.includes("99999"))).toEqual([]);
+  });
+});
