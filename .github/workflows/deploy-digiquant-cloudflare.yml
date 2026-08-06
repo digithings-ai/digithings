@@ -21,26 +21,33 @@ on:
       - "requirements.txt"
       - "setup.py"
       # The npm manifests break the deploy the same way, by a more direct route: the
-      # build script itself installs from the root lock (`npm install` at
-      # scripts/build-digiquant.sh:19), so a bad resolution there fails the build with no
-      # frontend file touched — no Cloudflare auto-detection needed. That is not
-      # hypothetical: PR #1949 changed package-lock.json by -1646/+176 lines, matched
-      # none of the globs above, and this check never ran on it.
+      # build script runs its own root install (scripts/build-digiquant.sh:19) — `npm
+      # install`, which reconciles the lock against the manifests, not `npm ci`, which
+      # installs from it — so a bad resolution there fails the build with no frontend
+      # file touched, and no Cloudflare auto-detection needed. That is not hypothetical:
+      # PR #1949 changed package-lock.json by -1646/+176 lines, matched none of the globs
+      # above, and this check never ran on it.
       #
-      # Both entries are root-anchored, and only the root hole is closed. A bare name
-      # matches the repo-root file alone — verified against the sibling Python entries,
-      # which no nested pyproject.toml has ever triggered (#1702, #1708, #1712 each
-      # edited 11 of them and fired neither deploy check). Do not read these two lines
-      # as covering more: each workspace manifest is matched, or not, one by one.
+      # Both entries are root-anchored, and only the root hole is closed: a `paths:`
+      # pattern is matched against the whole repo-root-relative path, so a wildcard-free
+      # name matches that one file and nothing nested. Do NOT re-cite #1702/#1708/#1712
+      # as proof of that, the way an earlier draft did. Those three did each edit 11
+      # nested pyproject.toml files and fire neither check — but they merged 2026-07-29
+      # and -07-30, and `pyproject.toml` only entered these filters on 2026-08-02
+      # (ff384b4f). The entry did not exist yet, so their silence is evidence of nothing.
+      # The standing in-repo corroboration is docs-reindex-guide.yml, which lists bare
+      # `ARCHITECTURE.md` alongside `digibase/ARCHITECTURE.md`, `digichat/ARCHITECTURE.md`
+      # and ~20 further per-component paths — every one of them redundant if the bare
+      # name reached nested files. Each workspace manifest is matched, or not, one by one.
       - "package.json"
       - "package-lock.json"
       # No per-workspace manifest is listed here, and that is a derived result rather
       # than an omission. This site's build closure, read off the @digithings/* deps, is
       # digiquant-web → design + web and olympus → design + web, with web → design — and
       # all four of those manifests already fall under the directory globs at the top of
-      # this list. The root lock would not stand in for them if they did not: 28 of the
-      # 45 commits that have touched one of the eight manifests named by today's
-      # `workspaces` globs left package-lock.json alone.
+      # this list. The root lock would not stand in for them if they did not: counted at
+      # PR granularity, 17 of the 38 PRs that have touched one of the eight left
+      # package-lock.json out of the PR entirely.
       #
       # The digithings check carries one extra line, frontend/digichat-ui/package.json,
       # because digithings-web imports digichat-ui at build time; nothing built here
@@ -50,9 +57,14 @@ on:
       #
       # Residual, deliberate: the root `npm install` above resolves all eight
       # workspaces, so an unresolvable manifest in one outside that closure still fails
-      # this build. frontend/digichat/package.json is covered elsewhere (ci.yml's
-      # `digichat` filter runs a root `npm ci`); frontend/digiweb/reference/package.json
-      # sits in no path filter in this repo and stays unwatched.
+      # this build. Four sit outside it. Three are covered by a lane that runs its own
+      # root install — frontend/digichat and frontend/digithings-web by ci.yml's
+      # `digichat` and `web`, and frontend/digichat-ui by the digithings deploy check,
+      # which carries that exact glob and runs a byte-identical root `npm install`. Note
+      # what that last one is: a coupling, not a guarantee. Narrow or drop the digichat-ui
+      # entry over there and this site silently loses its only cover for it. The fourth,
+      # frontend/digiweb/reference/package.json, is in no path filter in this repo — of
+      # the eight it is the one manifest watched by nothing.
   workflow_dispatch:
 
 concurrency:

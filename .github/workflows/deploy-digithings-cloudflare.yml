@@ -21,24 +21,43 @@ on:
       - "requirements.txt"
       - "setup.py"
       # The npm manifests break the deploy the same way, by a more direct route: the
-      # build script itself installs from the root lock (`npm install` at
-      # scripts/build-digithings.sh:15), so a bad resolution there fails the build with
-      # no frontend file touched — no Cloudflare auto-detection needed. PR #1949 was the
-      # near miss: -1646/+176 lines of package-lock.json, and the digiquant sibling of
-      # this check never fired at all.
+      # build script runs its own root install (scripts/build-digithings.sh:15) — `npm
+      # install`, which reconciles the lock against the manifests, not `npm ci`, which
+      # installs from it — so a bad resolution there fails the build with no frontend
+      # file touched, and no Cloudflare auto-detection needed. PR #1949 was the near
+      # miss: -1646/+176 lines of package-lock.json, and the digiquant sibling of this
+      # check never fired at all.
       #
-      # Both entries are root-anchored, and only the root hole is closed. A bare name
-      # matches the repo-root file alone — verified against the sibling Python entries,
-      # which no nested pyproject.toml has ever triggered (#1702, #1708, #1712 each
-      # edited 11 of them and fired neither deploy check). Do not read these two lines
-      # as covering more: the workspace manifests have to be named one by one, below.
+      # Both entries are root-anchored, and only the root hole is closed: a `paths:`
+      # pattern is matched against the whole repo-root-relative path, so a wildcard-free
+      # name matches that one file and nothing nested. Do NOT re-cite #1702/#1708/#1712
+      # as proof of that, the way an earlier draft did. Those three did each edit 11
+      # nested pyproject.toml files and fire neither check — but they merged 2026-07-29
+      # and -07-30, and `pyproject.toml` only entered these filters on 2026-08-02
+      # (ff384b4f). The entry did not exist yet, so their silence is evidence of nothing.
+      # The standing in-repo corroboration is docs-reindex-guide.yml, which lists bare
+      # `ARCHITECTURE.md` alongside `digibase/ARCHITECTURE.md`, `digichat/ARCHITECTURE.md`
+      # and ~20 further per-component paths — every one of them redundant if the bare
+      # name reached nested files. The workspace manifests therefore have to be named
+      # one by one, below.
       - "package.json"
       - "package-lock.json"
-      # The root lock does not stand in for those manifests — 28 of the 45 commits that
-      # have touched one of the eight named by today's `workspaces` globs left
-      # package-lock.json alone. 92ab99b6 (#1461) is the clean case: one changed file,
-      # frontend/digiquant-web/package.json, adding a @supabase/supabase-js dependency
-      # that no lock diff would have caught.
+      # The root lock does not stand in for those manifests. Counted at PR granularity —
+      # the unit a `paths:` filter actually sees — 17 of the 38 PRs that have touched one
+      # of the eight left package-lock.json out of the PR entirely, and 8 of the 38
+      # matched no glob in either deploy filter. PR #1385 is the clean exhibit: a
+      # one-file PR changing only frontend/digichat/package.json, on which neither deploy
+      # check ran. Do NOT cite 92ab99b6 for this, as an earlier draft did — it looks like
+      # a tidy one-file commit, but it shipped inside PR #1505 alongside
+      # package-lock.json and 15 other files, and that PR's digiquant check ran and
+      # passed. Commits are the wrong unit here; develop carries merges, not squashes.
+      #
+      # And be equally plain about what has NOT happened: across all 38, some lane
+      # running a root install always fired, so nothing has yet reached production
+      # through this hole. The two manifests with no lane of their own — digichat-ui and
+      # digiweb/reference — have simply never been edited alone; all three PRs touching
+      # frontend/digichat-ui/package.json also touched frontend/digithings-web/**. This
+      # closes a structural hole before it bites. It is not the fix for an incident.
       #
       # What follows is this site's build closure, read off the @digithings/* deps:
       # digithings-web → design + digichat-ui + web, digichat-ui → web, web → design.
@@ -50,13 +69,18 @@ on:
       #
       # Two residuals, both deliberate. (1) The root `npm install` resolves all eight
       # workspaces, so an unresolvable manifest OUTSIDE this closure still breaks this
-      # build. frontend/digichat/package.json is covered elsewhere — ci.yml's `digichat`
-      # filter runs a root `npm ci` — but frontend/digiweb/reference/package.json sits in
-      # no path filter in this repo and stays unwatched. (2) Only digichat-ui's manifest
-      # is watched, not its source, so a change to its components still reaches
-      # digithings.ai with this check silent; ci.yml notes the same blind spot above its
-      # frontend-canon guard. Widening to `frontend/digichat-ui/**` is the defensible
-      # next step, left out here only to keep this change to manifests.
+      # build. Four manifests sit outside it, and three are covered by a lane that runs
+      # its own root install — frontend/digichat by ci.yml's `digichat`,
+      # frontend/digiquant-web by its `web`, frontend/olympus by its `olympus`. The
+      # fourth, frontend/digiweb/reference/package.json, is in no path filter in this
+      # repo: of the eight it is the one manifest watched by nothing, and an
+      # unresolvable range there fails this build (verified — ETARGET out of the root
+      # install). Left out because it is in no site's closure; add it the day that
+      # stops being an acceptable trade. (2) Only digichat-ui's manifest is watched,
+      # not its source, so a change to its components still reaches digithings.ai with
+      # this check silent; ci.yml notes the same blind spot above its frontend-canon
+      # guard. Widening to `frontend/digichat-ui/**` is the defensible next step, left
+      # out here only to keep this change to manifests.
       - "frontend/digichat-ui/package.json"
   workflow_dispatch:
 
