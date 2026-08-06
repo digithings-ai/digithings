@@ -648,10 +648,10 @@ for hit in r.json()["results"]:
     authNote:
       "DigiAuthMiddleware with a per-path scope map: digivault:read for reads and for both orchestrator routes, digivault:write for mutations. /v1/orchestrator_invoke is gated at read because most of its tools are reads — the one mutating tool re-checks digivault:write in the handler, so a read-only caller cannot reach it through the shared endpoint.",
     run: {
-      cli: "docker compose --profile digivault up -d digivault   # opt-in profile, not up by default\ndigivault --root ./docs/vision lint",
+      cli: "docker compose --profile digivault up -d digivault   # opt-in profile, not up by default\ndigivault lint --root ./docs/vision",
     },
     env: [
-      { name: "DIGIVAULT_ROOT", def: "/data/vault", description: "Vault directory. Unset, every vault route answers 503 rather than guessing a path." },
+      { name: "DIGIVAULT_ROOT", def: "/data/vault", description: "Vault directory. Unset, the routes that read the filesystem answer 503 rather than guessing a path; /v1/orchestrator_tools still returns its static manifest." },
       { name: "DIGIKEY_JWKS_URL", def: "http://digikey:8005/.well-known/jwks.json", description: "Where the middleware fetches the public half to verify tokens." },
       { name: "DIGIKEY_ISSUER", def: "http://digikey:8005", description: "Expected token issuer." },
       { name: "DIGIKEY_AUDIENCE", def: "digi-ecosystem", description: "Expected token audience." },

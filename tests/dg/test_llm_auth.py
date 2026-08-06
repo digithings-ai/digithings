@@ -177,6 +177,7 @@ class TestByokHeader:
             pop_byok(tok)
 
 
+@pytest.mark.unit
 class TestByokProviderGuard:
     """The routability guard behind digigraph's 400 (#1873).
 
@@ -210,6 +211,7 @@ class TestByokProviderGuard:
         assert all(u.startswith("https://") for u in _BYOK_BASE_URLS.values())
 
 
+@pytest.mark.unit
 class TestByokGuardOverHttp:
     """The guard as a caller actually meets it: a 400 from the middleware.
 
