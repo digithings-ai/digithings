@@ -1,6 +1,6 @@
 """Declarative pipeline builder for LangGraph sub-graphs.
 
-A sub-graph like DigiQuant Atlas (#176) is a sequence of phases; each phase
+A sub-graph like digiquant Atlas (#176) is a sequence of phases; each phase
 has one or more nodes that may run in parallel, and every phase fully completes
 before the next begins. Instead of open-coding the edge plumbing per sub-graph,
 callers declare a ``list[PipelinePhase]`` and this builder compiles it into a
@@ -23,7 +23,7 @@ from dataclasses import dataclass
 # The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
 # gate flags unscoped `Any` imports. LangGraph node update dicts are
 # legitimately heterogeneous, so `Any` here is intentional.
-from typing import Any, Callable, Sequence  # noqa  # scored-lint suppression
+from typing import Any, Callable, Sequence  # score:allow untyped any — scored-lint suppression
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send

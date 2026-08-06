@@ -11,7 +11,6 @@ import json
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.atlas.data.queries import (
     ALLOWED_READ_TABLES,
     get_market_breadth,

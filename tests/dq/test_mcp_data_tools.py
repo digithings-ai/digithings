@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("mcp.server.fastmcp")
 
-from digiquant.mcp_server import create_mcp_server  # noqa: E402
+from digiquant.mcp_server import create_mcp_server
 
 
 def _tool_names(server) -> set[str]:

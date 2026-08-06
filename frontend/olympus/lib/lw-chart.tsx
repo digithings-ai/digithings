@@ -9,8 +9,10 @@
  * lib/chart-colors.ts (the single sanctioned color source, #1402), so charts
  * re-skin with the theme exactly like the DOM does.
  *
- * The six chart surfaces keep importing from `@/lib/lw-chart` (guarded by
- * lib/lw-chart-canon.test.ts) and are behavior-identical to the #1420 shape.
+ * The app-local chart surfaces keep importing from `@/lib/lw-chart` (guarded
+ * by lib/lw-chart-canon.test.ts) and are behavior-identical to the #1420
+ * shape. (The standalone drawdown chart left in #1548 — the workspace's
+ * drawdown view rides the shared <SyncedTearsheet/> directly.)
  *
  * See lib/CHARTS.md for the engine ruling (lightweight-charts = time-series
  * canon; recharts stays for categorical/composition surfaces).

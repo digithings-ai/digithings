@@ -45,77 +45,94 @@ tiers:
       cost_quality_tradeoff: 10
     # Phase pools = bare slugs (function tools). ``:online`` is web-search-only and lives
     # in ``web_search_models``; grounding is a separate pre-pass injected into the prompt.
+    # Endpoint capability (tools + strict json_schema + context floor) is verified by
+    # scripts/validate_olympus_pools.py (.github/workflows/validate-olympus-pools.yml).
     allowed_models:
       # NOTE: mistralai/mistral-small-3.1-24b-instruct removed — OpenRouter has no endpoint
       # supporting function tools for it (validate-providers function-tool smoke test 404'd).
+      # #1622: deepseek-v4-flash (Apr 2026, MIT, 1M ctx, $0.09/$0.18 per 1M) added to all
+      # pools; deepseek-r1 (CoT breaks strict json_schema, #1617) and llama-4-maverick
+      # (empty completions under strict json_schema, #1006) dropped from ``reasoning``.
       extraction:
         - "openrouter/deepseek/deepseek-chat"
+        - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/meta-llama/llama-4-maverick"
       research:
         - "openrouter/deepseek/deepseek-chat"
+        - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/meta-llama/llama-4-maverick"
       reasoning:
         - "openrouter/deepseek/deepseek-chat"
-        - "openrouter/deepseek/deepseek-r1"
-        - "openrouter/meta-llama/llama-4-maverick"
+        - "openrouter/deepseek/deepseek-v4-flash"
     web_search_models:
       - "openrouter/perplexity/sonar"
       - "openrouter/deepseek/deepseek-chat:online"
+      - "openrouter/deepseek/deepseek-v4-flash:online"
       - "openrouter/meta-llama/llama-4-maverick:online"
 
   balanced:
     openrouter:
-      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,openai/gpt-4o-mini*,perplexity/*"
+      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,z-ai/*,openai/gpt-4o-mini*,perplexity/*"
       cost_quality_tradeoff: 7
     allowed_models:
       extraction:
         - "openrouter/deepseek/deepseek-chat"
-        - "openrouter/google/gemini-2.0-flash-001"
+        - "openrouter/deepseek/deepseek-v4-flash"
+        - "openrouter/google/gemini-2.5-flash"
         - "openrouter/openai/gpt-4o-mini"
         - "openrouter/meta-llama/llama-4-maverick"
       research:
         - "openrouter/deepseek/deepseek-chat"
+        - "openrouter/deepseek/deepseek-v4-flash"
+        # z-ai/glm-5 removed 2026-07-20: endpoint gate record over 4 runs was
+        # pass/fail/pass/fail — empty bodies under strict json_schema even with a
+        # retry (the #1006 empty-completion class). Re-add a GLM only after
+        # glm-5.2/glm-5-turbo passes the gate consistently.
         - "openrouter/meta-llama/llama-4-maverick"
-        - "openrouter/google/gemini-2.0-flash-001"
-        - "openrouter/x-ai/grok-3-mini"
+        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/x-ai/grok-4.3"
         - "openrouter/openai/gpt-4o-mini"
       reasoning:
-        - "openrouter/deepseek/deepseek-r1"
-        - "openrouter/meta-llama/llama-4-maverick"
-        - "openrouter/x-ai/grok-3-mini"
-        - "openrouter/google/gemini-2.0-flash-001"
+        - "openrouter/deepseek/deepseek-v4-flash"
+        - "openrouter/x-ai/grok-4.3"
+        - "openrouter/google/gemini-2.5-flash"
     web_search_models:
       - "openrouter/perplexity/sonar"
       - "openrouter/deepseek/deepseek-chat:online"
-      - "openrouter/google/gemini-2.0-flash-001:online"
+      - "openrouter/google/gemini-2.5-flash:online"
       - "openrouter/openai/gpt-4o-mini:online"
 
   quality:
     openrouter:
-      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,openai/*,google/*,anthropic/*,x-ai/*,perplexity/*"
+      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,openai/*,google/*,anthropic/*,x-ai/*,z-ai/*,perplexity/*"
       cost_quality_tradeoff: 0
     allowed_models:
       extraction:
         - "openrouter/deepseek/deepseek-chat"
+        - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/openai/gpt-4o-mini"
         - "openrouter/google/gemini-2.5-flash"
-        - "openrouter/anthropic/claude-sonnet-4"
+        - "openrouter/anthropic/claude-sonnet-4.6"
       research:
-        - "openrouter/deepseek/deepseek-r1"
+        - "openrouter/deepseek/deepseek-v4-pro"
         - "openrouter/openai/gpt-4o"
-        - "openrouter/anthropic/claude-sonnet-4"
-        - "openrouter/google/gemini-2.5-pro"
-        - "openrouter/x-ai/grok-3"
+        - "openrouter/anthropic/claude-sonnet-4.6"
+        # No Gemini Pro entry: the endpoint gate failed three Pro variants in a row
+        # (2.5-pro: non-JSON under strict json_schema; 3-pro-preview: 404 rotated out;
+        # 3.1-pro-preview: empty body twice, 2026-07-20). gemini-2.5-flash is the one
+        # gate-proven Google slug — it carries Google coverage here.
+        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/x-ai/grok-4.3"
       reasoning:
-        - "openrouter/deepseek/deepseek-r1"
-        - "openrouter/anthropic/claude-sonnet-4"
+        - "openrouter/deepseek/deepseek-v4-pro"
+        - "openrouter/anthropic/claude-sonnet-4.6"
         - "openrouter/openai/gpt-4o"
-        - "openrouter/x-ai/grok-3"
+        - "openrouter/x-ai/grok-4.3"
     web_search_models:
       - "openrouter/perplexity/sonar"
       - "openrouter/openai/gpt-4o:online"
       - "openrouter/deepseek/deepseek-r1:online"
-      - "openrouter/anthropic/claude-sonnet-4:online"
+      - "openrouter/anthropic/claude-sonnet-4.6:online"
 
 phase_capabilities:
   macro: research

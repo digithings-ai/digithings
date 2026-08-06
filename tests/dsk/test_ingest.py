@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from digiskills.ingest import LocalPathCorpusBuilder
 from digiskills.models import SkillSource, SourceKind
 

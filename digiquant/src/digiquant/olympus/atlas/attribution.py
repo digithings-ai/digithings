@@ -23,7 +23,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any  # noqa  # scored-lint: heterogeneous position_attribution record dicts
+from typing import (
+    Any,  # score:allow untyped any — scored-lint: heterogeneous position_attribution record dicts
+)
 
 _RECONCILE_TOL_PCT = 1e-6
 

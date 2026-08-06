@@ -1,4 +1,4 @@
-"""Unit tests for the DigiThings-guide project config.
+"""Unit tests for the digithings-guide project config.
 
 Validates that:
   1. digiproject.yaml parses as valid YAML and conforms to the v1alpha1

@@ -130,7 +130,7 @@ def _workflow_end_payload(
 
 def run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
     """
-    Single custom skill entrypoint: chat idea → research (LLM + DigiSearch) → backtest (optional).
+    Single custom skill entrypoint: chat idea → research (LLM + digisearch) → backtest (optional).
     When backtest disabled (e.g. Sitas): research-only, returns research output.
     """
     workflow_id = str(uuid.uuid4())
@@ -214,7 +214,7 @@ def _workflow_result_from_state(final: dict) -> WorkflowResult:
     else:
         strategy = final.get("strategy_name")
         symbols = final.get("symbols", [])
-        msg = f"Research completed: strategy={strategy}, symbols={symbols}. No backtest (DigiQuant not in project)."
+        msg = f"Research completed: strategy={strategy}, symbols={symbols}. No backtest (digiquant not in project)."
     return WorkflowResult(
         success=True,
         message=msg,

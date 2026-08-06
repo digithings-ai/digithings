@@ -89,8 +89,8 @@ export const apiDocs: Record<string, ModuleApiDoc> = {
       mcp: "FastMCP streamable-http (workflow, chat, thread_state, list_orchestrator_tools)",
     },
     env: [
-      { name: "DIGIQUANT_URL", description: "DigiQuant base URL (defaults to the compose service URL)." },
-      { name: "DIGISEARCH_URL", description: "DigiSearch base URL; empty disables retrieval." },
+      { name: "DIGIQUANT_URL", description: "digiquant base URL (defaults to the compose service URL)." },
+      { name: "DIGISEARCH_URL", description: "digisearch base URL; empty disables retrieval." },
       { name: "DIGIKEY_JWKS_URL", description: "JWT public-key (JWKS) endpoint." },
       { name: "OPENAI_API_BASE", description: "LiteLLM proxy base URL." },
       { name: "DIGI_LLM_MODE", def: "test", description: "Model tier: test / medium / best." },
@@ -126,20 +126,20 @@ export const apiDocs: Record<string, ModuleApiDoc> = {
       {
         method: "POST",
         path: "/workflow",
-        summary: "Run the full research + backtest graph (DigiClaw custom skill).",
+        summary: "Run the full research + backtest graph (digiclaw custom skill).",
         auth: "digigraph:workflow (optional)",
         rateLimit: "10/min/IP",
         request: [
           { name: "prompt", type: "string", required: true, description: "The user request to route through the supervisor." },
           { name: "session_id", type: "string", description: "Conversation/session correlation id." },
           { name: "allowed_tools", type: "string[]", description: "Tool allowlist override for this run." },
-          { name: "digi_bearer", type: "string", description: "JWT forwarded downstream to DigiSearch/DigiQuant." },
+          { name: "digi_bearer", type: "string", description: "JWT forwarded downstream to digisearch/digiquant." },
         ],
         responseFields: [
           { name: "success", type: "boolean", description: "Whether the workflow completed." },
           { name: "message", type: "string", description: "Human-readable summary or full RAG answer." },
-          { name: "backtest_result", type: "object | null", description: "DigiQuant BacktestResult, if a backtest ran." },
-          { name: "rag_sources", type: "object[] | null", description: "Aggregated DigiSearch citations." },
+          { name: "backtest_result", type: "object | null", description: "digiquant BacktestResult, if a backtest ran." },
+          { name: "rag_sources", type: "object[] | null", description: "Aggregated digisearch citations." },
         ],
         examples: [
           {
@@ -427,9 +427,9 @@ for hit in r.json()["results"]:
       "digikey is the issuer. Admin routes require the `DIGIKEY_ADMIN_TOKEN` bearer; " +
       "token exchange takes a raw API key or a BFF-session grant. JWKS and /healthz are public.",
     scopes: [
-      { scope: "digigraph:workflow / :chat / :mcp", grants: "DigiGraph routes" },
-      { scope: "digiquant:backtest / :optimize", grants: "DigiQuant routes" },
-      { scope: "digisearch:query / :ingest", grants: "DigiSearch routes" },
+      { scope: "digigraph:workflow / :chat / :mcp", grants: "digigraph routes" },
+      { scope: "digiquant:backtest / :optimize", grants: "digiquant routes" },
+      { scope: "digisearch:query / :ingest", grants: "digisearch routes" },
       { scope: "*", grants: "Wildcard (all scopes) — dev_global keys only" },
     ],
     run: {
@@ -440,7 +440,7 @@ for hit in r.json()["results"]:
       { name: "DIGIKEY_DATABASE_URL", required: true, description: "SQLite or Postgres URL for key storage." },
       { name: "DIGIKEY_PRIVATE_KEY_PEM", description: "RSA 2048 PEM for RS256 signing (prod)." },
       { name: "DIGIKEY_ADMIN_TOKEN", required: true, description: "Bearer for POST /v1/admin/keys." },
-      { name: "DIGIKEY_BFF_TOKEN", description: "Bearer for grant_type=bff_session (DigiChat)." },
+      { name: "DIGIKEY_BFF_TOKEN", description: "Bearer for grant_type=bff_session (digichat)." },
       { name: "DIGIKEY_JWT_TTL_SEC", def: "900", description: "Access-token lifetime." },
       { name: "DIGIKEY_BLOCKLIST_REDIS_URL", description: "Redis for JWT revocation (prod)." },
     ],
@@ -565,7 +565,7 @@ for hit in r.json()["results"]:
     authNote:
       "The deployed digithings.ai chat is an agentic Cloudflare Pages Function (no login) that " +
       "grounds answers in the digivault docs. The full Docker BFF additionally authenticates users " +
-      "via NextAuth and exchanges a BFF session for a digikey JWT to call DigiGraph.",
+      "via NextAuth and exchanges a BFF session for a digikey JWT to call digigraph.",
     run: {
       compose: "docker compose --profile digichat up -d",
       cli: "make digichat-dev   # Next.js dev server with hot reload",
@@ -608,8 +608,8 @@ for hit in r.json()["results"]:
       cli: "python -m digiclaw            # one cycle\ndocker compose --profile heartbeat up -d heartbeat",
     },
     env: [
-      { name: "DIGIGRAPH_URL", description: "DigiGraph base URL for health checks." },
-      { name: "DIGIQUANT_URL", description: "DigiQuant base URL for health + drift checks." },
+      { name: "DIGIGRAPH_URL", description: "digigraph base URL for health checks." },
+      { name: "DIGIQUANT_URL", description: "digiquant base URL for health + drift checks." },
       { name: "DIGICLAW_DIGIKEY_API_KEY", description: "Key (digiquant:backtest+optimize) for auth-gated drift checks." },
       { name: "AUDIT_LOG_PATH", def: "digiquant/results/audit/events.jsonl", description: "Append-only JSONL audit destination." },
       { name: "REOPTIMIZE_STRATEGY", def: "mean_reversion_tech", description: "Strategy id for the drift check." },
@@ -644,11 +644,41 @@ for hit in r.json()["results"]:
   },
 
   // ─────────────────────────────────────────────────────────────────────────
+  digivault: {
+    authNote:
+      "DigiAuthMiddleware with a per-path scope map: digivault:read for reads and for both orchestrator routes, digivault:write for mutations. /v1/orchestrator_invoke is gated at read because most of its tools are reads — the one mutating tool re-checks digivault:write in the handler, so a read-only caller cannot reach it through the shared endpoint.",
+    run: {
+      cli: "docker compose --profile digivault up -d digivault   # opt-in profile, not up by default\ndigivault lint --root ./docs/vision",
+    },
+    env: [
+      { name: "DIGIVAULT_ROOT", def: "/data/vault", description: "Vault directory. Unset, the routes that read the filesystem answer 503 rather than guessing a path; /v1/orchestrator_tools still returns its static manifest." },
+      { name: "DIGIKEY_JWKS_URL", def: "http://digikey:8005/.well-known/jwks.json", description: "Where the middleware fetches the public half to verify tokens." },
+      { name: "DIGIKEY_ISSUER", def: "http://digikey:8005", description: "Expected token issuer." },
+      { name: "DIGIKEY_AUDIENCE", def: "digi-ecosystem", description: "Expected token audience." },
+    ],
+    publicInterface: [
+      { signature: "GET /v1/notes", description: "List notes in the vault." },
+      { signature: "GET /v1/notes/{name}", description: "Read one note — body plus parsed YAML frontmatter." },
+      { signature: "POST /v1/notes", description: "Create a note. Requires digivault:write." },
+      { signature: "PATCH /v1/notes/{name}/frontmatter", description: "Update frontmatter in place." },
+      { signature: "POST /v1/notes/{name}/rename", description: "Rename a note and repair the [[wikilinks]] pointing at it." },
+      { signature: "GET /v1/notes/{name}/backlinks", description: "Every note linking to this one." },
+      { signature: "GET /v1/tags/{tag}", description: "Notes carrying a tag." },
+      { signature: "GET /v1/lint", description: "Vault health: broken wikilinks, missing frontmatter, taxonomy drift." },
+      { signature: "POST /v1/orchestrator_tools", description: "Tool manifest, so digigraph can discover what the vault offers." },
+      { signature: "POST /v1/orchestrator_invoke", description: "Invoke one of those tools by name." },
+    ],
+    notes: [
+      "The vault is a folder of markdown files — YAML frontmatter, [[wikilinks]], tags, folder taxonomy. There is no database; the filesystem is the store.",
+      "Its first consumer is this repository's own docs/vision/, which scripts/gen-api-vault.ts generates from the same module registry this page is built from.",
+    ],
+  },
+
   digistore: {
     authNote: "Roadmap. Today a session-scoped dataset manager lives inside digigraph; the standalone storage service is planned.",
     notes: [
       "Planned: one storage API over S3, MinIO, Postgres, or SQLite so business code never binds to a backend.",
-      "Planned surface: DigiStore.configure(backend=…) + get/put/list over a backend-neutral interface.",
+      "Planned surface: digistore.configure(backend=…) + get/put/list over a backend-neutral interface.",
     ],
   },
 

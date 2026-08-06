@@ -1,7 +1,6 @@
-"""DigiKey scope matching."""
+"""digikey scope matching."""
 
 import pytest
-
 from digikey.scopes import scope_grants_required
 
 pytestmark = pytest.mark.unit

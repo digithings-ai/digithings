@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digismith.redaction import PiiRedactor, default_redactor
 
 pytestmark = pytest.mark.unit

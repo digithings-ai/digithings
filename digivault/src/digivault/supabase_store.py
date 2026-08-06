@@ -1,10 +1,10 @@
 """Supabase-backed vault store — read an Obsidian vault persisted in Postgres.
 
-Reconstructs DigiVault notes from a Supabase table (``architecture_notes`` /
+Reconstructs digivault notes from a Supabase table (``architecture_notes`` /
 ``knowledge_notes`` — Obsidian-shaped rows: ``frontmatter`` jsonb + ``body_markdown``
 + ``wikilinks`` []) and feeds them to :meth:`Vault.from_sources`, so the *same*
 indexing — frontmatter, ``[[wikilinks]]``, backlinks, tags, lint — applies to a
-DB-hosted vault as to an on-disk one (DigiVault store protocol, #1087).
+DB-hosted vault as to an on-disk one (digivault store protocol, #1087).
 
 The vault holds public open-core docs: read with the anon key for agents; the
 service role only writes (the sync job). ``supabase`` is imported lazily and lives
@@ -14,7 +14,10 @@ behind the optional ``digivault[supabase]`` extra — ``import digivault`` never
 from __future__ import annotations
 
 import os
-from typing import Any, Protocol  # noqa: ANN401 — Supabase client/response shapes are dynamic
+from typing import (  # score:allow untyped any — Supabase client/response shapes are dynamic
+    Any,
+    Protocol,
+)
 
 from pydantic import BaseModel, Field
 
@@ -60,7 +63,7 @@ def _rows(response: Any) -> list[dict[str, Any]]:
 
 
 class SupabaseStore:
-    """Read a DigiVault vault out of a Supabase table.
+    """Read a digivault vault out of a Supabase table.
 
     Inject a client for tests, or build one from the environment with
     :meth:`from_env`. Read-only — writes go through the sync job (digibase upsert).

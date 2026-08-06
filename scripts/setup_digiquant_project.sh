@@ -50,20 +50,20 @@ add_field() {
 add_field "Phase" \
   "Phase 2 — Hardening" \
   "Phase 3 — Domain unification" \
-  "Phase 4 — Atlas on DigiGraph" \
+  "Phase 4 — Atlas on digigraph" \
   "Phase 5 — Atlas tiering" \
   "SITAAS pilot"
 
 add_field "Area" \
   "Cross-cutting" \
-  "DigiGraph" \
-  "DigiQuant" \
-  "DigiSearch" \
-  "DigiSmith" \
-  "DigiKey" \
-  "DigiChat" \
-  "DigiBase" \
-  "DigiClaw" \
+  "digigraph" \
+  "digiquant" \
+  "digisearch" \
+  "digismith" \
+  "digikey" \
+  "digichat" \
+  "digibase" \
+  "digiclaw" \
   "Website" \
   "SITAAS" \
   "Docs" \

@@ -1,4 +1,4 @@
-"""Research node: document RAG (tool loop), quant JSON extraction, and DigiSearch-augmented prompts."""
+"""Research node: document RAG (tool loop), quant JSON extraction, and digisearch-augmented prompts."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ If the user names tickers or a universe, every symbol must appear in "symbols". 
 
 
 def _coerce_strategy_params(raw: object) -> dict[str, float | int | str] | None:
-    """Normalize LLM-provided strategy_params for DigiQuant (flat JSON numbers/strings only)."""
+    """Normalize LLM-provided strategy_params for digiquant (flat JSON numbers/strings only)."""
     if raw is None:
         return None
     if isinstance(raw, dict) and len(raw) == 0:
@@ -212,10 +212,10 @@ def _user_facing_llm_error(exc: Exception) -> str:
         base = (os.environ.get("OPENAI_API_BASE") or "").strip() or "(unset — OpenAI default URL)"
         vert = _vertical_url_host_hints()
         return (
-            "A network connection failed during research (LLM and/or tools calling DigiSearch). "
+            "A network connection failed during research (LLM and/or tools calling digisearch). "
             f"OPENAI_API_BASE is {base}. "
-            "Start LiteLLM (http://127.0.0.1:4000/v1) or Ollama (http://127.0.0.1:11434/v1) and ensure DigiGraph can reach it. "
-            "Document/RAG also needs DigiSearch orchestrator at DIGISEARCH_URL (host: http://127.0.0.1:8002). "
+            "Start LiteLLM (http://127.0.0.1:4000/v1) or Ollama (http://127.0.0.1:11434/v1) and ensure digigraph can reach it. "
+            "Document/RAG also needs digisearch orchestrator at DIGISEARCH_URL (host: http://127.0.0.1:8002). "
             + (vert + " " if vert else "")
             + "If you use `make stack-local`, host.docker.internal in OPENAI_API_BASE is rewritten to 127.0.0.1. "
             "See docs/LOCAL_STACK.md."
@@ -430,7 +430,7 @@ def _run_quant_or_augmented_path(
     user_content = str(prompt)
     if doc_context:
         user_content = (
-            f"[Document context from DigiSearch]\n{doc_context}\n\n[User prompt]\n{prompt}"
+            f"[Document context from digisearch]\n{doc_context}\n\n[User prompt]\n{prompt}"
         )
 
     try:

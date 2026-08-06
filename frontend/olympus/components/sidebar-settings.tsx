@@ -118,7 +118,7 @@ export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed
       <div
         ref={panelRef}
         style={panelStyleState}
-        className="rounded-xl border border-hair bg-surface backdrop-blur-xl shadow-[var(--shadow-glass)] p-4 max-h-[min(70vh,520px)] overflow-y-auto"
+        className="rounded-xl border border-hair bg-surface/95 backdrop-blur-md shadow-[var(--shadow-glass)] p-4 max-h-[min(70vh,520px)] overflow-y-auto"
         role="dialog"
         aria-label="Settings"
       >

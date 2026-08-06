@@ -227,7 +227,7 @@ class DigiProjectConfig:
         return self.agents.get("llm_mode", "test")
 
     def get_indexes(self) -> list[dict[str, Any]]:
-        """Index configs for DigiSearch."""
+        """Index configs for digisearch."""
         return self.indexes
 
     def get_search_index_name(self) -> str:
@@ -303,19 +303,19 @@ class DigiProjectConfig:
         return self.mcp.get("enabled", True)
 
     def get_digisearch_url(self) -> str:
-        """DigiSearch service URL."""
+        """digisearch service URL."""
         return self.services.get(
             "digisearch_url", os.environ.get("DIGISEARCH_URL", "http://digisearch:8002")
         )
 
     def get_digiquant_url(self) -> str:
-        """DigiQuant service URL."""
+        """digiquant service URL."""
         return self.services.get(
             "digiquant_url", os.environ.get("DIGIQUANT_URL", "http://digiquant:8001")
         )
 
     def get_digivault_url(self) -> str:
-        """DigiVault service URL."""
+        """digivault service URL."""
         return self.services.get(
             "digivault_url", os.environ.get("DIGIVAULT_URL", "http://digivault:8004")
         )

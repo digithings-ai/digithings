@@ -2,10 +2,10 @@
 --
 -- Run with:  supabase db push   (or apply via MCP against this project).
 --
--- Shared economic calendar for the DigiQuant suite (#1066). The twelve-x FX research
+-- Shared economic calendar for the digiquant suite (#1066). The twelve-x FX research
 -- project (separate Supabase project) owns the calendar ingest today, writing its own
 -- `fx_economic_calendar`. The calendar is a repurposable dataset (relevant to any
--- DigiQuant project), so it belongs in the unified `core` shared data layer. This creates
+-- digiquant project), so it belongs in the unified `core` shared data layer. This creates
 -- the shared `economic_calendar` here; twelve-x's ingest is repointed to write it and the
 -- twelve-x frontend is repointed to read it (sibling changes — see ADR 0021 + #1066).
 --

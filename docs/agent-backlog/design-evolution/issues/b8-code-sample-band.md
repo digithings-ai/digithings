@@ -28,7 +28,7 @@ Build **`CodeSampleBand`** — x.ai tabbed SDK / Cursor curl row for API and BYO
 
 ## Out of Scope
 
-- DigiChat marketing route wiring (D4)
+- digichat marketing route wiring (D4)
 - Live API key generation
 
 ## Dependencies

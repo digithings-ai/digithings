@@ -29,7 +29,7 @@ and let it ground itself**, driven by the phase prompts. Two tools:
    **curated domain allowlist** so the day-to-day search flow is consistent. Covers the
    soft / non-resident signals (news, sentiment, CTA positioning, options flow,
    politician trades, institutional flows/13F color, international-M2 freshness).
-2. **DigiQuant data tool (MCP + in-process)** — exposes the structured price/technicals
+2. **digiquant data tool (MCP + in-process)** — exposes the structured price/technicals
    and macro series **we already maintain in Supabase** as callable tools, so the agent
    queries real values on demand. Covers the quantitative core (macro, equities, sectors,
    asset classes, per-ticker analysts).
@@ -61,13 +61,13 @@ Grok Live Search is **orthogonal** to function-calling (it's server-side augment
 
 ## Components
 
-### A. DigiQuant data tools (Supabase → MCP + in-process ToolDefinition)
+### A. digiquant data tools (Supabase → MCP + in-process ToolDefinition)
 - Shared query functions (`olympus/atlas/data/queries.py`): `get_price_technicals(ticker,
   lookback)`, `get_macro_series(series_ids, lookback)` (and `get_prices` if needed) —
   read the existing `price_technicals` / `macro_series_observations` tables, return
   compact JSON (latest + short window; selected indicator columns, not all 30+).
 - **MCP exposure:** register them on the existing `digiquant/src/digiquant/mcp_server.py`
-  (`FastMCP("DigiQuant")`) as `digiquant_get_price_technicals` / `digiquant_get_macro_series`
+  (`FastMCP("digiquant")`) as `digiquant_get_price_technicals` / `digiquant_get_macro_series`
   — discoverable, MCP-first.
 - **In-process exposure:** wrap the same functions as `ToolDefinition`s + an `execute_tool`
   dispatcher for the research agent's loop (the pattern the digigraph agent runners
@@ -93,7 +93,7 @@ Grok Live Search is **orthogonal** to function-calling (it's server-side augment
   which series, upstream phase outputs); the agent then pulls the live values via tools.
 
 ### D. Prompts / skills
-- `ANALYST_SYSTEM` updated: "Use the DigiQuant data tools for prices/technicals/macro;
+- `ANALYST_SYSTEM` updated: "Use the digiquant data tools for prices/technicals/macro;
   use web search for news/sentiment/positioning/flows. Ground every quantitative claim on
   a tool result. Cite sources in the `sources` field. If a tool returns nothing, say so."
 - Per-phase SKILL.md updated to name the specific signals each phase should fetch.

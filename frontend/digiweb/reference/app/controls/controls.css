@@ -192,30 +192,11 @@
 }
 
 /* ── Search ───────────────────────────────────────────────────────────── */
-
-.ctl-search {
-  margin-top: 1.2rem;
-  width: min(100%, 26rem);
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--hair);
-  border-radius: 10px;
-  background: var(--surface);
-  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
-}
-
-.ctl-search:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-
-/* native search UA affordance has no Tailwind utility — the .sb-input class is
-   kept on the input solely as this rule's hook; its box/type live on utilities */
-.sb-input::-webkit-search-cancel-button {
-  display: none;
-}
+/* .ctl-search / .sb-input promoted to @digithings/web's <SearchBar/>
+   (#1548) — dress now lives in styles/controls-core.css. Only the `/`
+   keycap hint stays: it is consumer markup passed through the bar's hint
+   slot, and its unlayered .kbd override depends on THIS sheet loading
+   after globals.css. */
 
 /* the `/` keycap hint: kept as CSS, not a utility. `.kbd` (globals.css) is
    unlayered and sets color: ink-soft; unlayered rules beat Tailwind's layered
@@ -226,82 +207,9 @@
 }
 
 /* ── Navigation buttons ───────────────────────────────────────────────── */
-
-.nb-seg {
-  padding: 0.4rem 0.85rem;
-  border: none;
-  border-left: 1px solid var(--hair);
-  background: var(--surface);
-  color: var(--ink-mute);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  cursor: pointer;
-  transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
-}
-
-.nb-seg:first-child {
-  border-left: none;
-}
-
-.nb-seg:hover {
-  color: var(--ink-soft);
-}
-
-.nb-seg.on {
-  color: var(--ink);
-  background: var(--accent-weak);
-}
-
-.nb-page,
-.nb-page-edge {
-  min-width: 2rem;
-  height: 2rem;
-  padding: 0 0.6rem;
-  border: 1px solid var(--hair);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  cursor: pointer;
-  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
-}
-
-.nb-page:hover:not(.on),
-.nb-page-edge:hover:not(:disabled) {
-  color: var(--ink);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
-}
-
-.nb-page.on {
-  color: var(--surface-inverse, #06110f);
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.nb-page-edge:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.nb-icon {
-  width: 2rem;
-  height: 2rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--ink-mute);
-  cursor: pointer;
-  transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
-}
-
-.nb-icon:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-}
+/* nb-* promoted to @digithings/web's <SegmentedControl/> / <Pager/> /
+   <IconButton/> (#1548) — dress now lives in styles/controls-core.css,
+   selection keyed off aria-pressed / aria-current instead of .on. */
 
 /* ── Form fields ──────────────────────────────────────────────────────── */
 /* .ff-field, .ff-field.is-error, .ff-field.is-disabled kept as class hooks:
@@ -665,70 +573,12 @@
   transform: translateX(11px);
 }
 
-/* shimmer primitive */
-.sk {
-  position: relative;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
-  border-radius: 6px;
-}
-
-.sk::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--ink) 13%, transparent),
-    transparent
-  );
-  animation: sk-shimmer 1.5s var(--ease) infinite;
-}
-
-@keyframes sk-shimmer {
-  to {
-    transform: translateX(100%);
-  }
-}
-
-.sk-circle {
-  width: 40px;
-  height: 40px;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-
-.sk-line {
-  height: 0.72rem;
-}
-
-.sk-line--sm {
-  height: 0.5rem;
-}
-
-.sk-btn {
-  width: 6.6rem;
-  height: 2rem;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-
-.sk-block {
-  height: 1.5rem;
-  width: 60%;
-  border-radius: 5px;
-}
-
-/* card composition, tiles, avatar, and tile type migrated to token-backed
-   utilities in skeleton-reference.tsx (frame borders, grid, avatar tint,
-   value tone). The .sk shimmer primitives and .sk-toggle stay here. */
+/* The .sk shimmer primitives promoted to @digithings/web's <Skeleton/>
+   (#1548) — dress now lives in styles/controls-core.css. Card composition,
+   tiles, avatar, and tile type live on token-backed utilities in
+   skeleton-reference.tsx. Only the specimen's replay toggle stays here. */
 
 @media (prefers-reduced-motion: reduce) {
-  .sk::after {
-    animation: none;
-  }
   .sk-toggle-knob,
   .sk-toggle-track {
     transition: none;
@@ -803,74 +653,10 @@
 }
 
 /* ── tags / chips input ─────────────────────────────────────────────────── */
+/* tg-* promoted to @digithings/web's <TagsInput/> (#1548) — dress now lives
+   in styles/controls-core.css (the specimen's baked-in margin-top moved to
+   the thin consumer's mt-[1.2rem]). No CSS here. */
 
-.tg-field {
-  margin-top: 1.2rem;
-  width: min(100%, 30rem);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid var(--hair);
-  border-radius: 10px;
-  background: var(--surface);
-  cursor: text;
-  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
-}
-
-.tg-field:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
-}
-
-.tg-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.22rem 0.35rem 0.22rem 0.6rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--hair));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  color: var(--ink);
-  white-space: nowrap;
-}
-
-.tg-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.1rem;
-  border: none;
-  background: transparent;
-  color: var(--ink-mute);
-  cursor: pointer;
-  border-radius: 999px;
-  transition: color 0.15s var(--ease);
-}
-
-.tg-x:hover {
-  color: var(--ink);
-}
-
-.tg-suggest-chip {
-  padding: 0.25rem 0.6rem;
-  border: 1px solid var(--hair);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-soft);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  cursor: pointer;
-  transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
-}
-
-.tg-suggest-chip:hover {
-  color: var(--ink);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
-}
-
-/* empty / error states — migrated to token-backed Tailwind utilities in
-   empty-states-reference.tsx (the @theme bridge in globals.css). No CSS here. */
+/* empty / error states — promoted to @digithings/web's <EmptyState/> (#1548);
+   the specimen's token utilities were translated value-for-value into
+   styles/controls-core.css (ctl-empty*). No CSS here. */

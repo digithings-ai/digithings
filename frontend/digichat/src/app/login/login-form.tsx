@@ -21,7 +21,7 @@ export function LoginForm({
       <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
         {"> "}auth
       </p>
-      <h1 className="mb-2 text-xl font-semibold tracking-tight">Sign in to DigiChat.</h1>
+      <h1 className="mb-2 text-xl font-semibold tracking-tight">Sign in to digichat.</h1>
       <p className="mb-6 font-mono text-xs text-muted-foreground">
         organization SSO or local dev credentials.
       </p>

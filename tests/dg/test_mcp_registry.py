@@ -6,7 +6,6 @@ import textwrap
 from pathlib import Path
 
 import pytest
-
 from digigraph.orchestration.registry import ToolExposureMode, register_mcp_server
 
 

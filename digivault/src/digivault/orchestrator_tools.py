@@ -1,12 +1,12 @@
-"""OpenAI-style orchestrator tool definitions for DigiVault.
+"""OpenAI-style orchestrator tool definitions for digivault.
 
-Hubs (e.g. DigiGraph) fetch these via ``POST /v1/orchestrator_tools`` and execute
+Hubs (e.g. digigraph) fetch these via ``POST /v1/orchestrator_tools`` and execute
 via ``POST /v1/orchestrator_invoke`` so vault tooling is owned by this service.
 """
 
 from __future__ import annotations
 
-from typing import Any, TypedDict  # noqa: ANN401 — OpenAI tool JSON-schema property maps
+from typing import Any, TypedDict  # score:allow untyped any — OpenAI tool JSON-schema property maps
 
 
 class FunctionParametersSchema(TypedDict, total=False):
@@ -53,7 +53,7 @@ def _fn(name: str, description: str, params: FunctionParametersSchema) -> OpenAI
 
 
 def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
-    """Return the OpenAI function-tool definitions owned by DigiVault."""
+    """Return the OpenAI function-tool definitions owned by digivault."""
     return [
         _fn(
             TOOL_VAULT_SEARCH_TAG,
@@ -93,7 +93,7 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
         ),
         _fn(
             TOOL_VAULT_SEARCH_NOTES,
-            "Full-text search over the DigiThings architecture vault (all module docs — "
+            "Full-text search over the digithings architecture vault (all module docs — "
             "digigraph, digiquant, digisearch, digichat, digikey, digismith, digivault, "
             "digiclaw, digibase, and roadmap modules). Ranked by relevance across title, "
             "body, and tags. Use for any question about the digithings stack: modules, "

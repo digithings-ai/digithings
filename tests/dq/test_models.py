@@ -1,11 +1,10 @@
-"""Unit tests for DigiQuant Pydantic models."""
+"""Unit tests for digiquant Pydantic models."""
 
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from digiquant.models import BacktestResult, ExportResult, OptimizeResult
+from pydantic import ValidationError
 
 
 @pytest.mark.unit

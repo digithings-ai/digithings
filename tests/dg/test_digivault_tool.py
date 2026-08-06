@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-
 from digigraph.orchestration.registry import ToolContext, ToolExposureMode, get_tools, has_tool
 
 
@@ -100,7 +99,7 @@ def test_handle_digivault_search_success() -> None:
 
     hit = {
         "vault_path": "digigraph",
-        "title": "DigiGraph",
+        "title": "digigraph",
         "body_markdown": "LangGraph-based workflow engine.",
         "tags": ["core"],
         "rank": 0.8,
@@ -117,7 +116,7 @@ def test_handle_digivault_search_success() -> None:
             "content": "LangGraph-based workflow engine.",
             "score": 0.8,
             "doc_id": "digigraph",
-            "metadata": {"title": "DigiGraph", "tags": ["core"]},
+            "metadata": {"title": "digigraph", "tags": ["core"]},
         }
     ]
     assert json.loads(out["content"])["total"] == 1
@@ -149,7 +148,7 @@ def test_handle_digivault_search_invoke_error() -> None:
         side_effect=httpx.ConnectError("connection refused"),
     ):
         out = _handle_digivault_search({"query": "anything"}, _ctx())
-    assert "DigiVault orchestrator invoke failed" in out
+    assert "digivault orchestrator invoke failed" in out
 
 
 @pytest.mark.unit

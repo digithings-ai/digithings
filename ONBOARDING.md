@@ -1,4 +1,4 @@
-# Onboarding — Developing on DigiThings
+# Onboarding — Developing on digithings
 
 Welcome. This guide is how Chris develops on this monorepo with Claude Code. It's the companion to [CLAUDE.md](CLAUDE.md) (repo-wide agent rules) and [AGENTS.md](AGENTS.md) (stack-wide non-negotiables) — read both once, then come back here to see how the pieces connect day-to-day.
 

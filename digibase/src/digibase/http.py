@@ -50,7 +50,7 @@ def outbound_service_headers(
     extra: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """
-    Merge correlation id, optional Bearer (DigiKey JWT or legacy API key material), and extra headers.
+    Merge correlation id, optional Bearer (digikey JWT or legacy API key material), and extra headers.
     *bearer_token* must be the raw secret or JWT (no ``Bearer `` prefix).
     """
     h: dict[str, str] = {}
@@ -112,7 +112,7 @@ class RequestIdLogFilter(logging.Filter):
     ``KeyError`` in the formatter.
     """
 
-    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+    def filter(self, record: logging.LogRecord) -> bool:
         record.request_id = _REQUEST_ID_CTX.get() or _UNSET_REQUEST_ID
         return True
 

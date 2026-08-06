@@ -1,4 +1,4 @@
-# Scoring Rubrics — DigiThings Agentic Development
+# Scoring Rubrics — digithings Agentic Development
 
 Agents use these rubrics to **self-score** code changes before opening a pull request. Scores are honest assessments, not optimistic guesses. The PR template (`.github/PULL_REQUEST_TEMPLATE.md`) references these thresholds.
 
@@ -47,7 +47,7 @@ A code PR is eligible for reviewer fast-track when:
 
 A code PR **requires human review** when:
 - Any score is below target
-- The PR touches auth, crypto, live-trading, DigiKey signing keys, or DigiClaw execution gates
+- The PR touches auth, crypto, live-trading, digikey signing keys, or digiclaw execution gates
 - Novel architecture is introduced that isn't described in an existing ARCHITECTURE.md
 
 ---

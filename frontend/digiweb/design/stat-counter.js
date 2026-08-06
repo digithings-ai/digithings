@@ -1,5 +1,5 @@
 /**
- * DigiThings stat-counter — animates each .stat-counter's .stat-counter__value
+ * digithings stat-counter — animates each .stat-counter's .stat-counter__value
  * from 0 to data-target when the element scrolls into view.
  *
  * Markup contract:

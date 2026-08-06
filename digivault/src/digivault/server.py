@@ -1,4 +1,4 @@
-"""DigiVault HTTP API — Obsidian-style vault management for the Digi ecosystem.
+"""digivault HTTP API — Obsidian-style vault management for the Digi ecosystem.
 
 Operates on the vault directory named by ``DIGIVAULT_ROOT``. The vault is re-read
 from disk on each request (a documentation vault is small and correctness beats
@@ -12,7 +12,9 @@ import os
 import time as _time
 from collections import deque as _deque
 from threading import Lock as _Lock
-from typing import Any  # noqa: ANN401 — frontmatter / orchestrator argument maps are arbitrary
+from typing import (
+    Any,  # score:allow untyped any — frontmatter / orchestrator argument maps are arbitrary
+)
 
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
@@ -49,7 +51,7 @@ _MAX_SEARCH_NOTES_LIMIT = 50
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="DigiVault",
+    title="digivault",
     description="Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags).",
     version=__version__,
 )
@@ -288,7 +290,7 @@ def lint() -> LintReport:
 # ── orchestrator (hub) ─────────────────────────────────────────────────────
 @app.post("/v1/orchestrator_tools", response_model=OrchestratorToolsResponse)
 def orchestrator_tools() -> OrchestratorToolsResponse:
-    """Return OpenAI-style tool definitions owned by DigiVault (for DigiGraph)."""
+    """Return OpenAI-style tool definitions owned by digivault (for digigraph)."""
     return OrchestratorToolsResponse(tools=build_orchestrator_tool_manifest())
 
 
@@ -296,7 +298,7 @@ def orchestrator_tools() -> OrchestratorToolsResponse:
 def orchestrator_invoke(
     req: OrchestratorInvokeRequest, request: Request
 ) -> OrchestratorInvokeResponse:
-    """Execute one DigiVault orchestrator tool by name (hub dispatch)."""
+    """Execute one digivault orchestrator tool by name (hub dispatch)."""
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
     _require_tool_scope(request, tool)

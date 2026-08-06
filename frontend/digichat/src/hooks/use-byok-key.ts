@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { isOpenRouterKey } from "@/lib/byok-openrouter";
 
-export type BYOKProvider = "openai" | "anthropic" | "openrouter";
+export type BYOKProvider = "openai" | "anthropic" | "openrouter" | "gemini";
 
 export type BYOKKeyState = {
   key: string;
@@ -19,6 +19,7 @@ const STORAGE_MODEL_KEY = "byok_model";
 function readProvider(raw: string | null): BYOKProvider {
   if (raw === "anthropic") return "anthropic";
   if (raw === "openrouter") return "openrouter";
+  if (raw === "gemini") return "gemini";
   return "openai";
 }
 
@@ -69,6 +70,9 @@ export function validateBYOKKey(key: string, provider: BYOKProvider): string | n
   }
   if (provider === "openrouter" && !isOpenRouterKey(key)) {
     return "OpenRouter keys must start with sk-or-.";
+  }
+  if (provider === "gemini" && !key.startsWith("AI")) {
+    return "Gemini keys must start with AI.";
   }
   return null;
 }

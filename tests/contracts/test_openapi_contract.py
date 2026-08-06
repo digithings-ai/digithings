@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
+from digigraph.server import app as dg_app
 from fastapi.testclient import TestClient
 
-from digigraph.server import app as dg_app
 from tests.digi_test_jwt import auth_headers
 
 

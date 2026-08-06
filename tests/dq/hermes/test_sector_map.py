@@ -9,7 +9,6 @@ exposure beats research fan-out): USO is a commodity, QQQ is broad equity.
 from __future__ import annotations
 
 import pytest
-
 from digiquant.olympus.atlas.sectors_config import load_sectors
 from digiquant.olympus.hermes import sector_map
 from digiquant.olympus.hermes.sector_map import (

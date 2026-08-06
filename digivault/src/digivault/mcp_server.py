@@ -1,4 +1,4 @@
-"""DigiVault MCP server — exposes vault management as MCP tools for DigiGraph.
+"""digivault MCP server — exposes vault management as MCP tools for digigraph.
 
 Run: ``python -m digivault.mcp_server`` (streamable HTTP, default 127.0.0.1:8766).
 Operates on the vault directory named by ``DIGIVAULT_ROOT``.
@@ -16,7 +16,7 @@ from digivault.vault import Vault, VaultError
 
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("DigiVault", json_response=True)
+mcp = FastMCP("digivault", json_response=True)
 
 
 def _open_vault() -> Vault:
@@ -32,7 +32,7 @@ def digivault_search_tag(tag: str) -> str:
     try:
         notes = _open_vault().search_by_tag(tag)
     except VaultError as e:
-        return f"[DigiVault error: {e}]"
+        return f"[digivault error: {e}]"
     return _json.dumps([{"name": n.name, "title": n.title, "rel_path": n.rel_path} for n in notes])
 
 
@@ -42,9 +42,9 @@ def digivault_backlinks(name: str) -> str:
     try:
         vault = _open_vault()
     except VaultError as e:
-        return f"[DigiVault error: {e}]"
+        return f"[digivault error: {e}]"
     if vault.get_note(name) is None:
-        return f"[DigiVault: no such note {name!r}]"
+        return f"[digivault: no such note {name!r}]"
     return _json.dumps({"name": name, "backlinks": list(vault.backlinks(name))})
 
 
@@ -54,7 +54,7 @@ def digivault_lint() -> str:
     try:
         report = _open_vault().lint()
     except VaultError as e:
-        return f"[DigiVault error: {e}]"
+        return f"[digivault error: {e}]"
     return report.model_dump_json(indent=2)
 
 
@@ -65,7 +65,7 @@ def digivault_create_note(name: str, title: str | None = None, body: str = "") -
         fm = {"title": title} if title else {}
         note = _open_vault().create_note(name, frontmatter=fm, body=body)
     except VaultError as e:
-        return f"[DigiVault error: {e}]"
+        return f"[digivault error: {e}]"
     return note.model_dump_json()
 
 

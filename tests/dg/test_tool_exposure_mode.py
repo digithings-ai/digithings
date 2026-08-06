@@ -5,7 +5,6 @@ from __future__ import annotations
 import inspect
 
 import pytest
-
 from digigraph.orchestration.registry import (
     ToolContext,
     ToolExposureMode,

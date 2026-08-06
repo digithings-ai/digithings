@@ -1,6 +1,6 @@
 # REM-131 — Security-reviewer sign-off (PR #578 auth delta)
 
-**Scope:** DigiKey revocation blocklist (REM-005–019), DigiChat embed gate (REM-010), execute_python fail-closed docs (REM-012).
+**Scope:** digikey revocation blocklist (REM-005–019), digichat embed gate (REM-010), execute_python fail-closed docs (REM-012).
 
 **Reviewer:** security-reviewer subagent / human security review  
 **Branch:** `task/577-audit-wave0-remediation`  
@@ -13,7 +13,7 @@
 | JWT `jti` blocklist + Redis | Fail-closed when `DIGIKEY_REQUIRE_BLOCKLIST=1`; startup rehydrate from `jti_issued` | Pass |
 | Revoke endpoint | 503 when blocklist required but Redis unset | Pass |
 | BFF session `jti` persistence | `JtiIssuedRow` on exchange | Pass |
-| DigiChat embed | `DIGICHAT_EMBED_ENABLED` / `X-Embed-Token`; 503 when unset on embed routes | Pass |
+| digichat embed | `DIGICHAT_EMBED_ENABLED` / `X-Embed-Token`; 503 when unset on embed routes | Pass |
 | execute_python | Documented dev-only; subprocess static reject list | Pass (dev-only accepted) |
 | Olympus RLS | Threat model doc only; no policy change (REM-035) | Pass with note |
 | BFF Supabase redesign | REM-036 deferred — human gate | N/A this PR |

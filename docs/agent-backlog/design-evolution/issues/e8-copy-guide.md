@@ -12,7 +12,7 @@ Create and maintain **`frontend/digiweb/design/COPY_GUIDE.md`** — authoritativ
   - Voice & tone, headline formulas, subhead patterns, section title patterns, feature cell structure
   - Literal CTA library (per-surface matrix)
   - Friction reducers, footer IA, marketing vs dashboard IA templates
-  - Per-surface section maps (digithings, digiquant, DigiChat, Olympus/twelve-x)
+  - Per-surface section maps (digithings, digiquant, digichat, Olympus/twelve-x)
   - Anti-patterns, announcement bar copy template
 - [ ] Links to `EVOLUTION.md` and `references/scans/copy-patterns.md`
 - [ ] `frontend/digiweb/design/README.md` one-line link to COPY_GUIDE

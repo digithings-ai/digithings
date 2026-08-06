@@ -6,7 +6,12 @@ env:
   # apply_olympus_openrouter_env() in chain startup sets OPENROUTER_* from tier.
   OLYMPUS_MODEL_TIER: "cheap"
 
-  ATLAS_MAX_ANALYSTS: "25"
+  # Enforced for the first time by #1767 — before it, H4 passed the whole H3 thesis
+  # map as "held" and the cap bypassed itself (39 analysts dispatched against 25).
+  # 25 would now leave 12 of 27 live theses with no vehicle analysed (~$2.60/day);
+  # 30 leaves 7 (~$3.10) against today's uncapped 39-wide $4.00. Tighten once
+  # `breakdown.roster` has a week of width telemetry.
+  ATLAS_MAX_ANALYSTS: "30"
 
   # Fail-soft feature flags — outages degrade signal, never block the run.
   ATLAS_ONCHAIN_POSITIONING: "1"       # Hyperdash cohort GraphQL (#801)

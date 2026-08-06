@@ -96,3 +96,87 @@ def test_reset_clears_and_deactivates():
     usage.reset()
     assert usage.is_active() is False
     assert usage.snapshot()["llm_calls"] == 0
+
+
+@pytest.mark.unit
+def test_records_ordered_phase_scoped_events_without_call_bodies():
+    usage.start()
+    with usage.call_context(
+        phase="sector-technology",
+        operation="SectorReport",
+        document_key="sector-technology",
+    ):
+        usage.record(
+            kind="chat",
+            model="deepseek/deepseek-v4-flash",
+            prompt_tokens=120,
+            completion_tokens=30,
+            cached_tokens=80,
+            cost=0.0012,
+            duration_ms=425,
+            retry_count=1,
+        )
+        usage.record_tool_call(
+            name="get_price_technicals",
+            arguments={
+                "ticker": "XLK",
+                "api_key": "must-not-leak",
+                "private_key": "also-must-not-leak",
+                "jwt_claim": "nor-this",
+            },
+            duration_ms=18,
+            ok=True,
+            result={"ticker": "XLK", "close": 231.4},
+        )
+
+    events = usage.events_snapshot()
+    assert [event["sequence"] for event in events] == [1, 2]
+    assert events[0] == pytest.approx(
+        {
+            "sequence": 1,
+            "kind": "model_call",
+            "phase": "sector-technology",
+            "operation": "SectorReport",
+            "document_key": "sector-technology",
+            "name": "deepseek/deepseek-v4-flash",
+            "status": "ok",
+            "duration_ms": 425,
+            "retry_count": 1,
+            "prompt_tokens": 120,
+            "completion_tokens": 30,
+            "cached_tokens": 80,
+            "cost_usd": 0.0012,
+            "sources": 0,
+            "input_summary": "Structured model request",
+            "output_summary": "Model response returned",
+        }
+    )
+    assert events[1]["kind"] == "tool_call"
+    assert events[1]["name"] == "get_price_technicals"
+    assert events[1]["input_summary"] == "Arguments: ticker; 3 sensitive fields redacted"
+    assert events[1]["output_summary"] == "Returned 2 fields"
+    assert "api_key" not in str(events)
+    assert "private_key" not in str(events)
+    assert "jwt_claim" not in str(events)
+    assert "231.4" not in str(events)
+
+
+@pytest.mark.unit
+def test_event_text_is_bounded_before_persistence():
+    usage.start()
+    with usage.call_context(
+        phase="p" * 200,
+        operation="o" * 300,
+        document_key="d" * 700,
+    ):
+        usage.record_tool_call(
+            name="n" * 400,
+            arguments={f"field_{index:03d}": index for index in range(100)},
+        )
+
+    event = usage.events_snapshot()[0]
+    assert len(event["phase"]) == 120
+    assert len(event["operation"]) == 200
+    assert len(event["document_key"]) == 500
+    assert len(event["name"]) == 255
+    assert len(event["input_summary"]) == 500

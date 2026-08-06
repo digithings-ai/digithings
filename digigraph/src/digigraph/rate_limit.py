@@ -8,7 +8,6 @@ from collections import deque
 from threading import Lock
 
 from digibase.errors import json_error_response
-
 from fastapi import Request
 from fastapi.responses import JSONResponse
 

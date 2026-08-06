@@ -155,8 +155,8 @@ class UrlCorpusBuilder:
         if self._fetcher is not None:
             fetcher = self._fetcher
         else:
-            from digifetch import HttpFetcher  # lazy: keeps the core import digifetch-free
             import httpx  # lazy: same extra as digifetch
+            from digifetch import HttpFetcher  # lazy: keeps the core import digifetch-free
 
             # follow_redirects=False: a redirect must be re-validated against
             # the SSRF allowlist before it's requested, which digifetch's own
@@ -179,7 +179,7 @@ class UrlCorpusBuilder:
 
                 try:
                     result = fetcher.download(url)
-                except Exception as exc:  # noqa: BLE001 — one bad URL must not abort the build
+                except Exception as exc:  # one bad URL must not abort the build
                     logger.warning("skipping %s: fetch failed (%s)", url, exc)
                     truncated = True
                     continue

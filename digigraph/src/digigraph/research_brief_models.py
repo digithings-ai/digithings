@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 BRIEF_SYSTEM = """You write a machine-readable research brief as a single JSON object (no markdown).
 Rules:
-- Do not state backtest results, Sharpe ratios, returns, win rates, or any performance metrics unless the user prompt explicitly quotes them from a source. The corpus is literature and notes, not live DigiQuant output.
+- Do not state backtest results, Sharpe ratios, returns, win rates, or any performance metrics unless the user prompt explicitly quotes them from a source. The corpus is literature and notes, not live digiquant output.
 - Every theme.summary must only restate ideas that are supported by Retrieved sources. Each theme MUST include source_ids: a non-empty array of ids from ALLOWED_SOURCE_IDS. If you lack evidence for a theme, put the idea in corpus_gaps instead.
 - If sources disagree, add short strings to contradictions.
 - assumptions: operational facts the literature often leaves implicit (e.g. futures roll policy, fee model) — not invented statistics.

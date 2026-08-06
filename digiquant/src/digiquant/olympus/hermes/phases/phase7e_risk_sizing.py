@@ -13,15 +13,17 @@ is present.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any  # noqa  # scored-lint: duck-typed Supabase client + rows
+from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.data.queries import get_return_correlations
 from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState, RebalancePayload
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.hermes.models.deliberation import is_unchallenged_carry
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
@@ -134,6 +136,49 @@ def _effective_inputs(
     return convictions, stances
 
 
+def _cap_unchallenged_convictions(
+    convictions: Mapping[str, float],
+    debates: Mapping[str, Mapping[str, Any]],
+    *,
+    bar: float,
+) -> tuple[dict[str, float], list[str]]:
+    """Hold every crash-carried name at the entry ``bar``; return the book and those names.
+
+    H6 fails soft: when the deliberation LLM crashes it carries the analyst's own stance
+    forward, so a position that received **no** PM challenge could still be sized at top
+    conviction — 40% of the 2026-07-31 book, including all three new opens. Capping at
+    ``SizingCaps.min_conviction`` means an unchallenged name stays in the book but can never
+    outrank one that was actually debated.
+
+    Capping *at* the bar rather than scaling below it is deliberate. A name pushed under the
+    bar is dropped by the sizer's **selection** step and then re-added at its drifted weight
+    by the #1649 held-carry backstop — which can end up **larger** than applying no haircut
+    at all. Capping at the bar clears `_select`'s ``>=`` so selection never drops it.
+    Correlation de-dup can still drop a capped leg in favour of a challenged one
+    (``sizing._corr_dedup`` drops the lower-conviction side of a >0.80 pair); that is the
+    intended outcome, not an escape hatch.
+    """
+    out: dict[str, float] = {}
+    capped: list[str] = []
+    for ticker, conviction in convictions.items():
+        if conviction > bar and is_unchallenged_carry(debates.get(ticker) or {}):
+            out[ticker] = bar
+            capped.append(ticker)
+        else:
+            out[ticker] = conviction
+    return out, sorted(capped)
+
+
+def _unchallenged_note(unchallenged: list[str]) -> str:
+    """Book-note sentence naming the positions no PM challenge ever reached (#1742)."""
+    if not unchallenged:
+        return ""
+    return (
+        " Held at the conviction bar (H6 deliberation failed, no PM challenge): "
+        f"{', '.join(unchallenged)}."
+    )
+
+
 def _load_ticker_risk(
     client: SupabaseClient, tickers: list[str], run_date: date
 ) -> dict[str, TickerRisk]:
@@ -158,7 +203,7 @@ def _load_ticker_risk(
                 ticker = row.get("ticker")
                 if ticker and ticker not in latest:  # desc order → first seen is freshest
                     latest[ticker] = row
-        except Exception as exc:  # noqa: BLE001 — vol read is best-effort; default vol used
+        except Exception as exc:  # vol read is best-effort; default vol used
             logger.warning("phase7e: price_technicals read failed (%s); using default vol", exc)
     return {
         ticker: TickerRisk(
@@ -187,7 +232,10 @@ def _verb(current: float | None, target: float) -> str:
 
 
 def _rebuild_actions(
-    original_actions: list[Any], pm_targets: dict[str, float], sized: dict[str, float]
+    original_actions: list[Any],
+    pm_targets: dict[str, float],
+    sized: dict[str, float],
+    current_weights: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """Rebuild the advisory action list to match the SIZED book.
 
@@ -222,18 +270,138 @@ def _rebuild_actions(
                 f"{base} [removed by risk sizing — cap / correlation de-dup / conviction floor]"
             ).strip()
         out.append(row)
-    # Sized tickers the PM had no explicit action row for (rare) → minimal new rows.
+    # Sized tickers the PM had no explicit action row for — the NORM on the H7 memo
+    # path (original_actions is empty there), so every booked day misreported held
+    # rebalances as "new" (#1676). Classify against the live drifted weight instead:
+    # add / trim / hold for existing positions, "new" only for genuinely new names.
+    live = current_weights or {}
     for ticker, target in sized.items():
         if ticker not in seen:
+            verb = _verb(_opt_float(live.get(ticker)), target)
             out.append(
                 {
                     "ticker": ticker,
-                    "action": "new",
+                    "action": verb,
                     "target_pct": round(target, 4),
                     "rationale": "Position weight set by deterministic risk sizing.",
                 }
             )
     return out
+
+
+def _held_carry_weights(state: AtlasResearchState) -> dict[str, float]:
+    """Prior (drifted) weights for deliberately carried held names (#1030, #1555, #1649).
+
+    Two classes of held name must be carried at their current drifted weight or H9
+    fails closed with "held ticker missing from book and not flat" — the fail-closed
+    that silently froze **every** delta-day commit from 2026-06-26 (#1555) and again
+    on 2026-07-21/22 (#1649):
+
+    - H4-gated: the staleness gate moved a quiet held name into
+      ``focus_roster_excluded`` (no fresh analyst, absent from the H7 PM memo).
+    - Memo-unaddressed (#1649): the H7 PM memo's roster omitted a held name
+      entirely (neither ``long`` nor ``flat``) — memo coverage is LLM discipline,
+      and an owned position with no explicit instruction defaults to "hold".
+
+    Scoped to :func:`~digiquant.olympus.hermes.writers.commit_io.carried_held_tickers`
+    — reusing the exact set H9's coherence check exempts so the carry set and the
+    exemption set can never diverge into a new silent mismatch. A PM-exited name
+    (addressed in the roster, marked ``flat``) is memo-addressed, so it is never
+    resurrected here.
+    """
+    # Lazy import: keeps the phase7e ↔ commit_io edge one-directional at import time.
+    from digiquant.olympus.hermes.writers.commit_io import carried_held_tickers
+
+    gated = carried_held_tickers(state)
+    if not gated:
+        return {}
+    carry: dict[str, float] = {}
+    for ticker in gated:
+        weight = _drifted_weight(state, ticker)
+        if weight is not None and weight > 0:
+            carry[ticker] = weight
+    return carry
+
+
+def _drifted_weight(state: AtlasResearchState, ticker: str) -> float | None:
+    """Current (mark-to-market) weight for *ticker*, falling back to the prior book."""
+    current = _opt_float((state.config.preferences.get("current_weights") or {}).get(ticker))
+    if current is not None and current > 0:
+        return float(current)
+    for row in state.prior_context.prior_book:
+        if str(row.get("ticker")).strip().upper() == ticker:
+            prior = _opt_float(row.get("weight_pct"))
+            if prior is not None and prior > 0:
+                return float(prior)
+    return None
+
+
+def _apply_held_continuity_backstop(
+    sized: dict[str, float], state: AtlasResearchState
+) -> dict[str, float]:
+    """FINAL-book held invariant (#1649): held ⇒ positive weight or explicit flat.
+
+    The per-cause carries (#1030 gated, #1649 memo-unaddressed) cover known cracks,
+    but the 2026-07-22 22:54 run proved unknown ones exist: NINE held names reached
+    H9 with weight<=0 despite the memo-unaddressed carry being live (suspected:
+    PM-longed names dropped by sizing caps — memo-addressed, so exempt from the
+    carry). This backstop enforces the invariant on the FINAL sized dict regardless
+    of cause: any held, non-flat ticker at weight<=0 is re-added at its drifted
+    weight, with a WARNING naming the cause bucket (memo-addressed ⇒ sized-out;
+    else carry-miss) so diagnostics show exactly which crack fired. A held name
+    with NO recoverable weight stays out and H9 still fails closed — that case
+    genuinely needs eyes.
+    """
+    from digiquant.olympus.hermes.writers.commit_io import (
+        flat_tickers_from_memo,
+        held_tickers,
+        memo_addressed_tickers,
+    )
+
+    flats = flat_tickers_from_memo(state)
+    addressed = memo_addressed_tickers(state)
+    out = dict(sized)
+    for ticker in sorted(held_tickers(state)):
+        if out.get(ticker, 0.0) > 0 or ticker in flats:
+            continue
+        weight = _drifted_weight(state, ticker)
+        cause = "pm-addressed but sized out (caps?)" if ticker in addressed else "carry miss"
+        if weight is None:
+            logger.warning(
+                "held-continuity backstop: %s has weight<=0 (%s) and NO recoverable "
+                "drifted weight — H9 will fail closed",
+                ticker,
+                cause,
+            )
+            continue
+        logger.warning(
+            "held-continuity backstop: re-adding %s at drifted %.4f (%s)",
+            ticker,
+            weight,
+            cause,
+        )
+        out[ticker] = weight
+    return out
+
+
+def _cap_total_invested(sized: dict[str, float]) -> dict[str, float]:
+    """FINAL-book allocation invariant (#1676): Σ positive weights ≤ 100%.
+
+    Nothing upstream enforces the total, and the held-continuity backstop (#1649)
+    legitimately ADDS drifted weights on top of an already-allocated book — the
+    correct rescue can overshoot 100%. Proportionally scale all positive weights
+    down when the total exceeds 100 (cash residual < 100 is always valid).
+    """
+    total = sum(w for w in sized.values() if w > 0)
+    if total <= 100.0 + 1e-9:
+        return sized
+    scale = 100.0 / total
+    logger.warning(
+        "total-invested cap: sized book at %.2f%% > 100%%; scaling all positions by %.4f",
+        total,
+        scale,
+    )
+    return {t: (w * scale if w > 0 else w) for t, w in sized.items()}
 
 
 def _build_sized_book(
@@ -257,7 +425,7 @@ def _build_sized_book(
         )
         breaker_scale = breaker.scale
         breaker_note = f" Drawdown breaker: {breaker.reason}." if breaker.scale < 1.0 else ""
-    except Exception as exc:  # noqa: BLE001 — breaker is best-effort; neutral on failure
+    except Exception as exc:  # breaker is best-effort; neutral on failure
         logger.warning("phase7e: drawdown breaker failed (%s); neutral scale", exc)
         breaker_scale, breaker_note = 1.0, ""
 
@@ -267,20 +435,35 @@ def _build_sized_book(
             tickers=pm_tickers,
             run_date=state.run_date,
         )
-    except Exception as exc:  # noqa: BLE001 — correlation is best-effort
+    except Exception as exc:  # correlation is best-effort
         logger.warning("phase7e: correlation read failed (%s); using full-correlation default", exc)
         corr_frame = None
 
+    unchallenged: list[str] = []
     try:
         analysts = analyst_payloads(state)
+        debates = deliberation_summaries(state)
         if memo is not None:
             convictions, stances = _memo_effective_inputs(memo, analysts, caps.min_conviction)
         else:
             convictions, stances = _effective_inputs(
                 pm_tickers,
                 analysts,
-                deliberation_summaries(state),
+                debates,
                 default_conviction=caps.min_conviction,
+            )
+        # Applied to BOTH branches on purpose. The memo branch is the live production path
+        # (H7 writes a memo every run), so a haircut wired only into the no-memo branch
+        # would be inert in production (#1742).
+        convictions, unchallenged = _cap_unchallenged_convictions(
+            convictions, debates, bar=caps.min_conviction
+        )
+        if unchallenged:
+            logger.warning(
+                "phase7e: %d position(s) held at the conviction bar — H6 deliberation "
+                "crashed, so no PM challenge ran (%s)",
+                len(unchallenged),
+                ", ".join(unchallenged),
             )
         risk = _load_ticker_risk(deps.client, pm_tickers, state.run_date)
         result = size_portfolio(
@@ -291,11 +474,17 @@ def _build_sized_book(
             caps=caps,
             breaker_scale=breaker_scale,
         )
-    except Exception as exc:  # noqa: BLE001 — sizing must never crash the run
+    except Exception as exc:  # sizing must never crash the run
         logger.warning("phase7e: risk sizing failed (%s); keeping prior book", exc)
         return None
 
     sized = {p.ticker: p.target_pct for p in result.positions}
+    # Carry deliberately gated-out or memo-unaddressed held names at their current
+    # drifted weight (#1030, #1555, #1649) BEFORE the cadence band, so they flow through as continuing positions
+    # (held, not traded). ``setdefault`` never overrides a weight the PM/sizer already
+    # set — it only re-instates a quiet held name that sizing would otherwise drop.
+    for ticker, weight in _held_carry_weights(state).items():
+        sized.setdefault(ticker, weight)
     # current_weights is already mark-to-market drifted in preflight (#955). The cadence
     # dispatcher rebalances through the no-trade band on a permitted day, else holds the
     # drifted book (only PM direction changes trade).
@@ -309,13 +498,15 @@ def _build_sized_book(
         preferences=dict(state.config.preferences),
         run_date=state.run_date,
     )
+    sized = _apply_held_continuity_backstop(sized, state)
+    sized = _cap_total_invested(sized)
     updated: RebalancePayload = {
         "recommended_portfolio": [
             {"ticker": ticker, "target_pct": round(weight, 4)} for ticker, weight in sized.items()
         ],
-        "actions": _rebuild_actions(original_actions, pm_targets, sized),
+        "actions": _rebuild_actions(original_actions, pm_targets, sized, current_weights),
         "notes": (f"{prior_notes}\n\n" if prior_notes else "")
-        + f"Risk-sizing (H8): {result.explanation}{breaker_note}",
+        + f"Risk-sizing (H8): {result.explanation}{breaker_note}{_unchallenged_note(unchallenged)}",
     }
 
     logger.info(

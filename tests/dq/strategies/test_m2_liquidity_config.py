@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-import pytest
 from datetime import date
-import polars as pl
+
 import numpy as np
+import polars as pl
+import pytest
 
 try:
-    from nautilus_trader.model.identifiers import InstrumentId
-    from nautilus_trader.model.data import BarType, BarSpecification
+    from nautilus_trader.model.data import BarSpecification, BarType
     from nautilus_trader.model.enums import BarAggregation, PriceType
+    from nautilus_trader.model.identifiers import InstrumentId
 
     NAUTILUS_AVAILABLE = True
 except ImportError:
@@ -55,6 +56,7 @@ def bar_type(instrument_id):
 class TestM2LiquidityConfig:
     def test_defaults(self, instrument_id, bar_type, tmp_path) -> None:
         from decimal import Decimal
+
         from digiquant.strategies.m2_liquidity import M2LiquidityConfig
 
         path, _ = _write_signal_parquet(tmp_path)
@@ -73,6 +75,7 @@ class TestM2LiquidityConfig:
 class TestM2LiquidityStrategyInstantiation:
     def test_can_instantiate(self, instrument_id, bar_type, tmp_path) -> None:
         from decimal import Decimal
+
         from digiquant.strategies.m2_liquidity import M2LiquidityConfig, M2LiquidityStrategy
 
         path, _ = _write_signal_parquet(tmp_path)
@@ -87,6 +90,7 @@ class TestM2LiquidityStrategyInstantiation:
 
     def test_signal_index_loaded_on_start(self, instrument_id, bar_type, tmp_path) -> None:
         from decimal import Decimal
+
         from digiquant.strategies.m2_liquidity import M2LiquidityConfig, M2LiquidityStrategy
 
         path, n = _write_signal_parquet(tmp_path, 200)

@@ -23,7 +23,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any  # noqa  # scored-lint: duck-typed Supabase client + rows
+from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +155,7 @@ def breaker_scale_from_nav_history(
     config = config or BreakerConfig()
     try:
         navs = _recent_navs(client, as_of, config.lookback_days)
-    except Exception as exc:  # noqa: BLE001 — breaker is best-effort; never fail the run
+    except Exception as exc:  # breaker is best-effort; never fail the run
         logger.warning("breaker: nav_history read failed (%s); neutral scale", exc)
         return BreakerState(1.0, 0.0, None, None, f"nav_history read failed: {exc}")
     return compute_breaker_scale(navs, config=config)

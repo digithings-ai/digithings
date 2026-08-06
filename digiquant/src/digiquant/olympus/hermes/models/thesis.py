@@ -40,6 +40,12 @@ class ThesisReviewOutput(BaseModel):
 
 class ThesisProposal(BaseModel):
     thesis_id: constr(max_length=32)  # type: ignore[valid-type]
+    topic_key: constr(  # type: ignore[valid-type]
+        max_length=64,
+        pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
+    )
+    action: Literal["create", "update"]
+    existing_thesis_id: constr(max_length=32) | None = None  # type: ignore[valid-type]
     title: constr(max_length=200)  # type: ignore[valid-type]
     direction: str
     statement: constr(max_length=4000)  # type: ignore[valid-type]
@@ -51,6 +57,14 @@ class ThesisProposal(BaseModel):
     bear_case: list[str] | None = None
     horizon: Literal["short_term", "long_term"] | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _validate_identity_action(self) -> "ThesisProposal":
+        if self.action == "update" and self.existing_thesis_id != self.thesis_id:
+            raise ValueError("action=update requires matching existing_thesis_id and thesis_id")
+        if self.action == "create" and self.existing_thesis_id is not None:
+            raise ValueError("action=create cannot set existing_thesis_id")
+        return self
 
 
 class MarketThesisExplorationBody(BaseModel):

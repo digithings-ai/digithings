@@ -1,14 +1,13 @@
-"""Unit tests for the DigiQuant strategy store accessor (#1064)."""
+"""Unit tests for the digiquant strategy store accessor (#1064)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any  # noqa: ANN401 — fake client mirrors the driver's dynamic surface
+from typing import Any  # score:allow untyped any — fake client mirrors the driver's dynamic surface
 
 import polars as pl
 import pytest
-
 from digiquant.data.store import (
     PUBLIC_STRATEGY_COLUMNS,
     build_digiquant_client,
@@ -31,7 +30,6 @@ from digiquant.data.store.client import (
     SUPABASE_SERVICE_ROLE_KEY_ENV,
     SUPABASE_URL_ENV,
 )
-
 
 # ─── Fake Supabase client (records selects; honors eq/limit; upsert/insert) ──────
 

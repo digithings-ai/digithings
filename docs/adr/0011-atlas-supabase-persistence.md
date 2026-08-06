@@ -6,11 +6,11 @@
 
 ## Context
 
-ADR-0008 (2026-04-19) proposed a dedicated Postgres table `atlas_research` owned by DigiGraph to hold Atlas research outputs. Issue [#176](https://github.com/digithings-ai/digithings/issues/176) then landed the actual Atlas → DigiGraph migration, and during implementation it became clear that:
+ADR-0008 (2026-04-19) proposed a dedicated Postgres table `atlas_research` owned by digigraph to hold Atlas research outputs. Issue [#176](https://github.com/digithings-ai/digithings/issues/176) then landed the actual Atlas → digigraph migration, and during implementation it became clear that:
 
-- The existing `apps/digiquant-atlas/` system already writes every segment research document to Supabase `documents` (keyed by `(date, document_key)`) and digest snapshots to `daily_snapshots` (keyed by `date`). Those tables carry a year of production data and are read by the deployed DigiQuant Atlas frontend.
+- The existing `apps/digiquant-atlas/` system already writes every segment research document to Supabase `documents` (keyed by `(date, document_key)`) and digest snapshots to `daily_snapshots` (keyed by `date`). Those tables carry a year of production data and are read by the deployed digiquant Atlas frontend.
 - ADR-0008's proposed `atlas_research` table duplicates what `documents` already stores, with a different shape and ownership. Shipping it would fork Atlas persistence across two tables and force every downstream reader (frontend, Phase 9 evolution, BI queries) to know which bucket to read from.
-- The DigiQuant Atlas frontend at `digiquant.io` reads from `documents` today; migrating it to `atlas_research` is out of scope for #176.
+- The digiquant Atlas frontend at `digiquant.io` reads from `documents` today; migrating it to `atlas_research` is out of scope for #176.
 
 ## Decision
 
@@ -25,7 +25,7 @@ ADR-0008 is **superseded**: its `atlas_research` schema is not created, and its 
 **Positive**
 
 - One system of record for Atlas artifacts — no schema fork, no duplicate-write risk, no reader migration required.
-- The existing DigiQuant Atlas frontend keeps working unchanged; it reads live from `documents` / `daily_snapshots`.
+- The existing digiquant Atlas frontend keeps working unchanged; it reads live from `documents` / `daily_snapshots`.
 - Sub-graph writes and legacy scripts share `(date, document_key)` unique keys, so replays and concurrent writes are deterministic (last-writer-wins on the specific key).
 - Supabase migrations `009` (documents_db_first), `014` / `019` (doc_type extensions), `020` (track_b_thesis), `023` (pipeline_review) stay authoritative; no new migrations for Atlas core.
 

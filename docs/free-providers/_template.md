@@ -23,7 +23,7 @@ source_urls:
 > **Access:** signup requirements  
 > **Privacy:** data policy on free tier
 
-One-paragraph summary of the provider and its standing for DigiThings use cases.
+One-paragraph summary of the provider and its standing for digithings use cases.
 
 ---
 
@@ -62,7 +62,7 @@ model_list:
 
 ---
 
-## DigiThings Use
+## digithings Use
 
 | Field | Value |
 |---|---|

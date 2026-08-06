@@ -55,13 +55,18 @@ from datetime import date, timedelta
 from typing import Any, Callable, Iterator, TypedDict
 from unittest.mock import patch
 
+# Re-use the existing fake client + query implementation from the
+# unit-test suite. Importing from a tests module is unusual, but the
+# fake is the same shape every test in the project already depends on
+# and duplicating it here would be drift-prone.
+from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+
 from digiquant.olympus.atlas.graph import (
     AtlasGraphDeps,
     AtlasInput,
     build_atlas_graph,
     initial_state,
 )
-from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps
 from digiquant.olympus.atlas.phases.preflight import PreflightDeps, PreflightReflectDeps
 from digiquant.olympus.atlas.phases.publish_phase import PublishDeps
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
@@ -73,12 +78,7 @@ from digiquant.olympus.atlas.state import (
     RebalancePayload,
     RiskDebatePayload,
 )
-
-# Re-use the existing fake client + query implementation from the
-# unit-test suite. Importing from a tests module is unusual, but the
-# fake is the same shape every test in the project already depends on
-# and duplicating it here would be drift-prone.
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps
 
 # Gate thresholds (spec §12.2 / §16 test_quiet_day) — re-baseline when graph changes.
 # 2026-06-20 re-baseline: mandatory δ DocumentPatches (3) + phase5 sector bypass

@@ -24,6 +24,8 @@ describe('WhatToWatch', () => {
     expect(html).toContain('BOJ intervention');
     expect(html).toContain('48h'); // horizon
     expect(html).toContain('full read'); // CTA copy
+    expect(html).toContain('data-brief-section="watch"');
+    expect(html).not.toContain('glass-card');
   });
   it('renders only actionables when there are no risks', () => {
     const html = renderToStaticMarkup(

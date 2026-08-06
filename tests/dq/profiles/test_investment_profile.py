@@ -13,9 +13,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
-
 from digiquant.profiles import InvestmentProfile
+from pydantic import ValidationError
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "example_profile.json"
 

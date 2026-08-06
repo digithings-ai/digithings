@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -163,6 +164,32 @@ class TestUpsertPortfolioMetricsDaily:
         row = sb.store["portfolio_metrics"][0]
         assert row["pnl_pct"] == pytest.approx(0.60, abs=1e-4)
 
+    def test_persists_cumulative_portfolio_and_benchmark_returns(self) -> None:
+        sb = _fake_with(
+            {
+                "portfolio_metrics": [],
+                "position_attribution": [],
+                "positions": [],
+                "nav_history": [
+                    {"date": "2026-06-10", "nav": 100.0},
+                    {"date": "2026-06-11", "nav": 105.0},
+                    {"date": "2026-06-12", "nav": 110.0},
+                ],
+                "price_history": [
+                    {"date": "2026-06-10", "ticker": "SPY", "close": 400.0},
+                    {"date": "2026-06-12", "ticker": "SPY", "close": 420.0},
+                ],
+            }
+        )
+
+        upsert_portfolio_metrics_daily(sb, "2026-06-12")
+
+        row = sb.store["portfolio_metrics"][0]
+        assert row["net_return_pct"] == pytest.approx(10.0)
+        assert row["benchmark_return_pct"] == pytest.approx(5.0)
+        assert row["relative_return_pct"] == pytest.approx(5.0)
+        assert row["benchmark_ticker"] == "SPY"
+
     def test_pnl_pct_falls_back_to_nav_day_return_when_no_attribution(self) -> None:
         # No attribution rows → fall back to day-over-day nav return (#814).
         # nav_prev=100.0, nav=100.6 → (100.6 - 100.0) / 100.0 * 100 = +0.6%.
@@ -306,19 +333,36 @@ class TestUpsertPortfolioMetricsDaily:
         assert row["max_drawdown"] != -0.05
         assert row["alpha"] == 0.02
 
-    def test_skips_tearsheet_row(self) -> None:
-        # If a 'tearsheet' row exists for the date, must skip (no write).
-        sb = _fake_with(
-            {
-                "portfolio_metrics": [{"date": "2026-06-12", "computed_from": "tearsheet"}],
-                "position_attribution": [],
-                "nav_history": [],
-                "positions": [],
-            }
+    def test_backfills_returns_without_replacing_tearsheet_metrics(self) -> None:
+        existing = {
+            "date": "2026-06-12",
+            "computed_from": "tearsheet",
+            "sharpe": 1.25,
+        }
+        sb = FakeSupabaseClient(
+            store={"portfolio_metrics": [existing]},
+            canned_reads={
+                "portfolio_metrics": [existing],
+                "nav_history": [
+                    {"date": "2026-06-10", "nav": 100.0},
+                    {"date": "2026-06-12", "nav": 110.0},
+                ],
+                "price_history": [
+                    {"date": "2026-06-10", "ticker": "SPY", "close": 400.0},
+                    {"date": "2026-06-12", "ticker": "SPY", "close": 420.0},
+                ],
+            },
         )
+
         upsert_portfolio_metrics_daily(sb, "2026-06-12")
-        # store should have no NEW rows written (the canned_reads row is the tearsheet one)
-        assert len(sb.store.get("portfolio_metrics", [])) == 0
+
+        row = sb.store["portfolio_metrics"][0]
+        assert len(sb.store["portfolio_metrics"]) == 1
+        assert row["computed_from"] == "tearsheet"
+        assert row["sharpe"] == 1.25
+        assert row["net_return_pct"] == pytest.approx(10.0)
+        assert row["benchmark_return_pct"] == pytest.approx(5.0)
+        assert row["relative_return_pct"] == pytest.approx(5.0)
 
 
 # ---------------------------------------------------------------------------
@@ -447,3 +491,279 @@ class TestRefreshPositionsMetrics:
         assert n == 0
         # No update should have been applied to the CASH row
         assert sb.store["positions"][0]["current_price"] is None
+
+
+# ---------------------------------------------------------------------------
+# #1746: the scheduled (flagless) run must not silently re-process an older date
+# ---------------------------------------------------------------------------
+
+
+class TestCarriedPriceProvenance:
+    """A carried close must record the date it came from, never the book date (#1833).
+
+    Prod before this: every non-CASH row on Saturday 2026-08-01 carried
+    ``metrics_as_of = 2026-08-01`` while ``current_price`` was that ticker's 2026-07-31 close
+    exactly (EWZ 36.65, XLE 59.55, XLV 162.55) — and ``price_history`` has no equity rows on
+    08-01. The row asserted a close existed on a day the market never opened.
+
+    Migration 012 already defines the column as "Date of close used for metrics (usually last
+    trading day)", and its three sibling percent columns are defined *relative to*
+    ``metrics_as_of`` — so a wrong stamp made four definitions wrong at once. This is the same
+    principle #1749/#1750 settled for documents: a carried value keeps its source date.
+    """
+
+    def _make_position(self, ticker: str, entry_price: float | None = None) -> dict:
+        return {
+            "ticker": ticker,
+            "date": "2026-06-13",
+            "entry_price": entry_price,
+            "entry_date": "2026-06-01",
+            "unrealized_pnl_pct": None,
+            "day_change_pct": None,
+            "since_entry_return_pct": None,
+            "metrics_as_of": None,
+            "current_price": None,
+        }
+
+    def _sb(self, pos: dict, price_rows: list[dict]) -> FakeSupabaseClient:
+        sb = FakeSupabaseClient(canned_reads={"positions": [pos], "price_history": price_rows})
+        sb.store["positions"] = [dict(pos)]
+        return sb
+
+    # The prior-trading-day reference is resolved from SPY once for the whole book
+    # (``_prev_trading_date(sb, "SPY", metrics_date)``), not per ticker. So a carried close for
+    # any ticker depends on SPY having a row at that date — true in production, and it has to be
+    # in the fixture or the fallback silently cannot fire. Noted rather than fixed: a
+    # ticker whose own history lags SPY's gets no close from either candidate date, which is a
+    # separate defect (XRT lagged its peers by a day in prod) and a separate PR.
+    _SPY_PRIOR = {"ticker": "SPY", "date": "2026-06-12", "close": 535.0}
+
+    def test_a_same_day_close_stamps_the_book_date(self) -> None:
+        """The unchanged case: a real trading day marks itself."""
+        sb = self._sb(
+            self._make_position("SPY", entry_price=530.0),
+            [
+                {"ticker": "SPY", "date": "2026-06-13", "close": 540.0},
+                {"ticker": "SPY", "date": "2026-06-12", "close": 535.0},
+            ],
+        )
+        refresh_positions_metrics(sb, "2026-06-13")
+        row = sb.store["positions"][0]
+        assert row["current_price"] == 540.0
+        assert row["metrics_as_of"] == "2026-06-13"
+
+    def test_a_carried_close_stamps_the_source_date_not_the_book_date(self) -> None:
+        """The Saturday/Sunday case, and the whole point of #1833."""
+        sb = self._sb(
+            self._make_position("XLV", entry_price=150.0),
+            [self._SPY_PRIOR, {"ticker": "XLV", "date": "2026-06-12", "close": 162.55}],
+        )
+        refresh_positions_metrics(sb, "2026-06-13")
+        row = sb.store["positions"][0]
+        assert row["current_price"] == 162.55
+        assert row["metrics_as_of"] == "2026-06-12", (
+            "a carried Friday close stamped with the Sunday book date asserts a close on a day "
+            "the market never opened"
+        )
+
+    def test_a_carried_close_reports_no_day_change_rather_than_a_fabricated_zero(self) -> None:
+        """``c_now`` and ``c_prev`` are the SAME close on a carried day, so the old arithmetic
+        produced exactly 0.0% — a measured-looking number for a session that never happened.
+        All 11 non-CASH rows on 2026-08-01 carried it. NULL is the honest value; the frontend
+        already falls back to a client-side derivation when the column is null."""
+        sb = self._sb(
+            self._make_position("XLE", entry_price=55.0),
+            [self._SPY_PRIOR, {"ticker": "XLE", "date": "2026-06-12", "close": 59.55}],
+        )
+        refresh_positions_metrics(sb, "2026-06-13")
+        row = sb.store["positions"][0]
+        assert row["day_change_pct"] is None
+        # The other two percentages are still real — they are entry-relative, not session-relative.
+        assert row["unrealized_pnl_pct"] is not None
+
+    def test_a_real_session_still_reports_a_day_change(self) -> None:
+        """Guard against over-correcting: the NULL applies only to carried days."""
+        sb = self._sb(
+            self._make_position("SPY", entry_price=530.0),
+            [
+                {"ticker": "SPY", "date": "2026-06-13", "close": 540.0},
+                {"ticker": "SPY", "date": "2026-06-12", "close": 535.0},
+            ],
+        )
+        refresh_positions_metrics(sb, "2026-06-13")
+        assert sb.store["positions"][0]["day_change_pct"] == pytest.approx(
+            (540.0 - 535.0) / 535.0 * 100.0
+        )
+
+    def test_an_unmarkable_row_clears_every_metric_together(self) -> None:
+        """No close for either candidate date — real case: XRT's price_history lagged its peers
+        by a day. Previously the stale stored price was RETAINED while ``metrics_as_of`` was
+        stamped anyway: an old price under a fresh provenance label. All four must go null
+        together, because ``valuePosition`` needs both ``current_price`` and ``metrics_as_of``
+        to take its close branch — nulling both renders an em-dash, which is honest."""
+        stale = self._make_position("XRT", entry_price=70.0)
+        stale["current_price"] = 71.11  # left over from an earlier run
+        stale["metrics_as_of"] = "2026-06-01"
+        sb = self._sb(stale, [])  # price_history has nothing for this ticker
+        refresh_positions_metrics(sb, "2026-06-13")
+        row = sb.store["positions"][0]
+        assert row["current_price"] is None, "a stale price must not survive under a fresh stamp"
+        assert row["metrics_as_of"] is None
+        assert row["unrealized_pnl_pct"] is None
+        assert row["day_change_pct"] is None
+        assert row["since_entry_return_pct"] is None
+
+    def test_cash_is_still_skipped(self) -> None:
+        cash = self._make_position("CASH")
+        sb = self._sb(cash, [])
+        refresh_positions_metrics(sb, "2026-06-13")
+        assert sb.store["positions"][0]["metrics_as_of"] is None
+
+
+class TestMetricsCronRunsEveryDay:
+    """The schedule half of #1833. The book cron is daily; the metrics cron was MON-SAT, so a
+    Sunday book was written and then never enriched — NULL permanently, not just until 22:00."""
+
+    def test_the_cron_has_no_weekday_restriction(self) -> None:
+        import yaml
+
+        wf = (
+            Path(__file__).resolve().parents[3]
+            / ".github"
+            / "workflows"
+            / "pipeline-atlas-metrics.yml"
+        )
+        doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
+        crons = [s["cron"] for s in doc[True]["schedule"]]  # `on:` parses as boolean True
+        assert crons, "the metrics workflow must keep a schedule"
+        for cron in crons:
+            dow = cron.split()[4]
+            assert dow == "*", (
+                f"metrics cron day-of-week is {dow!r}; a restricted schedule leaves the book "
+                "for an excluded day permanently unenriched (#1833)"
+            )
+
+    def test_it_still_runs_after_the_eod_price_ingest(self) -> None:
+        """22:00 UTC is load-bearing: the price cron writes closes at 21:00, so an earlier
+        metrics run would carry the *previous* day forward on every trading day."""
+        import yaml
+
+        wf = (
+            Path(__file__).resolve().parents[3]
+            / ".github"
+            / "workflows"
+            / "pipeline-atlas-metrics.yml"
+        )
+        doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
+        for cron in [s["cron"] for s in doc[True]["schedule"]]:
+            minute, hour = cron.split()[0], cron.split()[1]
+            assert (int(hour), int(minute)) >= (22, 0), f"{cron} runs before the 21:00 ingest"
+
+
+class TestResolveScheduledMetricsDate:
+    """The flagless cron path resolves *today UTC*, never ``max(positions.date)``.
+
+    Falling back to the latest existing book let ``portfolio_metrics``' upsert
+    ``on_conflict='date'`` rewrite an older row: 22 of 33 green prod runs advanced no
+    date, and 2026-06-26's row was re-stamped on 2026-07-16.
+    """
+
+    @staticmethod
+    def _positions_on(*dates: str) -> FakeSupabaseClient:
+        return _fake_with({"positions": [{"date": d, "ticker": "SPY"} for d in dates]})
+
+    def test_returns_todays_book_when_it_exists(self) -> None:
+        sb = self._positions_on("2026-07-28", "2026-07-29", "2026-07-31")
+        assert _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 31)) == "2026-07-31"
+
+    def test_returns_the_book_date_not_the_target_when_a_book_is_ahead(self) -> None:
+        """Pins the documented contract: the resolved date is ``max(positions.date)``.
+
+        Prod never books ahead of today UTC, so this branch is unreachable there — but it
+        is the only case where returning the book date differs observably from returning
+        the target, and the docstring promises "never earlier".
+        """
+        sb = self._positions_on("2026-07-31")
+        assert _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 30)) == "2026-07-31"
+
+    def test_stale_message_does_not_recommend_a_bookless_date(self) -> None:
+        """The remediation hint must not send an operator to ``--date <today>``.
+
+        ``--date`` runs ``carry_forward_positions`` first, so pointing at a date with no
+        book would clone the previous one — the densification this guard exists to avoid.
+        """
+        sb = self._positions_on("2026-07-29")
+        with pytest.raises(_mod.StaleBookError) as excinfo:
+            _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 30))
+        message = str(excinfo.value)
+        assert "--date 2026-07-29" in message
+        assert "Do NOT pass --date 2026-07-30" in message
+
+    def test_raises_when_book_is_one_day_stale(self) -> None:
+        # Prod run 30589621216 (2026-07-30): the Olympus run was cancelled after 4h so no
+        # 07-30 book existed; the cron re-stamped 07-29 and exited 0 with two green ticks.
+        sb = self._positions_on("2026-07-28", "2026-07-29")
+        with pytest.raises(_mod.StaleBookError) as excinfo:
+            _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 30))
+        message = str(excinfo.value)
+        assert "2026-07-29" in message and "2026-07-30" in message
+        assert "1 day(s)" in message
+
+    def test_raises_across_the_twenty_day_blackout(self) -> None:
+        # 2026-06-27..07-16: 17 consecutive green runs all stamped 2026-06-26.
+        sb = self._positions_on("2026-06-26")
+        with pytest.raises(_mod.StaleBookError) as excinfo:
+            _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 16))
+        assert "20 day(s)" in str(excinfo.value)
+
+    def test_raises_when_no_positions_exist_at_all(self) -> None:
+        sb = self._positions_on()
+        with pytest.raises(_mod.StaleBookError):
+            _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 31))
+
+    def test_stale_book_writes_nothing(self) -> None:
+        """The guard runs *before* any upsert — a stale run leaves the DB untouched."""
+        sb = self._positions_on("2026-07-29")
+        with pytest.raises(_mod.StaleBookError):
+            _mod.resolve_scheduled_metrics_date(sb, date(2026, 7, 30))
+        assert sb.store == {}
+
+    def test_exit_code_is_distinct_from_hard_failure(self) -> None:
+        # The wrapper maps any other exception to 1; a stale book must be tellable apart.
+        assert _mod._EXIT_STALE_BOOK == 3
+
+
+class TestMetricsWorkflowStepOrder:
+    """Pins metrics BEFORE attribution in ``pipeline-atlas-metrics.yml``.
+
+    ``upsert_portfolio_metrics_daily`` prefers ``SUM(position_attribution.
+    contribution_pct)`` for ``pnl_pct`` and falls back to the one-day ``nav_history``
+    return, but ``refresh_attribution.py`` computes a **21-day trailing window**
+    (``_DEFAULT_WINDOW_DAYS = 21``). The two are different quantities — prod 2026-07-29
+    has an attribution sum of +0.98% against a nav day return of -0.42%, opposite signs.
+    Metrics-first means today's attribution rows do not exist yet and ``pnl_pct`` takes
+    the correct one-day path, so this order is load-bearing until the horizon mismatch
+    itself is fixed.
+    """
+
+    @staticmethod
+    def _step_names() -> list[str]:
+        import yaml
+
+        workflow = (
+            Path(__file__).resolve().parents[3]
+            / ".github"
+            / "workflows"
+            / "pipeline-atlas-metrics.yml"
+        )
+        spec = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+        return [str(step.get("name", "")) for step in spec["jobs"]["refresh"]["steps"]]
+
+    def test_metrics_step_precedes_attribution_step(self) -> None:
+        names = self._step_names()
+        metrics = next(i for i, n in enumerate(names) if "portfolio_metrics" in n)
+        attribution = next(i for i, n in enumerate(names) if "position_attribution" in n)
+        assert metrics < attribution, (
+            "metrics must run before attribution — reordering puts a 21-day window "
+            "contribution into the daily pnl_pct column on every row (#1746)"
+        )

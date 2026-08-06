@@ -1,5 +1,5 @@
 provider: sambanova
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
@@ -24,7 +24,7 @@ free_tier:
       context_window: 131072
       max_input_tokens: 131072
       max_output_tokens: 16384
-      status: active
+      status: deprecated        # absent from current official free-tier rate-limits table
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -33,7 +33,7 @@ free_tier:
       context_window: 65536
       max_input_tokens: 65536
       max_output_tokens: 16384
-      status: active
+      status: deprecated        # absent from current official free-tier rate-limits table
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -42,7 +42,7 @@ free_tier:
       context_window: 32768
       max_input_tokens: 32768
       max_output_tokens: 16384
-      status: active
+      status: deprecated        # replaced by DeepSeek-V3.1/V3.2 on current free-tier table
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -60,7 +60,7 @@ free_tier:
       context_window: 131072
       max_input_tokens: 131072
       max_output_tokens: 16384
-      status: active
+      status: deprecated        # now paid Developer-tier only (60 RPM/12,000 RPD), absent from free table
       verified: null
       last_verified: null
       last_verified_latency_ms: null
@@ -69,15 +69,42 @@ free_tier:
       context_window: 32768
       max_input_tokens: 32768
       max_output_tokens: 8192
-      status: active            # listed as Preview
+      status: deprecated        # absent from current official free-tier rate-limits table
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: DeepSeek-V3.1
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      status: active            # added 2026-07-19: current free-tier production model
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: DeepSeek-V3.2
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      status: active            # added 2026-07-19: free-tier preview model
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: gemma-4-31B-it
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+      status: active            # added 2026-07-19: free-tier preview model
       verified: null
       last_verified: null
       last_verified_latency_ms: null
       verification_error: null
   rate_limits:
     rpm: 20
-    rpd: null
-    tpm: null
+    rpd: 20               # newly recorded 2026-07-19: 20 RPD is a hard binding ceiling, much tighter than RPM alone implies
+    tpm: null              # official docs cite 200,000 TPD (no per-minute figure published)
     input_tpm: null
     concurrent_requests: null
     reset_window: rolling_minute
@@ -146,4 +173,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "MAJOR UPDATES 2026: Tool calling + structured output now supported on all models (was false in snapshot). Added free-tier models: Llama-4-Maverick (64K ctx), gpt-oss-120b, MiniMax-M2.7, Qwen3-32B (preview). Paid tier now documented: Scout $0.40/$0.70, Maverick $0.63/$1.80. Responses API (OpenAI format) launched May 11 2026 for gpt-oss-120b, MiniMax M2.5/M2.7. Fast RDU inference. No key configured yet."
+notes: "MATERIAL CHANGE 2026-07-19: official rate-limits doc (docs.sambanova.ai/docs/en/models/rate-limits) now shows a materially narrower free-tier model roster — only Meta-Llama-3.3-70B-Instruct, DeepSeek-V3.1, gpt-oss-120b (production) plus DeepSeek-V3.2, gemma-4-31B-it (preview) are listed. Llama-4-Scout, Llama-4-Maverick, DeepSeek-R1, MiniMax-M2.7 (now Developer-tier-only paid), and Qwen3-32B all dropped from the free table — marked deprecated above rather than deleted, pending reconfirmation. Also newly recorded: the free tier has a 20 RPD (requests/day) cap in addition to 20 RPM — this is a much harder ceiling than RPM alone implies, and 200,000 TPD (no dedicated schema field; recorded here in notes). Llama-4-Scout/Maverick paid pricing ($0.40/$0.70, $0.63/$1.80) still corroborated by third-party sources but could not be found in the current official rate-limit table's live model list — worth verifying they're still live SKUs at all. Developer (paid) tier confirmed: 20M tokens/day cap across all models, per-model RPM/RPD varies (Llama-3.3-70B: 240 RPM/48,000 RPD; others: 60 RPM/12,000 RPD). Tool calling + structured output confirmed on all models. Responses API (OpenAI format) launched May 11 2026. Fast RDU inference. No key configured yet; no probe run (method: skipped)."

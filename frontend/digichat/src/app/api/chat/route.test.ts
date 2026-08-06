@@ -17,7 +17,29 @@ vi.mock("@/lib/bff-rate-limit", () => ({
 
 vi.mock("@/lib/embed-ip-rate-limit", () => ({
   checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+  clientIpForRateLimit: vi.fn(() => "127.0.0.1"),
 }));
+
+vi.mock("@/lib/foundry-stream", () => ({
+  createFoundryStreamResponse: vi.fn(async () => new Response("foundry", { status: 200 })),
+}));
+
+vi.mock("@/lib/digivault-stream", () => ({
+  createDigivaultStreamResponse: vi.fn(async () => new Response("digivault", { status: 200 })),
+}));
+
+vi.mock("@/lib/digivault-ip-rate-limit", () => ({
+  checkDigivaultIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+  DIGIVAULT_RATE_LIMIT_MESSAGE: "rate limit exceeded — slow down a moment",
+}));
+
+vi.mock("@/lib/digivault-env", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/digivault-env")>("@/lib/digivault-env");
+  return {
+    ...actual,
+    resolveDigivaultEnv: vi.fn(actual.resolveDigivaultEnv),
+  };
+});
 
 vi.mock("@/lib/digigraph-upstream", () => ({
   resolveDigigraphUpstreamAuth: vi.fn(),
@@ -61,6 +83,12 @@ import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
+import { createFoundryStreamResponse } from "@/lib/foundry-stream";
+import { createDigivaultStreamResponse } from "@/lib/digivault-stream";
+import { checkDigivaultIpRateLimit } from "@/lib/digivault-ip-rate-limit";
+import { resolveDigivaultEnv, DigivaultEnvError } from "@/lib/digivault-env";
+import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
+import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { streamText } from "ai";
 
 describe("POST /api/chat", () => {
@@ -76,6 +104,11 @@ describe("POST /api/chat", () => {
     });
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkDigivaultIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    resetEmbedTrialQuotaForTests();
+    vi.mocked(createFoundryStreamResponse).mockClear();
+    vi.mocked(createDigivaultStreamResponse).mockClear();
+    vi.mocked(resolveDigivaultEnv).mockReset();
   });
 
   afterEach(() => {
@@ -190,7 +223,7 @@ describe("POST /api/chat", () => {
     expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
   });
 
-  it("routes OpenRouter BYOK through DigiGraph with BYOK headers", async () => {
+  it("routes OpenRouter BYOK through digigraph with BYOK headers", async () => {
     const res = await POST(
       new Request("http://localhost/api/chat", {
         method: "POST",
@@ -233,6 +266,89 @@ describe("POST /api/chat", () => {
     const body = await res.json();
     expect(body.error).toBe("byok_model_required");
   });
+
+  describe("trial_form gate", () => {
+    const trialCtx = {
+      tenantSlug: "datatap",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "datatap",
+        gateMode: "trial_form",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
+        activityDetail: "labels",
+      },
+    };
+
+    function trialReq(headers: Record<string, string> = {}): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-embed-host": "https://datatap.stream", ...headers },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      });
+    }
+
+    beforeEach(() => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(trialCtx as never);
+    });
+
+    it(`allows the first ${EMBED_FREE_TURN_LIMIT} turns (server cap) then returns 402 trial_gate without calling Foundry`, async () => {
+      // The server-side cap is deliberately looser than the client-advertised
+      // free-3 (EMBED_FREE_TURN_LIMIT, see embed-turn-limits.ts) — it's
+      // a backstop against localStorage/incognito bypass, not the primary
+      // enforcement, so this exercises the route with that cap.
+      for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+        const ok = await POST(trialReq());
+        expect(ok.status).toBe(200);
+      }
+      const gated = await POST(trialReq());
+      expect(gated.status).toBe(402);
+      expect(gated.headers.get("content-type")).toBe("application/json");
+      expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      // Foundry called once per allowed turn, never on the gated turn.
+      expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_FREE_TURN_LIMIT);
+    });
+
+    it("honors X-Embed-Trial-Unlock to allow turns past the free limit", async () => {
+      for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) await POST(trialReq());
+      const unlocked = await POST(trialReq({ "x-embed-trial-unlock": "1" }));
+      expect(unlocked.status).toBe(200);
+      expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_FREE_TURN_LIMIT + 1);
+    });
+
+    it("fails open when the quota check throws, so the turn still reaches the backend", async () => {
+      const quotaModule = await import("@/lib/embed-turn-quota");
+      const spy = vi
+        .spyOn(quotaModule, "isOverEmbedTrialLimit")
+        .mockImplementation(() => {
+          throw new Error("boom");
+        });
+      try {
+        const res = await POST(trialReq());
+        expect(res.status).toBe(200);
+        expect(createFoundryStreamResponse).toHaveBeenCalledTimes(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it("skips the quota entirely when the client IP is unknown, so a broken ingress fails open rather than collapsing every visitor into one bucket", async () => {
+      const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
+      const spy = vi.mocked(clientIpForRateLimit).mockReturnValue("unknown");
+      try {
+        // Even well past the server cap, every "unknown"-IP request succeeds —
+        // the quota is never consulted for a non-identity IP (route.ts).
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT + 2; i++) {
+          const res = await POST(trialReq());
+          expect(res.status).toBe(200);
+        }
+      } finally {
+        spy.mockReturnValue("127.0.0.1");
+      }
+    });
+  });
 });
 
 const RELAY_REGISTRY = JSON.stringify({
@@ -271,7 +387,7 @@ describe("external-relay embed tenants", () => {
     resetEmbedTenantRegistryForTests();
   });
 
-  it("streams from the configured relay without touching DigiGraph auth", async () => {
+  it("streams from the configured relay without touching digigraph auth", async () => {
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", RELAY_REGISTRY);
     resetEmbedTenantRegistryForTests();
     const fetchMock = vi.fn().mockResolvedValue(
@@ -335,5 +451,88 @@ describe("external-relay embed tenants", () => {
 
     expect(res.status).toBe(429);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/chat digivault backend", () => {
+  const digivaultCtx = {
+    tenantSlug: "docs",
+    ownerUserSub: "embed:anonymous",
+    embedConfig: {
+      slug: "docs",
+      gateMode: "ungated",
+      theme: "dark",
+      attribution: true,
+      token: "tok",
+      backend: {
+        type: "digivault",
+        supabaseUrlEnv: "CORE_SUPABASE_URL",
+        supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
+        openRouterKeyEnv: "OPENROUTER_API_KEY",
+      },
+      activityDetail: "full",
+    },
+  };
+
+  function digivaultReq(): Request {
+    return new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-embed-host": "https://docs.example.com" },
+      body: JSON.stringify({
+        messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "ports?" }] }],
+      }),
+    });
+  }
+
+  beforeEach(() => {
+    process.env = { ...process.env, DIGICHAT_TRACE_UI: "0" };
+    vi.mocked(requireDigiChatAuth).mockResolvedValue(mockAuthCtx);
+    vi.mocked(resolveChatTenantContext).mockResolvedValue(digivaultCtx as never);
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkDigivaultIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(resolveDigivaultEnv).mockReturnValue({
+      supabaseUrl: "https://example.supabase.co",
+      supabaseAnonKey: "anon",
+      openRouterKey: "sk-or-pool",
+    });
+    vi.mocked(createDigivaultStreamResponse).mockClear();
+  });
+
+  it("routes digivault backend to createDigivaultStreamResponse", async () => {
+    const res = await POST(digivaultReq());
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("digivault");
+    expect(createDigivaultStreamResponse).toHaveBeenCalledTimes(1);
+    expect(createDigivaultStreamResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activityDetail: "full",
+        env: {
+          supabaseUrl: "https://example.supabase.co",
+          supabaseAnonKey: "anon",
+          openRouterKey: "sk-or-pool",
+        },
+      }),
+    );
+  });
+
+  it("returns 429 with digivault rate-limit wording", async () => {
+    vi.mocked(checkDigivaultIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 12 });
+    const res = await POST(digivaultReq());
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.message).toBe("rate limit exceeded — slow down a moment");
+    expect(res.headers.get("retry-after")).toBe("12");
+    expect(createDigivaultStreamResponse).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 when digivault env names are unresolved", async () => {
+    vi.mocked(resolveDigivaultEnv).mockImplementation(() => {
+      throw new DigivaultEnvError("digivault backend is not configured");
+    });
+    const res = await POST(digivaultReq());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "chat_not_configured" });
+    expect(createDigivaultStreamResponse).not.toHaveBeenCalled();
   });
 });

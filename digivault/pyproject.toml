@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "digivault"
 version = "0.1.0"
-description = "DigiVault – Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags, taxonomy) for DigiThings"
+description = "digivault – Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags, taxonomy) for digithings"
 readme = "ARCHITECTURE.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -23,10 +23,13 @@ dependencies = [
 service = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    "mcp>=1.0",
+    # Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp`, which this package's
+    # MCP server imports at module scope — unbounded, it is a hard ImportError
+    # (#1711). Lift only together with a migration to the 2.x API.
+    "mcp>=1.0,<2",
     "typer>=0.12",
 ]
-dev = ["pytest>=8", "ruff>=0.8"]
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
 # Supabase-backed vault store (digivault.supabase_store). Lazily imported — the
 # core stays pydantic+pyyaml-only; this extra adds the DB read/search path.
 supabase = ["supabase>=2"]
@@ -40,6 +43,16 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.format]
+# Markdown is not source — see the root ruff.toml and #1705. This component config
+# overrides the root for this tree, so the exclusion has to be restated here.
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+# Explicit rule selection — see the root ruff.toml and #1701. This component config
+# overrides the root for this tree, so the selection has to be restated here.
+select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 
 [tool.ruff.lint.per-file-ignores]
 # Package __init__ re-exports public symbols; ruff flags them as unused.

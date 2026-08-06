@@ -1,6 +1,6 @@
-"""Polars-friendly accessor for the DigiQuant strategy store (#1064).
+"""Polars-friendly accessor for the digiquant strategy store (#1064).
 
-Read/write helpers over the dedicated DigiQuant Supabase project (see
+Read/write helpers over the dedicated digiquant Supabase project (see
 :mod:`digiquant.data.store.client`). Writers use the service role (which bypasses
 RLS); public read helpers project only the non-sensitive columns. Fitted
 calibration params live in the private ``strategy_calibrations`` sidecar and are
@@ -10,10 +10,11 @@ reachable only via the service-role helpers here — never exposed to anon.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any  # noqa: ANN401 — JSONB payloads and driver rows are dynamic at the DB boundary
+from typing import (
+    Any,  # JSONB payloads and driver rows are dynamic at the DB boundary
+)
 
 import polars as pl
-
 from digibase.audit import redact_mapping
 
 from digiquant.data.prices._utils import call_with_retry as _call_with_retry

@@ -24,19 +24,19 @@ function sum(values: Array<number | null | undefined>): number {
 export default function AttributionTab({
   attribution,
   date,
+  embedded = false,
 }: {
   attribution: TableRow<'position_attribution'>[];
   date: string | null;
+  embedded?: boolean;
 }) {
   const chart = useChartColors();
   const summary = useMemo(() => {
     if (!attribution.length) return null;
-    // Exclude the synthetic CASH row from all return sums — its total_attribution_pct
-    // represents cash drag (allocation effect only) and inflates activeReturn when included.
-    // The chart and holdings count already exclude CASH; these sums follow suit so every
-    // number on the stat tiles is consistent.
     const holdings = attribution.filter((r) => r.ticker !== 'CASH');
-    const activeReturn = sum(holdings.map((r) => r.total_attribution_pct));
+    // CASH is not a holding, but its allocation effect is part of active return:
+    // sum(all attribution) = portfolio return - benchmark return.
+    const activeReturn = sum(attribution.map((r) => r.total_attribution_pct));
     // Sort descending by date so the most-recent row wins the benchmark lookup, regardless of the
     // order rows arrived from the database.  An unsorted .find() is order-dependent and would
     // silently pick a stale benchmark if rows happen to arrive oldest-first.
@@ -55,6 +55,7 @@ export default function AttributionTab({
         title="No attribution rows yet"
         message="Per-position attribution is computed daily by refresh_attribution.py after EOD prices land, once the paper book holds positions. It will appear here after the next attribution run."
         note="Populates after the daily attribution job runs (refresh_attribution)."
+        flat={embedded}
       />
     );
   }
@@ -68,26 +69,40 @@ export default function AttributionTab({
     .map((r) => ({ ticker: r.ticker, contribution: r.contribution_pct as number }));
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="As of" value={date ?? '—'} sub={`${summary.holdings} ${summary.holdings === 1 ? 'holding' : 'holdings'}`} />
+    <div className={`flex flex-col ${embedded ? 'gap-0' : 'gap-6'}`}>
+      <div
+        className={`grid grid-cols-2 lg:grid-cols-4 ${embedded ? 'gap-0 border-l border-t border-hair' : 'gap-3'}`}
+      >
+        <StatTile
+          label="As of"
+          value={date ?? '—'}
+          sub={`${summary.holdings} ${summary.holdings === 1 ? 'holding' : 'holdings'}`}
+          flat={embedded}
+        />
         <StatTile
           label="Portfolio return"
           value={fmtPct(summary.portfolioReturn)}
           sub="window total"
           color={signColorClass(summary.portfolioReturn)}
+          flat={embedded}
         />
-        <StatTile label="Benchmark (SPY)" value={fmtPct(summary.benchmarkReturn)} color={signColorClass(summary.benchmarkReturn)} />
+        <StatTile
+          label="Benchmark (SPY)"
+          value={fmtPct(summary.benchmarkReturn)}
+          color={signColorClass(summary.benchmarkReturn)}
+          flat={embedded}
+        />
         <StatTile
           label="Active return"
           value={fmtPct(summary.activeReturn)}
           sub={summary.unpriced > 0 ? `partial · ${summary.unpriced} unpriced` : 'Σ attribution'}
           color={signColorClass(summary.activeReturn)}
+          flat={embedded}
         />
       </div>
 
       {summary.unpriced > 0 ? (
-        <p className="text-xs text-warn">
+        <p className={`text-xs text-warn ${embedded ? 'border-b border-hair px-4 py-3' : ''}`}>
           {summary.unpriced} holding{summary.unpriced === 1 ? '' : 's'} lack a priced window, so the
           active-return total is partial and does not fully reconcile to portfolio − benchmark.
         </p>
@@ -96,6 +111,7 @@ export default function AttributionTab({
       <SectionCard
         title="Contribution by position"
         subtitle="Each holding's share of the portfolio's window return (weight × return). Top contributors and detractors."
+        flat={embedded}
       >
         {chartData.length ? (
           <div className="h-[300px] w-full">
@@ -130,6 +146,7 @@ export default function AttributionTab({
       <SectionCard
         title="Decomposition"
         subtitle="Single-benchmark attribution: contribution (weight × return), selection (weight × excess vs SPY), and total active. Sums reconcile to active return when every holding is priced."
+        flat={embedded}
       >
         <div className="overflow-x-auto">
           <table className="w-full text-sm tabular-nums">

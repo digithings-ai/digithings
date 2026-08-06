@@ -48,7 +48,7 @@ export function HowItWorks() {
         <NumberedStages stages={STAGES} animated={false} className="max-w-3xl pt-1" />
         <Link
           href={buildPipelineHref({})}
-          className="inline-flex items-center gap-1.5 text-sm text-[var(--accent)] hover:underline"
+          className="inline-flex items-center gap-1.5 text-sm text-accent hover:underline"
         >
           See the full graph
           <ArrowRight size={14} />

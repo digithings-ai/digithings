@@ -111,7 +111,36 @@ export default function DeliberationDocumentView({
   const debateTicker =
     payload?.ticker != null && typeof payload.ticker === 'string' ? payload.ticker.trim() : '';
 
-  const isDebateShape = debateRounds.length > 0 || bullThesis !== '' || bearThesis !== '' || netStance !== '';
+  // ── H6 DeliberationSummary fields (#1679) ─────────────────────────────
+  // PM↔analyst deliberations carry {transcript:[{role,round_number,message}],
+  // conclusion, converged, carried, escalated, cap_reason} — none of which the
+  // bull/bear branch rendered, so H6 docs lost their transcript entirely.
+  const conclusion =
+    payload?.conclusion != null && typeof payload.conclusion === 'string'
+      ? payload.conclusion.trim()
+      : '';
+  const carried = payload?.carried === true;
+  const escalated = payload?.escalated === true;
+  const capReason =
+    payload?.cap_reason != null && typeof payload.cap_reason === 'string'
+      ? payload.cap_reason.trim()
+      : '';
+  const converged = typeof payload?.converged === 'boolean' ? payload.converged : null;
+  const transcript: { role?: string; round_number?: number; message?: string }[] = Array.isArray(
+    payload?.transcript,
+  )
+    ? (payload.transcript as { role?: string; round_number?: number; message?: string }[]).filter(
+        (turn) => turn && typeof turn.message === 'string' && turn.message.trim() !== '',
+      )
+    : [];
+
+  const isDebateShape =
+    debateRounds.length > 0 ||
+    bullThesis !== '' ||
+    bearThesis !== '' ||
+    netStance !== '' ||
+    transcript.length > 0 ||
+    conclusion !== '';
 
   // ── Legacy deliberation-transcript shape ─────────────────────────────
   const body =
@@ -196,6 +225,37 @@ export default function DeliberationDocumentView({
           </div>
         )}
 
+        {/* H6 state badges (#1679): carried / converged / max_rounds escalation */}
+        {(carried || escalated || converged != null) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {carried && (
+              <span className="rounded border border-hair px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+                carried from prior run
+              </span>
+            )}
+            {converged === true && !carried && (
+              <span className="rounded border border-hair px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-up">
+                converged
+              </span>
+            )}
+            {escalated && (
+              <span className="rounded border border-hair px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-warn">
+                escalated{capReason ? ` · ${capReason}` : ''}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* H6 conclusion — the deliberation's final read */}
+        {conclusion && (
+          <div>
+            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
+              Conclusion
+            </h3>
+            <SafeMarkdown>{cleanMemoProse(conclusion)}</SafeMarkdown>
+          </div>
+        )}
+
         {/* Bull / Bear thesis side-by-side */}
         {(bullThesis || bearThesis) ? (
           <div className="grid gap-4 md:grid-cols-2">
@@ -227,6 +287,28 @@ export default function DeliberationDocumentView({
             </div>
           </div>
         ) : null}
+
+        {/* PM ↔ analyst transcript, grouped by round (#1679) */}
+        {transcript.length > 0 && (
+          <div>
+            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
+              Deliberation transcript
+            </h3>
+            <ol className="space-y-3">
+              {transcript.map((turn, i) => (
+                <li key={i} className="rounded-lg border border-hair bg-term-bg/40 p-4">
+                  <p className="mb-1.5 flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+                    <span>Round {turn.round_number ?? '?'}</span>
+                    <span className={turn.role === 'pm' ? 'text-accent' : 'text-ink-soft'}>
+                      {turn.role === 'pm' ? 'PM challenge' : 'Analyst response'}
+                    </span>
+                  </p>
+                  <SafeMarkdown>{cleanMemoProse(turn.message ?? '')}</SafeMarkdown>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
       </div>
     );
   }

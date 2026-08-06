@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digiquant.data.prices._utils import call_with_retry
 
 

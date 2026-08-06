@@ -1,11 +1,10 @@
-"""Unit tests for DigiGraph Pydantic models."""
+"""Unit tests for digigraph Pydantic models."""
 
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from digigraph.models import ChatMessage, WorkflowRequest, WorkflowResult
+from pydantic import ValidationError
 
 
 @pytest.mark.unit
@@ -62,7 +61,7 @@ class TestWorkflowResult:
         assert r.backtest_result["status"] == "ok"
 
     def test_failure_without_backtest(self) -> None:
-        r = WorkflowResult(success=False, message="DigiQuant unreachable", backtest_result=None)
+        r = WorkflowResult(success=False, message="digiquant unreachable", backtest_result=None)
         assert r.success is False
         assert r.backtest_result is None
 

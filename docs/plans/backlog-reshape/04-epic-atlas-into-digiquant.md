@@ -1,14 +1,14 @@
 # Epic: Migrate `apps/digiquant-atlas/` into the `digiquant/` module
 
-**Title:** `[Epic] Migrate Atlas from apps/ into digiquant module — unify Atlas as a DigiQuant product`
+**Title:** `[Epic] Migrate Atlas from apps/ into digiquant module — unify Atlas as a digiquant product`
 
 **Labels:** `epic`, `component:digiquant`, `priority:high`, `type:migration`
 
 ## Goal
 
-Atlas is a DigiQuant product, not a sibling app. Today it lives at `apps/digiquant-atlas/` — parallel to the monorepo, with its own `.github/workflows/`, `.claude/`, `.cursor/`, supabase migrations, Python package (`src/digiquant_atlas/`), skills tree, and Next.js frontend. The split creates drift (duplicated tooling, parallel CI, separate agent instructions) and obscures that Atlas, Hermes, and Kairos are one product family built on the same quant core.
+Atlas is a digiquant product, not a sibling app. Today it lives at `apps/digiquant-atlas/` — parallel to the monorepo, with its own `.github/workflows/`, `.claude/`, `.cursor/`, supabase migrations, Python package (`src/digiquant_atlas/`), skills tree, and Next.js frontend. The split creates drift (duplicated tooling, parallel CI, separate agent instructions) and obscures that Atlas, Hermes, and Kairos are one product family built on the same quant core.
 
-This epic folds Atlas **into** `digiquant/` so the DigiQuant module owns its flagship product end-to-end. The frontend joins the `frontend/` umbrella alongside every other web surface (ADR-0009). This also reverses the precedent set by `apps/digiquant-atlas/` and therefore requires an ADR.
+This epic folds Atlas **into** `digiquant/` so the digiquant module owns its flagship product end-to-end. The frontend joins the `frontend/` umbrella alongside every other web surface (ADR-0009). This also reverses the precedent set by `apps/digiquant-atlas/` and therefore requires an ADR.
 
 ## Target layout (proposal — requires ADR approval)
 
@@ -90,7 +90,7 @@ Workflows in `apps/digiquant-atlas/.github/workflows/` fold into the monorepo's 
 
 - **Hard blocker:** #149 price pipeline migration lands first.
 - **Soft sequence:** complete before the Atlas daily-update epic's GHA cron task so the workflow references final paths.
-- **No blocker on:** DigiKey SSO, DigiChat work, website deploys.
+- **No blocker on:** digikey SSO, digichat work, website deploys.
 
 ## Acceptance
 

@@ -16,10 +16,8 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-
 from digiquant.olympus.atlas.phases.phase_monthly import MonthlyDigest, _monthly_node
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
-
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 

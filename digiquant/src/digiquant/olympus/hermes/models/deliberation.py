@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from collections.abc import Mapping
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: persisted JSON summary dicts
+    Literal,
+)
 
 from pydantic import BaseModel, Field
 
@@ -48,6 +52,11 @@ class DeliberationAnalystTurn(BaseModel):
     conviction_delta: int = Field(default=0, ge=-2, le=2)
 
 
+CARRY_FINGERPRINT_SKIP = "fingerprint_skip"
+CARRY_LLM_FAILURE = "llm_failure"
+CarryReason = Literal["fingerprint_skip", "llm_failure"]
+
+
 class DeliberationSummary(BaseModel):
     """Per-ticker deliberation output feeding H7."""
 
@@ -58,5 +67,24 @@ class DeliberationSummary(BaseModel):
     conviction_delta: int = Field(default=0, ge=-2, le=2)
     transcript: list[DeliberationTurn] = Field(default_factory=list)
     carried: bool = False
+    carry_reason: CarryReason | None = Field(
+        default=None,
+        description=(
+            "Why the debate did not run. ``fingerprint_skip`` is the benign quiet-ticker "
+            "carry (#925); ``llm_failure`` means the deliberation crashed and no PM "
+            "challenge ever executed (#1742). ``carried`` alone cannot tell the two apart, "
+            "which is how 31 crashed debates and 4 intentional skips published the same "
+            "flag on 2026-07-31."
+        ),
+    )
     escalated: bool = False
     cap_reason: str | None = None
+
+
+def is_unchallenged_carry(summary: Mapping[str, Any]) -> bool:
+    """True when a summary dict carries a stance whose PM challenge never ran (#1742).
+
+    Reads the persisted dict shape rather than the model because every downstream consumer
+    (``payloads``, H7, H8 sizing, the published document) sees state as plain JSON.
+    """
+    return summary.get("carry_reason") == CARRY_LLM_FAILURE

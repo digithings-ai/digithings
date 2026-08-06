@@ -11,7 +11,7 @@ For each snapshot YAML:
   - If a matching docs/free-providers/<slug>.md exists: update rate limits,
     model table, and verified_at in the frontmatter.
   - If no matching .md exists: emit a warning (manual doc creation needed for
-    providers that have complex DigiThings-specific context).
+    providers that have complex digithings-specific context).
 
 Also regenerates docs/free-providers/_index.md from all snapshots.
 
@@ -25,12 +25,11 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from datetime import date
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml  # pip install pyyaml
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOTS_DIR = REPO_ROOT / "docs" / "providers" / "snapshots"
@@ -171,7 +170,7 @@ def build_index(snapshots: list[dict[str, Any]], today: str) -> str:
 
 # Free-Provider Reference Index
 
-Deep-reference documentation for every free-tier LLM API available for DigiThings.
+Deep-reference documentation for every free-tier LLM API available for digithings.
 Each file is derived from `docs/providers/snapshots/` and updated weekly by the `provider-review` workflow.
 
 **Setup guides**: [`docs/providers/`](../providers/)
@@ -214,7 +213,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Print changes without writing files")
     args = parser.parse_args()
 
-    today = date.today().isoformat()
+    today = datetime.now(UTC).date().isoformat()
     updated: list[str] = []
     snapshots: list[dict[str, Any]] = []
 

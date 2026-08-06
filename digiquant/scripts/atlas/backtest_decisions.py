@@ -28,7 +28,7 @@ import sys
 from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any  # noqa  # scored-lint: duck-typed Supabase client + rows
+from typing import TYPE_CHECKING, Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 
 if TYPE_CHECKING:  # build_trades returns Trades; keep the dep import lazy (see _ensure_importable)
     from digiquant.olympus.atlas.backtest import Trade

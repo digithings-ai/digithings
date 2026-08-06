@@ -22,7 +22,7 @@ export const guides: Guide[] = [
     id: "getting-started",
     title: "Getting started",
     blocks: [
-      { kind: "p", text: "digithings is an open-core agentic stack — orchestration, quant research, retrieval, and chat behind one supervisor. Self-hosted, BYOK, audit-on by default." },
+      { kind: "p", text: "digithings is open-source, MIT-licensed AI infrastructure: nine modules that plug into the stack you already run rather than replacing it. digigraph orchestrates the three specialist sub-graphs — quant research, retrieval, and chat. Self-hosted anywhere, BYOK, audit-on by default." },
       { kind: "h", text: "Prerequisites" },
       { kind: "list", items: ["Docker (with Compose)", "Python ≥ 3.12 (for running services outside Docker)", "Node.js LTS (for the frontends)"] },
       { kind: "h", text: "Run the whole stack" },
@@ -71,7 +71,7 @@ export const guides: Guide[] = [
     title: "Conventions",
     blocks: [
       { kind: "h", text: "Liveness vs status" },
-      { kind: "p", text: "`GET /healthz` is the auth-exempt liveness probe — always `{\"ok\": true}`, for load balancers. `GET /v1/status` (DigiGraph, DigiSmith) is a richer operator diagnostic; never use it for health checks." },
+      { kind: "p", text: "`GET /healthz` is the auth-exempt liveness probe — always `{\"ok\": true}`, for load balancers. `GET /v1/status` (digigraph, digismith) is a richer operator diagnostic; never use it for health checks." },
       { kind: "h", text: "Error envelope" },
       { kind: "p", text: "Every service returns the same error shape:" },
       { kind: "code", lang: "json", code: '{\n  "error": {\n    "code": "http_401",\n    "message": "Bearer token required",\n    "request_id": "req-…",\n    "service": "digigraph"\n  }\n}' },

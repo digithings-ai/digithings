@@ -283,6 +283,13 @@ SECTOR SCORECARD — {{DATE}}
 - `thesis_tracker` — Hermes PM + reflection own thesis lifecycle
 - `portfolio_recommendations` — Hermes phases 7D–7E own allocation
 
+**Context budget ([#1559](https://github.com/digithings-ai/digithings/issues/1559)).** Phase 7 aggregates every fresh phase-1..5 segment body plus prior context, and two inputs scale with the segment roster. On full ~27-segment baseline days they blew past the smallest routed reasoning-tier model's **64k** context (`BadRequestError 400 … requested ~90690`), after which graceful degradation carried the prior digest forward — publishing a byte-identical `daily_snapshots` row daily while telemetry read "ok". The fix (`phases/phase7_synthesis.py`) bounds **both** movers:
+
+- **PHASE_INPUTS** — a run-wide char budget (`_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS = (64000 − 24000 reserve) × 3 chars/tok = 120 000 chars`) split across the *actual* fresh-segment count (`_per_segment_char_budget`), so the aggregate stays bounded as the roster grows. Within each segment `_slim_segment_body` greedily fills the decision-relevant fields (identity + stance → findings → sources → notes) up to that allowance and drops verbose extension prose; a full 34-segment day assembles to ~30k tokens.
+- **SHARED_CONTEXT** — `latest_segments` is filtered to the digest keys (`digest`, `digest-delta`) and the retained prior-digest payloads are trimmed (`_slim_prior_digest_payload`). The unfiltered prior per-segment carry was the dominant driver (~145k → ~0.4k tokens on a verbose baseline); it was redundant since carry/edit read the prior digest via `_DigestPriorLoader` directly.
+
+**Failure visibility.** When master-digest synthesis fails and carries the prior forward, the carried payload is stamped with `carried_from` (ISO source date) + a human `continuity` note (JSONB, no migration), and `diagnostics.summarize_run` escalates the run to **degraded** with the failure leading `error_summary` and a first-class `breakdown["master_digest_failed"]` key — so a stale carry is never reported as `ok`. (With the budget fix the overflow won't recur; the escalation is a safety net for any future digest failure.)
+
 ---
 
 ### Phase 7C — Asset Analyst Pass
@@ -580,52 +587,58 @@ Skills are packaged as **`skills/<slug>/SKILL.md`**; use [`SKILLS-CATALOG.md`](S
 
 ---
 
-## LLM Routing — Three-Tier Provider Model
+## LLM Routing — OpenRouter capability tiers
 
-*Introduced 2026-04. Rationale and token budget: [`docs/atlas/token-budget.md`](../../../../docs/atlas/token-budget.md). Design decision: [DESIGN-DECISIONS.md ADR-016](../DESIGN-DECISIONS.md#adr-016-three-tier-llm-provider-routing).*
+*Current since Jun 2026 (#859, #980, #998): every phase LLM call routes through **OpenRouter** via capability pools in [`config/olympus_models.yaml`](../../../../../../config/olympus_models.yaml), selected by `OLYMPUS_MODEL_TIER` (`cheap` default / `balanced` / `quality`). This superseded the 2026-04 three-tier free-provider model (Groq / Ollama / Gemini — [DESIGN-DECISIONS.md ADR-016](../DESIGN-DECISIONS.md#adr-016-three-tier-llm-provider-routing), retained as history). Operator knobs and cost levers: [RUNBOOK.md "OpenRouter model tiers"](../RUNBOOK.md#openrouter-model-tiers-configolympus_modelsyaml). Historical per-phase budgets: [`docs/atlas/token-budget.md`](../../../../../../docs/atlas/token-budget.md).*
 
-The pipeline uses three free-tier providers, each matched to the complexity of the phases it serves. The default configuration is **fully free**; paid users can override any model via config.
+The default `cheap` tier is **open-weight models only** — frontier models (`openai/*`, `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series) are rejected at runtime (`digigraph.model_config.is_flagship_openrouter_model`), a guard added after a bare-Auto-Router delta run landed on GPT-5.5 and cost $11.95.
 
-### Provider assignment (default free-tier)
+### Capability pools (default `cheap` tier)
 
-| Tier | Provider | Model | Phases | Rationale |
-|------|----------|-------|--------|-----------|
-| **Extraction** | Groq | `llama-3.1-8b-instant` | 1, 2, 7C | Fast, high concurrency, 20k TPM free — ideal for parallel structured extraction fan-outs |
-| **Analysis** | Ollama Cloud | `qwen3.5:cloud` (via `DIGI_LLM_MODE`) | 3, 4, 5 | 397B MoE, 256K context, deep multi-factor reasoning for sequential analysis phases |
-| **Synthesis** | Gemini | `gemini-2.5-flash` | 7, 7D, 9 | 1M TPM free, best multi-document reasoning for high-stakes synthesis |
+Each phase slug maps to a **capability** (`phase_capabilities` / `phase_capability_prefixes` in `olympus_models.yaml`); the model is a **stable-hash pick over that capability's pool** (deterministic per slug — no per-run randomness).
 
-Estimated **~113k tokens/run** spread across three independent free tiers (vs ~674k on a single Ollama provider). Per-provider peak load stays within each provider's free-tier TPM window.
+| Capability | Pool (cheap tier) | Example phases |
+|------------|-------------------|----------------|
+| **extraction** | `deepseek/deepseek-chat`, `deepseek/deepseek-v4-flash`, `meta-llama/llama-4-maverick` | `alt-*`, `inst-*`, 7C per-ticker analysts |
+| **research** | `deepseek/deepseek-chat`, `deepseek/deepseek-v4-flash`, `meta-llama/llama-4-maverick` | `macro`, `bonds`, `sector-*`, 7D debate, `phase9-evolution` |
+| **reasoning** | `deepseek/deepseek-chat`, `deepseek/deepseek-v4-flash` | `master-digest` (Phase 7), `pm-rebalance`, `monthly-digest` |
+| **web search** (grounding pre-pass only) | `perplexity/sonar`, `deepseek-chat:online`, `deepseek-v4-flash:online`, `llama-4-maverick:online` | live-search grounding; never phase/tool calls |
+
+Pools refreshed to the 2026 open-weight set in #1622 (`deepseek-v4-flash` on cheap; `grok-4.3`/`claude-sonnet-4.6` refreshes on balanced/quality; `deepseek-v4-pro` on quality). `deepseek-r1` was removed from every phase pool — its chain-of-thought output is not reliably strict JSON (the 2026-07-18 digest `JSONDecodeError`) — and `llama-4-maverick` from the reasoning pools (empty completions under strict `json_schema`, #1006). `z-ai/glm-5` was evaluated and rejected: its endpoint-gate record over four runs was pass/fail/pass/fail (empty bodies under strict `json_schema` even with a retry — the same #1006 class). Every pooled slug is **endpoint-verified** (function tools + strict `json_schema` + context floor) by `scripts/validate_olympus_pools.py`, which CI runs on any PR touching the routing configs (`validate-olympus-pools.yml`).
+
+> **Synthesis context (#1559, #1622).** `master-digest` is pinned via `phase_models` to `openrouter/deepseek/deepseek-v4-flash` (1M-token context), which removes the 64k context ceiling that broke synthesis daily 2026-07-08 → 07-17 (the 2025-era pool models' structured-output endpoints cap at 64,000 tokens against ~70–91k digest inputs). The #1559 input budget (`_slim_segment_body`, ≤64k target) is retained as a **cost bound** — prompt tokens are billed even when they fit. (Diagnostics note: the run-level `model` column in `atlas_run_diagnostics` is the first *served* model of the whole run, not the digest model — a failed digest call records no usage, so its model never appears there.)
+
+### Observed token volume
+
+From `atlas_run_diagnostics` (runs since 2026-06-15): **delta ≈ 1.3M total tokens/run** (~73 LLM calls, ≈ $0.43) and **baseline ≈ 340k** (~33 calls, ≈ $0.13). The old "~113k tokens/run" figure was the 2026-04 free-tier estimate and predates the Hermes fan-outs and web-grounding pre-passes.
 
 ### How routing works
 
-Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `analyst-AAPL`, `master-digest`) to `run_research_agent`. The agent resolves the model in this priority order:
+Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `master-digest`, `hermes/portfolio/deliberation-NVDA`) to `run_research_agent`. The model resolves in this priority order (`digigraph/src/digigraph/model_config.py`):
 
 ```
 1. Explicit model= kwarg  (test overrides, never set in production)
-2. get_model_for_phase(phase_slug)  →  looks up phase_models in config/model_modes.yaml
-3. get_model_for_mode()  →  DIGI_LLM_MODE tier (Ollama default)
+2. config/model_modes.yaml phase_models  →  explicit per-phase pin (escape hatch;
+   frontier models are rejected on cheap/balanced tiers)
+3. config/olympus_models.yaml  →  capability(phase_slug) × OLYMPUS_MODEL_TIER pool,
+   stable-hash pick
+4. get_model_for_mode()  →  legacy DIGI_LLM_MODE defaults; in an OpenRouter deploy a
+   non-OpenRouter fallback is redirected to the active tier's reasoning pool
 ```
 
-`config/model_modes.yaml` is the single configuration source for both tier defaults and per-phase overrides:
+`config/olympus_models.yaml` owns routing; `config/model_modes.yaml` `phase_models` is empty except for deliberate pins. The live pins (#1006, #1559, #1622):
 
 ```yaml
-# Per-phase overrides (provider/model format for Groq and Gemini)
 phase_models:
-  alt-sentiment-news: "groq/llama-3.1-8b-instant"
-  "analyst-":         "groq/llama-3.1-8b-instant"   # prefix match: analyst-AAPL, analyst-NVDA, …
-  master-digest:      "gemini/gemini-2.5-flash"
-  pm-rebalance:       "gemini/gemini-2.5-flash"
-  phase9-evolution:   "gemini/gemini-2.5-flash"
-  # Phases 3, 4, 5 have no entry → fall through to Ollama via DIGI_LLM_MODE
-
-# Ollama tier defaults (used when no phase_models entry exists)
-defaults:
-  test:   ollama-cloud/rnj-1:cloud
-  medium: ollama-cloud/qwen3-next:80b-cloud
-  best:   ollama-cloud/deepseek-v4-flash:cloud
+  # H6 deliberation emits strict JSON; llama-4-maverick returned empty completions under
+  # STRICT json_schema, so the per-ticker slugs are pinned to the json/tool-reliable model.
+  hermes/portfolio/deliberation-: openrouter/deepseek/deepseek-chat   # trailing '-' = prefix match
+  # Pinned (not pool-hashed) so digest routing stays deterministic; v4-flash's 1M context
+  # removes the #1559 64k synthesis ceiling (#1622).
+  master-digest: openrouter/deepseek/deepseek-v4-flash
 ```
 
-Model strings with a `provider/` prefix (`groq/`, `gemini/`) are routed to the corresponding external OpenAI-compatible client in `digigraph/src/digigraph/llm.py`. All other strings go through the existing Ollama Cloud path.
+Model strings with a registered `provider/` prefix (`openrouter/`, `gemini/`, `xai/`) route to the corresponding OpenAI-compatible client via digillm's provider registry (`digillm/src/digillm/client.py`); all other strings go through the legacy Ollama path.
 
 ### Fan-out cap (`ATLAS_MAX_ANALYSTS`)
 
@@ -634,9 +647,14 @@ Phase 7C spawns one LLM node per ticker in the watchlist (up to 98). The `ATLAS_
 | Value | Behaviour |
 |-------|-----------|
 | `0` (default) | No cap — full watchlist |
-| `25` (CI default) | Capped at 25 tickers; logged at INFO level |
+| `30` (CI default) | Capped at 30 tickers; logged at INFO level |
 
-This keeps Phase 7C within Groq's free-tier concurrency limits during scheduled CI runs. Production / local runs can set `ATLAS_MAX_ANALYSTS=0` to use the full watchlist.
+On the live thesis-first path the cap is applied once, in H4 (`roster_cap.capped_tickers`),
+and since #1767 it is actually enforced — the prior book is the only sanctioned overshoot
+and thesis vehicles are prioritised within it. See
+`hermes/docs/ARCHITECTURE.md` § "Roster cap enforcement (#1767)".
+
+This bounds the per-run OpenRouter call volume (and spend) during scheduled CI runs. Production / local runs can set `ATLAS_MAX_ANALYSTS=0` to use the full watchlist.
 
 **Watchlist resolution (#694):** when the CLI is invoked without `--watchlist`
 (every scheduled workflow), `resolve_cli_inputs` falls back to
@@ -650,45 +668,43 @@ bound spend.
 
 ### Fallback behaviour
 
-If a provider key is not configured (`GROQ_API_KEY` or `GEMINI_API_KEY` unset), `chat_completion` logs a warning and falls back to the Ollama client for that call. The pipeline completes with degraded quality on those phases but never hard-fails due to a missing key.
+If a provider-prefixed model's key is not configured (e.g. `OPENROUTER_API_KEY` unset), `resolve_request_model` logs a warning and falls back to the Ollama mode model for that call — the pipeline completes with degraded quality but never hard-fails on a missing key. Empty completions self-heal with a retry (the first retry adds OpenRouter provider-fallback routing); see [RUNBOOK.md "OpenRouter empty completions"](../RUNBOOK.md#openrouter-empty-completions-degraded-book-empty-completion-from--in-logs) for the operator checklist.
 
 ### Overriding models (user configuration)
 
-Any phase model can be overridden by editing `config/model_modes.yaml`. The `phase_models` block accepts any OpenAI-compatible model string:
+Pin a phase via the `phase_models` block in `config/model_modes.yaml` (exact slug, or trailing-`-` prefix match). Pins are subject to tier policy — frontier models are rejected on `cheap`/`balanced` and fall back to `olympus_models.yaml`:
 
 ```yaml
 phase_models:
-  master-digest: "groq/llama-3.3-70b-versatile"     # swap synthesis to Groq
-  macro:         "gemini/gemini-2.5-pro"             # use Pro model for macro
-  "analyst-":    "cerebras/llama-3.3-70b"            # switch extraction tier to Cerebras
+  master-digest: "openrouter/deepseek/deepseek-chat"   # pin synthesis to one pool model
+  "sector-":     "openrouter/mistralai/mistral-large"  # prefix match: sector-tech, sector-energy, …
 ```
 
-To add a new provider, register it in `_EXTERNAL_PROVIDERS` in `digigraph/src/digigraph/llm.py` (three lines: base URL, API key env var name). All existing retry, caching, and fallback logic applies automatically.
+Tier-wide changes belong in `config/olympus_models.yaml` (capability pools per tier). To add a new provider, call `digillm.register_provider(prefix, base_url, api_key_env)` or extend `_EXTERNAL_PROVIDERS` in `digillm/src/digillm/client.py`; retry, caching, and fallback logic applies automatically.
 
 ### Required secrets / env vars
 
-| Variable | Provider | Where set |
-|----------|----------|-----------|
-| `OPENAI_API_KEY` | Ollama Cloud | GitHub secret `OLLAMA_API_KEY` mapped in CI |
-| `GROQ_API_KEY` | Groq | GitHub secret + local `.env` |
-| `GEMINI_API_KEY` | Gemini | GitHub secret + local `.env` |
-| `ATLAS_MAX_ANALYSTS` | (cap) | CI workflow env: `"25"` |
-| `DIGI_LLM_MODE` | Ollama tier | CI: `best` (baseline), `medium` (delta) |
+| Variable | Purpose | Where set |
+|----------|---------|-----------|
+| `OPENROUTER_API_KEY` | All phase LLM calls + web grounding | GitHub secret + local `.env` |
+| `OLYMPUS_MODEL_TIER` | Tier select (`cheap` default / `balanced` / `quality`) | Optional; workflow env or shell |
+| `ATLAS_MAX_ANALYSTS` | H4/H5/H6 roster fan-out cap (#1767) | CI workflow env: `"30"` |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Publishing + diagnostics | GitHub secret + local `.env` |
 
-Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test all three providers.
+`OPENROUTER_ALLOWED_MODELS` and `OPENROUTER_COST_QUALITY_TRADEOFF` are **not** set by hand — `apply_olympus_openrouter_env()` derives them from the active tier at chain startup. Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test the configured providers.
 
 ---
 
-## DigiGraph Sub-graph Orchestration (issue #176, ADR-0009)
+## digigraph Sub-graph Orchestration (issue #176, ADR-0009)
 
-The 9-phase pipeline described above is now orchestrated by a DigiGraph
+The 9-phase pipeline described above is now orchestrated by a digigraph
 sub-graph in `digiquant/src/digiquant/olympus/atlas/`. Skill files in
 `skills/<slug>/SKILL.md` remain the authoritative "what to research"
 instructions — they are injected into a generic research agent at runtime
 rather than ported as prompt code.
 
 Entry point: `digiquant_atlas.graph.build_atlas_graph` plus `AtlasInput`.
-DigiClaw (issue #219) invokes this on a cron schedule.
+digiclaw (issue #219) invokes this on a cron schedule.
 
 **What changed operationally:**
 

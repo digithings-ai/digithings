@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any  # noqa: ANN401 — filter payloads are heterogeneous metadata
+from typing import Any  # score:allow untyped any — filter payloads are heterogeneous metadata
 
 from digisearch.core.filter_validator import validate_odata_filter
 

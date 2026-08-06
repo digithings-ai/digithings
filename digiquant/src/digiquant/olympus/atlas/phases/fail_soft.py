@@ -76,7 +76,7 @@ def run_segment_fail_soft(
             )
         )
         return slot, []
-    except Exception as exc:  # noqa: BLE001 — deliberate fail-soft boundary; see module docstring
+    except Exception as exc:  # deliberate fail-soft boundary; see module docstring
         logger.warning(
             "atlas node %r (phase %s) failed (%s: %s); carrying baseline forward",
             segment_slug,

@@ -22,11 +22,38 @@ jobs:
           cache-dependency-path: ./package-lock.json
 
       # Install at the monorepo root so npm wires the @digithings/web and
-      # @digithings/design workspace symlinks, then lint each app in-workspace.
-      # No "Install Linux native bindings" step here: these jobs are lint-only
-      # (ESLint is pure JS) and never invoke rolldown / lightningcss / oxide.
+      # @digithings/design workspace symlinks, then run each app in-workspace.
       - name: Install (root workspaces)
         run: npm ci --no-audit --no-fund
+
+      # Only the Tailwind oxide binding, deliberately — NOT the three-package list the
+      # digichat and olympus lanes carry. package-lock.json is macOS-generated, but it
+      # does lock the Linux x64 builds of rolldown (@rolldown/binding-linux-x64-gnu
+      # 1.2.2, an optionalDependency of the locked rolldown 1.2.2) and of lightningcss
+      # (1.33.0), so `npm ci` already installs both here. Adding them again at the
+      # versions those lanes pin — rolldown 1.0.0-rc.16 — installs a stale duplicate
+      # that the lock deliberately moved off. Only @tailwindcss/oxide is genuinely
+      # absent: the lock carries oxide-darwin-arm64 alone.
+      #
+      # It is not, however, the only macOS-only native tree in the lock, and saying
+      # "the one" overstated it: `unrs-resolver` 1.11.1 is a NON-optional dev dep with
+      # no `os` constraint, declaring 19 platform bindings of which the lock holds only
+      # @unrs/resolver-binding-darwin-arm64 — no linux-x64-gnu, and no wasm fallback.
+      # It does NOT follow that Linux gets nothing loadable, which an earlier version of
+      # this comment claimed: `unrs-resolver` ships `postinstall: napi-postinstall
+      # unrs-resolver 1.11.1 check` (hasInstallScript in the lock), which fetches the
+      # right binding itself when npm did not supply it. Verified by installing with
+      # --omit=optional and watching it install the binding. No lane passes
+      # --ignore-scripts and there is no root .npmrc, so that repair always runs.
+      #
+      # So there are two independent reasons nothing breaks: the package self-heals, and
+      # eslint-config-next's flat config never reaches the TypeScript resolver that would
+      # load it anyway (verified with a Module._load hook — zero loads across all three
+      # apps' lint runs). The durable fix is the lockfile, not this step.
+      - name: Install the Linux Tailwind binding
+        run: |
+          npm install @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
+            --no-save --no-audit --no-fund
 
       # Canon ratchet (#1404): frontends stay on token-backed utilities —
       # no raw palette classes, legacy vocabulary, or color literals outside
@@ -34,8 +61,37 @@ jobs:
       - name: Frontend canon guard
         run: python3 scripts/check_frontend_canon.py
 
+      # Shape only, no --max-age-days: the homepage imports this snapshot, so a
+      # malformed or vanity-metric-carrying one must not reach the build. Staleness
+      # deliberately does NOT fail here — a missed cron run is not a reason to redden
+      # an unrelated website PR, and the page prints the snapshot's own date.
+      - name: Repo-activity snapshot is well-formed
+        run: python3 scripts/fetch_repo_activity.py --check
+
       - name: Lint digithings-web
         run: npm run lint --workspace digithings-web
+
+      # digithings-web gained vitest in #1868 (2026-08-05) — chatHandoff and the CSP
+      # contract — but no lane ever ran it, so those two files could not fail. That is
+      # the same silent-pass defect as a green build with no reviewer attached, caught
+      # a day later while adding a third test file. digiquant-web has no `test`
+      # script; add the step when it gets one.
+      - name: Test digithings-web
+        run: npm run test --workspace digithings-web
+
+      # The two shared chat packages declare `"test": "vitest run"` and nothing
+      # invoked either, so ~640 test lines added by #1941 could not fail —
+      # activity-view, ChatActivities, MiniMarkdown, chat-markdown.render and
+      # chat-mermaid.client. They are separate vitest roots, so digithings-web's
+      # run above does not glob them in — 3 files there, 5 in digichat-ui, 10 in
+      # @digithings/web, all disjoint (49 was digichat's count, a different lane). This lane
+      # owns them because both packages live under frontend/digiweb and are
+      # consumed by more than one app.
+      - name: Test @digithings/web
+        run: npm run test --workspace @digithings/web
+
+      - name: Test @digithings/digichat-ui
+        run: npm run test --workspace @digithings/digichat-ui
 
       - name: Lint digiquant-web
         run: npm run lint --workspace digiquant-web

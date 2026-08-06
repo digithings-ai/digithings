@@ -200,7 +200,14 @@ export function DigiChatSession({
                     {renderAssistant(m.content, streaming)}
                     {streaming && <ChatStreamCursor className="dt-cur" />}
                     {streaming && !m.content && !m.activities?.length ? (
-                      <span className="dc-out-dim">connecting…</span>
+                      <span className="dc-thinking" role="status" aria-label="Assistant is thinking">
+                        <span className="dc-thinking-label">thinking</span>
+                        <span className="dc-thinking-dots" aria-hidden="true">
+                          <span />
+                          <span />
+                          <span />
+                        </span>
+                      </span>
                     ) : null}
                   </>
                 ) : (

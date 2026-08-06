@@ -14,10 +14,8 @@ from datetime import date, datetime, timedelta
 
 import polars as pl
 import pytest
-
 from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices.technicals import compute_indicators
-
 
 # ─── Deterministic fixture ──────────────────────────────────────────────
 

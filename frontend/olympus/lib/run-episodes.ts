@@ -23,6 +23,22 @@ function ts(d: AtlasRunDiagnostics): number {
   return d.created_at ? Date.parse(d.created_at) : 0;
 }
 
+/**
+ * Order two attempts of the same episode, oldest first.
+ *
+ * `attempt` is exact where it exists (#1762) and `created_at` is only a proxy — two attempts
+ * of one job can share a timestamp to the millisecond, and before migration 065 the surviving
+ * row's `created_at` was the *first* attempt's insert time while all its other columns were the
+ * last attempt's. So prefer the counter, and fall back to the timestamp for rows that predate
+ * it (`attempt` 0 or null) or when a date mixes both.
+ */
+function byAttempt(a: AtlasRunDiagnostics, b: AtlasRunDiagnostics): number {
+  const ai = a.attempt ?? 0;
+  const bi = b.attempt ?? 0;
+  if (ai > 0 && bi > 0 && ai !== bi) return ai - bi;
+  return ts(a) - ts(b);
+}
+
 export function groupRunEpisodes(diagnostics: AtlasRunDiagnostics[]): RunEpisode[] {
   const byKey = new Map<string, AtlasRunDiagnostics[]>();
   for (const d of diagnostics) {
@@ -33,7 +49,7 @@ export function groupRunEpisodes(diagnostics: AtlasRunDiagnostics[]): RunEpisode
   }
   const episodes: RunEpisode[] = [];
   for (const [key, attemptsUnsorted] of byKey) {
-    const attempts = [...attemptsUnsorted].sort((a, b) => ts(a) - ts(b)); // oldest → newest
+    const attempts = [...attemptsUnsorted].sort(byAttempt); // oldest → newest
     const latest = attempts[attempts.length - 1];
     const finalClass = classify(latest.status);
     const hadFailure = attempts.slice(0, -1).some((a) => classify(a.status) !== 'ok');

@@ -1,1 +1,1 @@
-# DigiQuant tests
+# digiquant tests

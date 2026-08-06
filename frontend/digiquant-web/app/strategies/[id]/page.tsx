@@ -5,19 +5,25 @@ import { DQ_FOOTER } from "../../_nav";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { TearsheetView } from "@/components/tearsheet/tearsheet-view";
 import { strategyDisplayName } from "@/components/tearsheet/strategy-names";
-import { type StrategyIndexEntry } from "@/components/tearsheet/types";
-import index from "@/public/strategies/index.json";
 
-const strategies = index as StrategyIndexEntry[];
+// Static export needs the route list (and per-route metadata) at build time,
+// while the tearsheet DATA is read live from Supabase inside <TearsheetView/>.
+// The published set is the three Slappers; keep the slug→label/symbol map here
+// so the build never depends on the live store (#1069).
+const PUBLISHED: Record<string, { label: string; symbol: string }> = {
+  btc_slapper: { label: "BTC Slapper", symbol: "BTC-USD" },
+  eth_slapper: { label: "ETH Slapper", symbol: "ETH-USD" },
+  sol_slapper: { label: "SOL Slapper", symbol: "SOL-USD" },
+};
 
 export const dynamicParams = false;
 export function generateStaticParams() {
-  return strategies.map((s) => ({ id: s.strategy }));
+  return Object.keys(PUBLISHED).map((id) => ({ id }));
 }
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
-  const s = strategies.find((e) => e.strategy === id);
-  const name = s ? strategyDisplayName(s.strategy, s.label) : id;
+  const s = PUBLISHED[id];
+  const name = s ? strategyDisplayName(id, s.label) : id;
   return s
     ? { title: `${name} · ${s.symbol} — digiquant tearsheet`, description: `Backtest tearsheet for ${name} (${s.symbol}) — equity, drawdown, and per-trade analytics.` }
     : { title: "Strategy Tearsheet — digiquant" };
@@ -25,7 +31,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function TearsheetPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!strategies.some((e) => e.strategy === id)) notFound();
+  if (!(id in PUBLISHED)) notFound();
 
   return (
     <>

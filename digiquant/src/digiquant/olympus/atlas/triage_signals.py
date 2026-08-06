@@ -27,7 +27,6 @@ from functools import lru_cache
 
 from digiquant.olympus.atlas.sectors_config import load_sectors
 
-
 # Bonds: TLT/IEF/SHY span the curve; AGG is the broad index; LQD/HYG/TIP/EMB
 # cover credit, inflation-linked, and EM.
 _BOND_TICKERS: tuple[str, ...] = ("TLT", "IEF", "SHY", "AGG", "LQD", "HYG", "TIP", "EMB")

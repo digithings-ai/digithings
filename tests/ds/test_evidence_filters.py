@@ -1,11 +1,13 @@
-"""DigiSearch evidence metadata helpers (unit)."""
+"""digisearch evidence metadata helpers (unit)."""
 
 from __future__ import annotations
 
 import pytest
-
 from digisearch.core.chroma_where import structured_filters_to_chroma_where
-from digisearch.core.evidence_metadata import merge_document_metadata_into_chunks, normalize_metadata_for_chroma
+from digisearch.core.evidence_metadata import (
+    merge_document_metadata_into_chunks,
+    normalize_metadata_for_chroma,
+)
 from digisearch.core.filter_apply import chunk_metadata_matches
 from digisearch.core.models import Chunk, Document
 

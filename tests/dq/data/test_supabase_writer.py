@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import polars as pl
 import pytest
-
 from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices.supabase_writer import (
     ohlcv_to_price_history_rows,
     technicals_to_rows,
+    upsert_instruments,
     upsert_macro_observations,
     upsert_price_history,
     upsert_price_technicals,
 )
-
+from digiquant.olympus.instrument_metadata import InstrumentMetadata
 
 # ─── Fake Supabase (ports the Atlas pattern) ───────────────────────────
 
@@ -138,6 +138,68 @@ def test_technicals_to_rows_drops_all_null_rows() -> None:
     assert rows[0]["date"] == "2025-01-02"
 
 
+@pytest.mark.unit
+def test_technicals_to_rows_omits_null_indicators_rather_than_nulling_them() -> None:
+    """Regression for #1752.
+
+    A daily run fetches only a trailing window, so long-window indicators are
+    None during warmup while short-window ones are computed. Emitting the None
+    as an explicit NULL upserts over the stored value and erased ~11 months of
+    sma_200/sma_50/zscore_200 across all 252 tickers. The key must be OMITTED.
+    """
+    warm, cold = TECHNICAL_COLUMNS[0], TECHNICAL_COLUMNS[1]
+    ind = pl.DataFrame({warm: [1.5], cold: [None]})
+    ts = pl.Series("timestamp", [date(2025, 1, 1)])
+
+    rows = technicals_to_rows(ind, "SPY", ts)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row[warm] == 1.5
+    # The load-bearing assertion: absent, not present-and-None.
+    assert cold not in row
+    assert row["date"] == "2025-01-01" and row["ticker"] == "SPY"
+
+
+@pytest.mark.unit
+def test_upsert_price_technicals_groups_rows_by_key_set() -> None:
+    """Regression for #1752.
+
+    Because technicals_to_rows now omits None indicator keys, one batch can hold
+    rows with differing key sets. PostgREST derives the bulk-upsert column list
+    from the payload and rejects heterogeneous objects (PGRST102), so every
+    outgoing batch must be internally homogeneous.
+    """
+    batches: list[list[dict[str, Any]]] = []
+
+    class _RecordingQuery(_FakeQuery):
+        def execute(self) -> _FakeResponse:
+            if self._upsert is not None:
+                batches.append(list(self._upsert))
+            return super().execute()
+
+    class _RecordingClient(FakeSupabaseClient):
+        def table(self, name: str) -> _FakeQuery:
+            return _RecordingQuery(table_name=name, store=self.store)
+
+    a, b = TECHNICAL_COLUMNS[0], TECHNICAL_COLUMNS[1]
+    rows = [
+        {"date": "2025-01-01", "ticker": "SPY", a: 1.0, b: 2.0},
+        {"date": "2025-01-02", "ticker": "SPY", a: 1.0},
+        {"date": "2025-01-03", "ticker": "SPY", a: 1.0, b: 2.0},
+    ]
+
+    res = upsert_price_technicals(_RecordingClient(), rows)
+
+    assert res.rows == 3
+    assert len(batches) == 2, "rows with differing key sets must not share a batch"
+    for batch in batches:
+        keysets = {tuple(sorted(r)) for r in batch}
+        assert len(keysets) == 1, f"heterogeneous batch would 400 on PostgREST: {keysets}"
+    # Every input row still reaches the table exactly once.
+    assert sum(len(b) for b in batches) == 3
+
+
 # ─── upsert_* ─────────────────────────────────────────────────────────
 
 
@@ -160,6 +222,40 @@ def test_upsert_price_history_chunks_and_records() -> None:
     assert res.rows == 12
     assert res.table == "price_history"
     assert len(client.store["price_history"]) == 12
+
+
+@pytest.mark.unit
+def test_upsert_instruments_uses_ticker_conflict_key() -> None:
+    captured: dict[str, Any] = {}
+
+    class _CaptureQuery(_FakeQuery):
+        def upsert(self, rows, on_conflict=None):
+            captured["on_conflict"] = on_conflict
+            return super().upsert(rows, on_conflict=on_conflict)
+
+    class _CaptureClient:
+        def __init__(self):
+            self.store: dict[str, list] = {}
+
+        def table(self, name):
+            return _CaptureQuery(table_name=name, store=self.store)
+
+    instrument = InstrumentMetadata(
+        ticker="XLE",
+        official_name="Energy Select Sector SPDR Fund",
+        instrument_type="ETF",
+        asset_class="EQUITY",
+        category="sector-energy",
+        provider="yahoo",
+        source_updated_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+    )
+    client = _CaptureClient()
+
+    result = upsert_instruments(client, [instrument])
+
+    assert result.rows == 1
+    assert captured["on_conflict"] == "ticker"
+    assert client.store["instruments"][0]["official_name"] == "Energy Select Sector SPDR Fund"
 
 
 @pytest.mark.unit

@@ -10,7 +10,6 @@ jwt = pytest.importorskip("jwt")
 @pytest.fixture()
 def key_setup(monkeypatch):
     from cryptography.hazmat.primitives.asymmetric import rsa
-
     from digikey.crypto_keys import private_key_to_pem, public_key_to_pem
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)

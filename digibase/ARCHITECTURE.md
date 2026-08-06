@@ -1,27 +1,26 @@
-# DigiBase Architecture — Critical Analysis
+# digibase Architecture — Critical Analysis
 
-> **Status:** Library shipped (v0.1.0). DigiBase data-plane service not yet built.
+> **Status:** Library shipped (v0.1.0). digibase data-plane service not yet built.
 > **Last updated:** 2026-03-29
 
 ---
 
 ## 1. Overview
 
-DigiBase plays two distinct roles that must not be conflated:
+digibase plays two distinct roles that must not be conflated:
 
 **Role 1 — Shared Python library (current state).** The `digibase` package (`digibase/src/digibase/`) is a thin, zero-state utility layer installed as an editable dependency inside every Python service in the monorepo. It provides four cross-cutting concerns: standardized JSON error envelopes, outbound HTTP correlation headers, audit payload redaction, and optional OpenTelemetry wiring. The library has no server port, no network listener, and no persistent state. It is a passive toolkit consumed at import time.
 
-**Role 2 — Data-plane broker service (roadmap).** A future `DigiBase` HTTP service would sit between application services and shared infrastructure backends (Postgres, Redis, blob storage). Instead of each service container holding raw `DATABASE_URL` or `REDIS_URL` secrets, they would request short-lived scoped handles from DigiBase using DigiKey-issued tokens. DigiBase would enforce quota, routing, audit, and credential rotation in one place.
+**Role 2 — Data-plane broker service (roadmap).** A future `digibase` HTTP service would sit between application services and shared infrastructure backends (Postgres, Redis, blob storage). Instead of each service container holding raw `DATABASE_URL` or `REDIS_URL` secrets, they would request short-lived scoped handles from digibase using digikey-issued tokens. digibase would enforce quota, routing, audit, and credential rotation in one place.
 
-**Why the split matters.** Conflating the two roles creates confusion: the library is already deployed everywhere and changes to it have immediate fleet-wide impact. The service does not exist yet and its design must account for latency, availability, and trust boundary concerns the library never had. The naming overlap (`digibase` package vs `DigiBase` service) is a deliberate choice per `ARCHITECTURE.md` — the library retains its name and stays lightweight for Lambda and worker deployments; the service will live in a new module (tentatively `digibase-server` or `digibase-plane`).
+**Why the split matters.** Conflating the two roles creates confusion: the library is already deployed everywhere and changes to it have immediate fleet-wide impact. The service does not exist yet and its design must account for latency, availability, and trust boundary concerns the library never had. The naming overlap (`digibase` package vs `digibase` service) is a deliberate choice per `ARCHITECTURE.md` — the library retains its name and stays lightweight for Lambda and worker deployments; the service will live in a new module (tentatively `digibase-server` or `digibase-plane`).
 
 ---
 
 ## 2. Current Implementation State
 
-The library ships modules under `digibase/src/digibase/`, including optional
-`connectors/` write clients (Notion via `digibase[notion]`, Supabase via
-`digibase[supabase]`).
+The library ships modules under `digibase/src/digibase/`, including the optional
+`connectors/` write client (Supabase via `digibase[supabase]`).
 
 | File | Purpose | Shipped |
 |------|---------|---------|
@@ -34,7 +33,6 @@ The library ships modules under `digibase/src/digibase/`, including optional
 | `otel.py` | Optional OTel FastAPI instrumentation wiring (requires `digibase[otel]`) | Yes |
 | `cors.py` | Shared CORS helper for FastAPI services | Yes |
 | `connectors/base.py` | Abstract `ConnectorPayload` / `ConnectorResult` DTOs for write actions | Yes |
-| `connectors/notion.py` | Notion database/page write client (requires `digibase[notion]`) | Yes |
 | `connectors/supabase.py` | Supabase upsert + filtered-select connector (requires `digibase[supabase]`) | Yes |
 | `util.py` | Small shared utilities | Yes |
 
@@ -64,7 +62,7 @@ Attaches an ASGI middleware that records three metrics per request and exposes t
 - `environment` defaults to the `DIGI_ENV` env var, or `"dev"` when unset.
 - The `route` label uses the FastAPI route template (`/items/{id}`), not the raw path, to keep cardinality bounded.
 - Metric objects are cached per `(service, version, environment)` so multiple FastAPI apps or repeated test harness constructions in the same process are idempotent against the default Prometheus registry.
-- DigiClaw does not expose `/metrics` — it is a CLI runner (`python -m digiclaw`) and has no HTTP surface.
+- digiclaw does not expose `/metrics` — it is a CLI runner (`python -m digiclaw`) and has no HTTP surface.
 
 No REST endpoints, no database, no background threads. The library is intentionally side-effect-free on import — all functions are pure or accept explicit parameters.
 
@@ -200,82 +198,13 @@ setup_otel_fastapi(app: Any, *, service_name: str) -> None
 ```
 No-op unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set in the environment. When set, attempts to import OpenTelemetry SDK packages; if they are missing (base install without `[otel]`), logs a warning and returns. When packages are present, creates a `TracerProvider` backed by a `BatchSpanProcessor` writing to `OTLPSpanExporter` at the configured endpoint, and instruments the FastAPI app via `FastAPIInstrumentor`. Logs the outcome at INFO level.
 
-### `digibase.connectors.notion`
-
-Optional write client for Notion, gated behind the `digibase[notion]` extra (`notion-client>=2.2`). Imported lazily by `digibase.connectors`, so the base install and the other connector types stay importable without `notion-client`. The connector is a thin, typed wrapper over Notion REST endpoints — it owns no Notion layout or page-structure policy; callers compose its primitives.
-
-**Two pinned API versions.** Notion split its admin and data-plane endpoints across versions, so `NotionConnector` holds two internal clients:
-
-| Client | `Notion-Version` | Used for |
-|--------|------------------|----------|
-| `_client` | `2022-06-28` | Page/block reads + writes, page-icon updates, and the legacy `databases/{id}/query` row lookup. Pinned here because later versions return `InvalidRequestURL` on that query endpoint. |
-| `_admin_client` | `2025-09-03` | The data-sources API: database creation with `initial_data_source`, `data_sources/*`, `views/*`, and `file_uploads`. These endpoints do not exist on `2022-06-28`. |
-
-Callers never construct `notion_client.Client` for database, data-source, view, or page-icon management; the admin methods below pick the correct version internally. Free-form page/block *layout* orchestration (listing/appending/deleting child blocks, creating sub-pages) is intentionally out of scope — consumers that manage page layout still call those block/page endpoints themselves.
-
-**Row upserts.**
-
-```python
-upsert_database_row(database_id, match_property, match_value, properties, ...) -> UpsertResult
-upsert_database_row_matched(
-    database_id, *, filter_body, title_property, title_value, properties=None, ...
-) -> UpsertResult
-upsert_board_row(database_id, match_property, match_value, currency_cells) -> UpsertResult
-```
-
-`upsert_database_row` matches an existing row by a title-property equals lookup. `upsert_database_row_matched` matches with a caller-supplied Notion `filter_body` (e.g. a composite `{"and": [...]}` over run-date + event-date + name); on create the title is still required and is set explicitly from `title_property`/`title_value`. Both accept the same typed property maps (`url_properties`, `date_properties`, `select_properties`, `multi_select_properties`, `number_properties`, `rich_text_properties`, `checkbox_properties`, `last_updated`) and return an `UpsertResult(success, external_id, error)`. All row operations use the `2022-06-28` client.
-
-**Page and block writes.**
-
-```python
-write_page_content(page_id, markdown) -> None          # clears + rewrites the page body
-update_page_icon(page_id, emoji) -> None               # emoji-only convenience
-set_page_icon(page_id, icon: dict) -> None              # any Notion icon object
-archive_page(page_id) -> None
-query_database_pages(database_id, *, filter_body=None, page_size=100) -> list[dict]
-```
-
-`set_page_icon` accepts any icon shape (`emoji`, `external`, or `file_upload`); `update_page_icon` is kept for the common emoji case. `sync_hub_*` and `ensure_hub_section_heading` remain available for the Atlas hub layout (consumer-specific, unchanged).
-
-**DB / data-source / view admin (`2025-09-03`).** Thin wrappers over the data-sources REST endpoints — no orchestration:
-
-```python
-create_database(parent_page_id, title, properties, *, inline=False) -> dict
-get_database(database_id) -> dict
-update_database(database_id, body) -> dict                 # title, is_inline, archived, parent move
-primary_data_source_id(database_id) -> str                 # first data source, else database_id
-
-get_data_source(data_source_id) -> dict
-update_data_source(data_source_id, properties) -> dict     # add/migrate columns
-query_data_source(data_source_id, *, filter_body=None, page_size=100) -> list[dict]
-
-list_view_ids(database_id) -> list[str]                    # [] if views unavailable
-get_view(view_id) -> dict | None
-create_view(body) -> dict                                  # body carries database_id + data_source_id
-update_view(view_id, body) -> dict
-delete_view(view_id) -> None
-
-create_file_upload(filename, content_type) -> dict         # returns upload object incl. upload_url
-get_file_upload(file_upload_id) -> dict                    # poll status until "uploaded"
-```
-
-`query_data_source` is the `2025-09-03` counterpart to `query_database_pages` (different endpoint: `data_sources/{id}/query` vs `databases/{id}/query`); both paginate. The file-upload pair starts and polls an upload; the actual bytes are streamed by the caller to the returned `upload_url` via a plain multipart POST (not a `notion-client` call), after which the upload id can be referenced through `set_page_icon` with a `file_upload` icon.
-
-**Markdown → blocks.**
-
-```python
-markdown_to_blocks(md: str, *, skip_title: bool = False) -> list[dict]
-```
-
-Single public converter (module-level function) merging the brief-format and documentation-page renderers. Handles `#`/`##`/`###` headings, `-`/`*` bullets, `1.` numbered list items, fenced code blocks (the fence info string becomes the Notion code `language`, so ` ```mermaid ` renders as a mermaid diagram), `|` pipe tables (header → bold paragraph, data rows → bullets), `---` dividers, `**bold**` inline markers, and `[[wikilinks]]` (stripped to plain text). `skip_title=True` drops the leading top-level `# ` heading (for pages whose title already lives in the page title); the default keeps it, so `write_page_content` (which calls this converter) is unchanged.
-
 ### `digibase.connectors.supabase`
 
 Requires the `digibase[supabase]` optional extra (`supabase>=2`). The `supabase`
 import is deferred into `from_env`, so importing the module — and the connector
 base types — never pulls the dependency on a lightweight base install. Mirrors
 the digiquant Supabase wrappers (`SupabaseClient` Protocol, `from_env`,
-metadata-only audit redaction) so DigiQuant can adopt this connector later, and
+metadata-only audit redaction) so digiquant can adopt this connector later, and
 consolidates twelve-x's hand-rolled `client.table(T).upsert(...)` /
 `.select(...).eq(...)` access.
 
@@ -348,7 +277,7 @@ already hold a `supabase.Client`.
 (default 500), and is idempotent when `on_conflict` names the row's unique
 key(s). Client/transport errors are caught and surfaced as
 `SupabaseWriteResult(success=False, error=...)` rather than raised — matching
-`NotionConnector`'s `UpsertResult` contract. `select` composes PostgREST filters
+a per-write success/error result rather than raising. `select` composes PostgREST filters
 (logical AND) and returns decoded `response.data`; failures surface as
 `SupabaseReadResult(success=False, error=...)`.
 
@@ -365,7 +294,7 @@ modules.
 
 ### Error envelope (v1)
 
-The canonical over-the-wire shape used by every DigiThings HTTP service:
+The canonical over-the-wire shape used by every digithings HTTP service:
 
 ```json
 {
@@ -441,15 +370,15 @@ The library has no internal circular dependencies. `errors.py` is the only modul
 
 | Service | `http.py` | `errors.py` | `audit.py` | `otel.py` |
 |---------|-----------|-------------|------------|-----------|
-| DigiGraph | `outbound_service_headers` (connectors, hub, nodes, tools) | `json_error_response`, `register_fastapi_error_handlers` | `redact_mapping` (via `digigraph/audit.py`) | `setup_otel_fastapi` |
-| DigiQuant | — | `json_error_response`, `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
-| DigiSearch | — | `json_error_response`, `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
-| DigiSmith | — | `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
-| DigiKey | — | `register_fastapi_error_handlers` | — | — |
+| digigraph | `outbound_service_headers` (connectors, hub, nodes, tools) | `json_error_response`, `register_fastapi_error_handlers` | `redact_mapping` (via `digigraph/audit.py`) | `setup_otel_fastapi` |
+| digiquant | — | `json_error_response`, `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
+| digisearch | — | `json_error_response`, `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
+| digismith | — | `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
+| digikey | — | `register_fastapi_error_handlers` | — | — |
 
-DigiGraph is the heaviest consumer: it uses `outbound_service_headers` in five locations (both connector modules, both vertical orchestrator hub modules, and the graph nodes module) to propagate correlation ids and bearer tokens on every outbound service-to-service call.
+digigraph is the heaviest consumer: it uses `outbound_service_headers` in five locations (both connector modules, both vertical orchestrator hub modules, and the graph nodes module) to propagate correlation ids and bearer tokens on every outbound service-to-service call.
 
-DigiClaw does not appear to import digibase directly; it uses the shared audit format by convention rather than by library import.
+digiclaw does not appear to import digibase directly; it uses the shared audit format by convention rather than by library import.
 
 ---
 
@@ -475,7 +404,7 @@ Span attribute secrets: the library instruments FastAPI routes automatically via
 
 ### Library vs service trust boundary
 
-Today, because `digibase` is a library, there is no network trust boundary to enforce: all consumers run in the same process space and importing the library implicitly trusts all of its behavior. The planned DigiBase service introduces a genuine trust boundary. Services will authenticate to it using DigiKey-scoped tokens, and DigiBase will make authorization decisions about which service may access which database handle. This is a significant architectural upgrade — library-level convenience helpers become service-level authorization policy — and the transition requires careful sequencing to avoid either a flag day migration or a prolonged dual-mode period.
+Today, because `digibase` is a library, there is no network trust boundary to enforce: all consumers run in the same process space and importing the library implicitly trusts all of its behavior. The planned digibase service introduces a genuine trust boundary. Services will authenticate to it using digikey-scoped tokens, and digibase will make authorization decisions about which service may access which database handle. This is a significant architectural upgrade — library-level convenience helpers become service-level authorization policy — and the transition requires careful sequencing to avoid either a flag day migration or a prolonged dual-mode period.
 
 ---
 
@@ -485,17 +414,17 @@ Today, because `digibase` is a library, there is no network trust boundary to en
 
 The library has no scalability dimension. It contributes zero overhead to scaling decisions. `redact_mapping` creates a shallow dict copy; `outbound_service_headers` allocates a small dict; `json_error_response` serializes a small Pydantic model. None of these are on any hot path that would affect throughput at scale.
 
-### Future DigiBase service
+### Future digibase service
 
 The service design must address several non-trivial scalability problems:
 
-**Postgres connection brokering.** If DigiBase sits in front of Postgres, every service that currently holds a direct connection pool through SQLAlchemy or asyncpg will instead hold a pool of connections to DigiBase. DigiBase must then maintain its own pool to Postgres. This double-pooling can be beneficial (DigiBase enforces a global cap on total Postgres connections, preventing pool exhaustion across a growing service fleet) but requires DigiBase to be highly available and low-latency. A single DigiBase instance becomes a single point of failure for all database operations.
+**Postgres connection brokering.** If digibase sits in front of Postgres, every service that currently holds a direct connection pool through SQLAlchemy or asyncpg will instead hold a pool of connections to digibase. digibase must then maintain its own pool to Postgres. This double-pooling can be beneficial (digibase enforces a global cap on total Postgres connections, preventing pool exhaustion across a growing service fleet) but requires digibase to be highly available and low-latency. A single digibase instance becomes a single point of failure for all database operations.
 
-**Multi-tenant credential scoping.** The security model described in `ARCHITECTURE.md` calls for per-tenant and per-service credential scoping (aligned with DigiKey). Credential issuance at scale requires a low-latency token store and efficient revocation. If each service request causes a synchronous credential lookup in DigiBase, the latency budget shrinks. Caching scoped credentials at the service level (with short TTLs and revocation push-down) is likely necessary.
+**Multi-tenant credential scoping.** The security model described in `ARCHITECTURE.md` calls for per-tenant and per-service credential scoping (aligned with digikey). Credential issuance at scale requires a low-latency token store and efficient revocation. If each service request causes a synchronous credential lookup in digibase, the latency budget shrinks. Caching scoped credentials at the service level (with short TTLs and revocation push-down) is likely necessary.
 
-**Redis credential brokering.** Phase 2 extends the model to Redis namespaced credentials. Redis is commonly used for high-throughput caching and rate limiting — paths that demand single-digit millisecond latency. Inserting DigiBase as a credential broker adds a round trip before the Redis call unless the credential is cached locally. Design must account for this.
+**Redis credential brokering.** Phase 2 extends the model to Redis namespaced credentials. Redis is commonly used for high-throughput caching and rate limiting — paths that demand single-digit millisecond latency. Inserting digibase as a credential broker adds a round trip before the Redis call unless the credential is cached locally. Design must account for this.
 
-**High availability.** DigiBase as a service must be deployed with redundancy and a health-check that services can use to detect outages and fail open or fail closed based on policy. Current Compose services use loopback-only bindings; DigiBase must follow the same model internally while being accessible to all services that depend on it.
+**High availability.** digibase as a service must be deployed with redundancy and a health-check that services can use to detect outages and fail open or fail closed based on policy. Current Compose services use loopback-only bindings; digibase must follow the same model internally while being accessible to all services that depend on it.
 
 ---
 
@@ -518,11 +447,11 @@ The batch processor uses a background thread. If the application process is kill
 
 ### Audit JSONL append
 
-`digigraph/audit.py` (the primary consumer of `redact_mapping`) writes audit events by opening the JSONL file in append mode (`"a"`) per event, writing, and closing. This is correct for correctness (no partial writes, no shared file handle state between calls) but suboptimal for throughput: each `audit_log()` call pays an `open()` + `write()` + `close()` syscall sequence. Under normal DigiGraph usage (tens of events per minute), this is inconsequential. Under high-frequency automated workflows, this could become a bottleneck and a source of file descriptor exhaustion on high-concurrency event loops. A buffered writer with periodic flush would be more efficient.
+`digigraph/audit.py` (the primary consumer of `redact_mapping`) writes audit events by opening the JSONL file in append mode (`"a"`) per event, writing, and closing. This is correct for correctness (no partial writes, no shared file handle state between calls) but suboptimal for throughput: each `audit_log()` call pays an `open()` + `write()` + `close()` syscall sequence. Under normal digigraph usage (tens of events per minute), this is inconsequential. Under high-frequency automated workflows, this could become a bottleneck and a source of file descriptor exhaustion on high-concurrency event loops. A buffered writer with periodic flush would be more efficient.
 
 ### Future service: connection pool sizing
 
-The DigiBase service will need to expose Postgres connection pools sized for the aggregate demand of all downstream services. A naive approach of one pool per logical database (DigiChat, DigiKey, DigiGraph checkpoints) multiplied by service replicas could easily exhaust Postgres connection limits (default 100 on many managed instances). PgBouncer-style pooling (session vs transaction vs statement mode) built into DigiBase, or reliance on an external pgBouncer, should be an explicit design decision before Phase 1 implementation.
+The digibase service will need to expose Postgres connection pools sized for the aggregate demand of all downstream services. A naive approach of one pool per logical database (digichat, digikey, digigraph checkpoints) multiplied by service replicas could easily exhaust Postgres connection limits (default 100 on many managed instances). PgBouncer-style pooling (session vs transaction vs statement mode) built into digibase, or reliance on an external pgBouncer, should be an explicit design decision before Phase 1 implementation.
 
 ---
 
@@ -530,15 +459,15 @@ The DigiBase service will need to expose Postgres connection pools sized for the
 
 ### How each service uses digibase today
 
-**DigiGraph** (`digigraph/src/digigraph/`) is the primary consumer. It uses `outbound_service_headers` in every outbound call to DigiQuant and DigiSearch, ensuring correlation ids and bearer tokens are forwarded. It uses `json_error_response` for the rate limit middleware response and `register_fastapi_error_handlers` at app startup. It calls `setup_otel_fastapi` to optionally enable tracing. Its local `audit.py` wraps `redact_mapping` from digibase with DigiGraph-specific event construction.
+**digigraph** (`digigraph/src/digigraph/`) is the primary consumer. It uses `outbound_service_headers` in every outbound call to digiquant and digisearch, ensuring correlation ids and bearer tokens are forwarded. It uses `json_error_response` for the rate limit middleware response and `register_fastapi_error_handlers` at app startup. It calls `setup_otel_fastapi` to optionally enable tracing. Its local `audit.py` wraps `redact_mapping` from digibase with digigraph-specific event construction.
 
-**DigiQuant** (`digiquant/src/digiquant/server.py`) uses `json_error_response`, `register_fastapi_error_handlers`, and `setup_otel_fastapi`. It does not use the HTTP header helpers directly (it is a destination service, not a hub).
+**digiquant** (`digiquant/src/digiquant/server.py`) uses `json_error_response`, `register_fastapi_error_handlers`, and `setup_otel_fastapi`. It does not use the HTTP header helpers directly (it is a destination service, not a hub).
 
-**DigiSearch** (`digisearch/src/digisearch/server.py`) mirrors DigiQuant: error handlers and OTel wiring, no outbound header usage from digibase.
+**digisearch** (`digisearch/src/digisearch/server.py`) mirrors digiquant: error handlers and OTel wiring, no outbound header usage from digibase.
 
-**DigiSmith** (`digismith/src/digismith/server.py`) uses `register_fastapi_error_handlers` and `setup_otel_fastapi`. Minimal consumer — it is itself a thin observability status service.
+**digismith** (`digismith/src/digismith/server.py`) uses `register_fastapi_error_handlers` and `setup_otel_fastapi`. Minimal consumer — it is itself a thin observability status service.
 
-**DigiKey** (`digikey/src/digikey/server.py`) uses only `register_fastapi_error_handlers`. It does not emit OTel traces via digibase (it may have its own tracing concerns given its role as the identity service).
+**digikey** (`digikey/src/digikey/server.py`) uses only `register_fastapi_error_handlers`. It does not emit OTel traces via digibase (it may have its own tracing concerns given its role as the identity service).
 
 ### Library as foundation layer
 
@@ -550,19 +479,19 @@ The library is the single lowest-level shared artifact in the monorepo Python st
 
 ### Future service: position in the stack
 
-Once built, the DigiBase service would sit between application services and shared infrastructure:
+Once built, the digibase service would sit between application services and shared infrastructure:
 
 ```
-DigiChat / DigiKey / DigiGraph
+digichat / digikey / digigraph
         |
-  [DigiKey JWT token]
+  [digikey JWT token]
         |
-  DigiBase (HTTP :8006 proposed)
+  digibase (HTTP :8006 proposed)
         |
   Postgres pool / Redis handles
 ```
 
-Application services would replace direct `DATABASE_URL` environment variables with `DIGIBASE_URL` + `DIGIKEY_SERVICE_TOKEN`, removing raw credentials from their environment and centralizing rotation in DigiBase. The library would gain helpers for making DigiBase client calls, wrapping the same `outbound_service_headers` pattern already established.
+Application services would replace direct `DATABASE_URL` environment variables with `DIGIBASE_URL` + `DIGIKEY_SERVICE_TOKEN`, removing raw credentials from their environment and centralizing rotation in digibase. The library would gain helpers for making digibase client calls, wrapping the same `outbound_service_headers` pattern already established.
 
 ---
 
@@ -572,11 +501,11 @@ Application services would replace direct `DATABASE_URL` environment variables w
 
 There is no `digibase` service in `docker-compose.yml`. The library is installed silently inside other service images. No port is allocated, no healthcheck exists for it as a standalone entity, and no Compose profile references it.
 
-The library is a build-time dependency only. When DigiGraph's Dockerfile runs `pip install`, it installs `digibase` from the monorepo context. No runtime container management is involved.
+The library is a build-time dependency only. When digigraph's Dockerfile runs `pip install`, it installs `digibase` from the monorepo context. No runtime container management is involved.
 
 ### Future service design
 
-When Phase 1 is implemented, the Compose file should gain a `digibase` service in the default profile (not an optional profile, since DigiChat and DigiKey will depend on it):
+When Phase 1 is implemented, the Compose file should gain a `digibase` service in the default profile (not an optional profile, since digichat and digikey will depend on it):
 
 ```yaml
 digibase:
@@ -601,11 +530,11 @@ digibase:
     start_period: 10s
 ```
 
-Services that migrate to DigiBase-brokered connections would add `digibase: condition: service_healthy` to their `depends_on`. This creates a new critical path in the startup dependency graph: DigiKey → DigiBase → DigiChat/DigiGraph.
+Services that migrate to digibase-brokered connections would add `digibase: condition: service_healthy` to their `depends_on`. This creates a new critical path in the startup dependency graph: digikey → digibase → digichat/digigraph.
 
 ### MCP exposure
 
-There is no plan in the roadmap to expose DigiBase as an MCP tool server. Its role is infrastructure brokering, not agent capability. The `digibase` library may eventually include an MCP-compatible helper for tool call parameter redaction (reusing `redact_mapping`), but this is not currently planned.
+There is no plan in the roadmap to expose digibase as an MCP tool server. Its role is infrastructure brokering, not agent capability. The `digibase` library may eventually include an MCP-compatible helper for tool call parameter redaction (reusing `redact_mapping`), but this is not currently planned.
 
 ---
 
@@ -614,15 +543,15 @@ There is no plan in the roadmap to expose DigiBase as an MCP tool server. Its ro
 | Phase | Outcome | Key consumers | Missing today |
 |-------|---------|---------------|--------------|
 | **0 (current)** | Direct `DATABASE_URL`/`REDIS_URL` per service; `digibase` library for errors, headers, audit redaction, OTel | All Python services | Service-side secret management; audit schema enforcement |
-| **1** | DigiBase **Postgres gateway**: logical DB name resolution, tenant routing, credential issuance via DigiKey token; DigiChat and DigiKey migrate first | DigiChat (`DIGICHAT_DATABASE_URL` → DigiBase handle), DigiKey (`DIGIKEY_DATABASE_URL` → DigiBase handle) | DigiBase server implementation; library client helpers; Compose integration |
-| **2** | **Cache namespace API**: Redis URL/credential brokering; per-consumer namespace isolation; TTL cap enforcement; LiteLLM optional integration | DigiSearch embedding cache, LiteLLM proxy cache, DigiGraph idempotency keys | Namespace policy model; Redis auth delegation |
-| **3** | **Artifact/object handles**: signed read/write handles for Digistore-like blobs; optional vector metadata routing for DigiSearch without exposing raw Chroma credentials | DigiSearch (Chroma index isolation), DigiQuant (result artifact export), future Digistore | Object store abstraction; signed URL generation; handle expiry |
+| **1** | digibase **Postgres gateway**: logical DB name resolution, tenant routing, credential issuance via digikey token; digichat and digikey migrate first | digichat (`DIGICHAT_DATABASE_URL` → digibase handle), digikey (`DIGIKEY_DATABASE_URL` → digibase handle) | digibase server implementation; library client helpers; Compose integration |
+| **2** | **Cache namespace API**: Redis URL/credential brokering; per-consumer namespace isolation; TTL cap enforcement; LiteLLM optional integration | digisearch embedding cache, LiteLLM proxy cache, digigraph idempotency keys | Namespace policy model; Redis auth delegation |
+| **3** | **Artifact/object handles**: signed read/write handles for Digistore-like blobs; optional vector metadata routing for digisearch without exposing raw Chroma credentials | digisearch (Chroma index isolation), digiquant (result artifact export), future Digistore | Object store abstraction; signed URL generation; handle expiry |
 
-**Credential rotation gap.** The most urgent gap is credential rotation. Currently, rotating a Postgres password requires updating environment variables and restarting every service that holds a direct pool. With DigiBase brokering, rotation is atomic from DigiBase's perspective — it updates its internal credential, and services obtain fresh handles on their next request. Without DigiBase, rotation requires coordinated restarts across DigiChat, DigiKey, and any other Postgres consumer simultaneously.
+**Credential rotation gap.** The most urgent gap is credential rotation. Currently, rotating a Postgres password requires updating environment variables and restarting every service that holds a direct pool. With digibase brokering, rotation is atomic from digibase's perspective — it updates its internal credential, and services obtain fresh handles on their next request. Without digibase, rotation requires coordinated restarts across digichat, digikey, and any other Postgres consumer simultaneously.
 
-**DigiKey-scoped tokens.** Phase 1 requires DigiKey to issue service-scoped tokens that DigiBase accepts and validates. This is a dependency between DigiKey and DigiBase that does not exist in `../digikey/ARCHITECTURE.md` today. The scoping model (which service token grants access to which logical database) needs to be specified before Phase 1 implementation.
+**digikey-scoped tokens.** Phase 1 requires digikey to issue service-scoped tokens that digibase accepts and validates. This is a dependency between digikey and digibase that does not exist in `../digikey/ARCHITECTURE.md` today. The scoping model (which service token grants access to which logical database) needs to be specified before Phase 1 implementation.
 
-**Audit schema gap.** DigiBase (service) would emit its own audit events for connection issuance, policy denials, and admin changes. These must align with the DigiClaw JSONL format. Neither format is currently specified as a Pydantic model, making cross-service audit log analysis fragile.
+**Audit schema gap.** digibase (service) would emit its own audit events for connection issuance, policy denials, and admin changes. These must align with the digiclaw JSONL format. Neither format is currently specified as a Pydantic model, making cross-service audit log analysis fragile.
 
 ---
 
@@ -630,20 +559,20 @@ There is no plan in the roadmap to expose DigiBase as an MCP tool server. Its ro
 
 The following are actionable recommendations ordered by urgency:
 
-**(a) Implement Phase 1 DigiBase service immediately.**
-DigiChat and DigiKey are the first consumers that need managed Postgres credentials. Both are active development priorities. Delaying DigiBase means more code is written against direct `DATABASE_URL` environment variables, increasing the migration cost later. The minimal Phase 1 surface is small: a `/v1/db/handle` endpoint that validates a DigiKey service token and returns a scoped connection string or pool reference. The existing `digibase` library already provides the error envelope and HTTP helpers to build this service correctly.
+**(a) Implement Phase 1 digibase service immediately.**
+digichat and digikey are the first consumers that need managed Postgres credentials. Both are active development priorities. Delaying digibase means more code is written against direct `DATABASE_URL` environment variables, increasing the migration cost later. The minimal Phase 1 surface is small: a `/v1/db/handle` endpoint that validates a digikey service token and returns a scoped connection string or pool reference. The existing `digibase` library already provides the error envelope and HTTP helpers to build this service correctly.
 
 **(b) Add `audit.py` emit-to-remote buffering with retry.**
-`digigraph/audit.py` currently writes to a local JSONL file with no retry, no batching, and no remote destination. If the `AUDIT_LOG_PATH` volume is unavailable (mount failure, permissions error), `audit_log()` raises an exception that propagates into the agent workflow. This should be wrapped in a try/except so audit failures are logged but do not crash the service. For production, an async buffered writer with configurable flush interval and an optional remote sink (HTTP POST to DigiClaw or DigiBase) would make audit events durable and observable across the fleet without requiring log volume aggregation.
+`digigraph/audit.py` currently writes to a local JSONL file with no retry, no batching, and no remote destination. If the `AUDIT_LOG_PATH` volume is unavailable (mount failure, permissions error), `audit_log()` raises an exception that propagates into the agent workflow. This should be wrapped in a try/except so audit failures are logged but do not crash the service. For production, an async buffered writer with configurable flush interval and an optional remote sink (HTTP POST to digiclaw or digibase) would make audit events durable and observable across the fleet without requiring log volume aggregation.
 
 **(c) Add OTel trace context propagation helper for HTTP outbound calls.**
 `digibase.http.outbound_service_headers` correctly propagates `X-Request-ID` but does not inject W3C `traceparent`/`tracestate` headers. Services using `FastAPIInstrumentor` receive inbound trace context automatically, but when they make outbound calls with httpx, the trace context is not propagated unless `httpx` is also instrumented via `opentelemetry-instrumentation-httpx`. Add a `propagate_trace_context(headers: dict[str, str]) -> dict[str, str]` helper to `digibase.otel` that calls `opentelemetry.propagate.inject(headers)` when OTel is configured, making distributed trace stitching automatic for all callers of `outbound_service_headers`.
 
 **(d) Standardize audit event schema with a Pydantic model.**
-Define `AuditEvent` in `digibase/audit.py` as a Pydantic v2 model with required fields (`ts`, `event_type`) and optional fields matching the observed schema (`agent_id`, `payload`, `key_prefix`, `tenant`, `project_id`, `jti`, `path`). Callers use `AuditEvent(...).model_dump()` before writing, ensuring the schema is validated at construction time. This eliminates silent schema drift across DigiGraph, DigiClaw, DigiQuant, and the future DigiBase service. The `redact_mapping` call should be integrated as a validator on the `payload` field (applied automatically).
+Define `AuditEvent` in `digibase/audit.py` as a Pydantic v2 model with required fields (`ts`, `event_type`) and optional fields matching the observed schema (`agent_id`, `payload`, `key_prefix`, `tenant`, `project_id`, `jti`, `path`). Callers use `AuditEvent(...).model_dump()` before writing, ensuring the schema is validated at construction time. This eliminates silent schema drift across digigraph, digiclaw, digiquant, and the future digibase service. The `redact_mapping` call should be integrated as a validator on the `payload` field (applied automatically).
 
 **(e) Add `digibase[vault]` extra for HashiCorp Vault credential fetching.**
-Phase 1 DigiBase service needs to fetch credentials from somewhere. Hard-coded environment variables are an operational risk. Add an optional `digibase[vault]` extra that wraps `hvac` (the Python Vault client) and exposes a `fetch_secret(path: str) -> str` helper that caches the result with TTL and renews leases. This extra would be used by the DigiBase server module only, not by application services, keeping the library surface clean for lightweight installs.
+Phase 1 digibase service needs to fetch credentials from somewhere. Hard-coded environment variables are an operational risk. Add an optional `digibase[vault]` extra that wraps `hvac` (the Python Vault client) and exposes a `fetch_secret(path: str) -> str` helper that caches the result with TTL and renews leases. This extra would be used by the digibase server module only, not by application services, keeping the library surface clean for lightweight installs.
 
 **(f) Library should validate span attributes against contract (opt-in).**
 The OTel span attribute contract (required: `workflow_id`, `request_id`, `session_id`; prohibited: raw prompts, API keys, full doc bodies) is enforced only by convention and code review. Add an opt-in `ValidatingSpanProcessor` to `digibase.otel` that checks spans for missing required attributes and rejects or warns on spans containing key names matching the `DEFAULT_REDACT_SUBSTRINGS` pattern. This would be instantiated alongside the `BatchSpanProcessor` when `DIGIBASE_OTEL_VALIDATE=1` is set. It is a development-time guardrail, not a performance-sensitive production component.

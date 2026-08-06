@@ -143,6 +143,9 @@ export function SyncedTearsheet({
         bottomFillColor2: toRgba(p.down, 0.32),
         lineWidth: 2,
         priceLineVisible: false,
+        // this pane is always the underwater drawdown series (percent, ≤ 0) —
+        // format the axis accordingly rather than leaving it bare numbers.
+        priceFormat: { type: "custom", formatter: (v: number) => `${v.toFixed(1)}%`, minMove: 0.1 },
       },
       1,
     );

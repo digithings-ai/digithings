@@ -6,14 +6,13 @@ import json
 from unittest.mock import patch
 
 import pytest
-from pydantic import BaseModel, Field, ValidationError
-
 from digigraph.graph.research_agent import (
     ANALYST_SYSTEM,
     _format_scope_block,
     _strictify_json_schema,
     run_research_agent,
 )
+from pydantic import BaseModel, Field, ValidationError
 
 
 class _SampleOutput(BaseModel):

@@ -6,7 +6,6 @@ from datetime import date
 
 import polars as pl
 import pytest
-
 from digiquant.data.prices.etf_flows import compute_etf_flows_proxy
 
 

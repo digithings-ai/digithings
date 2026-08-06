@@ -22,12 +22,11 @@ export const G10_CURRENCIES = [
 export type G10Currency = (typeof G10_CURRENCIES)[number];
 
 /**
- * The Research Matrix columns — the 8 board currencies, in the SAME order the
- * twelve-x Notion matrix uses (`nodes/publish.py` `_board_column`). A broker
- * currency_view is filed under its base currency only (pairs land under the
- * numerator, e.g. EUR/USD → EUR); views whose legs fall outside the extended
- * set (these 8 + NOK/SEK) are dropped. Kept deliberately separate from the
- * 10-entry `G10_CURRENCIES` (which the consensus uses) so the grid matches Notion.
+ * The Research Matrix columns — the 8 board currencies. A broker currency_view
+ * is filed under its base currency only (pairs land under the numerator, e.g.
+ * EUR/USD → EUR); views whose legs fall outside the extended set (these 8 +
+ * NOK/SEK) are dropped. Kept deliberately separate from the 10-entry
+ * `G10_CURRENCIES`, which the consensus uses.
  */
 export const MATRIX_COLUMNS = ['USD', 'EUR', 'GBP', 'AUD', 'CAD', 'CHF', 'JPY', 'NZD'] as const;
 export type MatrixColumn = (typeof MATRIX_COLUMNS)[number];
@@ -124,8 +123,14 @@ export interface FxEventSnapshotRow {
 }
 
 /**
- * `fx_economic_calendar` (twelve-x migration 001/002) — upcoming macro catalysts.
+ * `economic_calendar` in the shared digiquant **core** project — upcoming macro catalysts.
  * Read for the next-14-day window, ordered by `event_datetime_utc`.
+ *
+ * Not a twelve-x table, despite living in this module. The calendar is shared, so #1066
+ * made `core` its single source and retired twelve-x's own `fx_economic_calendar`
+ * (no dual-write) — which is why `getUpcomingEvents` reads it through the MAIN Olympus
+ * client rather than `twelveXSupabase`. The `Fx` prefix on this interface is a naming
+ * leftover, not a claim of ownership.
  */
 export interface FxEconomicCalendarRow {
   id: number; // bigserial
@@ -203,6 +208,22 @@ export interface FxLedgerRow {
 }
 
 /**
+ * A historical brief view for a broker/column cell — an older distinct view that
+ * is no longer the primary. Sorted newest-first in MatrixCell.history.
+ */
+export interface MatrixCellHistoryEntry {
+  run_date: string;
+  report_date: string | null;
+  source_file: string;
+  direction: string;
+  conviction: string;
+  signal?: string;
+  rationale?: string;
+  key_facts?: string[];
+  targets?: unknown[];
+}
+
+/**
  * One cell of the broker×G10 matrix — the LATEST currency_view a desk holds on a
  * currency over a recent window. Derived in TS from brief `currency_views`
  * (display grouping, not consensus math).
@@ -220,6 +241,8 @@ export interface MatrixCell {
   rationale?: string;
   key_facts?: string[];
   targets?: unknown[];
+  /** Older distinct brief views for this broker/column, sorted newest-first. */
+  history?: MatrixCellHistoryEntry[];
 }
 
 /**
@@ -345,6 +368,37 @@ export interface IntelligenceWhy {
   items: IntelligenceWhyItem[];
 }
 
+export type FxLevelProvenance =
+  | 'broker_quoted'
+  | 'pmt_bank_trade'
+  | 'pmt_seasonality_target'
+  | 'pmt_position_cluster'
+  | 'computed';
+
+export interface FxTradeLevel {
+  value: string;
+  provenance: FxLevelProvenance;
+  source_ref: string;
+}
+
+export interface FxTradeLevels {
+  entry_low: FxTradeLevel | null;
+  entry_high: FxTradeLevel | null;
+  stop: FxTradeLevel | null;
+  targets: FxTradeLevel[];
+  risk_reward: number | null;
+  status: 'complete' | 'partial' | 'incomplete';
+}
+
+export interface FxMarketEvidence {
+  source_slug: string;
+  instrument: string;
+  as_of: string;
+  statement: string;
+  stance: 'supports' | 'contradicts' | 'context';
+  snapshot_id: string;
+}
+
 /**
  * `fx_trade_ideas_snapshot` (twelve-x migration 012) — the curated, synthesized
  * actionable trade ideas for a run. PRIMARY KEY (run_date, rank). anon-readable.
@@ -360,4 +414,30 @@ export interface FxTradeIdeaRow {
   levels: unknown[]; // jsonb array of broker levels/targets
   citations: unknown[]; // jsonb array of TradeIdeaCitation
   as_of: string; // timestamptz (ISO)
+  trade_levels?: FxTradeLevels | Record<string, unknown> | null;
+  evidence?: FxMarketEvidence[] | unknown[] | null;
+}
+
+/**
+ * Assembled twelve-x consensus × PMT Smart Bias join for one G10 currency (P5).
+ * Produced only by `assembleConsensusDivergence` / `getConsensusDivergence` — never
+ * as a standalone smart-bias row (spec D6).
+ */
+export interface FxConsensusDivergence {
+  currency: string;
+  /** Canonical medium/weighted street score ∈ [−2, +2]. */
+  consensusScore: number;
+  consensusTilt: number;
+  consensusAsOf: string;
+  pmtSentiment: string;
+  /** Mapped Overall_Sentiment on the shared −2…+2 scale. */
+  pmtScore: number;
+  /** ISO week anchor from `fx_smart_bias.week_first_date`. */
+  pmtAsOf: string;
+  gap: number;
+  isDivergent: boolean;
+  snapshotId: string | null;
+  rawSnapshot: unknown | null;
+  streetStatement: string;
+  pmtStatement: string;
 }
