@@ -694,6 +694,66 @@ def write_row(
     except Exception as exc:  # telemetry write must never crash the run
         logger.warning("diagnostics: write_row failed (%s); run continues", exc)
         return None
+    events_captured = usage_snapshot is not None and "events" in usage_snapshot
+    events = list((usage_snapshot or {}).get("events") or [])
+    event_rows = [
+        {
+            "run_id": run_id,
+            "attempt": attempt,
+            "run_date": run_date.isoformat(),
+            "run_type": run_type,
+            "sequence": event.get("sequence"),
+            "event_kind": event.get("kind"),
+            "phase": event.get("phase"),
+            "operation": event.get("operation"),
+            "document_key": event.get("document_key"),
+            "name": event.get("name"),
+            "status": event.get("status"),
+            "duration_ms": event.get("duration_ms"),
+            "retry_count": event.get("retry_count"),
+            "prompt_tokens": event.get("prompt_tokens"),
+            "completion_tokens": event.get("completion_tokens"),
+            "cached_tokens": event.get("cached_tokens"),
+            "cost_usd": event.get("cost_usd"),
+            "sources": event.get("sources"),
+            "input_summary": event.get("input_summary"),
+            "output_summary": event.get("output_summary"),
+        }
+        for event in events
+        if (
+            isinstance(event, Mapping)
+            and isinstance(event.get("sequence"), int)
+            and event["sequence"] > 0
+            and event.get("kind") in {"model_call", "search_call", "tool_call"}
+            and event.get("status") in {"ok", "error"}
+            and isinstance(event.get("name"), str)
+            and isinstance(event.get("input_summary"), str)
+            and isinstance(event.get("output_summary"), str)
+        )
+    ]
+    if events_captured:
+        try:
+            stale_events = (
+                client.table("olympus_run_events")
+                .delete()
+                .eq("run_id", run_id)
+                .eq("attempt", attempt)
+            )
+            if event_rows:
+                stale_events = stale_events.gte(
+                    "sequence", max(row["sequence"] for row in event_rows) + 1
+                )
+            stale_events.execute()
+        except Exception as exc:  # event telemetry is independently fail-soft
+            logger.warning("diagnostics: stale run-event cleanup failed (%s); run continues", exc)
+    if event_rows:
+        try:
+            client.table("olympus_run_events").upsert(
+                event_rows,
+                on_conflict="run_id,attempt,sequence",
+            ).execute()
+        except Exception as exc:  # event telemetry is independently fail-soft
+            logger.warning("diagnostics: run-event write failed (%s); run continues", exc)
     logger.info(
         "diagnostics[%s attempt=%d]: status=%s segments ok=%d carried=%d failed=%d",
         run_id,

@@ -20,8 +20,8 @@ import {
   TooltipTrigger,
 } from '@digithings/web';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
-import type { ExpansionState, LaidOutNode } from '@/lib/pipeline-layout';
-import { layoutPipeline } from '@/lib/pipeline-layout';
+import type { ExpansionState, LaidOutNode, PipelineNodeRunStatus } from '@/lib/pipeline-layout';
+import { layoutPipeline, pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
 import type { PipelineStageId } from '@/lib/pipeline-topology';
 import { PIPELINE_TOPOLOGY, stageById } from '@/lib/pipeline-topology';
 import type { NodeRect } from './useCanvasCamera';
@@ -40,6 +40,13 @@ const DEFAULT_EXPANSION: ExpansionState = {
   expandedStages: new Set(),
   expandedFanouts: new Set(),
 };
+
+function mobileStatusClass(status: PipelineNodeRunStatus | undefined): string {
+  if (status === 'expected-artifact-missing') return 'bg-warn';
+  if (status === 'persisted-artifact' || status === 'parallel-dispatch') return 'bg-accent';
+  if (status === 'state-only') return 'border border-accent/70 bg-transparent';
+  return 'bg-hair';
+}
 
 export type PipelineFocusTarget =
   | { kind: 'node'; nodeId: string }
@@ -106,6 +113,19 @@ export function movePipelineWalkthrough(
   itemCount: number,
 ): number {
   return Math.max(0, Math.min(itemCount - 1, index + direction));
+}
+
+export function walkthroughNavigationTarget(
+  nodes: LaidOutNode[],
+  index: number,
+  direction: -1 | 1,
+  mode: 'desktop' | 'mobile',
+): { index: number; node: LaidOutNode; openDetail: boolean } | null {
+  const nextIndex = movePipelineWalkthrough(index, direction, nodes.length);
+  const node = nodes[nextIndex];
+  return node
+    ? { index: nextIndex, node, openDetail: mode === 'desktop' }
+    : null;
 }
 
 export function findPipelineWalkthroughIndex(
@@ -334,14 +354,14 @@ export default function PipelineCanvas({
     if (openDetail) onNodeActivate(node);
   }, [onNodeActivate]);
 
-  const walkPipeline = useCallback((direction: -1 | 1) => {
-    const nextIndex = movePipelineWalkthrough(
+  const walkPipeline = useCallback((direction: -1 | 1, mode: 'desktop' | 'mobile') => {
+    const target = walkthroughNavigationTarget(
+      walkthroughNodes,
       resolvedWalkthroughIndex,
       direction,
-      walkthroughNodes.length,
+      mode,
     );
-    const node = walkthroughNodes[nextIndex];
-    if (node) selectWalkthroughNode(node, nextIndex, false);
+    if (target) selectWalkthroughNode(target.node, target.index, target.openDetail);
   }, [resolvedWalkthroughIndex, selectWalkthroughNode, walkthroughNodes]);
 
   useEffect(() => {
@@ -363,7 +383,8 @@ export default function PipelineCanvas({
       if (direction === null) return;
 
       event.preventDefault();
-      walkPipeline(direction);
+      const mode = window.matchMedia('(min-width: 768px)').matches ? 'desktop' : 'mobile';
+      walkPipeline(direction, mode);
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -442,17 +463,18 @@ export default function PipelineCanvas({
                   }`}
                 >
                   <span
-                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                      node.documentKey || (expandable && count && count > 0)
-                        ? 'bg-accent'
-                        : 'bg-hair'
-                    }`}
+                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${mobileStatusClass(node.runStatus)}`}
                     aria-hidden
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block font-mono text-xs text-ink">
                       {node.label}
                     </span>
+                    {node.runStatus ? (
+                      <span className="mt-0.5 block font-mono text-[0.62rem] text-ink-mute">
+                        {pipelineNodeRunStatusLabel(node.runStatus)}
+                      </span>
+                    ) : null}
                   </span>
                   {count != null && count > 0 ? (
                     <span className="rounded-full bg-accent/15 px-2 py-0.5 font-mono text-xs tabular-nums text-accent">
@@ -474,7 +496,7 @@ export default function PipelineCanvas({
               type="button"
               aria-label="Previous pipeline section"
               disabled={resolvedWalkthroughIndex === 0}
-              onClick={() => walkPipeline(-1)}
+              onClick={() => walkPipeline(-1, 'mobile')}
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair text-ink transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
             >
               <ChevronLeft size={20} aria-hidden />
@@ -491,7 +513,7 @@ export default function PipelineCanvas({
               type="button"
               aria-label="Next pipeline section"
               disabled={resolvedWalkthroughIndex === walkthroughNodes.length - 1}
-              onClick={() => walkPipeline(1)}
+              onClick={() => walkPipeline(1, 'mobile')}
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair text-ink transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
             >
               <ChevronRight size={20} aria-hidden />
@@ -590,7 +612,7 @@ export default function PipelineCanvas({
                         aria-keyshortcuts="ArrowLeft Shift+Space"
                         data-no-pan=""
                         disabled={resolvedWalkthroughIndex === 0}
-                        onClick={() => walkPipeline(-1)}
+                        onClick={() => walkPipeline(-1, 'desktop')}
                       >
                         <ChevronLeft size={15} aria-hidden />
                       </IconButton>
@@ -625,7 +647,7 @@ export default function PipelineCanvas({
                         aria-keyshortcuts="ArrowRight Space"
                         data-no-pan=""
                         disabled={resolvedWalkthroughIndex === walkthroughNodes.length - 1}
-                        onClick={() => walkPipeline(1)}
+                        onClick={() => walkPipeline(1, 'desktop')}
                       >
                         <ChevronRight size={15} aria-hidden />
                       </IconButton>

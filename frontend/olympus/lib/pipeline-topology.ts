@@ -18,6 +18,8 @@ export interface SubStep {
    * not just on days with missing data.
    */
   stateOnly?: boolean;
+  /** Publishes an artifact only when its trigger fires; absence is not a failed persistence. */
+  conditionalArtifact?: boolean;
 }
 export interface StageDef {
   id: PipelineStageId;
@@ -176,6 +178,7 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
       id: 'beliefs',
       label: 'Beliefs fold',
       description: 'Distills eligible resolved evidence into updated beliefs for use by future runs.',
+      conditionalArtifact: true,
     },
   ]},
 ];

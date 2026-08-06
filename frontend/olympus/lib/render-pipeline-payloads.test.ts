@@ -325,12 +325,10 @@ describe('renderDocumentMarkdownFromPayload routing', () => {
     // but the payload shape sniffer must not mis-route it to a wrong renderer.
     // isAnalystSpecialistPayload is exported for that check — verify it classifies correctly.
     expect(isAnalystSpecialistPayload(ANALYST_PAYLOAD)).toBe(true);
-    // The fallback renderer in render-document-from-payload will render the JSON since
-    // isAnalystSpecialistPayload is not wired into renderDocumentMarkdownFromPayload directly,
-    // but the payload must not match the deliberation path.
+    // The payload must not match the deliberation path or get flattened into
+    // markdown; queries.ts routes it to AnalystDocumentView.
     expect(isDebateSummaryPayload(ANALYST_PAYLOAD)).toBe(false);
-    // Verify md is non-null.
-    expect(md).not.toBeNull();
+    expect(md).toBeNull();
   });
 
   it('renders deliberation documents with the debate renderer (#698)', () => {
@@ -352,10 +350,9 @@ describe('renderDocumentMarkdownFromPayload routing', () => {
     expect(md).toContain('| Technology | XLK | bullish | high | AI capex |');
   });
 
-  it('renders unknown shapes as a JSON dump instead of null', () => {
+  it('leaves unknown shapes to the structured document fallback', () => {
     const md = renderDocumentMarkdownFromPayload({ mystery: true }, 'future-doc-kind');
-    expect(md).toContain('# future-doc-kind');
-    expect(md).toContain('"mystery": true');
+    expect(md).toBeNull();
   });
 
   it('returns null for unknown digest-keyed payloads so the snapshot fallback applies', () => {

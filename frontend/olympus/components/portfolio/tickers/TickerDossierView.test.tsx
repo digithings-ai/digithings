@@ -23,6 +23,7 @@ vi.mock('next/link', () => ({
 
 vi.mock('lucide-react', () => ({
   ArrowLeft: () => createElement('svg', { 'data-icon': 'arrow-left' }),
+  ArrowUpRight: () => createElement('svg', { 'data-icon': 'arrow-up-right' }),
   TrendingUp: () => createElement('svg', { 'data-icon': 'trending-up' }),
   TrendingDown: () => createElement('svg', { 'data-icon': 'trending-down' }),
 }));
@@ -60,12 +61,8 @@ vi.mock('@/lib/holdings-decisions', () => ({
   decisionNodeFor: vi.fn(),
 }));
 
-vi.mock('./AnalystDossierCard', () => ({
-  default: () => createElement('div', { 'data-testid': 'analyst-dossier-card' }),
-}));
-
 vi.mock('./ConvictionHistory', () => ({
-  default: () => createElement('div', { 'data-testid': 'conviction-history' }),
+  default: () => createElement('div', { 'data-testid': 'analysis-history' }),
 }));
 
 import { useDashboard } from '@/lib/dashboard-context';
@@ -199,8 +196,8 @@ describe('TickerDossierView — command band structure', () => {
     const html = renderToStaticMarkup(createElement(TickerDossierView, { ticker: 'COPX' }));
 
     expect(html).toMatch(/covered.*unheld/i);
-    expect(html).toContain('coverage');
-    expect(html).toContain('analyst');
+    expect(html).toContain('Current view');
+    expect(html).toContain('Latest source');
   });
 
   it('displays position metrics when held: weight, since-entry, entry', () => {
@@ -260,18 +257,61 @@ describe('TickerDossierView — command band structure', () => {
     const html = renderToStaticMarkup(createElement(TickerDossierView, { ticker: 'XLE' }));
 
     expect(html).toContain('2026-07-18');
-    expect(html).toContain('as of');
+    expect(html).toContain('latest analysis');
   });
 });
 
-describe('TickerDossierView — editorial analyst workspace', () => {
+describe('TickerDossierView — ticker lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders AnalystDossierCard when analyst payload exists', () => {
+  it('orders the page around view, position, outcome, and analysis provenance', () => {
     vi.mocked(useDashboard).mockReturnValue({
-      data: { positions: [] },
+      data: {
+        positions: [
+          {
+            ticker: 'XLE',
+            name: 'Energy Select Sector SPDR',
+            weight_actual: 5.2,
+            weight_target: 6,
+            entry_price: 84.2,
+            entry_date: '2026-01-15',
+            since_entry_return_pct: 4.8,
+            unrealized_pnl_pct: null,
+            rationale: 'Express persistent energy scarcity.',
+            pm_notes: 'Hold while supply discipline persists.',
+          },
+        ],
+        position_history: [
+          { date: '2026-01-15', ticker: 'XLE', weight_pct: 4, category: 'energy', thesis_id: 'energy' },
+          { date: '2026-07-18', ticker: 'XLE', weight_pct: 5.2, category: 'energy', thesis_id: 'energy' },
+        ],
+        position_events: [
+          {
+            date: '2026-01-15',
+            ticker: 'XLE',
+            event: 'OPEN',
+            weight_pct: 4,
+            prev_weight_pct: 0,
+            weight_change_pct: 4,
+            price: 84.2,
+            thesis_id: 'energy',
+            reason: 'Opened as the preferred energy expression.',
+          },
+          {
+            date: '2026-07-18',
+            ticker: 'XLE',
+            event: 'ADD',
+            weight_pct: 5.2,
+            prev_weight_pct: 4,
+            weight_change_pct: 1.2,
+            price: 88.1,
+            thesis_id: 'energy',
+            reason: 'Derived from positions book vs prior committed book (digest unavailable).',
+          },
+        ],
+      },
       loading: false,
     } as any);
 
@@ -295,8 +335,32 @@ describe('TickerDossierView — editorial analyst workspace', () => {
           sources: [],
         },
         analystDate: '2026-07-18',
-        coverage: null,
-        decisions: [],
+        coverage: { current_recommendation_key: 'analyst/XLE' },
+        decisions: [
+          {
+            id: 'decision-1',
+            run_date: '2026-07-18',
+            stance: 'buy',
+            conviction: 3,
+            status: 'resolved',
+            alpha: 0.02,
+          },
+        ],
+        latestAttribution: {
+          id: 'attribution-1',
+          date: '2026-07-18',
+          ticker: 'XLE',
+          sector_bucket: 'energy',
+          weight_pct: 5.2,
+          position_return_pct: 2.5,
+          benchmark_return_pct: 1.7,
+          contribution_pct: 0.13,
+          selection_effect_pct: 0.04,
+          allocation_effect_pct: 0,
+          total_attribution_pct: 0.04,
+          metrics_as_of: '2026-07-18',
+          created_at: null,
+        },
       },
       loading: false,
       error: null,
@@ -304,14 +368,51 @@ describe('TickerDossierView — editorial analyst workspace', () => {
 
     const html = renderToStaticMarkup(createElement(TickerDossierView, { ticker: 'XLE' }));
 
-    expect(html).toContain('analyst-dossier-card');
-    expect(html).toContain('data-region="analyst-workspace"');
-    expect(html).toContain('data-region="dossier-context"');
+    expect(html).toContain('Current view');
+    expect(html).toContain('Portfolio position');
+    expect(html).toContain('Position history');
+    expect(html).toContain('Measured outcome');
+    expect(html).toContain('Latest attribution');
+    expect(html).toContain('analysis-history');
+    expect(html).toContain('Energy scarcity');
+    expect(html).toContain('Express persistent energy scarcity.');
+    expect(html).toContain('Opened as the preferred energy expression.');
+    expect(html).toContain('Observed from the committed position history.');
+    expect(html).not.toContain('digest unavailable');
+    expect(html).toContain('Current leg');
+    expect(html).toContain('2.50%');
+    expect(html).toContain('0.13%');
+    expect(html).toContain('0.04%');
+    expect(html).toContain(
+      '/pipeline?date=2026-07-18&amp;stage=selection'
+    );
+    expect(html).toContain('Open latest analysis');
+    expect(html).not.toContain('Research argument');
+    expect(html).not.toContain('Dossier state');
   });
 
-  it('renders ConvictionHistory below the analyst workspace', () => {
+  it('keeps a previously held ticker useful after exit', () => {
     vi.mocked(useDashboard).mockReturnValue({
-      data: { positions: [] },
+      data: {
+        positions: [],
+        position_history: [
+          { date: '2026-01-01', ticker: 'XLE', weight_pct: 5, category: 'energy', thesis_id: 'energy' },
+          { date: '2026-06-01', ticker: 'XLE', weight_pct: 0, category: 'energy', thesis_id: 'energy' },
+        ],
+        position_events: [
+          {
+            date: '2026-06-01',
+            ticker: 'XLE',
+            event: 'EXIT',
+            weight_pct: 0,
+            prev_weight_pct: 5,
+            weight_change_pct: -5,
+            price: 90,
+            thesis_id: 'energy',
+            reason: 'The catalyst was fully priced.',
+          },
+        ],
+      },
       loading: false,
     } as any);
 
@@ -324,6 +425,7 @@ describe('TickerDossierView — editorial analyst workspace', () => {
         decisions: [
           { id: 'd1', run_date: '2026-01-01', conviction: 3, status: 'resolved' },
         ],
+        latestAttribution: null,
       },
       loading: false,
       error: null,
@@ -331,6 +433,9 @@ describe('TickerDossierView — editorial analyst workspace', () => {
 
     const html = renderToStaticMarkup(createElement(TickerDossierView, { ticker: 'XLE' }));
 
-    expect(html).toContain('conviction-history');
+    expect(html).toContain('Previously held');
+    expect(html).toContain('2026-01-01–2026-06-01');
+    expect(html).toContain('The catalyst was fully priced.');
+    expect(html).toContain('No current position');
   });
 });

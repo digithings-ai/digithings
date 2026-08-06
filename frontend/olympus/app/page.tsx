@@ -1,16 +1,17 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDashboard } from '@/lib/dashboard-context';
 import type { BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
 import { DASHBOARD_BENCHMARK_TICKERS } from '@/lib/benchmark-tickers';
+import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { EmptyState } from '@digithings/web';
 import PageSkeleton from '@/components/page-skeleton';
-import { MoveHero } from '@/components/today/move-hero';
-import { WhatToWatch } from '@/components/today/what-to-watch';
-import { BookStrip } from '@/components/today/book-strip';
-import { TodaySummaries } from '@/components/today/today-summaries';
+import {
+  DailyBriefWorkspace,
+  type BriefRunHealth,
+} from '@/components/today/daily-brief-workspace';
 
 // ─── Benchmark blurb (kept from the prior overview; pure, honest window) ────────
 
@@ -22,8 +23,8 @@ function pickBenchmarkTicker(benchmarks: BenchmarkHistoryMap): string | null {
 }
 
 /**
- * Portfolio vs benchmark over the aligned window (first NAV snap date → last NAV
- * snap date, clipped to available benchmark history). `startDate` keeps the label
+ * Portfolio vs benchmark over the aligned return window (first portfolio point →
+ * last portfolio point, clipped to available benchmark history). `startDate` keeps the label
  * honest ("since {date}", not a dishonest "inception").
  */
 function inceptionVsBenchmark(
@@ -51,6 +52,39 @@ function inceptionVsBenchmark(
 
 export default function OverviewPage() {
   const { data, loading, error } = useDashboard();
+  const dashboardDate = data?.portfolio?.meta.last_updated ?? null;
+  const [runHealth, setRunHealth] = useState<BriefRunHealth | null>();
+
+  useEffect(() => {
+    if (!dashboardDate) return;
+    let cancelled = false;
+
+    void fetchAtlasRunDiagnostics()
+      .then((runs) => {
+        if (cancelled) return;
+        const latestForDate = runs.find((run) => run.run_date === dashboardDate) ?? null;
+        setRunHealth(
+          latestForDate
+            ? {
+                status: latestForDate.status,
+                runDate: latestForDate.run_date,
+                finishedAt: latestForDate.finished_at,
+                segmentsOk: latestForDate.segments_ok,
+                segmentsTotal: latestForDate.segments_total,
+                segmentsCarried: latestForDate.segments_carried,
+                segmentsFailed: latestForDate.segments_failed,
+              }
+            : null
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setRunHealth(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboardDate]);
 
   const benchmarkBlurb = useMemo(() => {
     if (!data?.portfolio?.snapshots?.length || !data.benchmarks) return null;
@@ -103,72 +137,68 @@ export default function OverviewPage() {
     }
   }
 
-  const navSnaps = portfolio.snapshots ?? [];
-  // The book's own as-of (latest nav_history point) — deliberately NOT
+  const performanceHistory = portfolio.snapshots ?? [];
+  // The book's own as-of (latest performance-history point) — deliberately NOT
   // latestDate (the digest date): research publishes daily even when the
   // book-persistence half is frozen (#1555), and book surfaces must carry
   // their own date rather than borrow the digest's freshness.
-  const bookAsOf = navSnaps.length ? navSnaps[navSnaps.length - 1].date : null;
-  const navIndex = navSnaps.length ? navSnaps[navSnaps.length - 1].nav : null;
-  const navFirst = navSnaps.length ? navSnaps[0].nav : null;
+  const bookAsOf = performanceHistory.length
+    ? performanceHistory[performanceHistory.length - 1].date
+    : null;
+  const latestPortfolioValue = performanceHistory.length
+    ? performanceHistory[performanceHistory.length - 1].nav
+    : null;
+  const initialPortfolioValue = performanceHistory.length ? performanceHistory[0].nav : null;
   const sincePct =
-    navIndex != null && navFirst != null && navFirst > 0
-      ? (navIndex / navFirst - 1) * 100
+    latestPortfolioValue != null && initialPortfolioValue != null && initialPortfolioValue > 0
+      ? (latestPortfolioValue / initialPortfolioValue - 1) * 100
       : null;
-  const sinceDate = navSnaps.length ? navSnaps[0].date : null;
-  // Daily delta + benchmark are gated on ≥2 NAV points (empty-state discipline).
+  const sinceDate = performanceHistory.length ? performanceHistory[0].date : null;
+  // Daily return + benchmark are gated on at least two persisted points.
   const dailyRet =
-    navSnaps.length >= 2
-      ? ((navSnaps[navSnaps.length - 1].nav - navSnaps[navSnaps.length - 2].nav) /
-          navSnaps[navSnaps.length - 2].nav) *
+    performanceHistory.length >= 2
+      ? ((performanceHistory[performanceHistory.length - 1].nav -
+          performanceHistory[performanceHistory.length - 2].nav) /
+          performanceHistory[performanceHistory.length - 2].nav) *
         100
       : null;
 
   return (
     <div className={`${SUBPAGE_MAX} py-4 md:py-7`}>
-      <section
-        data-testid="brief-workspace"
-        aria-label="Daily investment brief"
-        className="overflow-hidden border border-hair bg-surface"
-      >
-        <MoveHero
-          regime={strategy.regime}
-          regimeLabel={regimeLabel}
-          headline={strategy.summary || null}
-          confidence={strategy.theses?.[0]?.confidence ?? null}
-          asOf={latestDate}
-          runType={runTypeLabel}
-          actions={rebalanceActions}
-          rationaleByTicker={rationaleByTicker}
-          nav={{
-            index: navIndex,
-            sincePct,
-            sinceDate,
-            dailyPct: dailyRet,
-            benchTicker: benchmarkBlurb?.ticker ?? null,
-            excessPct: benchmarkBlurb?.excessPct ?? null,
-            asOfDate: bookAsOf,
-          }}
-        />
-
-        <WhatToWatch
-          actionables={strategy.actionableItems ?? []}
-          risks={strategy.riskItems ?? []}
-          asOfDate={latestDate}
-        />
-
-        <BookStrip
-          positions={positions}
-          asOfDate={bookAsOf}
-        />
-
-        <TodaySummaries
-          positions={positions}
-          theses={strategy.theses ?? []}
-          readSummary={strategy.summary ?? null}
-          asOfDate={latestDate}
-        />
-      </section>
+      <DailyBriefWorkspace
+        regime={strategy.regime}
+        regimeLabel={regimeLabel}
+        headline={strategy.summary || null}
+        confidence={strategy.theses?.[0]?.confidence ?? null}
+        digestDate={latestDate}
+        bookDate={bookAsOf}
+        runType={runTypeLabel}
+        actions={rebalanceActions}
+        rationaleByTicker={rationaleByTicker}
+        returns={{
+          sincePct,
+          sinceDate,
+          dailyPct: dailyRet,
+          benchTicker: benchmarkBlurb?.ticker ?? null,
+          excessPct: benchmarkBlurb?.excessPct ?? null,
+        }}
+        metrics={{
+          maxDrawdown:
+            data.server_portfolio_metrics?.max_drawdown ?? data.calculated?.max_drawdown ?? null,
+          volatility:
+            data.server_portfolio_metrics?.volatility ?? data.calculated?.volatility ?? null,
+        }}
+        investedPct={
+          data.server_portfolio_metrics?.invested_pct ?? data.calculated?.total_invested ?? null
+        }
+        positions={positions}
+        actionables={strategy.actionableItems ?? []}
+        risks={strategy.riskItems ?? []}
+        theses={strategy.theses ?? []}
+        contextBullets={data.snapshot_context_bullets ?? []}
+        latestEvent={data.position_events?.[0] ?? null}
+        runHealth={latestDate ? runHealth : null}
+      />
     </div>
   );
 }

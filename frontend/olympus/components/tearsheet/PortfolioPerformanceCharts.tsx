@@ -36,7 +36,7 @@ export function PortfolioContributionChart({
             cumulative contribution · percentage points
           </p>
           <h2 id="portfolio-contribution-title" className="font-display text-xl text-ink">
-            Portfolio attribution
+            Return contribution
           </h2>
         </div>
         {/* No per-asset legend — it cannot scale with a long history. Per-asset
@@ -46,15 +46,12 @@ export function PortfolioContributionChart({
             <span className="h-0 w-5 border-t-2 border-accent" aria-hidden />
             Portfolio return
           </span>
-          {benchmark ? (
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-0 w-5 border-t border-dashed border-ink-soft" aria-hidden />
-              {benchmark.ticker}
-            </span>
-          ) : null}
           {comparisons.length ? (
             <label className="inline-flex items-center gap-2">
-              <span className="sr-only">Comparison benchmark</span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-0 w-5 border-t border-dashed border-ink-soft" aria-hidden />
+                Benchmark
+              </span>
               <select
                 aria-label="Comparison benchmark"
                 value={benchmark?.ticker ?? ''}
@@ -68,8 +65,12 @@ export function PortfolioContributionChart({
                 ))}
               </select>
             </label>
+          ) : benchmark ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-0 w-5 border-t border-dashed border-ink-soft" aria-hidden />
+              {benchmark.ticker}
+            </span>
           ) : null}
-          <span>hover for per-position contributions</span>
         </div>
       </div>
       {points.length < 2 ? (

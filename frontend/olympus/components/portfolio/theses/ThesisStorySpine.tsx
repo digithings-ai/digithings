@@ -16,17 +16,14 @@ export function ThesisStorySpine({
   /** The spine's anchor date (the run the market theses come from). */
   asOf: string | null;
 }) {
+  const thesisLabel = `${stories.length} ${stories.length === 1 ? 'thesis' : 'theses'}`;
+
   return (
     <section data-region="thesis-ledger" className="min-w-0 border-y border-hair bg-surface">
       <div className="flex items-baseline justify-between gap-3 border-x border-b border-hair px-5 py-4">
-        <div>
-          <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
-            portfolio research
-          </p>
-          <h2 className="mt-1 font-display text-2xl text-ink">Research views</h2>
-        </div>
+        <h2 className="font-display text-2xl text-ink">Market theses</h2>
         <p className="font-mono text-xs text-ink-mute">
-          {asOf ? `As of ${asOf}` : 'Ordered by conviction'}
+          {thesisLabel}{asOf ? ` · as of ${asOf}` : ''}
         </p>
       </div>
       <div className="border-x border-hair">
@@ -40,7 +37,6 @@ export function ThesisStorySpine({
                 <ThesisStoryCard
                   key={story.thesis.id}
                   story={story}
-                  defaultOpen={index === 0}
                   rank={index + 1}
                 />
               ))}

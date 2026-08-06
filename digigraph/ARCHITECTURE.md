@@ -51,6 +51,7 @@ The following is built and functional as of this architecture review (March 2026
 | Thread state / history / resume endpoints (opt-in) | Built | `server.py` |
 | digismith tracing (`traceable` wrappers) | Built | `digillm` (via `digismith.trace.traceable`) |
 | OpenTelemetry export (opt-in) | Built | `server.py` (via `digibase.otel.setup_otel_fastapi`) |
+| Ordered body-free run call events | Built | `usage.py`, `graph/research_agent.py`, `digillm` observer |
 | Planning executor (topo-sort + parallel steps) | Built | `planning/executor.py` |
 | Graphiti graph memory | **Not built** | Phase 2 roadmap |
 | Remote MCP server enumeration | **Not built** | Phase 2 roadmap |
@@ -115,6 +116,20 @@ When `stream: true` in `POST /v1/chat/completions`:
 ---
 
 ## 4. Data Model
+
+### 4.0 Olympus call-event capture
+
+`usage.start()` activates one ordered, lock-protected event stream for an Olympus process.
+`digillm` contributes terminal model/search events; `graph/research_agent.py` times actual tool
+execution. `call_context(phase, operation, document_key)` labels model/search calls, while the
+tool wrapper also passes those labels explicitly because `ContextVar` state does not propagate
+into `ThreadPoolExecutor` workers.
+
+`RunCallEvent` is a frozen Pydantic v2 model. It stores fixed labels, status, duration, retries,
+usage totals, source count, and code-generated shape summaries. All public text is length-bounded.
+It never stores prompts, argument or result values, document bodies, credentials, PII-heavy
+values, model output, or chain-of-thought. `events_snapshot()` returns the ordered body-free
+records; aggregate `snapshot()` includes them under `events` for the Atlas diagnostics writer.
 
 ### 4.1 WorkflowState (`graph/state.py`)
 

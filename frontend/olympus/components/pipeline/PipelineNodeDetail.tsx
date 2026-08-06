@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Skeleton, SkeletonGroup } from '@digithings/web';
 import { BookOpen, ChevronsLeft, ChevronsRight, FileSearch, Maximize2, Minimize2, X } from 'lucide-react';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
+import { pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
 import type { LaidOutNode } from '@/lib/pipeline-layout';
 import { PIPELINE_TOPOLOGY, pipelineNodeExplanation } from '@/lib/pipeline-topology';
 import LibraryDocumentBody from '@/components/library/LibraryDocumentBody';
@@ -28,6 +29,8 @@ export default function PipelineNodeDetail({
   // only — the mobile docked pane keeps its height-based layout untouched.
   const [size, setSize] = useState<'default' | 'wide' | 'full'>('default');
   const explanation = node ? pipelineNodeExplanation(node.stageId, node.id) : null;
+  const runStatus = node?.runStatus
+    ?? (documentKey ? 'persisted-artifact' : node?.stateOnly ? 'state-only' : null);
 
   useEffect(() => {
     // No selection: the render derives the empty state from `documentKey`, so
@@ -72,15 +75,19 @@ export default function PipelineNodeDetail({
         size === 'full'
           ? 'md:fixed md:inset-0 md:z-50 md:h-full md:w-full'
           : size === 'wide'
-            ? 'md:relative md:inset-auto md:z-20 md:h-full md:w-[620px] md:min-h-0 md:border-l md:border-hair'
-            : 'md:relative md:inset-auto md:z-20 md:h-full md:w-[372px] md:min-h-0 md:border-l md:border-hair',
+            ? 'md:relative md:inset-auto md:z-20 md:h-full md:w-[min(80vw,960px)] md:min-h-0 md:border-l md:border-hair'
+            : 'md:relative md:inset-auto md:z-20 md:h-full md:w-[min(58vw,680px)] md:min-h-0 md:border-l md:border-hair',
       ].join(' ')}
     >
       {/* Header */}
       <div className="flex flex-shrink-0 items-start justify-between border-b border-hair px-4 py-3 md:px-5 md:py-4">
         <div className="min-w-0 flex-1">
           <div className="mb-1 text-xs font-bold uppercase text-accent">
-            {documentKey ? 'Run artifact' : explanation ? 'Pipeline guide' : 'No selection'}
+            {runStatus
+              ? pipelineNodeRunStatusLabel(runStatus)
+              : explanation
+                ? 'Pipeline guide'
+                : 'No selection'}
           </div>
           <div className="font-mono text-sm truncate text-ink">
             {node?.label ?? documentKey ?? '—'}
@@ -172,9 +179,15 @@ export default function PipelineNodeDetail({
               <p className="mt-2 text-xs leading-relaxed text-ink-mute">
                 {node?.kind === 'stage'
                   ? 'The stage is a navigational overview. Expand it to inspect each operation and any artifacts published for the selected run.'
-                  : node?.stateOnly
+                  : runStatus === 'not-run'
+                    ? 'This operation was not recorded for the selected run date.'
+                    : runStatus === 'state-only'
                     ? 'This operation updates pipeline state and does not publish a standalone document.'
-                    : 'No standalone artifact is attached to this node for the selected run. Its role in the process remains the same.'}
+                    : runStatus === 'expected-artifact-missing'
+                      ? 'The run was recorded, but the expected standalone artifact is missing.'
+                      : runStatus === 'parallel-dispatch'
+                        ? 'This operation dispatched parallel work. Expand it to inspect the persisted branch artifacts.'
+                        : 'No standalone artifact is attached to this node for the selected run. Its role in the process remains the same.'}
               </p>
             </div>
           </div>
