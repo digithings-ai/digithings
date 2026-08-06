@@ -21,7 +21,8 @@ BYOK settings UI, and handoff/seed logic.
 | `src/DigiChatSession.tsx` | The session shell: intro typewriter, thread, suggestions, quota/error banners, composer form. Controlled through a `DigiChatController` (`chat` prop). |
 | `src/useStreamingIntro.ts` | Character-streamed intro text hook. |
 | `src/components/MiniMarkdown.tsx` | react-markdown + remark-gfm renderer mapping nodes onto `.dc-md-*` classes; fenced ```mermaid → `MermaidBlock`. |
-| `src/components/ChatActivities.tsx` | Agent-step feed (`status` / `tool_call` / `tool_result` / `reasoning` / `trace`) rendered as one `.dc-activities` box. |
+| `src/activity-view.ts` | Pure projection of the `DigiChatActivity` wire vocabulary onto the shared chat family's props. The boundary adapter — no JSX, node-testable. |
+| `src/components/ChatActivities.tsx` | Agent-step feed, rendered on the shared `@digithings/web` chat primitives (see the mapping table below). Holds no mapping logic — that is `activity-view.ts`. |
 | `src/components/CopyButton.tsx` | Clipboard copy affordance (silently no-ops where the API is unavailable — cross-origin iframes). |
 | `src/components/DigiChatMark.tsx` | Brand mark / wordmark. |
 | `src/components/MermaidBlock.tsx` | Client-rendered mermaid SVG with view-source toggle. |
@@ -33,7 +34,8 @@ BYOK settings UI, and handoff/seed logic.
 
 - **Exports** (`src/index.ts`): `DigiChatSession`, `useStreamingIntro`,
   `CopyButton`, `DigiChatMark`/`DigiChatWordmark`, `ChatActivities`,
-  `MiniMarkdown` + the types in `src/types.ts`.
+  `MiniMarkdown`, `MermaidBlock`, `toCanonRows`/`outcomeMeta` +
+  the types in `src/types.ts` and `CanonActivityRow`.
 - **Class names are API.** Consumers style/target `.dc-*` and `.dt-*`/`.dtc-*`
   directly (digithings-web reuses `.dc-code-inline`, `.dc-mermaid-*`,
   `.dt-cur`; digichat layers `.dc-term-*` chrome around the widget). The
@@ -77,6 +79,47 @@ the session itself has no storage or routing knowledge.
   the animation-shorthand tie. Net visual delta: `.chat-cursor`'s
   `margin-left: 2px` — the same 2px the digichat app caret
   (`.dc-term-streaming::after`) already carries.
+- **`ChatActivities` — the agent chain (was gap 6).** The flat bordered
+  `.dc-activities` box is gone; every row is now a shared primitive, so the
+  embed shows the tool chain, the reasoning disclosure and its citations
+  instead of a list of prose lines:
+
+  | activity | primitive |
+  |---|---|
+  | `tool_call` | `<ChatToolCall status="running">` — bodyless, breathing |
+  | `tool_result` | `<ChatToolCall status="ok">` + a source list body |
+  | `trace` | `<ChatToolCall>` — bodyless step row |
+  | `reasoning` | `<ChatThinking>` disclosure (blob in `children`) |
+  | `brief` | `<ChatWidgetFrame variant="card">` |
+  | `status` | `<ChatMessage role="system">` — the `·` aside |
+
+  The wire-model → props mapping is `src/activity-view.ts` (pure, tested);
+  the component only renders. Three seams worth knowing:
+
+  1. **No timings exist.** `ActivitySpan` carries no duration, so
+     `ChatToolCall`'s `duration` slot — its head-right mono meta — is spent on
+     the outcome count (`3 notes` / `no hits`), which is what keeps a folded
+     result row honest about whether the search found anything.
+  2. **Citations start expanded**, everything else folded. `ChatToolCall`
+     renders no body while closed, so folding them would drop the sources from
+     the server markup entirely — invisible without client JS and to crawlers.
+     Citations are this product's central claim; reasoning and bare traces are
+     noise and stay folded.
+  3. **`status` rows arrive as prose.** By the time a withheld-documents or
+     failed-search outcome reaches the UI, its tool name and query have been
+     folded into a sentence upstream (`toDigiChatActivity` in digichat's
+     `lib/chat-activity.ts`). Recovering them would mean parsing prose, so
+     they render as system asides rather than as reconstructed tool rows. If
+     these ever need to render as real tool rows, widen the *protocol* — do
+     not parse strings here.
+
+  `.dc-act-*` selectors that no primitive needs any more (`-tool`, `-label`,
+  `-code`, `-query`, `-line`, `-check`, `-result`) were dropped from
+  `session.css` along with their markup; the survivors dress content nested
+  *inside* a primitive (the source list, reasoning blob, brief body). That
+  split is deliberate: no consumer `@source`s this package, so Tailwind
+  utilities authored here would never generate — only the primitives' own
+  utilities do, via each app's `@source ".../digiweb/web/src/components/chat"`.
 
 **Not adopted — primitive gaps (follow-ups for @digithings/web)**
 1. `ChatTranscript` has no chrome-less mode: `flat` only drops the shadow,
@@ -108,16 +151,17 @@ the session itself has no storage or routing knowledge.
 5. `ChatCodeBlock` always renders the figcaption caption row;
    `.dc-code-block` is a captionless `pre` with a floating hover copy chip.
    No variant matches, so `MiniMarkdown` keeps its own block.
-6. `ChatToolCall` / `ChatThinking` are per-call disclosure rows on `term-*`
-   tokens; `ChatActivities` renders one flat bordered `.dc-activities` box
-   whose `.dc-act-*` selectors are consumed API. The promoter's mapping
-   (tool_call/tool_result/trace → `ChatToolCall`, reasoning →
-   `ChatThinking`) changes DOM, look, and interaction wholesale — it needs
-   a product QA pass on digichat + digithings-web `/chat`, not a silent
-   internal swap.
+6. ~~`ChatToolCall` / `ChatThinking` vs the flat `.dc-activities` box.~~
+   **Closed** — see the agent-chain entry under *Adopted* above. The swap
+   changed DOM, look and interaction wholesale as predicted, so it is worth a
+   look on both surfaces before release; the `activity-view.ts` mapping and
+   the `ChatActivities` render tests pin the behaviour meanwhile.
 7. No primitive exists for the composer (`.dc-form` — asserted untouched by
    #1403 anyway), suggestions chips (`.dtc-chip`), status bar, or mermaid
-   figures.
+   figures. `ChatMarkdown` additionally renders no mermaid/LaTeX yet; until
+   that lands (in flight against `@digithings/web`) `MiniMarkdown` +
+   `MermaidBlock` remain the only diagram path on both surfaces and must not
+   be deleted — see the TODO in `MiniMarkdown.tsx`.
 
 **Consumer wiring** (done in #1418): digichat `src/app/globals.css` and
 digithings-web `app/globals.css` import `chat-core.css` + `chat-widgets.css`
