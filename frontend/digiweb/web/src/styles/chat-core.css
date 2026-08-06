@@ -1,3 +1,11 @@
+/* KaTeX's own layout sheet — ~1000 rules of metric-accurate spacing that
+   cannot be reproduced from tokens, so it is imported rather than rewritten;
+   the palette on top of it IS tokens (see the math section below). It must
+   sit above every rule in this file: @import is only legal before them.
+   katex is a dependency of @digithings/web and hoists to the workspace root,
+   so the bare specifier resolves for every app that imports this file. */
+@import "katex/dist/katex.min.css";
+
 /* ==========================================================================
    Chat core (@digithings/web) — the digichat turn grammar (canon §16).
    Owned by components/chat/*: <ChatTranscript> term-surface pane,
@@ -291,6 +299,154 @@
   color: var(--up);
 }
 
+/* ── mermaid diagram figure ───────────────────────────────────────────────
+   Same hairline box as .chat-md-code — a diagram is a fence that happened to
+   draw. Colour inside the SVG comes from mermaid themeVariables filled with
+   these same tokens (ChatMermaidBlock), so the only job here is the frame,
+   the fit, and a couple of belt-and-braces overrides for the chrome mermaid
+   emits with no theme variable of its own. */
+
+.chat-md-mermaid {
+  margin: 0.8rem 0;
+  border: 1px solid var(--hair);
+  border-radius: 9px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.chat-md-mermaid figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.chat-md-mermaid-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+/* The parse-failure caption borrows the negative-semantics token so a diagram
+   that could not be drawn says so without a second affordance. */
+.chat-md-mermaid[data-state="source"] figcaption > span:first-child {
+  color: var(--down);
+}
+
+.chat-md-mermaid-fig {
+  padding: 0.9rem;
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  animation: chat-mermaid-in 0.24s var(--ease) both;
+}
+
+.chat-md-mermaid-fig svg {
+  max-width: 100%;
+  height: auto;
+  background: transparent;
+}
+
+/* Edge labels and cluster titles are the two places mermaid still paints a
+   literal white plate under text; force them onto the surface token so the
+   light theme does not get a white patch on paper and the dark theme does not
+   get a white patch at all. */
+.chat-md-mermaid-fig .edgeLabel,
+.chat-md-mermaid-fig .edgeLabel rect,
+.chat-md-mermaid-fig .label-container {
+  fill: var(--surface);
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.chat-md-mermaid pre {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  overflow-x: auto;
+}
+
+.chat-md-mermaid code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre;
+}
+
+@keyframes chat-mermaid-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ── math (KaTeX) ─────────────────────────────────────────────────────────
+   The imported katex sheet lays glyphs out; everything visible here is a
+   token, so `$e^{i\pi}$` converts with [data-theme] like any other ink. */
+
+.chat-md .katex {
+  color: var(--ink);
+  font-size: 1.04em;
+}
+
+/* Display math is a block of its own — scrolls inside its box rather than
+   widening the turn (a long derivation must not stretch the transcript). */
+.chat-md .katex-display {
+  margin: 0.9rem 0;
+  padding: 0.15rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.chat-md .katex .mord,
+.chat-md .katex .mrel,
+.chat-md .katex .mbin,
+.chat-md .katex .mopen,
+.chat-md .katex .mclose,
+.chat-md .katex .mpunct {
+  color: inherit;
+}
+
+/* Rules (fraction bars, \overline, \sqrt) default to currentColor in katex —
+   pin them to ink so they never inherit a muted container colour. */
+.chat-md .katex .frac-line,
+.chat-md .katex .overline .overline-line,
+.chat-md .katex .underline .underline-line,
+.chat-md .katex .hline,
+.chat-md .katex .rule {
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+/* Unparseable TeX: KaTeX keeps the source, we tint it with the negative token
+   (ChatMarkdownSource passes errorColor: var(--down) for the same reason). */
+.chat-md .katex-error {
+  color: var(--down);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+}
+
+/* ── table scroll box ─────────────────────────────────────────────────────
+   Wide GFM tables scroll inside their own box; the .chat-md table combinator
+   above still owns the type. */
+.chat-md-table {
+  margin: 0.8rem 0;
+  overflow-x: auto;
+}
+
+.chat-md-table > table {
+  margin: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chat-cursor {
     animation: none;
@@ -298,5 +454,9 @@
 
   .chat-md-copy {
     transition: none;
+  }
+
+  .chat-md-mermaid-fig {
+    animation: none;
   }
 }
