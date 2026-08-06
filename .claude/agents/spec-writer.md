@@ -43,7 +43,7 @@ Emit a single markdown block ready for `gh issue create --body-file`:
 low | med | high
 
 ## Execution tier
-copilot | cursor | claude — <one-line justification tied to the decision tree>
+cursor | claude — <one-line justification tied to the decision tree>
 
 ## Acceptance criteria
 1. **Given** … **when** … **then** …
