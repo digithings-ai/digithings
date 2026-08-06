@@ -16,7 +16,7 @@
  * styles/chat-widgets.css (import it once app-wide; see the wiring note
  * there).
  */
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export type ChatToolCallStatus = "running" | "ok" | "error";
 
@@ -93,11 +93,24 @@ export function ChatToolCall({
   className,
 }: ChatToolCallProps) {
   const [ownOpen, setOwnOpen] = useState(defaultOpen);
+  // Tracks a real user toggle. Streaming rows keep a stable React key across
+  // tool_call → tool_result (see digichat-ui activity-view identityKey), so
+  // `defaultOpen` can flip true on settle without a remount — and useState
+  // only reads its initial argument. Adopt the new default until the reader
+  // has touched the control; after that, their choice wins.
+  const touched = useRef(false);
   const isOpen = open !== undefined ? open : ownOpen;
   const hasBody = Boolean(lines?.length) || (children !== undefined && children !== null);
 
+  useEffect(() => {
+    if (open !== undefined) return;
+    if (touched.current) return;
+    if (defaultOpen) setOwnOpen(true);
+  }, [defaultOpen, open]);
+
   const toggle = () => {
     const next = !isOpen;
+    touched.current = true;
     if (open === undefined) setOwnOpen(next);
     onOpenChange?.(next);
   };
