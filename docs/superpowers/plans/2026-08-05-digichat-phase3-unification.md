@@ -11,7 +11,7 @@
 
 **Goal (amended):** Ship digithings.ai `/chat` as native `@digithings/digichat-ui` + Pages Function digivault (`useStackChat` / `chatStream` / `functions/api/chat.ts`), with BYOK + handoff, on the free Cloudflare plan. No Containers merge gate.
 
-**Architecture (amended):** `DtNav` + `DigiChatSession` on Pages; `POST /api/chat` Pages Function; same-origin `chatHandoff`. DigiThings has **no Azure**. Containers scaffold is deferred.
+**Architecture (amended):** `DtNav` + `DigiChatSession` on Pages; `POST /api/chat` Pages Function; same-origin `chatHandoff`. DigiThings has **no Azure**. Containers scaffold is deferred. *(Superseded 2026-08-06 — the scaffold was deleted; see ADR-0018 historical note 4.)*
 
 **Tech Stack:** TypeScript, digithings-web static export + Pages Functions, Vitest, `@digithings/digichat-ui`.
 
