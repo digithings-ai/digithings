@@ -210,7 +210,8 @@ TelemetryFailureReporter: TypeAlias = Callable[[UUID, str], None]
 class TelemetryObserver(Protocol):
     """Synchronous sink boundary; implementations own buffering and persistence."""
 
-    def observe(self, record: TelemetryRecord) -> None: ...
+    def observe(self, record: TelemetryRecord) -> None:
+        raise NotImplementedError
 
 
 def emit_telemetry(
@@ -227,7 +228,7 @@ def emit_telemetry(
             try:
                 on_failure(_record_id(record), type(error).__name__)
             except Exception:
-                pass
+                return False
         return False
     return True
 
