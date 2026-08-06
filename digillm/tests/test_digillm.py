@@ -880,6 +880,13 @@ def test_create_with_retry_propagates_non_transient() -> None:
         client_mod._create_with_retry(fake_client, model="m", messages=[])
 
 
+def test_sdk_hidden_retries_remain_enabled_and_opaque() -> None:
+    """Attempt telemetry observes SDK create calls, not the SDK's internal HTTP retries."""
+    made = _capture_client_kwargs(digillm.get_client)
+    assert len(made) == 1
+    assert "max_retries" not in made[0]
+
+
 # ── Per-request overrides (contextvars) ──────────────────────────────────────
 
 

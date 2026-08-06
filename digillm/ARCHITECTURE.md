@@ -57,8 +57,44 @@ exception type may be recorded.
 `TelemetryObserver` is an injectable synchronous sink boundary. `emit_telemetry` catches sink
 failures and optionally reports only the record UUID and exception class, so telemetry cannot abort
 the caller's portfolio work. The module starts no threads, opens no connections, and writes no
-files on import. Task #1951 defines the vocabulary only: provider/cache/retry instrumentation and
-the durable DigiQuant writer are separate follow-up tasks.
+files on import. Task #1951 defines the vocabulary; Task #1955 adds the physical-attempt producer.
+The durable DigiQuant writer and logical-call purpose/parentage remain separate follow-up tasks.
+
+### Physical provider-attempt instrumentation
+
+**Purpose:** emit one typed `ProviderAttemptRecord` for every provider request visible at
+`digillm`'s transport boundary. **Reason:** aggregate usage counters collapse retries, failures,
+latency, served-model identity, and missing evidence, so provider reliability and cost cannot be
+reconciled. **Intent:** observe the incumbent provider behavior without changing retry counts,
+backoff, routing, cache order, provider selection, response parsing, or exceptions. **System
+contribution:** later Olympus persistence and reconciliation can distinguish provider-attempt
+effects from logical-call, node, and portfolio effects.
+
+`set_telemetry_observer(observer)` registers one process-wide sink, matching the existing startup
+registration used by usage telemetry and ensuring provider calls made in worker threads remain
+visible. The mutable logical-call UUID, attempt number, and next retry reason are held in a
+`ContextVar`, so concurrent invocations cannot share counters. Passing `None` disables emission.
+Observer failure, optional SDK metadata access, record construction, and delivery are all fail-soft;
+none can alter the provider result or raised exception. Prompt/response/search payloads, secrets,
+and exception messages never enter the record.
+
+The attempt producer covers:
+
+- each repository-visible `client.chat.completions.create(...)` invocation, including transient
+  retries and empty-response retries under one generated call UUID;
+- `client.responses.create(...)` in xAI web and X search; OpenRouter search delegates to
+  `completion()` and is therefore counted once;
+- streaming from request initiation through iterator exhaustion, recording success and final usage
+  only after exhaustion, failure on iteration errors, and cancellation on generator or asyncio
+  cancellation;
+- served model, token usage, and cost only when the SDK/provider supplies valid evidence; missing or
+  malformed optional evidence remains `None`, never zero.
+
+The OpenAI SDK's default `max_retries=2` remains enabled. Those internal HTTP retries occur below
+the repository-visible `create(...)` boundary and are opaque to this instrumentation. Therefore an
+attempt record means one observable SDK invocation, not proof of exactly one HTTP exchange. A
+canary test locks the SDK setting in place; changing or disabling it requires a separate measured
+decision. Cache hits produce no physical attempt record.
 
 DigiQuant migration `066_olympus_provider_telemetry.sql` owns the private normalized storage. Event
 times remain producer facts; the database adds `recorded_at` as its write clock. That schema is not

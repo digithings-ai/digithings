@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
+from openai import APITimeoutError
+from openai.types.chat import ChatCompletion
+from openai.types.chat import ChatCompletionMessage as OpenAIMessage
+from openai.types.chat.chat_completion import Choice
 from pydantic import ValidationError
 
 import digillm
+from digillm import client as client_mod
 from digillm.telemetry import (
     ArtifactRef,
     CacheStatus,
@@ -31,12 +40,59 @@ pytestmark = pytest.mark.unit
 NOW = datetime(2026, 8, 6, 12, tzinfo=UTC)
 
 
+class AttemptCollector(list[ProviderAttemptRecord]):
+    def observe(self, record: TelemetryRecord) -> None:
+        if isinstance(record, ProviderAttemptRecord):
+            self.append(record)
+
+
+@pytest.fixture(autouse=True)
+def _clean_client_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    digillm.clear_caches()
+    digillm.set_telemetry_observer(None)
+    for name in ("OPENAI_API_KEY", "XAI_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    yield
+    digillm.set_telemetry_observer(None)
+    digillm.clear_caches()
+
+
+def _completion(
+    content: str,
+    *,
+    model: str = "served-model",
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+) -> ChatCompletion:
+    response = ChatCompletion(
+        id="cmpl-telemetry",
+        created=0,
+        model=model,
+        object="chat.completion",
+        choices=[
+            Choice(
+                index=0,
+                finish_reason="stop",
+                message=OpenAIMessage(role="assistant", content=content),
+            )
+        ],
+    )
+    if prompt_tokens is not None or completion_tokens is not None:
+        response.usage = SimpleNamespace(  # type: ignore[assignment]
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            model_extra={},
+        )
+    return response
+
+
 def test_contracts_are_exported_from_package() -> None:
     assert digillm.NodeRunRecord is NodeRunRecord
     assert digillm.ProviderCallRecord is ProviderCallRecord
     assert digillm.ProviderAttemptRecord is ProviderAttemptRecord
     assert digillm.TelemetryObserver is TelemetryObserver
     assert digillm.emit_telemetry is emit_telemetry
+    assert digillm.set_telemetry_observer is client_mod.set_telemetry_observer
 
 
 def _node_run(**overrides: object) -> NodeRunRecord:
@@ -220,3 +276,408 @@ def test_emit_telemetry_reports_failure_without_raising() -> None:
     assert delivered is False
     assert observed == [node]
     assert failures == [(node.node_run_id, "RuntimeError")]
+
+
+def test_completion_emits_one_record_per_repository_retry() -> None:
+    timeout = APITimeoutError(request=MagicMock())
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [timeout, _completion("recovered")]
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        patch.object(client_mod, "_sleep_transient_retry", return_value=5.0),
+    ):
+        result = digillm.completion(
+            "openrouter/requested-model",
+            [{"role": "user", "content": "hello"}],
+        )
+
+    assert result.choices[0].message.content == "recovered"
+    assert [attempt.attempt_number for attempt in attempts] == [1, 2]
+    assert len({attempt.call_id for attempt in attempts}) == 1
+    assert [attempt.outcome for attempt in attempts] == [
+        ProviderAttemptOutcome.FAILED,
+        ProviderAttemptOutcome.SUCCEEDED,
+    ]
+    assert [attempt.retry_reason for attempt in attempts] == [
+        RetryReason.NOT_APPLICABLE,
+        RetryReason.TIMEOUT,
+    ]
+    assert attempts[0].error_type == "APITimeoutError"
+    assert attempts[1].requested_model == "openrouter/requested-model"
+    assert attempts[1].served_model == "served-model"
+    assert attempts[1].prompt_tokens is None
+    assert attempts[1].completion_tokens is None
+    assert attempts[1].cost_usd is None
+
+
+def test_exhausted_transient_retries_emit_every_attempt_and_preserve_error() -> None:
+    failures = [APITimeoutError(request=MagicMock()) for _ in range(12)]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = failures
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        patch.object(client_mod, "_sleep_transient_retry", return_value=5.0),
+        pytest.raises(APITimeoutError) as caught,
+    ):
+        digillm.completion("gpt-4o-mini", [{"role": "user", "content": "hello"}])
+
+    assert caught.value is failures[-1]
+    assert [attempt.attempt_number for attempt in attempts] == list(range(1, 13))
+    assert len({attempt.call_id for attempt in attempts}) == 1
+    assert attempts[0].retry_reason is RetryReason.NOT_APPLICABLE
+    assert all(attempt.retry_reason is RetryReason.TIMEOUT for attempt in attempts[1:])
+
+
+def test_empty_response_retry_keeps_one_call_and_monotonic_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(client_mod, "_EMPTY_RETRY_MAX", 1)
+    monkeypatch.setattr(client_mod.time, "sleep", lambda _delay: None)
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _completion(""),
+        _completion("healed"),
+    ]
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        result = digillm.completion(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hello"}],
+        )
+
+    assert result.choices[0].message.content == "healed"
+    assert [attempt.attempt_number for attempt in attempts] == [1, 2]
+    assert len({attempt.call_id for attempt in attempts}) == 1
+    assert attempts[1].retry_reason is RetryReason.EMPTY_RESPONSE
+
+
+def test_terminal_error_is_preserved_and_only_its_type_is_recorded() -> None:
+    failure = ValueError("secret response body")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = failure
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        pytest.raises(ValueError) as caught,
+    ):
+        digillm.completion("gpt-4o-mini", [{"role": "user", "content": "hello"}])
+
+    assert caught.value is failure
+    assert len(attempts) == 1
+    assert attempts[0].outcome is ProviderAttemptOutcome.FAILED
+    assert attempts[0].error_type == "ValueError"
+    assert "secret response body" not in attempts[0].model_dump_json()
+
+
+def test_broken_attempt_observer_does_not_change_completion() -> None:
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _completion("unchanged")
+
+    class BrokenObserver:
+        def observe(self, _record: TelemetryRecord) -> None:
+            raise RuntimeError("telemetry unavailable")
+
+    digillm.set_telemetry_observer(BrokenObserver())
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        result = digillm.completion(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hello"}],
+        )
+    assert result.choices[0].message.content == "unchanged"
+
+
+def test_cache_hit_does_not_emit_a_second_physical_attempt() -> None:
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _completion("cached")
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+    messages = [{"role": "user", "content": "hello"}]
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        first = digillm.completion("gpt-4o-mini", messages)
+        second = digillm.completion("gpt-4o-mini", messages)
+
+    assert first.choices[0].message.content == "cached"
+    assert second.choices[0].message.content == "cached"
+    assert fake_client.chat.completions.create.call_count == 1
+    assert len(attempts) == 1
+
+
+def test_process_observer_receives_attempt_from_worker_thread() -> None:
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _completion("threaded")
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            result = executor.submit(
+                digillm.completion,
+                "gpt-4o-mini",
+                [{"role": "user", "content": "hello"}],
+            ).result()
+
+    assert result.choices[0].message.content == "threaded"
+    assert len(attempts) == 1
+
+
+def _stream_chunk(
+    content: str | None,
+    *,
+    model: str = "stream-served-model",
+    usage: object | None = None,
+) -> MagicMock:
+    delta = SimpleNamespace(content=content, reasoning_content=None, tool_calls=None)
+    chunk = MagicMock()
+    chunk.choices = [SimpleNamespace(delta=delta)] if content is not None else []
+    chunk.model = model
+    chunk.usage = usage
+    return chunk
+
+
+def test_stream_attempt_finalizes_usage_after_exhaustion() -> None:
+    usage = SimpleNamespace(prompt_tokens=12, completion_tokens=3, model_extra={})
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = [
+        _stream_chunk("streamed"),
+        _stream_chunk(None, usage=usage),
+        _stream_chunk(None),
+    ]
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        result = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hello"}],
+            [],
+            execute_tool=lambda *_args: "",
+            stream_deltas=True,
+        )
+
+    assert result == "streamed"
+    assert len(attempts) == 1
+    assert attempts[0].outcome is ProviderAttemptOutcome.SUCCEEDED
+    assert attempts[0].served_model == "stream-served-model"
+    assert attempts[0].prompt_tokens == 12
+    assert attempts[0].completion_tokens == 3
+    assert attempts[0].cost_usd is None
+
+
+def test_stream_cancellation_closes_attempt_and_propagates() -> None:
+    def cancelling_stream() -> object:
+        yield _stream_chunk("partial")
+        raise GeneratorExit
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = cancelling_stream()
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        pytest.raises(GeneratorExit),
+    ):
+        digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hello"}],
+            [],
+            execute_tool=lambda *_args: "",
+            stream_deltas=True,
+        )
+
+    assert len(attempts) == 1
+    assert attempts[0].outcome is ProviderAttemptOutcome.CANCELLED
+    assert attempts[0].error_type is None
+
+
+def test_asyncio_cancellation_closes_stream_attempt_and_propagates() -> None:
+    def cancelling_stream() -> object:
+        yield _stream_chunk("partial")
+        raise asyncio.CancelledError
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = cancelling_stream()
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hello"}],
+            [],
+            execute_tool=lambda *_args: "",
+            stream_deltas=True,
+        )
+
+    assert len(attempts) == 1
+    assert attempts[0].outcome is ProviderAttemptOutcome.CANCELLED
+    assert attempts[0].error_type is None
+
+
+def test_stream_iteration_failure_closes_attempt_and_preserves_error() -> None:
+    failure = RuntimeError("private stream fragment")
+
+    def failing_stream() -> object:
+        yield _stream_chunk("partial")
+        raise failure
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = failing_stream()
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        pytest.raises(RuntimeError) as caught,
+    ):
+        digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hello"}],
+            [],
+            execute_tool=lambda *_args: "",
+            stream_deltas=True,
+        )
+
+    assert caught.value is failure
+    assert len(attempts) == 1
+    assert attempts[0].outcome is ProviderAttemptOutcome.FAILED
+    assert attempts[0].error_type == "RuntimeError"
+    assert "private stream fragment" not in attempts[0].model_dump_json()
+
+
+def test_stream_callback_failure_is_not_misattributed_to_provider() -> None:
+    failure = RuntimeError("consumer callback failed")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = [_stream_chunk("partial")]
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        pytest.raises(RuntimeError) as caught,
+    ):
+        digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "hello"}],
+            [],
+            execute_tool=lambda *_args: "",
+            on_tool_step=lambda *_args: (_ for _ in ()).throw(failure),
+            stream_deltas=True,
+        )
+
+    assert caught.value is failure
+    assert len(attempts) == 1
+    assert attempts[0].outcome is ProviderAttemptOutcome.CANCELLED
+    assert attempts[0].error_type is None
+
+
+@pytest.mark.parametrize(
+    ("search", "tool_type"),
+    ((digillm.web_search, "web_search"), (digillm.x_search, "x_search")),
+)
+def test_xai_search_transports_emit_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+    search: object,
+    tool_type: str,
+) -> None:
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    response = SimpleNamespace(
+        model="grok-served",
+        output_text="result",
+        output=[],
+        usage=SimpleNamespace(input_tokens=8, output_tokens=2, model_extra={}),
+    )
+    fake_client = MagicMock()
+    fake_client.responses.create.return_value = response
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        result = search("xai/grok-4", "query")  # type: ignore[operator]
+
+    assert result == ("result", [])
+    assert fake_client.responses.create.call_args.kwargs["tools"][0]["type"] == tool_type
+    assert len(attempts) == 1
+    assert attempts[0].provider == "xai"
+    assert attempts[0].requested_model == "xai/grok-4"
+    assert attempts[0].served_model == "grok-served"
+    assert attempts[0].prompt_tokens == 8
+    assert attempts[0].completion_tokens == 2
+
+
+def test_xai_search_failure_emits_attempt_and_preserves_fail_soft_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    fake_client = MagicMock()
+    fake_client.responses.create.side_effect = RuntimeError("private provider response")
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        result = digillm.web_search("xai/grok-4", "query")
+
+    assert result is None
+    assert len(attempts) == 1
+    assert attempts[0].outcome is ProviderAttemptOutcome.FAILED
+    assert attempts[0].error_type == "RuntimeError"
+    assert "private provider response" not in attempts[0].model_dump_json()
+
+
+def test_malformed_usage_evidence_cannot_change_search_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class MalformedResponse:
+        model = "grok-served"
+        output_text = "result"
+        output: list[object] = []
+
+        @property
+        def usage(self) -> object:
+            raise RuntimeError("malformed optional evidence")
+
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    fake_client = MagicMock()
+    fake_client.responses.create.return_value = MalformedResponse()
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        result = digillm.web_search("xai/grok-4", "query")
+
+    assert result == ("result", [])
+    assert len(attempts) == 1
+    assert attempts[0].prompt_tokens is None
+    assert attempts[0].completion_tokens is None
+    assert attempts[0].cost_usd is None
+
+
+def test_openrouter_search_is_not_double_counted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _completion(
+        "fact [source](https://example.com)"
+    )
+    attempts = AttemptCollector()
+    digillm.set_telemetry_observer(attempts)
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        result = digillm.openrouter_web_search("openrouter/perplexity/sonar", "query")
+
+    assert result == ("fact [source](https://example.com)", ["https://example.com"])
+    assert fake_client.chat.completions.create.call_count == 1
+    assert len(attempts) == 1

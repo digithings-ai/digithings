@@ -33,7 +33,9 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import functools
 import hashlib
 import json
 import logging
@@ -45,13 +47,25 @@ import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import ContextVar
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from typing import (  # score:allow untyped any — OpenAI message dict payloads are heterogeneous
     Any,
     TypedDict,
 )
+from uuid import UUID, uuid4
 
 from openai import OpenAI, Timeout
 from openai.types.chat import ChatCompletion
+
+from digillm.telemetry import (
+    ProviderAttemptOutcome,
+    ProviderAttemptRecord,
+    RetryReason,
+    TelemetryObserver,
+    emit_telemetry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -458,6 +472,204 @@ def clear_caches() -> None:
     _client_cache.clear()
 
 
+# ── Physical-attempt telemetry ───────────────────────────────────────────────
+
+_telemetry_observer: TelemetryObserver | None = None
+
+
+def set_telemetry_observer(observer: TelemetryObserver | None) -> None:
+    """Register a process-wide provider telemetry sink; pass ``None`` to disable."""
+    global _telemetry_observer
+    _telemetry_observer = observer
+
+
+@dataclass
+class _AttemptScope:
+    call_id: UUID
+    next_attempt_number: int = 1
+    next_retry_reason: RetryReason = RetryReason.NOT_APPLICABLE
+
+    def start(self) -> tuple[int, RetryReason, datetime]:
+        attempt_number = self.next_attempt_number
+        retry_reason = self.next_retry_reason
+        self.next_attempt_number += 1
+        self.next_retry_reason = RetryReason.UNKNOWN
+        return attempt_number, retry_reason, datetime.now(UTC)
+
+
+_attempt_scope: ContextVar[_AttemptScope | None] = ContextVar("digillm_attempt_scope", default=None)
+
+
+@contextlib.contextmanager
+def _logical_attempt_scope() -> Iterator[_AttemptScope]:
+    existing = _attempt_scope.get()
+    if existing is not None:
+        yield existing
+        return
+    scope = _AttemptScope(call_id=uuid4())
+    token = _attempt_scope.set(scope)
+    try:
+        yield scope
+    finally:
+        _attempt_scope.reset(token)
+
+
+def _with_logical_attempt_scope(function: Callable[..., Any]) -> Callable[..., Any]:
+    @functools.wraps(function)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        with _logical_attempt_scope():
+            return function(*args, **kwargs)
+
+    return wrapped
+
+
+def _provider_name(provider: str | None) -> str:
+    return provider or "default"
+
+
+def _retry_reason(error: Exception) -> RetryReason:
+    from openai import APIConnectionError, APITimeoutError, InternalServerError, RateLimitError
+
+    if isinstance(error, RateLimitError):
+        return RetryReason.RATE_LIMIT
+    if isinstance(error, APITimeoutError):
+        return RetryReason.TIMEOUT
+    if isinstance(error, APIConnectionError):
+        return RetryReason.CONNECTION_ERROR
+    if isinstance(error, InternalServerError):
+        return RetryReason.SERVER_ERROR
+    return RetryReason.UNKNOWN
+
+
+def _optional_nonnegative_int(value: Any) -> int | None:
+    return value if isinstance(value, int) and value >= 0 else None
+
+
+def _optional_attribute(value: Any, name: str) -> Any:
+    try:
+        return getattr(value, name, None)
+    except Exception:
+        return None
+
+
+def _response_usage(response: Any) -> tuple[int | None, int | None, Decimal | None]:
+    usage = _optional_attribute(response, "usage")
+    prompt_tokens = _optional_attribute(usage, "prompt_tokens")
+    if prompt_tokens is None:
+        prompt_tokens = _optional_attribute(usage, "input_tokens")
+    completion_tokens = _optional_attribute(usage, "completion_tokens")
+    if completion_tokens is None:
+        completion_tokens = _optional_attribute(usage, "output_tokens")
+    cost = _optional_attribute(usage, "cost")
+    if cost is None:
+        extra = _optional_attribute(usage, "model_extra")
+        if isinstance(extra, dict):
+            cost = extra.get("cost")
+    cost_usd: Decimal | None = None
+    if cost is not None:
+        try:
+            parsed_cost = Decimal(str(cost))
+        except (InvalidOperation, ValueError):
+            pass
+        else:
+            if parsed_cost.is_finite() and parsed_cost >= 0:
+                cost_usd = parsed_cost
+    return (
+        _optional_nonnegative_int(prompt_tokens),
+        _optional_nonnegative_int(completion_tokens),
+        cost_usd,
+    )
+
+
+@dataclass
+class _StreamEvidence:
+    model: str | None = None
+    usage: Any = None
+
+    def observe(self, chunk: Any) -> None:
+        chunk_model = _optional_attribute(chunk, "model")
+        if isinstance(chunk_model, str) and chunk_model:
+            self.model = chunk_model
+        chunk_usage = _optional_attribute(chunk, "usage")
+        if chunk_usage is not None:
+            self.usage = chunk_usage
+
+
+def _emit_attempt(
+    *,
+    scope: _AttemptScope,
+    attempt_number: int,
+    retry_reason: RetryReason,
+    provider: str,
+    requested_model: str,
+    started_at: datetime,
+    outcome: ProviderAttemptOutcome,
+    response: Any = None,
+    error: Exception | None = None,
+) -> None:
+    observer = _telemetry_observer
+    if observer is None:
+        return
+    try:
+        prompt_tokens, completion_tokens, cost_usd = _response_usage(response)
+        served_model = _optional_attribute(response, "model")
+        record = ProviderAttemptRecord(
+            attempt_id=uuid4(),
+            call_id=scope.call_id,
+            attempt_number=attempt_number,
+            provider=provider,
+            requested_model=requested_model,
+            served_model=served_model if isinstance(served_model, str) and served_model else None,
+            started_at=started_at,
+            finished_at=datetime.now(UTC),
+            outcome=outcome,
+            retry_reason=retry_reason,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=cost_usd,
+            error_type=type(error).__name__ if error is not None else None,
+        )
+        emit_telemetry(observer, record)
+    except Exception as telemetry_error:
+        logger.debug("attempt telemetry failed: %s", type(telemetry_error).__name__)
+
+
+def _responses_create_with_attempt(
+    client: OpenAI,
+    *,
+    provider: str,
+    requested_model: str,
+    **kwargs: Any,
+) -> Any:
+    with _logical_attempt_scope() as scope:
+        attempt_number, retry_reason, started_at = scope.start()
+        try:
+            response = client.responses.create(**kwargs)
+        except Exception as error:
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=provider,
+                requested_model=requested_model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.FAILED,
+                error=error,
+            )
+            raise
+        _emit_attempt(
+            scope=scope,
+            attempt_number=attempt_number,
+            retry_reason=retry_reason,
+            provider=provider,
+            requested_model=requested_model,
+            started_at=started_at,
+            outcome=ProviderAttemptOutcome.SUCCEEDED,
+            response=response,
+        )
+        return response
+
+
 # ── Usage observer ──────────────────────────────────────────────────────────────
 # digillm stays a leaf library (no digigraph/service imports), so it can't write into
 # a consumer's per-run usage accumulator directly. Instead the consuming app registers
@@ -543,7 +755,14 @@ def _sleep_transient_retry(delay: float, *, max_delay: float = 300.0) -> float:
     return min(delay * 2, max_delay)
 
 
-def _create_with_retry(client: OpenAI, **kwargs: Any) -> Any:
+def _create_with_retry(
+    client: OpenAI,
+    *,
+    _provider: str | None = None,
+    _requested_model: str | None = None,
+    _defer_success: bool = False,
+    **kwargs: Any,
+) -> Any:
     """Call ``client.chat.completions.create`` with backoff on transient errors.
 
     Retries on ``RateLimitError`` (429), ``InternalServerError`` (5xx),
@@ -562,20 +781,49 @@ def _create_with_retry(client: OpenAI, **kwargs: Any) -> Any:
     transient = (RateLimitError, InternalServerError, APIConnectionError, APITimeoutError)
     max_attempts = 12
     delay = 5.0
-    for attempt in range(max_attempts):
-        try:
-            return client.chat.completions.create(**kwargs)
-        except transient as exc:
-            if attempt >= max_attempts - 1:
-                raise
-            logger.warning(
-                "%s (attempt %d/%d): backing off %.1fs before retry",
-                type(exc).__name__,
-                attempt + 1,
-                max_attempts,
-                delay,
+    with _logical_attempt_scope() as scope:
+        requested_model = _requested_model or str(kwargs.get("model") or "unknown")
+        provider = _provider_name(_provider)
+        for attempt in range(max_attempts):
+            attempt_number, retry_reason, started_at = scope.start()
+            try:
+                response = client.chat.completions.create(**kwargs)
+            except Exception as error:
+                _emit_attempt(
+                    scope=scope,
+                    attempt_number=attempt_number,
+                    retry_reason=retry_reason,
+                    provider=provider,
+                    requested_model=requested_model,
+                    started_at=started_at,
+                    outcome=ProviderAttemptOutcome.FAILED,
+                    error=error,
+                )
+                if not isinstance(error, transient) or attempt >= max_attempts - 1:
+                    raise
+                scope.next_retry_reason = _retry_reason(error)
+                logger.warning(
+                    "%s (attempt %d/%d): backing off %.1fs before retry",
+                    type(error).__name__,
+                    attempt + 1,
+                    max_attempts,
+                    delay,
+                )
+                delay = _sleep_transient_retry(delay)
+                continue
+            if _defer_success:
+                return response, scope, attempt_number, retry_reason, started_at
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=provider,
+                requested_model=requested_model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.SUCCEEDED,
+                response=response,
             )
-            delay = _sleep_transient_retry(delay)
+            return response
     raise RuntimeError("chat completion failed after all retry attempts")  # pragma: no cover
 
 
@@ -841,6 +1089,7 @@ _with_openrouter_fallback = _with_openrouter_cost_controls
 
 
 @_traceable("completion")
+@_with_logical_attempt_scope
 def completion(
     model: str,
     messages: list[ChatCompletionMessage],
@@ -922,7 +1171,12 @@ def completion(
     kwargs = _with_openrouter_cost_controls(kwargs, provider)
 
     try:
-        r: ChatCompletion = _create_with_retry(client, **kwargs)
+        r: ChatCompletion = _create_with_retry(
+            client,
+            _provider=provider,
+            _requested_model=model,
+            **kwargs,
+        )
     except Exception as exc:  # only the 410 case is soft; everything else re-raises
         # xAI deprecated Live Search (HTTP 410) in favour of the Agent Tools API
         # (:func:`web_search`). Fail soft: drop the deprecated extra_body and retry once
@@ -932,7 +1186,15 @@ def completion(
                 "xAI rejected search_parameters (410 deprecated); retrying without Live Search"
             )
             kwargs.pop("extra_body", None)
-            r = _create_with_retry(client, **kwargs)
+            attempt_scope = _attempt_scope.get()
+            if attempt_scope is not None:
+                attempt_scope.next_retry_reason = RetryReason.UNKNOWN
+            r = _create_with_retry(
+                client,
+                _provider=provider,
+                _requested_model=model,
+                **kwargs,
+            )
         else:
             raise
 
@@ -954,7 +1216,15 @@ def completion(
             _EMPTY_RETRY_DELAY,
         )
         time.sleep(_EMPTY_RETRY_DELAY)  # intentional short backoff on empty
-        r = _create_with_retry(client, **retry_kwargs)
+        attempt_scope = _attempt_scope.get()
+        if attempt_scope is not None:
+            attempt_scope.next_retry_reason = RetryReason.EMPTY_RESPONSE
+        r = _create_with_retry(
+            client,
+            _provider=provider,
+            _requested_model=model,
+            **retry_kwargs,
+        )
 
     _u = getattr(r, "usage", None)
     _cached_tokens = getattr(getattr(_u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
@@ -1070,6 +1340,7 @@ def openrouter_web_search(
     return text, _urls_from_grounding_text(text)
 
 
+@_with_logical_attempt_scope
 def web_search(
     model: str,
     query: str,
@@ -1102,7 +1373,10 @@ def web_search(
         tool["filters"] = {"allowed_domains": list(allowed_domains)}
     try:
         client = get_client_for_model(model)
-        resp = client.responses.create(
+        resp = _responses_create_with_attempt(
+            client,
+            provider=provider,
+            requested_model=model,
             model=model_id,
             input=[{"role": "user", "content": query}],
             tools=[tool],
@@ -1124,6 +1398,7 @@ def web_search(
     return text, sources
 
 
+@_with_logical_attempt_scope
 def x_search(
     model: str,
     query: str,
@@ -1147,7 +1422,10 @@ def x_search(
         return None
     try:
         client = get_client_for_model(model)
-        resp = client.responses.create(
+        resp = _responses_create_with_attempt(
+            client,
+            provider=provider,
+            requested_model=model,
             model=model_id,
             input=[{"role": "user", "content": query}],
             tools=[{"type": "x_search", "max_search_results": max_results}],
@@ -1203,6 +1481,7 @@ def _message_from_response(resp: ChatCompletion) -> tuple[str, list[ToolCallDict
     return content, tc_list
 
 
+@_with_logical_attempt_scope
 def _stream_completion_one_turn(
     model: str,
     messages: list[ChatCompletionMessage],
@@ -1238,52 +1517,135 @@ def _stream_completion_one_turn(
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
 
-    stream = _create_with_retry(client, **kwargs)
+    stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
+        client,
+        _provider=provider,
+        _requested_model=model,
+        _defer_success=True,
+        **kwargs,
+    )
     content_parts: list[str] = []
     tool_calls_accum: dict[int, ToolCallDict] = {}
+    evidence = _StreamEvidence()
 
-    for chunk in stream:
-        if not chunk.choices:
-            continue
-        delta = chunk.choices[0].delta
-        if not delta:
-            continue
-
-        reasoning_piece = getattr(delta, "reasoning_content", None)
-        if reasoning_piece is not None and on_reasoning_delta:
-            on_reasoning_delta(str(reasoning_piece))
-
-        if getattr(delta, "content", None):
-            piece = delta.content or ""
-            accumulated = "".join(content_parts)
-            content_parts.append(piece)
-            # Some providers resend the full message in the final chunk; emit only
-            # the new suffix so callers never see duplicated content.
-            if on_content_delta and piece:
-                if accumulated and piece.startswith(accumulated) and len(piece) > len(accumulated):
-                    piece = piece[len(accumulated) :]
-                elif accumulated and piece == accumulated:
-                    piece = ""
-                if piece:
-                    on_content_delta(piece)
-
-        for tc in getattr(delta, "tool_calls", None) or []:
-            idx = getattr(tc, "index", None)
-            if idx is None:
-                continue
-            acc = tool_calls_accum.setdefault(
-                idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+    stream_iterator = iter(stream)
+    while True:
+        try:
+            chunk = next(stream_iterator)
+        except StopIteration:
+            break
+        except (GeneratorExit, asyncio.CancelledError):
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=_provider_name(provider),
+                requested_model=model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.CANCELLED,
+                response=evidence,
             )
-            if getattr(tc, "id", None):
-                acc["id"] = tc.id
-            fn = getattr(tc, "function", None)
-            if fn:
-                if getattr(fn, "name", None):
-                    acc["function"]["name"] = (acc["function"]["name"] or "") + (fn.name or "")
-                if getattr(fn, "arguments", None):
-                    acc["function"]["arguments"] = (acc["function"]["arguments"] or "") + (
-                        fn.arguments or ""
-                    )
+            raise
+        except Exception as error:
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=_provider_name(provider),
+                requested_model=model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.FAILED,
+                response=evidence,
+                error=error,
+            )
+            raise
+
+        evidence.observe(chunk)
+        try:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if not delta:
+                continue
+
+            reasoning_piece = getattr(delta, "reasoning_content", None)
+            if reasoning_piece is not None and on_reasoning_delta:
+                on_reasoning_delta(str(reasoning_piece))
+
+            if getattr(delta, "content", None):
+                piece = delta.content or ""
+                accumulated = "".join(content_parts)
+                content_parts.append(piece)
+                # Some providers resend the full message in the final chunk; emit only
+                # the new suffix so callers never see duplicated content.
+                if on_content_delta and piece:
+                    if (
+                        accumulated
+                        and piece.startswith(accumulated)
+                        and len(piece) > len(accumulated)
+                    ):
+                        piece = piece[len(accumulated) :]
+                    elif accumulated and piece == accumulated:
+                        piece = ""
+                    if piece:
+                        on_content_delta(piece)
+
+            for tc in getattr(delta, "tool_calls", None) or []:
+                idx = getattr(tc, "index", None)
+                if idx is None:
+                    continue
+                acc = tool_calls_accum.setdefault(
+                    idx,
+                    {
+                        "id": "",
+                        "type": "function",
+                        "function": {"name": "", "arguments": ""},
+                    },
+                )
+                if getattr(tc, "id", None):
+                    acc["id"] = tc.id
+                fn = getattr(tc, "function", None)
+                if fn:
+                    if getattr(fn, "name", None):
+                        acc["function"]["name"] = (acc["function"]["name"] or "") + (fn.name or "")
+                    if getattr(fn, "arguments", None):
+                        acc["function"]["arguments"] = (acc["function"]["arguments"] or "") + (
+                            fn.arguments or ""
+                        )
+        except (GeneratorExit, asyncio.CancelledError):
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=_provider_name(provider),
+                requested_model=model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.CANCELLED,
+                response=evidence,
+            )
+            raise
+        except Exception:
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=_provider_name(provider),
+                requested_model=model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.CANCELLED,
+                response=evidence,
+            )
+            raise
+    _emit_attempt(
+        scope=scope,
+        attempt_number=attempt_number,
+        retry_reason=retry_reason,
+        provider=_provider_name(provider),
+        requested_model=model,
+        started_at=started_at,
+        outcome=ProviderAttemptOutcome.SUCCEEDED,
+        response=evidence,
+    )
 
     content = "".join(content_parts).strip()
     if not tool_calls_accum:
