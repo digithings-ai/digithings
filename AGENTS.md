@@ -14,7 +14,7 @@ Claude Code loads `CLAUDE.md` at session start. Cursor agents use `.cursor/rules
 
 ### Dependency install
 
-The VM update script creates `.venv`, runs `scripts/install-workspace.sh --with-dev` (put `.venv/bin` on `PATH` first — the script calls `python`, not `python3`), installs `digiquant[nautilus]`, `litellm[proxy]`, and root `npm ci` plus Linux native bindings for digichat Vitest (see `.github/workflows/test-digichat.yml`).
+The VM update script creates `.venv`, runs `scripts/install-workspace.sh --with-dev` (put `.venv/bin` on `PATH` first — the script calls `python`, not `python3`), installs `digiquant[nautilus]`, `litellm[proxy]`, and root `npm ci` (which now supplies the Linux native bindings digichat Vitest needs — `package-lock.json` carries every installable platform entry, so no hand-install step is required).
 
 Activate before Python commands: `source .venv/bin/activate` or `PATH="$PWD/.venv/bin:$PATH"`.
 
