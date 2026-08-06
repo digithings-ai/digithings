@@ -11,6 +11,29 @@ on:
       - "frontend/digiweb/web/**"
       - "frontend/digiweb/design/**"
       - "scripts/build-digithings.sh"
+      # The build script's callees. Watching the caller alone leaves the gap this
+      # check exists to close, and the two files below fail in different places.
+      # `write-build-info.sh` runs inside the real Cloudflare build under
+      # `set -euo pipefail` (scripts/build-digithings.sh:66) and the build hard-fails
+      # when the stamp it writes is absent — a bug there breaks the production deploy.
+      # `check_deploy_freshness.py` is never reached by the real deploy (Cloudflare's
+      # build command is `bash scripts/build-digithings.sh`, which does not call it);
+      # it is the evaluator behind this workflow's "Assert deploy build stamp" step and
+      # smoke-site.yml's daily probe, so a bug there breaks detection instead — every
+      # production probe turns into a false verdict while the site builds fine.
+      # Neither is untested today: ci.yml's ruff_and_scripts filter matches scripts/**,
+      # so tests/scripts/ runs on both. What that suite cannot reach is this job — the
+      # real npm install, the Next build, and the writer running *in situ*. The unit
+      # suite never executes a build script at all (it only reads their text) and runs
+      # the writer standalone, with an absolute output path and a controlled env. So a
+      # stamp that breaks only under the build script's `cd` to the repo root — which is
+      # what makes the relative `dist/build-info.json` resolve, and what the `git
+      # rev-parse` fallback reads — or under the `rm -rf dist` at build-digithings.sh:55,
+      # which lands *after* the Next build and is pinned today by a text assertion rather
+      # than by execution, or only once fed through the evaluator, passes there and fails
+      # on Cloudflare.
+      - "scripts/write-build-info.sh"
+      - "scripts/check_deploy_freshness.py"
       - ".github/workflows/deploy-digithings-cloudflare.yml"
       # Root packaging manifests are what make Cloudflare's build image auto-run a
       # dependency install ahead of the build command, so a change to one can break the
