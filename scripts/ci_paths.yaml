@@ -64,6 +64,13 @@ digifetch:
 
 digichat:
   - frontend/digichat/**
+  # #1941 moved digichat's whole render path into these two packages —
+  # MiniMarkdown delegates to @digithings/web's ChatMarkdown, and the activity
+  # feed renders on its chat primitives. Without them an edit to
+  # ChatMarkdownSource or ChatMermaidBlock changed the embed transcript and
+  # fired no digichat lint, test or build.
+  - frontend/digichat-ui/**
+  - frontend/digiweb/web/**
   - frontend/digiweb/design/**
   - package.json
   - package-lock.json
@@ -79,6 +86,9 @@ olympus:
 web:
   - frontend/digithings-web/**
   - frontend/digiquant-web/**
+  # digithings-web /chat renders digichat-ui's DigiChatSession and imports its
+  # session.css + cursor.css, so a change there is a change to this app.
+  - frontend/digichat-ui/**
   - frontend/digiweb/web/**
   - frontend/digiweb/design/**
   - package.json

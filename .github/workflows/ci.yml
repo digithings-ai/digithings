@@ -89,6 +89,8 @@ jobs:
               - '.github/workflows/test-digifetch.yml'
             digichat:
               - 'frontend/digichat/**'
+              - 'frontend/digichat-ui/**'
+              - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
@@ -102,6 +104,7 @@ jobs:
             web:
               - 'frontend/digithings-web/**'
               - 'frontend/digiquant-web/**'
+              - 'frontend/digichat-ui/**'
               - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
               - 'package.json'

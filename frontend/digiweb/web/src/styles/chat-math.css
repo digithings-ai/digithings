@@ -1,0 +1,70 @@
+/* ==========================================================================
+   Chat math (@digithings/web) — KaTeX layout + the token palette over it.
+   ==========================================================================
+
+   Split out of chat-core.css deliberately. The @import below pulls KaTeX's
+   own stylesheet, which drags in 60 font files — about 1 MB of assets. While
+   it lived in chat-core.css, every app importing that sheet paid for it:
+   olympus shipped 1.03 MB of KaTeX fonts and 407 `.katex` selectors inside an
+   11 MB static export while declaring no katex dependency and rendering no
+   math at all, and the design reference did the same.
+
+   So import this sheet ONLY from an app that actually renders math — today
+   digichat and digithings-web, both of which render <DigiChatSession> and so
+   reach remark-math/rehype-katex. An app that only uses <ChatMarkdown>'s
+   children path (olympus, via SafeMarkdown) must not import it.
+
+   Import it AFTER chat-core.css: the `.chat-md .katex` rules below are the
+   token palette laid over KaTeX's metric-accurate layout, and @import is only
+   legal before other rules, so it has to head its own file.
+
+   katex is a dependency of @digithings/web and hoists to the workspace root,
+   so the bare specifier resolves from every consumer.
+   ========================================================================== */
+@import "katex/dist/katex.min.css";
+
+/* ── math (KaTeX) ─────────────────────────────────────────────────────────
+   The imported katex sheet lays glyphs out; everything visible here is a
+   token, so `$e^{i\pi}$` converts with [data-theme] like any other ink. */
+
+.chat-md .katex {
+  color: var(--ink);
+  font-size: 1.04em;
+}
+
+/* Display math is a block of its own — scrolls inside its box rather than
+   widening the turn (a long derivation must not stretch the transcript). */
+.chat-md .katex-display {
+  margin: 0.9rem 0;
+  padding: 0.15rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.chat-md .katex .mord,
+.chat-md .katex .mrel,
+.chat-md .katex .mbin,
+.chat-md .katex .mopen,
+.chat-md .katex .mclose,
+.chat-md .katex .mpunct {
+  color: inherit;
+}
+
+/* Rules (fraction bars, \overline, \sqrt) default to currentColor in katex —
+   pin them to ink so they never inherit a muted container colour. */
+.chat-md .katex .frac-line,
+.chat-md .katex .overline .overline-line,
+.chat-md .katex .underline .underline-line,
+.chat-md .katex .hline,
+.chat-md .katex .rule {
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+/* Unparseable TeX: KaTeX keeps the source, we tint it with the negative token
+   (ChatMarkdownSource passes errorColor: var(--down) for the same reason). */
+.chat-md .katex-error {
+  color: var(--down);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+}
