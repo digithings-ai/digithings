@@ -31,16 +31,28 @@ on:
       # matches the repo-root file alone — verified against the sibling Python entries,
       # which no nested pyproject.toml has ever triggered (#1702, #1708, #1712 each
       # edited 11 of them and fired neither deploy check). Do not read these two lines
-      # as covering more. The workspace manifests are a wider, separate gap: the
-      # `npm install` above resolves all eight workspaces (`frontend/*`,
-      # `frontend/digiweb/*`) and only four match the globs above, while 31 of the 52
-      # commits that have touched a workspace manifest left the root lock alone. The
-      # sites built here import only @digithings/design and @digithings/web, both
-      # covered — but an unresolvable manifest in any workspace fails the root install
-      # before either build starts. `**/package.json` is not the fix; it would fire
-      # both deploy checks on every unrelated workspace.
+      # as covering more: each workspace manifest is matched, or not, one by one.
       - "package.json"
       - "package-lock.json"
+      # No per-workspace manifest is listed here, and that is a derived result rather
+      # than an omission. This site's build closure, read off the @digithings/* deps, is
+      # digiquant-web → design + web and olympus → design + web, with web → design — and
+      # all four of those manifests already fall under the directory globs at the top of
+      # this list. The root lock would not stand in for them if they did not: 28 of the
+      # 45 commits that have touched one of the eight manifests named by today's
+      # `workspaces` globs left package-lock.json alone.
+      #
+      # The digithings check carries one extra line, frontend/digichat-ui/package.json,
+      # because digithings-web imports digichat-ui at build time; nothing built here
+      # does. Re-derive the closure before adding a glob rather than mirroring that
+      # file — `**/package.json` was rejected precisely because it would fire this check
+      # on digichat and digiweb/reference, which this site never builds.
+      #
+      # Residual, deliberate: the root `npm install` above resolves all eight
+      # workspaces, so an unresolvable manifest in one outside that closure still fails
+      # this build. frontend/digichat/package.json is covered elsewhere (ci.yml's
+      # `digichat` filter runs a root `npm ci`); frontend/digiweb/reference/package.json
+      # sits in no path filter in this repo and stays unwatched.
   workflow_dispatch:
 
 concurrency:
