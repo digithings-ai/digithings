@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 // a reader can check: the licence (root LICENSE, MIT), the module count (the
 // shared modules registry in @digithings/web — four core plus four support are
 // shipping; digistore and digilink carry tier: "roadmap", so the lede says
-// "eight shipping … plus two more marked roadmap" rather than the flat "ten"
+// "nine shipping … plus two more marked roadmap" rather than the flat "eleven"
 // the homepage uses. A page whose thesis is that every claim is checkable
 // cannot fold two unbuilt modules into a headline count), the
 // single compose file (root docker-compose.yml), provider credentials the stack
@@ -98,7 +98,7 @@ export default function AboutPage() {
             </>
           }
         >
-          digithings is an open-source, modular AI infrastructure repository. Eight shipping modules
+          digithings is an open-source, modular AI infrastructure repository. Nine shipping modules
           — orchestration, quant research, retrieval, chat, auth, tracing, heartbeat and audit, and
           the shared library the rest sit on — plus two more marked roadmap in the registry rather
           than quietly counted as built. You run them on your own

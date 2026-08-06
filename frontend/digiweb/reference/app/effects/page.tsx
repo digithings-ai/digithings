@@ -106,7 +106,7 @@ export default function EffectsPage() {
 
       <section className="section-block" id="module-graph">
         <p className="kicker">{"// scrolly module graph"}</p>
-        <h2 className="title">Ten modules, walked one by one.</h2>
+        <h2 className="title">Eleven modules, walked one by one.</h2>
         <p className="section-copy">
           The digithings.ai convergence animation — the architecture story behind the hero. The
           graph pins to the viewport while scroll advances the focus node by node; incident edges
