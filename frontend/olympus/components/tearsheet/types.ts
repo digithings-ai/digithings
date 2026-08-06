@@ -71,6 +71,12 @@ export interface PortfolioReturnPoint {
   returnPct: number;
 }
 
+export interface BenchmarkComparison {
+  ticker: string;
+  returnPct: number;
+  series: Array<{ date: string; returnPct: number }>;
+}
+
 export type PerformanceReturnsSource = 'persisted' | 'derived' | 'mixed' | 'unavailable';
 
 export interface OlympusTearsheet {
@@ -79,6 +85,7 @@ export interface OlympusTearsheet {
   benchmarkReturnPct: number | null;
   relativeReturnPct: number | null;
   benchmarkTicker: string;
+  benchmarkComparisons: BenchmarkComparison[];
   returnsSource: PerformanceReturnsSource;
   metricsAsOf: string | null;
   inceptionDate: string | null;
