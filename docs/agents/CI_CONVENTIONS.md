@@ -66,7 +66,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `deploy-digiquant-cloudflare.yml` | Deploy: digiquant.io build check | PR (digiquant.io assets), dispatch | Gate/validate `scripts/build-digiquant.sh` (ADR-0012); primary deploy is Cloudflare Pages watching `main` | Working | digiquant.io assets |
 | `agent-pr-autolabel.yml` | Agent: PR autolabel | workflow_run (CI) | Add `automerge-agent` to low-risk agent-branch PRs once CI is green | Working | none |
 | `agent-pr-automerge.yml` | Agent: PR auto-merge | pull_request, workflow_run (CI) | Enable squash auto-merge for PRs labeled `automerge-agent` | Working | none |
-| `agent-pr-finalizer.yml` | Agent: PR finalizer | schedule (daily 07:00), dispatch | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path (copilot/* handled by gh-aw lifecycle) | Working | none |
+| `agent-pr-finalizer.yml` | Agent: PR finalizer | schedule (daily 07:00), dispatch | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path | Working | none |
 | `agent-dispatch-replay.yml` | Agent: dispatch replay | dispatch only | Re-fire `exec:*` dispatch for issues labeled at creation time (GitHub skips `issues:labeled` for `gh issue create` labels) | Working (on-demand) | none |
 
 ---
@@ -77,6 +77,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 |-------------------|---------|---------------------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | agent-claude.yml, agent-claude-review.yml, agent-claude-dispatch.yml, pipeline-continuous-improvement.yml, pipeline-provider-review.yml | Optional — features disabled when absent |
 | `CURSOR_API_KEY` | agent-pr-finalizer.yml | Optional — Cursor fix dispatch skipped when absent |
+| `DIGITHINGS_PROJECT_TOKEN` | project routing/status workflows, CI failure triage, PR finalizer, scheduled maintenance | Required for cross-project updates; guarded features skip when absent |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | atlas-baseline, atlas-delta, atlas-monthly, digiquant-prices | Required for production runs |
 | `GEMINI_API_KEY` | atlas-baseline, atlas-delta, atlas-monthly | Required for Atlas/Hermes LLM calls |
 | `OLLAMA_API_KEY` | atlas-baseline, atlas-delta, atlas-monthly | Required for reasoning tier (phases 7, 7D) |
