@@ -57,8 +57,9 @@ import type { DigiChatActivity, VaultHitSummary } from "../types";
 function SourceList({ sources }: { sources: VaultHitSummary[] }) {
   return (
     <ul className="dc-act-hits">
-      {sources.map((hit) => (
-        <li key={hit.path}>
+      {/* path is not unique — two chunks of one vault document share it. */}
+      {sources.map((hit, i) => (
+        <li key={`${hit.path}-${i}`}>
           <span className="dc-act-hit-title">{hit.title}</span>
           {hit.tier ? <span className="dc-act-hit-tier">{hit.tier}</span> : null}
           {typeof hit.year === "number" ? (
