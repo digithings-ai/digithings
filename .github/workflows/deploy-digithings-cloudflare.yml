@@ -8,6 +8,35 @@ on:
   pull_request:
     paths:
       - "frontend/digithings-web/**"
+      # digithings-web imports @digithings/digichat-ui — <DigiChatMark> in DtNav.tsx,
+      # <DigiChatSession> on the /chat route, and its stylesheets in globals.css — so it
+      # is a build input to this site, and has been since #1384. PR #1490 edited
+      # frontend/digichat-ui/src/DigiChatSession.tsx alongside digichat-only files,
+      # matched no glob here, and ran no deploy build check; #1859 repeated it. Judge that
+      # by the PR's whole file set, not by a commit: a filter sees the union of the PR's
+      # paths, so a digichat-ui commit that rides along with a digithings-web edit does
+      # fire this check and proves nothing either way.
+      #
+      # The miss is silent because no other job in CI runs a production `next build` of
+      # digithings-web. test-web.yml lints it (`eslint .`) and runs vitest; the only
+      # `run build` invocations in .github/workflows/ are digichat's and olympus's. So a
+      # `next build`-only failure — a "use client" boundary violation, a crash while
+      # prerendering the static export — is caught here or nowhere.
+      #
+      # One entry, not a workspace sweep. What belongs here is the closure of what
+      # scripts/build-digithings.sh compiles: digithings-web, plus its transitive workspace
+      # deps @digithings/design, @digithings/web, and this. All four are now listed. The
+      # digiquant sibling needs no equivalent entry — its closure is digiquant-web +
+      # olympus + design + web, already complete, and neither app consumes digichat-ui
+      # (scripts/ci_paths.yaml's `olympus` filter records that half; the digiquant-web half
+      # is verified by there being no import of it anywhere in that app). The same file's
+      # `web` filter already lists frontend/digichat-ui/** for the reason above — added in
+      # #1948, for the lint/test lane only. Do not read this entry as "watch every
+      # workspace": the root `npm install` resolves all eight, but gating both checks on
+      # all eight fires them on every unrelated workspace, which is the trade #1956
+      # declines for `**/package.json`. tests/scripts/test_deploy_build_inputs.py derives
+      # both closures from the manifests and asserts each filter covers its own.
+      - "frontend/digichat-ui/**"
       - "frontend/digiweb/web/**"
       - "frontend/digiweb/design/**"
       - "scripts/build-digithings.sh"
