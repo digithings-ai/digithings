@@ -92,29 +92,24 @@ on:
       # frontend/digichat-ui/package.json also touched frontend/digithings-web/**. This
       # closes a structural hole before it bites. It is not the fix for an incident.
       #
-      # What follows is this site's build closure, read off the @digithings/* deps:
-      # digithings-web → design + digichat-ui + web, digichat-ui → web, web → design.
-      # Three of those four are already covered by the directory globs above. digichat-ui
-      # is not, and digithings-web imports it at BUILD time — its stylesheets at
-      # app/globals.css:25-26 and <DigiChatMark> at components/DtNav.tsx:14.
-      # `**/package.json` is not the fix: it would fire both deploy checks on every
-      # unrelated workspace, digigraph's vendored echarts manifest included.
+      # This site's build closure, read off the @digithings/* deps, is digithings-web →
+      # design + digichat-ui + web, digichat-ui → web, web → design. All four are covered
+      # by the directory globs at the top of this list — digichat-ui by the entry added
+      # there, which supersedes the `frontend/digichat-ui/package.json` line #1956 added
+      # here: a manifest glob is a strict subset of the directory glob, so keeping both
+      # would leave a dead entry. `**/package.json` is still not the fix: it would fire
+      # both deploy checks on every unrelated workspace, digigraph's vendored echarts
+      # manifest included.
       #
-      # Two residuals, both deliberate. (1) The root `npm install` resolves all eight
-      # workspaces, so an unresolvable manifest OUTSIDE this closure still breaks this
-      # build. Four manifests sit outside it, and three are covered by a lane that runs
-      # its own root install — frontend/digichat by ci.yml's `digichat`,
-      # frontend/digiquant-web by its `web`, frontend/olympus by its `olympus`. The
-      # fourth, frontend/digiweb/reference/package.json, is in no path filter in this
-      # repo: of the eight it is the one manifest watched by nothing, and an
-      # unresolvable range there fails this build (verified — ETARGET out of the root
-      # install). Left out because it is in no site's closure; add it the day that
-      # stops being an acceptable trade. (2) Only digichat-ui's manifest is watched,
-      # not its source, so a change to its components still reaches digithings.ai with
-      # this check silent; ci.yml notes the same blind spot above its frontend-canon
-      # guard. Widening to `frontend/digichat-ui/**` is the defensible next step, left
-      # out here only to keep this change to manifests.
-      - "frontend/digichat-ui/package.json"
+      # Residual, deliberate: the root `npm install` resolves all eight workspaces, so an
+      # unresolvable manifest OUTSIDE this closure still breaks this build. Four manifests
+      # sit outside it, and three are covered by a lane that runs its own root install —
+      # frontend/digichat by ci.yml's `digichat`, frontend/digiquant-web by its `web`,
+      # frontend/olympus by its `olympus`. The fourth,
+      # frontend/digiweb/reference/package.json, is in no path filter in this repo: of the
+      # eight it is the one manifest watched by nothing, and an unresolvable range there
+      # fails this build (verified — ETARGET out of the root install). Left out because it
+      # is in no site's closure; add it the day that stops being an acceptable trade.
   workflow_dispatch:
 
 concurrency:

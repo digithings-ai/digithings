@@ -49,20 +49,24 @@ on:
       # PR granularity, 17 of the 38 PRs that have touched one of the eight left
       # package-lock.json out of the PR entirely.
       #
-      # The digithings check carries one extra line, frontend/digichat-ui/package.json,
-      # because digithings-web imports digichat-ui at build time; nothing built here
-      # does. Re-derive the closure before adding a glob rather than mirroring that
-      # file — `**/package.json` was rejected precisely because it would fire this check
-      # on digichat and digiweb/reference, which this site never builds.
+      # The digithings check carries one extra entry, frontend/digichat-ui/**, because
+      # digithings-web imports digichat-ui at build time; nothing built here does. (It
+      # began as frontend/digichat-ui/package.json in #1956 and was widened to the whole
+      # directory in #1966, which supersedes the manifest line.) Re-derive the closure
+      # before adding a glob rather than mirroring that file — `**/package.json` was
+      # rejected precisely because it would fire this check on digichat and
+      # digiweb/reference, which this site never builds.
       #
       # Residual, deliberate: the root `npm install` above resolves all eight
       # workspaces, so an unresolvable manifest in one outside that closure still fails
       # this build. Four sit outside it. Three are covered by a lane that runs its own
       # root install — frontend/digichat and frontend/digithings-web by ci.yml's
       # `digichat` and `web`, and frontend/digichat-ui by the digithings deploy check,
-      # which carries that exact glob and runs a byte-identical root `npm install`. Note
-      # what that last one is: a coupling, not a guarantee. Narrow or drop the digichat-ui
-      # entry over there and this site silently loses its only cover for it. The fourth,
+      # whose frontend/digichat-ui/** glob covers that manifest and which runs a
+      # byte-identical root `npm install`. Note what that last one is: a coupling, not a
+      # guarantee. Narrow or drop the digichat-ui entry over there and this site silently
+      # loses its only cover for it — though since #1966 that narrowing now fails
+      # tests/scripts/test_deploy_build_inputs.py rather than passing quietly. The fourth,
       # frontend/digiweb/reference/package.json, is in no path filter in this repo — of
       # the eight it is the one manifest watched by nothing.
   workflow_dispatch:
