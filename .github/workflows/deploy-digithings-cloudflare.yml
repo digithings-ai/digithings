@@ -44,10 +44,14 @@ on:
       - "package-lock.json"
       # The root lock does not stand in for those manifests. Counted at PR granularity —
       # the unit a `paths:` filter actually sees — 17 of the 38 PRs that have touched one
-      # of the eight left package-lock.json out of the PR entirely, and 8 of the 38
-      # matched no glob in either deploy filter. PR #1385 is the clean exhibit: a
-      # one-file PR changing only frontend/digichat/package.json, on which neither deploy
-      # check ran. Do NOT cite 92ab99b6 for this, as an earlier draft did — it looks like
+      # of the eight left package-lock.json out of the PR entirely. A further 8 of the 38
+      # would match no glob in either deploy filter *as those filters stand today*: a
+      # counterfactual, and a floor rather than a count, because the filters' own
+      # contents have changed across that span — the very trap the paragraph above
+      # warns about, so do not restate it as history. The one case verified against the
+      # runs API is PR #1385: a one-file PR changing only
+      # frontend/digichat/package.json, on which neither deploy check ran.
+      # Do NOT cite 92ab99b6 for this, as an earlier draft did — it looks like
       # a tidy one-file commit, but it shipped inside PR #1505 alongside
       # package-lock.json and 15 other files, and that PR's digiquant check ran and
       # passed. Commits are the wrong unit here; develop carries merges, not squashes.
