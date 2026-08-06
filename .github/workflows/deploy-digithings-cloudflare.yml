@@ -20,6 +20,15 @@ on:
       - "pyproject.toml"
       - "requirements.txt"
       - "setup.py"
+      # The npm manifests break the deploy the same way, by a more direct route: the
+      # build script itself installs from the root lock (`npm install` at
+      # scripts/build-digithings.sh:15), so a bad resolution there fails the build with
+      # no frontend file touched — no Cloudflare auto-detection needed. PR #1949 was the
+      # near miss: -1646/+176 lines of package-lock.json, and the digiquant sibling of
+      # this check never fired at all. Root-anchored on purpose — a workspace
+      # package.json under frontend/** is already covered by the globs above.
+      - "package.json"
+      - "package-lock.json"
   workflow_dispatch:
 
 concurrency:
