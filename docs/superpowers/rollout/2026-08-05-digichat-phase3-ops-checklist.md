@@ -19,7 +19,8 @@
    - `CORE_SUPABASE_ANON_KEY`
 2. Deploy digithings-web (build mirrors `frontend/digithings-web/functions` → repo-root `functions/`).
 3. No `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` required for `/chat`.
-4. Optional deferred: Workers Paid + [`frontend/digichat-cloudflare/`](../../../frontend/digichat-cloudflare/README.md) if later promoting to Containers.
+4. Optional deferred: Workers Paid + `frontend/digichat-cloudflare/` if later promoting to Containers.
+   *Superseded 2026-08-06 — that scaffold was deleted unused; see ADR-0018 historical note 4.*
 
 ### Local
 

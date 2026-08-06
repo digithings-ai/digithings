@@ -25,8 +25,12 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed` for customers) st
 1. Original 0018: digichat app under `digithings.ai/chat/*` with `DIGICHAT_BASE_PATH=/chat`.
 2. Midday Phase 3 amendment: `/chat` Pages shell + iframe → Containers `/embed` (blocked on Workers Paid).
 3. Evening amendment: native digichat-ui + Pages Function (this revision).
-
-Deferred scaffold: [`frontend/digichat-cloudflare/`](../../frontend/digichat-cloudflare/README.md) if DigiThings later adopts Workers Paid and wants one digichat Node for marketing + embeds.
+4. **2026-08-06:** the deferred `frontend/digichat-cloudflare/` Containers scaffold (and its
+   `Dockerfile.digichat-cloudflare`) was **deleted**. It was never deployed — no
+   `digithings-digichat` Workers app was ever created, every `[[routes]]` block stayed
+   commented out, and no workflow built the image — while its `wrangler` devDependency kept
+   five `workerd` platform binaries in the root lockfile. Recover it from git history if
+   DigiThings later adopts Workers Paid and wants one digichat Node for marketing + embeds.
 
 ## Production configuration
 
