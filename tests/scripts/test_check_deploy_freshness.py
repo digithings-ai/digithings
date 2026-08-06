@@ -293,6 +293,12 @@ def test_build_check_validates_the_stamp_it_just_wrote(workflow_path: Path) -> N
     assert "scripts/check_deploy_freshness.py" in runs
 
 
+def _trigger_paths(workflow_path: Path) -> list[str]:
+    # PyYAML resolves a bare top-level `on:` key to the boolean True (YAML 1.1), so
+    # the trigger block is not reachable under the string "on".
+    return _workflow(workflow_path)[True]["pull_request"]["paths"]
+
+
 @pytest.mark.parametrize("workflow_path", _BUILD_CHECK_WORKFLOWS, ids=lambda p: p.name)
 @pytest.mark.parametrize(
     "callee", ["scripts/write-build-info.sh", "scripts/check_deploy_freshness.py"]
@@ -306,7 +312,23 @@ def test_build_check_watches_the_files_it_runs(workflow_path: Path, callee: str)
     glob and ran neither check; likewise ``check_deploy_freshness.py``, the evaluator
     both the "Assert deploy build stamp" step and the daily probe call.
     """
-    # PyYAML resolves a bare top-level `on:` key to the boolean True (YAML 1.1), so
-    # the trigger block is not reachable under the string "on".
-    triggers = _workflow(workflow_path)[True]
-    assert callee in triggers["pull_request"]["paths"]
+    assert callee in _trigger_paths(workflow_path)
+
+
+@pytest.mark.parametrize("workflow_path", _BUILD_CHECK_WORKFLOWS, ids=lambda p: p.name)
+@pytest.mark.parametrize("manifest", ["pyproject.toml", "requirements.txt", "setup.py"])
+def test_build_check_watches_the_root_packaging_manifests(
+    workflow_path: Path, manifest: str
+) -> None:
+    """The #1714 globs, pinned for the same reason as the callees above.
+
+    Cloudflare's build image auto-detects languages from the repo root and runs
+    ``pip install .`` *before* the configured build command, so a root manifest can
+    freeze a site without a frontend file being touched — #1714 edited only the root
+    pyproject.toml and uv.lock and both sites silently built nothing for three days
+    with every PR green. Each workflow's own comment records that; nothing enforced it.
+
+    Deliberately not exhaustive: ``package.json``/``package-lock.json`` are the same
+    class and are added by #1956, so they belong on this list once that merges.
+    """
+    assert manifest in _trigger_paths(workflow_path)

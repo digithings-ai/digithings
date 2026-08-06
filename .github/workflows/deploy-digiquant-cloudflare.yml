@@ -29,9 +29,10 @@ on:
       # stamp that breaks only under the build script's `cd` to the repo root — which is
       # what makes the relative `dist/build-info.json` resolve, and what the `git
       # rev-parse` fallback reads — or only once fed through the evaluator, passes there
-      # and fails on Cloudflare. This script's `rm -rf dist` is a pre-build clean at :15,
-      # ~70 lines ahead of the writer, so the teardown-ordering hazard the digithings
-      # sibling of this comment names does not exist here.
+      # and fails on Cloudflare. The teardown-ordering hazard the digithings sibling of
+      # this comment names does not exist here: build-digiquant.sh clears dist/ before
+      # `npm install`, not after the builds, so nothing can delete a stamp written once
+      # the exports are assembled.
       - "scripts/write-build-info.sh"
       - "scripts/check_deploy_freshness.py"
       - ".github/workflows/deploy-digiquant-cloudflare.yml"
