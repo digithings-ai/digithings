@@ -143,6 +143,8 @@ which `scripts/build-digiquant.sh` copies to the **dist root** — Cloudflare Pa
 ignores `_headers` files below the output root, so a copy under `dist/olympus/`
 would never apply in production (#674).
 The dashboard CSP is scoped to `/olympus*`; landing pages keep Google Fonts working.
+Its `connect-src` permits Supabase reads over HTTPS and Realtime subscriptions over
+secure WebSockets (`wss://*.supabase.co`).
 Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
 
 **Deploy freshness (#1759):** `scripts/write-build-info.sh` writes
