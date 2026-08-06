@@ -31,6 +31,7 @@ pytestmark = pytest.mark.unit
 @pytest.fixture(autouse=True)
 def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear module-global caches and provider env vars before each test."""
+    previous_usage_observer = client_mod._usage_observer
     digillm.clear_caches()
     digillm.set_usage_observer(None)
     for var in (
@@ -51,7 +52,7 @@ def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
     ):
         monkeypatch.delenv(var, raising=False)
     yield
-    digillm.set_usage_observer(None)
+    digillm.set_usage_observer(previous_usage_observer)
     digillm.clear_caches()
 
 

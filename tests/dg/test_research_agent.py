@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from digigraph.graph.research_agent import (
@@ -13,6 +15,8 @@ from digigraph.graph.research_agent import (
     run_research_agent,
 )
 from pydantic import BaseModel, Field, ValidationError
+
+from digillm import CallPurpose, ProviderCallContextHandle
 
 
 class _SampleOutput(BaseModel):
@@ -243,6 +247,43 @@ class TestRunResearchAgent:
         assert second_messages[-2]["role"] == "assistant"
         assert second_messages[-1]["role"] == "user"
         assert "did not validate" in second_messages[-1]["content"]
+
+    def test_structured_repair_links_to_rejected_call(self) -> None:
+        bad = json.dumps({"regime": "x"})
+        good = json.dumps({"regime": "x", "confidence": 0.4})
+        call_ids = [uuid4(), uuid4()]
+        contexts: list[dict[str, object]] = []
+
+        @contextmanager
+        def capture_context(**kwargs: object):
+            contexts.append(kwargs)
+            yield ProviderCallContextHandle(last_call_id=call_ids[len(contexts) - 1])
+
+        with (
+            patch(
+                "digigraph.graph.research_agent.completion_text",
+                side_effect=[bad, good],
+            ),
+            patch(
+                "digigraph.graph.research_agent._usage.logical_call_context",
+                side_effect=capture_context,
+            ),
+        ):
+            run_research_agent(
+                skill_text="x",
+                phase_inputs={},
+                shared_context={},
+                output_model=_SampleOutput,
+                model="test-model",
+                max_retries=1,
+            )
+
+        assert [context["purpose"] for context in contexts] == [
+            CallPurpose.STRUCTURED_COMPLETION,
+            CallPurpose.STRUCTURED_REPAIR,
+        ]
+        assert contexts[0]["parent_call_id"] is None
+        assert contexts[1]["parent_call_id"] == call_ids[0]
 
     def test_raises_validation_error_after_exhausting_retries(self) -> None:
         bad = json.dumps({"regime": "x"})

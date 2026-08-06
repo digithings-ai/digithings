@@ -10,11 +10,14 @@ digillm entry points and assert correct wiring.
 from __future__ import annotations
 
 import builtins
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
-from digigraph import llm_client
+from digigraph import llm_client, usage
+from digillm import CallPurpose, NoArtifactReason, ProviderCallContextHandle
 
 
 @pytest.mark.unit
@@ -55,6 +58,52 @@ class TestCompletion:
         assert kwargs["response_format"] == rf
         assert kwargs["tool_choice"] == "auto"
 
+    def test_real_node_context_injects_generic_logical_metadata(self) -> None:
+        node_run_id = uuid4()
+        observed: dict[str, object] = {}
+
+        @contextmanager
+        def capture_context(**kwargs: object):
+            observed.update(kwargs)
+            yield ProviderCallContextHandle()
+
+        with (
+            usage.call_context(node_run_id=node_run_id),
+            usage.logical_call_context(
+                purpose=CallPurpose.STRUCTURED_COMPLETION,
+                no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+            ),
+            patch.object(llm_client, "resolve_request_model", return_value="m"),
+            patch.object(llm_client, "_digillm_provider_call_context", capture_context),
+            patch.object(llm_client, "_digillm_completion", return_value=MagicMock()),
+        ):
+            llm_client.completion("model", [])
+
+        assert observed == {
+            "node_run_id": node_run_id,
+            "purpose": CallPurpose.STRUCTURED_COMPLETION,
+            "parent_call_id": None,
+            "artifacts": (),
+            "no_artifact_reason": NoArtifactReason.CONSUMED_INLINE,
+            "follow_up_purpose": None,
+            "follow_up_artifacts": (),
+            "follow_up_no_artifact_reason": None,
+        }
+
+    def test_missing_node_context_does_not_fabricate_detailed_metadata(self) -> None:
+        with (
+            usage.logical_call_context(
+                purpose=CallPurpose.STRUCTURED_COMPLETION,
+                no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+            ),
+            patch.object(llm_client, "resolve_request_model", return_value="m"),
+            patch.object(llm_client, "_digillm_provider_call_context") as context,
+            patch.object(llm_client, "_digillm_completion", return_value=MagicMock()),
+        ):
+            llm_client.completion("model", [])
+
+        context.assert_not_called()
+
 
 @pytest.mark.unit
 class TestCompletionText:
@@ -68,7 +117,9 @@ class TestCompletionText:
     def test_returns_stripped_first_choice_content(self) -> None:
         with (
             patch.object(llm_client, "resolve_request_model", return_value="m"),
-            patch.object(llm_client, "_digillm_completion", return_value=self._resp("  hi there  ")),
+            patch.object(
+                llm_client, "_digillm_completion", return_value=self._resp("  hi there  ")
+            ),
         ):
             out = llm_client.completion_text("model", [{"role": "user", "content": "x"}])
         assert out == "hi there"
@@ -76,7 +127,9 @@ class TestCompletionText:
     def test_empty_choices_returns_empty_string(self) -> None:
         with (
             patch.object(llm_client, "resolve_request_model", return_value="m"),
-            patch.object(llm_client, "_digillm_completion", return_value=self._resp(None, empty=True)),
+            patch.object(
+                llm_client, "_digillm_completion", return_value=self._resp(None, empty=True)
+            ),
         ):
             assert llm_client.completion_text("model", []) == ""
 
@@ -95,9 +148,7 @@ class TestRunTools:
     def test_no_callback_is_non_streaming_with_parallel_safe(self) -> None:
         with (
             patch.object(llm_client, "resolve_request_model", return_value="m"),
-            patch(
-                "digigraph.orchestration.registry.list_tool_names", return_value=["a", "b"]
-            ),
+            patch("digigraph.orchestration.registry.list_tool_names", return_value=["a", "b"]),
             patch.object(llm_client, "_digillm_run_tools", return_value="done") as rt,
         ):
             out = llm_client.run_tools(
@@ -150,3 +201,12 @@ def test_llm_client_wires_digillm_usage_observer() -> None:
     from digigraph import usage
 
     assert _digillm_client._usage_observer is usage.record
+
+
+@pytest.mark.unit
+def test_llm_client_wires_digillm_detailed_observer() -> None:
+    import digillm.client as _digillm_client
+
+    from digigraph import usage
+
+    assert _digillm_client._telemetry_observer is usage.DETAILED_USAGE_OBSERVER

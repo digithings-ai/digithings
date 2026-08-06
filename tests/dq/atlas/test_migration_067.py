@@ -143,14 +143,66 @@ def test_cache_hit_can_have_zero_attempts_but_other_success_cannot(sql: str) -> 
     assert "outcome <> 'succeeded' OR attempt_count > 0" in normalized
 
 
+def test_calls_require_exactly_one_artifact_disposition(sql: str) -> None:
+    body = _table_body(sql, "olympus_provider_calls")
+    normalized = " ".join(body.split())
+    assert "jsonb_array_length(artifacts) > 0 AND no_artifact_reason IS NULL" in normalized
+    assert "jsonb_array_length(artifacts) = 0 AND no_artifact_reason IS NOT NULL" in normalized
+
+
+def test_failed_calls_require_sanitized_error_type(sql: str) -> None:
+    body = _table_body(sql, "olympus_provider_calls")
+    normalized = " ".join(body.split())
+    assert "outcome = 'failed' AND error_type IS NOT NULL" in normalized
+    assert "outcome <> 'failed' AND error_type IS NULL" in normalized
+
+
+@pytest.mark.parametrize("table", ("olympus_provider_calls", "olympus_provider_attempts"))
+def test_provider_identifiers_have_length_bounds(sql: str, table: str) -> None:
+    body = " ".join(_table_body(sql, table).split())
+    assert "length(requested_model) BETWEEN 1 AND 256" in body
+    assert "error_type IS NULL OR length(error_type) BETWEEN 1 AND 200" in body
+
+
 @pytest.mark.parametrize(
     ("table", "column", "values"),
     (
         ("olympus_node_runs", "outcome", ("started", "succeeded", "failed", "cancelled")),
         (
             "olympus_provider_calls",
+            "purpose",
+            (
+                "initial_generation",
+                "chat_completion",
+                "structured_completion",
+                "structured_repair",
+                "tool_selection",
+                "tool_follow_up",
+                "web_grounding",
+                "x_grounding",
+                "tool_loop",
+                "web_search",
+                "x_search",
+                "embedding",
+            ),
+        ),
+        (
+            "olympus_provider_calls",
             "cache_status",
             ("bypassed", "hit", "miss", "unavailable"),
+        ),
+        (
+            "olympus_provider_calls",
+            "no_artifact_reason",
+            (
+                "consumed_inline",
+                "tool_dispatch",
+                "validation_rejected",
+                "no_output",
+                "call_failed",
+                "call_cancelled",
+                "unknown",
+            ),
         ),
         (
             "olympus_provider_attempts",

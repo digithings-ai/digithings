@@ -15,8 +15,14 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validato
 class CallPurpose(StrEnum):
     """Why a logical provider call exists."""
 
+    INITIAL_GENERATION = "initial_generation"
     CHAT_COMPLETION = "chat_completion"
     STRUCTURED_COMPLETION = "structured_completion"
+    STRUCTURED_REPAIR = "structured_repair"
+    TOOL_SELECTION = "tool_selection"
+    TOOL_FOLLOW_UP = "tool_follow_up"
+    WEB_GROUNDING = "web_grounding"
+    X_GROUNDING = "x_grounding"
     TOOL_LOOP = "tool_loop"
     WEB_SEARCH = "web_search"
     X_SEARCH = "x_search"
@@ -30,6 +36,18 @@ class CacheStatus(StrEnum):
     HIT = "hit"
     MISS = "miss"
     UNAVAILABLE = "unavailable"
+
+
+class NoArtifactReason(StrEnum):
+    """Why a logical call has no immutable artifact reference."""
+
+    CONSUMED_INLINE = "consumed_inline"
+    TOOL_DISPATCH = "tool_dispatch"
+    VALIDATION_REJECTED = "validation_rejected"
+    NO_OUTPUT = "no_output"
+    CALL_FAILED = "call_failed"
+    CALL_CANCELLED = "call_cancelled"
+    UNKNOWN = "unknown"
 
 
 class NodeRunOutcome(StrEnum):
@@ -123,15 +141,31 @@ class ProviderCallRecord(TimedTelemetryModel):
     node_run_id: UUID
     parent_call_id: UUID | None = None
     purpose: CallPurpose
-    requested_model: Annotated[str, Field(min_length=1)]
+    requested_model: Annotated[str, Field(min_length=1, max_length=256)]
     cache_status: CacheStatus
     outcome: ProviderCallOutcome
     attempt_count: Annotated[int, Field(ge=0)]
     artifacts: tuple[ArtifactRef, ...] = ()
+    no_artifact_reason: NoArtifactReason | None = None
+    error_type: Annotated[str, Field(min_length=1, max_length=200)] | None = None
 
     @model_validator(mode="after")
     def validate_lifecycle(self) -> ProviderCallRecord:
         _validate_finished_state(self.outcome.value, self.finished_at)
+        if bool(self.artifacts) == (self.no_artifact_reason is not None):
+            raise ValueError("a logical call requires either artifacts or one no-artifact reason")
+        if self.outcome is ProviderCallOutcome.FAILED:
+            if self.error_type is None:
+                raise ValueError("a failed logical call requires a sanitized error type")
+            if self.no_artifact_reason is not NoArtifactReason.CALL_FAILED:
+                raise ValueError("a failed logical call requires the call_failed disposition")
+        elif self.error_type is not None:
+            raise ValueError("only a failed logical call can carry an error type")
+        if (
+            self.outcome is ProviderCallOutcome.CANCELLED
+            and self.no_artifact_reason is not NoArtifactReason.CALL_CANCELLED
+        ):
+            raise ValueError("a cancelled logical call requires the call_cancelled disposition")
         if (
             self.outcome is ProviderCallOutcome.SUCCEEDED
             and self.cache_status is not CacheStatus.HIT
@@ -150,14 +184,14 @@ class ProviderAttemptRecord(TimedTelemetryModel):
     call_id: UUID
     attempt_number: Annotated[int, Field(ge=1)]
     provider: Annotated[str, Field(min_length=1)]
-    requested_model: Annotated[str, Field(min_length=1)]
+    requested_model: Annotated[str, Field(min_length=1, max_length=256)]
     served_model: Annotated[str, Field(min_length=1)] | None = None
     outcome: ProviderAttemptOutcome
     retry_reason: RetryReason
     prompt_tokens: Annotated[int, Field(ge=0)] | None = None
     completion_tokens: Annotated[int, Field(ge=0)] | None = None
     cost_usd: Annotated[Decimal, Field(ge=0)] | None = None
-    error_type: Annotated[str, Field(min_length=1)] | None = None
+    error_type: Annotated[str, Field(min_length=1, max_length=200)] | None = None
 
     @model_validator(mode="after")
     def validate_lifecycle(self) -> ProviderAttemptRecord:
@@ -217,6 +251,7 @@ __all__ = [
     "ArtifactRef",
     "CacheStatus",
     "CallPurpose",
+    "NoArtifactReason",
     "NodeRunOutcome",
     "NodeRunRecord",
     "ProviderAttemptOutcome",

@@ -58,7 +58,41 @@ exception type may be recorded.
 failures and optionally reports only the record UUID and exception class, so telemetry cannot abort
 the caller's portfolio work. The module starts no threads, opens no connections, and writes no
 files on import. Task #1951 defines the vocabulary; Task #1955 adds the physical-attempt producer.
-The durable DigiQuant writer and logical-call purpose/parentage remain separate follow-up tasks.
+Task #1963 adds logical-call lifecycle and parentage. Full run/node/agent/ticker propagation and
+the durable DigiQuant writer remain separate follow-up tasks.
+
+### Logical provider-call instrumentation
+
+**Purpose:** emit one terminal `ProviderCallRecord` for each logical invocation, including cache
+hits, tool-loop turns, grounding, and structured repair. **Reason:** physical attempts prove that
+transport work occurred but cannot explain why it existed, whether a cache answered it, which
+call caused a follow-up, or what consumed the result. **Intent:** connect provider work to generic
+research purpose and artifact disposition without importing DigiGraph, Olympus, ticker, or
+portfolio semantics into this leaf library. **System contribution:** consumers can reconcile
+logical research operations with physical reliability and cost evidence while preserving the
+existing provider behavior.
+
+`provider_call_context(...)` supplies a real `node_run_id`, closed `CallPurpose`, optional parent,
+and exactly one successful disposition: immutable `ArtifactRef` values or a typed
+`NoArtifactReason`. The context is optional. Calls without it retain incumbent aggregate and
+physical-attempt behavior but do not fabricate a required node identity. Mutable call IDs, attempt
+counters, retry reasons, and tool-follow-up lineage remain context-local; the registered observer
+is process-wide so worker-thread attempts remain visible.
+
+The outermost public invocation owns finalization. Nested wrappers, including OpenRouter search
+through `completion()`, contribute to that one logical call rather than double-counting it. Each
+tool-loop turn receives a fresh call ID and attempt counter; a follow-up references the preceding
+selection call. Cache hits are successful zero-attempt calls with `CacheStatus.HIT`; direct search,
+tool, live-search, and BYOK paths are explicitly bypassed. Failures and cancellations override any
+prospective artifact disposition with `CALL_FAILED` or `CALL_CANCELLED`, and failures retain only
+the sanitized exception class.
+
+Logical telemetry is observational and fail-soft. Record construction, optional provider evidence,
+and observer delivery cannot alter cache ordering, retries/backoff, routing, tool execution,
+return values, or raised exceptions. Unknown purpose or disposition must use the closed `UNKNOWN`
+value rather than being silently omitted. Rollback is to stop injecting `provider_call_context`;
+physical attempts and strict contracts remain intact. Task 1.4 owns complete
+run/node/agent/ticker propagation, and Task 1.5 owns durable buffering, flush, and reconciliation.
 
 ### Physical provider-attempt instrumentation
 

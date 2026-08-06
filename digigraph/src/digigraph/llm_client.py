@@ -19,20 +19,31 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any  # score:allow untyped any — heterogeneous LLM tool/step payloads
+from contextlib import contextmanager
+from typing import (
+    Any,  # score:allow untyped any — heterogeneous LLM tool/step payloads
+    Iterator,
+)
 
 from digillm import (  # re-exported: grounding pre-passes
+    CallPurpose,
     ChatCompletionMessage,
     JsonSchemaResponseFormat,
+    NoArtifactReason,
+    ProviderCallContextHandle,
     ToolArguments,
     ToolDefinition,
-    openrouter_web_search,
-    web_search,
-    x_search,
 )
 from digillm import completion as _digillm_completion
+from digillm import openrouter_web_search as _digillm_openrouter_web_search
+from digillm import (
+    provider_call_context as _digillm_provider_call_context,
+)
 from digillm import run_tools as _digillm_run_tools
+from digillm import set_telemetry_observer as _set_telemetry_observer
 from digillm import set_usage_observer as _set_usage_observer
+from digillm import web_search as _digillm_web_search
+from digillm import x_search as _digillm_x_search
 from openai.types.chat import ChatCompletion
 
 from digigraph import usage as _usage
@@ -55,6 +66,47 @@ __all__ = [
 # digigraph.usage.start() activates a run; registered here because llm_client is the
 # module every digigraph LLM call imports.
 _set_usage_observer(_usage.record)
+_set_telemetry_observer(_usage.DETAILED_USAGE_OBSERVER)
+
+
+@contextmanager
+def _logical_call_scope(
+    default_purpose: CallPurpose,
+    default_no_artifact_reason: NoArtifactReason,
+    *,
+    follow_up_purpose: CallPurpose | None = None,
+    follow_up_no_artifact_reason: NoArtifactReason | None = None,
+) -> Iterator[ProviderCallContextHandle]:
+    """Bridge generic DigiGraph metadata only when a real node identity is available."""
+    node_run_id, metadata = _usage.provider_call_metadata()
+    if node_run_id is None:
+        yield metadata.handle if metadata is not None else ProviderCallContextHandle()
+        return
+    if metadata is None:
+        with _digillm_provider_call_context(
+            node_run_id=node_run_id,
+            purpose=default_purpose,
+            no_artifact_reason=default_no_artifact_reason,
+            follow_up_purpose=follow_up_purpose,
+            follow_up_no_artifact_reason=follow_up_no_artifact_reason,
+        ) as handle:
+            yield handle
+        return
+    with _digillm_provider_call_context(
+        node_run_id=node_run_id,
+        purpose=metadata.purpose,
+        parent_call_id=metadata.parent_call_id,
+        artifacts=metadata.artifacts,
+        no_artifact_reason=metadata.no_artifact_reason,
+        follow_up_purpose=metadata.follow_up_purpose,
+        follow_up_artifacts=metadata.follow_up_artifacts,
+        follow_up_no_artifact_reason=metadata.follow_up_no_artifact_reason,
+    ) as handle:
+        metadata.handle.last_call_id = handle.last_call_id
+        try:
+            yield handle
+        finally:
+            metadata.handle.last_call_id = handle.last_call_id
 
 
 def completion(
@@ -75,16 +127,22 @@ def completion(
     Read ``resp.choices[0].message.content`` / ``.tool_calls`` from the result.
     ``search_parameters`` forwards an xAI Live Search descriptor (no-op off xAI).
     """
-    return _digillm_completion(
-        resolve_request_model(model),
-        messages,
-        temperature=temperature,
-        tools=tools,
-        tool_choice=tool_choice,
-        response_format=response_format,
-        max_tokens=max_tokens,
-        search_parameters=search_parameters,
+    default_purpose = (
+        CallPurpose.STRUCTURED_COMPLETION
+        if response_format is not None
+        else CallPurpose.INITIAL_GENERATION
     )
+    with _logical_call_scope(default_purpose, NoArtifactReason.CONSUMED_INLINE):
+        return _digillm_completion(
+            resolve_request_model(model),
+            messages,
+            temperature=temperature,
+            tools=tools,
+            tool_choice=tool_choice,
+            response_format=response_format,
+            max_tokens=max_tokens,
+            search_parameters=search_parameters,
+        )
 
 
 def completion_text(
@@ -146,15 +204,72 @@ def run_tools(
     delta)`` alongside the tool-call/result steps. ``search_parameters`` forwards an
     xAI Live Search descriptor (first tool round only). Returns the model's final answer.
     """
-    return _digillm_run_tools(
-        resolve_request_model(model),
-        messages,
-        tools,
-        execute_tool,
-        temperature=temperature,
-        max_tool_rounds=max_tool_rounds,
-        on_tool_step=on_tool_step,
-        parallel_safe_tools=_parallel_safe_tools(),
-        stream_deltas=on_tool_step is not None,
-        search_parameters=search_parameters,
-    )
+    with _logical_call_scope(
+        CallPurpose.TOOL_SELECTION,
+        NoArtifactReason.TOOL_DISPATCH,
+        follow_up_purpose=CallPurpose.TOOL_FOLLOW_UP,
+        follow_up_no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+    ):
+        return _digillm_run_tools(
+            resolve_request_model(model),
+            messages,
+            tools,
+            execute_tool,
+            temperature=temperature,
+            max_tool_rounds=max_tool_rounds,
+            on_tool_step=on_tool_step,
+            parallel_safe_tools=_parallel_safe_tools(),
+            stream_deltas=on_tool_step is not None,
+            search_parameters=search_parameters,
+        )
+
+
+def web_search(
+    model: str,
+    query: str,
+    *,
+    allowed_domains: list[str] | None = None,
+    max_results: int = 8,
+) -> tuple[str, list[str]] | None:
+    """Run xAI web grounding with generic logical-call purpose metadata."""
+    with _logical_call_scope(CallPurpose.WEB_GROUNDING, NoArtifactReason.CONSUMED_INLINE):
+        return _digillm_web_search(
+            resolve_request_model(model),
+            query,
+            allowed_domains=allowed_domains,
+            max_results=max_results,
+        )
+
+
+def openrouter_web_search(
+    model: str,
+    query: str,
+    *,
+    allowed_domains: list[str] | None = None,
+    max_results: int = 8,
+    engine: str = "exa",
+) -> tuple[str, list[str]] | None:
+    """Run OpenRouter web grounding without double-counting its nested completion."""
+    with _logical_call_scope(CallPurpose.WEB_GROUNDING, NoArtifactReason.CONSUMED_INLINE):
+        return _digillm_openrouter_web_search(
+            resolve_request_model(model),
+            query,
+            allowed_domains=allowed_domains,
+            max_results=max_results,
+            engine=engine,
+        )
+
+
+def x_search(
+    model: str,
+    query: str,
+    *,
+    max_results: int = 12,
+) -> tuple[str, list[str]] | None:
+    """Run xAI social grounding with generic logical-call purpose metadata."""
+    with _logical_call_scope(CallPurpose.X_GROUNDING, NoArtifactReason.CONSUMED_INLINE):
+        return _digillm_x_search(
+            resolve_request_model(model),
+            query,
+            max_results=max_results,
+        )

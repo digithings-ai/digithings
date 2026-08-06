@@ -27,6 +27,7 @@ import time
 # message content-part dicts used by LiteLLM / OpenAI clients.
 from typing import Any, Callable, TypeVar  # score:allow untyped any — scored-lint suppression
 
+from digillm import CallPurpose, NoArtifactReason
 from pydantic import BaseModel, ValidationError
 
 from digigraph import usage as _usage
@@ -321,30 +322,49 @@ def run_research_agent(
         return result
 
     last_error: Exception | None = None
+    parent_call_id = None
     tool_grounded = bool(tools) and execute_tool is not None
     with _usage.call_context(phase=phase_slug, operation=schema_name):
         for attempt in range(max_retries + 1):
             # Only the FIRST attempt runs the tool loop. Retries drop the tools so that
             # ``response_format`` survives into the request (#1739) — see "Tool-path retry".
             if tool_grounded and attempt == 0:
-                raw = run_tools(
-                    effective_model,
-                    messages,
-                    tools=tools,
-                    execute_tool=traced_execute_tool,
-                    temperature=temperature,
-                    search_parameters=search_parameters,
-                )
-            else:
-                try:
-                    raw = completion_text(
+                with _usage.logical_call_context(
+                    purpose=CallPurpose.TOOL_SELECTION,
+                    no_artifact_reason=NoArtifactReason.TOOL_DISPATCH,
+                    follow_up_purpose=CallPurpose.TOOL_FOLLOW_UP,
+                    follow_up_no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+                ) as call:
+                    raw = run_tools(
                         effective_model,
                         messages,
+                        tools=tools,
+                        execute_tool=traced_execute_tool,
                         temperature=temperature,
-                        response_format=response_format,
-                        max_tokens=max_tokens,
                         search_parameters=search_parameters,
                     )
+                    parent_call_id = call.last_call_id
+            else:
+                purpose = (
+                    CallPurpose.STRUCTURED_REPAIR
+                    if attempt > 0
+                    else CallPurpose.STRUCTURED_COMPLETION
+                )
+                try:
+                    with _usage.logical_call_context(
+                        purpose=purpose,
+                        parent_call_id=parent_call_id,
+                        no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+                    ) as call:
+                        raw = completion_text(
+                            effective_model,
+                            messages,
+                            temperature=temperature,
+                            response_format=response_format,
+                            max_tokens=max_tokens,
+                            search_parameters=search_parameters,
+                        )
+                    parent_call_id = call.last_call_id
                 except Exception:
                     # Never-worse-than-today guarantee. ``last_error`` is set only on a retry,
                     # i.e. only once a prior attempt already produced an unusable body. If the

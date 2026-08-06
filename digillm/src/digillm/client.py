@@ -60,8 +60,14 @@ from openai import OpenAI, Timeout
 from openai.types.chat import ChatCompletion
 
 from digillm.telemetry import (
+    ArtifactRef,
+    CacheStatus,
+    CallPurpose,
+    NoArtifactReason,
     ProviderAttemptOutcome,
     ProviderAttemptRecord,
+    ProviderCallOutcome,
+    ProviderCallRecord,
     RetryReason,
     TelemetryObserver,
     emit_telemetry,
@@ -484,10 +490,81 @@ def set_telemetry_observer(observer: TelemetryObserver | None) -> None:
 
 
 @dataclass
+class ProviderCallContextHandle:
+    """Mutable result handle populated with the latest logical call ID in the scope."""
+
+    last_call_id: UUID | None = None
+
+
+@dataclass(frozen=True)
+class _ProviderCallMetadata:
+    node_run_id: UUID
+    purpose: CallPurpose
+    parent_call_id: UUID | None
+    artifacts: tuple[ArtifactRef, ...]
+    no_artifact_reason: NoArtifactReason | None
+    follow_up_purpose: CallPurpose | None
+    follow_up_artifacts: tuple[ArtifactRef, ...]
+    follow_up_no_artifact_reason: NoArtifactReason | None
+    handle: ProviderCallContextHandle
+
+
+_provider_call_metadata: ContextVar[_ProviderCallMetadata | None] = ContextVar(
+    "digillm_provider_call_metadata", default=None
+)
+
+
+@contextlib.contextmanager
+def provider_call_context(
+    *,
+    node_run_id: UUID,
+    purpose: CallPurpose,
+    parent_call_id: UUID | None = None,
+    artifacts: tuple[ArtifactRef, ...] = (),
+    no_artifact_reason: NoArtifactReason | None = None,
+    follow_up_purpose: CallPurpose | None = None,
+    follow_up_artifacts: tuple[ArtifactRef, ...] = (),
+    follow_up_no_artifact_reason: NoArtifactReason | None = None,
+) -> Iterator[ProviderCallContextHandle]:
+    """Inject generic logical-call metadata without changing provider call signatures."""
+    if bool(artifacts) == (no_artifact_reason is not None):
+        raise ValueError("provide either artifacts or one no_artifact_reason")
+    if follow_up_purpose is not None and bool(follow_up_artifacts) == (
+        follow_up_no_artifact_reason is not None
+    ):
+        raise ValueError("provide either follow_up_artifacts or one follow_up_no_artifact_reason")
+    handle = ProviderCallContextHandle()
+    token = _provider_call_metadata.set(
+        _ProviderCallMetadata(
+            node_run_id=node_run_id,
+            purpose=purpose,
+            parent_call_id=parent_call_id,
+            artifacts=artifacts,
+            no_artifact_reason=no_artifact_reason,
+            follow_up_purpose=follow_up_purpose,
+            follow_up_artifacts=follow_up_artifacts,
+            follow_up_no_artifact_reason=follow_up_no_artifact_reason,
+            handle=handle,
+        )
+    )
+    try:
+        yield handle
+    finally:
+        _provider_call_metadata.reset(token)
+
+
+@dataclass
 class _AttemptScope:
     call_id: UUID
+    requested_model: str
+    started_at: datetime
+    metadata: _ProviderCallMetadata | None
     next_attempt_number: int = 1
     next_retry_reason: RetryReason = RetryReason.NOT_APPLICABLE
+    cache_status: CacheStatus = CacheStatus.UNAVAILABLE
+    finalized: bool = False
+    terminal_outcome: ProviderCallOutcome | None = None
+    logical_error_type: str | None = None
 
     def start(self) -> tuple[int, RetryReason, datetime]:
         attempt_number = self.next_attempt_number
@@ -501,12 +578,37 @@ _attempt_scope: ContextVar[_AttemptScope | None] = ContextVar("digillm_attempt_s
 
 
 @contextlib.contextmanager
-def _logical_attempt_scope() -> Iterator[_AttemptScope]:
+def _logical_attempt_scope(requested_model: str = "unknown") -> Iterator[_AttemptScope]:
     existing = _attempt_scope.get()
     if existing is not None:
         yield existing
         return
-    scope = _AttemptScope(call_id=uuid4())
+    context_metadata = _provider_call_metadata.get()
+    metadata = context_metadata
+    if (
+        context_metadata is not None
+        and context_metadata.handle.last_call_id is not None
+        and context_metadata.follow_up_purpose is not None
+    ):
+        metadata = _ProviderCallMetadata(
+            node_run_id=context_metadata.node_run_id,
+            purpose=context_metadata.follow_up_purpose,
+            parent_call_id=context_metadata.handle.last_call_id,
+            artifacts=context_metadata.follow_up_artifacts,
+            no_artifact_reason=context_metadata.follow_up_no_artifact_reason,
+            follow_up_purpose=context_metadata.follow_up_purpose,
+            follow_up_artifacts=context_metadata.follow_up_artifacts,
+            follow_up_no_artifact_reason=context_metadata.follow_up_no_artifact_reason,
+            handle=context_metadata.handle,
+        )
+    scope = _AttemptScope(
+        call_id=uuid4(),
+        requested_model=requested_model,
+        started_at=datetime.now(UTC),
+        metadata=metadata,
+    )
+    if metadata is not None:
+        metadata.handle.last_call_id = scope.call_id
     token = _attempt_scope.set(scope)
     try:
         yield scope
@@ -517,10 +619,78 @@ def _logical_attempt_scope() -> Iterator[_AttemptScope]:
 def _with_logical_attempt_scope(function: Callable[..., Any]) -> Callable[..., Any]:
     @functools.wraps(function)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-        with _logical_attempt_scope():
+        if _attempt_scope.get() is not None:
             return function(*args, **kwargs)
+        requested_model = str(args[0]) if args else str(kwargs.get("model") or "unknown")
+        with _logical_attempt_scope(requested_model) as scope:
+            try:
+                result = function(*args, **kwargs)
+            except (GeneratorExit, asyncio.CancelledError):
+                _emit_logical_call(
+                    scope,
+                    scope.terminal_outcome or ProviderCallOutcome.CANCELLED,
+                    error_type=scope.logical_error_type,
+                )
+                raise
+            except Exception as error:
+                _emit_logical_call(
+                    scope,
+                    scope.terminal_outcome or ProviderCallOutcome.FAILED,
+                    error_type=scope.logical_error_type or type(error).__name__,
+                )
+                raise
+            if scope.next_attempt_number > 1 or scope.cache_status is CacheStatus.HIT:
+                _emit_logical_call(
+                    scope,
+                    scope.terminal_outcome or ProviderCallOutcome.SUCCEEDED,
+                    error_type=scope.logical_error_type,
+                )
+            return result
 
     return wrapped
+
+
+def _emit_logical_call(
+    scope: _AttemptScope,
+    outcome: ProviderCallOutcome,
+    *,
+    error_type: str | None = None,
+) -> None:
+    if scope.finalized:
+        return
+    scope.finalized = True
+    observer = _telemetry_observer
+    metadata = scope.metadata
+    if observer is None or metadata is None:
+        return
+    try:
+        artifacts = metadata.artifacts
+        no_artifact_reason = metadata.no_artifact_reason
+        if outcome is ProviderCallOutcome.FAILED:
+            artifacts = ()
+            no_artifact_reason = NoArtifactReason.CALL_FAILED
+        elif outcome is ProviderCallOutcome.CANCELLED:
+            artifacts = ()
+            no_artifact_reason = NoArtifactReason.CALL_CANCELLED
+            error_type = None
+        record = ProviderCallRecord(
+            call_id=scope.call_id,
+            node_run_id=metadata.node_run_id,
+            parent_call_id=metadata.parent_call_id,
+            purpose=metadata.purpose,
+            requested_model=scope.requested_model,
+            cache_status=scope.cache_status,
+            outcome=outcome,
+            attempt_count=scope.next_attempt_number - 1,
+            artifacts=artifacts,
+            no_artifact_reason=no_artifact_reason,
+            error_type=error_type,
+            started_at=scope.started_at,
+            finished_at=datetime.now(UTC),
+        )
+        emit_telemetry(observer, record)
+    except Exception as telemetry_error:
+        logger.debug("logical-call telemetry failed: %s", type(telemetry_error).__name__)
 
 
 def _provider_name(provider: str | None) -> str:
@@ -642,10 +812,13 @@ def _responses_create_with_attempt(
     **kwargs: Any,
 ) -> Any:
     with _logical_attempt_scope() as scope:
+        scope.cache_status = CacheStatus.BYPASSED
         attempt_number, retry_reason, started_at = scope.start()
         try:
             response = client.responses.create(**kwargs)
         except Exception as error:
+            scope.terminal_outcome = ProviderCallOutcome.FAILED
+            scope.logical_error_type = type(error).__name__
             _emit_attempt(
                 scope=scope,
                 attempt_number=attempt_number,
@@ -1154,6 +1327,15 @@ def completion(
     # captured by the cache key, so a search request bypasses the cache like tool calls.
     xai_live_search = search_parameters is not None and provider == "xai"
 
+    attempt_scope = _attempt_scope.get()
+    cache_status = (
+        CacheStatus.BYPASSED
+        if tools or xai_live_search or _byok_override.get() is not None
+        else CacheStatus.MISS
+    )
+    if attempt_scope is not None:
+        attempt_scope.cache_status = cache_status
+
     # Cache only tool-free, search-free, non-BYOK requests (BYOK keys must not pollute or
     # read the shared in-process cache; tool calls / live search may have side effects).
     cache_key: str | None = None
@@ -1164,6 +1346,8 @@ def completion(
         cached = _llm_cache_get(cache_key)
         if cached is not None:
             logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
+            if attempt_scope is not None:
+                attempt_scope.cache_status = CacheStatus.HIT
             return ChatCompletion.model_validate_json(cached)
 
     kwargs: dict[str, Any] = {
@@ -1423,9 +1607,11 @@ def web_search(
             url = getattr(s, "url", None) or (s.get("url") if isinstance(s, dict) else None)
             if url and url not in sources:
                 sources.append(url)
+    _, _, cost_usd = _response_usage(resp)
     _record_usage(
         kind="web_search",
         model=model_id,
+        cost=float(cost_usd) if cost_usd is not None else 0.0,
         sources=len(sources),
         ok=True,
         duration_ms=round((time.perf_counter() - started) * 1000),
@@ -1477,9 +1663,11 @@ def x_search(
         return None
     text = getattr(resp, "output_text", "") or ""
     sources = _urls_from_grounding_text(text)
+    _, _, cost_usd = _response_usage(resp)
     _record_usage(
         kind="x_search",
         model=model_id,
+        cost=float(cost_usd) if cost_usd is not None else 0.0,
         sources=len(sources),
         ok=True,
         duration_ms=round((time.perf_counter() - started) * 1000),
@@ -1582,6 +1770,7 @@ def _stream_completion_one_turn(
         except StopIteration:
             break
         except (GeneratorExit, asyncio.CancelledError):
+            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
             _emit_attempt(
                 scope=scope,
                 attempt_number=attempt_number,
@@ -1594,6 +1783,8 @@ def _stream_completion_one_turn(
             )
             raise
         except Exception as error:
+            scope.terminal_outcome = ProviderCallOutcome.FAILED
+            scope.logical_error_type = type(error).__name__
             _emit_attempt(
                 scope=scope,
                 attempt_number=attempt_number,
@@ -1660,6 +1851,7 @@ def _stream_completion_one_turn(
                             fn.arguments or ""
                         )
         except (GeneratorExit, asyncio.CancelledError):
+            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
             _emit_attempt(
                 scope=scope,
                 attempt_number=attempt_number,
@@ -1672,6 +1864,7 @@ def _stream_completion_one_turn(
             )
             raise
         except Exception:
+            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
             _emit_attempt(
                 scope=scope,
                 attempt_number=attempt_number,

@@ -1072,8 +1072,9 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   `core` Supabase project. The records distinguish graph work, logical calls/cache outcomes, and
   physical attempts without storing prompts, responses, search text, secrets, or raw exceptions.
   Producer event times and database `recorded_at` remain distinct; unavailable token usage or cost
-  stays NULL. This is a contract-only surface in #1951: existing aggregate diagnostics remain the
-  active writer until later instrumentation and reconciliation tasks.
+  stays NULL. Tasks #1955 and #1963 now produce physical attempts and generic logical-call lineage
+  in process. Existing aggregate diagnostics remain the only active durable writer; Task 1.5
+  owns buffering, flush, and durable reconciliation into these private tables.
 - `digiquant.olympus.atlas.diagnostics` — writes one `atlas_run_diagnostics` row per run
   **attempt** (`write_row`, keyed on `(run_id, attempt)`, fail-soft): fresh/carried/failed
   segment counts from
@@ -1222,7 +1223,9 @@ adds `olympus_node_runs`, `olympus_provider_calls`, and `olympus_provider_attemp
 service-role-only, RLS-enabled with no policies, and append-only: `service_role` receives only
 `SELECT`/`INSERT`, while database triggers reject `UPDATE` and `DELETE`. The schema stores generic
 artifact references but no provider payload. It is prospective only; no historical attempts or
-costs are inferred from `atlas_run_diagnostics` aggregates.
+costs are inferred from `atlas_run_diagnostics` aggregates. Task #1963 does not write these tables:
+it establishes in-process logical purpose, parentage, cache status, exact observable attempt count,
+and artifact disposition; Task 1.5 owns durable persistence and reconciliation.
 
 **Live price fan-out + public portfolio surface (#1461/#1462).** Migration
 [`supabase/migrations/050_public_portfolio_views.sql`](supabase/migrations/050_public_portfolio_views.sql)

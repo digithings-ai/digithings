@@ -23,6 +23,7 @@ from digillm.telemetry import (
     ArtifactRef,
     CacheStatus,
     CallPurpose,
+    NoArtifactReason,
     NodeRunOutcome,
     NodeRunRecord,
     ProviderAttemptOutcome,
@@ -46,14 +47,20 @@ class AttemptCollector(list[ProviderAttemptRecord]):
             self.append(record)
 
 
+class TelemetryCollector(list[TelemetryRecord]):
+    def observe(self, record: TelemetryRecord) -> None:
+        self.append(record)
+
+
 @pytest.fixture(autouse=True)
 def _clean_client_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    previous_observer = client_mod._telemetry_observer
     digillm.clear_caches()
     digillm.set_telemetry_observer(None)
     for name in ("OPENAI_API_KEY", "XAI_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     yield
-    digillm.set_telemetry_observer(None)
+    digillm.set_telemetry_observer(previous_observer)
     digillm.clear_caches()
 
 
@@ -119,6 +126,7 @@ def _call(node_run_id: UUID, **overrides: object) -> ProviderCallRecord:
         "finished_at": NOW,
         "outcome": ProviderCallOutcome.SUCCEEDED,
         "attempt_count": 1,
+        "no_artifact_reason": NoArtifactReason.CONSUMED_INLINE,
     }
     values.update(overrides)
     return ProviderCallRecord.model_validate(values)
@@ -206,6 +214,62 @@ def test_non_cache_hit_cannot_succeed_without_an_attempt() -> None:
     node = _node_run()
     with pytest.raises(ValidationError):
         _call(node.node_run_id, cache_status=CacheStatus.MISS, attempt_count=0)
+
+
+def test_successful_call_requires_exactly_one_artifact_disposition() -> None:
+    node = _node_run()
+    with pytest.raises(ValidationError, match="either artifacts or one no-artifact reason"):
+        _call(node.node_run_id, no_artifact_reason=None)
+    with pytest.raises(ValidationError, match="either artifacts or one no-artifact reason"):
+        _call(
+            node.node_run_id,
+            artifacts=(
+                ArtifactRef(
+                    artifact_type="research_bundle",
+                    artifact_id="bundle-1",
+                    version="v1",
+                ),
+            ),
+            no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+        )
+
+
+def test_failed_call_requires_sanitized_type_and_failure_disposition() -> None:
+    node = _node_run()
+    failed = _call(
+        node.node_run_id,
+        cache_status=CacheStatus.BYPASSED,
+        outcome=ProviderCallOutcome.FAILED,
+        error_type="RuntimeError",
+        no_artifact_reason=NoArtifactReason.CALL_FAILED,
+    )
+    assert failed.error_type == "RuntimeError"
+    with pytest.raises(ValidationError, match="sanitized error type"):
+        _call(
+            node.node_run_id,
+            cache_status=CacheStatus.BYPASSED,
+            outcome=ProviderCallOutcome.FAILED,
+            no_artifact_reason=NoArtifactReason.CALL_FAILED,
+        )
+
+
+def test_provider_identifiers_have_defensive_length_bounds() -> None:
+    node = _node_run()
+    with pytest.raises(ValidationError):
+        _call(node.node_run_id, requested_model="m" * 257)
+    with pytest.raises(ValidationError):
+        _call(
+            node.node_run_id,
+            cache_status=CacheStatus.BYPASSED,
+            outcome=ProviderCallOutcome.FAILED,
+            error_type="E" * 201,
+            no_artifact_reason=NoArtifactReason.CALL_FAILED,
+        )
+    call = _call(node.node_run_id)
+    with pytest.raises(ValidationError):
+        _attempt(call.call_id, requested_model="m" * 257)
+    with pytest.raises(ValidationError):
+        _attempt(call.call_id, error_type="E" * 201)
 
 
 def test_attempt_number_is_positive() -> None:
@@ -413,6 +477,145 @@ def test_cache_hit_does_not_emit_a_second_physical_attempt() -> None:
     assert len(attempts) == 1
 
 
+def test_cache_miss_and_hit_emit_reconciled_logical_calls() -> None:
+    node_run_id = uuid4()
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _completion("cached")
+    records = TelemetryCollector()
+    digillm.set_telemetry_observer(records)
+    messages = [{"role": "user", "content": "hello"}]
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with digillm.provider_call_context(
+            node_run_id=node_run_id,
+            purpose=CallPurpose.INITIAL_GENERATION,
+            no_artifact_reason=digillm.NoArtifactReason.CONSUMED_INLINE,
+        ):
+            first = digillm.completion("gpt-4o-mini", messages)
+        with digillm.provider_call_context(
+            node_run_id=node_run_id,
+            purpose=CallPurpose.INITIAL_GENERATION,
+            no_artifact_reason=digillm.NoArtifactReason.CONSUMED_INLINE,
+        ):
+            second = digillm.completion("gpt-4o-mini", messages)
+
+    assert first.choices[0].message.content == "cached"
+    assert second.choices[0].message.content == "cached"
+    calls = [record for record in records if isinstance(record, ProviderCallRecord)]
+    attempts = [record for record in records if isinstance(record, ProviderAttemptRecord)]
+    assert len(calls) == 2
+    assert [call.cache_status for call in calls] == [CacheStatus.MISS, CacheStatus.HIT]
+    assert [call.attempt_count for call in calls] == [1, 0]
+    assert calls[0].call_id == attempts[0].call_id
+    assert calls[1].call_id != calls[0].call_id
+    assert all(call.node_run_id == node_run_id for call in calls)
+    assert all(call.purpose is CallPurpose.INITIAL_GENERATION for call in calls)
+    assert fake_client.chat.completions.create.call_count == 1
+
+
+def test_completion_emits_immutable_artifact_reference_without_payloads() -> None:
+    artifact = ArtifactRef(
+        artifact_type="research_bundle",
+        artifact_id="bundle-1",
+        version="sha256:abc123",
+    )
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _completion("private response")
+    records = TelemetryCollector()
+    digillm.set_telemetry_observer(records)
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with digillm.provider_call_context(
+            node_run_id=uuid4(),
+            purpose=CallPurpose.STRUCTURED_COMPLETION,
+            artifacts=(artifact,),
+        ):
+            digillm.completion(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "private prompt"}],
+            )
+
+    call = next(record for record in records if isinstance(record, ProviderCallRecord))
+    serialized = call.model_dump_json()
+    assert call.artifacts == (artifact,)
+    assert call.no_artifact_reason is None
+    assert "private prompt" not in serialized
+    assert "private response" not in serialized
+
+
+def test_unrelated_top_level_calls_do_not_share_parentage_or_attempt_counters() -> None:
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _completion("first"),
+        _completion("second"),
+    ]
+    records = TelemetryCollector()
+    digillm.set_telemetry_observer(records)
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        for content in ("first request", "second request"):
+            with digillm.provider_call_context(
+                node_run_id=uuid4(),
+                purpose=CallPurpose.INITIAL_GENERATION,
+                no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+            ):
+                digillm.completion(
+                    "gpt-4o-mini",
+                    [{"role": "user", "content": content}],
+                )
+
+    calls = [record for record in records if isinstance(record, ProviderCallRecord)]
+    attempts = [record for record in records if isinstance(record, ProviderAttemptRecord)]
+    assert len(calls) == 2
+    assert len({call.call_id for call in calls}) == 2
+    assert all(call.parent_call_id is None for call in calls)
+    assert [call.attempt_count for call in calls] == [1, 1]
+    assert [attempt.attempt_number for attempt in attempts] == [1, 1]
+    assert [attempt.call_id for attempt in attempts] == [call.call_id for call in calls]
+
+
+def test_tool_follow_up_links_to_selection_call_without_sharing_attempt_counter() -> None:
+    function = SimpleNamespace(name="lookup", arguments='{"query":"rates"}')
+    tool_call = SimpleNamespace(id="call-1", function=function)
+    message = SimpleNamespace(content=None, tool_calls=[tool_call])
+    selection = SimpleNamespace(choices=[SimpleNamespace(message=message)], model="served-model")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [selection, _completion("final")]
+    records = TelemetryCollector()
+    digillm.set_telemetry_observer(records)
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with digillm.provider_call_context(
+            node_run_id=uuid4(),
+            purpose=CallPurpose.TOOL_SELECTION,
+            no_artifact_reason=digillm.NoArtifactReason.TOOL_DISPATCH,
+            follow_up_purpose=CallPurpose.TOOL_FOLLOW_UP,
+            follow_up_no_artifact_reason=digillm.NoArtifactReason.CONSUMED_INLINE,
+        ):
+            result = digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "research rates"}],
+                [{"type": "function", "function": {"name": "lookup", "parameters": {}}}],
+                execute_tool=lambda _name, _arguments: "grounded",
+            )
+
+    calls = [record for record in records if isinstance(record, ProviderCallRecord)]
+    attempts = [record for record in records if isinstance(record, ProviderAttemptRecord)]
+    assert result == "final"
+    assert [call.purpose for call in calls] == [
+        CallPurpose.TOOL_SELECTION,
+        CallPurpose.TOOL_FOLLOW_UP,
+    ]
+    assert calls[0].parent_call_id is None
+    assert calls[1].parent_call_id == calls[0].call_id
+    assert [call.attempt_count for call in calls] == [1, 1]
+    assert [attempt.attempt_number for attempt in attempts] == [1, 1]
+    assert [call.no_artifact_reason for call in calls] == [
+        digillm.NoArtifactReason.TOOL_DISPATCH,
+        digillm.NoArtifactReason.CONSUMED_INLINE,
+    ]
+
+
 def test_process_observer_receives_attempt_from_worker_thread() -> None:
     attempts = AttemptCollector()
     digillm.set_telemetry_observer(attempts)
@@ -563,26 +766,37 @@ def test_stream_callback_failure_is_not_misattributed_to_provider() -> None:
     failure = RuntimeError("consumer callback failed")
     fake_client = MagicMock()
     fake_client.chat.completions.create.return_value = [_stream_chunk("partial")]
-    attempts = AttemptCollector()
-    digillm.set_telemetry_observer(attempts)
+    records = TelemetryCollector()
+    digillm.set_telemetry_observer(records)
 
     with (
         patch.object(client_mod, "get_client_for_model", return_value=fake_client),
         pytest.raises(RuntimeError) as caught,
     ):
-        digillm.run_tools(
-            "gpt-4o-mini",
-            [{"role": "user", "content": "hello"}],
-            [],
-            execute_tool=lambda *_args: "",
-            on_tool_step=lambda *_args: (_ for _ in ()).throw(failure),
-            stream_deltas=True,
-        )
+        with digillm.provider_call_context(
+            node_run_id=uuid4(),
+            purpose=CallPurpose.TOOL_SELECTION,
+            no_artifact_reason=NoArtifactReason.TOOL_DISPATCH,
+        ):
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "hello"}],
+                [],
+                execute_tool=lambda *_args: "",
+                on_tool_step=lambda *_args: (_ for _ in ()).throw(failure),
+                stream_deltas=True,
+            )
 
+    attempts = [record for record in records if isinstance(record, ProviderAttemptRecord)]
+    calls = [record for record in records if isinstance(record, ProviderCallRecord)]
     assert caught.value is failure
     assert len(attempts) == 1
     assert attempts[0].outcome is ProviderAttemptOutcome.CANCELLED
     assert attempts[0].error_type is None
+    assert len(calls) == 1
+    assert calls[0].outcome is ProviderCallOutcome.CANCELLED
+    assert calls[0].no_artifact_reason is NoArtifactReason.CALL_CANCELLED
+    assert calls[0].error_type is None
 
 
 @pytest.mark.parametrize(
@@ -619,6 +833,79 @@ def test_xai_search_transports_emit_attempts(
     assert attempts[0].completion_tokens == 2
 
 
+@pytest.mark.parametrize(
+    ("search", "purpose"),
+    (
+        (digillm.web_search, CallPurpose.WEB_GROUNDING),
+        (digillm.x_search, CallPurpose.X_GROUNDING),
+    ),
+)
+def test_xai_grounding_emits_one_logical_call(
+    monkeypatch: pytest.MonkeyPatch,
+    search: object,
+    purpose: CallPurpose,
+) -> None:
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    response = SimpleNamespace(
+        model="grok-served",
+        output_text="result",
+        output=[],
+        usage=SimpleNamespace(input_tokens=8, output_tokens=2, model_extra={}),
+    )
+    fake_client = MagicMock()
+    fake_client.responses.create.return_value = response
+    records = TelemetryCollector()
+    digillm.set_telemetry_observer(records)
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with digillm.provider_call_context(
+            node_run_id=uuid4(),
+            purpose=purpose,
+            no_artifact_reason=digillm.NoArtifactReason.CONSUMED_INLINE,
+        ):
+            result = search("xai/grok-4", "query")  # type: ignore[operator]
+
+    calls = [record for record in records if isinstance(record, ProviderCallRecord)]
+    attempts = [record for record in records if isinstance(record, ProviderAttemptRecord)]
+    assert result == ("result", [])
+    assert len(calls) == 1
+    assert calls[0].purpose is purpose
+    assert calls[0].cache_status is CacheStatus.BYPASSED
+    assert calls[0].attempt_count == 1
+    assert attempts[0].call_id == calls[0].call_id
+
+
+def test_openrouter_grounding_nested_completion_is_one_logical_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _completion(
+        "fact [source](https://example.com)"
+    )
+    records = TelemetryCollector()
+    digillm.set_telemetry_observer(records)
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with digillm.provider_call_context(
+            node_run_id=uuid4(),
+            purpose=CallPurpose.WEB_GROUNDING,
+            no_artifact_reason=digillm.NoArtifactReason.CONSUMED_INLINE,
+        ):
+            result = digillm.openrouter_web_search(
+                "openrouter/perplexity/sonar",
+                "query",
+            )
+
+    calls = [record for record in records if isinstance(record, ProviderCallRecord)]
+    attempts = [record for record in records if isinstance(record, ProviderAttemptRecord)]
+    assert result == ("fact [source](https://example.com)", ["https://example.com"])
+    assert len(calls) == 1
+    assert calls[0].purpose is CallPurpose.WEB_GROUNDING
+    assert calls[0].attempt_count == 1
+    assert attempts[0].call_id == calls[0].call_id
+
+
 def test_xai_search_failure_emits_attempt_and_preserves_fail_soft_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -636,6 +923,32 @@ def test_xai_search_failure_emits_attempt_and_preserves_fail_soft_result(
     assert attempts[0].outcome is ProviderAttemptOutcome.FAILED
     assert attempts[0].error_type == "RuntimeError"
     assert "private provider response" not in attempts[0].model_dump_json()
+
+
+def test_xai_grounding_failure_emits_sanitized_logical_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    fake_client = MagicMock()
+    fake_client.responses.create.side_effect = RuntimeError("private provider response")
+    records = TelemetryCollector()
+    digillm.set_telemetry_observer(records)
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with digillm.provider_call_context(
+            node_run_id=uuid4(),
+            purpose=CallPurpose.WEB_GROUNDING,
+            no_artifact_reason=digillm.NoArtifactReason.CONSUMED_INLINE,
+        ):
+            result = digillm.web_search("xai/grok-4", "query")
+
+    calls = [record for record in records if isinstance(record, ProviderCallRecord)]
+    assert result is None
+    assert len(calls) == 1
+    assert calls[0].outcome is ProviderCallOutcome.FAILED
+    assert calls[0].no_artifact_reason is digillm.NoArtifactReason.CALL_FAILED
+    assert calls[0].error_type == "RuntimeError"
+    assert "private provider response" not in calls[0].model_dump_json()
 
 
 def test_malformed_usage_evidence_cannot_change_search_result(

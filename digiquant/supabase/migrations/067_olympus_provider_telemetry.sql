@@ -39,21 +39,39 @@ CREATE TABLE IF NOT EXISTS public.olympus_provider_calls (
     parent_call_id uuid,
     purpose text NOT NULL CHECK (
         purpose IN (
+            'initial_generation',
             'chat_completion',
             'structured_completion',
+            'structured_repair',
+            'tool_selection',
+            'tool_follow_up',
+            'web_grounding',
+            'x_grounding',
             'tool_loop',
             'web_search',
             'x_search',
             'embedding'
         )
     ),
-    requested_model text NOT NULL CHECK (length(requested_model) > 0),
+    requested_model text NOT NULL CHECK (length(requested_model) BETWEEN 1 AND 256),
     cache_status text NOT NULL CHECK (
         cache_status IN ('bypassed', 'hit', 'miss', 'unavailable')
     ),
     outcome text NOT NULL CHECK (outcome IN ('started', 'succeeded', 'failed', 'cancelled')),
     attempt_count integer NOT NULL CHECK (attempt_count >= 0),
     artifacts jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(artifacts) = 'array'),
+    no_artifact_reason text CHECK (
+        no_artifact_reason IN (
+            'consumed_inline',
+            'tool_dispatch',
+            'validation_rejected',
+            'no_output',
+            'call_failed',
+            'call_cancelled',
+            'unknown'
+        )
+    ),
+    error_type text CHECK (error_type IS NULL OR length(error_type) BETWEEN 1 AND 200),
     started_at timestamptz NOT NULL,
     finished_at timestamptz,
     recorded_at timestamptz NOT NULL DEFAULT now(),
@@ -74,6 +92,16 @@ CREATE TABLE IF NOT EXISTS public.olympus_provider_calls (
         CHECK (
             (cache_status = 'hit' AND attempt_count = 0)
             OR (cache_status <> 'hit' AND (outcome <> 'succeeded' OR attempt_count > 0))
+        ),
+    CONSTRAINT chk_olympus_provider_calls_artifact_disposition
+        CHECK (
+            (jsonb_array_length(artifacts) > 0 AND no_artifact_reason IS NULL)
+            OR (jsonb_array_length(artifacts) = 0 AND no_artifact_reason IS NOT NULL)
+        ),
+    CONSTRAINT chk_olympus_provider_calls_error_type
+        CHECK (
+            (outcome = 'failed' AND error_type IS NOT NULL)
+            OR (outcome <> 'failed' AND error_type IS NULL)
         )
 );
 
@@ -82,7 +110,7 @@ CREATE TABLE IF NOT EXISTS public.olympus_provider_attempts (
     call_id uuid NOT NULL,
     attempt_number integer NOT NULL CHECK (attempt_number > 0),
     provider text NOT NULL CHECK (length(provider) > 0),
-    requested_model text NOT NULL CHECK (length(requested_model) > 0),
+    requested_model text NOT NULL CHECK (length(requested_model) BETWEEN 1 AND 256),
     served_model text CHECK (served_model IS NULL OR length(served_model) > 0),
     outcome text NOT NULL CHECK (outcome IN ('started', 'succeeded', 'failed', 'cancelled')),
     retry_reason text NOT NULL CHECK (
@@ -99,7 +127,7 @@ CREATE TABLE IF NOT EXISTS public.olympus_provider_attempts (
     prompt_tokens bigint CHECK (prompt_tokens IS NULL OR prompt_tokens >= 0),
     completion_tokens bigint CHECK (completion_tokens IS NULL OR completion_tokens >= 0),
     cost_usd numeric CHECK (cost_usd IS NULL OR cost_usd >= 0),
-    error_type text CHECK (error_type IS NULL OR length(error_type) > 0),
+    error_type text CHECK (error_type IS NULL OR length(error_type) BETWEEN 1 AND 200),
     started_at timestamptz NOT NULL,
     finished_at timestamptz,
     recorded_at timestamptz NOT NULL DEFAULT now(),

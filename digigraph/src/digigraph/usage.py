@@ -17,13 +17,28 @@ from typing import (
     Iterator,
     Literal,
 )
+from uuid import UUID
 
+from digillm import (
+    ArtifactRef,
+    CacheStatus,
+    CallPurpose,
+    NoArtifactReason,
+    ProviderAttemptOutcome,
+    ProviderAttemptRecord,
+    ProviderCallContextHandle,
+    ProviderCallOutcome,
+    ProviderCallRecord,
+    TelemetryRecord,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 _LOCK = threading.Lock()
 _ACTIVE = False
 _CALLS: list[dict[str, Any]] = []
 _EVENTS: list["RunCallEvent"] = []
+_PROVIDER_CALLS: list[ProviderCallRecord] = []
+_PROVIDER_ATTEMPTS: list[ProviderAttemptRecord] = []
 
 _SEARCH_KINDS = {"web_search", "x_search"}
 _PHASE_MAX = 120
@@ -55,6 +70,7 @@ _SENSITIVE_FIELD_PARTS = frozenset(
 class CallContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    node_run_id: UUID | None = None
     phase: str | None = Field(default=None, max_length=_PHASE_MAX)
     operation: str | None = Field(default=None, max_length=_OPERATION_MAX)
     document_key: str | None = Field(default=None, max_length=_DOCUMENT_KEY_MAX)
@@ -87,6 +103,25 @@ _CALL_CONTEXT: ContextVar[CallContext] = ContextVar(
 )
 
 
+class LogicalCallContext(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    purpose: CallPurpose
+    parent_call_id: UUID | None = None
+    artifacts: tuple[ArtifactRef, ...] = ()
+    no_artifact_reason: NoArtifactReason | None = None
+    follow_up_purpose: CallPurpose | None = None
+    follow_up_artifacts: tuple[ArtifactRef, ...] = ()
+    follow_up_no_artifact_reason: NoArtifactReason | None = None
+    handle: ProviderCallContextHandle
+
+
+_LOGICAL_CALL_CONTEXT: ContextVar[LogicalCallContext | None] = ContextVar(
+    "digigraph_usage_logical_call_context",
+    default=None,
+)
+
+
 def _bounded(value: str | None, limit: int) -> str | None:
     return value[:limit] if value is not None else None
 
@@ -94,22 +129,67 @@ def _bounded(value: str | None, limit: int) -> str | None:
 @contextmanager
 def call_context(
     *,
+    node_run_id: UUID | None = None,
     phase: str | None = None,
     operation: str | None = None,
     document_key: str | None = None,
 ) -> Iterator[None]:
     """Label calls in the current phase without retaining prompts or outputs."""
+    current = _CALL_CONTEXT.get()
     token = _CALL_CONTEXT.set(
         CallContext(
-            phase=_bounded(phase, _PHASE_MAX),
-            operation=_bounded(operation, _OPERATION_MAX),
-            document_key=_bounded(document_key, _DOCUMENT_KEY_MAX),
+            node_run_id=node_run_id if node_run_id is not None else current.node_run_id,
+            phase=_bounded(phase, _PHASE_MAX) if phase is not None else current.phase,
+            operation=(
+                _bounded(operation, _OPERATION_MAX) if operation is not None else current.operation
+            ),
+            document_key=(
+                _bounded(document_key, _DOCUMENT_KEY_MAX)
+                if document_key is not None
+                else current.document_key
+            ),
         )
     )
     try:
         yield
     finally:
         _CALL_CONTEXT.reset(token)
+
+
+@contextmanager
+def logical_call_context(
+    *,
+    purpose: CallPurpose,
+    parent_call_id: UUID | None = None,
+    artifacts: tuple[ArtifactRef, ...] = (),
+    no_artifact_reason: NoArtifactReason | None = None,
+    follow_up_purpose: CallPurpose | None = None,
+    follow_up_artifacts: tuple[ArtifactRef, ...] = (),
+    follow_up_no_artifact_reason: NoArtifactReason | None = None,
+) -> Iterator[ProviderCallContextHandle]:
+    """Describe one generic provider invocation without requiring Olympus semantics."""
+    handle = ProviderCallContextHandle()
+    token = _LOGICAL_CALL_CONTEXT.set(
+        LogicalCallContext(
+            purpose=purpose,
+            parent_call_id=parent_call_id,
+            artifacts=artifacts,
+            no_artifact_reason=no_artifact_reason,
+            follow_up_purpose=follow_up_purpose,
+            follow_up_artifacts=follow_up_artifacts,
+            follow_up_no_artifact_reason=follow_up_no_artifact_reason,
+            handle=handle,
+        )
+    )
+    try:
+        yield handle
+    finally:
+        _LOGICAL_CALL_CONTEXT.reset(token)
+
+
+def provider_call_metadata() -> tuple[UUID | None, LogicalCallContext | None]:
+    """Return the current real node identity and optional logical-call description."""
+    return _CALL_CONTEXT.get().node_run_id, _LOGICAL_CALL_CONTEXT.get()
 
 
 def start() -> None:
@@ -119,6 +199,8 @@ def start() -> None:
         _ACTIVE = True
         _CALLS.clear()
         _EVENTS.clear()
+        _PROVIDER_CALLS.clear()
+        _PROVIDER_ATTEMPTS.clear()
 
 
 def reset() -> None:
@@ -128,6 +210,8 @@ def reset() -> None:
         _ACTIVE = False
         _CALLS.clear()
         _EVENTS.clear()
+        _PROVIDER_CALLS.clear()
+        _PROVIDER_ATTEMPTS.clear()
 
 
 def is_active() -> bool:
@@ -206,6 +290,77 @@ def record(
                 output_summary=output_summary,
             )
         )
+
+
+def observe_telemetry(record: TelemetryRecord) -> None:
+    """Collect strict logical/attempt records for the active run without persistence."""
+    if not _ACTIVE:
+        return
+    with _LOCK:
+        if isinstance(record, ProviderCallRecord):
+            _PROVIDER_CALLS.append(record)
+        elif isinstance(record, ProviderAttemptRecord):
+            _PROVIDER_ATTEMPTS.append(record)
+
+
+class DetailedUsageObserver:
+    """Adapt the in-process collector to DigiLLM's strict observer protocol."""
+
+    def observe(self, record: TelemetryRecord) -> None:
+        observe_telemetry(record)
+
+
+DETAILED_USAGE_OBSERVER = DetailedUsageObserver()
+
+
+def _nullable_sum(values: list[int | float | None]) -> int | float | None:
+    if not values or any(value is None for value in values):
+        return None
+    return sum(value for value in values if value is not None)
+
+
+def detailed_usage_projection() -> dict[str, int | float | None]:
+    """Project aggregate-compatible successes without fabricating provider evidence."""
+    with _LOCK:
+        calls = list(_PROVIDER_CALLS)
+        attempts = list(_PROVIDER_ATTEMPTS)
+    successful_calls = [call for call in calls if call.outcome is ProviderCallOutcome.SUCCEEDED]
+    aggregate_calls = [
+        call for call in successful_calls if call.cache_status is not CacheStatus.HIT
+    ]
+    attempts_by_call: dict[UUID, ProviderAttemptRecord] = {}
+    for attempt in attempts:
+        if attempt.outcome is ProviderAttemptOutcome.SUCCEEDED:
+            attempts_by_call[attempt.call_id] = attempt
+    successful_attempts = [
+        attempts_by_call[call.call_id]
+        for call in aggregate_calls
+        if call.call_id in attempts_by_call
+    ]
+    search_purposes = {CallPurpose.WEB_GROUNDING, CallPurpose.X_GROUNDING}
+    llm_call_ids = {call.call_id for call in aggregate_calls if call.purpose not in search_purposes}
+    llm_attempts = [attempt for attempt in successful_attempts if attempt.call_id in llm_call_ids]
+    prompt_tokens = (
+        _nullable_sum([attempt.prompt_tokens for attempt in llm_attempts]) if llm_call_ids else 0
+    )
+    completion_tokens = (
+        _nullable_sum([attempt.completion_tokens for attempt in llm_attempts])
+        if llm_call_ids
+        else 0
+    )
+    cost_usd = _nullable_sum(
+        [
+            float(attempt.cost_usd) if attempt.cost_usd is not None else None
+            for attempt in successful_attempts
+        ]
+    )
+    return {
+        "llm_calls": sum(call.purpose not in search_purposes for call in aggregate_calls),
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cost_usd": round(float(cost_usd), 6) if cost_usd is not None else None,
+        "search_calls": sum(call.purpose in search_purposes for call in aggregate_calls),
+    }
 
 
 def _is_sensitive_field(name: str) -> bool:
