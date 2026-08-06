@@ -3,7 +3,7 @@
  *
  * Two browser lanes feed these shapes (see digiquant/supabase/README.md):
  *   - crypto  → Coinbase's public keyless WS (per-product ticker stream)
- *   - equities → Supabase Realtime broadcast channel "prices:live"
+ *   - equities → Supabase Realtime `postgres_changes` on `public.prices_live`
  * with a daily-close SEED/fallback from the `public_price_latest` view so
  * values exist before the first tick and when a lane is dark.
  *
@@ -14,7 +14,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Where a {@link LiveQuote} came from — for badging and staleness rules. */
-export type LiveQuoteSource = "coinbase" | "broadcast" | "seed";
+export type LiveQuoteSource = "coinbase" | "postgres_changes" | "seed";
 
 /**
  * One instrument's latest observed price.
@@ -48,8 +48,8 @@ export interface UseLivePricesOptions {
   /**
    * Symbols to seed from `public_price_latest` and surface in the map
    * (equities AND crypto, uppercase — "SPY", "BTC-USD"). When non-empty it
-   * also bounds the map: broadcast quotes outside this set (∪ cryptoProductIds)
-   * are ignored. Empty/omitted = accept every broadcast symbol.
+   * also bounds the map: `prices_live` rows outside this set (∪
+   * cryptoProductIds) are ignored. Empty/omitted = accept every row.
    */
   symbols?: string[];
   /**
@@ -63,9 +63,9 @@ export interface UseLivePricesOptions {
   cryptoProductIds?: string[];
   /**
    * Test seam / explicit override: the Supabase client to use for the seed
-   * SELECT and the equity broadcast. Defaults to the module singleton (which is
-   * `null` when the public env vars are unset). Pass `null` to force the
-   * equity+seed lanes dark (crypto still streams).
+   * SELECT and the equity `postgres_changes` subscription. Defaults to the
+   * module singleton (which is `null` when the public env vars are unset). Pass
+   * `null` to force the equity+seed lanes dark (crypto still streams).
    */
   client?: SupabaseClient | null;
 }

@@ -37,20 +37,26 @@ const FLOW: { n: string; title: string; body: string; tool: string }[] = [
   {
     n: "05",
     title: "Optimize",
-    body: "Search the parameter space with Optuna; walk-forward windows guard against overfitting.",
+    body:
+      "Search the parameter space with Optuna against your own objective. Results are in-sample — " +
+      "the tearsheets say so too.",
     tool: "Optuna",
   },
   {
     n: "06",
     title: "Backtest",
-    body: "Replay on a NautilusTrader core — Pine-faithful fills, full trade ledger, and a tearsheet.",
+    body:
+      "Replay on a NautilusTrader core with Pine-faithful indicators — RSI on Wilder's smoothing, " +
+      "Bollinger on population sigma — a full trade ledger, and a tearsheet.",
     tool: "NautilusTrader",
   },
   {
     n: "07",
-    title: "Execution",
-    body: "Promote up the ladder: backtest → paper → loopback → live. Every rung is a human gate.",
-    tool: "Kairos · gated",
+    title: "Export",
+    body:
+      "Export the strategy to TradingView as Pine v5. Live execution is not built: there is no " +
+      "paper or live path, and every broker adapter is a stub.",
+    tool: "Kairos · planned",
   },
 ];
 
@@ -107,7 +113,7 @@ export function ResearchPipeline() {
       <div className="wrap">
         <Reveal className="dq-sechead">
           <span className="kicker">{"// the pipeline"}</span>
-          <h2 className="dq-title">Research in, orders out — in a straight line.</h2>
+          <h2 className="dq-title">Research in, a tested strategy out.</h2>
           <p className="dq-sub">
             digiquant is not a hub of services routing messages around; it&rsquo;s a linear research
             workflow. You start in a chat, and each stage hands its output to the next until a

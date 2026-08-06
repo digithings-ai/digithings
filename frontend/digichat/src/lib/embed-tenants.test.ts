@@ -88,6 +88,69 @@ describe("parseEmbedTenants", () => {
     ).toThrow(/https/);
   });
 
+  it("accepts digivault backend with env-name refs", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "docs.example.com": {
+          slug: "docs",
+          token: "tok",
+          gateMode: "ungated",
+          theme: "dark",
+          attribution: true,
+          backend: {
+            type: "digivault",
+            supabaseUrlEnv: "CORE_SUPABASE_URL",
+            supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
+            openRouterKeyEnv: "OPENROUTER_API_KEY",
+          },
+        },
+      })
+    );
+    expect(reg.get("docs.example.com")?.backend).toEqual({
+      type: "digivault",
+      supabaseUrlEnv: "CORE_SUPABASE_URL",
+      supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
+      openRouterKeyEnv: "OPENROUTER_API_KEY",
+    });
+  });
+
+  it("rejects digivault env names that look like URLs or keys", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            token: "tok",
+            gateMode: "ungated",
+            backend: {
+              type: "digivault",
+              supabaseUrlEnv: "https://x.supabase.co",
+              supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
+              openRouterKeyEnv: "OPENROUTER_API_KEY",
+            },
+          },
+        })
+      )
+    ).toThrow(/env/i);
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            token: "tok",
+            gateMode: "ungated",
+            backend: {
+              type: "digivault",
+              supabaseUrlEnv: "CORE_SUPABASE_URL",
+              supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
+              openRouterKeyEnv: "sk-or-v1-abc",
+            },
+          },
+        })
+      )
+    ).toThrow(/env/i);
+  });
+
   it("parses a foundry backend", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({
@@ -204,6 +267,20 @@ describe("parseEmbedTenants", () => {
     ).toThrow(/token/);
   });
 
+  it("accepts trial_form as a gate mode", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "trial_form",
+          token: "t",
+        },
+      }),
+    );
+    expect(reg.get("example.com")?.gateMode).toBe("trial_form");
+  });
+
   it("throws on an invalid gateMode or theme", () => {
     expect(() =>
       parseEmbedTenants(
@@ -257,6 +334,144 @@ describe("parseEmbedTenants", () => {
     );
     resetEmbedTenantRegistryForTests();
     expect(resolveEmbedTenantByHost("example.com")?.lockedContact).toBe("info@example.com");
+  });
+
+  describe("activityDetail", () => {
+    const entry = (extra: Record<string, unknown> = {}) =>
+      JSON.stringify({
+        "tenant.example": {
+          slug: "tenant",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "tok",
+          ...extra,
+        },
+      });
+
+    // Conservative by construction: a tenant nobody configured must not stream
+    // retrieved document titles to anonymous visitors.
+    it("defaults to labels when unspecified", () => {
+      const cfg = parseEmbedTenants(entry()).get("tenant.example")!;
+      expect(cfg.activityDetail).toBe("labels");
+    });
+
+    it("accepts each valid level", () => {
+      for (const level of ["off", "labels", "full"] as const) {
+        const cfg = parseEmbedTenants(entry({ activityDetail: level })).get("tenant.example")!;
+        expect(cfg.activityDetail).toBe(level);
+      }
+    });
+
+    it("rejects an unknown level at startup rather than silently downgrading", () => {
+      expect(() => parseEmbedTenants(entry({ activityDetail: "verbose" }))).toThrow(
+        /activityDetail must be/
+      );
+    });
+  });
+
+  it("parses showByok, showStatusBar, layout independent of gateMode", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "digithings.ai": {
+          slug: "digithings",
+          backend: {
+            type: "digivault",
+            supabaseUrlEnv: "A_URL",
+            supabaseAnonKeyEnv: "A_ANON",
+            openRouterKeyEnv: "A_OR",
+          },
+          gateMode: "ungated",
+          showByok: true,
+          showStatusBar: true,
+          layout: "page",
+          activityDetail: "full",
+          token: "t",
+        },
+      }),
+    );
+    const t = reg.get("digithings.ai")!;
+    expect(t.gateMode).toBe("ungated");
+    expect(t.showByok).toBe(true);
+    expect(t.showStatusBar).toBe(true);
+    expect(t.layout).toBe("page");
+  });
+
+  it("rejects invalid layout", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "ex",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            layout: "fullscreen",
+            token: "t",
+          },
+        }),
+      ),
+    ).toThrow(/layout/);
+  });
+
+  it("omits UI flags when absent (callers default)", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "ex",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+        },
+      }),
+    );
+    const t = reg.get("example.com")!;
+    expect(t.showByok).toBeUndefined();
+    expect(t.showStatusBar).toBeUndefined();
+    expect(t.layout).toBeUndefined();
+  });
+
+  it("accepts a gate block with an https consumeUrl", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "dev.datatap.stream": {
+          slug: "datatap",
+          backend: { type: "digigraph" },
+          gateMode: "trial_form",
+          token: "t",
+          gate: { consumeUrl: "https://api.test/consume" },
+        },
+      }),
+    );
+    expect(reg.get("dev.datatap.stream")?.gate?.consumeUrl).toBe("https://api.test/consume");
+  });
+
+  it("rejects a gate whose consumeUrl is not https", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "dev.datatap.stream": {
+            slug: "datatap",
+            backend: { type: "digigraph" },
+            gateMode: "trial_form",
+            token: "t",
+            gate: { consumeUrl: "http://api.test/consume" },
+          },
+        }),
+      ),
+    ).toThrow(/consumeUrl/);
+  });
+
+  it("leaves gate undefined when absent", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "dev.datatap.stream": {
+          slug: "datatap",
+          backend: { type: "digigraph" },
+          gateMode: "trial_form",
+          token: "t",
+        },
+      }),
+    );
+    expect(reg.get("dev.datatap.stream")?.gate).toBeUndefined();
   });
 });
 

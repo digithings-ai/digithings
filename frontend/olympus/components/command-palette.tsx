@@ -8,10 +8,12 @@ import {
   Brain,
   FileText,
   GitBranch,
+  Globe,
   LayoutDashboard,
   LineChart,
   Newspaper,
   PieChart,
+  Scale,
   Search,
   Settings,
   Tag,
@@ -26,6 +28,7 @@ import { useAppShell } from '@/components/app-shell-context';
 import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
 import { buildDocumentSearchItems } from '@/lib/document-search';
 import { fetchAllTickers } from '@/lib/queries';
+import { thesisDetailHref } from '@/lib/portfolio-url-state';
 import type { Doc } from '@/lib/types';
 
 export type CmdItem = {
@@ -65,9 +68,16 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     {
       id: 'go-perf',
       title: 'Portfolio — Performance',
-      hint: 'NAV, comparables & decision quality',
+      hint: 'NAV, returns & position performance',
       href: '/portfolio/performance',
       icon: LineChart,
+    },
+    {
+      id: 'go-attribution',
+      title: 'Portfolio — Attribution',
+      hint: 'Position decomposition & recommendation quality',
+      href: '/portfolio/attribution',
+      icon: Scale,
     },
     {
       id: 'go-pipeline',
@@ -91,6 +101,20 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
       icon: Brain,
     },
     {
+      id: 'go-fx',
+      title: 'FX Hub',
+      hint: 'Desk consensus, matrix & events',
+      href: '/twelve-x',
+      icon: Globe,
+    },
+    {
+      id: 'go-fx-how',
+      title: 'FX Hub — how it works',
+      hint: 'The research pipeline, explained',
+      href: '/twelve-x?tab=how-it-works',
+      icon: Globe,
+    },
+    {
       id: 'go-system',
       title: 'System',
       hint: 'Run health & how Olympus works',
@@ -110,7 +134,7 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     id: `thesis-${t.id}`,
     title: `Thesis — ${t.name}`,
     hint: t.id,
-    href: `/portfolio/theses/${encodeURIComponent(t.id)}`,
+    href: thesisDetailHref(t.id),
     icon: Brain,
   }));
 

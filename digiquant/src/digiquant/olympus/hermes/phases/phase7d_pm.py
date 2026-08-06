@@ -21,10 +21,7 @@ Emitted as a single ``RebalanceDecision`` per run into
 from __future__ import annotations
 
 import logging
-
-from digiquant.olympus.atlas.state import PhaseError
-
-from typing import Any, Literal  # noqa: F401 — used for JSON-derived dict shape
+from typing import Any, Literal  # score:allow untyped any — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
@@ -35,10 +32,10 @@ from digiquant.olympus.atlas.phases._node_factory import (
     apply_web_grounding_to_inputs,
     build_grounding,
 )
+from digiquant.olympus.atlas.state import PhaseError
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.state import HermesState
-
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +154,7 @@ def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
             tools=tools,
             execute_tool=execute_tool,
         )
-    except Exception as exc:  # noqa: BLE001 — LLM-output failure degrades this debate arm (#1665)
+    except Exception as exc:  # LLM-output failure degrades this debate arm (#1665)
         logger.warning("risk-aggressive LLM failed (%s: %s); empty case", type(exc).__name__, exc)
         return {
             "phase7d_risk_debate": {
@@ -225,7 +222,7 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
             tools=tools,
             execute_tool=execute_tool,
         )
-    except Exception as exc:  # noqa: BLE001 — LLM-output failure degrades this debate arm (#1665)
+    except Exception as exc:  # LLM-output failure degrades this debate arm (#1665)
         logger.warning(
             "risk-conservative LLM failed (%s: %s); keeping aggressive half",
             type(exc).__name__,
@@ -336,7 +333,7 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
             tools=tools,
             execute_tool=execute_tool,
         )
-    except Exception as exc:  # noqa: BLE001 — LLM-output failure degrades legacy PM, never the chain (#1665)
+    except Exception as exc:  # LLM-output failure degrades legacy PM, never the chain (#1665)
         # H8 prefers the H7 memo when present; the legacy rebalance is only the
         # fallback path, so skipping it on an LLM failure is safe degradation.
         logger.warning(

@@ -28,6 +28,39 @@ const story = (over: Partial<ThesisStory>): ThesisStory => ({
   ...over,
 });
 
+describe('ThesisStorySpine — research library', () => {
+  it('renders a simple dated research-view disclosure list', () => {
+    const stories = [story({ thesis: thesis({ id: 'MT1', name: 'High conviction' }) })];
+
+    const html = renderToStaticMarkup(
+      createElement(ThesisStorySpine, {
+        stories,
+        asOf: '2026-07-17',
+      })
+    );
+
+    expect(html).toContain('Research views');
+    expect(html).toContain('As of 2026-07-17');
+    expect(html).toContain('High conviction');
+  });
+
+  it('does not render coverage metrics, an index, or unassigned shelves', () => {
+    const html = renderToStaticMarkup(
+      createElement(ThesisStorySpine, {
+        stories: [story({ thesis: thesis({ id: 'MT1', name: 'A' }) })],
+        asOf: '2026-07-17',
+      })
+    );
+
+    expect(html).not.toContain('mapped exposure');
+    expect(html).not.toContain('held unmapped');
+    expect(html).not.toContain('proposed unheld');
+    expect(html).not.toContain('Thesis index');
+    expect(html).not.toContain('Unassigned');
+    expect(html).not.toContain('drives');
+  });
+});
+
 describe('ThesisStorySpine — one-open disclosure default', () => {
   it('opens only the first/highest-conviction thesis by default, not all', () => {
     const stories = [
@@ -47,8 +80,6 @@ describe('ThesisStorySpine — one-open disclosure default', () => {
     const html = renderToStaticMarkup(
       createElement(ThesisStorySpine, {
         stories,
-        unassigned: { heldUnmapped: [], proposedUnheld: [] },
-        weightByThesis: new Map(),
         asOf: '2026-07-17',
       })
     );
@@ -60,7 +91,8 @@ describe('ThesisStorySpine — one-open disclosure default', () => {
 
     expect(openMatches.length).toBe(1); // Only one thesis should be open
     expect(html).toContain('High conviction'); // First thesis is rendered
-    expect(html.match(/glass-card/g)).toHaveLength(stories.length);
+    // Now using hairline borders instead of glass-card
+    expect(html).toMatch(/border-y border-hair/);
     expect(html).not.toContain('text-up');
     expect(html).not.toContain('text-down');
   });

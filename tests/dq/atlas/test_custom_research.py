@@ -16,12 +16,11 @@ Covers:
 from __future__ import annotations
 
 from datetime import date
-from typing import Any  # noqa: F401 — used for fake-payload dict shape
+from typing import Any  # score:allow untyped any — used for fake-payload dict shape
 from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-
 from digiquant.olympus.atlas.graph import (
     AtlasInput,
     build_cli_parser,
@@ -38,7 +37,6 @@ from digiquant.olympus.atlas.state import (
 )
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-
 
 # ─── AtlasInput + CLI parser ────────────────────────────────────────────────
 

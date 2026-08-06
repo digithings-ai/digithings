@@ -1,4 +1,4 @@
-"""DigiQuant HTTP API for DigiGraph. Phase 2: backtest, optimize, export, pipeline."""
+"""digiquant HTTP API for digigraph. Phase 2: backtest, optimize, export, pipeline."""
 
 from __future__ import annotations
 
@@ -10,17 +10,15 @@ import threading
 from queue import Empty, Queue
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
-
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digiquant_path_scopes
-
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +26,8 @@ from digiquant import __version__
 from digiquant.addm import AddmResult, check_drift, record_sharpe
 from digiquant.audit import audit_log as dq_audit_log
 from digiquant.backtest_jobs import create_backtest_job, get_backtest_job
-from digiquant.models import BacktestResult, ExportResult, OptimizeResult, OptimizationConstraints
 from digiquant.graph.pipeline import run_quant_workflow
+from digiquant.models import BacktestResult, ExportResult, OptimizationConstraints, OptimizeResult
 from digiquant.service import (
     service_list_strategies,
     service_run_backtest,
@@ -38,8 +36,8 @@ from digiquant.service import (
 )
 
 app = FastAPI(
-    title="DigiQuant",
-    description="High-perf backtest/optimize/export API for DigiGraph (MCP in Phase 2)",
+    title="digiquant",
+    description="High-perf backtest/optimize/export API for digigraph (MCP in Phase 2)",
     version=__version__,
 )
 install_metrics(app, service="digiquant", version=__version__)
@@ -205,7 +203,7 @@ def _pipeline_requires_export(req: PipelineRequest) -> bool:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Legacy health check for Docker and DigiGraph (kept for back-compat)."""
+    """Legacy health check for Docker and digigraph (kept for back-compat)."""
     return {"status": "ok", "service": "digiquant"}
 
 
@@ -213,7 +211,7 @@ def health() -> dict[str, str]:
 def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
-    Returns HTTP 200 with ``{"ok": true}``. Pair with DigiSmith's ``/v1/status``
+    Returns HTTP 200 with ``{"ok": true}``. Pair with digismith's ``/v1/status``
     for richer diagnostics.
     """
     return {"ok": True}
@@ -359,7 +357,7 @@ class OrchestratorInvokeRequest(BaseModel):
 
 @v1.post("/orchestrator_tools")
 def v1_orchestrator_tools() -> dict[str, Any]:
-    """Return OpenAI-style tools owned by DigiQuant (for DigiGraph orchestration)."""
+    """Return OpenAI-style tools owned by digiquant (for digigraph orchestration)."""
     from digiquant.orchestrator_tools import build_orchestrator_tool_manifest
 
     return {"tools": build_orchestrator_tool_manifest(), "version": 1}
@@ -376,7 +374,7 @@ def _normalize_symbols(raw: Any) -> list[str]:
 
 @v1.post("/orchestrator_invoke")
 def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
-    """Execute one DigiQuant orchestrator tool (DigiGraph hub dispatch)."""
+    """Execute one digiquant orchestrator tool (digigraph hub dispatch)."""
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
 
@@ -545,7 +543,7 @@ def v1_post_workflow(req: PipelineRequest) -> dict[str, Any]:
 
 @v1.get("/jobs/{job_id}/status")
 async def v1_get_job_status(job_id: str) -> dict:
-    """Job lifecycle: ``running`` | ``completed`` | ``failed`` (DigiQuant backtest jobs)."""
+    """Job lifecycle: ``running`` | ``completed`` | ``failed`` (digiquant backtest jobs)."""
     job = get_backtest_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id!r}")

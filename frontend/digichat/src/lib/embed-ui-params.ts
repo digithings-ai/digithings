@@ -1,8 +1,6 @@
 /** Client-side embed UI overrides from iframe URL search params. */
 
-// #rrggbb only. The value becomes a CSS custom-property value, so validate
-// strictly — never interpolate an arbitrary URL param into a style.
-const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+import { isEmbedHexColor } from "@/lib/embed-accent-style";
 
 export type EmbedUiParams = {
   welcome?: string;
@@ -16,7 +14,7 @@ export type EmbedUiParams = {
 
 function readHexParam(sp: URLSearchParams, key: string): string | undefined {
   const raw = sp.get(key);
-  return raw && HEX_COLOR.test(raw) ? raw : undefined;
+  return isEmbedHexColor(raw) ? raw : undefined;
 }
 
 export function readEmbedUiParams(search: string): EmbedUiParams {

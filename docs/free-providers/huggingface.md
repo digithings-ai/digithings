@@ -10,7 +10,7 @@ free_tier_type: credit-based
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-05-03
+verified_at: 2026-07-19
 source_urls:
   - https://huggingface.co/docs/api-inference/en/rate-limits
   - https://huggingface.co/docs/api-inference/en/index
@@ -22,7 +22,7 @@ source_urls:
 > **Access:** email signup; free tier very limited; PRO for meaningful usage  
 > **Privacy:** routes to underlying providers (Together AI, Fireworks, SambaNova, etc.)
 
-Hugging Face Inference Providers is a routing layer: your HF API call is routed to an underlying compute provider (Together AI, Fireworks, SambaNova, or others depending on the model). It's best thought of as a model-discovery hub rather than a primary inference provider. The free anonymous tier has very tight limits. PRO plan gives $2/month in credits. Most useful for: discovering and testing models, embeddings for DigiSearch, and prototyping before moving to a direct provider.
+Hugging Face Inference Providers is a routing layer: your HF API call is routed to an underlying compute provider (Together AI, Fireworks, SambaNova, or others depending on the model). It's best thought of as a model-discovery hub rather than a primary inference provider. The free anonymous tier has very tight limits. PRO plan gives $2/month in credits. Most useful for: discovering and testing models, embeddings for digisearch, and prototyping before moving to a direct provider.
 
 ---
 
@@ -74,15 +74,15 @@ model_list:
 
 ---
 
-## DigiThings Use
+## digithings Use
 
 | Field | Value |
 |---|---|
-| Best for | Model discovery; free embeddings (sentence-transformers models); DigiSearch indexing |
+| Best for | Model discovery; free embeddings (sentence-transformers models); digisearch indexing |
 | DIGI_LLM_MODE tier | Not in primary chain — embeddings only |
 | Single-shot 100k | Not recommended — credit limits too low |
 | Privacy safe | Unknown (routes to third parties) |
-| Atlas/Hermes role | **Not in research pipeline** — embeddings for DigiSearch only |
+| Atlas/Hermes role | **Not in research pipeline** — embeddings for digisearch only |
 
 ---
 
@@ -90,7 +90,7 @@ model_list:
 
 - The $2/month PRO credit depletes quickly with 70B model calls (~$0.001/call × 2000 = budget).
 - HF is best as a unified model discovery and embedding endpoint, not as a primary LLM provider.
-- Sentence-transformers embeddings (`all-MiniLM-L6-v2`, `all-mpnet-base-v2`) are effectively free and excellent for DigiSearch.
+- Sentence-transformers embeddings (`all-MiniLM-L6-v2`, `all-mpnet-base-v2`) are effectively free and excellent for digisearch.
 - LiteLLM's `huggingface/` prefix works for hosted inference endpoints; use `openai/` passthrough for HF Inference Endpoints (dedicated).
 
 ---
@@ -106,3 +106,4 @@ PRO plan at $9/month includes $2 inference credits. Inference Endpoints: dedicat
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-07-19 | Automated snapshot sync | provider-review scan |

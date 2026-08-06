@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-
 from digigraph.graph.nodes import backtest_node, research_node
 
 
@@ -175,7 +174,7 @@ class TestResearchNode:
 
 @pytest.mark.unit
 class TestBacktestNode:
-    """backtest_node: DigiQuant success, timeout, 5xx, malformed response."""
+    """backtest_node: digiquant success, timeout, 5xx, malformed response."""
 
     def test_success_returns_backtest_result(self) -> None:
         backtest_payload = {"run_id": "bt-1", "status": "ok", "symbols": ["AAPL", "MSFT"]}
@@ -229,7 +228,7 @@ class TestBacktestNode:
         assert sync_call_json["strategy_params"] == {"fast_ema_period": 8, "slow_ema_period": 21}
 
     def test_x_request_id_passed_to_digiquant_posts(self) -> None:
-        """Outbound DigiQuant calls include X-Request-ID when state has request_id."""
+        """Outbound digiquant calls include X-Request-ID when state has request_id."""
         backtest_payload = {"run_id": "bt-1", "status": "ok", "symbols": ["AAPL"]}
         v1_response = MagicMock()
         v1_response.status_code = 404

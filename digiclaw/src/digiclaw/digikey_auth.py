@@ -1,4 +1,4 @@
-"""Exchange a DigiKey machine API key for a short-lived JWT (heartbeat / automation)."""
+"""Exchange a digikey machine API key for a short-lived JWT (heartbeat / automation)."""
 
 from __future__ import annotations
 

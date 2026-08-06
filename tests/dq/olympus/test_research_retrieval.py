@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.research_retrieval import (
     ResearchCache,
     ResearchRetriever,
@@ -14,6 +13,7 @@ from digiquant.olympus.research_retrieval import (
     query_research,
     research_document_allowed,
 )
+
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
 

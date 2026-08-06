@@ -16,19 +16,19 @@ class WorkflowState(TypedDict, total=False):
     session_id: str | None
     request_id: str | None
     workflow_id: str | None
-    # Forward DigiKey JWT (or legacy API key) to DigiQuant / DigiSearch HTTP clients.
+    # Forward digikey JWT (or legacy API key) to digiquant / digisearch HTTP clients.
     digi_bearer: str | None
     # Sorted list of allowed orchestrator tool names; None = unrestricted.
     allowed_tool_names: list[str] | None
     strategy_name: str
     symbols: list[str]
-    # Optional parameters passed to DigiQuant run_backtest (from research extraction or user).
+    # Optional parameters passed to digiquant run_backtest (from research extraction or user).
     strategy_params: dict[str, Any]
     # Optional user/tenant trading profile (Phase F); merged into optimization_constraints when set.
     trading_profile: dict[str, Any]
     research_note: str
     research_response: str  # Freeform LLM response (document-search mode)
-    # Aggregated DigiSearch citations + structured brief (research / ideation tier).
+    # Aggregated digisearch citations + structured brief (research / ideation tier).
     rag_sources: list[dict[str, Any]]
     research_brief: dict[str, Any]
     profiling_questions: list[str]
@@ -39,7 +39,7 @@ class WorkflowState(TypedDict, total=False):
     optimize_result: dict | None
     optimize_error: str | None
     optimization_constraints: dict[str, Any]
-    # Opaque URI from DigiQuant/export (Phase 2 artifact contract); workflow stores refs not blobs.
+    # Opaque URI from digiquant/export (Phase 2 artifact contract); workflow stores refs not blobs.
     quant_artifact_uri: str | None
     error: str | None
     # Session datasets: ref -> { ref, profile }. No reducer; last writer wins per key.

@@ -4,19 +4,21 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Any  # noqa  # scored-lint: heterogeneous fake-row / fixture dicts
+from typing import (
+    Any,  # score:allow untyped any — scored-lint: heterogeneous fake-row / fixture dicts
+)
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.graph.pipeline_builder import build_pipeline
-
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     FocusRosterEntry,
     PhaseHermesState,
+    PriorContext,
 )
+from digiquant.olympus.hermes.focus_roster import with_fanout_ticker
 from digiquant.olympus.hermes.models.deliberation import (
     DeliberationAnalystTurn,
     DeliberationPmTurn,
@@ -24,7 +26,11 @@ from digiquant.olympus.hermes.models.deliberation import (
     DeliberationTurn,
 )
 from digiquant.olympus.hermes.payloads import deliberation_summaries
-from digiquant.olympus.hermes.phases.h6_deliberation import build_h6_deliberation
+from digiquant.olympus.hermes.phases import h6_deliberation
+from digiquant.olympus.hermes.phases.h6_deliberation import (
+    build_h6_deliberation,
+    build_h6_from_state,
+)
 
 
 def _state() -> AtlasResearchState:
@@ -238,3 +244,90 @@ class TestDeliberationConvergence:
         assert shaped["cap_reason"] == "max_rounds"
         assert shaped["rounds_count"] == 2
         assert shaped["conclusion"] == "aligned on buy"
+
+
+@pytest.mark.unit
+class TestDeliberationFailureCarry:
+    """#1742 — a crashed deliberation must be distinguishable from a benign carry.
+
+    On 2026-07-31, 31 of 39 debates died and each published ``carried=true`` +
+    ``converged=true`` — the same flags as the 4 intentional fingerprint skips.
+    """
+
+    @staticmethod
+    def _run_h6(state: AtlasResearchState) -> dict[str, Any]:
+        # Drives the production fan-out worker directly: this exercises the carry
+        # construction without standing up the LLM plumbing the loop tests need.
+        return build_h6_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
+
+    def test_crash_carry_is_flagged_and_is_not_converged(self) -> None:
+        with patch.object(
+            h6_deliberation,
+            "run_deliberation_loop",
+            side_effect=ValueError("Expecting value: line 1 column 1 (char 0)"),
+        ):
+            out = self._run_h6(_state())
+        summary = out["phase_hermes"].deliberation_summaries["AAPL"]
+        assert summary["carried"] is True
+        assert summary["carry_reason"] == "llm_failure"
+        # No PM challenge ran, so there is no debate to have converged.
+        assert summary["converged"] is False
+        assert summary["transcript"] == []
+        # The PhaseError shape the Atlas Hermes-density gate counts stays untouched.
+        assert out["errors"][0].phase == "hermes_h6_deliberation"
+        assert out["errors"][0].message.startswith("deliberation LLM failed")
+
+    def test_fingerprint_skip_carry_is_labelled_benign(self) -> None:
+        state = _state()
+        state.prior_context = PriorContext(
+            prior_deliberation_by_ticker={
+                "AAPL": {
+                    "conclusion_excerpt": "prior agreement",
+                    "net_stance": "neutral",
+                    "conviction_delta": 0,
+                }
+            }
+        )
+        with patch.object(h6_deliberation, "deliberation_skip_signal", return_value=True):
+            out = self._run_h6(state)
+        summary = out["phase_hermes"].deliberation_summaries["AAPL"]
+        assert summary["carried"] is True
+        assert summary["carry_reason"] == "fingerprint_skip"
+        # The prior debate did converge; nothing moved, so it still stands (#925).
+        assert summary["converged"] is True
+        assert "errors" not in out
+
+    def test_crash_carry_publishes_no_bear_thesis(self) -> None:
+        state = _state()
+        state.phase_hermes.deliberation_summaries = {
+            "AAPL": DeliberationSummary(
+                ticker="AAPL",
+                converged=False,
+                conclusion="growth intact",
+                net_stance="bullish",
+                carried=True,
+                carry_reason="llm_failure",
+            ).model_dump(mode="json")
+        }
+        shaped = deliberation_summaries(state)["AAPL"]
+        assert shaped["carry_reason"] == "llm_failure"
+        assert shaped["converged"] is False
+        assert shaped["rounds_count"] == 0
+        # The carried analyst thesis is a true statement about what happened; a bear case
+        # byte-identical to it is not, and it made the document look two-sided.
+        assert shaped["bull_thesis"] == "growth intact"
+        assert shaped["bear_thesis"] == ""
+
+    def test_benign_carry_keeps_the_mirrored_bear_fallback(self) -> None:
+        state = _state()
+        state.phase_hermes.deliberation_summaries = {
+            "AAPL": DeliberationSummary(
+                ticker="AAPL",
+                conclusion="prior agreement",
+                carried=True,
+                carry_reason="fingerprint_skip",
+            ).model_dump(mode="json")
+        }
+        shaped = deliberation_summaries(state)["AAPL"]
+        assert shaped["carry_reason"] == "fingerprint_skip"
+        assert shaped["bear_thesis"] == "prior agreement"

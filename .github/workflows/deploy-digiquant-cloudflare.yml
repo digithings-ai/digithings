@@ -12,6 +12,14 @@ on:
       - "frontend/digiweb/design/**"
       - "scripts/build-digiquant.sh"
       - ".github/workflows/deploy-digiquant-cloudflare.yml"
+      # Root packaging manifests are what make Cloudflare's build image auto-run a
+      # dependency install ahead of the build command, so a change to one can break the
+      # deploy without touching a single frontend file. #1714 was exactly that — it edited
+      # only the root pyproject.toml and uv.lock, matched none of the globs above, and so
+      # froze this site for three days without ever running this check.
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "setup.py"
   workflow_dispatch:
 
 concurrency:
@@ -33,6 +41,17 @@ jobs:
           node-version: "22"
           cache: npm
 
+      # Cloudflare's build image auto-detects languages from the repo root, finds the root
+      # pyproject.toml, and runs `pip install .` BEFORE the configured build command. If that
+      # fails, the build command is never reached — so this whole job passing proves nothing
+      # about the real deploy. That is not hypothetical: #1714 added the root pyproject.toml
+      # on 2026-07-30 and both production sites silently built nothing until 2026-08-02, with
+      # every PR green throughout. Run the same step Cloudflare runs, first, in the same order.
+      # --dry-run suffices: the failure occurs in "getting requirements to build wheel", which
+      # --dry-run still performs, and it avoids mutating the runner's site-packages.
+      - name: Assert the repo root is pip-installable (Cloudflare runs `pip install .`)
+        run: python3 -m pip install --dry-run --no-deps .
+
       - name: Assemble dist/ (same as Cloudflare Pages)
         run: bash scripts/build-digiquant.sh
 
@@ -42,3 +61,16 @@ jobs:
           test -f dist/CNAME
           test -d dist/olympus
           grep -q digiquant.io dist/CNAME
+
+      # The daily freshness probe in smoke-site.yml reads this stamp off the live
+      # site (#1759). Validate the stamp the build just wrote with the same
+      # evaluator, so a regression in either half fails here rather than turning
+      # every production probe into a false UNSTAMPED.
+      - name: Assert deploy build stamp
+        run: |
+          test -f dist/build-info.json
+          python3 scripts/check_deploy_freshness.py \
+            --url dist/build-info.json \
+            --status 200 \
+            --body-file dist/build-info.json \
+            --max-age-hours 1

@@ -1,1 +1,1 @@
-"""DigiSearch ingestion: parsers, chunkers, OCR."""
+"""digisearch ingestion: parsers, chunkers, OCR."""

@@ -1,4 +1,4 @@
-"""DigiSkills CLI. Typer-based. Entry point: ``digiskills``."""
+"""digiskills CLI. Typer-based. Entry point: ``digiskills``."""
 
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ from digiskills.models import SkillSource, SourceKind
 from digiskills.package import write_skill_package, write_skill_zip
 
 app = typer.Typer(
-    help="DigiSkills – compile a codebase/docs source into an installable Agent Skill"
+    help="digiskills – compile a codebase/docs source into an installable Agent Skill"
 )
 
 
 @app.callback()
 def _main() -> None:
-    """DigiSkills – compile a codebase/docs source into an installable Agent Skill.
+    """digiskills – compile a codebase/docs source into an installable Agent Skill.
 
     Empty callback: keeps ``digiskills compile ...`` requiring the explicit
     subcommand name even while it's the only command (Typer otherwise

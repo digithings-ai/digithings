@@ -12,7 +12,6 @@ from datetime import date, timedelta
 
 import polars as pl
 import pytest
-
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
@@ -196,6 +195,84 @@ def test_effective_conviction_applies_debate_delta() -> None:
     w = _weights(rebal)
     assert w["AAA"] > w["BBB"]
     assert w["AAA"] / w["BBB"] == pytest.approx(5.0 / 3.0, rel=0.05)
+
+
+class TestUnchallengedCarryIsLowConfidence:
+    """#1742 — a position whose H6 debate crashed may not be sized as a won argument.
+
+    On 2026-07-31 the three highest-conviction new opens (VGK/FXI/IBIT, 30% of NAV) were
+    all crash-carried: H6 published the analyst's own stance as a converged debate, and
+    sizing had no way to know the PM challenge never ran.
+    """
+
+    _ANALYSTS = {
+        "AAA": {"conviction_score": 3, "stance": "buy"},
+        "BBB": {"conviction_score": 3, "stance": "buy"},
+    }
+
+    def _sized(
+        self,
+        debates: dict,
+        preferences: dict | None = None,
+        analysts: dict | None = None,
+        **kwargs,
+    ) -> dict:
+        return _run(
+            _state(
+                [{"ticker": "AAA", "target_pct": 50}, {"ticker": "BBB", "target_pct": 50}],
+                analysts=analysts or dict(self._ANALYSTS),
+                debates=debates,
+                preferences={**_RELAXED, **(preferences or {})},
+                **kwargs,
+            ),
+            FakeSupabaseClient(
+                canned_reads={"price_technicals": _tech_rows({"AAA": 20, "BBB": 20})}
+            ),
+        )
+
+    def test_memo_path_caps_the_crash_carried_name_at_the_bar(self) -> None:
+        # The memo branch is production (H7 writes a memo every run): rank 1 (AAA) would
+        # outweigh rank 2 (BBB), but AAA's debate crashed, so it drops to the entry bar.
+        rebal = self._sized({"AAA": {"carried": True, "carry_reason": "llm_failure"}})
+        w = _weights(rebal)
+        assert w["AAA"] == pytest.approx(w["BBB"])
+        # Capped, never ejected — the name stays in the book and is named in the note.
+        assert "AAA" in w
+        assert "H6 deliberation failed" in rebal["notes"]
+
+    def test_benign_fingerprint_skip_keeps_full_conviction(self) -> None:
+        # The quiet-ticker carry (#925) is a real prior debate; it must not be haircut.
+        rebal = self._sized({"AAA": {"carried": True, "carry_reason": "fingerprint_skip"}})
+        w = _weights(rebal)
+        assert w["AAA"] > w["BBB"]
+        assert "H6 deliberation failed" not in rebal["notes"]
+
+    def test_legacy_path_caps_the_crash_carried_name_too(self) -> None:
+        # No-memo branch, with the un-carried run as its own control: AAA's analyst
+        # conviction of 5 outweighs BBB's 2 until AAA's debate crashes.
+        analysts = {
+            "AAA": {"conviction_score": 5, "stance": "buy"},
+            "BBB": {"conviction_score": 2, "stance": "buy"},
+        }
+        control = self._sized({}, analysts=analysts, use_memo=False)
+        crashed = self._sized(
+            {"AAA": {"carried": True, "carry_reason": "llm_failure"}},
+            analysts=analysts,
+            use_memo=False,
+        )
+        assert _weights(control)["AAA"] > _weights(control)["BBB"]
+        assert _weights(crashed)["AAA"] == pytest.approx(_weights(crashed)["BBB"])
+
+    def test_cap_holds_when_the_bar_is_raised_above_the_default(self) -> None:
+        # ``min_conviction`` above the memo floor of 2.0: capping AT the bar still clears
+        # the sizer's ``>=`` selection, so the position survives at minimum size.
+        rebal = self._sized(
+            {"AAA": {"carried": True, "carry_reason": "llm_failure"}},
+            preferences={"min_conviction": 3.0},
+        )
+        w = _weights(rebal)
+        assert "AAA" in w
+        assert w["AAA"] == pytest.approx(w["BBB"])
 
 
 def test_memo_conviction_rank_orders_weights() -> None:

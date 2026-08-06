@@ -13,7 +13,16 @@ export { Emblem, emblems } from "./components/emblems";
 export { StackLogo, StackRow } from "./components/StackLogo";
 export { GitHubGlyph } from "./components/icons";
 export { ScrollyGraph, GraphSVG } from "./components/graph";
-export { Nav, Footer, Colophon, ModuleCard, type NavLink } from "./components/chrome";
+export {
+  Nav,
+  Footer,
+  Colophon,
+  ModuleCard,
+  isNavGroup,
+  type NavLink,
+  type NavGroup,
+  type NavItem,
+} from "./components/chrome";
 export { NavShell, type NavShellProps } from "./components/NavShell";
 export { DocsLayout, type DocsNavGroup, type DocsNavItem, type DocsHero } from "./components/docs/DocsLayout";
 export { CodeTabs, DocsCodeBlock, type CodeSample } from "./components/docs/CodeTabs";
@@ -48,6 +57,8 @@ export { ChatTranscript, type ChatTranscriptProps } from "./components/chat/Chat
 export { ChatMessage, type ChatMessageProps, type ChatRole, type ChatTone } from "./components/chat/ChatMessage";
 export { ChatStreamCursor, type ChatStreamCursorProps } from "./components/chat/ChatStreamCursor";
 export { ChatMarkdown, type ChatMarkdownProps } from "./components/chat/ChatMarkdown";
+export { ChatMarkdownSource, type ChatMarkdownSourceProps } from "./components/chat/ChatMarkdownSource";
+export { ChatMermaidBlock, type ChatMermaidBlockProps } from "./components/chat/ChatMermaidBlock";
 export { ChatCodeBlock, ChatCopyButton, type ChatCodeBlockProps, type ChatCopyButtonProps } from "./components/chat/ChatCodeBlock";
 export { ChatToolCall, type ChatToolCallProps, type ChatToolCallStatus, type ChatToolCallLine } from "./components/chat/ChatToolCall";
 export { ChatThinking, type ChatThinkingProps } from "./components/chat/ChatThinking";
@@ -244,6 +255,7 @@ export {
   CandlestickChart,
   TimeSeries,
   SignedBars,
+  ContributionReturnChart,
   TradeReturnChart,
   ReturnsMatrix,
   SegToggle,
@@ -276,6 +288,8 @@ export {
   type CandlestickChartProps,
   type TimeSeriesProps,
   type SignedBarsProps,
+  type ContributionReturnChartProps,
+  type ContributionReturnPoint,
   type TradeReturnChartProps,
   type ReturnsPeriod,
   type MatrixMetric,
@@ -307,3 +321,20 @@ export {
   type CommandPaletteItem,
 } from "./components/command-palette";
 export { OlympusMark, Wordmark, type OlympusMarkProps, type WordmarkProps } from "./components/symbols/marks";
+// Terminal identity — the `digi` + block-cursor lockup and the hairline display
+// cut. Supersedes `Wordmark` for new work; `Wordmark`/`Colophon` stay for the
+// surfaces already using them.
+export {
+  TerminalMark,
+  TerminalWordmark,
+  HairlineWordmark,
+  TERMINAL_CURSOR,
+  type TerminalMarkProps,
+  type TerminalWordmarkProps,
+  type HairlineWordmarkProps,
+} from "./components/symbols/terminal-marks";
+export {
+  AnimatedLockup,
+  MODULE_SUFFIXES,
+  type AnimatedLockupProps,
+} from "./components/symbols/terminal-lockup";

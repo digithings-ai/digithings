@@ -57,7 +57,7 @@ export async function POST(req: Request) {
       {
         error: "invalid_endpoints",
         message:
-          "Three valid http(s) URLs required (DigiGraph, DigiQuant, DigiSmith). Optional fourth: digisearchUrl (DigiSearch / RAG).",
+          "Three valid http(s) URLs required (digigraph, digiquant, digismith). Optional fourth: digisearchUrl (digisearch / RAG).",
       },
       { status: 400 }
     );

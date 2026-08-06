@@ -9,13 +9,13 @@
 @import "@digithings/web/styles/docs.css";
 @import "@digithings/web/styles/terminal-manifest.css";
 /* Homepage primitives (#1450): NumberedStages spine (stages.css), the
-   digit-roll OdometerStrip metrics band (data-layout.css, #1452 promotion),
-   the WordReveal pinned-blur claim (word-reveal.css) and the stack Marquee
-   (marquee.css). */
+   digit-roll OdometerStrip metrics band (data-layout.css, #1452 promotion) and
+   the WordReveal pinned-blur claim (word-reveal.css). marquee.css is gone with
+   the stack Marquee it styled — the band under the hero is <RepoStrip> now, built
+   from tokens and utilities. digiquant-web still imports it. */
 @import "@digithings/web/styles/stages.css";
 @import "@digithings/web/styles/data-layout.css";
 @import "@digithings/web/styles/word-reveal.css";
-@import "@digithings/web/styles/marquee.css";
 /* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
    the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
    caret's animation shorthand when an element carries both .chat-cursor
@@ -34,7 +34,7 @@
 @source "../../digiweb/web/src/components/stages";
 @source "../../digiweb/web/src/components/data-layout";
 @source "../../digiweb/web/src/components/typography";
-@source "../../digiweb/web/src/components/marquee";
+@source "../../digiweb/web/src/components/symbols";
 
 /* Point the token font families at the self-hosted next/font variables. */
 :root[data-theme] {
@@ -47,7 +47,7 @@
 }
 
 /* ---- Neutral platform palette (digithings.ai only) ----
-   DigiThings is the platform; accent flavoring belongs to individual modules,
+   digithings is the platform; accent flavoring belongs to individual modules,
    not the platform shell. The shared design tokens (tokens.css) define a teal
    accent that digiquant.io legitimately uses for its green-candle identity — we
    must NOT change that file (digiquant-web + olympus consume it). Instead we
@@ -76,13 +76,6 @@
    page shading always reaches the top border. (The shared file also feeds
    digiquant.io, so we don't touch it.) */
 .glow { animation: none; transform: none; }
-
-/* brand QR mark: transparent, theme-inverted (dark modules in light mode, white
-   in dark) — two <img>s swapped by [data-theme] (Lightning CSS drops mask-image,
-   so a single recolorable mark isn't reliable). */
-.brand-mark { display: inline-block; }
-[data-theme="light"] .brand-mark-dark { display: none; }
-[data-theme="dark"] .brand-mark-light { display: none; }
 
 /* ==========================================================================
    v7 LANDING CHROME — originally ported from digiquant-web/app/globals.css
@@ -213,6 +206,9 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dc-settings-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
 .dc-settings-error { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--down); }
 .dc-settings-test-ok { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--up); }
+
+
+/* Landing / module cards continue below */
 
 /* ---- /docs API reference — app-owned CONTENT chrome only. The shell
    (responsive sidebar + scroll-spy + mobile disclosure), hero, code blocks,

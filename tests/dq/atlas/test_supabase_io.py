@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import Any  # noqa: F401 — used for fake-client payload dict shape
+from typing import Any  # score:allow untyped any — used for fake-client payload dict shape
 
 import pytest
-
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseConfig,
     SupabaseNotConfiguredError,
     load_active_theses_rows,
+    load_portfolio_performance_snapshot,
     load_prior_analyst_summaries,
     load_prior_book,
     load_prior_context,
     load_prior_deliberation_summaries,
-    load_portfolio_performance_snapshot,
     prior_book_current_weights,
     publish_daily_snapshot,
     publish_document,
@@ -27,7 +27,6 @@ from digiquant.olympus.atlas.supabase_io import (
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
-
 
 # ─── In-memory fake Supabase client ─────────────────────────────────────────
 
@@ -52,6 +51,7 @@ class _FakeQuery:
     canned: list[dict[str, Any]] = field(default_factory=list)
     _upsert_row: dict[str, Any] | None = None
     _update_row: dict[str, Any] | None = None
+    _delete: bool = False
     _filters: list[tuple[str, str, Any]] = field(default_factory=list)
     _order: tuple[str, bool] | None = None
     _limit: int | None = None
@@ -81,6 +81,11 @@ class _FakeQuery:
         self._filters.append(("in_", col, list(vals)))
         return self
 
+    def like(self, col: str, pattern: str) -> "_FakeQuery":
+        # PostgREST ``like``; only the trailing-``%`` prefix form is used in-repo.
+        self._filters.append(("like", col, pattern))
+        return self
+
     def order(self, col: str, desc: bool = False) -> "_FakeQuery":
         self._order = (col, desc)
         return self
@@ -98,12 +103,35 @@ class _FakeQuery:
         self._update_row = dict(payload)
         return self
 
+    def delete(self) -> "_FakeQuery":
+        # PostgREST ``delete().eq(...).execute()``; removes matching rows from the
+        # write-side ``store`` (reads come from ``canned``, so a test that exercises
+        # a delete seeds the row in both).
+        self._delete = True
+        return self
+
+    def _matches(self, row: dict[str, Any]) -> bool:
+        return all(
+            (op == "eq" and row.get(col) == val)
+            or (op == "lt" and str(row.get(col, "")) < str(val))
+            or (op == "lte" and str(row.get(col, "")) <= str(val))
+            or (op == "gte" and str(row.get(col, "")) >= str(val))
+            or (op == "in_" and row.get(col) in val)
+            or (op == "like" and str(row.get(col, "")).startswith(str(val).rstrip("%")))
+            for op, col, val in self._filters
+        )
+
     def execute(self) -> _FakeResponse:
         if self._upsert_row is not None:
             self.store.setdefault(self.table_name, []).append(self._upsert_row)
             return _FakeResponse(
                 data=[{**self._upsert_row, "id": f"row-{len(self.store[self.table_name])}"}]
             )
+        if self._delete is True:
+            rows = self.store.get(self.table_name, [])
+            removed = [r for r in rows if self._matches(r)]
+            self.store[self.table_name] = [r for r in rows if not self._matches(r)]
+            return _FakeResponse(data=removed)
         if self._update_row is not None:
             # Apply update to rows in store that match all eq filters. Mirrors
             # PostgREST's ``update().eq(...).execute()`` chain semantics so the
@@ -111,29 +139,11 @@ class _FakeQuery:
             # ``update_decision_resolution`` is exercised end-to-end.
             updated: list[dict[str, Any]] = []
             for row in self.store.get(self.table_name, []):
-                if all(
-                    (op == "eq" and row.get(col) == val)
-                    or (op == "lt" and str(row.get(col, "")) < str(val))
-                    or (op == "lte" and str(row.get(col, "")) <= str(val))
-                    or (op == "gte" and str(row.get(col, "")) >= str(val))
-                    or (op == "in_" and row.get(col) in val)
-                    for op, col, val in self._filters
-                ):
+                if self._matches(row):
                     row.update(self._update_row)
                     updated.append(row)
             return _FakeResponse(data=updated)
-        rows = list(self.canned)
-        for op, col, val in self._filters:
-            if op == "lt":
-                rows = [r for r in rows if str(r.get(col, "")) < str(val)]
-            elif op == "lte":
-                rows = [r for r in rows if str(r.get(col, "")) <= str(val)]
-            elif op == "gte":
-                rows = [r for r in rows if str(r.get(col, "")) >= str(val)]
-            elif op == "eq":
-                rows = [r for r in rows if r.get(col) == val]
-            elif op == "in_":
-                rows = [r for r in rows if r.get(col) in val]
+        rows = [r for r in self.canned if self._matches(r)]
         if self._order is not None:
             col, desc = self._order
             rows.sort(key=lambda r: r.get(col, ""), reverse=desc)
@@ -277,9 +287,9 @@ class TestPublishDocument:
         """If a caller inadvertently passed an api_key field via the outer
         audit payload it would be redacted. The adapter never puts secrets
         there today, but the contract must hold."""
-        from digiquant.olympus.atlas.supabase_io import _audit
-
         import logging
+
+        from digiquant.olympus.atlas.supabase_io import _audit
 
         with caplog.at_level(logging.INFO, logger="digiquant.olympus.atlas.supabase_io"):
             _audit("test", {"document_key": "k", "api_key": "sk-should-not-appear"})
@@ -514,6 +524,53 @@ class TestContinuityLoaders:
         client = FakeSupabaseClient(canned_reads={"theses": rows})
         active = load_active_theses_rows(client, date(2026, 6, 19))
         assert [r["thesis_id"] for r in active] == ["shy-duration"]
+
+    def test_load_active_theses_rows_is_not_capped_across_dates(self) -> None:
+        """The register must not thin out as history accumulates (#1835).
+
+        The old shape was ``.order("date", desc=True).limit(row_cap)`` followed by a client-side
+        filter to the newest date present, so rows from OLDER dates consumed the cap and could
+        crowd out the date actually wanted. Here the newest date has 3 theses and the two older
+        dates have 40 between them, against ``row_cap=5`` — the old query would have returned
+        five rows all from 2026-06-18/17 ordering and yielded an arbitrary slice. The date is now
+        resolved first, so the cap applies to one date only.
+        """
+        newest = [
+            {"date": "2026-06-18", "thesis_id": f"live-{i}", "name": f"T{i}", "status": "ACTIVE"}
+            for i in range(3)
+        ]
+        older = [
+            {"date": "2026-06-17", "thesis_id": f"old-{i}", "name": f"O{i}", "status": "ACTIVE"}
+            for i in range(40)
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": newest + older})
+        active = load_active_theses_rows(client, date(2026, 6, 19), row_cap=5)
+        assert sorted(r["thesis_id"] for r in active) == ["live-0", "live-1", "live-2"]
+
+    def test_load_active_theses_rows_warns_when_it_hits_the_cap(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A truncated register admits the duplicate theses it exists to prevent, and the caller
+        cannot tell a complete register from a clipped one. So say so out loud."""
+        rows = [
+            {"date": "2026-06-18", "thesis_id": f"t-{i}", "name": f"T{i}", "status": "ACTIVE"}
+            for i in range(6)
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": rows})
+        with caplog.at_level(logging.WARNING):
+            load_active_theses_rows(client, date(2026, 6, 19), row_cap=3)
+        assert any("row_cap" in r.message for r in caplog.records)
+
+    def test_load_active_theses_rows_is_quiet_when_well_under_the_cap(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        rows = [
+            {"date": "2026-06-18", "thesis_id": "t-1", "name": "T1", "status": "ACTIVE"},
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": rows})
+        with caplog.at_level(logging.WARNING):
+            load_active_theses_rows(client, date(2026, 6, 19), row_cap=100)
+        assert not [r for r in caplog.records if "row_cap" in r.message]
 
     def test_load_portfolio_performance_snapshot(self) -> None:
         client = FakeSupabaseClient(

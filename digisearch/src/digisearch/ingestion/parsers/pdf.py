@@ -39,8 +39,8 @@ _OCR_AVAILABLE = False
 
 if _OCR_ENABLED:
     try:
-        import pytesseract as _pytesseract  # type: ignore[import-untyped]
         import pdf2image as _pdf2image  # type: ignore[import-untyped]
+        import pytesseract as _pytesseract  # type: ignore[import-untyped]
 
         _OCR_AVAILABLE = True
     except ImportError:

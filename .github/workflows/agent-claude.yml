@@ -11,8 +11,10 @@ name: "Agent: Claude Code"
 #   * Skips the `assigned` issue trigger — @claude in body/title is what
 #     matters, and `assigned` fires on every assignment change (wasteful).
 #
-# Code reviews are delegated to GitHub Copilot (housekeeping tier) — this
-# workflow is reserved for targeted human-initiated Claude requests only.
+# Code review is Cursor Bugbot, invoked on demand with a `bugbot run` comment, or
+# `/review <N>` in-session when Bugbot is out of quota. The Copilot review request
+# was retired 2026-08-05 (#1894). This workflow stays reserved for targeted,
+# human-initiated Claude requests only.
 
 on:
   issue_comment:

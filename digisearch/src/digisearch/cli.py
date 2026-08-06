@@ -1,4 +1,4 @@
-"""DigiSearch CLI. Typer-based. Entry point: digisearch."""
+"""digisearch CLI. Typer-based. Entry point: digisearch."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 import typer
 
-app = typer.Typer(help="DigiSearch – RAG, document search for Digi ecosystem")
+app = typer.Typer(help="digisearch – RAG, document search for Digi ecosystem")
 
 
 def _pick_chunker(name: str) -> Any:

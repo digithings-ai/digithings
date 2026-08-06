@@ -7,7 +7,12 @@ Per-phase segment outputs live in phase modules and slot into
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated, Any, Literal, TypedDict  # noqa: F401 — dict shape typing below
+from typing import (  # score:allow untyped any — dict shape typing below
+    Annotated,
+    Any,
+    Literal,
+    TypedDict,
+)
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -571,6 +576,31 @@ class AtlasResearchState(BaseModel):
             "Audit ``DocumentPatch`` payloads keyed by target materialized "
             "document_key (§5.4). Populated by edit-mode nodes; consumed by publish."
         ),
+    )
+    # Edit-mode merge fallbacks: segment slug → short reason (#1641/#1741). #1641 made a
+    # failed patch merge fall back to full regeneration with *no* PhaseError, which is the
+    # right call for run health but left the event completely unobservable — a segment that
+    # paid for a patch call AND a full regeneration is byte-identical in
+    # ``atlas_run_diagnostics`` to one that merged cleanly. Non-gating telemetry: written
+    # here, surfaced via ``atlas.telemetry.merge_fallback_breakdown``, never read by a gate.
+    # Right-wins reducer (like ``document_deltas``, not ``_merge_segment_dict``): parallel
+    # fan-out nodes each write their own slug, and a duplicate slug is not a wiring bug
+    # worth failing a run over.
+    merge_fallbacks: Annotated[dict[str, str], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="Segments whose edit patch failed to merge and were regenerated full.",
+    )
+    # Content freezes: segment slug → ``unchanged_since`` ISO date (#1749/#1751). An edit-mode
+    # merge that changed nothing still publishes a ``documents`` row under the run date marked
+    # source="today", so it lands in ``segments_ok`` and the freshness badge reads "today". The
+    # freeze was previously discoverable only by hashing payloads in SQL after the fact — which
+    # is how the #1559 digest freeze went unnoticed. Non-gating telemetry, same contract as
+    # ``merge_fallbacks``: written by edit-mode nodes, surfaced via
+    # ``atlas.telemetry.content_freeze_breakdown``, never read by a gate. Right-wins reducer for
+    # the same reason — one slug per fan-out node.
+    content_freezes: Annotated[dict[str, str], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="Segments whose edit merge produced a content-identical body.",
     )
     published: list[PublishedArtifact] = Field(default_factory=list)
     # Append reducer (not last-writer-wins): parallel fan-out nodes each record

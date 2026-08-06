@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Any  # noqa  # scored-lint: heterogeneous fake-row / fixture dicts
+from typing import (
+    Any,  # score:allow untyped any — scored-lint: heterogeneous fake-row / fixture dicts
+)
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.graph.pipeline_builder import build_pipeline
-
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,

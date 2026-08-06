@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digiquant.olympus.atlas.schemas import (
     SchemaNotFoundError,
     list_schema_names,

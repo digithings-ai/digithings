@@ -14,10 +14,9 @@ matching triage rule, so a future segment can't silently regenerate every run.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any  # noqa: F401 — used for snapshot/injection dict shape
+from typing import Any  # score:allow untyped any — used for snapshot/injection dict shape
 
 import pytest
-
 from digiquant.olympus.atlas.phases.phase1_altdata import _SPECS as ALT_SPECS
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,

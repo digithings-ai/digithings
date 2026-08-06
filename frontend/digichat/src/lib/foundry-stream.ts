@@ -15,6 +15,14 @@ import { DefaultAzureCredential } from "@azure/identity";
 import { AIProjectClient } from "@azure/ai-projects";
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
 import { lastUserMessageText } from "./external-relay-stream";
+import {
+  ACTIVITY_PART_TYPE,
+  applyActivityDetail,
+  sanitizeActivitySpan,
+  type ActivityDetail,
+  type ActivityDocument,
+  type ActivitySpan,
+} from "./chat-activity";
 
 export interface FoundryStreamEvent {
   type: string;
@@ -40,9 +48,18 @@ export function defaultOpenAIClientFactory(projectEndpoint: string): OpenAIRespo
 
 type FoundryServerEvent =
   | { type: "text-delta"; delta: string }
-  | { type: "trace"; label: string; status: "in_progress" | "completed" }
+  | { type: "activity"; span: ActivitySpan }
   | { type: "done" }
   | { type: "error"; message: string };
+
+/**
+ * Marks an error surfaced deliberately by Foundry's own `response.error`
+ * protocol event, as opposed to an unexpected SDK/network exception. The
+ * former is already a presentation-safe message meant to be shown; the
+ * latter can carry stack traces or internal hostnames and must be masked —
+ * see the catch block below.
+ */
+class FoundryProtocolError extends Error {}
 
 const FILE_SEARCH_LABEL = "Searching knowledge base…";
 
@@ -79,27 +96,49 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
   const item = event.item;
   if (item?.type === "file_search_call") {
     const queries = item.queries ?? [];
-    const label =
-      queries.length > 0 ? `Searched for: ${queries.map((q) => `"${q}"`).join(", ")}` : FILE_SEARCH_LABEL;
-    return { type: "trace", label, status: "completed" };
+    const query = queries[0];
+    const label = query
+      ? `Searched for: ${queries.map((q) => `"${q}"`).join(", ")}`
+      : FILE_SEARCH_LABEL;
+    return {
+      type: "activity",
+      span: {
+        operation: "execute_tool",
+        toolName: "file_search",
+        status: "completed",
+        ...(query ? { query } : {}),
+        label,
+      },
+    };
   }
   if (item?.type === "message") {
-    // Two citation shapes share this event: Foundry's native file_search tool annotates
-    // with `filename`, while the azure_ai_search tool (Microsoft docs, "Connect an Azure
-    // AI Search index to Foundry agents") emits `{type: "url_citation", url, title}`
-    // instead — no filename at all. Handle both so sources show up regardless of which
-    // grounding tool an agent uses.
-    const sources = [
-      ...new Set(
-        (item.content ?? []).flatMap((c) =>
-          (c.annotations ?? [])
-            .map((a) => (a.type === "url_citation" ? a.title || a.url : a.filename))
-            .filter((s): s is string => Boolean(s))
-        )
-      ),
-    ];
-    if (sources.length > 0) {
-      return { type: "trace", label: `Sources: ${sources.join(", ")}`, status: "completed" };
+    // Two citation shapes share this event: Foundry's native file_search tool
+    // annotates with `filename`, while the azure_ai_search tool emits
+    // `{type: "url_citation", url, title}` with no filename at all. Handle both
+    // so sources show up regardless of which grounding tool an agent uses.
+    const documents: ActivityDocument[] = [];
+    const seen = new Set<string>();
+    for (const content of item.content ?? []) {
+      for (const annotation of content.annotations ?? []) {
+        const path = annotation.type === "url_citation" ? annotation.url : annotation.filename;
+        if (!path || seen.has(path)) continue;
+        seen.add(path);
+        const title =
+          (annotation.type === "url_citation" ? annotation.title : annotation.filename) || path;
+        documents.push({ title, path });
+      }
+    }
+    if (documents.length > 0) {
+      return {
+        type: "activity",
+        span: {
+          operation: "retrieve",
+          toolName: "file_search",
+          status: "completed",
+          label: "Sources",
+          documents,
+        },
+      };
     }
   }
   return null;
@@ -119,7 +158,15 @@ export function mapFoundryEvent(event: FoundryStreamEvent): FoundryServerEvent |
       return delta ? { type: "text-delta", delta } : null;
     }
     case "response.file_search_call.in_progress":
-      return { type: "trace", label: FILE_SEARCH_LABEL, status: "in_progress" };
+      return {
+        type: "activity",
+        span: {
+          operation: "execute_tool",
+          toolName: "file_search",
+          status: "started",
+          label: FILE_SEARCH_LABEL,
+        },
+      };
     case "response.output_item.done":
       return mapOutputItemDone(event as OutputItemDoneEvent);
     case "response.completed":
@@ -137,6 +184,7 @@ export async function createFoundryStreamResponse(opts: {
   messages: UIMessage[];
   conversationId: string | null;
   responseHeaders: Record<string, string>;
+  activityDetail: ActivityDetail;
   signal?: AbortSignal;
   openAIClientFactory?: (projectEndpoint: string) => OpenAIResponsesClientLike;
 }): Promise<Response> {
@@ -190,19 +238,25 @@ export async function createFoundryStreamResponse(opts: {
           if (mapped.type === "text-delta") {
             openText();
             writer.write({ type: "text-delta", id: textId, delta: mapped.delta });
-          } else if (mapped.type === "trace") {
-            writer.write({
-              type: "data-digigraphTrace",
-              id: `foundry-trace-${traceSeq++}`,
-              data: {
-                v: 1,
-                type: "external_activity",
-                service: "external",
-                payload: { label: mapped.label, status: mapped.status },
-              },
-            });
+          } else if (mapped.type === "activity") {
+            // Foundry's own event carries unbounded upstream strings (a query
+            // list, citation titles/urls); the digigraph and relay providers
+            // cap theirs before writing (see chatActivitySpan) but this path
+            // built the span literal directly and never did. Route it through
+            // the same allowlist/cap the client applies on receipt, so an
+            // oversized or over-long upstream payload never reaches the wire
+            // in the first place.
+            const sanitized = sanitizeActivitySpan(mapped.span);
+            const span = sanitized && applyActivityDetail(sanitized, opts.activityDetail);
+            if (span) {
+              writer.write({
+                type: ACTIVITY_PART_TYPE,
+                id: `foundry-activity-${traceSeq++}`,
+                data: span,
+              });
+            }
           } else if (mapped.type === "error") {
-            throw new Error(mapped.message);
+            throw new FoundryProtocolError(mapped.message);
           } else if (mapped.type === "done") {
             break;
           }
@@ -210,11 +264,28 @@ export async function createFoundryStreamResponse(opts: {
       } catch (err) {
         if (opts.signal?.aborted) return;
         openText();
-        writer.write({
-          type: "text-delta",
-          id: textId,
-          delta: `Upstream error: ${err instanceof Error ? err.message : String(err)}`,
-        });
+        if (err instanceof FoundryProtocolError) {
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta: `Upstream error: ${err.message}`,
+          });
+        } else {
+          // An unexpected SDK/network exception, not Foundry's own protocol
+          // error — can carry stack traces or internal hostnames, and this
+          // response reaches anonymous embed visitors. Log it server-side;
+          // never stream it. Same pattern as stream-digigraph-trace.ts and
+          // external-relay-stream.ts.
+          console.error(
+            "[foundry] stream error",
+            err instanceof Error ? err.message : String(err)
+          );
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta: "The assistant is unavailable right now. Please try again shortly.",
+          });
+        }
       } finally {
         closeText();
       }

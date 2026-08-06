@@ -1,5 +1,5 @@
 /**
- * DigiThings scroll-trigger — writes a 0..1 progress value to `--scroll`
+ * digithings scroll-trigger — writes a 0..1 progress value to `--scroll`
  * on every element matching `selector` as the user scrolls.
  *
  * Markup contract (unchanged from original website/main.js):

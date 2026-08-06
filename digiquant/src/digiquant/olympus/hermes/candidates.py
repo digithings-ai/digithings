@@ -25,7 +25,9 @@ import json
 import logging
 import os
 from datetime import date, timedelta
-from typing import Any  # noqa  # scored-lint suppression: duck-typed Supabase client + rows
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: duck-typed Supabase client + rows
+)
 
 from digiquant.olympus.atlas.data.queries import TECHNICAL_COLUMNS
 
@@ -155,7 +157,7 @@ def select_focus_tickers(
             reverse=True,
         )
         top = ranked[:n]
-    except Exception as exc:  # noqa: BLE001 — scoring is best-effort routing, never fatal
+    except Exception as exc:  # scoring is best-effort routing, never fatal
         logger.warning("focus scoring unavailable (%s); using watchlist head", exc)
         top = candidates[:n]
     focus = [*holdings_list, *top]

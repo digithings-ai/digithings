@@ -22,11 +22,22 @@ jobs:
           cache-dependency-path: ./package-lock.json
 
       # Install at the monorepo root so npm wires the @digithings/web and
-      # @digithings/design workspace symlinks, then lint each app in-workspace.
-      # No "Install Linux native bindings" step here: these jobs are lint-only
-      # (ESLint is pure JS) and never invoke rolldown / lightningcss / oxide.
+      # @digithings/design workspace symlinks, then run each app in-workspace.
       - name: Install (root workspaces)
         run: npm ci --no-audit --no-fund
+
+      # Only the Tailwind oxide binding, deliberately — NOT the three-package list the
+      # digichat and olympus lanes carry. package-lock.json is macOS-generated, but it
+      # does lock the Linux x64 builds of rolldown (@rolldown/binding-linux-x64-gnu
+      # 1.2.2, an optionalDependency of the locked rolldown 1.2.2) and of lightningcss
+      # (1.33.0), so `npm ci` already installs both here. Adding them again at the
+      # versions those lanes pin — rolldown 1.0.0-rc.16 — installs a stale duplicate
+      # that the lock deliberately moved off. Only @tailwindcss/oxide is genuinely
+      # absent: the lock carries oxide-darwin-arm64 alone.
+      - name: Install the Linux Tailwind binding
+        run: |
+          npm install @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
+            --no-save --no-audit --no-fund
 
       # Canon ratchet (#1404): frontends stay on token-backed utilities —
       # no raw palette classes, legacy vocabulary, or color literals outside
@@ -34,8 +45,23 @@ jobs:
       - name: Frontend canon guard
         run: python3 scripts/check_frontend_canon.py
 
+      # Shape only, no --max-age-days: the homepage imports this snapshot, so a
+      # malformed or vanity-metric-carrying one must not reach the build. Staleness
+      # deliberately does NOT fail here — a missed cron run is not a reason to redden
+      # an unrelated website PR, and the page prints the snapshot's own date.
+      - name: Repo-activity snapshot is well-formed
+        run: python3 scripts/fetch_repo_activity.py --check
+
       - name: Lint digithings-web
         run: npm run lint --workspace digithings-web
+
+      # digithings-web gained vitest in #1868 (2026-08-05) — chatHandoff and the CSP
+      # contract — but no lane ever ran it, so those two files could not fail. That is
+      # the same silent-pass defect as a green build with no reviewer attached, caught
+      # a day later while adding a third test file. digiquant-web has no `test`
+      # script; add the step when it gets one.
+      - name: Test digithings-web
+        run: npm run test --workspace digithings-web
 
       - name: Lint digiquant-web
         run: npm run lint --workspace digiquant-web

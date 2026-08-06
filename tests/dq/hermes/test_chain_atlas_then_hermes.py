@@ -24,13 +24,11 @@ Two scenarios:
 from __future__ import annotations
 
 from datetime import date
-from typing import Any  # noqa  # scored-lint suppression: test fixture dicts
+from typing import Any  # score:allow untyped any — scored-lint suppression: test fixture dicts
 from unittest.mock import patch
 
 import pytest
-
 from digiquant.olympus.atlas.graph import AtlasInput
-
 from digiquant.olympus.atlas.testing.simulator import simulated_pipeline
 
 

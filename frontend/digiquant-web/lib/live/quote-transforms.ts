@@ -31,19 +31,40 @@ function toEpochMs(t: unknown, fallback: number): number {
   return n < 1e12 ? n * 1000 : n;
 }
 
-/** One symbol's payload inside the "prices:live" broadcast (Finnhub-shaped). */
-export interface BroadcastQuote {
-  c: number; // current price
-  d: number | null; // change
-  dp: number | null; // percent change
-  t: number; // quote unix seconds
+/**
+ * A Postgres `timestamptz`, as Realtime delivers it off the WAL → epoch ms.
+ *
+ * Deliberately NOT {@link toEpochMs}. That one coerces through `num()`, which
+ * turns any date STRING into `NaN` and then silently hands back the fallback —
+ * every row would be stamped `Date.now()`, type-clean, lint-clean and wrong.
+ * Postgres renders the column as `2026-08-01 14:23:00+00` (space separator,
+ * two-digit offset); neither that nor a trailing bare offset is in the
+ * ECMA-262 `Date.parse` grammar, so engines disagree about it. Try the value as
+ * delivered, then once more normalized to strict ISO-8601, then give up —
+ * `fallback` is `now` at the call site and the row is seconds old, so giving up
+ * costs almost nothing.
+ */
+function timestamptzToEpochMs(v: unknown, fallback: number): number {
+  if (typeof v !== "string") return fallback;
+  const direct = Date.parse(v);
+  if (Number.isFinite(direct)) return direct;
+  const iso = v.trim().replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
+  const retry = Date.parse(iso);
+  return Number.isFinite(retry) ? retry : fallback;
 }
 
-/** The full broadcast payload: `{ type, at, quotes: { SYM: {c,d,dp,t} } }`. */
-export interface BroadcastPayload {
-  type?: string;
-  at?: string;
-  quotes?: Record<string, BroadcastQuote>;
+/** A `public.prices_live` row (raw, pre-coercion) as Realtime delivers it. */
+export interface PriceRow {
+  ticker?: unknown;
+  /** Finnhub `c` — the quote. */
+  price?: unknown;
+  /** Finnhub `d` — absolute change. Carried by the table, unused by the UI. */
+  change?: unknown;
+  /** Finnhub `dp` — percent change, in POINTS. */
+  change_pct?: unknown;
+  /** Finnhub `t` widened to `timestamptz` by the publisher. */
+  quoted_at?: unknown;
+  updated_at?: unknown;
 }
 
 /** A Coinbase public `ticker` message (only the fields we read). */
@@ -55,29 +76,38 @@ export interface CoinbaseTicker {
   time?: string;
 }
 
-/** Extract the `quotes` map from an unknown broadcast message payload. */
-export function parseBroadcastPayload(payload: unknown): Record<string, BroadcastQuote> {
-  if (payload == null || typeof payload !== "object") return {};
-  const quotes = (payload as BroadcastPayload).quotes;
-  return quotes && typeof quotes === "object" ? quotes : {};
-}
-
-/** Broadcast per-symbol quote → {@link LiveQuote}. Live (non-stale) by definition. */
-export function broadcastQuoteToLive(
-  symbol: string,
-  q: BroadcastQuote,
-  now: number = Date.now(),
-): LiveQuote {
-  const price = num(q.c) ?? 0;
-  const changePct = num(q.dp) ?? 0;
+/**
+ * A `public.prices_live` row → a LIVE {@link LiveQuote}, or `null` when the row
+ * is unusable. Live (non-stale) by definition: the row exists only because the
+ * service-role publisher wrote a fresh Finnhub quote into it.
+ *
+ * `null` when the ticker is missing or the price is not a finite number. A
+ * DELETE event falls into that first case for free — its `new` is `{}`, so it
+ * carries no ticker and drops out here rather than needing an eventType check
+ * at the call site.
+ *
+ * Note the bar is "finite", not "positive", matching {@link seedRowToLive}: a
+ * non-positive mark is left to the consumers that already gate on it
+ * (`positionRowToLive`, `computeLiveTotal`) rather than being swallowed here,
+ * where dropping the row would silently pin the symbol to its stale seed.
+ *
+ * `change_pct` is Finnhub `dp`, already in percent POINTS. The `change` column
+ * (Finnhub `d`) is intentionally dropped — {@link LiveQuote} has never carried
+ * an absolute-change field and nothing in the UI asks for one.
+ */
+export function priceRowToLive(row: PriceRow, now: number = Date.now()): LiveQuote | null {
+  const symbol = typeof row.ticker === "string" ? row.ticker.trim().toUpperCase() : "";
+  const price = num(row.price);
+  if (!symbol || price == null) return null;
+  const changePct = num(row.change_pct) ?? 0;
   return {
-    symbol: symbol.toUpperCase(),
+    symbol,
     price,
     changePct,
     up: changePct >= 0,
-    ts: toEpochMs(q.t, now),
+    ts: timestamptzToEpochMs(row.quoted_at, now),
     stale: false,
-    source: "broadcast",
+    source: "postgres_changes",
   };
 }
 
@@ -110,8 +140,8 @@ export function coinbaseTickerToLive(
  * A `public_price_latest` row → a STALE seed {@link LiveQuote}. `change_pct` is
  * the prior-session daily move (migration 052) so a seeded equity shows its real
  * last close instead of a flat 0% — a missing/absent change reads as 0. Kept
- * `stale` so it never counts as a live tick (a broadcast/Coinbase quote always
- * overwrites it, and the live book valuation ignores it).
+ * `stale` so it never counts as a live tick (a prices_live/Coinbase quote
+ * always overwrites it, and the live book valuation ignores it).
  */
 export function seedRowToLive(
   row: { ticker?: unknown; close?: unknown; change_pct?: unknown },

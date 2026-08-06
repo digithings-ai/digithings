@@ -163,6 +163,11 @@
   .ts-legend-label { fill: var(--ink-mute); font-family: var(--font-mono); font-size: 10px; }
   .ts-line { stroke-width: 2; }
   .ts-area { opacity: 0.14; stroke: none; }
+  .ts-contribution-segment { opacity: 0.78; }
+  .ts-portfolio-return-line { stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+  .ts-portfolio-return-dot { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .ts-benchmark-return-line { stroke: var(--ink-soft); stroke-width: 1.5; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+  .ts-contribution-axis { font-size: 9px; }
 }
 
 .ts-tab-content .ts-chart { height: clamp(220px, 52vw, 440px); }

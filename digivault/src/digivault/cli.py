@@ -1,4 +1,4 @@
-"""DigiVault CLI. Typer-based. Entry point: ``digivault``.
+"""digivault CLI. Typer-based. Entry point: ``digivault``.
 
 Operates on a vault directory passed via ``--root`` or the ``DIGIVAULT_ROOT``
 environment variable.
@@ -13,7 +13,7 @@ import typer
 
 from digivault.vault import MANIFEST_NAME, Vault, VaultError
 
-app = typer.Typer(help="DigiVault – Obsidian-style markdown vault management")
+app = typer.Typer(help="digivault – Obsidian-style markdown vault management")
 
 
 def _resolve_root(root: str | None) -> Path:

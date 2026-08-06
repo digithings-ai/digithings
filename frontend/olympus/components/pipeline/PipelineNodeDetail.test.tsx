@@ -51,13 +51,14 @@ describe('PipelineNodeDetail', () => {
     expect(html).toMatch(/close|✕|×/i);
   });
 
-  it('uses an in-flow lower pane on mobile and a side panel on desktop', () => {
+  it('uses a full-page overlay on mobile and a side panel on desktop', () => {
     const html = renderToStaticMarkup(
       createElement(PipelineNodeDetail, { documentKey: 'digest', date: '2026-06-23', onClose: () => {} }),
     );
-    expect(html).toContain('h-[46%]');
-    expect(html).not.toContain('fixed inset-x-0 bottom-0');
-    expect(html).toContain('md:');
+    expect(html).toContain('fixed inset-0');
+    expect(html).toContain('h-dvh');
+    expect(html).toContain('md:relative');
+    expect(html).not.toContain('h-[46%]');
   });
 
   it('renders pipeline guidance when a selected step has no run document', () => {

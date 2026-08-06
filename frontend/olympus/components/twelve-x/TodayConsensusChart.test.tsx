@@ -115,13 +115,13 @@ describe('TodayConsensusChart', () => {
     expect(html).not.toContain('Consensus tab');
   });
 
-  it('passes exactly two markers (actual and prior) to ConsensusScoreBar', () => {
+  it('passes exactly one marker (today’s actual) to ConsensusScoreBar', () => {
     const html = render(tenCurrencySeries());
-    // The compact spec removes yesterday-average and 5-days-ago markers. Only
-    // today's actual (white) and prior-run actual (for change) remain.
-    // Note: 'prior' kind renders as 't-yday' class in ConsensusScoreBar.
+    // Only the legend-explained actual tick overlays the smoothed fill. The
+    // prior-run level rides the momentum arrow + signed delta beside the bar —
+    // its tick read as an unexplained stray line (#1664 follow-up).
     expect(html).toContain('t-actual');
-    expect(html).toContain('t-yday');
+    expect(html).not.toContain('t-yday');
     expect(html).not.toContain('t-ago');
   });
 

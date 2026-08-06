@@ -4,7 +4,8 @@ name: "Agent: dispatch replay"
 # (GitHub does not fire issues:labeled for labels set via gh issue create).
 # Also useful after fixing dispatch workflows or clearing quota flags.
 #
-# Tier C: exec:copilot re-fires via copilot-issue-dispatch.lock.yml (gh-aw).
+# Tier C for Copilot was removed 2026-08-05 with the subscription: nothing dispatches
+# exec:copilot any more, so replaying it only bounced labels into a void.
 #         exec:cursor re-fires by bouncing the label, which triggers the Cursor Automation.
 #         exec:claude bounces the label to trigger the local-dispatch comment workflow.
 #
@@ -29,7 +30,6 @@ on:
         type: choice
         options:
           - "all"
-          - "copilot"
           - "cursor"
           - "claude"
 
@@ -76,38 +76,6 @@ jobs:
           }
 
           echo "=== Agent dispatch replay (dry_run=${DRY_RUN}, tier=${TIER}) ==="
-
-          if [[ "$TIER" == "all" || "$TIER" == "copilot" ]]; then
-            echo ""
-            echo "--- exec:copilot (not yet assigned to Copilot) ---"
-            # Tier C: bouncing exec:copilot fires the gh-aw copilot-issue-dispatch workflow.
-            list_tier "exec:copilot" | python3 -c "
-          import json, subprocess, sys, os
-          repo = os.environ['REPO']
-          token = os.environ['GH_TOKEN']
-          issues = json.load(sys.stdin)
-          stuck = []
-          for issue in issues:
-              labels = [l['name'] for l in issue.get('labels', [])]
-              if 'pending:quota' in labels:
-                  continue
-              # Check if Copilot is already assigned
-              assignees = [a['login'].lower() for a in issue.get('assignees', [])]
-              copilot_logins = {'copilot', 'copilot-swe-agent', 'copilot-swe-agent[bot]'}
-              if not any(a in copilot_logins for a in assignees):
-                  stuck.append(issue)
-          for issue in stuck:
-              print(f\"#{issue['number']}\t{issue['title'][:80]}\")
-          with open('/tmp/copilot-stuck.txt', 'w') as f:
-              for issue in stuck:
-                  f.write(f\"{issue['number']}\n\")
-          print(f'Found {len(stuck)} issue(s)', flush=True)
-          "
-            cat /tmp/copilot-stuck.txt 2>/dev/null | while read -r num; do
-              [[ -z "${num:-}" ]] && continue
-              bounce_label "$num" "exec:copilot"
-            done
-          fi
 
           if [[ "$TIER" == "all" || "$TIER" == "cursor" ]]; then
             echo ""

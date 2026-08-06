@@ -27,7 +27,7 @@ from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.trading.strategy import Strategy
 
-from digiquant.indicators import BollingerBands, DPSDTrend, RollingADF, RSI, make_ma
+from digiquant.indicators import RSI, BollingerBands, DPSDTrend, RollingADF, make_ma
 from digiquant.indicators.ma import VWMA
 from digiquant.strategies.registry import register
 

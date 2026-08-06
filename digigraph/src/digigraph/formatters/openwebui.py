@@ -9,8 +9,10 @@ from pathlib import Path
 
 from tabulate import tabulate
 
-from digigraph.orchestration import builtin  # noqa: F401 - register built-in tools
-from digigraph.orchestration import list_tool_names
+from digigraph.orchestration import (
+    builtin,  # noqa: F401 - register built-in tools
+    list_tool_names,
+)
 
 _DELEGATE_TOOL_NAMES = frozenset(list_tool_names(tag="delegate"))
 
@@ -32,7 +34,7 @@ def _cell_safe(v: object, max_chars: int | None = None) -> str:
 
 
 def _results_to_markdown_table(results: list[dict]) -> str:
-    """Format raw DigiSearch-style results as markdown table: all columns, top MAX_TABLE_ROWS rows, cells truncated to MAX_CELL_CHARS."""
+    """Format raw digisearch-style results as markdown table: all columns, top MAX_TABLE_ROWS rows, cells truncated to MAX_CELL_CHARS."""
     if not results:
         return "No results."
     all_keys: set[str] = set()

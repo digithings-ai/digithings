@@ -6,7 +6,7 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
-
+from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PriorContext
 from digiquant.olympus.hermes.models.thesis import ThesisReviewOutput, ThesisStatusUpdate
 from digiquant.olympus.hermes.phases.h1_thesis_review import build_h1_thesis_review
@@ -15,7 +15,7 @@ from digiquant.olympus.hermes.writers.thesis_io import (
     merge_review_with_invalidation_hits,
     normalize_thesis_status,
 )
-from digigraph.graph.pipeline_builder import build_pipeline
+
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
 

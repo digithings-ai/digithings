@@ -20,10 +20,11 @@ import {
   currencyColor,
 } from '@/lib/twelve-x/consensus-bar';
 import { useChartColors, withAlpha } from '@/lib/chart-colors';
-import type { ConsensusDeltaSet, FxConsensusSnapshotRow, FxBriefRow, IntelligenceWhy } from '@/lib/twelve-x/types';
+import type { ConsensusDeltaSet, FxBriefRow, FxConsensusDivergence, FxConsensusSnapshotRow, IntelligenceWhy } from '@/lib/twelve-x/types';
 import { deriveConsensusRows, type ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
 import { ConsensusDataTable } from './ConsensusDataTable';
 import CurrencyDrilldownPanel from './CurrencyDrilldownPanel';
+import DivergencePanel from './DivergencePanel';
 import { augmentWithStaleSeries } from '@/lib/twelve-x/consensus-chart';
 import { useTwelveX } from './context';
 
@@ -59,6 +60,7 @@ export default function ConsensusTab({
   latest,
   latestDate,
   deltas,
+  divergenceByCurrency = {},
   focusCcy,
   intelligenceWhy,
   researchBriefs,
@@ -68,6 +70,7 @@ export default function ConsensusTab({
   latest: FxConsensusSnapshotRow[];
   latestDate: string | null;
   deltas: ConsensusDeltaSet;
+  divergenceByCurrency?: Record<string, FxConsensusDivergence>;
   focusCcy?: string | null;
   intelligenceWhy: IntelligenceWhy;
   researchBriefs: FxBriefRow[];
@@ -77,6 +80,7 @@ export default function ConsensusTab({
   const { openBrief } = useTwelveX();
   const [view, setView] = useState<ConsensusView>(initialView);
   const [drilldownCcy, setDrilldownCcy] = useState<string | null>(null);
+  const [divergenceCcy, setDivergenceCcy] = useState<string | null>(null);
 
   const consensusRows = useMemo<ConsensusCurrencyRow[]>(
     () => deriveConsensusRows(series),
@@ -116,6 +120,7 @@ export default function ConsensusTab({
 
   const drilldownRow = consensusRows.find((r) => r.currency === drilldownCcy) ?? null;
   const drilldownIntelligence = intelligenceWhy.items.find((item) => item.currency === drilldownCcy) ?? null;
+  const divergencePanelItem = divergenceCcy ? divergenceByCurrency[divergenceCcy] ?? null : null;
 
   const relevantBriefs = useMemo<FxBriefRow[]>(() => {
     if (!drilldownCcy) return [];
@@ -192,6 +197,8 @@ export default function ConsensusTab({
           series={series}
           latest={latest}
           deltas={deltas}
+          divergenceByCurrency={divergenceByCurrency}
+          onDivergenceClick={(ccy) => setDivergenceCcy(ccy)}
           onRowClick={(ccy) => setDrilldownCcy(ccy)}
         />
       ) : null}
@@ -205,11 +212,11 @@ export default function ConsensusTab({
               </h3>
               <span className="text-[10px] text-ink-mute flex items-center gap-2 w-full">
                 <span className="flex items-center gap-1">
-                  <span className="inline-block h-2.5 w-3 rounded-sm bg-up/15" />
+                  <span className="inline-block h-2.5 w-3 rounded-sm bg-accent/15" />
                   Strong ±{STRONG_BAND}
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="inline-block w-3 border-t border-dashed border-up/60" />
+                  <span className="inline-block w-3 border-t border-dashed border-accent/60" />
                   Lean ±{LEAN_BAND}
                 </span>
                 <span className="ml-auto">Raw per-run scores</span>
@@ -245,13 +252,13 @@ export default function ConsensusTab({
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={scoreSeries} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
                     <CartesianGrid stroke={chart.hair} />
-                    <ReferenceArea y1={STRONG_BAND} y2={SCORE_MAX} fill={chart.up} fillOpacity={0.06} />
-                    <ReferenceArea y1={SCORE_MIN} y2={-STRONG_BAND} fill={chart.down} fillOpacity={0.06} />
-                    <ReferenceLine y={STRONG_BAND} stroke={chart.up} strokeOpacity={0.5} strokeDasharray="4 4" />
-                    <ReferenceLine y={LEAN_BAND} stroke={chart.up} strokeOpacity={0.3} strokeDasharray="2 4" />
+                    <ReferenceArea y1={STRONG_BAND} y2={SCORE_MAX} fill={chart.accent} fillOpacity={0.06} />
+                    <ReferenceArea y1={SCORE_MIN} y2={-STRONG_BAND} fill={chart.warn} fillOpacity={0.06} />
+                    <ReferenceLine y={STRONG_BAND} stroke={chart.accent} strokeOpacity={0.5} strokeDasharray="4 4" />
+                    <ReferenceLine y={LEAN_BAND} stroke={chart.accent} strokeOpacity={0.3} strokeDasharray="2 4" />
                     <ReferenceLine y={0} stroke={withAlpha(chart.ink, 0.25)} />
-                    <ReferenceLine y={-LEAN_BAND} stroke={chart.down} strokeOpacity={0.3} strokeDasharray="2 4" />
-                    <ReferenceLine y={-STRONG_BAND} stroke={chart.down} strokeOpacity={0.5} strokeDasharray="4 4" />
+                    <ReferenceLine y={-LEAN_BAND} stroke={chart.warn} strokeOpacity={0.3} strokeDasharray="2 4" />
+                    <ReferenceLine y={-STRONG_BAND} stroke={chart.warn} strokeOpacity={0.5} strokeDasharray="4 4" />
                     <XAxis
                       dataKey="run_date"
                       tick={{ fill: chart.axis, fontSize: 11 }}
@@ -330,6 +337,12 @@ export default function ConsensusTab({
         intelligenceItem={drilldownIntelligence}
         relevantBriefs={relevantBriefs}
         onOpenBrief={openBrief}
+      />
+
+      <DivergencePanel
+        open={!!divergenceCcy}
+        divergence={divergencePanelItem}
+        onClose={() => setDivergenceCcy(null)}
       />
     </div>
   );

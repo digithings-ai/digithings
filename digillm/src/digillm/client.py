@@ -45,9 +45,12 @@ import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import ContextVar
-from typing import Any, TypedDict  # noqa: ANN401 — OpenAI message dict payloads are heterogeneous
+from typing import (  # score:allow untyped any — OpenAI message dict payloads are heterogeneous
+    Any,
+    TypedDict,
+)
 
-from openai import OpenAI
+from openai import OpenAI, Timeout
 from openai.types.chat import ChatCompletion
 
 logger = logging.getLogger(__name__)
@@ -239,7 +242,7 @@ def is_registered_provider(prefix: str) -> bool:
 def get_provider_api_key_env(prefix: str) -> str | None:
     """Return the API-key env var name for a registered provider, or ``None`` if unregistered.
 
-    Lets callers (e.g. DigiGraph's request-model resolution) check whether a
+    Lets callers (e.g. digigraph's request-model resolution) check whether a
     provider's key is configured *before* routing to it, without duplicating
     this registry or triggering :func:`get_client_for_model`'s ``RuntimeError``
     on a missing key.
@@ -286,6 +289,34 @@ def _default_client_api_key() -> str:
     return os.environ.get("OPENAI_API_KEY", "not-set")
 
 
+# ── Request timeout ───────────────────────────────────────────────────────────
+# Calls were never actually unbounded: the OpenAI SDK substitutes its own
+# ``httpx.Timeout(timeout=600, connect=5.0)`` whenever ``timeout`` is omitted. But that
+# bound lived only in the SDK's constants module — invisible from this repo, unanswerable
+# by an operator, and free to change under us on any dependency bump. #1734 burned 210
+# minutes of a 240-minute CI job in unexplained silence and the first question asked was
+# "what is our request timeout?"; nobody could answer it from the source. So the bound is
+# now stated here and tunable without a code change.
+#
+# The defaults below are byte-identical to the SDK's, so this states the status quo rather
+# than changing it. Note ``connect`` must stay separate: passing a bare ``600.0`` float
+# would widen the connect timeout from 5s to 600s — a regression dressed as a fix.
+#
+# The full silence budget for one ``completion`` call is the product of three layers, not
+# this value alone: SDK ``max_retries=2`` (3 HTTP attempts) x ``_create_with_retry``'s 12
+# attempts, each attempt bounded by the read timeout below. Lowering this number is the
+# only single-knob way to shrink that product; it is left at the SDK default because a
+# large-context reasoning completion can legitimately run for minutes.
+#
+# Resolved once at import — matching the ``_EMPTY_RETRY_*`` idiom below — rather than per
+# call: ``_client_cache`` is keyed on ``(api_key, base_url)`` only, so a call-time env read
+# would hand a cached client its stale timeout and quietly falsify the cache's documented
+# "recreated when env changes" contract.
+_REQUEST_TIMEOUT_SECONDS = float(os.environ.get("DIGILLM_REQUEST_TIMEOUT_SECONDS", "") or 600.0)
+_CONNECT_TIMEOUT_SECONDS = float(os.environ.get("DIGILLM_CONNECT_TIMEOUT_SECONDS", "") or 5.0)
+_REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SECONDS)
+
+
 def get_client() -> OpenAI:
     """Return an OpenAI client for the default (non-prefixed) path.
 
@@ -299,7 +330,7 @@ def get_client() -> OpenAI:
     byok_override = _byok_override.get()
     if byok_override:
         api_key, base_url = byok_override
-        return OpenAI(api_key=api_key, base_url=base_url)
+        return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
 
     api_key = _default_client_api_key()
     base_url = os.environ.get("OPENAI_API_BASE")
@@ -308,7 +339,7 @@ def get_client() -> OpenAI:
     cache_key: tuple[str, str | None] = (api_key, normalized_base)
     client = _client_cache.get(cache_key)
     if client is None:
-        kwargs: dict[str, Any] = {"api_key": api_key}
+        kwargs: dict[str, Any] = {"api_key": api_key, "timeout": _REQUEST_TIMEOUT}
         if normalized_base:
             kwargs["base_url"] = normalized_base
         client = OpenAI(**kwargs)
@@ -338,7 +369,7 @@ def get_client_for_model(model: str) -> OpenAI:
         api_key, base_url = byok_override
         cfg = _EXTERNAL_PROVIDERS.get(provider)
         if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
-            return OpenAI(api_key=api_key, base_url=base_url)
+            return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
     if provider is None:
         return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]
@@ -351,7 +382,7 @@ def get_client_for_model(model: str) -> OpenAI:
     cached = _client_cache.get(cache_key)
     if cached is not None:
         return cached
-    client = OpenAI(api_key=api_key, base_url=cfg["base_url"])
+    client = OpenAI(api_key=api_key, base_url=cfg["base_url"], timeout=_REQUEST_TIMEOUT)
     _client_cache[cache_key] = client
     return client
 
@@ -454,7 +485,7 @@ def _record_usage(**fields: Any) -> None:
         return
     try:
         observer(**fields)
-    except Exception as exc:  # noqa: BLE001 — telemetry must never break the LLM call
+    except Exception as exc:  # telemetry must never break the LLM call
         logger.debug("usage observer raised: %s", exc)
 
 
@@ -508,7 +539,7 @@ def _compact_tool_message_content(msg_content: str) -> str:
 def _sleep_transient_retry(delay: float, *, max_delay: float = 300.0) -> float:
     """Sleep ``delay`` plus up to 25% jitter; return the next (doubled, capped) delay."""
     jitter = random.uniform(0.0, delay * 0.25)
-    time.sleep(delay + jitter)  # noqa: S110 — intentional blocking backoff
+    time.sleep(delay + jitter)  # intentional blocking backoff
     return min(delay * 2, max_delay)
 
 
@@ -892,7 +923,7 @@ def completion(
 
     try:
         r: ChatCompletion = _create_with_retry(client, **kwargs)
-    except Exception as exc:  # noqa: BLE001 — only the 410 case is soft; everything else re-raises
+    except Exception as exc:  # only the 410 case is soft; everything else re-raises
         # xAI deprecated Live Search (HTTP 410) in favour of the Agent Tools API
         # (:func:`web_search`). Fail soft: drop the deprecated extra_body and retry once
         # ungrounded so the phase/pipeline keeps producing instead of crashing.
@@ -922,7 +953,7 @@ def completion(
             _EMPTY_RETRY_MAX,
             _EMPTY_RETRY_DELAY,
         )
-        time.sleep(_EMPTY_RETRY_DELAY)  # noqa: S110 — intentional short backoff on empty
+        time.sleep(_EMPTY_RETRY_DELAY)  # intentional short backoff on empty
         r = _create_with_retry(client, **retry_kwargs)
 
     _u = getattr(r, "usage", None)
@@ -1026,7 +1057,7 @@ def openrouter_web_search(
                 temperature=0.2,
                 usage_kind="web_search",
             )
-    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+    except Exception as exc:  # grounding is best-effort; degrade gracefully
         logger.warning("openrouter_web_search failed (%s); continuing ungrounded", exc)
         _record_usage(kind="web_search", model=model_id, ok=False)
         return None
@@ -1076,7 +1107,7 @@ def web_search(
             input=[{"role": "user", "content": query}],
             tools=[tool],
         )
-    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+    except Exception as exc:  # grounding is best-effort; degrade gracefully
         logger.warning("web_search failed (%s); continuing ungrounded", exc)
         _record_usage(kind="web_search", model=model_id, ok=False)
         return None
@@ -1121,7 +1152,7 @@ def x_search(
             input=[{"role": "user", "content": query}],
             tools=[{"type": "x_search", "max_search_results": max_results}],
         )
-    except Exception as exc:  # noqa: BLE001 — grounding is best-effort; degrade gracefully
+    except Exception as exc:  # grounding is best-effort; degrade gracefully
         logger.warning("x_search failed (%s); continuing ungrounded", exc)
         _record_usage(kind="x_search", model=model_id, ok=False)
         return None

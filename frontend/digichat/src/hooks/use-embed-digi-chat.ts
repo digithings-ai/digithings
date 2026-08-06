@@ -6,7 +6,13 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { p } from "@/lib/base-path";
-import { resolveEmbedHost } from "@/lib/embed-gate";
+import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
+import {
+  ACTIVITY_PART_TYPE,
+  sanitizeActivitySpan,
+  toDigiChatActivity,
+  type ActivitySpan,
+} from "@/lib/chat-activity";
 
 /** Read ?token= / ?host= at send time — useChat transport is frozen on first render (#1339). */
 function readEmbedUrlAuth(): { token?: string; host?: string } {
@@ -20,10 +26,41 @@ function readEmbedUrlAuth(): { token?: string; host?: string } {
   };
 }
 
+/**
+ * Whether this embed host is trial-unlocked, read at send time.
+ * Same freeze reason as readEmbedUrlAuth (#1339): a `trialUnlocked` prop closed
+ * over by DefaultChatTransport stays false after datatap:unlocked arrives, so
+ * the client counter can show 100 while the server still returns trial_gate.
+ */
+export function isEmbedTrialUnlockedAtSend(
+  resolvedHost: string,
+  propFallback?: boolean,
+): boolean {
+  return !!propFallback || readTrialUnlocked(resolvedHost);
+}
+
+/**
+ * The chat-access token for this host, read at send time. Same freeze reason as
+ * isEmbedTrialUnlockedAtSend (#1339): a token closed over by DefaultChatTransport would be null
+ * forever, because it is written after the transport is created.
+ */
+export function chatAccessTokenAtSend(resolvedHost: string): string | null {
+  return readChatAccessToken(resolvedHost);
+}
+
 const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
 
 function conversationStorageKey(host: string): string {
   return `${CONVERSATION_STORAGE_PREFIX}${host}`;
+}
+
+/** The upstream conversation id for this embed host, when one has been established. */
+export function readEmbedConversationId(embedHost: string): string | null {
+  try {
+    return window.sessionStorage.getItem(conversationStorageKey(embedHost));
+  } catch {
+    return null;
+  }
 }
 
 type TracePartData = {
@@ -31,12 +68,18 @@ type TracePartData = {
   payload?: { label?: unknown; status?: unknown };
 };
 
-export function uiMessageToDigiChat(message: UIMessage): DigiChatMessage {
-  const text = message.parts
-    .filter((part): part is { type: "text"; text: string } => part.type === "text")
-    .map((part) => part.text)
-    .join("");
-
+/**
+ * Legacy path: providers emitted a single data-digigraphTrace{label,status} part
+ * before the activity protocol landed. A visitor's browser caching an OLD client
+ * bundle isn't what this covers — that old bundle doesn't contain this function
+ * at all, so no branch here could help it. What it actually covers is the
+ * reverse: during a rolling deploy, a visitor who has already loaded this NEW
+ * client bundle can still be routed to an OLD server revision that hasn't
+ * picked up the activity protocol yet and only emits data-digigraphTrace. This
+ * fallback keeps that visitor's steps rendering until the rollout finishes.
+ * TODO(next release): remove once no server revision can emit the legacy part.
+ */
+function legacyTraceActivities(message: UIMessage): DigiChatActivity[] {
   const traces = message.parts.filter(
     (part): part is { type: "data-digigraphTrace"; data: TracePartData } =>
       part.type === "data-digigraphTrace",
@@ -55,11 +98,32 @@ export function uiMessageToDigiChat(message: UIMessage): DigiChatMessage {
     else byLabel.set(label, { label, done });
   }
 
-  const activities: DigiChatActivity[] = Array.from(byLabel.values(), (t) => ({
+  return Array.from(byLabel.values(), (t) => ({
     kind: "trace" as const,
     label: t.label,
     done: t.done,
   }));
+}
+
+export function uiMessageToDigiChat(message: UIMessage): DigiChatMessage {
+  const text = message.parts
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+
+  const spans = message.parts
+    .filter((part): part is { type: typeof ACTIVITY_PART_TYPE; data: unknown } =>
+      part.type === ACTIVITY_PART_TYPE
+    )
+    .map((part) => sanitizeActivitySpan(part.data))
+    .filter((span): span is ActivitySpan => span !== null);
+
+  // Activity parts win outright: during a deploy a single message could carry
+  // both shapes, and rendering both would double every step.
+  const hasActivityParts = message.parts.some((part) => part.type === ACTIVITY_PART_TYPE);
+  const activities = hasActivityParts
+    ? toDigiChatActivity(spans)
+    : legacyTraceActivities(message);
 
   return {
     role: message.role === "user" ? "user" : "assistant",
@@ -76,6 +140,8 @@ type UseEmbedDigiChatOptions = {
   byokKey?: string;
   byokProvider?: string;
   byokModel?: string;
+  trialUnlocked?: boolean;
+  onGated?: () => void;
 };
 
 export function useEmbedDigiChat({
@@ -86,7 +152,11 @@ export function useEmbedDigiChat({
   byokKey,
   byokProvider,
   byokModel,
-}: UseEmbedDigiChatOptions): DigiChatController {
+  trialUnlocked,
+  onGated,
+}: UseEmbedDigiChatOptions): DigiChatController & {
+  seed: (msgs: readonly DigiChatMessage[]) => void;
+} {
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -109,6 +179,15 @@ export function useEmbedDigiChat({
               headers["X-BYOK-Model"] = byokModel.trim();
             }
           }
+          // Send-time unlock check — transport is frozen on first render (#1339),
+          // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
+          if (isEmbedTrialUnlockedAtSend(resolvedHost, trialUnlocked)) {
+            headers["X-Embed-Trial-Unlock"] = "1";
+          }
+          const chatToken = chatAccessTokenAtSend(resolvedHost);
+          if (chatToken) {
+            headers["X-Embed-Chat-Token"] = chatToken;
+          }
           try {
             const conversationId = window.sessionStorage.getItem(
               conversationStorageKey(resolvedHost),
@@ -126,10 +205,12 @@ export function useEmbedDigiChat({
           };
         },
       }),
-    [accent, token, host, embedHost, byokKey, byokProvider, byokModel],
+    // trialUnlocked stays in the deps for the rare case useChat starts honoring
+    // transport identity; the send-time read is what actually unlocks today.
+    [accent, token, host, embedHost, byokKey, byokProvider, byokModel, trialUnlocked],
   );
 
-  const { messages, sendMessage, status, error, regenerate } = useChat<UIMessage>({
+  const { messages, sendMessage, status, error, regenerate, setMessages } = useChat<UIMessage>({
     transport,
   });
 
@@ -153,6 +234,16 @@ export function useEmbedDigiChat({
   const busy = status === "streaming" || status === "submitted";
   const chatError = formatEmbedChatError(error);
 
+  useEffect(() => {
+    if (!error?.message || !onGated) return;
+    try {
+      const parsed = JSON.parse(error.message.trim()) as { error?: string };
+      if (parsed.error === "trial_gate") onGated();
+    } catch {
+      /* non-JSON error — not a gate signal */
+    }
+  }, [error, onGated]);
+
   const send = useCallback(
     (question: string) => {
       const q = question.trim();
@@ -167,11 +258,25 @@ export function useEmbedDigiChat({
 
   const digiMessages = useMemo(() => messages.map(uiMessageToDigiChat), [messages]);
 
+  const seed = useCallback(
+    (msgs: readonly DigiChatMessage[]) => {
+      setMessages(
+        msgs.map((m) => ({
+          id: crypto.randomUUID(),
+          role: m.role,
+          parts: [{ type: "text" as const, text: m.content }],
+        })),
+      );
+    },
+    [setMessages],
+  );
+
   return {
     messages: digiMessages,
     busy,
     error: chatError,
     send,
     onRetry: () => regenerate(),
+    seed,
   };
 }

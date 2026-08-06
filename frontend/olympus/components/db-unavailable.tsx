@@ -1,7 +1,7 @@
 'use client';
 
 import { EmptyState } from '@digithings/web';
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 
 /**
  * Standardized "database unavailable" gate card.

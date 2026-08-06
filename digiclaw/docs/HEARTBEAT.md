@@ -4,8 +4,8 @@
 
 ## 1. Service health
 
-- [ ] Ping DigiGraph `/health` (DIGIGRAPH_URL)
-- [ ] Ping DigiQuant `/health` (DIGIQUANT_URL)
+- [ ] Ping digigraph `/health` (DIGIGRAPH_URL)
+- [ ] Ping digiquant `/health` (DIGIQUANT_URL)
 - [ ] If any unhealthy: log to audit and optionally alert (Phase 3: log only)
 
 ## 2. Portfolio / strategy (when live)

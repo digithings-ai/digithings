@@ -1,6 +1,6 @@
-"""DigiQuant strategy store + shared-data-layer accessor (#1064).
+"""digiquant strategy store + shared-data-layer accessor (#1064).
 
-Thin, Polars-friendly helpers over the dedicated DigiQuant Supabase project,
+Thin, Polars-friendly helpers over the dedicated digiquant Supabase project,
 separate from the Olympus/Atlas project. See
 ``docs/adr/0021-digiquant-supabase-project-topology.md``.
 """

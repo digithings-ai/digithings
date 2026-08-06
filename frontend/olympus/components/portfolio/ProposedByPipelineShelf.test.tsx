@@ -33,4 +33,13 @@ describe('ProposedByPipelineShelf', () => {
     expect(html).not.toContain('T6');
     expect(html).not.toContain('T28');
   });
+
+  it('uses flat divided sections with hairlines instead of glass-card', () => {
+    const html = renderToStaticMarkup(createElement(ProposedByPipelineShelf, {
+      proposed: [p({})],
+    }));
+    expect(html).not.toContain('glass-card');
+    expect(html).not.toContain('rounded-lg');
+    expect(html).toContain('border-hair');
+  });
 });

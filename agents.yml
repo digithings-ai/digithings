@@ -34,17 +34,6 @@ scoring_thresholds:
 execution_tiers:
   # Minimum-capability ceiling: a lower tier must NEVER pick up a higher-tier task.
   # A human on Claude Code can take anything. See docs/agents/EXECUTION_TIERS.md.
-  - label: "exec:copilot"
-    name: "Tier 1 — GitHub Copilot"
-    scope: "Triggered automation — fixed rule, no judgment. Housekeeping only."
-    examples:
-      - "Dependabot bumps, pip-audit, gitleaks, type-check reports"
-      - "Stale issue/PR cleanup, formatting autofix, coverage PR comments"
-      - "Structured CI-failure triage comments (no code fixes)"
-    never:
-      - "Judgment calls about correctness"
-      - "Changes spanning more than a few files"
-      - "Anything touching live-trading or auth code"
   - label: "exec:cursor"
     name: "Tier 2 — Cursor Cloud Agent"
     scope: "One-paragraph spec, clear acceptance criteria, no mid-task dialogue."
@@ -74,7 +63,6 @@ execution_tiers:
 
 # Heuristics for default tier when a creator hasn't classified explicitly.
 # risk:high OR matches a human_gate → exec:claude.
-# risk:low + housekeeping (deps, lint, stale) → exec:copilot.
 # Everything else → exec:cursor.
 tier_routing:
   claude_triggers:
@@ -83,12 +71,7 @@ tier_routing:
     - "component:digikey (auth/JWT changes)"
     - "live-trading paths"
     - "cross-component integration"
-  copilot_triggers:
-    - "label:security:finding (pip-audit/gitleaks CVE bumps)"
-    - "label:housekeeping:deps"
-    - "label:housekeeping:format"
-    - "label:stale"
-  cursor_default: true
+
 
 human_gates:
   - "Any change to auth, JWT, or cryptography code (digikey/)"
@@ -208,7 +191,7 @@ agent_capabilities:
     make_target: task
 
   - id: parse-traceback
-    description: "Parse a Python stack trace and identify the DigiThings component"
+    description: "Parse a Python stack trace and identify the digithings component"
     script: scripts/parse_traceback.py
     make_target: parse-error
 
@@ -239,7 +222,7 @@ claude_code_surface:
       purpose: "Red/green/refactor TDD loop bound to the component test command"
     - name: security-reviewer
       path: .claude/agents/security-reviewer.md
-      purpose: "OWASP + DigiThings security sweep before auth/crypto PRs"
+      purpose: "OWASP + digithings security sweep before auth/crypto PRs"
   skills:
     - name: triage
       path: .claude/skills/triage/SKILL.md
@@ -264,6 +247,8 @@ claude_code_surface:
       path: .claude/commands/opsx-apply.md
     - name: /opsx-archive
       path: .claude/commands/opsx-archive.md
+    - name: /review
+      path: .claude/commands/review.md
 
 orchestration:
   workflow_doc: docs/agents/AGENT_WORKFLOW.md

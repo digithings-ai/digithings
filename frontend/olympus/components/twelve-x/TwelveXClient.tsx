@@ -6,13 +6,16 @@ import {
   CalendarDays,
   Grid3x3,
   LineChart as LineChartIcon,
+  Workflow,
 } from 'lucide-react';
 import { EmptyState } from '@digithings/web';
 
-import { SubpageStickyTabBar, SUBPAGE_MAX, subpageTabButtonClass } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { SubpageStickyTabBar, subpageTabButtonClass } from '@/components/subpage-tab-bar';
 import PageSkeleton from '@/components/page-skeleton';
 import {
   computeConsensusDeltaSet,
+  getConsensusDivergence,
   getConsensusTimeSeries,
   getEventOpinions,
   getIntelligence,
@@ -30,6 +33,7 @@ import { isTwelveXConfigured } from '@/lib/twelve-x/supabase';
 import type {
   FxBriefRow,
   FxConfluenceSnapshotRow,
+  FxConsensusDivergence,
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
   FxEventSnapshotRow,
@@ -41,8 +45,10 @@ import TodayTab from './TodayTab';
 import BriefsIndex from './BriefsIndex';
 import ConsensusTab from './ConsensusTab';
 import EventsTab from './EventsTab';
+import HowItWorksTab from './HowItWorksTab';
 import MatrixTab from './MatrixTab';
 import BriefPanel from './BriefPanel';
+import TwelveXHeading from './TwelveXHeading';
 import { TwelveXProvider, type TwelveXContextValue, type CrossLink, type TwelveXTab } from './context';
 import { useWatchlist } from './useWatchlist';
 
@@ -54,6 +60,7 @@ export const TWELVE_X_TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof Calenda
   { id: 'consensus', Icon: LineChartIcon, label: 'Consensus' },
   { id: 'matrix', Icon: Grid3x3, label: 'Matrix' },
   { id: 'events', Icon: CalendarDays, label: 'Events' },
+  { id: 'how-it-works', Icon: Workflow, label: 'How it works' },
 ];
 
 function TwelveXTabBar({
@@ -66,7 +73,7 @@ function TwelveXTabBar({
   disabled?: boolean;
 }) {
   return (
-    <SubpageStickyTabBar aria-label="FX research workspace" topOffset="none">
+    <SubpageStickyTabBar aria-label="FX research workspace">
       {TWELVE_X_TABS.map(({ id, Icon, label }) => (
         <button
           key={id}
@@ -86,12 +93,10 @@ function TwelveXTabBar({
 export function TwelveXUnavailable({ configured }: { configured: boolean }) {
   return (
     <div className="flex min-h-full flex-col">
-      <TwelveXTabBar active="today" disabled />
       <div className={`${SUBPAGE_MAX} flex-1 py-12`}>
         <EmptyState
           variant="error"
-          dress="glass-display"
-          className="glass-card mx-auto max-w-md"
+          className="mx-auto max-w-md border border-hair bg-surface"
           title={configured ? 'FX research is temporarily unavailable' : 'FX research is not connected'}
           body={
             configured
@@ -129,6 +134,7 @@ interface TwelveXData {
   todayBriefs: FxBriefRow[];
   todayEvents: FxEconomicCalendarRow[];
   researchBriefs: FxBriefRow[];
+  divergenceByCurrency: Record<string, FxConsensusDivergence>;
 }
 
 export function resolveTab(urlTab: string | null): TwelveXTab {
@@ -136,6 +142,7 @@ export function resolveTab(urlTab: string | null): TwelveXTab {
   if (urlTab === 'intelligence') return 'consensus'; // Legacy redirect
   if (urlTab === 'events') return 'events';
   if (urlTab === 'matrix') return 'matrix';
+  if (urlTab === 'how-it-works') return 'how-it-works';
   return 'today';
 }
 
@@ -256,9 +263,14 @@ export default function TwelveXClient() {
           getIntelligenceWhy(intelRunDate),
         ]);
         const canonical = intelligence[0]?.run_date ?? digest?.run_date ?? null;
-        const [tradeIdeas, todayBriefs, todayEvents] = canonical
-          ? await Promise.all([getTradeIdeas(canonical), getTodayBriefs(canonical), getTodayEvents()])
-          : [[], [], await getTodayEvents()];
+        const [tradeIdeas, todayBriefs, todayEvents, divergenceByCurrency] = canonical
+          ? await Promise.all([
+              getTradeIdeas(canonical),
+              getTodayBriefs(canonical),
+              getTodayEvents(),
+              getConsensusDivergence(canonical),
+            ])
+          : [[], [], await getTodayEvents(), {}];
         if (cancelled) return;
         const latestConsensus = selectLatestCompleteConsensus(consensusSeries);
         setData({
@@ -274,6 +286,7 @@ export default function TwelveXClient() {
           todayBriefs,
           todayEvents,
           researchBriefs,
+          divergenceByCurrency,
         });
       } catch (err) {
         if (cancelled) return;
@@ -347,17 +360,13 @@ export default function TwelveXClient() {
     [canonicalRunDate, crossLink, openBrief, watchlist]
   );
 
-  if (loading) return <PageSkeleton />;
-
-  if (error === 'unconfigured') {
-    return <TwelveXUnavailable configured={false} />;
-  }
-
-  if (error) {
-    return <TwelveXUnavailable configured />;
-  }
-
+  // How-it-works is fully static and must stay reachable while the feed loads
+  // or is down; the data tabs degrade to the skeleton / unavailable state
+  // inside the workspace chrome instead of replacing it.
   const renderActiveTab = () => {
+    if (tab === 'how-it-works') return <HowItWorksTab />;
+    if (loading) return <PageSkeleton bare />;
+    if (error) return <TwelveXUnavailable configured={error !== 'unconfigured'} />;
     switch (tab) {
       case 'consensus':
         return (
@@ -366,6 +375,7 @@ export default function TwelveXClient() {
             latest={data?.latestConsensus ?? []}
             latestDate={latestConsensusDate}
             deltas={consensusDeltas}
+            divergenceByCurrency={data?.divergenceByCurrency ?? {}}
             focusCcy={consensusFocusCcy}
             intelligenceWhy={data?.intelligenceWhy ?? { runDate: null, items: [] }}
             researchBriefs={data?.researchBriefs ?? []}
@@ -394,6 +404,7 @@ export default function TwelveXClient() {
             briefs={data?.todayBriefs ?? []}
             events={data?.todayEvents ?? []}
             series={data?.consensusSeries ?? []}
+            divergenceByCurrency={data?.divergenceByCurrency ?? {}}
             onSeeAllBriefs={openBriefsIndex}
           />
         );
@@ -401,7 +412,8 @@ export default function TwelveXClient() {
   };
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div data-testid="twelvex-workspace" className="flex min-h-full flex-col">
+      <TwelveXHeading />
       <TwelveXTabBar active={tab} onSelect={setTab} />
 
       <TwelveXProvider value={ctx}>

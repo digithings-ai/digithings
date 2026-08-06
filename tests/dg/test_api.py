@@ -1,13 +1,13 @@
-"""API tests for DigiGraph FastAPI app (integration with TestClient)."""
+"""API tests for digigraph FastAPI app (integration with TestClient)."""
 
 from __future__ import annotations
 
 from unittest.mock import patch
 
 import pytest
+from digigraph.server import app
 from fastapi.testclient import TestClient
 
-from digigraph.server import app
 from tests.digi_test_jwt import auth_headers
 
 SAMPLE_WORKFLOW_PAYLOAD = {"prompt": "Build me a mean-reversion stat-arb on tech"}
@@ -93,7 +93,7 @@ class TestTestLlm:
 
 @pytest.mark.unit
 class TestOpenAICompatible:
-    """GET /v1/models, POST /v1/chat/completions (expose DigiGraph as model)."""
+    """GET /v1/models, POST /v1/chat/completions (expose digigraph as model)."""
 
     def test_model_info_returns_model_and_mode(self, client: TestClient) -> None:
         r = client.get("/v1/model-info")

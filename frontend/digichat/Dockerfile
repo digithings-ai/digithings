@@ -1,4 +1,4 @@
-# DigiChat — Next.js standalone.
+# digichat — Next.js standalone.
 # Build from the REPO ROOT (compose: context '.', dockerfile frontend/digichat/Dockerfile):
 # the app is an npm workspace member whose lockfile lives at the repo root and whose
 # private @digithings/design dependency only resolves through the workspace link.
@@ -31,12 +31,16 @@ COPY frontend/digiweb/design ./frontend/digiweb/design
 COPY frontend/digiweb/web ./frontend/digiweb/web
 COPY frontend/digichat-ui ./frontend/digichat-ui
 COPY frontend/digichat ./frontend/digichat
-# package-lock.json is macOS-generated; Linux optional natives are not locked
-# (see .github/workflows/test-digichat.yml, which needs the -gnu equivalents
-# on its own non-Alpine runner — this image is musl/Alpine, hence -musl here).
+# Tailwind's oxide is the one native tree the root lock cannot supply here:
+# @tailwindcss/oxide-darwin-arm64 4.2.2 is its sole platform entry, so no Linux
+# oxide binary arrives from `npm ci` and @tailwindcss/postcss would fail the
+# build. Everything else is locked and installs itself — @rolldown/binding-linux-x64-musl
+# at 1.2.2 and both lightningcss musl builds (1.33.0 hoisted, 1.32.0 nested) —
+# so pinning those re-fetched a stale rolldown rc and dropped a 1.32.0
+# lightningcss binary over the hoisted 1.33.0 one (#1940 removed the same two
+# from CI). Same reasoning as .github/workflows/test-digichat.yml, which keeps
+# the -gnu binding for its non-Alpine runner; this image is musl/Alpine.
 RUN npm install \
-      @rolldown/binding-linux-x64-musl@1.0.0-rc.16 \
-      lightningcss-linux-x64-musl@1.32.0 \
       @tailwindcss/oxide-linux-x64-musl@4.2.2 \
       --no-save --no-audit --no-fund
 RUN npm run build --workspace frontend/digichat

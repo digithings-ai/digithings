@@ -11,7 +11,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.hermes.risk_controls import (
     BreakerConfig,
     breaker_scale_from_nav_history,

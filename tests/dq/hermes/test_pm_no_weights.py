@@ -5,9 +5,8 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from pydantic import ValidationError
-
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
 

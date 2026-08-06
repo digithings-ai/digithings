@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Skeleton, SkeletonGroup } from '@digithings/web';
-import { BookOpen, FileSearch, X } from 'lucide-react';
+import { BookOpen, ChevronsLeft, ChevronsRight, FileSearch, Maximize2, Minimize2, X } from 'lucide-react';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
 import type { LaidOutNode } from '@/lib/pipeline-layout';
 import { PIPELINE_TOPOLOGY, pipelineNodeExplanation } from '@/lib/pipeline-topology';
@@ -24,6 +24,9 @@ export default function PipelineNodeDetail({
   const [doc, setDoc] = useState<LibraryDocumentResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Reader ergonomics (#1679): comfortable (default) / wide / full-screen. Desktop
+  // only — the mobile docked pane keeps its height-based layout untouched.
+  const [size, setSize] = useState<'default' | 'wide' | 'full'>('default');
   const explanation = node ? pipelineNodeExplanation(node.stageId, node.id) : null;
 
   useEffect(() => {
@@ -55,50 +58,83 @@ export default function PipelineNodeDetail({
     return () => { cancelled = true; };
   }, [documentKey, date]);
 
-  // Responsive container: mobile = docked lower pane, desktop = right side panel.
-  // Keeping mobile detail in flow leaves the stage navigator visible above it.
+  // Mobile detail replaces the browser as a full-page surface; closing it returns to
+  // the exact Pipeline selection. Desktop keeps the in-workspace side panel.
   return (
     <aside
       aria-label="Node detail"
       aria-live="polite"
       className={[
-        'relative z-20 flex h-[46%] min-h-40 shrink-0 flex-col border-t border-hair bg-term-bg',
-        'md:h-full md:w-[372px] md:min-h-0 md:border-l md:border-t-0',
+        'fixed inset-0 z-[1100] flex h-dvh w-full shrink-0 flex-col overflow-hidden bg-term-bg',
+        'pt-[env(safe-area-inset-top)] md:pt-0',
+        // Desktop reader sizes (#1679): comfortable / wide / full-screen; mobile is
+        // always the full-page surface from the develop-side mobile pass.
+        size === 'full'
+          ? 'md:fixed md:inset-0 md:z-50 md:h-full md:w-full'
+          : size === 'wide'
+            ? 'md:relative md:inset-auto md:z-20 md:h-full md:w-[620px] md:min-h-0 md:border-l md:border-hair'
+            : 'md:relative md:inset-auto md:z-20 md:h-full md:w-[372px] md:min-h-0 md:border-l md:border-hair',
       ].join(' ')}
     >
       {/* Header */}
       <div className="flex flex-shrink-0 items-start justify-between border-b border-hair px-4 py-3 md:px-5 md:py-4">
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-bold tracking-[0.14em] uppercase text-accent mb-1">
+          <div className="mb-1 text-xs font-bold uppercase text-accent">
             {documentKey ? 'Run artifact' : explanation ? 'Pipeline guide' : 'No selection'}
           </div>
           <div className="font-mono text-sm truncate text-ink">
             {node?.label ?? documentKey ?? '—'}
           </div>
           {explanation && (
-            <div className="mt-1 font-mono text-[0.65rem] text-ink-mute">
+            <div className="mt-1 font-mono text-xs text-ink-mute">
               Stage {explanation.stageNumber} of {PIPELINE_TOPOLOGY.length} · {explanation.stageLabel}
             </div>
           )}
         </div>
-        <button
-          type="button"
-          aria-label="Close"
-          onClick={onClose}
-          className="ml-3 flex-shrink-0 w-7 h-7 flex items-center justify-center border border-hair rounded-lg text-ink-mute hover:text-ink transition-colors"
-        >
-          <X size={13} />
-        </button>
+        <div className="ml-3 flex flex-shrink-0 items-center gap-1.5">
+          {/* Reader-size toggles (#1679) — desktop only; mobile is already full-page */}
+          {size !== 'full' && (
+            <button
+              type="button"
+              aria-label={size === 'wide' ? 'Narrow panel' : 'Widen panel'}
+              onClick={() => setSize(size === 'wide' ? 'default' : 'wide')}
+              className="hidden h-8 w-8 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:flex"
+            >
+              {size === 'wide' ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label={size === 'full' ? 'Exit full screen' : 'Full screen'}
+            onClick={() => setSize(size === 'full' ? 'default' : 'full')}
+            className="hidden h-8 w-8 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:flex"
+          >
+            {size === 'full' ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 text-sm leading-relaxed text-ink-mute md:px-5 md:py-4">
+      <div
+        className={[
+          'flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-sm leading-relaxed text-ink-mute md:px-5 md:py-4',
+          size === 'full' ? 'md:mx-auto md:w-full md:max-w-3xl' : '',
+        ].join(' ')}
+      >
         {/* Empty state */}
         {!documentKey && !explanation && (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
             <FileSearch size={32} className="text-ink-mute opacity-40" />
             <p className="text-ink-mute text-sm">No document selected.</p>
-            <p className="text-[12px] text-ink-mute/60">
+            <p className="text-xs text-ink-mute/60">
               Select a node in the pipeline graph to view its output here.
             </p>
           </div>
@@ -117,20 +153,20 @@ export default function PipelineNodeDetail({
             </div>
             <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-hair bg-hair">
               <div className="bg-term-bg px-3 py-2.5">
-                <dt className="font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+                <dt className="font-mono text-xs uppercase text-ink-mute">
                   Stage
                 </dt>
                 <dd className="mt-1 text-xs text-ink">{explanation.stageLabel}</dd>
               </div>
               <div className="bg-term-bg px-3 py-2.5">
-                <dt className="font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+                <dt className="font-mono text-xs uppercase text-ink-mute">
                   Execution
                 </dt>
                 <dd className="mt-1 text-xs text-ink">{explanation.behavior}</dd>
               </div>
             </dl>
             <div className="border-t border-hair pt-4">
-              <p className="font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+              <p className="font-mono text-xs uppercase text-ink-mute">
                 This run
               </p>
               <p className="mt-2 text-xs leading-relaxed text-ink-mute">
@@ -159,7 +195,7 @@ export default function PipelineNodeDetail({
         {documentKey && !loading && error && (
           <div className="space-y-2">
             <p className="text-warn text-sm">{error}</p>
-            <p className="text-[12px] text-ink-mute">
+            <p className="text-xs text-ink-mute">
               This document may not be available for the selected date.
             </p>
           </div>
@@ -189,7 +225,7 @@ export default function PipelineNodeDetail({
             <p className="text-ink-mute text-sm">
               No output found for <span className="font-mono text-ink">{documentKey}</span> on {date}.
             </p>
-            <p className="text-[12px] text-ink-mute/70">
+            <p className="text-xs text-ink-mute/70">
               This stage may not have run yet, or the output was not persisted.
             </p>
           </div>

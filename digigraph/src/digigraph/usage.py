@@ -10,7 +10,9 @@ threads, so all mutation is under a lock.
 from __future__ import annotations
 
 import threading
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous call records
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous call records
+)
 
 _LOCK = threading.Lock()
 _ACTIVE = False

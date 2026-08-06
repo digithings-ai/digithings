@@ -2,7 +2,7 @@ import type { ModelMessage } from "ai";
 
 /**
  * Mirror digigraph.models._coerce_openai_message_content so trace-path requests
- * match OpenAI-style bodies DigiGraph validates reliably.
+ * match OpenAI-style bodies digigraph validates reliably.
  */
 export function coerceMessageContentToString(content: unknown): string {
   if (content == null) return "";

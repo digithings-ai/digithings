@@ -1,11 +1,11 @@
-"""Smoke test: DigiGraph exposes /metrics with service/version/environment labels."""
+"""Smoke test: digigraph exposes /metrics with service/version/environment labels."""
 
 from __future__ import annotations
 
 import pytest
+from digigraph.server import app
 from fastapi.testclient import TestClient
 
-from digigraph.server import app
 from tests.conftest import assert_prom_metrics_labels
 
 pytestmark = pytest.mark.unit

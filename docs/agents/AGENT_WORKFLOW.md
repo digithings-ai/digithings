@@ -1,6 +1,6 @@
 # Autonomous Agent Development Workflow
 
-Protocol for agents working in the DigiThings monorepo.
+Protocol for agents working in the digithings monorepo.
 
 ---
 

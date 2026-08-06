@@ -15,15 +15,15 @@ import { SiteNav } from "@/components/landing/SiteNav";
 const POSTER: Record<string, { epithet: string; fine: string }> = {
   atlas: {
     epithet: "he carries the data.",
-    fine: "digiquant/src/digiquant/olympus/atlas/ · accent-atlas → ink",
+    fine: "digiquant/src/digiquant/olympus/atlas/",
   },
   hermes: {
     epithet: "he carries the orders.",
-    fine: "digiquant/src/digiquant/olympus/hermes/ · accent-hermes → ink",
+    fine: "digiquant/src/digiquant/olympus/hermes/",
   },
   kairos: {
     epithet: "he knows the moment.",
-    fine: "executes on NautilusTrader · human-gated · accent-kairos → ink",
+    fine: "the execution stage · planned, no package yet",
   },
 };
 

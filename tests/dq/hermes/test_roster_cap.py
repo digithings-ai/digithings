@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digiquant.olympus.hermes.roster_cap import capped_tickers
 
 

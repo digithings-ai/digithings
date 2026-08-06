@@ -26,14 +26,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.12'
+          enable-cache: true
 
-      - name: Install deps
-        run: pip install pyyaml httpx
+      # Installs from the committed uv.lock rather than resolving fresh (#1715).
+      # The script needs only httpx + pyyaml, both locked; the live OpenRouter
+      # calls it makes are unaffected by how the client is installed.
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
 
       - name: Validate pooled slugs against live OpenRouter endpoints
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: python3 scripts/validate_olympus_pools.py
+        run: uv run --frozen --no-sync python scripts/validate_olympus_pools.py

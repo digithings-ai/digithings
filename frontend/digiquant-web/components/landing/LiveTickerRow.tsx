@@ -6,9 +6,10 @@
  * carrying crypto (Coinbase's keyless public WS, streams client-side regardless
  * of Supabase config) followed by the equity/ETF majors (seeded from the
  * daily-close view with its real prior-session change, live intraday during US
- * hours over the "prices:live" broadcast). One band, both asset classes — the
- * crypto ticks 24/7; the majors show their last daily move until the market
- * opens (user ruling 2026-07-12).
+ * hours via Realtime postgres_changes on public.prices_live — #1807 moved that
+ * lane off the anon-forgeable "prices:live" broadcast topic). One band, both
+ * asset classes — the crypto ticks 24/7; the majors show their last daily move
+ * until the market opens (user ruling 2026-07-12).
  *
  * The tape is the ONE marquee that legitimately wears the money colors: a
  * price change IS the up/down semantic (StockTicker colors from TickerItem.up
@@ -47,7 +48,7 @@ const CRYPTO_PRODUCTS: string[] = [
 
 // Curated liquid majors spanning the macro book's lenses — broad cap, rates,
 // the dollar, developed + EM, credit, gold. Seeded from public_price_latest;
-// live during US market hours via the equity broadcast.
+// live during US market hours via postgres_changes on public.prices_live.
 const EQUITY_MAJORS: string[] = [
   "SPY",
   "QQQ",

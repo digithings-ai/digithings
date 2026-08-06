@@ -9,8 +9,16 @@
    color-mix backdrop band, the JS-toggled state classes (.is-scrolled,
    .is-hidden, .is-menu-open), the hamburger's parent-state span transforms,
    descendant dressing of slotted content (.theme-toggle, .btn-icon, sheet
-   links), the portal overlay pair (scrim + sheet), and the breakpoint /
-   reduced-motion guards.
+   links), the dropdown group (trigger, caret, panel) and its sheet counterpart
+   (a labelled section), the portal overlay pair (scrim + sheet), and the
+   breakpoint / reduced-motion guards.
+
+   Layering contract — one hidden-state idiom, used three times: an overlay
+   surface stays in the DOM and is parked with `visibility: hidden` +
+   `pointer-events: none` (plus opacity/transform for the travel), then
+   unparked by an `.is-open` class. The scrim, the sheet and the dropdown panel
+   all follow it, so every one of them can transition, and none of them can
+   trap a tab stop while closed.
 
    The bar reads --nav-shell-h (fallback 62px) so apps can retune height in one
    place — and reuse it for scroll-padding-top / anchor offsets.
@@ -41,6 +49,10 @@
 .nav-shell.is-hidden {
   transform: translateY(calc(-1 * var(--nav-shell-h, 62px) - 1px));
 }
+/* An open dropdown pins the bar: yielding would take the panel with it. */
+.nav-shell[data-group-open="true"].is-hidden {
+  transform: none;
+}
 
 /* ── inline links: hover ink on descendants ─────────────────────────────── */
 .nav-shell-links a {
@@ -48,6 +60,112 @@
 }
 .nav-shell-links a:hover {
   color: var(--ink);
+}
+
+/* ── dropdown group (wide bar only; the sheet gets sections instead) ──────
+      The panel is positioned against its group box, so the anchor chain is
+      stretched to the bar's full height — row → strip → group — and `top: 100%`
+      then lands exactly on the bar's bottom hairline instead of floating
+      mid-bar. Each stretched box re-centres its own content, so nothing moves.
+      ─────────────────────────────────────────────────────────────────────── */
+.nav-shell-row {
+  align-self: stretch;
+}
+.nav-shell-links {
+  align-self: stretch;
+  align-items: center;
+}
+.nav-shell-group {
+  position: relative;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+}
+.nav-shell-group-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: color 0.2s var(--ease);
+}
+.nav-shell-group-trigger:hover,
+.nav-shell-group[data-open="true"] .nav-shell-group-trigger {
+  color: var(--ink);
+}
+/* borders, not a glyph: the caret follows ink through [data-theme] and needs
+   no font metrics to sit straight */
+.nav-shell-group-caret {
+  width: 0.3rem;
+  height: 0.3rem;
+  border-right: 1.2px solid currentColor;
+  border-bottom: 1.2px solid currentColor;
+  transform: translateY(-0.1rem) rotate(45deg);
+  transition: transform 0.2s var(--ease);
+}
+.nav-shell-group[data-open="true"] .nav-shell-group-caret {
+  transform: translateY(0.02rem) rotate(-135deg);
+}
+
+/* the panel: same parked-then-unparked contract as the sheet below. Hairline +
+   blurred band, no drop shadow — quiet by default. */
+.nav-shell-menu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  z-index: 1; /* the tail cluster follows the strip in the DOM */
+  display: flex;
+  flex-direction: column;
+  min-width: max(11rem, 100%);
+  margin-top: 0.4rem;
+  padding: 0.4rem;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-0.3rem);
+  /* visibility is stepped, not interpolated: on close it waits out the fade
+     (0s delayed by 0.2s); on open it flips at once, with no transition at all.
+     A transitioned `visibility` would still compute as `hidden` at t=0, and the
+     first thing an opening menu does is focus an item — focus() on a hidden
+     element is a silent no-op, so the keyboard would appear dead. */
+  transition:
+    opacity 0.2s var(--ease),
+    transform 0.2s var(--ease),
+    visibility 0s linear 0.2s;
+}
+.nav-shell-menu.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(-50%);
+  transition:
+    opacity 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+.nav-shell-menu-item {
+  display: block;
+  padding: 0.45rem 0.7rem;
+  border-radius: 7px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  transition:
+    color 0.2s var(--ease),
+    background 0.2s var(--ease);
+}
+.nav-shell-menu-item:hover,
+.nav-shell-menu-item:focus-visible {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
 /* ── tail cluster: theme toggle, slotted actions, hamburger — borderless,
@@ -187,6 +305,22 @@
 .nav-shell-sheet-links a:hover {
   color: var(--ink);
 }
+/* a NavGroup in the sheet: a kicker-cased label over its own links. No
+   disclosure — the sheet is already the vertical index a dropdown would open. */
+.nav-shell-sheet-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 100%;
+}
+.nav-shell-sheet-group-label {
+  margin: 0.9rem 0 0.1rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-mute);
+}
 .nav-shell-sheet-cta {
   display: flex;
   justify-content: flex-end;
@@ -228,14 +362,26 @@
 }
 
 /* ── reduced motion: same states, instant — the bar still settles, yields
-      and returns; nothing slides or fades ──────────────────────────────── */
+      and returns; dropdowns still open, close and dress their caret; nothing
+      slides or fades ──────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .nav-shell,
   .nav-shell-toggle span,
   .nav-shell-links a,
+  .nav-shell-group-trigger,
+  .nav-shell-group-caret,
+  .nav-shell-menu,
+  /* the open state re-declares transition (see the panel rule), so it needs
+     naming here too — a bare .nav-shell-menu would lose the specificity duel */
+  .nav-shell-menu.is-open,
+  .nav-shell-menu-item,
   .nav-shell-sheet-links a,
   .nav-shell-backdrop,
   .nav-shell-sheet {
     transition: none;
+  }
+  /* no travel either: the panel simply is, or is not, there */
+  .nav-shell-menu {
+    transform: translateX(-50%);
   }
 }

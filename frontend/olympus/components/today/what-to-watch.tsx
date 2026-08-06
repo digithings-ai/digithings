@@ -25,8 +25,8 @@ export function WhatToWatch({ actionables, risks, asOfDate }: WhatToWatchProps) 
   if (acts.length === 0 && tails.length === 0) return null;
 
   return (
-    <section className="glass-card px-5 py-4 sm:px-6">
-      <div className="mb-3 flex items-center justify-between gap-2">
+    <section data-brief-section="watch" className="border-b border-hair px-5 py-5 sm:px-7">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex items-center gap-2">
           <Eye size={14} className="text-ink-mute" />
           <h2 className="text-xs font-bold uppercase tracking-widest text-ink-mute">
@@ -35,7 +35,7 @@ export function WhatToWatch({ actionables, risks, asOfDate }: WhatToWatchProps) 
         </div>
         <Link
           href={buildPipelineHref({ date: asOfDate, stage: 'synthesis', node: 'digest' })}
-          className="text-[10px] font-medium text-accent hover:underline"
+          className="shrink-0 text-[10px] font-medium text-accent hover:underline"
         >
           See the full read →
         </Link>

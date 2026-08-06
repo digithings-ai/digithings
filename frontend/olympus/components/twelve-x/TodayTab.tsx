@@ -1,15 +1,17 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { CalendarClock } from 'lucide-react';
 import type {
   FxConfluenceSnapshotRow,
+  FxConsensusDivergence,
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
   FxBriefRow,
   FxTradeIdeaRow,
 } from '@/lib/twelve-x/types';
 import { eventLocalDateKey } from '@/lib/twelve-x/fetch';
+import { countDisputedTradeIdeas, disputedTradeIdeaRanks } from '@/lib/twelve-x/divergence';
 import TradeIdeasPanel from './TradeIdeasPanel';
 import DigestBrief from './DigestBrief';
 import TodayConsensusChart from './TodayConsensusChart';
@@ -26,6 +28,7 @@ export default function TodayTab({
   briefs,
   events,
   series,
+  divergenceByCurrency = {},
   onSeeAllBriefs,
 }: {
   digest: DigestData;
@@ -34,9 +37,21 @@ export default function TodayTab({
   briefs: FxBriefRow[];
   events: FxEconomicCalendarRow[];
   series: FxConsensusSnapshotRow[];
+  divergenceByCurrency?: Record<string, FxConsensusDivergence>;
   onSeeAllBriefs: () => void;
 }) {
   const { openBrief } = useTwelveX();
+  const [highlightDisputed, setHighlightDisputed] = useState(false);
+
+  const disputeCount = useMemo(
+    () => countDisputedTradeIdeas(tradeIdeas, divergenceByCurrency),
+    [tradeIdeas, divergenceByCurrency],
+  );
+
+  const highlightRanks = useMemo(() => {
+    if (!highlightDisputed) return undefined;
+    return new Set(disputedTradeIdeaRanks(tradeIdeas, divergenceByCurrency));
+  }, [highlightDisputed, tradeIdeas, divergenceByCurrency]);
 
   const timelineEvents = useMemo(() => eventsToTimeline(events), [events]);
 
@@ -51,12 +66,30 @@ export default function TodayTab({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
-      <h2 className="font-display text-2xl tracking-tight text-ink">Today&rsquo;s read</h2>
+        <h2 className="font-display text-2xl tracking-tight text-ink">Today&rsquo;s read</h2>
       </div>
+
+      {disputeCount > 0 ? (
+        <p className="px-1 text-sm text-ink-soft">
+          <button
+            type="button"
+            data-disputes-line="true"
+            className="text-left text-accent hover:underline"
+            onClick={() => setHighlightDisputed((v) => !v)}
+          >
+            The data disputes {disputeCount} of today&rsquo;s calls
+            {disputeCount === 1 ? '' : 's'}.
+          </button>
+        </p>
+      ) : null}
 
       {/* Above the fold: trade ideas + digest brief co-lead */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <TradeIdeasPanel ideas={tradeIdeas} confluence={confluence} />
+        <TradeIdeasPanel
+          ideas={tradeIdeas}
+          confluence={confluence}
+          highlightRanks={highlightRanks}
+        />
         <DigestBrief digest={digest} />
       </div>
 

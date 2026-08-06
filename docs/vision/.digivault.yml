@@ -1,4 +1,4 @@
-# DigiVault manifest for the DigiThings architecture vision vault.
+# digivault manifest for the digithings architecture vision vault.
 # Governs required frontmatter, the tag taxonomy, and link integrity.
 # Validated in CI via `make vault-check`.
 required_frontmatter:

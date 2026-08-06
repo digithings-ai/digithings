@@ -16,7 +16,7 @@ def infer_row(issue_number: int, labels: list[dict[str, str]]) -> tuple[str, str
     elif "phase-3" in names:
         phase = "Phase 3 — Domain unification"
     elif "phase-4" in names:
-        phase = "Phase 4 — Atlas on DigiGraph"
+        phase = "Phase 4 — Atlas on digigraph"
     elif "phase-5" in names:
         phase = "Phase 5 — Atlas tiering"
     elif "sitaas" in names:
@@ -25,12 +25,12 @@ def infer_row(issue_number: int, labels: list[dict[str, str]]) -> tuple[str, str
     area = "Cross-cutting"
     component_map = {
         "component:website": "Website",
-        "component:digichat": "DigiChat",
-        "component:digisearch": "DigiSearch",
-        "component:digigraph": "DigiGraph",
-        "component:digiquant": "DigiQuant",
-        "component:digikey": "DigiKey",
-        "component:digismith": "DigiSmith",
+        "component:digichat": "digichat",
+        "component:digisearch": "digisearch",
+        "component:digigraph": "digigraph",
+        "component:digiquant": "digiquant",
+        "component:digikey": "digikey",
+        "component:digismith": "digismith",
     }
     for label, board_area in component_map.items():
         if label in names:

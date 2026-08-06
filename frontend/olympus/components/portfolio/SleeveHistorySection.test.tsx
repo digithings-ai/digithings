@@ -35,4 +35,12 @@ describe('SleeveHistorySection', () => {
     expect(html).toContain('nb-seg-group--accent');
     expect(html).toContain('aria-pressed="true"');
   });
+
+  it('uses flat divided sections with hairlines instead of glass-card', () => {
+    const html = renderToStaticMarkup(createElement(SleeveHistorySection, {
+      ...base, sleeveData: [{ date: '2026-06-23', NVDA: 30 }, { date: '2026-06-24', NVDA: 31 }],
+    }));
+    expect(html).not.toContain('glass-card');
+    expect(html).toContain('border-hair');
+  });
 });

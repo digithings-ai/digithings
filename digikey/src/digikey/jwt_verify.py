@@ -1,4 +1,4 @@
-"""Verify DigiKey JWTs via local PEM or JWKS URL."""
+"""Verify digikey JWTs via local PEM or JWKS URL."""
 
 from __future__ import annotations
 

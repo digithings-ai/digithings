@@ -1,11 +1,9 @@
 "use client";
-import type { ChatMessage } from "./useStackChat";
 
 /**
- * Cross-tab handoff for escalating the landing quick-ask into the full DigiChat
- * page. When the inline quick-ask hits a follow-up, it stashes the running
- * transcript plus the new question here and opens `/chat` in a new tab; the page
- * reads-and-clears this on mount and resumes the session.
+ * Cross-tab / landing→/chat handoff. Landing quick-ask writes here; /chat
+ * DigiChatSession reads-and-clears and seeds the controller (same-origin —
+ * no iframe / postMessage required).
  *
  * Uses `localStorage`, NOT `sessionStorage`: a `window.open`'d tab gets a fresh
  * session storage, so the handoff would silently vanish. localStorage is shared
@@ -14,6 +12,12 @@ import type { ChatMessage } from "./useStackChat";
  * payload is one-shot and doesn't leak into a later visit. Stale payloads (a tab
  * never opened) self-expire after a few minutes.
  */
+
+export type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 const KEY = "digichat:handoff";
 const MAX_AGE_MS = 5 * 60 * 1000;
 

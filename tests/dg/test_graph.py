@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-import digigraph.graph.graph as _graph_module
+import logging
+import sys
+import types
 from unittest.mock import patch
 
+import digigraph.graph.graph as _graph_module
 import pytest
-
 from digigraph.graph import build_workflow_graph
 
 
@@ -120,3 +122,120 @@ def test_graph_research_only_when_backtest_disabled() -> None:
         out = g.invoke({"prompt": "search docs"}, config={"configurable": {"thread_id": "test"}})
     assert "backtest_result" not in out or out.get("backtest_result") is None
     assert out.get("error")
+
+
+# ── Postgres checkpointer connection bounds (#1734) ──────────────────────────
+#
+# ``langgraph-checkpoint-postgres`` is NOT needed — the saver is faked. psycopg *is*, and it
+# only arrives with the optional ``digigraph[checkpoint-postgres]`` extra, so every test that
+# needs it skips rather than erroring at import time.
+
+_BOUND_KEYS = ("connect_timeout", "keepalives", "keepalives_idle", "keepalives_interval")
+
+
+def _conninfo_params(conn_string: str) -> dict[str, str]:
+    from psycopg.conninfo import conninfo_to_dict
+
+    return {k: str(v) for k, v in conninfo_to_dict(conn_string).items()}
+
+
+@pytest.fixture
+def fake_postgres_saver(monkeypatch):
+    """Install a fake ``langgraph.checkpoint.postgres`` and record the conninfo it gets."""
+    received: list[str] = []
+
+    class _FakeSaver:
+        def setup(self) -> None:
+            """No-op: the real ``setup()`` issues DDL over a live connection."""
+
+    class _FakeCm:
+        def __enter__(self):
+            return _FakeSaver()
+
+        def __exit__(self, *_exc) -> bool:
+            return False
+
+    class _FakePostgresSaver:
+        @staticmethod
+        def from_conn_string(conn_string: str) -> _FakeCm:
+            received.append(conn_string)
+            return _FakeCm()
+
+    module = types.ModuleType("langgraph.checkpoint.postgres")
+    module.PostgresSaver = _FakePostgresSaver  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "langgraph.checkpoint.postgres", module)
+    return received
+
+
+@pytest.mark.unit
+def test_postgres_checkpointer_conninfo_carries_connection_bounds(
+    monkeypatch, reset_checkpointer, fake_postgres_saver
+):
+    """The conninfo handed to ``PostgresSaver.from_conn_string`` must carry a connect
+    timeout and TCP keepalives. Without them a peer that vanishes without an RST leaves
+    the socket ESTABLISHED forever — the 2026-07-30 shape, 210 min of silence inside a
+    240-min job (#1734). psycopg exposes no kwarg for these, so the conninfo is the seam.
+    """
+    pytest.importorskip("psycopg")
+    monkeypatch.setenv("DIGI_CHECKPOINTER", "postgres")
+    monkeypatch.setenv(
+        "DIGI_CHECKPOINTER_POSTGRES_URI", "postgresql://u:p@db.example.test:5432/postgres"
+    )
+
+    ckpt = _graph_module.get_checkpointer()
+
+    assert ckpt is not None, "Expected the faked PostgresSaver, got None"
+    assert len(fake_postgres_saver) == 1
+    params = _conninfo_params(fake_postgres_saver[0])
+    assert params["host"] == "db.example.test", "credentials/host must survive the rewrite"
+    assert params["password"] == "p"
+    for key in _BOUND_KEYS:
+        assert key in params, f"{key} missing from the checkpointer conninfo"
+    assert params["connect_timeout"] == "10"
+    assert params["keepalives"] == "1"
+
+
+@pytest.mark.unit
+def test_bounded_conn_string_accepts_keyword_value_form():
+    """libpq allows ``host=... dbname=...`` as well as a URI; both must be bounded."""
+    pytest.importorskip("psycopg")
+    out = _graph_module._bounded_conn_string("host=db.example.test dbname=postgres user=u")
+    params = _conninfo_params(out)
+    assert params["dbname"] == "postgres"
+    for key in _BOUND_KEYS:
+        assert key in params
+
+
+@pytest.mark.unit
+def test_bounded_conn_string_preserves_operator_overrides():
+    """A value already in DIGI_CHECKPOINTER_POSTGRES_URI wins — that env var is the
+    documented escape hatch, so the defaults must never overwrite it."""
+    pytest.importorskip("psycopg")
+    out = _graph_module._bounded_conn_string(
+        "postgresql://db.example.test/postgres?connect_timeout=45&keepalives_idle=600"
+    )
+    params = _conninfo_params(out)
+    assert params["connect_timeout"] == "45"
+    assert params["keepalives_idle"] == "600"
+    assert params["keepalives"] == "1"  # still filled in
+
+
+@pytest.mark.unit
+def test_bounded_conn_string_returns_unparseable_input_unchanged(caplog):
+    """Bounding is best-effort: a malformed conninfo must warn and pass through, never
+    raise. Whatever error the operator has is theirs to see from psycopg, not from us."""
+    pytest.importorskip("psycopg")
+    raw = "this is not a conninfo"
+    with caplog.at_level(logging.WARNING):
+        assert _graph_module._bounded_conn_string(raw) == raw
+    assert "not parseable" in caplog.text
+    assert raw not in caplog.text, "a conninfo can contain the DB password; never log it"
+
+
+@pytest.mark.unit
+def test_bounded_conn_string_returns_input_unchanged_without_psycopg(monkeypatch):
+    """Deployments without the ``checkpoint-postgres`` extra have no psycopg. Missing the
+    bounds is the status quo; an ImportError at graph-build time would be a regression."""
+    monkeypatch.setitem(sys.modules, "psycopg.conninfo", None)
+    raw = "postgresql://db.example.test/postgres"
+    assert _graph_module._bounded_conn_string(raw) == raw

@@ -23,4 +23,16 @@ describe("formatEmbedChatError", () => {
       "not enabled",
     );
   });
+
+  it("parses trial_gate JSON bodies instead of leaking the raw 402 payload", () => {
+    const msg = formatEmbedChatError(
+      new Error(
+        JSON.stringify({
+          error: "trial_gate",
+          message: "Complete the free trial form to keep chatting.",
+        }),
+      ),
+    );
+    expect(msg).toBe("Complete the free trial form to keep chatting.");
+  });
 });

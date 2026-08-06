@@ -1,4 +1,4 @@
-"""Tests for DigiSearch structured JSON logging (#215)."""
+"""Tests for digisearch structured JSON logging (#215)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import json
 import logging
 
 import pytest
-
 from digibase.http import _REQUEST_ID_CTX  # type: ignore[attr-defined]
 from digisearch.logging import _HANDLER_MARKER, configure_logging
 
@@ -22,9 +21,9 @@ def _digi_handler() -> logging.Handler | None:
 
 
 def _swap_to_stream(stream: io.StringIO) -> None:
-    """Point the installed DigiSearch JSON handler at *stream* for capture."""
+    """Point the installed digisearch JSON handler at *stream* for capture."""
     h = _digi_handler()
-    assert h is not None, "configure_logging() must install the DigiSearch JSON handler"
+    assert h is not None, "configure_logging() must install the digisearch JSON handler"
     h.stream = stream  # type: ignore[attr-defined]
 
 

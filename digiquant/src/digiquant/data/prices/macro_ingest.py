@@ -22,7 +22,7 @@ keeps the fetchers unit-testable without a Supabase client.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -235,7 +235,7 @@ def fetch_fred(
     rows: list[MacroObservation] = []
     failed: list[tuple[str, str]] = []
     attempted: list[str] = []
-    end_s = end or date.today().isoformat()
+    end_s = end or datetime.now(UTC).date().isoformat()
     sess = _retrying_session()
     for item in manifest.fred_series:
         if not isinstance(item, dict):
@@ -275,14 +275,21 @@ def fetch_fred(
 #   * ``GBPUSD=X``  → USD per 1 GBP (e.g. 1.27)
 #   * ``JPY=X``     → JPY per 1 USD (e.g. 150)
 #   * ``CAD=X``     → CAD per 1 USD (e.g. 1.35)
+#   * ``AUDUSD=X``  → USD per 1 AUD (e.g. 0.66)
+#   * ``USDCHF=X``  → CHF per 1 USD (e.g. 0.81)
+#   * ``NZDUSD=X``  → USD per 1 NZD (e.g. 0.59)
 # We persist Yahoo's native quote unchanged and stamp ``meta.quote_convention``
 # so downstream consumers can disambiguate. Skill prompts already speak in the
-# natural EUR/USD, GBP/USD, USD/JPY, USD/CAD direction — this matches them.
+# natural EUR/USD, GBP/USD, USD/JPY, USD/CAD, AUD/USD, USD/CHF, NZD/USD
+# direction — this matches them.
 YAHOO_FX_DEFAULT: dict[str, dict[str, str]] = {
     "EURUSD=X": {"series_id": "FX/EUR", "quote_convention": "USD_per_EUR"},
     "GBPUSD=X": {"series_id": "FX/GBP", "quote_convention": "USD_per_GBP"},
     "JPY=X": {"series_id": "FX/JPY", "quote_convention": "JPY_per_USD"},
     "CAD=X": {"series_id": "FX/CAD", "quote_convention": "CAD_per_USD"},
+    "AUDUSD=X": {"series_id": "FX/AUD", "quote_convention": "USD_per_AUD"},
+    "USDCHF=X": {"series_id": "FX/CHF", "quote_convention": "CHF_per_USD"},
+    "NZDUSD=X": {"series_id": "FX/NZD", "quote_convention": "USD_per_NZD"},
 }
 
 
@@ -399,13 +406,13 @@ def fetch_fx_yahoo(
     """Fetch daily FX closes from Yahoo Finance.
 
     Returns ``macro_series_observations`` rows for each symbol in ``symbols``
-    (defaults to :data:`YAHOO_FX_DEFAULT` — EUR/USD, GBP/USD, USD/JPY,
-    USD/CAD). ``source="yahoo"`` distinguishes these from legacy Frankfurter
-    rows so the upsert key ``(source, series_id, obs_date)`` does not collide
-    on historical data.
+    (defaults to :data:`YAHOO_FX_DEFAULT` — G10 USD majors plus EUR/GBP).
+    ``source="yahoo"`` distinguishes these from legacy Frankfurter rows so the
+    upsert key ``(source, series_id, obs_date)`` does not collide on historical
+    data.
 
-    No FRED-style per-series isolation is needed — yfinance batches all four
-    pairs in one HTTP call, so failure modes are all-or-nothing.
+    No FRED-style per-series isolation is needed — yfinance batches all symbols
+    in one HTTP call, so failure modes are all-or-nothing.
     """
     yahoo_to_series = symbols or YAHOO_FX_DEFAULT
     if not yahoo_to_series:

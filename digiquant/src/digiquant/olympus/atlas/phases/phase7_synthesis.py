@@ -10,7 +10,7 @@ import json
 import logging
 import re
 from datetime import date
-from typing import Any, Literal  # noqa: F401 — used for JSON-derived dict shape
+from typing import Any, Literal  # score:allow untyped any — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
@@ -28,6 +28,10 @@ from digiquant.olympus.atlas.state import (
     refresh_scope_forces_full,
 )
 from digiquant.olympus.edit_mode import DocumentPatch, MergeError, merge_document_patch
+from digiquant.olympus.edit_mode.content_identity import (
+    UNCHANGED_FLAG_KEY,
+    UNCHANGED_SINCE_KEY,
+)
 from digiquant.olympus.edit_mode.models import TriageSignal
 from digiquant.olympus.edit_mode.prior import PriorPublished
 from digiquant.olympus.edit_mode.resolve import resolve_edit_mode
@@ -36,9 +40,19 @@ logger = logging.getLogger(__name__)
 
 
 class SegmentFreshness(BaseModel):
-    """Per-segment provenance marker used by the dashboard."""
+    """Per-segment provenance marker used by the dashboard.
 
-    source: Literal["today", "baseline"]
+    ``frozen`` (#1749) means the segment *was* regenerated today and the merge changed
+    nothing, so the body is byte-identical to an earlier one and ``as_of`` is the date that
+    content last materially changed — not the run date. It is distinct from ``baseline``,
+    which means the segment was not regenerated at all (an explicit ``Carried`` slot).
+
+    Keep this in lockstep with :class:`digiquant.olympus.atlas.snapshot.SegmentFreshness`,
+    which validates rows on the *read* path with ``extra="forbid"`` and would reject a value
+    this model can emit but that one cannot accept.
+    """
+
+    source: Literal["today", "baseline", "frozen"]
     as_of: str = Field(description="ISO date")
 
 
@@ -90,6 +104,31 @@ class DigestSnapshot(SegmentReport):
     )
 
 
+def _slot_freshness(payload: object) -> SegmentFreshness:
+    """One slot's freshness marker, derived from the slot — never from the LLM.
+
+    Three-way (#1749). ``today`` and ``baseline`` are structural: the slot is either a fresh
+    ``SegmentPayload`` or an explicit ``Carried``. ``frozen`` is the case that used to be
+    indistinguishable from ``today`` — a merge that ran and changed nothing — and it reports
+    the content's own date rather than the run date, so the badge stops claiming freshness the
+    body does not have. This is the public half of the fix: the marker rides in
+    ``daily_snapshots.snapshot`` (JSONB), so no migration and no view change is involved.
+    """
+    structural_as_of = getattr(payload, "as_of", None) or getattr(payload, "baseline_date", None)
+    as_of = structural_as_of.isoformat() if structural_as_of else ""
+    if getattr(payload, "source", None) != "today":
+        return SegmentFreshness(source="baseline", as_of=as_of)
+    body = getattr(payload, "body", None)
+    if isinstance(body, dict) and body.get(UNCHANGED_FLAG_KEY):
+        since = body.get(UNCHANGED_SINCE_KEY)
+        # Fall back to the run date when the marker is present but its date is missing or
+        # malformed: still honestly "frozen", just without a length. Never silently "today".
+        return SegmentFreshness(
+            source="frozen", as_of=since if isinstance(since, str) and since else as_of
+        )
+    return SegmentFreshness(source="today", as_of=as_of)
+
+
 def _segment_freshness(state: AtlasResearchState) -> dict[str, SegmentFreshness]:
     """Derive the freshness map from state — does not rely on the LLM."""
     out: dict[str, SegmentFreshness] = {}
@@ -100,21 +139,9 @@ def _segment_freshness(state: AtlasResearchState) -> dict[str, SegmentFreshness]
         state.phase5_outputs,
     ):
         for slug, slot in bag.items():
-            source = "today" if slot.payload.source == "today" else "baseline"
-            as_of_val = getattr(slot.payload, "as_of", None) or getattr(
-                slot.payload, "baseline_date", None
-            )
-            as_of = as_of_val.isoformat() if as_of_val else ""
-            out[slug] = SegmentFreshness(source=source, as_of=as_of)  # type: ignore[arg-type]
+            out[slug] = _slot_freshness(slot.payload)
     if state.phase3_output is not None:
-        source = "today" if state.phase3_output.payload.source == "today" else "baseline"
-        as_of_val = getattr(state.phase3_output.payload, "as_of", None) or getattr(
-            state.phase3_output.payload, "baseline_date", None
-        )
-        out["macro"] = SegmentFreshness(
-            source=source,  # type: ignore[arg-type]
-            as_of=as_of_val.isoformat() if as_of_val else "",
-        )
+        out["macro"] = _slot_freshness(state.phase3_output.payload)
     return out
 
 
@@ -571,7 +598,7 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
                     output_model=DocumentPatch,
                     phase_slug="master-digest",
                 )
-            except Exception as exc:  # noqa: BLE001 — observable degrade, not a swallow
+            except Exception as exc:  # observable degrade, not a swallow
                 return _carry_prior_digest_or_raise(state, document_key, exc)
             if not isinstance(patch, DocumentPatch):
                 msg = f"digest edit expected DocumentPatch, got {type(patch).__name__}"
@@ -599,7 +626,7 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
             output_model=DigestSnapshot,
             phase_slug="master-digest",
         )
-    except Exception as exc:  # noqa: BLE001 — observable degrade, not a swallow
+    except Exception as exc:  # observable degrade, not a swallow
         return _carry_prior_digest_or_raise(state, document_key, exc)
     return {"phase7_digest": _finalize_digest(state, result.model_dump(mode="json"))}
 

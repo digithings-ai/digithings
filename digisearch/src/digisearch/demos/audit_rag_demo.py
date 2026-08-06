@@ -1,4 +1,4 @@
-"""Audit RAG demo for assertion-driven, corroborated DigiSearch workflows."""
+"""Audit RAG demo for assertion-driven, corroborated digisearch workflows."""
 
 from __future__ import annotations
 

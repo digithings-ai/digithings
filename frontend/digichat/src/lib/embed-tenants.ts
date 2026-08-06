@@ -8,16 +8,20 @@
  * so the env var must be present AT BUILD as well as at runtime.
  */
 
+import type { ActivityDetail } from "@/lib/chat-activity";
+import type { DigivaultBackendConfig } from "@/lib/digivault-env";
+
 export type EmbedBackendConfig =
   | { type: "digigraph" }
   | { type: "external-relay"; url: string }
-  | { type: "foundry"; projectEndpoint: string; agentName: string };
+  | { type: "foundry"; projectEndpoint: string; agentName: string }
+  | DigivaultBackendConfig;
 
 export type EmbedTenantConfig = {
   slug: string;
   aliases?: string[];
   backend: EmbedBackendConfig;
-  gateMode: "turn_limited" | "ungated";
+  gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
   accent?: { color: string; foreground: string };
   attribution: boolean;
@@ -37,6 +41,20 @@ export type EmbedTenantConfig = {
    */
   lockedContact?: string;
   /**
+   * How much of the agent's thinking chain this tenant's visitors see.
+   * "off" emits nothing, "labels" emits step labels only, "full" adds the
+   * retrieved document titles. Gated server-side, so lower levels never put
+   * documents on the wire. Defaults to "labels" — a tenant nobody configured
+   * should not stream retrieved titles to anonymous visitors.
+   */
+  activityDetail: ActivityDetail;
+  /** When true, embed shows BYOK/settings. Independent of gateMode. */
+  showByok?: boolean;
+  /** When true, embed shows digichat-ui status bar. Independent of gateMode. */
+  showStatusBar?: boolean;
+  /** page = full content chrome inside iframe; embed = compact iframe child. */
+  layout?: "page" | "embed";
+  /**
    * Per-tenant secret. Knowing a tenant's host string is public (it's the
    * tenant's own domain) so registry membership alone must never grant
    * embed access — callers must also present this value as X-Embed-Token.
@@ -46,10 +64,25 @@ export type EmbedTenantConfig = {
    * guessable by an unrelated caller either.
    */
   token: string;
+  /**
+   * Optional server-side quota provider. When set, /api/chat spends one message per request
+   * against this endpoint instead of trusting the client-asserted unlock header. Tenants without
+   * it keep the in-memory free-turn behaviour unchanged — this must stay opt-in, since digichat
+   * serves tenants that have no such service.
+   */
+  gate?: { consumeUrl: string };
 };
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
+export const EMBED_ENV_NAME = /^[A-Z][A-Z0-9_]{0,127}$/;
+
+function requireEnvName(ctx: string, field: string, value: unknown): string {
+  if (typeof value !== "string" || !EMBED_ENV_NAME.test(value)) {
+    throw new Error(`${ctx}: digivault "${field}" must be an env var name (A-Z[A-Z0-9_]*)`);
+  }
+  return value;
+}
 
 export function normalizeEmbedHost(input: string | null | undefined): string | null {
   if (!input) return null;
@@ -114,12 +147,33 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       throw new Error(`${ctx}: foundry backend requires an "agentName"`);
     }
     backendCfg = { type: "foundry", projectEndpoint: backend.projectEndpoint, agentName: backend.agentName };
+  } else if (backend?.type === "digivault") {
+    for (const banned of ["supabaseUrl", "supabaseAnonKey", "openRouterKey", "url"]) {
+      if (banned in backend) {
+        throw new Error(`${ctx}: digivault must not include raw "${banned}" — use *Env name refs`);
+      }
+    }
+    backendCfg = {
+      type: "digivault",
+      supabaseUrlEnv: requireEnvName(ctx, "supabaseUrlEnv", backend.supabaseUrlEnv),
+      supabaseAnonKeyEnv: requireEnvName(ctx, "supabaseAnonKeyEnv", backend.supabaseAnonKeyEnv),
+      openRouterKeyEnv: requireEnvName(ctx, "openRouterKeyEnv", backend.openRouterKeyEnv),
+    };
   } else {
-    throw new Error(`${ctx}: backend.type must be "digigraph", "external-relay", or "foundry"`);
+    throw new Error(`${ctx}: backend.type must be "digigraph", "external-relay", "foundry", or "digivault"`);
   }
 
-  if (v.gateMode !== "turn_limited" && v.gateMode !== "ungated") {
-    throw new Error(`${ctx}: gateMode must be "turn_limited" or "ungated"`);
+  if (v.gateMode !== "turn_limited" && v.gateMode !== "ungated" && v.gateMode !== "trial_form") {
+    throw new Error(`${ctx}: gateMode must be "turn_limited", "ungated", or "trial_form"`);
+  }
+
+  let gate: EmbedTenantConfig["gate"];
+  if (v.gate !== undefined) {
+    const consumeUrl = (v.gate as { consumeUrl?: unknown } | null)?.consumeUrl;
+    if (typeof consumeUrl !== "string" || !consumeUrl.startsWith("https://")) {
+      throw new Error(`${ctx}: gate.consumeUrl must be an https URL`);
+    }
+    gate = { consumeUrl };
   }
 
   if (v.theme !== undefined && v.theme !== "dark" && v.theme !== "light") {
@@ -169,6 +223,25 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: lockedContact must be a string`);
   }
 
+  if (
+    v.activityDetail !== undefined &&
+    v.activityDetail !== "off" &&
+    v.activityDetail !== "labels" &&
+    v.activityDetail !== "full"
+  ) {
+    throw new Error(`${ctx}: activityDetail must be "off", "labels", or "full"`);
+  }
+
+  if (v.showByok !== undefined && typeof v.showByok !== "boolean") {
+    throw new Error(`${ctx}: showByok must be a boolean`);
+  }
+  if (v.showStatusBar !== undefined && typeof v.showStatusBar !== "boolean") {
+    throw new Error(`${ctx}: showStatusBar must be a boolean`);
+  }
+  if (v.layout !== undefined && v.layout !== "page" && v.layout !== "embed") {
+    throw new Error(`${ctx}: layout must be "page" or "embed"`);
+  }
+
   return {
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
@@ -183,6 +256,11 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     suggestions,
     placeholder: typeof v.placeholder === "string" ? v.placeholder : undefined,
     lockedContact: typeof v.lockedContact === "string" ? v.lockedContact : undefined,
+    activityDetail: (v.activityDetail as ActivityDetail | undefined) ?? "labels",
+    showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
+    showStatusBar: typeof v.showStatusBar === "boolean" ? v.showStatusBar : undefined,
+    layout: v.layout === "page" || v.layout === "embed" ? v.layout : undefined,
+    gate,
   };
 }
 

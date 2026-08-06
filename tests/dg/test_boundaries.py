@@ -6,7 +6,6 @@ from queue import Queue
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS, STREAM_SSE_ERRORS
 from digigraph.models import WorkflowRequest
 from digigraph.workflow import _initial_graph_state, run_digigraph_workflow_streaming

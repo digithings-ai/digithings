@@ -1,9 +1,8 @@
-"""Workspace filter enforcement for DigiSearch query paths."""
+"""Workspace filter enforcement for digisearch query paths."""
 
 from __future__ import annotations
 
 import pytest
-
 from digisearch.core.models import Chunk, Query
 from digisearch.core.workspace_filter import merge_workspace_filter
 from digisearch.search._stub import _stub_index, query_index

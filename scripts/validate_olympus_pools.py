@@ -100,8 +100,21 @@ def _bare_slug(model: str) -> str:
 
 
 def _request(client: httpx.Client, method: str, url: str, **kwargs: Any) -> httpx.Response:
-    """One retry on transient upstream statuses; other statuses are returned as-is."""
-    resp = client.request(method, url, **kwargs)
+    """One retry on transient upstream statuses or timeouts; other statuses returned as-is.
+
+    A timeout has to be retried separately from a retryable *status*: it raises out of
+    `client.request` instead of returning a response, so it never reached the status check
+    below. That made a single slow upstream call fail the whole sweep — `/models/{slug}/
+    endpoints` exceeded the client's 60s timeout partway through run 30543907845, after
+    seven slugs had already passed, and the gate went red with nothing wrong with the pools.
+    The status path already tolerates one transient failure; a timeout is the same kind of
+    upstream blip and gets the same single retry.
+    """
+    try:
+        resp = client.request(method, url, **kwargs)
+    except httpx.TimeoutException:
+        time.sleep(_RETRY_DELAY_S)
+        resp = client.request(method, url, **kwargs)
     if resp.status_code in _RETRYABLE_STATUS:
         time.sleep(_RETRY_DELAY_S)
         resp = client.request(method, url, **kwargs)

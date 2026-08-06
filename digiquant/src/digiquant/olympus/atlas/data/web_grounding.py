@@ -15,7 +15,9 @@ import os
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous yaml config
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous yaml config
+)
 
 import yaml
 

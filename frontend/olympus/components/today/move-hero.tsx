@@ -15,54 +15,38 @@ import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
  */
 
 type RegimeAccent = {
-  border: string;
-  bg: string;
   label: string;
-  badge: 'green' | 'red' | 'amber' | 'blue';
+  badge: 'default' | 'amber' | 'blue';
 };
 
 const REGIME_ACCENT: Record<string, RegimeAccent> = {
   strong_bullish: {
-    border: 'border-up/60',
-    bg: 'bg-gradient-to-br from-up/[0.10] via-transparent to-transparent',
-    label: 'text-up',
-    badge: 'green',
+    label: 'text-accent',
+    badge: 'blue',
   },
   bullish: {
-    border: 'border-up/45',
-    bg: 'bg-gradient-to-br from-up/[0.07] via-transparent to-transparent',
-    label: 'text-up',
-    badge: 'green',
+    label: 'text-accent',
+    badge: 'blue',
   },
   bearish: {
-    border: 'border-down/45',
-    bg: 'bg-gradient-to-br from-down/[0.07] via-transparent to-transparent',
-    label: 'text-down',
-    badge: 'red',
+    label: 'text-warn',
+    badge: 'amber',
   },
   strong_bearish: {
-    border: 'border-down/60',
-    bg: 'bg-gradient-to-br from-down/[0.10] via-transparent to-transparent',
-    label: 'text-down',
-    badge: 'red',
+    label: 'text-warn',
+    badge: 'amber',
   },
   caution: {
-    border: 'border-warn/50',
-    bg: 'bg-gradient-to-br from-warn/[0.07] via-transparent to-transparent',
     label: 'text-warn',
     badge: 'amber',
   },
   mixed: {
-    border: 'border-warn/40',
-    bg: 'bg-gradient-to-br from-warn/[0.05] via-transparent to-transparent',
     label: 'text-warn',
     badge: 'amber',
   },
   neutral: {
-    border: 'border-accent/40',
-    bg: 'bg-gradient-to-br from-accent/[0.06] via-transparent to-transparent',
-    label: 'text-accent',
-    badge: 'blue',
+    label: 'text-ink-soft',
+    badge: 'default',
   },
 };
 
@@ -127,7 +111,7 @@ export function MoveHero({
     nav.excessPct == null ? 'text-ink-mute' : nav.excessPct >= 0 ? 'text-up' : 'text-down';
 
   return (
-    <section className={`glass-card border ${accent.border} ${accent.bg} overflow-hidden`}>
+    <section data-brief-section="command" className="overflow-hidden border-b border-hair">
       <div className="px-5 pt-5 pb-6 sm:px-7">
         {/* Quiet regime ribbon */}
         <div className="flex flex-wrap items-center justify-between gap-3">

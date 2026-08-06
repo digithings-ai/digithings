@@ -8,9 +8,12 @@ write — never a hard abort that leaves the dashboard stale.
 from __future__ import annotations
 
 from datetime import date
+from unittest.mock import patch
 
 import pytest
-
+from digiquant.olympus.atlas import diagnostics
+from digiquant.olympus.atlas.graph import AtlasInput
+from digiquant.olympus.atlas.phases.preflight import PreflightDeps
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
@@ -19,10 +22,13 @@ from digiquant.olympus.atlas.state import (
     SegmentSlot,
 )
 from digiquant.olympus.hermes.chain import (
+    ChainDeps,
     _coerce_atlas_state,
     _record_chain_error,
     _retry_worthy,
+    _run_beliefs_fold,
     _run_terminal_phase,
+    run_atlas_then_hermes,
 )
 
 pytestmark = pytest.mark.unit
@@ -107,9 +113,95 @@ def test_retry_worthy_when_book_materialized_but_uncommitted() -> None:
 
 
 def test_not_retry_worthy_when_not_degraded() -> None:
-    # A run with fresh research is not degraded → never retry, book or not.
+    # A run with fresh research is not degraded → never retry, book or not. NOTE this holds
+    # even though ``status`` is now "degraded" for exactly this state (no committed book):
+    # ``_retry_worthy`` keys on the frozen ``retry_signal``, not on the health verdict (#1736).
     state = _state()
     state.phase1_outputs = {
         "macro": SegmentSlot(payload=SegmentPayload(segment="macro", body={}, as_of=state.run_date))
     }
     assert _retry_worthy(state, degraded_pct=50.0) is False
+    assert diagnostics.summarize_run(state).status == "degraded"
+
+
+# ─── #1737: beliefs distillation is optional and must never kill a booked run ───
+
+
+class _FakeClient:
+    """Stand-in for the Supabase client; only its presence matters to the beliefs fold."""
+
+
+def _chain_deps() -> ChainDeps:
+    from digiquant.olympus.atlas.graph import AtlasGraphDeps
+    from digiquant.olympus.hermes.graph import HermesGraphDeps
+
+    return ChainDeps(
+        atlas=AtlasGraphDeps(
+            preflight=PreflightDeps(client=_FakeClient(), config_loader=None)  # type: ignore[arg-type]
+        ),
+        hermes=HermesGraphDeps(),
+    )
+
+
+def test_beliefs_failure_is_recorded_and_swallowed() -> None:
+    # Beliefs distillation is an on-demand backlog fold, not a run deliverable. Before #1737
+    # both call sites were bare, so a failure here propagated out of run_atlas_then_hermes and
+    # killed a run whose book had already committed.
+    state = _state()
+    with patch(
+        "digiquant.olympus.hermes.chain.run_beliefs_distillation_if_triggered",
+        side_effect=RuntimeError("beliefs LLM 500"),
+    ):
+        _run_beliefs_fold(state, _chain_deps(), AtlasInput(run_date=state.run_date))
+    assert [(e.phase, e.node) for e in state.errors] == [("chain", "beliefs")]
+    assert "beliefs LLM 500" in state.errors[0].message
+
+
+def test_beliefs_fold_skipped_without_a_client() -> None:
+    from digiquant.olympus.atlas.graph import AtlasGraphDeps
+    from digiquant.olympus.hermes.graph import HermesGraphDeps
+
+    state = _state()
+    deps = ChainDeps(
+        atlas=AtlasGraphDeps(preflight=PreflightDeps(client=None, config_loader=None)),  # type: ignore[arg-type]
+        hermes=HermesGraphDeps(),
+    )
+    with patch(
+        "digiquant.olympus.hermes.chain.run_beliefs_distillation_if_triggered",
+        side_effect=AssertionError("must not be called"),
+    ):
+        _run_beliefs_fold(state, deps, AtlasInput(run_date=state.run_date))
+    assert state.errors == []
+
+
+# ─── #1733/#1763: a terminating crash must be recorded before the diagnostics write ───
+
+
+def test_terminating_crash_is_recorded_in_the_diagnostics_row_then_reraised() -> None:
+    """A BaseException (job-timeout SIGTERM, SystemExit, KeyboardInterrupt) used to reach the
+    ``finally`` diagnostics write with an error-free state — so the row said nothing was
+    wrong. Record it first, then re-raise untouched so the exit code is unchanged."""
+    written: dict[str, object] = {}
+
+    def _capture(_client, *, state, **_kwargs):
+        written["errors"] = [(e.phase, e.node) for e in state.errors]
+        written["status"] = diagnostics.summarize_run(state).status
+        return None
+
+    from digiquant.olympus.hermes.chain import DiagnosticsDeps
+
+    deps = _chain_deps()
+    deps = ChainDeps(
+        atlas=deps.atlas,
+        hermes=deps.hermes,
+        diagnostics=DiagnosticsDeps(client=_FakeClient(), run_id="r1"),
+    )
+    with (
+        patch("digiquant.olympus.hermes.chain.build_atlas_graph", side_effect=KeyboardInterrupt),
+        patch("digiquant.olympus.atlas.diagnostics.write_row", _capture),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        run_atlas_then_hermes(atlas_input=AtlasInput(run_date=date(2026, 6, 12)), deps=deps)
+
+    assert written["errors"] == [("chain", "terminal")]
+    assert written["status"] == "failed"

@@ -3,11 +3,10 @@
 import { useMemo } from 'react';
 import type { Position, Thesis } from '@/lib/types';
 import type { TableRow } from '@/lib/database.types';
-import { splitTheses } from '@/lib/theses-ledger';
+import { consolidateThesesByTopic, splitTheses } from '@/lib/theses-ledger';
 import { latestDecisionByTicker } from '@/lib/holdings-decisions';
 import {
   buildThesisStory,
-  attributeWeightToPrimaryThesis,
   type ThesisVehicleRow,
 } from '@/lib/thesis-story';
 import { ThesisStorySpine } from '@/components/portfolio/theses/ThesisStorySpine';
@@ -17,8 +16,7 @@ import { ThesisStorySpine } from '@/components/portfolio/theses/ThesisStorySpine
  * market theses are the spine; each expands to the vehicles that express it (via
  * the reliable `thesis_vehicles` join, NOT the dead `linked_market_thesis_id`);
  * each vehicle expands to its stock-level story (held metrics + entry/exit +
- * latest signed analyst call + dossier / deliberation links). A trailing shelf
- * carries what the spine cannot place.
+ * latest signed analyst call + dossier / deliberation links).
  *
  * Data is wired in from PortfolioShellInner so the tab stays a pure, testable
  * render. Production uses latest-available-per-entity (`anchorDate = lastUpdated`);
@@ -37,27 +35,26 @@ export default function ThesesTab({
   decisions: TableRow<'decision_log'>[];
   thesisVehicleRows: ThesisVehicleRow[];
 }) {
-  const { market, vehicle } = useMemo(() => splitTheses(theses), [theses]);
+  const activeTheses = useMemo(
+    () =>
+      theses.filter(
+        (thesis) => !['CLOSED', 'INVALIDATED'].includes((thesis.status ?? '').toUpperCase())
+      ),
+    [theses]
+  );
+  const { market, vehicle } = useMemo(() => {
+    const split = splitTheses(activeTheses);
+    return { ...split, market: consolidateThesesByTopic(split.market) };
+  }, [activeTheses]);
   const decisionsByTicker = useMemo(() => latestDecisionByTicker(decisions), [decisions]);
 
-  const { stories, unassigned, weightByThesis } = useMemo(() => {
+  const stories = useMemo(() => {
     const result = buildThesisStory(market, thesisVehicleRows, positions, decisionsByTicker, {
       anchorDate: lastUpdated,
       vehicleTheses: vehicle,
     });
-    return {
-      stories: result.stories,
-      unassigned: result.unassigned,
-      weightByThesis: attributeWeightToPrimaryThesis(positions, result.effectiveRows),
-    };
+    return result.stories;
   }, [market, vehicle, thesisVehicleRows, positions, decisionsByTicker, lastUpdated]);
 
-  return (
-    <ThesisStorySpine
-      stories={stories}
-      unassigned={unassigned}
-      weightByThesis={weightByThesis}
-      asOf={lastUpdated}
-    />
-  );
+  return <ThesisStorySpine stories={stories} asOf={lastUpdated} />;
 }

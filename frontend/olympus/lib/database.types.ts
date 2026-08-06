@@ -51,11 +51,36 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['positions']['Row'], 'id'> & { id?: string };
         Update: Partial<Database['public']['Tables']['positions']['Insert']>;
       };
+      instruments: {
+        Row: {
+          ticker: string;
+          official_name: string;
+          instrument_type: string | null;
+          asset_class: string | null;
+          category: string | null;
+          sector: string | null;
+          industry: string | null;
+          exchange: string | null;
+          currency: string | null;
+          country: string | null;
+          provider: string;
+          provider_metadata: Json;
+          source_updated_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database['public']['Tables']['instruments']['Row'],
+          'created_at' | 'updated_at'
+        > & { created_at?: string; updated_at?: string };
+        Update: Partial<Database['public']['Tables']['instruments']['Insert']>;
+      };
       theses: {
         Row: {
           id: string;
           date: string;
           thesis_id: string;
+          topic_key?: string | null;
           name: string;
           vehicle: string | null;
           invalidation: string | null;
@@ -131,6 +156,10 @@ export interface Database {
           volatility: number | null;
           max_drawdown: number | null;
           alpha: number | null;
+          net_return_pct: number | null;
+          benchmark_return_pct: number | null;
+          relative_return_pct: number | null;
+          benchmark_ticker: string;
           invested_pct: number | null;
           generated_at: string | null;
           computed_from?: string | null;
@@ -172,6 +201,36 @@ export interface Database {
         };
         Insert: Database['public']['Tables']['price_technicals']['Row'];
         Update: Partial<Database['public']['Tables']['price_technicals']['Row']>;
+      };
+      prices_live: {
+        // Latest intraday quote per ticker (migration 063) — ONE row per symbol, upserted
+        // every ~60s during extended US hours by the `prices-live` edge function. This is
+        // the DISPLAY lane (#1833) and it is READ-ONLY from the browser: RLS is enabled
+        // with exactly one `FOR SELECT` policy, and "the absent write policy IS the
+        // security control" (063) — `service_role` is the only writer. `Insert`/`Update`
+        // are declared for shape parity with the other tables here; no client code may
+        // use them, and a live price must never be written back into
+        // `positions.current_price`, which is the nightly CLOSE the performance batch
+        // reads (that is the invariant #1833 exists to protect).
+        //
+        // Coverage is NOT guaranteed per held ticker: the publisher caps at 25 symbols
+        // (a curated MAJORS list plus portfolio tickers), so a holding may be absent —
+        // consumers fall back to the close. See lib/live-valuation.ts.
+        Row: {
+          ticker: string;
+          /** Finnhub `c`. NOT NULL, but may legitimately be 0 for a halted symbol. */
+          price: number;
+          /** Finnhub `d` — absolute change vs prior close. Carried, unused by the UI. */
+          change: number | null;
+          /** Finnhub `dp` — percent POINTS vs prior close: 1.24 means +1.24%, not 0.0124. */
+          change_pct: number | null;
+          /** EXCHANGE tick time — the freshness a staleness check must read. */
+          quoted_at: string;
+          /** OUR write clock; advances even when the quote has not moved. Not "as of". */
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['prices_live']['Row'], 'updated_at'> & { updated_at?: string };
+        Update: Partial<Database['public']['Tables']['prices_live']['Insert']>;
       };
       macro_series_observations: {
         Row: {
@@ -264,6 +323,10 @@ export interface Database {
       atlas_run_diagnostics: {
         Row: {
           run_id: string;
+          // Outer-retry attempt within one workflow run, 1-based; part of the primary key with
+          // run_id since migration 065 (#1762). `0` means the row predates per-attempt keying
+          // and may be a collapsed multi-attempt row — never read 0 as "first attempt".
+          attempt: number;
           run_type: string | null;
           run_date: string | null;
           model: string | null;
@@ -317,7 +380,9 @@ export interface Database {
         };
       };
       // Curated, anon-readable run health (migration 041): status / segment counts / model /
-      // timing ONLY — spend telemetry (cost, tokens, error_summary, breakdown) is excluded.
+      // timing / retry attempt ONLY — spend telemetry (cost, tokens, error_summary, breakdown)
+      // is excluded. ONE ROW PER RETRY ATTEMPT since 065 (#1762): a date that took three
+      // attempts has three rows, which is what groupRunEpisodes was built to read.
       atlas_run_health: {
         Row: {
           run_id: string;
@@ -333,6 +398,9 @@ export interface Database {
           segments_carried: number | null;
           segments_failed: number | null;
           created_at: string | null;
+          // Last in the SELECT list, mirroring the view: CREATE OR REPLACE VIEW can only
+          // append columns, so 065 could not slot `attempt` next to `run_id`.
+          attempt: number;
         };
       };
     };

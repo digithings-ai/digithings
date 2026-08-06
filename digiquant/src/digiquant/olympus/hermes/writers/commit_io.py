@@ -6,19 +6,22 @@ import hashlib
 import json
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
+
 from digiquant.olympus.atlas.decision_log import persist_pending
 from digiquant.olympus.atlas.state import AtlasResearchState, PublishedArtifact, RebalancePayload
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
     load_prior_book,
     publish_document,
-    query_price_deltas,
 )
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
+from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
 
 logger = logging.getLogger(__name__)
@@ -27,9 +30,16 @@ _SEED_NAV = 100.0
 _RISK_FIELDS_ENV = "OLYMPUS_POSITION_RISK_FIELDS"
 _ATR_STOP_MULT = 2.0
 _ATR_TARGET_MULT = 3.0
-_DEFAULT_HORIZON_DAYS = 21
 _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
 _MANIFEST_DOC_PREFIX = "commit-run/"
+_MANIFEST_SEQ_FIELD = "commit_seq"
+
+# NAV interval window (#1745). ``_interval_price_returns`` needs one close at or
+# before the prior book date, so the fetch floor is padded below it; the interval
+# itself is capped so a pathological book gap cannot turn one commit into an
+# unbounded ``price_history`` scan.
+_NAV_INTERVAL_PAD_DAYS = 7
+_NAV_MAX_INTERVAL_DAYS = 120
 
 
 def _position_risk_fields_enabled() -> bool:
@@ -82,17 +92,130 @@ def _prior_nav(client: SupabaseClient, run_date: date) -> float:
     return nav if nav > 0 else _SEED_NAV
 
 
+def _prior_book_date(prior_book: list[dict[str, Any]]) -> date | None:
+    """The single date ``load_prior_book`` returned rows for, or ``None``.
+
+    The weights and the interval start must come from the *same* row set or the
+    NAV return is computed over a window the book was not actually held for, so
+    this reads the ``date`` column off the prior-book rows rather than
+    re-deriving it from ``nav_history`` (which the metrics cron may extend to
+    bookless dates — see the ownership contract in ``hermes/docs/ARCHITECTURE.md``).
+    """
+    for row in prior_book:
+        raw = row.get("date")
+        if isinstance(raw, date):
+            return raw
+        if isinstance(raw, str) and raw:
+            try:
+                return date.fromisoformat(raw[:10])
+            except ValueError:
+                continue
+    return None
+
+
+def _interval_price_returns(
+    *,
+    client: SupabaseClient,
+    tickers: tuple[str, ...],
+    start_date: date,
+    run_date: date,
+) -> dict[str, float]:
+    """``{ticker: pct_change}`` from the ``start_date`` close to the last close before ``run_date``.
+
+    A *new* helper rather than a change to ``atlas.supabase_io.query_price_deltas``
+    (#1745): that function is deliberately a one-trading-day signal shared with the
+    triage rule evaluators, and re-pointing it at an interval would silently change
+    every rule threshold calibrated against it.
+
+    Why an interval and not the latest pair of trading days: ``nav_history`` is
+    restated every evening by the metrics cron to "NAV as of this date's close", so
+    ``_prior_nav`` already embeds the move up to the prior book date. Multiplying it
+    by the latest one-day delta double-counts that move on a dense series (verified
+    on 2026-07-28: the manifest applied the 07-24→07-27 return that ``nav_history``
+    had already absorbed into 07-27) and *loses* the move entirely across a gap
+    (2026-06-26 → 07-17 recorded +0.03% for a book that actually returned -0.37%).
+    Anchoring on the prior book date makes both cases exact.
+
+    Same conservative-drop contract as ``query_price_deltas``: a ticker with no
+    usable close pair is omitted, and the caller treats a missing key as 0.0 —
+    a name we cannot price must not move the index.
+    """
+    if not tickers or start_date >= run_date:
+        return {}
+
+    floor_from_cap = run_date - timedelta(days=_NAV_MAX_INTERVAL_DAYS)
+    anchor = max(start_date, floor_from_cap)
+    if anchor != start_date:
+        logger.warning(
+            "commit_io: NAV interval %s→%s exceeds the %d-day cap; anchoring at %s",
+            start_date.isoformat(),
+            run_date.isoformat(),
+            _NAV_MAX_INTERVAL_DAYS,
+            anchor.isoformat(),
+        )
+
+    floor = (anchor - timedelta(days=_NAV_INTERVAL_PAD_DAYS)).isoformat()
+    resp = (
+        client.table("price_history")
+        .select("date, ticker, close")
+        .in_("ticker", list(tickers))
+        .gte("date", floor)
+        .lt("date", run_date.isoformat())
+        .execute()
+    )
+
+    anchor_str = anchor.isoformat()
+    # Per ticker keep the latest close at-or-before the anchor (interval start) and
+    # the latest close strictly before run_date (interval end). Small categorical
+    # data — a handful of tickers over weeks of dates — so no dataframe, matching
+    # the ``query_price_deltas`` precedent.
+    begin: dict[str, tuple[str, float]] = {}
+    end: dict[str, tuple[str, float]] = {}
+    for row in getattr(resp, "data", None) or []:
+        ticker = row.get("ticker")
+        row_date = row.get("date")
+        close = _opt_float(row.get("close"))
+        if not isinstance(ticker, str) or not isinstance(row_date, str) or close is None:
+            continue
+        if row_date <= anchor_str and row_date > begin.get(ticker, ("", 0.0))[0]:
+            begin[ticker] = (row_date, close)
+        if row_date > end.get(ticker, ("", 0.0))[0]:
+            end[ticker] = (row_date, close)
+
+    returns: dict[str, float] = {}
+    for ticker, (begin_date, begin_close) in begin.items():
+        end_entry = end.get(ticker)
+        if end_entry is None or begin_close <= 0:
+            continue
+        end_date, end_close = end_entry
+        if end_date <= begin_date:
+            # No close after the anchor: the prior NAV is already as-of the latest
+            # available close, so the book has not moved since it was booked.
+            returns[ticker] = 0.0
+            continue
+        returns[ticker] = (end_close - begin_close) / begin_close
+    return returns
+
+
 def _compute_nav(client: SupabaseClient, run_date: date, prior_book: list[dict[str, Any]]) -> float:
+    """NAV for ``run_date`` = prior NAV compounded by the prior book's interval return.
+
+    See :func:`_interval_price_returns` for why the return is measured over the
+    interval since the prior book date rather than the latest one-day delta (#1745).
+    """
     prior_nav = _prior_nav(client, run_date)
     held = {
         str(r.get("ticker")): _coerce_float(r.get("weight_pct"))
         for r in prior_book
         if r.get("ticker") and not _is_cash(r.get("ticker"))
     }
-    if not held:
+    book_date = _prior_book_date(prior_book)
+    if not held or book_date is None:
         return round(prior_nav, 6)
-    deltas = query_price_deltas(client=client, tickers=tuple(held), run_date=run_date)
-    port_return = sum((w / 100.0) * deltas.get(t, 0.0) for t, w in held.items())
+    returns = _interval_price_returns(
+        client=client, tickers=tuple(held), start_date=book_date, run_date=run_date
+    )
+    port_return = sum((w / 100.0) * returns.get(t, 0.0) for t, w in held.items())
     return round(prior_nav * (1.0 + port_return), 6)
 
 
@@ -119,7 +242,7 @@ def _latest_values(
             .limit(len(tickers) * (lookback_days + 1))
             .execute()
         )
-    except Exception as exc:  # noqa: BLE001 — advisory fields must never block the book
+    except Exception as exc:  # advisory fields must never block the book
         logger.warning(
             "commit_io: %s.%s read failed (%s); risk fields degrade", table, value_col, exc
         )
@@ -151,12 +274,7 @@ def _enrich_positions(
     prior = {str(r.get("ticker")): r for r in prior_book if r.get("ticker")}
     closes = _latest_values(client, "price_history", "close", tickers, run_date)
     atr_pct = _latest_values(client, "price_technicals", "atr_pct", tickers, run_date)
-    horizon = preferences.get("holding_days")
-    horizon_days = (
-        int(horizon)
-        if isinstance(horizon, (int, float)) and not isinstance(horizon, bool) and horizon > 0
-        else _DEFAULT_HORIZON_DAYS
-    )
+    horizon_days = risk_horizon_days(preferences)
 
     for row in pos_rows:
         ticker = row.get("ticker")
@@ -236,10 +354,54 @@ def _canonical_thesis_ids(
             .execute()
         )
         rows = list(getattr(resp, "data", None) or [])
-    except Exception:  # noqa: BLE001 — thesis lookup must never block booking
+    except Exception:  # thesis lookup must never block booking
         rows = []
     # Latest-date row wins when multiple theses cover the same ticker.
     return {str(r["ticker"]): str(r["thesis_id"]) for r in rows if r.get("thesis_id")}
+
+
+def _prune_orphan_positions(*, client: SupabaseClient, date_str: str, keep: set[str]) -> list[str]:
+    """Delete same-date ``positions`` rows absent from the book just written (#1744).
+
+    ``positions`` is upserted on ``(date, ticker)``, so a second commit for the same
+    date that *drops* a name leaves the dropped row behind at its old weight — the
+    book then sums above 100% of NAV and reports a position no run intended to hold.
+    ``refresh_performance_metrics`` sums non-CASH ``weight_pct`` into
+    ``portfolio_metrics.invested_pct`` and ``execute_at_open.build_events_from_positions_book``
+    derives OPEN/TRIM/EXIT from this table, so an orphan becomes both an inflated
+    dashboard metric and a phantom Activity-feed event.
+
+    ``keep`` carries CASH only when ``cash_pct > 0.01``, so a re-commit that goes
+    fully invested also clears the stale CASH row that would otherwise contradict
+    ``nav_history.cash_pct``.
+
+    Deliberately **not** fail-soft: a silently-surviving orphan is the defect this
+    closes, and it corrupts a published performance series rather than degrading an
+    advisory field. The cost is honest — a raise here lands *after* the book is written
+    and *before* ``save_commit_manifest``, leaving a booked-but-unmanifested date. That
+    gap already existed; what the date-keyed guard adds is that the next attempt
+    re-commits and re-prunes instead of stacking a second book on top.
+
+    The two sibling scripts that already implement this pattern
+    (``sync_positions_from_rebalance.py``, ``materialize_snapshot.py``) issue one
+    DELETE per orphan; this issues a single ``in_`` delete instead — same effect,
+    one round trip.
+    """
+    resp = client.table("positions").select("ticker").eq("date", date_str).execute()
+    existing = {
+        str(row.get("ticker")) for row in getattr(resp, "data", None) or [] if row.get("ticker")
+    }
+    orphans = sorted(existing - keep)
+    if not orphans:
+        return []
+    client.table("positions").delete().eq("date", date_str).in_("ticker", orphans).execute()
+    logger.warning(
+        "commit_io: pruned %d orphan position row(s) for %s not in the committed book: %s",
+        len(orphans),
+        date_str,
+        orphans,
+    )
+    return orphans
 
 
 @dataclass(frozen=True)
@@ -251,6 +413,7 @@ class BookedPortfolio:
     invested_pct: float
     nav: float
     position_rows: list[dict[str, Any]]
+    pruned_tickers: list[str] = field(default_factory=list)
 
 
 def book_portfolio(
@@ -295,7 +458,7 @@ def book_portfolio(
                 debates=deliberation_summaries(state),
                 preferences=dict(state.config.preferences),
             )
-        except Exception as exc:  # noqa: BLE001 — advisory fields must never block the book
+        except Exception as exc:  # advisory fields must never block the book
             logger.warning(
                 "commit_io: position risk-field enrichment failed (%s); booking plain weights",
                 exc,
@@ -334,12 +497,21 @@ def book_portfolio(
     for row in pos_rows:
         client.table("positions").upsert(row, on_conflict="date,ticker").execute()
 
+    # Upsert first, then prune: the inverse order would leave a window in which the
+    # date has no book at all.
+    pruned = _prune_orphan_positions(
+        client=client,
+        date_str=date_str,
+        keep={str(r["ticker"]) for r in pos_rows},
+    )
+
     return BookedPortfolio(
         weights=weights,
         cash_pct=cash_pct,
         invested_pct=round(invested, 4),
         nav=nav,
         position_rows=pos_rows,
+        pruned_tickers=pruned,
     )
 
 
@@ -347,37 +519,79 @@ def manifest_document_key(source_run_id: str) -> str:
     return f"{_MANIFEST_DOC_PREFIX}{source_run_id}"
 
 
-def load_commit_manifest(
-    *,
-    client: SupabaseClient,
-    source_run_id: str,
-    run_date: date,
-) -> dict[str, Any] | None:
-    """Load a prior commit manifest for ``source_run_id`` on ``run_date``."""
-    key = manifest_document_key(source_run_id)
+def load_commit_manifests(*, client: SupabaseClient, run_date: date) -> list[dict[str, Any]]:
+    """Every commit manifest already persisted for ``run_date`` (#1744).
+
+    Keyed on the **date**, never on ``source_run_id``. ``AtlasResearchState.run_id``
+    is a fresh ``uuid4()`` per process, so CI's outer retry always presents a new id
+    and a run_id-keyed lookup structurally *cannot* see the manifest an earlier
+    attempt on the same date wrote — the guard was dead across exactly the retries it
+    existed to cover. Migration 044 re-keyed ``decision_log`` from ``(run_id, ticker)``
+    to ``(run_date, ticker)`` for this same reason (#947); the commit manifest never
+    got the same treatment, and 2026-06-24 carries three manifests with three
+    different ``weights_fingerprint`` values as the proof.
+
+    The manifest *document* stays per-run (``commit-run/{source_run_id}``) so each
+    attempt keeps its own audit artefact; only the idempotency lookup is date-scoped.
+    """
     date_str = run_date.isoformat()
+    out: list[dict[str, Any]] = []
 
     store = getattr(client, "store", None)
     if isinstance(store, dict):
         for row in store.get("documents", []):
-            if row.get("date") == date_str and row.get("document_key") == key:
+            key = row.get("document_key")
+            if (
+                row.get("date") == date_str
+                and isinstance(key, str)
+                and key.startswith(_MANIFEST_DOC_PREFIX)
+            ):
                 payload = row.get("payload")
                 if isinstance(payload, dict):
-                    return dict(payload)
+                    out.append(dict(payload))
+    if out:
+        return out
 
     resp = (
         client.table("documents")
         .select("payload")
         .eq("date", date_str)
-        .eq("document_key", key)
-        .limit(1)
+        .like("document_key", f"{_MANIFEST_DOC_PREFIX}%")
         .execute()
     )
-    rows = list(getattr(resp, "data", None) or [])
-    if not rows:
-        return None
-    payload = rows[0].get("payload")
-    return dict(payload) if isinstance(payload, dict) else None
+    for row in getattr(resp, "data", None) or []:
+        payload = row.get("payload")
+        if isinstance(payload, dict):
+            out.append(dict(payload))
+    return out
+
+
+def manifest_commit_seq(manifest: dict[str, Any]) -> int:
+    """``commit_seq`` of a manifest; ``0`` for pre-#1744 manifests that carry none."""
+    try:
+        return int(manifest.get(_MANIFEST_SEQ_FIELD) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def resolve_prior_commit(
+    manifests: list[dict[str, Any]],
+) -> tuple[dict[str, Any] | None, int]:
+    """Return ``(unambiguously-latest manifest | None, next commit_seq)``.
+
+    ``documents`` has no ``created_at``/``updated_at`` column, so ordering comes from
+    ``commit_seq`` inside the payload we control. Legacy manifests all read 0, which
+    on a date with several of them (2026-06-24) makes "latest" genuinely undecidable
+    — so this returns ``None`` rather than guess. ``None`` means "re-commit", which is
+    always safe now that booking prunes orphans: matching a fingerprint against a
+    manifest that is *not* the last writer would otherwise report "already booked"
+    while the rows on disk belong to a different book.
+    """
+    if not manifests:
+        return None, 1
+    top = max(manifest_commit_seq(m) for m in manifests)
+    at_top = [m for m in manifests if manifest_commit_seq(m) == top]
+    return (at_top[0] if len(at_top) == 1 else None), top + 1
 
 
 def save_commit_manifest(
@@ -602,11 +816,13 @@ __all__ = [
     "coherence_errors",
     "flat_tickers_from_memo",
     "held_tickers",
-    "load_commit_manifest",
+    "load_commit_manifests",
+    "manifest_commit_seq",
     "manifest_document_key",
     "persist_decision_log",
     "publish_hermes_documents",
     "publish_portfolio_brief",
+    "resolve_prior_commit",
     "save_commit_manifest",
     "weights_fingerprint",
     "weights_from_sized_book",

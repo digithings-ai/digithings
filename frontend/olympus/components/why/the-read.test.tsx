@@ -45,10 +45,48 @@ describe('TheReadBody', () => {
     expect(html).toContain('today');
   });
 
+  // #1749: a segment that ran and whose edit merge changed nothing used to render as
+  // `today` with the accent dot and "Refreshed in the latest run" — over content up to six
+  // days old. It must disclose the freeze and carry the date the content last moved.
+  it('marks a frozen segment as unchanged, not today', () => {
+    const html = renderToStaticMarkup(
+      createElement(TheReadBody, {
+        digest: digest({
+          segment_freshness: {
+            'sector-healthcare': { source: 'frozen', as_of: '2026-07-28' },
+          },
+        }),
+      }),
+    );
+    expect(html).toContain('unchanged 2026-07-28');
+    expect(html).toContain('content unchanged since 2026-07-28');
+    expect(html).not.toContain('Refreshed in the latest run');
+    expect(html).not.toContain('bg-accent');
+  });
+
+  it('still distinguishes a carried baseline segment from a frozen one', () => {
+    const html = renderToStaticMarkup(
+      createElement(TheReadBody, {
+        digest: digest({
+          segment_freshness: { macro: { source: 'baseline', as_of: '2026-07-26' } },
+        }),
+      }),
+    );
+    expect(html).toContain('baseline 2026-07-26');
+    expect(html).toContain('Carried from the last baseline');
+  });
+
   it('collapses the deeper segments into details elements', () => {
     const html = renderToStaticMarkup(createElement(TheReadBody, { digest: digest() }));
     expect(html).toContain('<details');
     expect(html).toContain('Institutional flows');
     expect(html).toContain('Thesis tracker');
+  });
+
+  it('renders the research read as a flat hairline workspace', () => {
+    const html = renderToStaticMarkup(createElement(TheReadBody, { digest: digest() }));
+    expect(html).toContain('data-testid="why-read-workspace"');
+    expect(html).toContain('data-testid="why-read-disclosures"');
+    expect(html).not.toContain('glass-card');
   });
 });

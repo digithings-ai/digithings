@@ -1,4 +1,4 @@
-name: "Pipeline: DigiQuant tearsheets"
+name: "Pipeline: digiquant tearsheets"
 
 # Daily Slapper tearsheet regeneration for digiquant.io (#1068, #1069).
 #
@@ -39,29 +39,32 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            digibase/pyproject.toml
-            digikey/pyproject.toml
-            digiquant/pyproject.toml
+          ref: main   # scheduled triggers fire from default branch; code pinned to main (#1626)
 
-      - name: Install digiquant (nautilus + store)
-        run: |
-          python -m pip install -U pip
-          pip install -e "./digibase"
-          pip install -e "./digikey"
-          pip install -e "./digiquant[nautilus,prices]"
-          pip install ccxt
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # From the lockfile in the checked-out tree (`main`) — see #1717/#1721.
+      # This is the one pipeline that keeps NautilusTrader: it generates real
+      # tearsheets, so the engine is the point rather than a hazard (#42 is about
+      # the dq *test* lane, not this job).
+      #
+      # ccxt is NOT in the lock because it is declared in no pyproject, despite
+      # `digiquant/scripts/fetch_coinbase.py` importing it unguarded at module
+      # scope. It is supplied per-step below with `uv run --with` instead of being
+      # added to the lock here: the lockfile this job reads lives on `main`, so a
+      # new dependency could not take effect until the next release and the step
+      # would break in between. Declaring and pinning it is tracked separately.
+      - name: Install from lockfile
+        run: uv sync --frozen --package digiquant --extra nautilus --extra prices
 
       - name: Verify calibrations exist in Supabase
-        run: python digiquant/scripts/verify_strategy_calibrations_rls.py
+        run: uv run --frozen --no-sync python digiquant/scripts/verify_strategy_calibrations_rls.py
 
       - name: Fetch Coinbase daily OHLCV
-        run: python digiquant/scripts/fetch_coinbase.py --through-yesterday
+        run: uv run --frozen --with ccxt python digiquant/scripts/fetch_coinbase.py --through-yesterday
 
       - name: Generate tearsheets + push to Supabase
         # --push-supabase: upsert the tearsheet payload + current signal to
@@ -70,7 +73,7 @@ jobs:
         # position can't be read off the curve. No repo commit — the DB is the
         # delivery; digiquant.io reads strategy_tearsheets live.
         run: |
-          python digiquant/scripts/generate_tearsheets.py \
+          uv run --frozen --no-sync python digiquant/scripts/generate_tearsheets.py \
             --from-supabase \
             --push-supabase \
             --signal-delay-days 3

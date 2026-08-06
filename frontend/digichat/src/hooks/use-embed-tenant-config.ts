@@ -6,7 +6,7 @@ import { resolveEmbedHost } from "@/lib/embed-gate";
 
 export type EmbedTenantClientConfig = {
   slug: string;
-  gateMode: "turn_limited" | "ungated";
+  gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
   accent: { color: string; foreground: string } | null;
   attribution: boolean;
@@ -15,6 +15,9 @@ export type EmbedTenantClientConfig = {
   suggestions?: string[];
   placeholder?: string;
   lockedContact?: string;
+  showByok?: boolean;
+  showStatusBar?: boolean;
+  layout?: "page" | "embed";
 };
 
 /** Legacy defaults — deliberately the *gated* configuration, so a slow or
@@ -25,6 +28,9 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   theme: "dark",
   accent: null,
   attribution: false,
+  showByok: false,
+  showStatusBar: false,
+  layout: "embed",
 };
 
 /**
@@ -51,7 +57,9 @@ export function useEmbedTenantConfig(
         if (
           !cancelled &&
           json &&
-          (json.gateMode === "turn_limited" || json.gateMode === "ungated")
+          (json.gateMode === "turn_limited" ||
+            json.gateMode === "ungated" ||
+            json.gateMode === "trial_form")
         ) {
           setConfig(json);
         }

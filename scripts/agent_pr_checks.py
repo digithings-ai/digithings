@@ -6,10 +6,11 @@ from __future__ import annotations
 import json
 import subprocess
 
-COPILOT_TARGETED_CI = "Copilot targeted CI"
 AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/")
-# After enabling "skip approval for Copilot coding agent Actions workflows", main CI
-# runs normally on copilot/* branches. IGNORED_CHECK_NAMES is now empty.
+# copilot/* stays a valid branch name in BRANCHING.md, so the prefix above keeps it —
+# but there is no Copilot-specific check any more. The "Copilot targeted CI" arm was
+# removed with copilot-pr-targeted-ci.yml (2026-08-05): that check run can never be
+# posted again, so a branch matching copilot/* is now gated on main CI like any other.
 IGNORED_CHECK_NAMES: frozenset[str] = frozenset()
 
 
@@ -17,31 +18,6 @@ def _gh_json(*args: str) -> object:
     out = subprocess.check_output(["gh", *args], text=True)
     return json.loads(out)
 
-
-def copilot_targeted_ci_state(repo: str, head_sha: str) -> str:
-    """Return missing, pending, success, or failure for the Copilot targeted CI check."""
-    owner, name = repo.split("/", 1)
-    data = _gh_json(
-        "api",
-        f"repos/{owner}/{name}/commits/{head_sha}/check-runs",
-        "--jq",
-        f'[.check_runs[] | select(.name == "{COPILOT_TARGETED_CI}")] | last',
-    )
-    if not data:
-        return "missing"
-    conclusion = (data.get("conclusion") or "").lower()
-    status = (data.get("status") or "").lower()
-    if conclusion == "success":
-        return "success"
-    if conclusion == "failure":
-        return "failure"
-    if status in {"in_progress", "queued", "pending"}:
-        return "pending"
-    return "missing"
-
-
-def copilot_targeted_ci_ok(repo: str, head_sha: str) -> bool:
-    return copilot_targeted_ci_state(repo, head_sha) == "success"
 
 
 def agent_checks_ok(repo: str, pr_number: int, head_branch: str, head_sha: str) -> tuple[bool, str]:
@@ -62,14 +38,11 @@ def agent_checks_ok(repo: str, pr_number: int, head_branch: str, head_sha: str) 
         return True, "all checks SUCCESS"
 
     if head_branch.startswith("copilot/"):
-        # Accept Copilot targeted CI (fast fallback) OR main CI (after auto-approval enabled).
-        if copilot_targeted_ci_ok(repo, head_sha):
-            return True, f"{COPILOT_TARGETED_CI} success"
         checks = _gh_json("pr", "checks", str(pr_number), "--repo", repo, "--json", "name,state")
         main_ci = [c for c in checks if c.get("name") == "CI" and c.get("state") == "SUCCESS"]
         if main_ci:
             return True, "main CI success"
-        return False, f"missing or failed {COPILOT_TARGETED_CI} and main CI"
+        return False, "missing or failed main CI"
 
     checks = _gh_json(
         "pr",

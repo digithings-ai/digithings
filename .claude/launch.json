@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "DigiGraph",
+      "name": "digigraph",
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": [
         "-c",
@@ -11,7 +11,7 @@
       "port": 18000
     },
     {
-      "name": "DigiQuant",
+      "name": "digiquant",
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": [
         "-c",
@@ -20,7 +20,7 @@
       "port": 18001
     },
     {
-      "name": "DigiSearch",
+      "name": "digisearch",
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": [
         "-c",
@@ -38,7 +38,7 @@
       "port": 3000
     },
     {
-      "name": "DigiChat (Next.js)",
+      "name": "digichat (Next.js)",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--workspace",

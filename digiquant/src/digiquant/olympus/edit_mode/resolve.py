@@ -25,7 +25,18 @@ def resolve_edit_mode(
     if prior is None:
         return "full"
 
-    gap_days = (run_date - prior.date).days
+    # Measure staleness from the last date the content materially CHANGED, not the last date
+    # a row was written (#1749). A no-op republish writes a fresh ``documents`` row, and
+    # ``prior.date`` is the newest row for the key — so before this the gap was 1 on every
+    # run of a frozen chain and §5.3.2's hard cap could never fire. ``content_date`` is None
+    # for any row without an ``unchanged_since`` marker, which keeps the pre-existing
+    # behaviour for rows published before the marker shipped.
+    #
+    # This is NOT the verbatim guard §5.3.1 rejects: the trigger is still purely the elapsed
+    # day count against ``stale_full_days()``, unchanged. Only what "elapsed since" means is
+    # corrected. See :mod:`digiquant.olympus.edit_mode.content_identity`.
+    content_date = prior.content_date or prior.date
+    gap_days = (run_date - content_date).days
     if gap_days > stale_full_days():
         return "full"
 

@@ -4,9 +4,20 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { logStorageFailure } from "@/lib/storage-debug";
+import { EMBED_FREE_TURN_LIMIT, EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 
-export const EMBED_FREE_TURN_LIMIT = 3;
+export { EMBED_FREE_TURN_LIMIT, EMBED_TRIAL_TURN_LIMIT };
 const STORAGE_PREFIX = "digichat_embed_turns:";
+const TRIAL_UNLOCK_STORAGE_PREFIX = "digichat_embed_trial_unlocked:";
+
+/**
+ * Session-local mirror of the trial-unlock flag. Needed because `useChat`
+ * freezes its transport on first render (#1339): `prepareSendMessagesRequest`
+ * cannot see a React `trialUnlocked` prop that flips later. Reading this map
+ * (and localStorage) at send time is the same pattern as `readEmbedUrlAuth`.
+ * Survives private-mode localStorage failures for the current tab only.
+ */
+const liveTrialUnlocked = new Set<string>();
 
 /**
  * Resolve the host-origin key this embed is running under.
@@ -62,6 +73,72 @@ export function writeTurns(host: string, value: number): void {
   } catch (err) {
     logStorageFailure("writeTurns", err);
   }
+}
+
+function trialUnlockStorageKey(host: string): string {
+  return `${TRIAL_UNLOCK_STORAGE_PREFIX}${host}`;
+}
+
+/**
+ * Persisted trial-form unlock flag (localStorage, per host origin) — mirrors
+ * readTurns/writeTurns above. Without this, `trialUnlocked` would live only
+ * in React state while the turn counter it overrides is persisted: after any
+ * reload a registered visitor's counter still reads >= limit but the unlock
+ * that raised the limit is gone, permanently re-gating them (see page.tsx).
+ */
+export function readTrialUnlocked(host: string): boolean {
+  if (liveTrialUnlocked.has(host)) return true;
+  try {
+    return localStorage.getItem(trialUnlockStorageKey(host)) === "1";
+  } catch (err) {
+    logStorageFailure("readTrialUnlocked", err);
+    return false;
+  }
+}
+
+export function writeTrialUnlocked(host: string, value: boolean): void {
+  if (value) {
+    liveTrialUnlocked.add(host);
+  } else {
+    liveTrialUnlocked.delete(host);
+  }
+  try {
+    if (value) {
+      localStorage.setItem(trialUnlockStorageKey(host), "1");
+    } else {
+      localStorage.removeItem(trialUnlockStorageKey(host));
+    }
+  } catch (err) {
+    logStorageFailure("writeTrialUnlocked", err);
+  }
+}
+
+const CHAT_ACCESS_TOKEN_PREFIX = "digichat_embed_chat_token:";
+
+function chatAccessTokenKey(host: string): string {
+  return `${CHAT_ACCESS_TOKEN_PREFIX}${host}`;
+}
+
+/** Chat-access token for this embed host. Same storage discipline as the unlock flag. */
+export function readChatAccessToken(host: string): string | null {
+  try {
+    return localStorage.getItem(chatAccessTokenKey(host));
+  } catch {
+    return null;
+  }
+}
+
+export function writeChatAccessToken(host: string, token: string): void {
+  try {
+    localStorage.setItem(chatAccessTokenKey(host), token);
+  } catch {
+    // Blocked storage — the send-time read returns null and the free quota applies.
+  }
+}
+
+/** Test hook — clears the in-memory unlock mirror (localStorage is per-test). */
+export function resetLiveTrialUnlockedForTests(): void {
+  liveTrialUnlocked.clear();
 }
 
 export type EmbedGate = {

@@ -42,6 +42,19 @@ on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 | **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
 | **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
 
+### H2 market-thesis identity
+
+Every market proposal has a stable lowercase `topic_key` plus an explicit
+`action=create|update`. H2 receives `prior_context.active_theses` with full names, notes,
+criteria, IDs, and topic keys. Revised evidence, wording, confidence, or catalyst detail
+updates the existing topic with its exact `thesis_id`; only a distinct market mechanism
+creates a new topic. `validate_market_thesis_proposals` drops unknown updates, active topic
+collisions, ambiguous legacy topic ownership, changed topic keys, duplicate IDs, and duplicate
+topics before persistence. New topics start `ACTIVE`; updates preserve H1's same-run status,
+or the prior nonterminal status when H1 did not review that topic. A `PAUSED` topic remains
+the same opinion and cannot be replaced with a new ID. Supabase migration 056 provides the
+final one-active-topic-per-date constraint.
+
 ### Vehicle → market thesis linkage (#1563)
 
 `theses.linked_market_thesis_id` ties a `vehicle-{ticker}` thesis to the market
@@ -80,10 +93,52 @@ The result feeds `compute_focus_roster(..., adaptive_max_analysts=budget, min_ne
 → `roster_cap.capped_tickers`. **Invariants:** *cost-safe* — `budget ≤ ATLAS_MAX_ANALYSTS`
 always (the adaptive budget only tightens, never increases spend); *fail-soft* — any missing
 signal, absent client, or reader error degrades to the static cap and logs (never raises).
-Env knobs: `ATLAS_MAX_ANALYSTS` (the cap/baseline), `ATLAS_BUDGET_STRESS_FLOOR` (default 3),
+Env knobs: `ATLAS_MAX_ANALYSTS` (the cap/baseline, read only through
+`roster_cap.configured_max_analysts()`), `ATLAS_BUDGET_STRESS_FLOOR` (default 3),
 `ATLAS_BUDGET_DISPERSION_HI` (default 0.015). Deferred (cost-/measurement-gated): budget > cap
 in dispersion regimes, a dedicated cross-asset dispersion metric, and the `dispatch_outcomes`
 feedback table (Stage 4).
+
+### Roster cap enforcement (#1767)
+
+The cost-safe invariant above held for `budget`, but not for the roster: from the day H3
+started emitting a vehicle map until #1767, `compute_focus_roster` passed
+`active_held ∪ every thesis-map ticker` as `capped_tickers(held=…)`. Held tickers are
+exempt from the cap by #936, so a populated map (40 tickers on 2026-07-31, 46 on 07-29)
+pushed the protected set past the cap on every such day, `capped_tickers` took its
+over-budget branch, and **`ATLAS_MAX_ANALYSTS` never capped anything** — 39 analysts
+dispatched against a configured 25, and roster width tracked spend 1:1 ($0.86 at width 8,
+$4.00 at width 39).
+
+The enforced contract is now one invariant:
+
+> **`len(focus_roster) ≤ max(cap, len(active_held))`.** The prior book is the *only*
+> sanctioned overshoot. Nothing else may widen the roster.
+
+Two consequences, both deliberate:
+
+- **Thesis vehicles are prioritised, not exempt.** `held=` is the prior book only;
+  thesis-mapped tickers go in as `candidate_priority`, a **round-robin across theses by
+  within-thesis rank** (`h4_opportunity_screener.thesis_priority_order`). Output order
+  still follows the watchlist — priority decides *which* candidates survive, not the
+  dispatch order. A vehicle the cap drops gets a `focus_roster_excluded` row naming the
+  cap, so the drop is recorded rather than silent.
+- **`min_new` / `explore_floor` is a floor, not a licence.** It is clamped to the slots
+  left after the book instead of expanding the cap. Whenever the book leaves any budget,
+  that whole budget goes to non-held candidates, so #950's anti-freeze guarantee survives
+  within the cap; it is surrendered only when the book alone fills the ceiling.
+
+**Known limitation.** There is **no conviction signal anywhere in the H3 output** —
+`candidate_rank` is a position inside the mapping, not a score, and `ThesisVehicleMapping`
+has no score field — so "prioritise the thesis map" can only mean *breadth*: cover as many
+theses as the budget allows before deepening any one. At `ATLAS_MAX_ANALYSTS=30`, roughly
+7 of 27 theses get no vehicle analysed on a wide day (25 would leave 12). The cap and the
+thesis map are sized for different worlds; this makes the cap real without resolving that.
+
+Width is recorded in the `atlas_run_diagnostics.breakdown` jsonb (no migration) by
+`hermes/roster_diagnostics.roster_breakdown` — `width`, `by_reason`, `theses_covered`,
+`excluded`, `max_analysts`, `over_cap`. Its absence is why the breach went unnoticed for
+the pipeline's whole observed lifetime.
 
 ---
 
@@ -105,6 +160,36 @@ Per-ticker cyclic sub-graph (not a single LLM call):
 Termination when either side sets `converged=true` (no product round cap; infra timeouts
 only). On fingerprint quiet (#925): `skip` — carry prior deliberation summary into H7;
 fresh `deliberation_transcript` row only when the loop runs.
+
+### Carry provenance — `carry_reason` (#1742)
+
+`DeliberationSummary.carried` is set by **two** unrelated paths, and until #1742 they were
+indistinguishable: on 2026-07-31, 31 crashed debates and 4 intentional skips published the
+same `carried=true, converged=true`. `carry_reason` names which one happened:
+
+| `carry_reason` | Path | `converged` | Meaning |
+|---|---|---|---|
+| `fingerprint_skip` | quiet ticker (#925) | `true` | a real prior debate still stands |
+| `llm_failure` | fail-soft catch (#1665) | **`false`** | no PM challenge ever ran |
+
+Consequences of `llm_failure`, all downstream of the flag:
+
+- **State.** `converged=false` — there is no debate to converge, so H7's `debate_summaries`
+  and the published `deliberation/{ticker}` document stop claiming one.
+- **Document.** `payloads.deliberation_summaries` publishes **no** `bear_thesis`; mirroring
+  the bull side off the same `conclusion` produced two byte-identical theses.
+- **Sizing.** H8 caps the name's conviction at `SizingCaps.min_conviction`
+  (`phase7e._cap_unchallenged_convictions`) — applied to **both** the memo and the legacy
+  branch, since H7 writes a memo on every production run. Capping *at* the bar, not below
+  it, is deliberate: a name pushed under the bar is dropped by the sizer's selection step
+  and then re-added at its drifted weight by the #1649 held-carry backstop, which can size
+  it *larger*. Correlation de-dup can still drop a capped leg in favour of a challenged one
+  — intended. The book note names every capped position.
+
+The `PhaseError` shape (`phase="hermes_h6_deliberation"`, message prefix `deliberation LLM
+failed`) is unchanged — Atlas's Hermes-density degraded gate counts phases, not messages.
+Not yet propagated: `supabase_io._slim_deliberation_summary` drops `carry_reason`, so a
+crash carry looks benign to the *next* day's fingerprint-skip carry.
 
 ---
 
@@ -132,6 +217,12 @@ fail-closed checks over the H8 `sized_book` weights:
    in the H7 memo (no silent drop of an owned name);
 2. every open position has an H5 analyst doc **or** is `flat` **or** is a deliberately
    carried held name (`commit_io.carried_held_tickers`).
+
+When advisory position risk fields are enabled, H9 resolves `positions.horizon_days` from
+the dedicated `preferences.risk_horizon_days` contract (default 21). It intentionally does
+not reuse `preferences.holding_days`: that separate value controls decision evaluation and
+turnover cadence (default 5). `risk_envelope.risk_horizon_days` owns this validation and is
+shared with the legacy `portfolio_materialize` path so both writers persist identical semantics.
 
 **Held-carry (two classes, one set).** `commit_io.carried_held_tickers` — used by BOTH
 H8's carry injection (`phase7e_risk_sizing._held_carry_weights`) and H9's exemption, so
@@ -168,6 +259,139 @@ H9 `PhaseError` can't trigger on its own. Both flags are emitted structurally in
 `book_materialized`; a commit-failure marker is prepended to `error_summary` so it survives
 the 2000-char cap. `chain._retry_worthy` keys the #809 good-book guard on `book_committed`
 (not mere materialization), so an uncommitted book retries while a committed one does not.
+
+### Same-date idempotency and orphan pruning (#1744)
+
+**The idempotency key is the run *date*, never `run_id`.** `AtlasResearchState.run_id`
+is `Field(default_factory=uuid4)` — a fresh UUID per process — so CI's outer retry always
+presents a new id and a `run_id`-keyed manifest lookup structurally *cannot* see what an
+earlier attempt on the same date wrote. Prod 2026-06-24 carries **three** `commit-run/`
+manifests with three different `weights_fingerprint` values as the proof. Migration 044
+re-keyed `decision_log` from `(run_id, ticker)` to `(run_date, ticker)` for the identical
+reason (#947); this closes the same hole in the commit manifest.
+
+Two things stay separate:
+
+- the manifest **document** remains per-run (`commit-run/{source_run_id}`), so every
+  attempt keeps its own audit artefact;
+- the **guard** is date-scoped: `commit_io.load_commit_manifests` returns every manifest
+  for the date and `commit_io.resolve_prior_commit` picks the last writer.
+
+**Reconciliation is last-writer-wins, not fail-closed.** A same-date commit whose
+fingerprint differs from the prior one re-books and records `supersedes`; it does *not*
+raise. A hard conflict error would fail the phase on the 06-24 shape production already
+produces, and with the uncommitted-book gate above that reports `degraded` for a book that
+did commit. Ordering comes from `commit_seq` inside the manifest payload because
+`documents` has no `created_at` column; pre-#1744 manifests read 0, so a date carrying
+several of them is an undecidable tie and `resolve_prior_commit` returns `None` (re-commit)
+rather than guess.
+
+Re-booking is safe only because `commit_io._prune_orphan_positions` deletes same-date
+`positions` rows absent from the book just written — including a stale `CASH` row, which
+`book_portfolio` only writes when `cash_pct > 0.01`. Without the prune a shrinking
+re-commit left the dropped name at its old weight: the raw book exceeds 100% of NAV,
+`refresh_performance_metrics` sums the orphan into `portfolio_metrics.invested_pct`, and
+`execute_at_open.build_events_from_positions_book` emits a phantom Activity-feed event.
+The prune is deliberately **not** fail-soft. That trade is worth naming precisely: the
+non-transactional gap between `book_portfolio` and `save_commit_manifest` is **not
+closed** — a raise from the prune (or any failure between the two calls) still leaves a
+booked-but-unmanifested date, and the prune itself is one more thing that can raise
+there. What changes is that re-attempts now **converge across** the gap instead of
+stacking: the date-keyed guard sees no manifest, re-commits, and re-prunes to the last
+writer's book. Making the prune fail-soft would trade a loud, self-healing gap for a
+silent orphan in a published performance series, which is the defect this closes.
+
+### `nav_history` ownership contract (#1745)
+
+`nav_history` has **two writers**, and they are not peers:
+
+| Writer | When | Owns |
+|---|---|---|
+| H9 `commit_io.book_portfolio` | commit time, ~12:00–14:00 UTC | the **provisional** row: NAV as of the latest close available *before* `run_date`, plus `cash_pct` / `invested_pct`, which H9 alone owns |
+| `scripts/atlas/refresh_performance_metrics.py` | evening cron, ~22:00–23:00 UTC | the **authoritative** NAV: restated against that date's settled close |
+
+**The evening restatement is a correction, not corruption.** Reading a manifest NAV and a
+`nav_history` NAV that differ for the same date is expected: the manifest is a commit-time
+artefact whose only structural job is the `weights_fingerprint` idempotency check, and
+`nav_history` is the published series (`public_nav_history`). Do not "fix" the divergence
+by having H9 write the later value — at commit time that close does not exist yet.
+
+What H9 *must* get right is its anchor. Because the cron restates row `D` to "NAV as of
+D's close", `_prior_nav` already embeds the move up to the prior book date. So the return
+H9 applies is measured **over the interval from the prior book date to the last close
+before `run_date`** (`commit_io._interval_price_returns`), not over the latest pair of
+trading days. Applying a one-day delta on top of a restated anchor double-counts it
+(2026-07-28: the manifest re-applied the 07-24→07-27 return already inside the 07-27 NAV)
+and, across a book gap, records almost none of the move (2026-06-26 → 07-17 recorded
++0.03% for a book that actually returned −0.37%).
+
+The interval start comes from the `date` column of the rows `load_prior_book` returned, so
+the weights and the window are the same row set by construction. Anchoring on
+`nav_history`'s own latest date would desynchronize the moment the cron extends the series
+to a **bookless** date — which is exactly what `--fill-calendar-through` does, and why the
+anchor is the book, not the NAV row.
+
+`atlas.supabase_io.query_price_deltas` is deliberately left alone: it is a one-trading-day
+triage signal shared with the rule evaluators, and every rule threshold is calibrated
+against that meaning.
+<!-- #1766 -->
+### The 2026-06-27 → 2026-07-16 book gap is permanent and accepted
+
+The #1555 freeze above left a hole in the book that will **not** be filled. Read this before
+proposing a backfill. Verified against the live `core` project on 2026-08-01:
+
+- `positions`, `nav_history` and `portfolio_metrics` each hold **zero rows** for every date in
+  `2026-06-27 … 2026-07-16` — 20 consecutive calendar days. Last pre-gap book: 06-26. First
+  post-gap book: 07-17.
+- 22 `atlas_run_diagnostics` rows cover that window and **18 of them report `status='ok'`**.
+  All 18 carry the H9 coherence check (1) failure in `error_summary`:
+  `hermes_h9_commit_run/hermes/portfolio/commit-run: held ticker <T> missing from book and not
+  flat in H7` (EWT on most dates; EWT, IJR, UUP and TLT by 07-16). Grep production for **that
+  message**, not for the word "coherence" — the literal string `coherence` appears in zero rows,
+  and no `error_summary` in the window comes close to the 2000-char cap, so nothing was
+  truncated. This is check (1) at the top of this section reporting a frozen commit under an
+  `ok` verdict, which is exactly the lie the degraded gate above now prevents.
+
+**Fixed 2026-07-17** by `40312d82` "restore Hermes H4–H9 commits" (PR #1565, branch
+`task/1555-hermes-restoration`), then hardened 07-22 by the memo-unaddressed held carry
+(`b84a4d73`) and the final-book continuity backstop (`1dc93db3`). `positions` resumes on
+2026-07-17, the same date. Of the 18 diagnostics rows from 07-17 onward that carry a **non-null**
+`book_committed`, `book_committed = true` holds exactly when `positions` has rows for that
+`run_date` — zero counterexamples in either direction, including the correctly-`false` 07-21,
+07-22 and 07-24 runs. (Three further 07-17 rows predate emission of the flag and carry `null`.
+Separately, 07-30 has no diagnostics row at all — a hole in the *detection* series, unrelated to
+this book gap.)
+
+**The gap is deliberately not backfilled**, for two independent reasons:
+
+1. **It would fabricate an audit trail.** Synthesising 20 days of book for dates on which the PM
+   demonstrably made no decision invents holdings that were never chosen, and it would silently
+   restate every published performance number — NAV, Sharpe, volatility, drawdown, alpha and
+   attribution are all computed over this series.
+2. **The only tool that could do it structurally cannot.**
+   `digiquant/scripts/atlas/refresh_performance_metrics.py`'s `fill_calendar_through`
+   (`:578-596`) resolves its start from `_max_positions_date` (`:580`, `:101-107`) and then walks
+   **forward only** (`:593-596`). A target date earlier than the latest snapshot degrades to a
+   single-day refresh (`:584-590`). It provably cannot reach a hole that sits *behind*
+   `max(positions.date)`, and `carry_forward_positions` (`:109-146`) is only ever called from
+   that forward walk. See the "Limitation" note in
+   [`atlas/docs/RUNBOOK.md`](../../atlas/docs/RUNBOOK.md), which has said so since before the gap.
+
+Two consequences a future reader must not "fix" by accident. First, the sparseness of
+`positions` / `nav_history` **is the signal** that a book failed to commit; densifying the
+calendar by carrying the prior book forward across missing dates would destroy the only
+data-level evidence of recurrence. Second, the gap is currently **invisible** in the UI rather
+than merely visible-and-empty, because the tearsheet contribution chart plots by array index, so
+the 20 absent dates are compressed away instead of rendering as a break. Annotating the chart is
+a separate, unfiled piece of work; it was considered and deliberately deferred.
+
+**#1766 needs no repair.** The production defect it reports was fixed 07-17, so there is nothing
+live left to fix and no data left to reconstruct; this section *is* the resolution. The remediation
+plan's disposition was to leave the issue **open with this evidence attached** rather than close it
+as fixed-by-code, so that the gap keeps a visible owner. The narrow residual — a run that produces research but commits no book while still
+reporting `ok` — is closed by detection rather than by a data repair, once the no-book gate in the
+`summarize_run` work lands (PR #1774, open as of 2026-08-01). If you are here because the gap
+looks unexplained, it is explained: read up, not sideways into a backfill.
 
 ---
 
@@ -210,3 +434,34 @@ and thesis context loads via preflight + on-demand `fetch_prior_document`.
 - [`AGENTS.md`](AGENTS.md) — extension checklist
 - [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) — historical Wave 2 spec (topology now shipped as H1–H9)
 - Atlas handoff: [`atlas/docs/agentic/ARCHITECTURE.md`](../../atlas/docs/agentic/ARCHITECTURE.md)
+
+---
+
+<!-- #1736 -->
+## Chain-level failure containment (#1736 / #1737 / #1733)
+
+`chain.run_atlas_then_hermes` writes the `atlas_run_diagnostics` row from a `finally` block,
+so anything that can reach that block with an error-free state becomes an invisible failure.
+Three holes are closed:
+
+1. **Beliefs distillation is fail-soft.** `_run_beliefs_fold` wraps both call sites (the
+   `refresh_scope="beliefs"` escape hatch and the post-publish automatic fold). Beliefs is an
+   optional on-demand backlog fold (spec §11.1), not a run deliverable — a failure there must
+   never kill a run that already committed a book. It records `("chain", "beliefs")` instead,
+   which degrades the run.
+2. **A terminating crash is recorded before the row is written.** `except BaseException:
+   _record_chain_error(state, "terminal", exc); raise` sits between the body and the
+   `finally`. This catches SystemExit / KeyboardInterrupt / a job timeout's SIGTERM — none of
+   which `_safe_invoke_graph`'s `except Exception` sees. The exception is re-raised untouched,
+   so the exit code and CI's view of the job are unchanged.
+3. **Hermes reasoning failures are counted, not just logged.** H6 degrades one ticker per
+   failure and carries the analyst stance forward, so 31 of 39 dead deliberations left every
+   segment "fresh" and the run "ok". `diagnostics._hermes_deliberation_health` counts errors
+   in the five Hermes phases (`phase_hermes`, `hermes_h6_deliberation`,
+   `hermes_h7_pm_direction`, `phase7d_pm`, `phase9_evolution`) over
+   `phase_hermes.deliberation_summaries`. `hermes_h9_commit_run` is **excluded** — it is
+   already gated by #1555 and must not be double-counted.
+
+**Adding a `breakdown` key?** Do not edit `diagnostics._segment_counts`. Write a contributor
+and pass it to `diagnostics.register_breakdown_contributor`; the `breakdown_contributor`
+fixture in `tests/dq/atlas/conftest.py` registers one for the duration of a test.

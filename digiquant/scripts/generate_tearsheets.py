@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate TradingView-faithful tearsheets via the NautilusTrader engine.
 
-This is the DigiQuant flagship path for the Slapper family (BTC/ETH/SOL):
+This is the digiquant flagship path for the Slapper family (BTC/ETH/SOL):
 
     Coinbase OHLCV cache
       → NautilusTrader backtest (digiquant.strategies.SlapperStrategy)
@@ -259,12 +259,16 @@ def run_nautilus(
 
     def _epoch_ns(value) -> int:
         # Polars Date -> midnight-UTC ns (matches the previous BarDataWrangler index).
-        dt = value if isinstance(value, datetime) else datetime(value.year, value.month, value.day)
+        dt = (
+            value
+            if isinstance(value, datetime)
+            else datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+        )
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return int(dt.timestamp() * 1_000_000_000)
 
-    # Build Nautilus bars directly from the Polars frame — DigiQuant is Polars-only,
+    # Build Nautilus bars directly from the Polars frame — digiquant is Polars-only,
     # so OHLCV is not routed through the DataFrame-wrangler ingestion path.
     bars = []
     for i, t in enumerate(ts_vals):
@@ -316,7 +320,7 @@ def trades_from_positions(positions) -> list[dict]:
     """Round-trip trades (chronological) from the Nautilus positions report.
 
     The Nautilus report is read row-wise; missing exits (NaT/NaN) are detected via
-    self-inequality, avoiding non-Polars dataframe helpers in DigiQuant code.
+    self-inequality, avoiding non-Polars dataframe helpers in digiquant code.
     """
 
     def _missing(x) -> bool:

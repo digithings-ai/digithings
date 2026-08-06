@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
-
 from digiskills.models import (
     CompileResult,
     Corpus,
@@ -17,6 +15,7 @@ from digiskills.models import (
     SourceDocument,
     SourceKind,
 )
+from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
 
