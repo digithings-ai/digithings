@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   applicationName: "DigiThings",
   title: "digithings — AI infrastructure in a glass box",
   description:
-    "Open-source, MIT-licensed AI infrastructure: eight modules that plug into the stack you already "
+    "Open-source, MIT-licensed AI infrastructure: nine modules that plug into the stack you already "
     + "run — not a replacement for it. Self-hosted anywhere, your own keys and providers, every step "
     + "traceable.",
   manifest: "/manifest.webmanifest",
@@ -50,7 +50,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "digithings — AI infrastructure in a glass box",
     description:
-      "Open-source AI infrastructure you self-host: eight MIT-licensed modules that drop into the "
+      "Open-source AI infrastructure you self-host: nine MIT-licensed modules that drop into the "
       + "stack you already run. Your own keys and providers, every step traceable.",
     url: "https://digithings.ai",
     images: [

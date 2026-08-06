@@ -43,11 +43,14 @@ const STACK: MarqueeItem[] = [
 
 // Every figure here is countable in the repo — no projections, no asterisks
 // (#1846). Each one is checked against the code, and the band must not
-// contradict the manifest right below it, which self-discloses "8 online · 2 on
-// the roadmap":
-//   8  — non-roadmap modules in the shared `modules` registry (2 are roadmap:
-//        digistore, digilink). This deliberately does NOT say "10", which is
-//        what used to sit 14 lines under "no asterisks".
+// contradict the manifest right below it, which self-discloses "9 online · 2 on
+// the roadmap" (computed from the registry, so it tracks automatically):
+//   9  — non-roadmap modules in the shared `modules` registry (2 are roadmap:
+//        digistore, digilink). digivault was missing from the registry until it was
+//        added here — it ships
+//        a FastAPI service on 8004 behind its own compose profile and had been
+//        missing. This deliberately does NOT say "11", which is what used to sit
+//        14 lines under "no asterisks".
 //   16 — services under `services:` in the single 460-line docker-compose.yml.
 //   2  — live vector backends behind one client: Chroma and Azure AI Search
 //        (digisearch/src/digisearch/server.py fails startup unless one is
@@ -59,7 +62,7 @@ const STACK: MarqueeItem[] = [
 // that rolls to its value on arrival; reduced motion and no-JS ship the
 // settled final figures.
 const METRICS: OdometerStat[] = [
-  { value: "8", label: "modules shipping" },
+  { value: "9", label: "modules shipping" },
   { value: "16", label: "compose services" },
   { value: "2", label: "vector backends" },
   { value: "0", label: "keys stored" },
@@ -184,7 +187,7 @@ export default function Home() {
               <span className="kicker">{"// by the numbers"}</span>
               <h2>The platform, in four numbers.</h2>
               <p>
-                No asterisks — every figure is countable in the repo. Eight modules ship today and
+                No asterisks — every figure is countable in the repo. Nine modules ship today and
                 two are still on the roadmap; the manifest below names which.
               </p>
             </Reveal>
@@ -200,9 +203,9 @@ export default function Home() {
               <span className="kicker">{"// the architecture"}</span>
               {/* nowrap from md up so the claim holds one line; it still wraps on
                   phones, where forcing one line would shrink it to nothing. */}
-              <h2 className="md:whitespace-nowrap">Ten modules. One toolkit.</h2>
+              <h2 className="md:whitespace-nowrap">Eleven modules. One toolkit.</h2>
               <p>
-                The eight that ship run standalone or compose with the rest — retrieval, quant
+                The nine that ship run standalone or compose with the rest — retrieval, quant
                 research and chat, plus the auth, tracing and audit any deployment needs. Two more
                 are on the roadmap; the manifest below marks which.
               </p>
