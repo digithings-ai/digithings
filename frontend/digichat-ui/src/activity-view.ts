@@ -89,15 +89,39 @@ export function outcomeMeta(count: number): string {
 /**
  * Projects the wire activities onto canon rows, in order.
  *
- * Index-keyed: the activity list is rebuilt from scratch on every render of a
- * streaming turn (see `toDigiChatActivity`), and rows are append-mostly — so
- * position is the stable identity here, and two rows that stringify the same
- * (a repeated trace label, two identical reasoning blobs) still get distinct
- * React keys.
+ * Keyed by IDENTITY, not position. Position is not stable: `toDigiChatActivity`
+ * appends the reasoning row last, after every tool row, so its index climbs each
+ * time a tool arrives; it also rewrites a row in place from `tool_call` to
+ * `tool_result` (kind is part of any composite key), and its final filter drops
+ * orphaned placeholders, shifting everything after them. Since `ChatThinking`
+ * and `ChatToolCall` are uncontrolled, a changed key is an unmount — so an
+ * index key collapsed a disclosure the reader had opened, mid-stream, and
+ * removed its text from the DOM.
+ *
+ * Reasoning is a singleton per turn, so it keys as itself. Tool rows key on
+ * name+query, which is the identity the producer already groups by internally.
+ * A trailing index still disambiguates genuine duplicates.
  */
+/**
+ * A key that survives the row moving. `reasoning` is one per turn so it needs no
+ * suffix; tool rows carry name+query (the producer's own grouping key) and a
+ * trailing index only to separate true duplicates.
+ */
+function identityKey(activity: DigiChatActivity, i: number): string {
+  switch (activity.kind) {
+    case "reasoning":
+      return "reasoning";
+    case "tool_call":
+    case "tool_result":
+      return `tool:${activity.name}|${"query" in activity ? (activity.query ?? "") : ""}`;
+    default:
+      return `${activity.kind}-${i}`;
+  }
+}
+
 export function toCanonRows(activities: readonly DigiChatActivity[]): CanonActivityRow[] {
   return activities.map((activity, i): CanonActivityRow => {
-    const key = `${activity.kind}-${i}`;
+    const key = identityKey(activity, i);
     switch (activity.kind) {
       case "tool_call":
         // Still in flight: no body, so the head renders as a plain row with a

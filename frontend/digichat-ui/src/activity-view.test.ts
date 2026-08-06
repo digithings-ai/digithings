@@ -17,7 +17,7 @@ describe("toCanonRows — tool calls", () => {
     const row = onlyRow([{ kind: "tool_call", name: "digivault.search", query: "auth" }]);
     expect(row).toEqual({
       kind: "tool",
-      key: "tool_call-0",
+      key: "tool:digivault.search|auth",
       name: "digivault.search",
       args: "auth",
       status: "running",
@@ -93,7 +93,7 @@ describe("toCanonRows — reasoning, briefs and asides", () => {
   it("maps reasoning to a ChatThinking disclosure carrying the whole blob", () => {
     const text = "First I check the vault.\nThen I compare the two answers.";
     const row = onlyRow([{ kind: "reasoning", text }]);
-    expect(row).toEqual({ kind: "thinking", key: "reasoning-0", label: "reasoning", text });
+    expect(row).toEqual({ kind: "thinking", key: "reasoning", label: "reasoning", text });
   });
 
   it("maps a brief to a card row, dropping an empty questions list", () => {
@@ -152,5 +152,36 @@ describe("outcomeMeta", () => {
     expect(outcomeMeta(1)).toBe("1 note");
     expect(outcomeMeta(3)).toBe("3 notes");
     expect(outcomeMeta(0)).toBe("no hits");
+  });
+});
+
+// Regression: rows were keyed `${kind}-${index}`, but toDigiChatActivity appends
+// reasoning LAST, so its index climbs with every tool row that arrives. Since
+// ChatThinking is uncontrolled, the changed key unmounted it — a disclosure the
+// reader had opened collapsed under their cursor mid-stream, text and all.
+describe("row keys survive the stream", () => {
+  it("keeps the reasoning key fixed as tool rows arrive", () => {
+    const keyOf = (acts: DigiChatActivity[]) =>
+      toCanonRows(acts).find((r) => r.kind === "thinking")?.key;
+
+    const reasoning: DigiChatActivity = { kind: "reasoning", text: "thinking..." };
+    const one = keyOf([reasoning]);
+    const two = keyOf([{ kind: "tool_call", name: "search", query: "a" }, reasoning]);
+    const three = keyOf([
+      { kind: "tool_call", name: "search", query: "a" },
+      { kind: "tool_call", name: "fetch", query: "b" },
+      reasoning,
+    ]);
+
+    expect(one).toBeDefined();
+    expect(two).toBe(one);
+    expect(three).toBe(one);
+  });
+
+  it("keeps a tool row's key stable when it settles from call to result", () => {
+    const keyOf = (a: DigiChatActivity) => toCanonRows([a])[0]?.key;
+    const running = keyOf({ kind: "tool_call", name: "search", query: "a" });
+    const done = keyOf({ kind: "tool_result", name: "search", query: "a", hits: [] } as DigiChatActivity);
+    expect(done).toBe(running);
   });
 });

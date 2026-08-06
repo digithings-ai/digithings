@@ -22,6 +22,7 @@
  * for a component only where an affordance is needed: fenced code gets
  * <ChatCodeBlock>'s copy caption, a ```mermaid fence gets <ChatMermaidBlock>.
  */
+import { isValidElement, type ReactNode } from "react";
 import type { Components, Options } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -63,7 +64,27 @@ function remarkDisplayDollars() {
   };
 }
 
-const remarkPlugins: Options["remarkPlugins"] = [remarkGfm, remarkMath, remarkDisplayDollars];
+/**
+ * `singleDollarTextMath: false` is load-bearing, not a preference. remark-math
+ * defaults it to true, which makes any paragraph containing two `$` signs parse
+ * as inline math: "the starter plan is $29 and the team plan is $99" re-sets the
+ * prose between them as italic math with the spaces collapsed, and eats the
+ * second `$`. Currency is far commoner than inline math in a docs answer — and
+ * this renders for a quant-finance stack — so `$…$` stays literal.
+ *
+ * The cost, stated plainly: there is then NO inline math syntax. remark-math
+ * understands only `$`/`$$`, not `\(…\)`, so turning single-dollar off leaves
+ * block math (`$$…$$`, plus fenced math promoted by remarkDisplayDollars below)
+ * as the only route. That is the right trade for a docs chat — a mangled price
+ * is a wrong answer, a formula that needs its own line is a formatting nit — but
+ * it is a trade, not a free win. Revisit if inline notation ever outweighs
+ * currency on these surfaces.
+ */
+const remarkPlugins: Options["remarkPlugins"] = [
+  remarkGfm,
+  [remarkMath, { singleDollarTextMath: false }],
+  remarkDisplayDollars,
+];
 
 /**
  * KaTeX options. `strict: "ignore"` keeps half-typed model output from filling
@@ -74,7 +95,12 @@ const remarkPlugins: Options["remarkPlugins"] = [remarkGfm, remarkMath, remarkDi
  * instead of KaTeX's hard-coded red.
  */
 const rehypePlugins: Options["rehypePlugins"] = [
-  [rehypeKatex, { strict: "ignore", errorColor: "var(--down)" }],
+  // maxSize bounds \rule and friends. KaTeX names maxExpand and maxSize as the two
+  // knobs for untrusted input; maxExpand defaults to 1000 and holds, but maxSize
+  // defaults to Infinity, so `$$\rule{99999em}{99999em}$$` in a model answer
+  // inserts a ~1.6-million-pixel box and blows out the page scroll — inline math
+  // has no overflow container at all.
+  [rehypeKatex, { strict: "ignore", errorColor: "var(--down)", maxSize: 10 }],
 ];
 
 /** Only http(s) links survive; anything else (javascript:, data:) renders as text. */
@@ -111,15 +137,31 @@ const components: Components = {
   ),
   // <ChatCodeBlock>/<ChatMermaidBlock> are <figure>s that bring their own
   // <pre>, so the fence's wrapper is dropped and `code` decides the shape.
-  pre: ({ children }) => <>{children}</>,
+  // Block code is decided HERE, at the <pre>, because that node is the only one
+  // that actually says "this is a block". Guessing from the child string instead
+  // — react-markdown >=9 dropped the `inline` prop — misread the commonest shape
+  // of model output: a bare one-line fence holding a single shell command has no
+  // language and no newline, so it rendered as inline <code>, losing its block
+  // styling and its copy button. Indented blocks lost their leading whitespace
+  // for the same reason.
+  pre: ({ children }) => {
+    const child = Array.isArray(children) ? children[0] : children;
+    if (isValidElement<{ className?: string; children?: ReactNode }>(child)) {
+      const raw = String(child.props.children ?? "").replace(/\n$/, "");
+      const lang = child.props.className?.replace(/^language-/, "").toLowerCase() ?? "";
+      if (lang === "mermaid") return <ChatMermaidBlock code={raw} />;
+      return <ChatCodeBlock code={raw} lang={lang || undefined} />;
+    }
+    return <>{children}</>;
+  },
+  // Reached for inline code only; the `pre` branch above consumes block code
+  // without rendering its child.
   code: ({ className, children }) => {
     const raw = String(children).replace(/\n$/, "");
     const lang = className?.replace(/^language-/, "").toLowerCase() ?? "";
     if (lang === "mermaid") return <ChatMermaidBlock code={raw} />;
-    // react-markdown ≥9 dropped the `inline` prop: a fence either carries a
-    // language class or spans lines — everything else is inline `code`.
-    if (!lang && !raw.includes("\n")) return <code>{raw}</code>;
-    return <ChatCodeBlock code={raw} lang={lang || undefined} />;
+    if (lang) return <ChatCodeBlock code={raw} lang={lang} />;
+    return <code>{raw}</code>;
   },
 };
 

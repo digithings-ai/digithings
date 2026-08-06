@@ -160,6 +160,13 @@
   padding-left: 0.2rem;
 }
 
+/* remark-gfm task lists carry their own checkbox; the disc from `.chat-md ul`
+   would sit beside it as a second marker. */
+.chat-md ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
 .chat-md ul li::marker {
   color: var(--accent);
 }
