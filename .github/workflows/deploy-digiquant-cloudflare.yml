@@ -25,8 +25,20 @@ on:
       # scripts/build-digiquant.sh:19), so a bad resolution there fails the build with no
       # frontend file touched — no Cloudflare auto-detection needed. That is not
       # hypothetical: PR #1949 changed package-lock.json by -1646/+176 lines, matched
-      # none of the globs above, and this check never ran on it. Root-anchored on
-      # purpose — a workspace package.json under frontend/** is already covered above.
+      # none of the globs above, and this check never ran on it.
+      #
+      # Both entries are root-anchored, and only the root hole is closed. A bare name
+      # matches the repo-root file alone — verified against the sibling Python entries,
+      # which no nested pyproject.toml has ever triggered (#1702, #1708, #1712 each
+      # edited 11 of them and fired neither deploy check). Do not read these two lines
+      # as covering more. The workspace manifests are a wider, separate gap: the
+      # `npm install` above resolves all eight workspaces (`frontend/*`,
+      # `frontend/digiweb/*`) and only four match the globs above, while 31 of the 52
+      # commits that have touched a workspace manifest left the root lock alone. The
+      # sites built here import only @digithings/design and @digithings/web, both
+      # covered — but an unresolvable manifest in any workspace fails the root install
+      # before either build starts. `**/package.json` is not the fix; it would fire
+      # both deploy checks on every unrelated workspace.
       - "package.json"
       - "package-lock.json"
   workflow_dispatch:

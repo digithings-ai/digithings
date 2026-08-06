@@ -25,8 +25,20 @@ on:
       # scripts/build-digithings.sh:15), so a bad resolution there fails the build with
       # no frontend file touched — no Cloudflare auto-detection needed. PR #1949 was the
       # near miss: -1646/+176 lines of package-lock.json, and the digiquant sibling of
-      # this check never fired at all. Root-anchored on purpose — a workspace
-      # package.json under frontend/** is already covered by the globs above.
+      # this check never fired at all.
+      #
+      # Both entries are root-anchored, and only the root hole is closed. A bare name
+      # matches the repo-root file alone — verified against the sibling Python entries,
+      # which no nested pyproject.toml has ever triggered (#1702, #1708, #1712 each
+      # edited 11 of them and fired neither deploy check). Do not read these two lines
+      # as covering more. The workspace manifests are a wider, separate gap: the
+      # `npm install` above resolves all eight workspaces (`frontend/*`,
+      # `frontend/digiweb/*`) and only three match the globs above, while 31 of the 52
+      # commits that have touched a workspace manifest left the root lock alone — so a
+      # dependency added to frontend/digichat-ui/package.json, whose stylesheets and
+      # <DigiChatMark> this site imports at build time, still reaches production with
+      # neither check running. `**/package.json` is not the fix; it would fire both
+      # deploy checks on every unrelated workspace.
       - "package.json"
       - "package-lock.json"
   workflow_dispatch:
