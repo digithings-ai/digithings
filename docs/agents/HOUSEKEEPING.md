@@ -22,7 +22,7 @@ the broader delegation framework.
 | Stale issues (>90d no activity) | `pipeline-maintenance.yml` — `stale-issues` job | weekly Mon 08:00 UTC | Adds `stale` label + a reminder comment. Not auto-closed. Blocked issues use a 7d threshold |
 | Stale PRs (>14d no activity) | `pipeline-maintenance.yml` — `stale-prs` job | weekly Mon 08:00 UTC | Posts an escalation comment on task/cursor/claude/module branches |
 | Label coverage drift | `pipeline-maintenance.yml` — `label-coverage` job | weekly Mon 08:00 UTC | One tracker issue listing every open issue missing `exec:*`, `priority:*`, `component:*`, or (non-epic) `complexity:*` / `risk:*` |
-| Project-field coverage | `project-stub-fields.yml` | scheduled | Ensures required project fields are populated |
+| Project-field coverage | the `coverage` job in `ci-pr-hygiene.yml` | daily 06:00 UTC + on PR | Runs `scripts/check_project_fields_coverage.py`: every agent-task issue in the TSV with a real phase and a valid model |
 | Agent backlog snapshot | `agent-backlog-snapshot.yml` | weekly Mon 06:00 UTC | Regenerates `docs/agent-backlog/generated-snapshot.md` |
 
 ## Documentation hygiene
@@ -71,7 +71,7 @@ the broader delegation framework.
 | Agent PR autolabel | `agent-pr-autolabel.yml` | on CI success | Adds `automerge-agent` to `cursor/*` / `copilot/*` PRs |
 | Agent PR auto-merge | `agent-pr-automerge.yml` | on `automerge-agent` label + green CI | Squash auto-merge for low-risk agent PRs |
 | Agent PR finalizer | `agent-pr-finalizer.yml` | daily 07:00 UTC + manual | Backstop for `cursor/*` PRs; triage, fix dispatch, automerge when eligible |
-| PR quality gate | **not implemented** | — | A `/simplify` + `/review` checkbox gate on `task/*` merges was planned and never built: no workflow or job implements it, and the filename this row used to name (`pr-quality-gate.yml`) has never existed. Listed rather than deleted so the gap is visible instead of assumed-covered. |
+| PR quality gate | **removed** | — | A `/simplify` + `/review` checkbox gate on `task/*` merges existed as `pr-quality-gate.yml` from #131 (`abc7e541`) until #378 (`5abc4f41`) replaced it with the finish-task skill. Nothing enforces it in CI today. Listed rather than deleted so the gap is visible instead of assumed-covered. |
 | PR issue linkage | the `check-linkage` job in `ci-pr-hygiene.yml` | on PR open/edit | Blocks merge without `Fixes #N` / `Closes #N` |
 
 ## Escalation paths
