@@ -141,12 +141,15 @@ the session itself has no storage or routing knowledge.
    outcome exactly.** This entry warned that `MiniMarkdown` "cannot wrap its
    output in `.chat-md` without visibly restyling both consumers", the
    re-rating being 0.88rem body and display-face headings against `.dc-md`'s
-   0.8rem mono scale, and that it therefore needed "a product-approved visual
-   migration".
+   0.8rem mono scale, and that it therefore needed "a density/legacy variant **or** a
+   product-approved visual migration". #1941 took neither branch.
 
    #1941 made the swap and did restyle both consumers — digichat `/embed` **and**
-   digithings.ai/chat, because no app has ever overridden `renderAssistantContent`
-   (see the props table above: both surfaces take the package default). The PR
+   digithings.ai/chat, because by then neither app overrode `renderAssistantContent`
+   (see the props table above: both surfaces take the package default). digithings-web
+   did carry a forked renderer until #1450 (`ae4d4a33`) deleted it, but it was
+   byte-identical to this package's bar a docblock, so no output ever diverged —
+   "has never been overridden" would be wrong, "is not overridden today" is the claim. The PR
    described the change as scoped to the embed, so the public page moved
    unreviewed. Caught in review afterwards; the owner then approved keeping the
    shared canon, so the re-rating stands deliberately rather than by accident.

@@ -78,6 +78,13 @@ digichat:
 
 olympus:
   - frontend/olympus/**
+  # Olympus is the third consumer of @digithings/web: it declares the dep, imports
+  # chat-core.css, and renders <ChatMarkdown> via SafeMarkdown. Without this, a PR
+  # editing only frontend/digiweb/web/** runs no olympus lint, tests or static-export
+  # check while measurably changing what olympus ships — the `.chat-md h5` selector
+  # added in #1948 lands in olympus's built stylesheet. Not digichat-ui: olympus does
+  # not consume it.
+  - frontend/digiweb/web/**
   - frontend/digiweb/design/**
   - package.json
   - package-lock.json
@@ -168,6 +175,16 @@ ruff_and_scripts:
   - agents/**
   - .github/workflows/ci.yml
   - scripts/ci_paths.yaml
+  # tests/scripts/test_release_manifest_consistency.py reads these five, and `tests/**`
+  # above only fires when the test itself is edited. Without them the guard is silent on
+  # exactly the commits it exists to catch: both hand-cut digichat releases (d9b4f6fe,
+  # df3999dc) touched only the manifest, CHANGELOG and package.json, and a re-point of
+  # release-please at a dead branch fires actionlint but not this lane.
+  - .release-please-manifest.json
+  - release-please-config.json
+  - frontend/digichat/package.json
+  - package-lock.json
+  - .github/workflows/release-please-digichat.yml
   # tests/scripts/test_prices_cron_dst.py asserts DST invariants and cron<->`if:`
   # linkage for this workflow. A cron edit that touches nothing else would
   # otherwise skip this lane, and the failure it guards (a stale

@@ -80,9 +80,9 @@ def test_every_managed_package_declares_the_version_the_manifest_claims() -> Non
 def test_the_lockfile_records_the_same_version_as_each_managed_package() -> None:
     """npm records workspace versions in the lockfile, and it lags a hand-cut bump.
 
-    Caught after the fact twice on digichat (0.5.0 → 0.7.0, then 0.7.0 → 0.8.0), both
-    times as a stray hunk in an unrelated PR. `npm install` fixes it; this says so
-    before the fact.
+    Caught after the fact three times on digichat — 0.3.0 → 0.5.0 (in an unrelated
+    website PR), 0.5.0 → 0.7.0, then 0.7.0 → 0.8.0 — every time as a stray hunk in a PR
+    about something else. `npm install` fixes it; this says so before the fact.
     """
     lock = json.loads((REPO_ROOT / "package-lock.json").read_text(encoding="utf-8"))
     packages = lock.get("packages", {})

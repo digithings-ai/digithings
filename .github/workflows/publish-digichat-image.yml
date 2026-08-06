@@ -1,6 +1,7 @@
 # Publishes the digichat image only once a version has actually reached main
 # (passed make score + the promotion PR), decoupled on purpose from when
-# release-please-digichat.yml cuts the tag on module/digichat (see #1343).
+# release-please-digichat.yml cuts the tag on develop (see #1343 for why not main;
+# #1948 moved it off module/digichat, which had not moved since digichat-v0.6.0).
 name: "Publish: digichat image"
 
 on:

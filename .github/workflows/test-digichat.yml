@@ -40,10 +40,17 @@ jobs:
       # "the one" overstated it: `unrs-resolver` 1.11.1 is a NON-optional dev dep with
       # no `os` constraint, declaring 19 platform bindings of which the lock holds only
       # @unrs/resolver-binding-darwin-arm64 — no linux-x64-gnu, and no wasm fallback.
-      # `npm ci` therefore installs its JS on Linux with nothing loadable behind it.
-      # Nothing breaks today because eslint-config-next's flat config never reaches the
-      # TypeScript resolver that would load it; if a future lint config does, this step
-      # is where the fix belongs.
+      # It does NOT follow that Linux gets nothing loadable, which an earlier version of
+      # this comment claimed: `unrs-resolver` ships `postinstall: napi-postinstall
+      # unrs-resolver 1.11.1 check` (hasInstallScript in the lock), which fetches the
+      # right binding itself when npm did not supply it. Verified by installing with
+      # --omit=optional and watching it install the binding. No lane passes
+      # --ignore-scripts and there is no root .npmrc, so that repair always runs.
+      #
+      # So there are two independent reasons nothing breaks: the package self-heals, and
+      # eslint-config-next's flat config never reaches the TypeScript resolver that would
+      # load it anyway (verified with a Module._load hook — zero loads across all three
+      # apps' lint runs). The durable fix is the lockfile, not this step.
       #
       # This step used to re-install rolldown at 1.0.0-rc.16 and lightningcss at 1.32.0.
       # Both were redundant, and the lightningcss pin was actively wrong: installing it

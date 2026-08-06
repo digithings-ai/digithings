@@ -15,10 +15,14 @@
 # exist. #1948 created those two tags at the commits that declared them and pointed
 # this workflow at develop, so the next release continues from a real 0.8.0.
 #
-# develop is the right target rather than a workaround: it receives squash-merged task
-# PRs whose subjects are genuine Conventional Commits (`feat(digichat): …`), which is
-# exactly the signal release-please needs — and unlike main, nothing squashes them
-# again on the way in.
+# develop is the right target rather than a workaround: task PRs squash-merge into it
+# with genuine Conventional Commit subjects (`feat(digichat): …`), which is exactly the
+# signal release-please needs, and unlike main nothing squashes them again on the way in.
+# Develop does also carry merge commits with non-conventional subjects (roughly 1 in 6 —
+# `Merge pull request #1941 …` among them); those are simply ignored by the parser while
+# the conventional commits they carry are still walked, so they cost nothing here. On
+# main the problem is the opposite and fatal: the promotion squash REPLACES those
+# subjects with one non-conventional line.
 name: "Release please: digichat"
 
 on:
