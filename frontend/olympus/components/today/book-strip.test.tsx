@@ -25,7 +25,7 @@ describe('BookStrip', () => {
   ];
   it('shows the Invested/Cash header and leads with the biggest mover', () => {
     const html = renderToStaticMarkup(
-      createElement(BookStrip, { positions, investedPct: 75, asOfDate: '2026-06-24' })
+      createElement(BookStrip, { positions, asOfDate: '2026-06-24' })
     );
     expect(html).toContain('Invested');
     expect(html).toContain('Cash');
@@ -39,14 +39,14 @@ describe('BookStrip', () => {
   });
   it("renders the book's own as-of via the shared badge (#1555 honesty)", () => {
     const html = renderToStaticMarkup(
-      createElement(BookStrip, { positions, investedPct: 75, asOfDate: '2026-06-26' })
+      createElement(BookStrip, { positions, asOfDate: '2026-06-26' })
     );
     expect(html).toContain('Jun 26');
   });
 
   it('renders an empty-state line when there are no held positions', () => {
     const html = renderToStaticMarkup(
-      createElement(BookStrip, { positions: [pos({ ticker: 'CASH', weight_actual: 100 })], investedPct: 0, asOfDate: null })
+      createElement(BookStrip, { positions: [pos({ ticker: 'CASH', weight_actual: 100 })], asOfDate: null })
     );
     expect(html).toContain('No positions held yet');
   });

@@ -13,7 +13,6 @@ import HoldingsActivityTable from '@/components/portfolio/HoldingsActivityTable'
 export default function AllocationsTab(props: {
   lastUpdated: string | null;
   positions: Position[];
-  investedPct: number | null;
   decisions: TableRow<'decision_log'>[];
   positionHistory: PositionHistoryRow[];
   positionEvents: DashboardPositionEvent[];
@@ -30,11 +29,11 @@ export default function AllocationsTab(props: {
   formatSleeveKey: (k: string) => string;
 }) {
   const {
-    lastUpdated, positions, investedPct, positionEvents,
+    lastUpdated, positions, positionEvents,
   } = props;
   const [view, setView] = useState<'positions' | 'activity'>('positions');
 
-  const reconciliation = useMemo(() => reconcileBook(positions, { investedPct }), [positions, investedPct]);
+  const reconciliation = useMemo(() => reconcileBook(positions), [positions]);
   const positionCount = reconciliation.rows.length;
 
   return (

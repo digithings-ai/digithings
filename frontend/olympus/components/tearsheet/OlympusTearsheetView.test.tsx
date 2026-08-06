@@ -125,11 +125,13 @@ describe('OlympusTearsheetView', () => {
   });
 });
 
-describe('live vs realized presentation (#1664)', () => {
-  it('headline returns are labeled live and note the unrealized open book', () => {
+describe('headline vs realized presentation (#1664)', () => {
+  it('dates persisted headline returns and notes the unrealized open book', () => {
     const out = html();
-    expect(out).toContain('Portfolio return · live');
-    expect(out).toContain('Active return · live');
+    expect(out).not.toContain('Portfolio return · live');
+    expect(out).not.toContain('Active return · live');
+    expect(out).toContain('2026-07-17');
+    expect(out).toContain('persisted metrics');
     expect(out).toContain('marks the open book · incl. unrealized');
   });
 

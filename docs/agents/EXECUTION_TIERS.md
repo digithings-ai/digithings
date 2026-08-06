@@ -4,23 +4,29 @@ Every digithings backlog task carries exactly one `exec:*` label identifying the
 
 Source of truth: `agents.yml` → `execution_tiers` and `tier_routing`. Regenerate platform adapters (`CLAUDE.md`, `.github/copilot-instructions.md`, `.cursor/rules/digithings.mdc`) with `make agents-init` after edits.
 
-## The three tiers
+## The two tiers
 
-### `exec:copilot` — Tier 1 — GitHub Copilot + gh-aw automation
-
-Triggered automation. Fixed rule, no judgment. Runs on a schedule or event inside GitHub Actions.
-
-**Fits:** Dependabot bumps, `pip-audit`, `gitleaks`, `ruff format`, stale issue/PR sweeps, label-coverage drift, orphan-issue routing, project-status transitions, scheduled-workflow failure digests, `digiquant-prices` failure dedup, CI-failure triage, **PR code review** (primary reviewer on all PRs), housekeeping tasks (duplicate issues, project backfill, doc links).
+There used to be three. `exec:copilot` — Tier 1, triggered automation — was retired
+on 2026-08-05 when the subscription lapsed and its dispatchers were deleted (#1904).
+The label still exists, marked RETIRED, because 19 closed issues carry it; **nothing
+routes to it, and nothing picks it up.** The scheduled housekeeping it used to
+describe (dependency bumps, `pip-audit`, `gitleaks`, `ruff format`, stale sweeps,
+label drift, failure digests) still runs — as plain GitHub Actions workflows that
+need no agent tier at all. What genuinely needs an agent now goes to `exec:cursor`.
 
 **Full coverage index:** see `docs/agents/HOUSEKEEPING.md` — every scheduled sweep, its cadence, and what it escalates.
 
 **Copilot execution is retired (2026-08-05).** The subscription lapsed, and with it
 `copilot-issue-dispatch`, `copilot-pr-lifecycle`, `copilot-pr-mark-ready`,
 `copilot-pr-targeted-ci` and `copilot-quota-gate` were deleted. Nothing dispatches
-`exec:copilot`, so every site that applied it was retargeted at `exec:cursor` (5 in
-`pipeline-maintenance.yml`, 2 in `pipeline-digiquant-prices.yml`), the now-meaningless
-bare `copilot` label was dropped from 8 issue-creation sites, and the five issues
-already stranded on the dead tier were migrated. The label itself is kept, marked
+`exec:copilot`, so every site that applied it was retargeted at `exec:cursor`: 5 in
+`pipeline-maintenance.yml`, 2 in `pipeline-digiquant-prices.yml`, and — found later by
+an in-session review, which is why this list is longer than the first attempt claimed
+— `derive_exec_tier` in `scripts/create_issue.sh` (the `make new-task` entrypoint,
+which was still minting the dead tier for every low-risk chore), the routing table
+below, `tier_routing.copilot_triggers` in `agents.yml`, and the `spec-writer`
+subagent. The now-meaningless bare `copilot` label was dropped from 8 issue-creation
+sites, and the five issues already stranded on the dead tier were migrated. The label itself is kept, marked
 RETIRED in its description — 19 closed issues carry it and deleting a label strips it
 from their history too.
 
@@ -55,11 +61,11 @@ Autonomous, asynchronous. Describable in one paragraph with clear acceptance cri
 
 ### `exec:claude` — Tier 3 — Claude Code (human-supervised, LOCAL only)
 
-Interactive, local, human-in-the-loop. The top tier; takes everything above and adds judgment-heavy work. **Claude never auto-executes issues — only Copilot (Tier 1) and Cursor (Tier 2) do.** The label is a tier *marker*; execution is always a human on a workstation.
+Interactive, local, human-in-the-loop. The top tier; takes everything above and adds judgment-heavy work. **Claude never auto-executes issues — only Cursor (Tier 2) does.** The label is a tier *marker*; execution is always a human on a workstation.
 
 **Fits:** architecture and new-module scaffolding; complex debugging; cross-module integration; security review; strategy/iterative design; milestone decomposition; targeted `@claude` help.
 
-**PR code review (secondary, opt-in):** Claude's `/code-review` plugin via `.github/workflows/agent-claude-review.yml` is **off by default**. Enable it by setting repo variable `ENABLE_CLAUDE_PR_REVIEW = true` (Settings → Secrets and variables → Actions → Variables). Also requires `CLAUDE_CODE_OAUTH_TOKEN` secret. Use Copilot review first; enable Claude review only for projects that need deeper analysis.
+**PR code review (secondary, opt-in):** Claude's `/code-review` plugin via `.github/workflows/agent-claude-review.yml` is **off by default**. Enable it by setting repo variable `ENABLE_CLAUDE_PR_REVIEW = true` (Settings → Secrets and variables → Actions → Variables). Also requires `CLAUDE_CODE_OAUTH_TOKEN` secret. Bugbot is the primary reviewer; enable Claude review only for projects that need deeper analysis. When Bugbot is unavailable, `/review <N>` in-session is the honest fallback — see `CLAUDE.md`.
 
 **Weekly continuous-improvement digest:** `.github/workflows/pipeline-continuous-improvement.yml` runs every Sunday 22:00 UTC, synthesizes the past 7 days of PR/CI/review activity, and files a single tracker issue with 3–5 prioritized suggestions. See [HOUSEKEEPING.md](HOUSEKEEPING.md#continuous-improvement) — synthesis is judgment work, so it lives at Tier 3.
 
@@ -76,7 +82,7 @@ Cloud dispatch via the Claude Code Action is **intentionally disabled** (policy,
 
 ```
 Fully automatable with a trigger + fixed rule?
-├── YES → exec:copilot
+├── YES → no tier at all; it is a scheduled workflow, not a backlog task
 └── NO
     └── Spec fits one paragraph, no mid-task dialogue, clear acceptance?
         ├── YES → exec:cursor
@@ -90,20 +96,19 @@ Applied by `scripts/create_issue.sh` and the `spec-writer` subagent:
 | Condition | Default tier |
 |---|---|
 | `risk:high`, matches a human gate, or touches `digikey/` auth / live-trading paths | `exec:claude` |
-| Labelled `security:finding`, `housekeeping:deps`, `housekeeping:format`, `stale` | `exec:copilot` |
-| Everything else | `exec:cursor` |
+| Everything else, including `security:finding`, `housekeeping:deps`, `housekeeping:format` and `stale` | `exec:cursor` |
 
 ## Responsibilities by tier
 
-- **Copilot workflows** (`scheduled-maintenance.yml`, `ci-failure-triage.yml`) must tag every issue they open with an `exec:*` label. CVE bumps and lint drift → `exec:copilot`. CI failures needing code fixes → `exec:cursor`. Architectural findings → `exec:claude` plus `needs-human`.
-- **Cursor Cloud Agents** must only pick up issues labelled `exec:cursor` or `exec:copilot`. If a task feels larger than the one-paragraph spec implied, relabel it `exec:claude` and comment why — do not proceed.
+- **Maintenance workflows** (`pipeline-maintenance.yml`, `agent-ci-failure-triage.yml`) must tag every issue they open with an `exec:*` label. CVE bumps, lint drift and CI failures needing code fixes → `exec:cursor`. Architectural findings → `exec:claude` plus `needs-human`.
+- **Cursor Cloud Agents** must only pick up issues labelled `exec:cursor`. If a task feels larger than the one-paragraph spec implied, relabel it `exec:claude` and comment why — do not proceed.
 - **Claude Code (you)** decomposes milestones, writes issue bodies via `/spec`, assigns tiers, and reviews PRs only when `ENABLE_CLAUDE_PR_REVIEW` is set.
 
 ## Workflow
 
 1. **Claude Code** — read milestone, decompose, write issues via `/spec`, tier each one.
 2. **Cursor Cloud Agents** — execute `exec:cursor` issues in parallel; open PRs.
-3. **Copilot** — reviews every PR as primary reviewer; picks up `exec:copilot` issues continuously.
+3. **Review** — Cursor Bugbot on demand (`bugbot run`), or `/review <N>` in-session when Bugbot is out of quota. Recorded by a `reviewed:*` label and asserted before `main` by `ci-review-coverage.yml`.
 4. **Claude Code** — handles judgment-heavy tasks locally; secondary PR reviewer when enabled.
 
 ## Cursor setup (one-time, Tier C)
@@ -113,7 +118,7 @@ Applied by `scripts/create_issue.sh` and the `spec-writer` subagent:
 
 See `docs/agents/CURSOR_AGENT_ONBOARDING.md` for the full agent operating protocol.
 
-## Copilot setup (one-time)
+## Bugbot / maintenance setup (one-time)
 
 1. Confirm `DIGITHINGS_PROJECT_TOKEN` secret is set (needed for maintenance workflows).
 2. Raise the Cursor spend limit if Bugbot reports `usage limit reached`, and set
@@ -141,12 +146,12 @@ if the token is missing.
 
 ## Quota exhaustion
 
-Copilot and Cursor both have monthly-reset subscription quotas. When quota is exhausted, the agent session fails and the issue/PR stays incomplete — no automatic escalation or parking. When quota resets, re-apply the `exec:*` label (or use **Agent dispatch replay**) to re-fire dispatch.
+Cursor has a monthly-reset subscription quota. When quota is exhausted, the agent session fails and the issue/PR stays incomplete — no automatic escalation or parking. When quota resets, re-apply the `exec:*` label (or use **Agent dispatch replay**) to re-fire dispatch.
 
 If you want to track quota state manually, `agent-quota-reset.yml` runs on the 1st of each month and can clean up any stale labels on issue #387.
 
 ## Cost note
 
-- Copilot: flat subscription — use freely. Primary PR reviewer and housekeeping agent.
 - Cursor: burns compute credits — keep tasks scoped; 15 min good, 2 h bad. Prefer over Claude for implementable tasks.
+- Cursor Bugbot: usage-based since June 2026, roughly $1.00–$1.50 a run. Invoke by hand with `bugbot run` once a diff is final — never at PR open, never per push.
 - Claude Code Max: reserve for the hard work (architecture, judgment, security). PR review is opt-in (`ENABLE_CLAUDE_PR_REVIEW`). Cloud dispatch via GH Action is disabled (policy, issue #384); local dispatch via `make task ISSUE=N` always works.

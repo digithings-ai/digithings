@@ -33,12 +33,10 @@ export default function AttributionTab({
   const chart = useChartColors();
   const summary = useMemo(() => {
     if (!attribution.length) return null;
-    // Exclude the synthetic CASH row from all return sums — its total_attribution_pct
-    // represents cash drag (allocation effect only) and inflates activeReturn when included.
-    // The chart and holdings count already exclude CASH; these sums follow suit so every
-    // number on the stat tiles is consistent.
     const holdings = attribution.filter((r) => r.ticker !== 'CASH');
-    const activeReturn = sum(holdings.map((r) => r.total_attribution_pct));
+    // CASH is not a holding, but its allocation effect is part of active return:
+    // sum(all attribution) = portfolio return - benchmark return.
+    const activeReturn = sum(attribution.map((r) => r.total_attribution_pct));
     // Sort descending by date so the most-recent row wins the benchmark lookup, regardless of the
     // order rows arrived from the database.  An unsorted .find() is order-dependent and would
     // silently pick a stale benchmark if rows happen to arrive oldest-first.

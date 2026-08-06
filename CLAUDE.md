@@ -197,4 +197,4 @@ So `feat/<slug>` and `fix/<slug>` are the only name-rule-valid patterns that sti
 
 Skills, subagents, and slash commands under `.claude/` are generated from `agents/sources/` by `make agents-init`. Never hand-edit `.claude/agents/`, `.claude/skills/`, or `.claude/commands/` — edit the sources and run `make agents-init`. CI enforces idempotence.
 
-Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.
+Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, `/review <pr-number>`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.

@@ -18,7 +18,6 @@ describe('TodaySummaries', () => {
     const html = renderToStaticMarkup(
       createElement(TodaySummaries, {
         positions: [pos('NVDA', 6.1, -2)],
-        investedPct: null,
         theses: [{ id: 'T1', name: 'AI capex supercycle', status: 'confirmed' }],
         readSummary: 'Risk-off consolidation; rotating into defensives.',
         asOfDate: '2026-06-24',
@@ -36,13 +35,12 @@ describe('TodaySummaries', () => {
   });
 
   it('shows holdings on the % of NAV basis (matches the book strip / portfolio table)', () => {
-    // Live shape: holdings are % of NAV summing to invested_pct (90) with a CASH
-    // row for the rest. scale → 1, so UUP reads its true 40.0% (not the old 36%),
+    // Persisted shape: holdings are % of NAV and include a CASH row for the rest.
+    // No independent metrics scale applies, so UUP reads its true 40.0% (not 36%),
     // and CASH never appears as a holding row (#1553).
     const html = renderToStaticMarkup(
       createElement(TodaySummaries, {
         positions: [pos('UUP', 40), pos('TLT', 35), pos('IJR', 15), pos('CASH', 10)],
-        investedPct: 90,
         theses: [],
         readSummary: null,
         asOfDate: '2026-07-16',
@@ -56,7 +54,7 @@ describe('TodaySummaries', () => {
   it('handles an empty book without crashing', () => {
     const html = renderToStaticMarkup(
       createElement(TodaySummaries, {
-        positions: [], investedPct: null, theses: [], readSummary: null, asOfDate: null,
+        positions: [], theses: [], readSummary: null, asOfDate: null,
       })
     );
     expect(html).toContain('Holdings');

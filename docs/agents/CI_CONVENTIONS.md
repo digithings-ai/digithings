@@ -20,7 +20,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `test-atlas-graph.yml` | Test: Atlas graph | workflow_call | Unit tests + lint for Atlas + Hermes trees; installs the full workspace from `uv.lock` (`uv sync --frozen`) | Working | `digiquant/src/digiquant/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, `pipeline-olympus.yml` |
 | `project-stub-fields.yml` | Project: stub fields TSV | issues labeled | Appends inferred row to `scripts/project_fields.tsv` when `agent-task` or `phase-N` label applied | Working | none |
 | `agent-docs-automerge.yml` | Agent: doc auto-merge | PR events | Enable squash auto-merge for PRs with `automerge-docs` label after doc-only path verification | Working | none |
-| `agent-ci-failure-triage.yml` | Agent: CI failure triage | workflow_run (completed) | Create `copilot` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
+| `agent-ci-failure-triage.yml` | Agent: CI failure triage | workflow_run (completed) | Create `exec:cursor` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
 | `ci.yml` | CI | push (main/develop), PR | Orchestrator: per-component tests + score + e2e-contract + nautilus-smoke + atlas-graph + pip-audit + ruff/scripts/baseline/provider_review + compose-validate + `actionlint` (repo-wide workflow lint) + `frontend-canon` (unconditional canon guard, #1434) | Working | none |
 | `test-e2e.yml` | Test: e2e stack | workflow_call, workflow_dispatch, push (develop) | PR gate: `e2e-contract` via `ci.yml`; compose `pytest -m e2e` on develop push/dispatch only (`continue-on-error`) | Working | `tests/test_e2e*.py`, compose |
 | `test-nautilus.yml` | Test: Nautilus smoke | workflow_call | Linux `digiquant[nautilus]` smoke subset | Working | `digiquant/**`, `tests/dq/**` |
@@ -64,9 +64,9 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `db-migrate.yml` | db-migrate | push (`main`), dispatch | Apply pending Olympus Supabase migrations to prod; forward-only, the `olympus_schema_migrations` ledger is the SOLE skip gate (the `BASELINE_THROUGH` baseline branch was deleted in #1814 — it silently recorded a new low-numbered file as applied without running its DDL); one transaction per file on the unwrapped path; `production` env (human gate) (#1016) | Working | `digiquant/supabase/migrations/**` |
 | `deploy-digithings-cloudflare.yml` | Deploy: digithings.ai build check | PR (digithings.ai assets), dispatch | Gate/validate `scripts/build-digithings.sh`; primary deploy is Cloudflare Pages watching `main` | Working | digithings.ai assets |
 | `deploy-digiquant-cloudflare.yml` | Deploy: digiquant.io build check | PR (digiquant.io assets), dispatch | Gate/validate `scripts/build-digiquant.sh` (ADR-0012); primary deploy is Cloudflare Pages watching `main` | Working | digiquant.io assets |
-| `agent-pr-autolabel.yml` | Agent: PR autolabel | workflow_run (CI, Copilot targeted CI) | Add `automerge-agent` to low-risk agent-branch PRs once CI is green | Working | none |
-| `agent-pr-automerge.yml` | Agent: PR auto-merge | pull_request, workflow_run (CI, Copilot targeted CI) | Enable squash auto-merge for PRs labeled `automerge-agent` | Working | none |
-| `agent-pr-finalizer.yml` | Agent: PR finalizer | schedule (daily 07:00), dispatch | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path (copilot/* handled by gh-aw lifecycle) | Working | none |
+| `agent-pr-autolabel.yml` | Agent: PR autolabel | workflow_run (CI) | Add `automerge-agent` to low-risk agent-branch PRs once CI is green | Working | none |
+| `agent-pr-automerge.yml` | Agent: PR auto-merge | pull_request, workflow_run (CI) | Enable squash auto-merge for PRs labeled `automerge-agent` | Working | none |
+| `agent-pr-finalizer.yml` | Agent: PR finalizer | schedule (daily 07:00), dispatch | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path | Working | none |
 | `agent-dispatch-replay.yml` | Agent: dispatch replay | dispatch only | Re-fire `exec:*` dispatch for issues labeled at creation time (GitHub skips `issues:labeled` for `gh issue create` labels) | Working (on-demand) | none |
 
 ---
@@ -77,6 +77,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 |-------------------|---------|---------------------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | agent-claude.yml, agent-claude-review.yml, agent-claude-dispatch.yml, pipeline-continuous-improvement.yml, pipeline-provider-review.yml | Optional — features disabled when absent |
 | `CURSOR_API_KEY` | agent-pr-finalizer.yml | Optional — Cursor fix dispatch skipped when absent |
+| `DIGITHINGS_PROJECT_TOKEN` | project routing/status workflows, CI failure triage, PR finalizer, scheduled maintenance | Required for cross-project updates; guarded features skip when absent |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | atlas-baseline, atlas-delta, atlas-monthly, digiquant-prices | Required for production runs |
 | `GEMINI_API_KEY` | atlas-baseline, atlas-delta, atlas-monthly | Required for Atlas/Hermes LLM calls |
 | `OLLAMA_API_KEY` | atlas-baseline, atlas-delta, atlas-monthly | Required for reasoning tier (phases 7, 7D) |

@@ -4,10 +4,9 @@ const CONSUME_TIMEOUT_MS = 2500;
 /**
  * Spend one message against a tenant's quota service.
  *
- * Fails **open**: only an explicit 401/402 denies. Timeouts, 5xx and transport errors let the
- * message through, matching the existing gate's philosophy — the asset is free chat messages, and
- * an outage must not break chat on every embedding site. The accepted consequence is that the cap
- * is bypassable by anyone able to break the quota service.
+ * Fails **open** on provider outages: timeouts, 5xx and transport errors let the message through,
+ * matching the existing gate's philosophy. Client errors fail closed because they indicate an
+ * invalid, forbidden, or spent token rather than an unavailable quota service.
  */
 export async function consumeChatAccess(
   consumeUrl: string,
@@ -20,7 +19,7 @@ export async function consumeChatAccess(
       body: JSON.stringify({ token }),
       signal: AbortSignal.timeout(CONSUME_TIMEOUT_MS),
     });
-    if (res.status === 401 || res.status === 402) return "deny";
+    if (res.status >= 400 && res.status < 500) return "deny";
     return "allow";
   } catch {
     return "allow";

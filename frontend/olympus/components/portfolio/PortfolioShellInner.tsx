@@ -45,7 +45,6 @@ export default function PortfolioShellInner() {
   const [sleeveStackMode, setSleeveStackMode] = useState<SleeveStackMode>('ticker');
 
   const positions = useMemo(() => data?.positions ?? [], [data]);
-  const investedPct = data?.server_portfolio_metrics?.invested_pct ?? null;
   const [decisions, setDecisions] = useState<TableRow<'decision_log'>[]>([]);
   useEffect(() => {
     let alive = true;
@@ -208,7 +207,6 @@ export default function PortfolioShellInner() {
           <AllocationsTab
             lastUpdated={lastUpdated}
             positions={positions}
-            investedPct={investedPct}
             decisions={decisions}
             positionHistory={positionHistory}
             positionEvents={positionEvents}
