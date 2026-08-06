@@ -23,12 +23,15 @@ to it later (their current in-tree LLM modules are superseded by this package).
 |--------|----------------|
 | `digillm/client.py` | Provider registry + routing, client cache, retry/backoff, SHA-256 response cache, `chat_completion`, the tool-calling loop, tool-call types, and the per-request override contextvars. |
 | `digillm/structured.py` | `structured_completion` (json_schema → validated Pydantic model) and `resolve_model` (opt-in test/medium/best resolution). |
+| `digillm/telemetry.py` | Strict provider-agnostic records for node runs, logical calls, physical attempts, artifact references, and fail-soft observer delivery. |
 | `digillm/__init__.py` | Public API surface (re-exports). |
 
 ## Public API
 
 ```python
 from digillm import (
+  ArtifactRef, CacheStatus, CallPurpose, NodeRunRecord,
+  ProviderCallRecord, ProviderAttemptRecord, TelemetryObserver, emit_telemetry,
     chat_completion, chat_completion_with_tools, structured_completion,
     get_client_for_model, get_client, register_provider, resolve_model,
     set_proxy_key, reset_proxy_key, get_proxy_key, proxy_key,   # proxy override
@@ -36,6 +39,30 @@ from digillm import (
     clear_caches,
 )
 ```
+
+### Provider telemetry contracts
+
+`NodeRunRecord`, `ProviderCallRecord`, and `ProviderAttemptRecord` separate graph work, one
+logical invocation, and each physical provider request. All are frozen Pydantic v2 models with
+`extra="forbid"`, producer-supplied stable UUIDs, closed lifecycle/retry enums, timezone-aware
+UTC event times, and deterministic serialization. `ArtifactRef` carries identity and version only;
+it never contains an artifact payload.
+
+A logical cache hit has `attempt_count=0`. A successful non-cache call has at least one physical
+attempt, and each retry after attempt 1 requires a closed `RetryReason`. Token usage and cost are
+nullable: unavailable provider evidence is never represented as zero. Prompts, responses, search
+text, API keys, secrets, and raw exceptions are not fields on any contract; only a sanitized
+exception type may be recorded.
+
+`TelemetryObserver` is an injectable synchronous sink boundary. `emit_telemetry` catches sink
+failures and optionally reports only the record UUID and exception class, so telemetry cannot abort
+the caller's portfolio work. The module starts no threads, opens no connections, and writes no
+files on import. Task #1951 defines the vocabulary only: provider/cache/retry instrumentation and
+the durable DigiQuant writer are separate follow-up tasks.
+
+DigiQuant migration `066_olympus_provider_telemetry.sql` owns the private normalized storage. Event
+times remain producer facts; the database adds `recorded_at` as its write clock. That schema is not
+part of `digillm` and does not create a persistence dependency for other consumers.
 
 ### `chat_completion`
 

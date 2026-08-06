@@ -1,0 +1,233 @@
+"""Contract tests for migration 066, the private provider telemetry ledger."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.unit
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
+MIGRATION_PATH = MIGRATIONS_DIR / "066_olympus_provider_telemetry.sql"
+
+TABLES = (
+    "olympus_node_runs",
+    "olympus_provider_calls",
+    "olympus_provider_attempts",
+)
+PUBLIC_ROLES = ("PUBLIC", "anon", "authenticated")
+FORBIDDEN_COLUMNS = (
+    "prompt",
+    "prompt_body",
+    "prompt_content",
+    "response",
+    "response_body",
+    "response_content",
+    "message",
+    "messages",
+    "api_key",
+    "secret",
+    "raw_exception",
+    "search_text",
+)
+SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
+
+
+def _strip_comments(raw: str) -> str:
+    return "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("--"))
+
+
+@pytest.fixture(scope="module")
+def raw() -> str:
+    assert MIGRATION_PATH.is_file(), f"migration missing: {MIGRATION_PATH}"
+    return MIGRATION_PATH.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def sql(raw: str) -> str:
+    return _strip_comments(raw)
+
+
+def _table_body(sql: str, table: str) -> str:
+    match = re.search(
+        rf"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?public\.{table}\s*"
+        rf"\((?P<body>.*?)\)\s*;",
+        sql,
+        re.IGNORECASE | re.DOTALL,
+    )
+    assert match, f"missing CREATE TABLE for {table}"
+    return match.group("body")
+
+
+def test_migration_is_the_only_066() -> None:
+    assert sorted(MIGRATIONS_DIR.glob("066_*.sql")) == [MIGRATION_PATH]
+
+
+def test_migration_remains_single_transaction_compatible(raw: str) -> None:
+    assert SELF_WRAP_REGEX.search(raw) is None
+    assert "COMMIT;" not in raw.upper()
+
+
+@pytest.mark.parametrize("table", TABLES)
+def test_tables_use_stable_uuid_primary_keys(sql: str, table: str) -> None:
+    body = _table_body(sql, table)
+    expected_id = {
+        "olympus_node_runs": "node_run_id",
+        "olympus_provider_calls": "call_id",
+        "olympus_provider_attempts": "attempt_id",
+    }[table]
+    assert re.search(rf"\b{expected_id}\s+uuid\s+PRIMARY KEY\b", body, re.IGNORECASE)
+
+
+def test_calls_require_node_parent_and_support_logical_parent(sql: str) -> None:
+    body = _table_body(sql, "olympus_provider_calls")
+    assert re.search(r"node_run_id\s+uuid\s+NOT NULL", body, re.IGNORECASE)
+    assert re.search(
+        r"FOREIGN KEY\s*\(node_run_id\)\s+REFERENCES\s+public\.olympus_node_runs",
+        body,
+        re.IGNORECASE,
+    )
+    assert re.search(r"parent_call_id\s+uuid", body, re.IGNORECASE)
+    assert re.search(
+        r"FOREIGN KEY\s*\(parent_call_id\)\s+REFERENCES\s+public\.olympus_provider_calls",
+        body,
+        re.IGNORECASE,
+    )
+
+
+def test_attempts_require_call_parent_and_unique_sequence(sql: str) -> None:
+    body = _table_body(sql, "olympus_provider_attempts")
+    assert re.search(r"call_id\s+uuid\s+NOT NULL", body, re.IGNORECASE)
+    assert re.search(
+        r"FOREIGN KEY\s*\(call_id\)\s+REFERENCES\s+public\.olympus_provider_calls",
+        body,
+        re.IGNORECASE,
+    )
+    assert re.search(r"UNIQUE\s*\(call_id,\s*attempt_number\)", body, re.IGNORECASE)
+    assert re.search(r"CHECK\s*\(attempt_number\s*>\s*0\)", body, re.IGNORECASE)
+
+
+@pytest.mark.parametrize("table", TABLES)
+def test_event_and_recorded_times_are_timezone_aware(sql: str, table: str) -> None:
+    body = _table_body(sql, table)
+    assert re.search(r"started_at\s+timestamptz\s+NOT NULL", body, re.IGNORECASE)
+    assert re.search(r"finished_at\s+timestamptz", body, re.IGNORECASE)
+    assert re.search(
+        r"recorded_at\s+timestamptz\s+NOT NULL\s+DEFAULT\s+now\(\)",
+        body,
+        re.IGNORECASE,
+    )
+
+
+def test_missing_attempt_usage_and_cost_are_nullable(sql: str) -> None:
+    body = _table_body(sql, "olympus_provider_attempts")
+    for column, data_type in (
+        ("prompt_tokens", "bigint"),
+        ("completion_tokens", "bigint"),
+        ("cost_usd", "numeric"),
+    ):
+        definition = re.search(rf"\b{column}\s+{data_type}(?P<tail>[^,\n]*)", body, re.IGNORECASE)
+        assert definition, f"missing {column}"
+        assert "NOT NULL" not in definition.group("tail").upper()
+        assert "DEFAULT" not in definition.group("tail").upper()
+
+
+def test_cache_hit_can_have_zero_attempts_but_other_success_cannot(sql: str) -> None:
+    body = _table_body(sql, "olympus_provider_calls")
+    normalized = " ".join(body.split())
+    assert "attempt_count >= 0" in normalized
+    assert "cache_status = 'hit' AND attempt_count = 0" in normalized
+    assert "outcome <> 'succeeded' OR attempt_count > 0" in normalized
+
+
+@pytest.mark.parametrize(
+    ("table", "column", "values"),
+    (
+        ("olympus_node_runs", "outcome", ("started", "succeeded", "failed", "cancelled")),
+        (
+            "olympus_provider_calls",
+            "cache_status",
+            ("bypassed", "hit", "miss", "unavailable"),
+        ),
+        (
+            "olympus_provider_attempts",
+            "retry_reason",
+            (
+                "not_applicable",
+                "rate_limit",
+                "timeout",
+                "connection_error",
+                "empty_response",
+                "server_error",
+                "unknown",
+            ),
+        ),
+    ),
+)
+def test_state_columns_are_closed(
+    sql: str, table: str, column: str, values: tuple[str, ...]
+) -> None:
+    body = _table_body(sql, table)
+    match = re.search(rf"CHECK\s*\(\s*{column}\s+IN\s*\((?P<values>.*?)\)\s*\)", body, re.I | re.S)
+    assert match, f"missing closed CHECK for {table}.{column}"
+    assert set(re.findall(r"'([^']+)'", match.group("values"))) == set(values)
+
+
+def test_schema_has_no_payload_or_secret_columns(sql: str) -> None:
+    bodies = "\n".join(_table_body(sql, table) for table in TABLES)
+    for forbidden in FORBIDDEN_COLUMNS:
+        assert not re.search(
+            rf"^\s*{forbidden}\s+",
+            bodies,
+            re.IGNORECASE | re.MULTILINE,
+        )
+
+
+@pytest.mark.parametrize("table", TABLES)
+def test_tables_are_private(sql: str, table: str) -> None:
+    assert re.search(
+        rf"ALTER TABLE public\.{table} ENABLE ROW LEVEL SECURITY;",
+        sql,
+        re.IGNORECASE,
+    )
+    assert not re.search(rf"CREATE\s+POLICY[^;]*ON\s+public\.{table}", sql, re.I | re.S)
+    revoke = re.search(rf"REVOKE\s+ALL\s+ON\s+public\.{table}\s+FROM\s+([^;]+);", sql, re.I)
+    assert revoke, f"missing complete client revoke for {table}"
+    revoked_roles = {role.strip() for role in revoke.group(1).split(",")}
+    assert revoked_roles == set(PUBLIC_ROLES)
+
+
+@pytest.mark.parametrize("table", TABLES)
+def test_service_role_can_only_insert_and_read(sql: str, table: str) -> None:
+    grant = re.search(
+        rf"GRANT\s+(?P<privileges>[^;]+?)\s+ON\s+public\.{table}\s+TO\s+service_role;",
+        sql,
+        re.IGNORECASE,
+    )
+    assert grant, f"missing service_role grant for {table}"
+    privileges = {item.strip().upper() for item in grant.group("privileges").split(",")}
+    assert privileges == {"SELECT", "INSERT"}
+
+
+@pytest.mark.parametrize("table", TABLES)
+def test_mutation_rejection_trigger_guards_each_table(sql: str, table: str) -> None:
+    assert re.search(
+        rf"CREATE TRIGGER reject_{table}_mutation\s+BEFORE UPDATE OR DELETE\s+"
+        rf"ON public\.{table}",
+        sql,
+        re.IGNORECASE | re.DOTALL,
+    )
+
+
+def test_mutation_trigger_always_raises(sql: str) -> None:
+    function = re.search(
+        r"CREATE OR REPLACE FUNCTION public\.reject_olympus_provider_telemetry_mutation\(\)"
+        r".*?\$\$(?P<body>.*?)\$\$;",
+        sql,
+        re.IGNORECASE | re.DOTALL,
+    )
+    assert function
+    assert "RAISE EXCEPTION" in function.group("body").upper()

@@ -49,12 +49,41 @@ from digillm.client import (
     x_search,
 )
 from digillm.structured import resolve_model, structured_completion
+from digillm.telemetry import (
+    ArtifactRef,
+    CacheStatus,
+    CallPurpose,
+    NodeRunOutcome,
+    NodeRunRecord,
+    ProviderAttemptOutcome,
+    ProviderAttemptRecord,
+    ProviderCallOutcome,
+    ProviderCallRecord,
+    RetryReason,
+    TelemetryFailureReporter,
+    TelemetryObserver,
+    TelemetryRecord,
+    emit_telemetry,
+)
 
 __version__ = "0.1.0"
 
 __all__ = [
+    "ArtifactRef",
+    "CacheStatus",
+    "CallPurpose",
     "ChatCompletionMessage",
     "JsonSchemaResponseFormat",
+    "NodeRunOutcome",
+    "NodeRunRecord",
+    "ProviderAttemptOutcome",
+    "ProviderAttemptRecord",
+    "ProviderCallOutcome",
+    "ProviderCallRecord",
+    "RetryReason",
+    "TelemetryFailureReporter",
+    "TelemetryObserver",
+    "TelemetryRecord",
     "ToolArguments",
     "ToolCallDict",
     "ToolCallFunction",
@@ -64,6 +93,7 @@ __all__ = [
     "byok",
     "clear_caches",
     "completion",
+    "emit_telemetry",
     "get_byok",
     "get_client",
     "get_client_for_model",
