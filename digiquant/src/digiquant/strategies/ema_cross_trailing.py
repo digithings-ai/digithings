@@ -2,8 +2,8 @@
 
 from decimal import Decimal
 
-from nautilus_trader.examples.strategies.ema_cross_trailing_stop import EMACrossTrailingStop
 from nautilus_trader.examples.strategies.ema_cross_trailing_stop import (
+    EMACrossTrailingStop,
     EMACrossTrailingStopConfig,
 )
 

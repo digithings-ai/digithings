@@ -1,4 +1,4 @@
-"""Load repo ``.env`` for DigiQuant CLI scripts (Supabase credentials, etc.)."""
+"""Load repo ``.env`` for digiquant CLI scripts (Supabase credentials, etc.)."""
 
 from __future__ import annotations
 

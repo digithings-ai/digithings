@@ -9,7 +9,6 @@ Tools are grouped by agent:
 
 from __future__ import annotations
 
-from digigraph.tools.analytics.load import load_dataset
 from digigraph.tools.analytics.analysis import (
     cluster_metadata,
     correlation_matrix,
@@ -19,6 +18,7 @@ from digigraph.tools.analytics.analysis import (
     summary_stats,
 )
 from digigraph.tools.analytics.data_prep import export_dataset, filter_dataset, sample_dataset
+from digigraph.tools.analytics.load import load_dataset
 from digigraph.tools.analytics.visualization import (
     build_relationship_graph,
     entity_co_occurrence,

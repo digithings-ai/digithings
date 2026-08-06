@@ -678,7 +678,7 @@ Claude-Session: https://claude.ai/code/session_01JvfyP2WatQhVSBS45HPys2"
 
 ---
 
-## GitHub issues to file (DigiThings convention)
+## GitHub issues to file (digithings convention)
 
 This surface is a single frontend-issue's worth of work; the `Fixes #<DOCS-ARCHIVE-ISSUE>` placeholder above is one issue ("Olympus Documents — defer the archive, hand reading to Pipeline, palette cross-day search"). It depends on the **F2 / deep-link-grammar Phase 0 issue** (`buildPipelineHref`, `buildCommandItems`, nav flip) landing first. No *backend* issue originates here — the four backend issues in the spec (`weight_pct` seeding, `backtest-seed`, `thesis_id` canonicalization, `linked_market_thesis_id`) belong to Holdings/Theses/Performance, not Documents.
 

@@ -12,7 +12,7 @@ import { buildOlympusTearsheet } from '@/lib/observability-queries';
 
 const sample = buildOlympusTearsheet({
   nav: [{ date: '2026-06-23', nav: 99.32, cash_pct: 25, invested_pct: 75 }],
-  decisions: [],
+  positions: [],
   metrics: null,
   attribution: [],
 });
@@ -26,7 +26,7 @@ vi.mock('@/lib/observability-queries', async () => {
 });
 
 vi.mock('@/components/observability/AttributionTab', () => ({ default: () => null }));
-vi.mock('@/components/AtlasLoader', () => ({ default: () => null }));
+vi.mock('@/components/page-skeleton', () => ({ default: () => null }));
 
 vi.mock('react', async () => {
   const actual = await vi.importActual<typeof import('react')>('react');
@@ -54,9 +54,9 @@ beforeEach(() => {
 });
 
 describe('/portfolio/performance route', () => {
-  it('renders the OlympusTearsheetView (serif H1) once data loads', () => {
+  it('renders the persisted Performance view once data loads', () => {
     const html = renderToStaticMarkup(createElement(PerformancePage));
-    expect(html).toContain('Olympus — AI-intelligence strategy');
-    expect(html).toMatch(/Download PDF/);
+    expect(html).toContain('Performance');
+    expect(html).toContain('Download performance tear sheet as PDF');
   });
 });

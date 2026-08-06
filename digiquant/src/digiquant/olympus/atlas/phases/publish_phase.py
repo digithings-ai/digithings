@@ -35,8 +35,9 @@ class PublishDeps:
 
 
 # ``documents.category`` must satisfy the ``chk_documents_category`` CHECK
-# constraint (migration 002/011): one of synthesis, macro, asset-class, equity,
-# sector, alt-data, institutional, portfolio, delta, output, rollup, deep-dive.
+# constraint (migration 002/011/053): one of synthesis, macro, asset-class,
+# equity, sector, alt-data, institutional, portfolio, delta, output, rollup,
+# deep-dive, learning.
 # Map each segment slug to its phase's category; unmapped slugs fall back to the
 # catch-all "output". (Passing the old default "research" violated the
 # constraint and failed every publish — issue #628.)
@@ -210,6 +211,12 @@ def _carry_incomplete_snapshot(
     carried: dict[str, Any] = dict(prior_snap)
     carried["continuity"] = "carried_incomplete"
     carried["date"] = state.run_date.isoformat()
+    # Machine-readable provenance (#1559): the source date this content was carried
+    # from, uniform with the synthesis-carry path (_carry_prior_digest). JSONB column,
+    # no migration. ``prior_row`` carries the source snapshot's own date.
+    prior_date = prior_row.get("date") if isinstance(prior_row, dict) else None
+    if prior_date:
+        carried["carried_from"] = str(prior_date)
     return carried  # type: ignore[return-value]
 
 

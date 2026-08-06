@@ -7,22 +7,32 @@ tests (module-global response/client caches would otherwise mask the mock).
 from __future__ import annotations
 
 import json
-from typing import Any  # noqa: ANN401 — fake OpenAI client dict shapes
+from typing import Any  # score:allow untyped any — fake OpenAI client dict shapes
 from unittest.mock import MagicMock, patch
 
 import pytest
-from openai.types.chat import ChatCompletion, ChatCompletionMessage as OpenAIMessage
+from openai import Timeout
+from openai.types.chat import ChatCompletion
+from openai.types.chat import ChatCompletionMessage as OpenAIMessage
 from openai.types.chat.chat_completion import Choice
 from pydantic import BaseModel, ValidationError
 
 import digillm
 from digillm import client as client_mod
 
+# Every test here is offline — the OpenAI client is mocked throughout (see the module
+# docstring), so the whole file is `unit` by construction. Marking it module-wide rather
+# than per-test matches digifetch/tests and means a new test cannot forget the marker.
+# Until #1788 this file carried no marker at all, so `pytest -m unit` selected zero of its
+# tests and `make test-unit` covered none of them.
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture(autouse=True)
 def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear module-global caches and provider env vars before each test."""
     digillm.clear_caches()
+    digillm.set_usage_observer(None)
     for var in (
         "OPENAI_API_KEY",
         "OPENAI_API_BASE",
@@ -41,6 +51,7 @@ def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
     ):
         monkeypatch.delenv(var, raising=False)
     yield
+    digillm.set_usage_observer(None)
     digillm.clear_caches()
 
 
@@ -164,6 +175,87 @@ def test_register_provider(monkeypatch: pytest.MonkeyPatch) -> None:
         assert made["api_key"] == "ak-1"
     finally:
         client_mod._EXTERNAL_PROVIDERS.pop("acme", None)
+
+
+# ── Explicit request timeout (#1734) ─────────────────────────────────────────
+
+
+def _capture_client_kwargs(build: Any) -> list[dict[str, Any]]:
+    """Run ``build()`` with ``OpenAI`` patched; return the kwargs of every construction."""
+    made: list[dict[str, Any]] = []
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.append(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        build()
+    return made
+
+
+def test_default_timeout_matches_openai_sdk_default() -> None:
+    """The explicit bound must equal the SDK default it replaces, or this "hardening"
+    silently retunes every call. A bare float would widen connect from 5s to 600s."""
+    from openai._constants import DEFAULT_TIMEOUT
+
+    assert client_mod._REQUEST_TIMEOUT == DEFAULT_TIMEOUT
+    assert client_mod._REQUEST_TIMEOUT.connect == 5.0
+    assert client_mod._REQUEST_TIMEOUT.read == 600
+
+
+@pytest.mark.parametrize(
+    ("env", "build"),
+    [
+        pytest.param(
+            {"OPENAI_API_KEY": "sk-default"},
+            lambda: digillm.get_client_for_model("gpt-4o-mini"),
+            id="default-client",
+        ),
+        pytest.param(
+            {"OPENROUTER_API_KEY": "or-test"},
+            lambda: digillm.get_client_for_model("openrouter/mistral/mistral-7b"),
+            id="provider-client",
+        ),
+    ],
+)
+def test_clients_are_built_with_an_explicit_timeout(
+    monkeypatch: pytest.MonkeyPatch, env: dict[str, str], build: Any
+) -> None:
+    """Every client construction threads ``timeout=``. Without it the bound exists only
+    inside the OpenAI SDK's constants module: invisible here and free to change on a bump."""
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    sentinel = Timeout(123.0, connect=4.0)
+    # raising=False so this fails on the missing ``timeout`` kwarg (the actual defect)
+    # rather than on the missing constant, which would prove nothing about behavior.
+    monkeypatch.setattr(client_mod, "_REQUEST_TIMEOUT", sentinel, raising=False)
+    made = _capture_client_kwargs(build)
+    assert made, "expected exactly one client construction"
+    assert all(kw.get("timeout") is sentinel for kw in made), (
+        f"expected timeout={sentinel!r} on every client, got {[kw.get('timeout') for kw in made]}"
+    )
+
+
+def test_byok_clients_are_built_with_an_explicit_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The two uncached BYOK paths bypass the ``_client_cache`` branches above, so they
+    need their own coverage — a user-key client that can hang forever is the same bug."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    sentinel = Timeout(123.0, connect=4.0)
+    monkeypatch.setattr(client_mod, "_REQUEST_TIMEOUT", sentinel, raising=False)
+
+    def build() -> None:
+        with digillm.byok("sk-or-user", "https://openrouter.ai/api/v1"):
+            digillm.get_client_for_model("openrouter/openai/gpt-4o-mini")  # provider BYOK
+            digillm.get_client_for_model("gpt-4o-mini")  # default-path BYOK
+
+    made = _capture_client_kwargs(build)
+    assert len(made) == 2
+    assert all(kw.get("timeout") is sentinel for kw in made), (
+        f"expected timeout={sentinel!r} on both BYOK clients, "
+        f"got {[kw.get('timeout') for kw in made]}"
+    )
 
 
 # ── chat_completion ─────────────────────────────────────────────────────────
@@ -783,11 +875,112 @@ def test_create_with_retry_retries_then_succeeds() -> None:
     assert sleep.call_count == 1
 
 
+def test_completion_reports_transient_provider_retries() -> None:
+    from openai import APITimeoutError
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        APITimeoutError(request=MagicMock()),
+        _real_completion("recovered"),
+    ]
+    events: list[dict[str, Any]] = []
+    digillm.set_usage_observer(lambda **fields: events.append(fields))
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        patch.object(client_mod, "_sleep_transient_retry", return_value=5.0),
+    ):
+        digillm.completion("gpt-4o-mini", [{"role": "user", "content": "hi"}])
+
+    assert fake_client.chat.completions.create.call_count == 2
+    assert len(events) == 1
+    assert events[0]["retry_count"] == 1
+
+
+def test_completion_records_failed_410_fallback_retry() -> None:
+    class GoneError(RuntimeError):
+        status_code = 410
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        GoneError("live search removed"),
+        ValueError("fallback failed"),
+    ]
+    events: list[dict[str, Any]] = []
+    digillm.set_usage_observer(lambda **fields: events.append(fields))
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with pytest.raises(ValueError, match="fallback failed"):
+            digillm.completion(
+                "xai/grok-4",
+                [{"role": "user", "content": "hi"}],
+                search_parameters={"mode": "auto"},
+            )
+
+    assert fake_client.chat.completions.create.call_count == 2
+    assert len(events) == 1
+    assert events[0]["ok"] is False
+    assert events[0]["retry_count"] == 1
+
+
 def test_create_with_retry_propagates_non_transient() -> None:
     fake_client = MagicMock()
     fake_client.chat.completions.create.side_effect = ValueError("bad request")
     with pytest.raises(ValueError, match="bad request"):
         client_mod._create_with_retry(fake_client, model="m", messages=[])
+
+
+@pytest.mark.parametrize(
+    ("search_name", "expected_kind"),
+    [("web_search", "web_search"), ("x_search", "x_search")],
+)
+def test_direct_search_reports_duration(
+    monkeypatch: pytest.MonkeyPatch,
+    search_name: str,
+    expected_kind: str,
+) -> None:
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    response = MagicMock()
+    response.output_text = "Grounded [[1]](https://example.test/source)"
+    response.output = []
+    fake_client = MagicMock()
+    fake_client.responses.create.return_value = response
+    events: list[dict[str, Any]] = []
+    digillm.set_usage_observer(lambda **fields: events.append(fields))
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        patch.object(client_mod.time, "perf_counter", side_effect=[10.0, 10.125]),
+    ):
+        result = getattr(client_mod, search_name)("xai/grok-4", "latest market news")
+
+    assert result is not None
+    assert len(events) == 1
+    assert events[0]["kind"] == expected_kind
+    assert events[0]["duration_ms"] == 125
+
+
+@pytest.mark.parametrize("search_name", ["web_search", "x_search"])
+def test_direct_search_failure_reports_duration(
+    monkeypatch: pytest.MonkeyPatch,
+    search_name: str,
+) -> None:
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    fake_client = MagicMock()
+    fake_client.responses.create.side_effect = RuntimeError("provider unavailable")
+    events: list[dict[str, Any]] = []
+    digillm.set_usage_observer(lambda **fields: events.append(fields))
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        patch.object(client_mod.time, "perf_counter", side_effect=[20.0, 20.075]),
+    ):
+        result = getattr(client_mod, search_name)("xai/grok-4", "latest market news")
+
+    assert result is None
+    assert len(events) == 1
+    assert events[0]["ok"] is False
+    assert events[0]["duration_ms"] == 75
 
 
 # ── Per-request overrides (contextvars) ──────────────────────────────────────

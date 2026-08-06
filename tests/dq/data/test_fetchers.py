@@ -7,10 +7,10 @@ from unittest.mock import patch
 
 import polars as pl
 import pytest
-
 from digiquant.data.prices import OHLCV_COLUMNS
 from digiquant.data.prices.fetchers import (
     FetchResult,
+    _to_yahoo_symbol,
     fetch_batch,
     fetch_quotes,
     parse_watchlist,
@@ -74,6 +74,51 @@ def test_fetch_batch_handles_yfinance_missing_module() -> None:
     else:
         # If yfinance is installed in dev env, we just accept the call doesn't crash.
         assert isinstance(result, FetchResult)
+
+
+@pytest.mark.unit
+def test_to_yahoo_symbol_maps_share_class_dot_to_hyphen() -> None:
+    """Regression for #1754."""
+    assert _to_yahoo_symbol("BRK.B") == "BRK-B"
+    assert _to_yahoo_symbol("BF.B") == "BF-B"
+    # Identity for everything without a share-class dot.
+    for plain in ("SPY", "QQQ", "EOG", "XOP"):
+        assert _to_yahoo_symbol(plain) == plain
+
+
+@pytest.mark.unit
+def test_fetch_batch_requests_yahoo_symbol_but_keys_frames_canonically() -> None:
+    """Regression for #1754.
+
+    BRK.B had zero rows in price_history since inception because the dotted
+    canonical symbol was sent straight to Yahoo, which returns no data for it.
+    The download must use BRK-B while the caller keeps addressing BRK.B, so DB
+    rows and the Atlas sector config continue to agree.
+
+    Kept pandas-free (Polars-only rule): the download is made to fail, which
+    exercises both halves of the contract — the symbol sent over the wire, and
+    the canonical key the caller gets back — without a pandas fixture.
+    """
+    import sys as _sys
+    import types
+
+    requested: dict[str, object] = {}
+
+    def _download(tickers, **kwargs):
+        requested["tickers"] = list(tickers)
+        raise RuntimeError("network down")
+
+    stub = types.ModuleType("yfinance")
+    stub.download = _download  # type: ignore[attr-defined]
+
+    with patch.dict(_sys.modules, {"yfinance": stub}):
+        result = fetch_batch(["BRK.B", "SPY"], dry_run=False)
+
+    # The wire request uses Yahoo's hyphenated form — this is the fix.
+    assert requested["tickers"] == ["BRK-B", "SPY"]
+    # Callers keep addressing the canonical ticker, never the Yahoo alias.
+    assert set(result.errors) == {"BRK.B", "SPY"}
+    assert "BRK-B" not in result.errors
 
 
 @pytest.mark.unit

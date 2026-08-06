@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from digigraph.graph.research import (
     _coerce_symbols_from_llm,
     _parse_llm_json_object,

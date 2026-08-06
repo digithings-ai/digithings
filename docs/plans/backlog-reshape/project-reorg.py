@@ -19,6 +19,7 @@ Usage:
   python3 project-reorg.py --apply     # execute
 """
 from __future__ import annotations
+
 import json
 import subprocess
 import sys

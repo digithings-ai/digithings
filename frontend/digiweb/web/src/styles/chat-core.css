@@ -1,3 +1,4 @@
+
 /* ==========================================================================
    Chat core (@digithings/web) — the digichat turn grammar (canon §16).
    Owned by components/chat/*: <ChatTranscript> term-surface pane,
@@ -95,10 +96,17 @@
 
 /* Assistant turns flatten the heading scale — every level reads as the same
    display-face section head (the transcript, not the page, owns hierarchy). */
+/* h5/h6 are included because ChatMarkdownSource downshifts markdown headings two
+   levels (h1→h3 … h4→h6) so streamed model text cannot claim the page's <h1>.
+   Without them, a `###` in an answer would render structurally correct and
+   completely unstyled. h1/h2 stay listed for any caller that renders the
+   children path with its own heading tags. */
 .chat-md h1,
 .chat-md h2,
 .chat-md h3,
-.chat-md h4 {
+.chat-md h4,
+.chat-md h5,
+.chat-md h6 {
   margin: 0 0 0.5rem;
   font-family: var(--font-display);
   font-weight: 400;
@@ -150,6 +158,13 @@
 
 .chat-md li {
   padding-left: 0.2rem;
+}
+
+/* remark-gfm task lists carry their own checkbox; the disc from `.chat-md ul`
+   would sit beside it as a second marker. */
+.chat-md ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
 }
 
 .chat-md ul li::marker {
@@ -291,6 +306,109 @@
   color: var(--up);
 }
 
+/* ── mermaid diagram figure ───────────────────────────────────────────────
+   Same hairline box as .chat-md-code — a diagram is a fence that happened to
+   draw. Colour inside the SVG comes from mermaid themeVariables filled with
+   these same tokens (ChatMermaidBlock), so the only job here is the frame,
+   the fit, and a couple of belt-and-braces overrides for the chrome mermaid
+   emits with no theme variable of its own. */
+
+.chat-md-mermaid {
+  margin: 0.8rem 0;
+  border: 1px solid var(--hair);
+  border-radius: 9px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.chat-md-mermaid figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.chat-md-mermaid-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+/* The parse-failure caption borrows the negative-semantics token so a diagram
+   that could not be drawn says so without a second affordance. */
+.chat-md-mermaid[data-state="source"] figcaption > span:first-child {
+  color: var(--down);
+}
+
+.chat-md-mermaid-fig {
+  padding: 0.9rem;
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  animation: chat-mermaid-in 0.24s var(--ease) both;
+}
+
+.chat-md-mermaid-fig svg {
+  max-width: 100%;
+  height: auto;
+  background: transparent;
+}
+
+/* Edge labels and cluster titles are the two places mermaid still paints a
+   literal white plate under text; force them onto the surface token so the
+   light theme does not get a white patch on paper and the dark theme does not
+   get a white patch at all. */
+.chat-md-mermaid-fig .edgeLabel,
+.chat-md-mermaid-fig .edgeLabel rect,
+.chat-md-mermaid-fig .label-container {
+  fill: var(--surface);
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.chat-md-mermaid pre {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  overflow-x: auto;
+}
+
+.chat-md-mermaid code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre;
+}
+
+@keyframes chat-mermaid-in {
+  from {
+    opacity: 0;
+  }
+}
+
+
+/* ── table scroll box ─────────────────────────────────────────────────────
+   Wide GFM tables scroll inside their own box; the .chat-md table combinator
+   above still owns the type. */
+.chat-md-table {
+  margin: 0.8rem 0;
+  overflow-x: auto;
+}
+
+.chat-md-table > table {
+  margin: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chat-cursor {
     animation: none;
@@ -298,5 +416,9 @@
 
   .chat-md-copy {
     transition: none;
+  }
+
+  .chat-md-mermaid-fig {
+    animation: none;
   }
 }

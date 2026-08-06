@@ -65,7 +65,7 @@ function normalizeBase(u: string): string {
   return u.trim().replace(/\/$/, "");
 }
 
-/** Drop or fill DigiSearch URL based on DIGICHAT_ENABLED_SERVICES. */
+/** Drop or fill digisearch URL based on DIGICHAT_ENABLED_SERVICES. */
 export function withDigisearchCapability(e: EcosystemEndpoints): EcosystemEndpoints {
   const out = { ...e };
   if (!isServiceCapabilityEnabled("digisearch")) {

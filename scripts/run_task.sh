@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run_task.sh — Execute a DigiThings backlog task end-to-end in an isolated worktree.
+# run_task.sh — Execute a digithings backlog task end-to-end in an isolated worktree.
 #
 # Usage:
 #   scripts/run_task.sh ISSUE_NUMBER

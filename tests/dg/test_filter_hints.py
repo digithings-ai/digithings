@@ -6,7 +6,6 @@ import json
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.filter_hints import FilterHints, extract_filter_hints
 
 

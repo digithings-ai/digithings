@@ -17,11 +17,35 @@ describe('matrix-format', () => {
   });
 
   describe('directionStyle', () => {
-    it('gives green ▲ for bullish, red ▼ for bearish, amber ◆ for watch', () => {
-      expect(directionStyle('bullish')).toMatchObject({ text: 'text-up', glyph: '▲' });
-      expect(directionStyle('short')).toMatchObject({ text: 'text-down', glyph: '▼' });
-      expect(directionStyle('watch')).toMatchObject({ text: 'text-warn', glyph: '◆' });
+    it('gives accent ▲ for bullish, warn ▼ for bearish, neutral ◆ for watch — never P&L tokens (#1664)', () => {
+      expect(directionStyle('bullish')).toMatchObject({ text: 'text-accent', glyph: '▲' });
+      expect(directionStyle('short')).toMatchObject({ text: 'text-warn', glyph: '▼' });
+      expect(directionStyle('watch')).toMatchObject({ text: 'text-ink-mute', glyph: '◆' });
+      expect(JSON.stringify(directionStyle('bullish'))).not.toContain('-up');
+      expect(JSON.stringify(directionStyle('short'))).not.toContain('-down');
       expect(directionStyle('mixed')).toMatchObject({ text: 'text-ink-soft', glyph: '•' });
+    });
+
+    it('includes semantic-preserving hover classes for each direction', () => {
+      // Bullish: hover should brighten the same accent-themed background/border.
+      const bull = directionStyle('bullish');
+      expect(bull.hoverBg).toContain('hover:bg-accent');
+      expect(bull.hoverBorder).toContain('hover:border-accent');
+
+      // Bearish: hover should brighten the same warn-themed background/border.
+      const bear = directionStyle('bearish');
+      expect(bear.hoverBg).toContain('hover:bg-warn');
+      expect(bear.hoverBorder).toContain('hover:border-warn');
+
+      // Watch: hover should brighten the same neutral ink-themed background/border.
+      const watch = directionStyle('watch');
+      expect(watch.hoverBg).toContain('hover:bg-ink');
+      expect(watch.hoverBorder).toContain('hover:border-ink-mute');
+
+      // Neutral: hover should brighten the same ink-themed background/border.
+      const neutral = directionStyle('neutral');
+      expect(neutral.hoverBg).toContain('hover:bg-ink');
+      expect(neutral.hoverBorder).toContain('hover:border-');
     });
   });
 

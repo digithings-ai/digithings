@@ -1,5 +1,5 @@
 /**
- * Generate DigiVault notes for the API reference.
+ * Generate digivault notes for the API reference.
  *
  * Reads the same authored content + serializers that drive the /docs page
  * (single source of truth) and writes one Obsidian-style markdown note per

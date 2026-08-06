@@ -1,13 +1,13 @@
 """Atlas research search helpers (MCP-free).
 
-``search_strategies`` is the typed query surface used by the DigiSearch MCP
+``search_strategies`` is the typed query surface used by the digisearch MCP
 tool and unit tests. Keeping it out of ``mcp_server.py`` avoids importing
 ``mcp`` in stub-only test environments.
 """
 
 from __future__ import annotations
 
-from typing import Any  # noqa: ANN401 — MCP search result dicts
+from typing import Any  # score:allow untyped any — MCP search result dicts
 
 from digisearch.atlas_ingest import ATLAS_FILTERABLE_FIELDS, ATLAS_INDEX_NAME
 from digisearch.core.models import Query
@@ -54,7 +54,7 @@ def search_strategies(
     run_type: str | None = None,
     index_name: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Semantic search over the Atlas research library indexed by DigiSearch."""
+    """Semantic search over the Atlas research library indexed by digisearch."""
     idx = (index_name or ATLAS_INDEX_NAME or "atlas").strip() or "atlas"
     structured = _atlas_filters(
         date_from_ymd=date_from_ymd,

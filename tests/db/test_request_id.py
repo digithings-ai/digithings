@@ -6,9 +6,6 @@ import logging
 import re
 
 import pytest
-from fastapi import FastAPI, Request
-from fastapi.testclient import TestClient
-
 from digibase.http import (
     RequestIdLogFilter,
     current_request_id,
@@ -17,7 +14,8 @@ from digibase.http import (
     outbound_request_id_headers,
     outbound_service_headers,
 )
-
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.unit
 
@@ -110,7 +108,7 @@ def test_log_filter_picks_up_in_flight_request_id() -> None:
     captured: list[str] = []
 
     class _Capture(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:  # noqa: D401
+        def emit(self, record: logging.LogRecord) -> None:
             captured.append(getattr(record, "request_id", "MISSING"))
 
     log.addHandler(_Capture())

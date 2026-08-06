@@ -1,8 +1,8 @@
-# DigiVault – Agent guide
+# digivault – Agent guide
 
 ## Purpose
 
-DigiVault manages an Obsidian-style markdown vault: frontmatter, `[[wikilinks]]`,
+digivault manages an Obsidian-style markdown vault: frontmatter, `[[wikilinks]]`,
 backlinks, tags, and folder taxonomy. A pure-Python core library plus a thin
 FastAPI + MCP + CLI service layer. First consumer: the project documentation
 (`docs/vision/`).
@@ -35,7 +35,7 @@ FastAPI + MCP + CLI service layer. First consumer: the project documentation
 - ❌ Importing `fastapi` from `digivault/__init__.py`, `vault.py`, `frontmatter.py`, or `wikilinks.py`.
 - ❌ Returning dicts from `Vault` methods (use the models).
 - ❌ Regex-rewriting wikilinks without masking code regions (breaks examples in docs).
-- ❌ Adding standard Markdown link validation (the `[label]` + `(target)` inline form) here — that is `scripts/check_doc_links.py`'s job; DigiVault validates `[[wikilinks]]`.
+- ❌ Adding standard Markdown link validation (the `[label]` + `(target)` inline form) here — that is `scripts/check_doc_links.py`'s job; digivault validates `[[wikilinks]]`.
 
 ## Test commands
 

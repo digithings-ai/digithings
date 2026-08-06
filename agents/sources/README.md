@@ -4,7 +4,7 @@ Authoritative content for every skill, subagent, and slash command used by any c
 
 ## Why this exists
 
-DigiThings is developed with multiple coding agents in parallel — Claude Code, Cursor, GitHub Copilot, and others. Without a single source of truth, a skill authored for one tool silently drifts from the others. This directory is the *only* place these definitions live in hand-written form.
+digithings is developed with multiple coding agents in parallel — Claude Code, Cursor, GitHub Copilot, and others. Without a single source of truth, a skill authored for one tool silently drifts from the others. This directory is the *only* place these definitions live in hand-written form.
 
 ## Layout
 
@@ -40,7 +40,7 @@ CI catches drift via `scripts/agents_init.py --check` — a PR whose generated f
 | `spec-writer` | `spec-writer.md` | Emit issue bodies matching `.github/ISSUE_TEMPLATE/agent_task.yml`; invoke via `/spec`. |
 | `pr-reviewer` | `pr-reviewer.md` | Rubric-aware PR review aligned with `docs/scoring/`. |
 | `test-first-implementer` | `test-first-implementer.md` | Red/green/refactor TDD loop bound to the component test command. |
-| `security-reviewer` | `security-reviewer.md` | Focused OWASP + DigiThings-specific security sweep before PR review. |
+| `security-reviewer` | `security-reviewer.md` | Focused OWASP + digithings-specific security sweep before PR review. |
 
 ### Skills (`agents/sources/skills/`)
 

@@ -1,4 +1,4 @@
-"""LangGraph pipeline for DigiQuant: validate → backtest → optional optimize → optional export."""
+"""LangGraph pipeline for digiquant: validate → backtest → optional optimize → optional export."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from digiquant.models import BacktestResult, ExportResult, OptimizeResult, OptimizationConstraints
+from digiquant.models import BacktestResult, ExportResult, OptimizationConstraints, OptimizeResult
 from digiquant.service import service_run_backtest, service_run_export, service_run_optimize
 
 

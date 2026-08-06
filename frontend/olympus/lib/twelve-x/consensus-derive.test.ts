@@ -3,7 +3,32 @@ import {
   consensusAverageAt,
   consensusAverageSeries,
   latestConsensusAverages,
+  selectLatestCompleteConsensus,
 } from './consensus-derive';
+
+const G10 = ['USD', 'EUR', 'JPY', 'GBP', 'CHF', 'CAD', 'AUD', 'NZD', 'SEK', 'NOK'];
+
+describe('selectLatestCompleteConsensus', () => {
+  it('skips an incrementally published run in favor of the latest complete G10 run', () => {
+    const complete = G10.map((currency) => ({ run_date: '2026-07-15', currency }));
+    const partial = [{ run_date: '2026-07-16', currency: 'USD' }];
+
+    const selected = selectLatestCompleteConsensus([...complete, ...partial]);
+
+    expect(selected).toHaveLength(10);
+    expect(new Set(selected.map((row) => row.run_date))).toEqual(new Set(['2026-07-15']));
+    expect(selected.map((row) => row.currency)).toEqual(G10);
+  });
+
+  it('returns the newest partial run when no complete run exists', () => {
+    const selected = selectLatestCompleteConsensus([
+      { run_date: '2026-07-15', currency: 'EUR' },
+      { run_date: '2026-07-16', currency: 'USD' },
+    ]);
+
+    expect(selected).toEqual([{ run_date: '2026-07-16', currency: 'USD' }]);
+  });
+});
 
 describe('consensusAverageAt', () => {
   it('returns null for i<0', () => {

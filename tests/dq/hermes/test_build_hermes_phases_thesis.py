@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState
 from digiquant.olympus.hermes.graph import build_hermes_graph, build_hermes_phases_thesis
 
@@ -67,7 +66,6 @@ class TestBuildHermesPhasesThesis:
         from unittest.mock import patch
 
         from digigraph.graph.pipeline_builder import build_pipeline
-
         from digiquant.olympus.atlas.state import AtlasConfigBundle
         from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
             build_h4_opportunity_screener,

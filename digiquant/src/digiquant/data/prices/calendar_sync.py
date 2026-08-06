@@ -40,7 +40,7 @@ import logging
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 _logger = logging.getLogger(__name__)
@@ -91,7 +91,7 @@ def parse_end_spec(spec: str, *, today: date | None = None) -> date:
     runtime dependency.
     """
     if today is None:
-        today = date.today()
+        today = datetime.now(UTC).date()
     spec = spec.strip()
     if not spec:
         raise ValueError("end spec must not be empty")

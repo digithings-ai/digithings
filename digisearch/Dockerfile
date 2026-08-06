@@ -1,6 +1,6 @@
-# DigiSearch – RAG, document search for Digi ecosystem
+# digisearch – RAG, document search for Digi ecosystem
 # Build from repo root: docker compose build digisearch (context: .)
-# See digisearch/ARCHITECTURE.md. HTTP API + MCP tooling for DigiGraph.
+# See digisearch/ARCHITECTURE.md. HTTP API + MCP tooling for digigraph.
 
 FROM python:3.12-slim
 

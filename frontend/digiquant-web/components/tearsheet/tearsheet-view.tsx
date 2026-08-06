@@ -7,7 +7,7 @@
  * (equity with log/linear toggle, drawdown, dual-axis per-trade & cumulative
  * P&L — all sharing one zoom/pan time window), a returns heatmap, and the trade
  * log. "Download PDF" opens the system print dialog with a light-mode,
- * full-span export layout (all charts and tables, DigiQuant branding).
+ * full-span export layout (all charts and tables, digiquant branding).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -22,6 +22,7 @@ import {
   PRINT_FULL_VIEW,
   ReturnsMatrix,
   SegToggle,
+  TerminalMark,
   TimeSeries,
   TradeLogTable,
   TradeReturnChart,
@@ -63,10 +64,8 @@ import {
   tradesForPnlChart,
   tradesForDisplay,
 } from "./trades";
-import { type TearsheetData, type TearsheetTrade, type StrategyIndexEntry } from "./types";
-import index from "@/public/strategies/index.json";
-
-const INDEX = index as StrategyIndexEntry[];
+import { type TearsheetData, type TearsheetTrade } from "./types";
+import { fetchTearsheet } from "@/lib/live/strategies";
 
 function Toned({ v, children }: { v: number | null | undefined; children: React.ReactNode }) {
   const c = toneClass(v);
@@ -138,19 +137,16 @@ export function TearsheetView({ slug }: { slug: string }) {
   const printThemeRef = useRef<string | null>(null);
   const printTitleRef = useRef<string | null>(null);
 
-  const entry = INDEX.find((e) => e.strategy === slug);
-
   useEffect(() => {
     let alive = true;
-    const src = `/strategies/${slug}.json`;
-    fetch(src)
-      .then((r) => {
-        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-        return r.json();
+    fetchTearsheet(slug)
+      .then((d) => {
+        if (!alive) return;
+        if (d) setData(d);
+        else setErr("Could not load tearsheet data — the live store returned nothing.");
       })
-      .then((d: TearsheetData) => { if (alive) setData(d); })
       .catch((e: unknown) => {
-        if (alive) setErr(`Could not load tearsheet data (${src}): ${e instanceof Error ? e.message : String(e)}`);
+        if (alive) setErr(`Could not load tearsheet data: ${e instanceof Error ? e.message : String(e)}`);
       });
     return () => { alive = false; };
   }, [slug]);
@@ -211,13 +207,13 @@ export function TearsheetView({ slug }: { slug: string }) {
   const chartTab = chartTabPick ?? (hasPrice ? "price" : "equity");
 
   useEffect(() => {
-    const sheetTitle = strategyDisplayName(slug, entry?.label);
+    const sheetTitle = strategyDisplayName(slug, data?.label);
     const onBeforePrint = () => {
       printThemeRef.current = document.documentElement.getAttribute("data-theme");
       printTitleRef.current = document.title;
       document.documentElement.setAttribute("data-theme", "light");
       document.documentElement.classList.add("ts-printing");
-      document.title = `${sheetTitle} — DigiQuant`;
+      document.title = `${sheetTitle} — digiquant`;
       setPrinting(true);
     };
     const onAfterPrint = () => {
@@ -234,7 +230,7 @@ export function TearsheetView({ slug }: { slug: string }) {
       window.removeEventListener("beforeprint", onBeforePrint);
       window.removeEventListener("afterprint", onAfterPrint);
     };
-  }, [slug, entry?.label]);
+  }, [slug, data?.label]);
 
   const avgTrade = useMemo(() => avgTradePct(data ? data.trades.map((t) => t.pnl_pct) : []), [data]);
 
@@ -286,7 +282,7 @@ export function TearsheetView({ slug }: { slug: string }) {
   if (err) return <p className="ts-status ts-status-error">{err}</p>;
   if (!data) return <p className="ts-status">Loading tearsheet…</p>;
 
-  const title = strategyDisplayName(slug, entry?.label);
+  const title = strategyDisplayName(slug, data?.label);
   const asset = symbolBase(data.symbol);
   const cagr = cagrPct(data.initial_capital, data.final_equity, data.period_start, data.period_end);
 
@@ -294,7 +290,7 @@ export function TearsheetView({ slug }: { slug: string }) {
   const chartScale = printing ? "linear" : scale;
 
   const handlePrint = () => {
-    runTearsheetPrint({ documentTitle: `${title} — DigiQuant`, setPrinting });
+    runTearsheetPrint({ documentTitle: `${title} — digiquant`, setPrinting });
   };
 
   const zoomed = !viewsNear(view, presetView);
@@ -349,7 +345,10 @@ export function TearsheetView({ slug }: { slug: string }) {
   return (
     <div className="ts-print-root">
       <div className="ts-print-brand" aria-hidden="true">
-        <img src="/favicon-qr-mark-dark.svg" alt="" width={22} height={22} className="ts-print-brand-mark" />
+        {/* The mark, not an <img>: the old QR tile was hardcoded to the dark
+            variant with no theme switch, so it printed a black square. In
+            currentColor it follows the print ink like the word beside it. */}
+        <TerminalMark size={22} variant="compact" className="ts-print-brand-mark" />
         <span className="ts-print-brand-word">digiquant</span>
         <a className="ts-print-brand-link" href="https://digiquant.io">digiquant.io</a>
       </div>

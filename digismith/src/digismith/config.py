@@ -43,7 +43,7 @@ def langsmith_host_sanitized() -> str | None:
 class SmithStatus(BaseModel):
     """Public status for GET /v1/status."""
 
-    version: str = Field(description="DigiSmith package version")
+    version: str = Field(description="digismith package version")
     tracing_configured: bool = Field(
         description="LangSmith tracing would activate (key + langsmith installed)"
     )

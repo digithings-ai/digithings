@@ -29,8 +29,8 @@ flowchart TD
   D1[D1 Olympus flatten]
   D2[D2 twelve-x polish]
   D3[D3 subpage chrome docs]
-  D4[D4 DigiChat marketing]
-  I240[#240 DigiChat tokens]
+  D4[D4 digichat marketing]
+  I240[#240 digichat tokens]
   E8[E8 COPY_GUIDE]
   E2[E2 ClosingCtaBand]
   E1[E1 HorizontalScrollBand]
@@ -115,7 +115,7 @@ flowchart TD
 | Issue | Relationship |
 |-------|----------------|
 | #235 | Parent design-system epic (tokens, surfaces) — this epic extends with reference-driven primitives |
-| #240 | DigiChat token adoption — prerequisite for D4 |
+| #240 | digichat token adoption — prerequisite for D4 |
 | #1195 | Hoist landing primitives — should land before or with Phase B |
 | #9 | digiquant.io stand-up — largely done; C-phase issues evolve the landing |
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# set_project_fields.sh — bulk-set Phase/Area/Kind/Priority/Model on DigiThings GitHub Project items.
+# set_project_fields.sh — bulk-set Phase/Area/Kind/Priority/Model on digithings GitHub Project items.
 #
 # Usage:
 #   scripts/set_project_fields.sh [--tsv PATH] [--owner OWNER] [--project NUM]
@@ -10,7 +10,7 @@
 #
 #   issue<TAB>phase<TAB>area<TAB>kind<TAB>priority<TAB>model
 #   2<TAB>Phase 2 — Hardening<TAB>Cross-cutting<TAB>Epic<TAB>P0<TAB>sonnet
-#   42<TAB>Phase 2 — Hardening<TAB>DigiQuant<TAB>Bug<TAB>P0<TAB>opus
+#   42<TAB>Phase 2 — Hardening<TAB>digiquant<TAB>Bug<TAB>P0<TAB>opus
 #
 # Field/option names must match the Project's configuration exactly (em-dash, etc.).
 # Re-runs are idempotent — rows can be added/edited and the script rerun safely.

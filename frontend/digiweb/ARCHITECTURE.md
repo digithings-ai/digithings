@@ -48,7 +48,7 @@ print-grade SVG tearsheet grammar (`.ts-*`) promoted from
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
-| `finance-tearsheet` | CandlestickChart (trade entry/exit markers + hover cards), TimeSeries, SignedBars, TradeReturnChart (linear/log/symlog scales; one shared normalized `ViewWindow` synced across charts; `LOOKBACK_OPTIONS`/`viewWindowForPreset`/`matchLookbackPreset`), ReturnsMatrix (3 metrics × 3 periods — THE matrix grammar), KpiStrip/Kpi, TradeLogTable/DirectionPill (ReactNode cells, open-row state), TearsheetCard(+Kpis/Kpi) anchor dress, LiveBadge, `runTearsheetPrint`/`PRINT_FULL_VIEW` (flushSync + `window.print` PDF pipeline), format/tone helpers, `TEARSHEET_DEMO` | `./styles/finance-tearsheet.css` (self-layering; the ENTIRE `@media print` grammar lives here, unlayered — the family's differentiator) |
+| `finance-tearsheet` | CandlestickChart (trade entry/exit markers + hover cards), TimeSeries, SignedBars, TradeReturnChart, ContributionReturnChart (signed cumulative contribution bars + exact portfolio-return line; linear/log/symlog scales; one shared normalized `ViewWindow` synced across interactive series charts; `LOOKBACK_OPTIONS`/`viewWindowForPreset`/`matchLookbackPreset`), ReturnsMatrix (3 metrics × 3 periods — THE matrix grammar), KpiStrip/Kpi, TradeLogTable/DirectionPill (ReactNode cells, open-row state), TearsheetCard(+Kpis/Kpi) anchor dress, LiveBadge, `runTearsheetPrint`/`PRINT_FULL_VIEW` (flushSync + `window.print` PDF pipeline), format/tone helpers, `TEARSHEET_DEMO` | `./styles/finance-tearsheet.css` (self-layering; the ENTIRE `@media print` grammar lives here, unlayered — the family's differentiator) |
 
 Engine ruling: canvas families are for screen-only dashboards; any surface
 with a PDF export composes finance-tearsheet — see [CHARTS.md](CHARTS.md).
@@ -72,6 +72,14 @@ the dashboard sub-nav chip row, which may flex-wrap; the ink follows across
 rows), takes `ReactNode` labels, and accepts `linkPanels={false}` to omit
 `aria-controls` when the consumer owns no panel ids (wrapper-adaption cases
 like olympus's subpage tab bar).
+
+Page-level dashboard composition is specified by
+`reference/components/dashboard-workspace-reference.tsx` on the Finance page.
+Its `dw-*` grammar is deliberately reference-only: a command band establishes
+one primary state, compact metrics add context, and a flat hairline ledger owns
+the working detail. Product apps adapt that composition around their own data
+and interactions rather than introducing generic cards or duplicating existing
+controls such as `TabStrip`, `SegmentedControl`, `Sheet`, and `EmptyState`.
 
 Since the canon migration (#1399, 2026-07): apps declare **no local `@theme`
 block** — `web-theme.css` is the one bridge (its `inline` semantics keep scoped
@@ -127,6 +135,60 @@ The generator derives structure (name, path, family) from the filesystem and
 the family a component is imported into, and the `summary` from the leading
 `/** … */` docblock. Components without a docblock appear with `summary: null` —
 the generator prints the coverage so gaps are visible and easy to backfill.
+
+## Brand identity — the terminal marks
+
+`@digithings/web` `components/symbols/terminal-marks.tsx` is the canonical
+identity; `reference/components/symbols/terminal-marks.tsx` re-exports it as the
+specimen. Three components, each matching the weight of the surface it imitates:
+
+| export | form | weight | use |
+|--------|------|--------|-----|
+| `TerminalMark` | outlined SVG paths + a `<rect>` cursor | 400 | the mark. `variant="full"` is `digi` + cursor; `variant="compact"` is the `d` reduction |
+| `TerminalWordmark` | text, token-backed utilities | 400 | the default wordmark |
+| `HairlineWordmark` | outlined SVG, stroked | 500 | display only, replicating the footer colophon |
+
+Three constraints that fail silently if broken:
+
+- **The mark and hairline are outlined paths, not text.** The mark because the
+  same artwork is the favicon source and must not depend on a loaded font; the
+  hairline because its overlapping contours are the design. `TerminalWordmark`
+  is deliberately text — it is plain mono at tracking 0 with nothing to preserve,
+  so outlining would ship ~9 KB of path data for a glyph-identical result.
+- **The hairline's contours are left overlapping and un-booleaned**, outlined
+  from the *variable* font. Stroked, those overlaps give the `t` its crossing
+  grid and the `d`/`i` their stem spurs. Never run a boolean union, a "remove
+  overlap", or an SVG "simplify paths" pass over that data, and never regenerate
+  it from a static cut — a static `t` has one merged contour where the variable
+  font has two, and the crossings vanish with no error.
+- **Each register has a floor.** `variant="full"` closes up below ~64px, so
+  chrome uses `compact`. The hairline's stroke scales with the art, so its floor
+  is on the em (~173px): for `digithings` that is a ~1036px rendered width before
+  the stroke reaches one device pixel. Below that use `TerminalWordmark`; do not
+  shrink the hairline to fit.
+
+Weight 400 is not a style choice — `.term-body`, `.term-title`, `.cmdline` and
+`.app-input-field` set no `font-weight` and inherit `body { font-weight: 400 }`
+(`design/site/site.css`), so 400 *is* terminal text. The hairline sits at 500
+because `.colo-word` does.
+
+Favicons are the `compact` mark baked into a tile with its own background — the
+one place a mark cannot inherit ink — wired through `metadata.icons` with
+`prefers-color-scheme` queries. Neither marketing site uses an `app/icon.svg`:
+that Next.js file convention overrides `metadata.icons` and would drop the
+queries silently.
+
+Each product app also owns explicit 32px fallback, 180px Apple touch, and
+192/512px web-app PNGs plus a maskable 512px variant. DigiThings and DigiQuant
+use the compact terminal mark; Olympus uses the canonical four-stroke mark.
+Tab and Apple metadata publish light/dark pairs with media queries. Web App
+Manifest icons use one contrast-safe default because installed icons are cached
+by the operating system and the manifest standard has no live colour-scheme
+selector; changing those assets requires removing and reinstalling the shortcut.
+
+The older text `Wordmark` (`symbols/marks.tsx`) and `Colophon`
+(`components/chrome.tsx`) are superseded for new work but not retired — the
+surfaces already using them still do.
 
 ## The `digiweb` skill — the routing contract
 

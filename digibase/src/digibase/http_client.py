@@ -1,7 +1,7 @@
 """Bounded-timeout ``httpx`` client helpers.
 
 Centralizes the default timeout envelope used for every service-to-service
-HTTP call across the DigiThings monorepo. Bare ``httpx.AsyncClient()`` and
+HTTP call across the digithings monorepo. Bare ``httpx.AsyncClient()`` and
 ``httpx.Client()`` constructions wait *forever* on a slow upstream (LLM,
 broker, vector store), which is unacceptable for production request-path
 code. This module provides thin factory helpers that preload a sensible

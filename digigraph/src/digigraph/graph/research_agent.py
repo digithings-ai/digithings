@@ -6,12 +6,12 @@ filter, citation discipline) lives in this module. The *what* (which sector,
 which data sources, which output schema) is injected per call as
 ``skill_text`` + ``output_model``.
 
-This lets sub-graphs — notably DigiQuant Atlas (#176/#177) — compose research
+This lets sub-graphs — notably digiquant Atlas (#176/#177) — compose research
 pipelines from declarative phase configs without re-authoring a prompt per
 segment. The module stays generic: no Atlas-specific vocabulary here.
 
 The existing ``digigraph.graph.research`` node is the RAG/tool-loop research
-node invoked by the DigiGraph supervisor; it is a different concern and is
+node invoked by the digigraph supervisor; it is a different concern and is
 not touched.
 """
 
@@ -20,14 +20,16 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 
 # The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
 # gate flags unscoped `Any` imports. Here Any matches heterogeneous LLM
 # message content-part dicts used by LiteLLM / OpenAI clients.
-from typing import Any, Callable, TypeVar  # noqa  # scored-lint suppression
+from typing import Any, Callable, TypeVar  # score:allow untyped any — scored-lint suppression
 
 from pydantic import BaseModel, ValidationError
 
+from digigraph import usage as _usage
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
@@ -217,16 +219,42 @@ def run_research_agent(
         max_tokens: Maximum output tokens for the completion. None (default) lets
             the provider use its own limit — no cap is imposed on the response.
         tools: Optional function-tool definitions. When supplied with
-            ``execute_tool``, the agent runs a tool-calling loop
-            (``run_tools``) so it can ground itself on real data
-            before emitting the final JSON, which is still validated against
-            ``output_model``. ``response_format`` is not used on this path (tools
-            and json_schema are mutually exclusive in one API call).
+            ``execute_tool``, the *first* attempt runs a tool-calling loop
+            (``run_tools``) so it can ground itself on real data before emitting
+            the final JSON, which is still validated against ``output_model``.
+            ``response_format`` is not sent on that first attempt (tools and
+            json_schema are mutually exclusive in one API call — ``digillm``'s
+            ``completion`` drops ``response_format`` whenever ``tools`` is set).
+            Every *retry* after a parse/validation failure therefore drops the
+            tools and goes down the ``completion_text`` path **with**
+            ``response_format`` — see "Tool-path retry" below.
         execute_tool: Dispatcher ``(name, args) -> json_str`` bound to the tools.
             Required for the tool path; ignored when ``tools`` is empty.
         search_parameters: Optional xAI Live Search descriptor, forwarded via
             ``extra_body`` for xAI models (no-op otherwise). Applies on both the
             tool and the structured-output paths.
+
+    Tool-path retry (#1739):
+        A tool-grounded turn gets **no** provider-side schema enforcement, so a
+        chatty model can answer with a prose preamble and fail ``json.loads`` at
+        char 0 (observed 31/39 H6 deliberations on 2026-07-31). The retry is
+        therefore *tool-free and enforced* rather than a second tool loop:
+
+        - ``digillm.run_tools`` builds its tool-result conversation in a local
+          copy and returns only the final string, so the tool results never reach
+          ``messages`` here. Re-running the loop would re-bill 2-6 completions to
+          rebuild grounding this function cannot see, and would *still* carry no
+          ``response_format``.
+        - The failing attempt's raw text is already appended to ``messages`` below,
+          so a single tool-free ``completion_text`` call with ``response_format``
+          asks the provider to re-emit that same content as schema-valid JSON. One
+          completion instead of 2-6, and enforcement where there was none.
+
+        Narrow tradeoff, stated plainly: when the tool attempt returns an *empty*
+        body rather than prose there is no content to reformat, and the retry gives
+        up the chance to re-ground with real data in exchange for a much higher
+        chance of schema-valid output. The observed failure mode is prose, not
+        empty, and that case strictly improves.
 
     Provider notes:
         ``response_format=json_schema`` is passed to the API call so that providers
@@ -267,63 +295,110 @@ def run_research_agent(
         {"role": "user", "content": content_parts},
     ]
 
-    last_error: Exception | None = None
-    for attempt in range(max_retries + 1):
-        # Live Search is first-round-only *within* one tool loop; a validation retry
-        # re-runs the loop, so worst case is (max_retries + 1) searches per phase.
-        if tools and execute_tool is not None:
-            raw = run_tools(
-                effective_model,
-                messages,
-                tools=tools,
-                execute_tool=execute_tool,
-                temperature=temperature,
-                search_parameters=search_parameters,
-            )
-        else:
-            raw = completion_text(
-                effective_model,
-                messages,
-                temperature=temperature,
-                response_format=response_format,
-                max_tokens=max_tokens,
-                search_parameters=search_parameters,
-            )
+    def traced_execute_tool(name: str, arguments: dict[str, Any]) -> str:
+        assert execute_tool is not None
+        started = time.perf_counter()
         try:
-            # Guard empty/whitespace before json.loads: an empty body from the provider
-            # (openrouter/auto under high cost_quality_tradeoff + 25-analyst fan-out) surfaces
-            # as raw="" here. Let it fail with a clear ValueError so the retry/fail-soft path
-            # can diagnose and handle it — a bare json.loads("") raises JSONDecodeError with a
-            # generic message that buries the real cause in the logs (#814).
-            stripped = _strip_json_fence(raw or "")
-            if not stripped:
-                raise ValueError(
-                    f"empty LLM response from {effective_model!r} "
-                    f"(attempt {attempt + 1}/{max_retries + 1})"
-                )
-            data = json.loads(stripped)
-            return output_model.model_validate(data)
-        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            last_error = exc
-            logger.warning(
-                "research_agent attempt %d/%d failed for %s: %s",
-                attempt + 1,
-                max_retries + 1,
-                schema_name,
-                exc,
+            result = execute_tool(name, arguments)
+        except BaseException:
+            _usage.record_tool_call(
+                name=name,
+                arguments=arguments,
+                duration_ms=round((time.perf_counter() - started) * 1000),
+                ok=False,
+                phase=phase_slug,
+                operation=schema_name,
             )
-            if attempt == max_retries:
-                break
-            messages = messages + [
-                {"role": "assistant", "content": raw or ""},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Your previous response did not validate against {schema_name}. "
-                        f"Error: {exc}\n\nRe-emit a single JSON object that validates. "
-                        f"No prose, no code fences."
-                    ),
-                },
-            ]
+            raise
+        _usage.record_tool_call(
+            name=name,
+            arguments=arguments,
+            result=result,
+            duration_ms=round((time.perf_counter() - started) * 1000),
+            phase=phase_slug,
+            operation=schema_name,
+        )
+        return result
+
+    last_error: Exception | None = None
+    tool_grounded = bool(tools) and execute_tool is not None
+    with _usage.call_context(phase=phase_slug, operation=schema_name):
+        for attempt in range(max_retries + 1):
+            # Only the FIRST attempt runs the tool loop. Retries drop the tools so that
+            # ``response_format`` survives into the request (#1739) — see "Tool-path retry".
+            if tool_grounded and attempt == 0:
+                raw = run_tools(
+                    effective_model,
+                    messages,
+                    tools=tools,
+                    execute_tool=traced_execute_tool,
+                    temperature=temperature,
+                    search_parameters=search_parameters,
+                )
+            else:
+                try:
+                    raw = completion_text(
+                        effective_model,
+                        messages,
+                        temperature=temperature,
+                        response_format=response_format,
+                        max_tokens=max_tokens,
+                        search_parameters=search_parameters,
+                    )
+                except Exception:
+                    # Never-worse-than-today guarantee. ``last_error`` is set only on a retry,
+                    # i.e. only once a prior attempt already produced an unusable body. If the
+                    # enforced retry itself fails at the provider we surface that ORIGINAL parse
+                    # error, so callers (Atlas/Hermes fail-soft, which key off the parse error)
+                    # see exactly the exception they would have seen before this change. Bare
+                    # ``Exception`` is deliberate: the guarantee is "any failure degrades to the
+                    # prior error", which a narrower tuple would not deliver — an un-enumerated
+                    # provider error would escape as a brand-new failure class. On attempt 0 of
+                    # the tool-free path ``last_error`` is None and the error propagates as-is.
+                    if last_error is None:
+                        raise
+                    logger.warning(
+                        "research_agent enforced retry failed at the provider for %s; "
+                        "re-raising the original parse failure",
+                        schema_name,
+                        exc_info=True,
+                    )
+                    raise last_error from None
+            try:
+                # Guard empty/whitespace before json.loads: an empty body from the provider
+                # (openrouter/auto under high cost_quality_tradeoff + 25-analyst fan-out) surfaces
+                # as raw="" here. Let it fail with a clear ValueError so the retry/fail-soft path
+                # can diagnose and handle it — a bare json.loads("") raises JSONDecodeError with a
+                # generic message that buries the real cause in the logs (#814).
+                stripped = _strip_json_fence(raw or "")
+                if not stripped:
+                    raise ValueError(
+                        f"empty LLM response from {effective_model!r} "
+                        f"(attempt {attempt + 1}/{max_retries + 1})"
+                    )
+                data = json.loads(stripped)
+                return output_model.model_validate(data)
+            except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+                last_error = exc
+                logger.warning(
+                    "research_agent attempt %d/%d failed for %s: %s",
+                    attempt + 1,
+                    max_retries + 1,
+                    schema_name,
+                    exc,
+                )
+                if attempt == max_retries:
+                    break
+                messages = messages + [
+                    {"role": "assistant", "content": raw or ""},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Your previous response did not validate against {schema_name}. "
+                            f"Error: {exc}\n\nRe-emit a single JSON object that validates. "
+                            f"No prose, no code fences."
+                        ),
+                    },
+                ]
     assert last_error is not None  # loop always records on failure
     raise last_error

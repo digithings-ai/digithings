@@ -1,10 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { NAV, isDbExempt } from './nav';
 
 describe('NAV', () => {
-  it('is the 4-destination owner spine, in order', () => {
-    expect(NAV.map((n) => n.href)).toEqual(['/', '/portfolio', '/pipeline', '/system']);
-    expect(NAV.map((n) => n.label)).toEqual(['Brief', 'Portfolio', 'Pipeline', 'System']);
+  it('is the 5-destination owner spine, in order (FX Hub permanent since #1664)', () => {
+    expect(NAV.map((n) => n.href)).toEqual(['/', '/portfolio', '/pipeline', '/twelve-x', '/system']);
+    expect(NAV.map((n) => n.label)).toEqual(['Brief', 'Portfolio', 'Pipeline', 'FX Hub', 'System']);
+    expect(NAV.find((n) => n.href === '/twelve-x')?.demoted).toBeUndefined();
   });
 
   it('demotes only System', () => {
@@ -27,6 +28,8 @@ describe('isDbExempt', () => {
     expect(isDbExempt('/research')).toBe(true);
     expect(isDbExempt('/strategy')).toBe(true);
     expect(isDbExempt('/portfolio/theses')).toBe(true);
+    // twelve-x gates itself on its own research feed, not the main backend (#1664)
+    expect(isDbExempt('/twelve-x')).toBe(true);
   });
 
   it('matches nested paths under an exempt prefix', () => {

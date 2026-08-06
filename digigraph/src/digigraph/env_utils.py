@@ -1,4 +1,4 @@
-"""Shared environment-variable substitution helper for DigiGraph.
+"""Shared environment-variable substitution helper for digigraph.
 
 Resolves ``${VAR}`` and ``${VAR:-default}`` references in strings and arbitrarily
 nested dicts/lists.

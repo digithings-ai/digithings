@@ -1,4 +1,4 @@
-"""DigiFetch — the shared web-scraping / headless-fetch engine for DigiThings.
+"""digifetch — the shared web-scraping / headless-fetch engine for digithings.
 
 A standalone **library** (no FastAPI, no port, no service coupling) extracting
 the *reusable* parts of twelve-x's scrapers: headless-browser session lifecycle,
@@ -91,7 +91,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str) -> Any:  # noqa: ANN401 — PEP 562 lazy re-export shim
+def __getattr__(name: str) -> Any:  # PEP 562 lazy re-export shim
     """Resolve browser-seam symbols lazily (PEP 562).
 
     Keeps ``import digifetch`` free of any browser import while still letting

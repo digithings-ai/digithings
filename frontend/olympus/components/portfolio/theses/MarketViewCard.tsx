@@ -39,7 +39,7 @@ export function MarketViewCard({
           {thesis.name}
         </h3>
         {isNonActive(thesis.status) ? (
-          <span className="shrink-0 rounded-full border border-warn/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-warn">
+          <span className="shrink-0 rounded-full border border-warn/40 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-warn">
             {thesis.status}
           </span>
         ) : null}
@@ -51,7 +51,7 @@ export function MarketViewCard({
           <span className="text-xs text-ink-mute tabular-nums">{confidenceLabel}</span>
         </div>
         {thesis.horizon ? (
-          <span className="rounded-md border border-hair px-2 py-0.5 text-[11px] text-ink-soft">
+          <span className="rounded-md border border-hair px-2 py-0.5 text-xs text-ink-soft">
             {thesis.horizon}
           </span>
         ) : null}

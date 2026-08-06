@@ -1,4 +1,4 @@
-"""DigiKey scope policy for DigiVault routes.
+"""digikey scope policy for digivault routes.
 
 Defined here (not in ``digikey``) so the auth plane stays untouched — the
 middleware accepts any ``(method, path) -> scopes | None`` function. Reads need

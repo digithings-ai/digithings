@@ -25,7 +25,7 @@ export function OperatorControls() {
         <ul className="space-y-1.5">
           {FLAGS.map((f) => (
             <li key={f.flag} className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
-              <code className="shrink-0 font-mono text-xs text-[var(--accent)]">{f.flag}</code>
+              <code className="shrink-0 font-mono text-xs text-accent">{f.flag}</code>
               <span className="text-ink-mute">{f.desc}</span>
             </li>
           ))}

@@ -31,8 +31,8 @@ docker compose --profile heartbeat up -d heartbeat
 ```
 
 ## Configuration
-- `DIGIGRAPH_URL`: DigiGraph base URL for health checks.
-- `DIGIQUANT_URL`: DigiQuant base URL for health + drift checks.
+- `DIGIGRAPH_URL`: digigraph base URL for health checks.
+- `DIGIQUANT_URL`: digiquant base URL for health + drift checks.
 - `DIGICLAW_DIGIKEY_API_KEY`: Key (digiquant:backtest+optimize) for auth-gated drift checks.
 - `AUDIT_LOG_PATH` (default `digiquant/results/audit/events.jsonl`): Append-only JSONL audit destination.
 - `REOPTIMIZE_STRATEGY` (default `mean_reversion_tech`): Strategy id for the drift check.

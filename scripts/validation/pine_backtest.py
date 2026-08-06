@@ -34,8 +34,9 @@ _SRC = Path(__file__).resolve().parents[2] / "digiquant" / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from digiquant.indicators import BollingerBands, DPSDTrend, RollingADF, RSI, make_ma  # noqa: E402
+from digiquant.indicators import RSI, BollingerBands, DPSDTrend, RollingADF, make_ma  # noqa: E402
 from digiquant.indicators.ma import VWMA  # noqa: E402
+
 # Param resolution: prefer the registry (when nautilus is importable); otherwise
 # read the calibration JSON directly so the Pine-faithful backtester still runs in
 # non-Nautilus envs. No proprietary calibration values are hardcoded in this tracked
@@ -53,7 +54,7 @@ def _load_calibrations() -> dict[str, dict]:
 
 _FALLBACK_PARAMS: dict[str, dict] = _load_calibrations()
 try:
-    from digiquant.strategies.registry import _REGISTRY  # noqa: PLC0415
+    from digiquant.strategies.registry import _REGISTRY
 except ImportError:
     _REGISTRY = {}  # type: ignore[assignment]
 

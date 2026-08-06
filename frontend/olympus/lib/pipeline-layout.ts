@@ -13,6 +13,26 @@ export interface LaidOutNode {
   width: number;
   height: number;
   documentKey?: string;
+  /** Backend runs this step in-state only — it never publishes a document (see SubStep.stateOnly). */
+  stateOnly?: boolean;
+  runStatus?: PipelineNodeRunStatus;
+}
+
+export type PipelineNodeRunStatus =
+  | 'stage-overview'
+  | 'not-run'
+  | 'state-only'
+  | 'persisted-artifact'
+  | 'expected-artifact-missing'
+  | 'parallel-dispatch';
+
+export function pipelineNodeRunStatusLabel(status: PipelineNodeRunStatus): string {
+  if (status === 'stage-overview') return 'Stage overview';
+  if (status === 'not-run') return 'Not run';
+  if (status === 'state-only') return 'State-only operation';
+  if (status === 'persisted-artifact') return 'Persisted artifact';
+  if (status === 'expected-artifact-missing') return 'Expected artifact missing';
+  return 'Parallel dispatch';
 }
 
 export interface Connector { fromId: string; toId: string; active?: boolean; }
@@ -38,14 +58,24 @@ const BASE_Y = 0;
 /**
  * Resolve a leaf sub-step's document_key, honouring the golden rule: only
  * return a key that is actually present in this day's documents. `commit` is
- * special-cased — there can be several `commit-run/{run_id}` keys per day, so
- * we pick the present ones and default to the lexicographically-last. `digest`
- * is special-cased too — it's published as `digest` on baseline days and
- * `digest-delta` on delta days (see `resolvePresentDigestKey`).
+ * special-cased — there can be several `commit-run/{run_id}` keys per day
+ * (CI outer retries mint a new GITHUB_RUN_ID each attempt), so we pick the
+ * newest by numeric run_id — lexicographic order is wrong across digit-length
+ * boundaries ('9999999999' > '10000000000'). `digest` is special-cased too —
+ * it's published as `digest` on baseline days and `digest-delta` on delta
+ * days (see `resolvePresentDigestKey`).
  */
 function resolveLeafDocumentKey(subStepId: string, day: PipelineDayData): string | undefined {
   if (subStepId === 'commit') {
-    const runs = [...day.presentKeys].filter((k) => k.startsWith('commit-run/')).sort();
+    const runId = (k: string) => Number.parseInt(k.slice('commit-run/'.length), 10);
+    const runs = [...day.presentKeys]
+      .filter((k) => k.startsWith('commit-run/'))
+      .sort((a, b) => {
+        const na = runId(a);
+        const nb = runId(b);
+        if (Number.isNaN(na) || Number.isNaN(nb)) return a.localeCompare(b);
+        return na - nb;
+      });
     return runs.length > 0 ? runs[runs.length - 1] : undefined;
   }
   if (subStepId === 'digest') {
@@ -70,6 +100,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
   const connectors: Connector[] = [];
   let cursorX = 0;
   let maxY = NODE_H;
+  const runRecorded = day.runRecorded ?? day.presentKeys.size > 0;
 
   for (const stage of PIPELINE_TOPOLOGY) {
     const stageExpanded = expansion.expandedStages.has(stage.id);
@@ -85,6 +116,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
         y: BASE_Y,
         width: NODE_W,
         height: NODE_H,
+        runStatus: runRecorded ? 'stage-overview' : 'not-run',
       });
       if (nodes.length > 1) {
         connectors.push({ fromId: nodes[nodes.length - 2].id, toId: stageNodeId });
@@ -105,6 +137,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
         y: BASE_Y,
         width: NODE_W,
         height: NODE_H,
+        runStatus: runRecorded ? 'stage-overview' : 'not-run',
       });
       if (nodes.length > 1) {
         const prevStageNode = nodes.find(
@@ -121,8 +154,25 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
         const fanoutExpanded = expansion.expandedFanouts.has(fanoutKey);
         const subX = cursorX;
 
-        // Leaf sub-steps (no fan-out) carry a document_key when it's present today.
-        const leafKey = sub.fanout ? undefined : resolveLeafDocumentKey(sub.id, day);
+        // Leaf sub-steps (no fan-out) carry a document_key when it's present
+        // today. State-only steps never resolve one — the backend runs them
+        // but publishes nothing (thesis framing, screener, consolidate, preflight).
+        const leafKey =
+          sub.fanout || sub.stateOnly ? undefined : resolveLeafDocumentKey(sub.id, day);
+        const fanoutKeys = sub.fanout ? day.fanoutKeys[sub.fanout.id] ?? [] : [];
+        const runStatus: PipelineNodeRunStatus = !runRecorded
+          ? 'not-run'
+          : sub.stateOnly
+            ? 'state-only'
+            : sub.fanout
+              ? fanoutKeys.length > 0 || sub.fanout.defaultCount === 0
+                ? 'parallel-dispatch'
+                : 'expected-artifact-missing'
+              : leafKey
+                ? 'persisted-artifact'
+                : sub.conditionalArtifact
+                  ? 'not-run'
+                  : 'expected-artifact-missing';
 
         nodes.push({
           id: subId,
@@ -134,6 +184,8 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
           width: NODE_W,
           height: NODE_H,
           documentKey: leafKey,
+          stateOnly: sub.stateOnly,
+          runStatus,
         });
         // Sequential connectors inside an expanded stage are "active" (the
         // expanded stage's own internal flow), so they read in cyan on top.
@@ -158,6 +210,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
                 width: NODE_W,
                 height: NODE_H,
                 documentKey,
+                runStatus: 'persisted-artifact',
               });
               // Fan-out branch connectors flow out of an expanded fan-out.
               connectors.push({ fromId: subId, toId: branchId, active: true });
@@ -179,6 +232,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
                 y: branchY,
                 width: NODE_W,
                 height: NODE_H,
+                runStatus: runRecorded ? 'expected-artifact-missing' : 'not-run',
               });
               connectors.push({ fromId: subId, toId: branchId, active: true });
               if (branchY + NODE_H > maxY) maxY = branchY + NODE_H;

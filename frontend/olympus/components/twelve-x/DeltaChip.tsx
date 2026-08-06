@@ -35,7 +35,7 @@ export default function DeltaChip({ delta, decimals = 2, isNew, className }: Del
   const isUp = value > 0.005;
   const isDown = value < -0.005;
   const glyph = isUp ? '▲' : isDown ? '▼' : '■';
-  const tone = isUp ? 'text-up' : isDown ? 'text-down' : 'text-ink-mute';
+  const tone = isUp ? 'text-accent' : isDown ? 'text-warn' : 'text-ink-mute';
   const sign = isUp ? '+' : '';
   const label = `${glyph}${sign}${value.toFixed(decimals)}`;
 

@@ -6,8 +6,8 @@
  * `atlas_run_health` view (migration 041). Kept separate from `getFullDashboardData`
  * so the main Morning Read bundle stays lean; these fire only when their consumer mounts.
  *
- * Attribution and per-position risk now live on Performance/Holdings (which read their own
- * sources). System reads run telemetry from `atlas_run_health` — the curated projection
+ * Attribution and recommendation quality now live on Portfolio Attribution; per-position
+ * risk remains on Holdings. System reads run telemetry from `atlas_run_health` — the curated projection
  * that bypasses the base-table RLS on `atlas_run_diagnostics` (migration 033). Spend
  * telemetry (cost, tokens, error_summary, breakdown) is intentionally excluded from the
  * view; economics tiles render "—" on the public anon-key dashboard.
@@ -20,21 +20,27 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import type { TableRow, ViewRow } from './database.types';
 import type { AtlasRunDiagnostics } from './types';
-import { computeEffectivePortfolioRiskMetrics } from './portfolio-risk-metrics';
-import { backtestDecisions, type DecisionInput } from './decision-track-record';
-import type { TearsheetSeriesPoint } from '@digithings/web';
 import type {
-  DecisionLogRow,
+  BenchmarkComparison,
   OlympusTearsheet,
-  TearsheetBreakdown,
-  TearsheetData,
+  PerformanceHoldingRow,
+  PortfolioReturnPoint,
 } from '@/components/tearsheet/types';
+import type { ContributionReturnPoint } from '@digithings/web';
+import { DASHBOARD_BENCHMARK_TICKERS } from './benchmark-tickers';
 
-const DECISION_LIMIT = 1000;
-const TEARSHEET_NAV_LIMIT = 2000;
-const ATTRIBUTION_LIMIT = 500;
+const DECISION_PAGE_SIZE = 1000;
+const DECISION_MAX_ROWS = 50000;
+const PERFORMANCE_HISTORY_LIMIT = 5000;
+const ATTRIBUTION_LIMIT = 5000;
 
 export interface ObservabilityData {
+  decisions: TableRow<'decision_log'>[];
+}
+
+export interface PortfolioAttributionData {
+  attribution: TableRow<'position_attribution'>[];
+  attributionDate: string | null;
   decisions: TableRow<'decision_log'>[];
 }
 
@@ -57,6 +63,24 @@ async function safeSelect<T>(
   }
 }
 
+async function fetchDecisionHistory(): Promise<TableRow<'decision_log'>[]> {
+  const decisions: TableRow<'decision_log'>[] = [];
+  for (let offset = 0; offset < DECISION_MAX_ROWS; offset += DECISION_PAGE_SIZE) {
+    const page = await safeSelect<TableRow<'decision_log'>>('decision_log', (sb) =>
+      sb
+        .from('decision_log')
+        .select(
+          'id,run_id,run_date,ticker,stance,conviction,thesis,benchmark,holding_days,status,actual_return,alpha,reflection,resolved_at,created_at'
+        )
+        .order('run_date', { ascending: false })
+        .range(offset, offset + DECISION_PAGE_SIZE - 1)
+    );
+    decisions.push(...page.rows);
+    if (!page.ok || page.rows.length < DECISION_PAGE_SIZE) break;
+  }
+  return decisions;
+}
+
 export async function fetchObservabilityData(): Promise<ObservabilityData> {
   // Distinguish a total misconfiguration (no Supabase env) from a configured-but-empty book:
   // throw so the page shows a clear error, matching the main data layer (lib/queries.ts).
@@ -66,19 +90,15 @@ export async function fetchObservabilityData(): Promise<ObservabilityData> {
         'Observability data cannot be loaded.'
     );
   }
-  const decisionsRes = await safeSelect<TableRow<'decision_log'>>('decision_log', (sb) =>
-    sb
-      .from('decision_log')
-      .select(
-        'id,run_id,run_date,ticker,stance,conviction,thesis,benchmark,holding_days,status,actual_return,alpha,reflection,resolved_at,created_at'
-      )
-      .order('run_date', { ascending: false })
-      .limit(DECISION_LIMIT)
-  );
-  return { decisions: decisionsRes.rows };
+  return { decisions: await fetchDecisionHistory() };
 }
 
-const RUN_DIAGNOSTICS_LIMIT = 30;
+// Raised from 30 with migration 065 (#1762). The view now returns ONE ROW PER RETRY ATTEMPT,
+// so a date that took three attempts consumes three slots instead of one. At 30 the timeline
+// would show proportionally fewer distinct dates the moment retries became visible — and
+// retries are not rare: 28 of the 54 rows extant at migration time were collapsed multi-attempt
+// writes. 90 preserves ~30 distinct dates even if every one of them exhausts MAX_OUTER_ATTEMPTS.
+const RUN_DIAGNOSTICS_LIMIT = 90;
 
 /**
  * Read run health from the anon-readable `atlas_run_health` view (migration 041).
@@ -96,6 +116,10 @@ export async function fetchAtlasRunDiagnostics(): Promise<AtlasRunDiagnostics[]>
   );
   return res.rows.map((r) => ({
     run_id: r.run_id,
+    // `?? null` rather than `?? 1`: a row written before migration 065 carries 0, and a row
+    // read from an un-migrated view carries undefined. Both mean "unknown", and defaulting
+    // either to 1 would fabricate the provenance #1762 exists to stop fabricating.
+    attempt: r.attempt ?? null,
     run_type: r.run_type,
     run_date: r.run_date,
     model: r.model,
@@ -123,10 +147,9 @@ export async function fetchAtlasRunDiagnostics(): Promise<AtlasRunDiagnostics[]>
 }
 
 /* ── Performance tear sheet (Pillar 3C) ───────────────────────────────────────
-   Assembles the hybrid OlympusTearsheet: a live-NAV track (TearsheetData,
-   engine='live') + the decision track-record (TS port of atlas/backtest.py) +
-   absorbed per-position attribution. The builder is pure and unit-tested; the
-   fetch wrapper is fail-soft (empty/RLS-deny → a zeroed empty-state build). */
+  Reads persisted portfolio returns and stored attribution windows. Missing
+  cumulative-return fields fall back to the same deterministic first/last
+  history calculation used by the backend writer. */
 
 /** Keep only the rows whose date equals the most recent date present. */
 function latestDateRows<T extends { date: string | null }>(rows: T[]): { rows: T[]; date: string | null } {
@@ -137,143 +160,385 @@ function latestDateRows<T extends { date: string | null }>(rows: T[]): { rows: T
   return { rows: date === null ? [] : rows.filter((r) => r.date === date), date };
 }
 
-/** Drawdown (%) from a peak-to-current equity curve — mirrors tearsheet_data._drawdown_from_equity. */
-function drawdownFromEquity(points: TearsheetSeriesPoint[]): TearsheetSeriesPoint[] {
-  if (!points.length) return [];
-  let peak = points[0].v;
-  return points.map((p) => {
-    peak = Math.max(peak, p.v);
-    const dd = peak > 0 ? ((p.v - peak) / peak) * 100 : 0;
-    return { t: p.t, v: dd };
+export function buildPortfolioAttributionData(args: {
+  attribution: TableRow<'position_attribution'>[];
+  decisions: TableRow<'decision_log'>[];
+}): PortfolioAttributionData {
+  const latestAttribution = latestDateRows(args.attribution);
+  return {
+    attribution: latestAttribution.rows,
+    attributionDate: latestAttribution.date,
+    decisions: args.decisions,
+  };
+}
+
+export async function fetchPortfolioAttribution(): Promise<PortfolioAttributionData> {
+  if (!isSupabaseConfigured() || !supabase) {
+    throw new Error(
+      'Supabase is not configured (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY). ' +
+        'Portfolio attribution cannot be loaded.'
+    );
+  }
+
+  const [attributionRes, observability] = await Promise.all([
+    safeSelect<TableRow<'position_attribution'>>('position_attribution', (sb) =>
+      sb
+        .from('position_attribution')
+        .select('*')
+        .order('date', { ascending: false })
+        .limit(ATTRIBUTION_LIMIT)
+    ),
+    fetchObservabilityData(),
+  ]);
+  return buildPortfolioAttributionData({
+    attribution: attributionRes.rows,
+    decisions: observability.decisions,
   });
 }
 
-function emptyBreakdown(): TearsheetBreakdown {
+function latestAttributionByTicker(
+  rows: TableRow<'position_attribution'>[]
+): Map<string, TableRow<'position_attribution'>> {
+  const latest = new Map<string, TableRow<'position_attribution'>>();
+  for (const row of [...rows].sort((a, b) => b.date.localeCompare(a.date))) {
+    const ticker = row.ticker.toUpperCase();
+    if (ticker !== 'CASH' && !latest.has(ticker)) latest.set(ticker, row);
+  }
+  return latest;
+}
+
+function toHoldingRow(
+  ticker: string,
+  position: TableRow<'positions'> | null,
+  attribution: TableRow<'position_attribution'> | null,
+  exit: TableRow<'position_events'> | null = null,
+  isClosed = false
+): PerformanceHoldingRow {
+  const entryPrice = position?.entry_price;
+  const exitPrice = exit?.price ?? position?.current_price;
+  const realizedReturnPct =
+    isClosed && entryPrice != null && entryPrice > 0 && exitPrice != null && exitPrice > 0
+      ? roundPct((exitPrice / entryPrice - 1) * 100)
+      : null;
   return {
-    trades: 0,
-    net_profit: 0,
-    net_profit_pct: 0,
-    gross_profit: 0,
-    gross_loss: 0,
-    percent_profitable: 0,
-    profit_factor: 0,
-    avg_trade: 0,
-    wins: 0,
-    losses: 0,
+    ticker,
+    category:
+      attribution?.sector_bucket ?? position?.sector_bucket ?? position?.category ?? null,
+    weightPct: attribution?.weight_pct ?? position?.weight_pct ?? null,
+    unrealizedReturnPct:
+      position?.unrealized_pnl_pct ?? position?.since_entry_return_pct ?? null,
+    realizedReturnPct,
+    attributionDate:
+      exit?.date ??
+      attribution?.date ??
+      position?.metrics_as_of ??
+      (isClosed ? position?.date : null) ??
+      null,
   };
+}
+
+function roundPct(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function periodReturnPct(values: number[]): number | null {
+  if (values.length < 2) return null;
+  const first = values[0];
+  const last = values.at(-1);
+  if (last == null || first <= 0 || !Number.isFinite(first) || !Number.isFinite(last)) {
+    return null;
+  }
+  return roundPct((last / first - 1) * 100);
+}
+
+function buildPortfolioReturnSeries(
+  nav: TableRow<'nav_history'>[]
+): PortfolioReturnPoint[] {
+  const sorted = [...nav].sort((a, b) => a.date.localeCompare(b.date));
+  const baseline = sorted.find((row) => Number.isFinite(row.nav) && row.nav > 0)?.nav;
+  if (baseline == null) return [];
+  return sorted
+    .filter((row) => Number.isFinite(row.nav) && row.nav > 0)
+    .map((row) => ({
+      date: row.date,
+      nav: row.nav,
+      returnPct: roundPct((row.nav / baseline - 1) * 100),
+    }));
+}
+
+function buildBenchmarkComparisons(
+  navSeries: PortfolioReturnPoint[],
+  prices: Array<{ ticker?: string; date: string; close: number }>,
+  fallbackTicker: string
+): BenchmarkComparison[] {
+  if (navSeries.length < 2) return [];
+  const grouped = new Map<string, Array<{ date: string; close: number }>>();
+  for (const row of prices) {
+    if (!Number.isFinite(row.close) || row.close <= 0) continue;
+    const ticker = (row.ticker ?? fallbackTicker).toUpperCase();
+    if (!grouped.has(ticker)) grouped.set(ticker, []);
+    grouped.get(ticker)!.push(row);
+  }
+
+  const order = new Map<string, number>(
+    DASHBOARD_BENCHMARK_TICKERS.map((ticker, index) => [ticker, index])
+  );
+  return [...grouped.entries()]
+    .map(([ticker, rows]): BenchmarkComparison | null => {
+      const sorted = [...rows].sort((left, right) => left.date.localeCompare(right.date));
+      if (sorted.length < 2) return null;
+      const baseline = sorted[0].close;
+      let priceIndex = -1;
+      const series = navSeries.map((point) => {
+        while (priceIndex + 1 < sorted.length && sorted[priceIndex + 1].date <= point.date) {
+          priceIndex += 1;
+        }
+        const close = priceIndex >= 0 ? sorted[priceIndex].close : baseline;
+        return { date: point.date, returnPct: roundPct((close / baseline - 1) * 100) };
+      });
+      return { ticker, returnPct: series.at(-1)!.returnPct, series };
+    })
+    .filter((comparison): comparison is BenchmarkComparison => comparison != null)
+    .sort(
+      (left, right) =>
+        (order.get(left.ticker) ?? Number.MAX_SAFE_INTEGER) -
+          (order.get(right.ticker) ?? Number.MAX_SAFE_INTEGER) ||
+        left.ticker.localeCompare(right.ticker)
+    );
+}
+
+function buildPositionContributionSeries(
+  navSeries: PortfolioReturnPoint[],
+  positions: TableRow<'positions'>[],
+  currentTickers: Set<string>
+): ContributionReturnPoint[] {
+  if (!navSeries.length) return [];
+
+  const snapshots = new Map<string, Map<string, TableRow<'positions'>>>();
+  const pricesByTicker = new Map<string, Array<{ date: string; price: number }>>();
+  for (const row of positions) {
+    const ticker = row.ticker.toUpperCase();
+    if (ticker === 'CASH' || !currentTickers.has(ticker)) continue;
+    if (!snapshots.has(row.date)) snapshots.set(row.date, new Map());
+    snapshots.get(row.date)!.set(ticker, row);
+    if (row.current_price != null && row.current_price > 0) {
+      if (!pricesByTicker.has(ticker)) pricesByTicker.set(ticker, []);
+      pricesByTicker.get(ticker)!.push({ date: row.date, price: row.current_price });
+    }
+  }
+
+  const snapshotDates = [...snapshots.keys()].sort();
+  const cumulativeByTicker = new Map<string, number[]>();
+  for (const [ticker, rawPrices] of pricesByTicker) {
+    const prices = [...rawPrices].sort((left, right) => left.date.localeCompare(right.date));
+    const cumulative: number[] = [0];
+    let snapshotIndex = -1;
+    let priceIndex = -1;
+    let priorWeight = 0;
+    let priorPrice: number | null = null;
+    let hasComparableInterval = false;
+
+    for (let index = 0; index < navSeries.length; index += 1) {
+      const date = navSeries[index].date;
+      while (snapshotIndex + 1 < snapshotDates.length && snapshotDates[snapshotIndex + 1] <= date) {
+        snapshotIndex += 1;
+      }
+      while (priceIndex + 1 < prices.length && prices[priceIndex + 1].date <= date) {
+        priceIndex += 1;
+      }
+
+      const snapshot = snapshotIndex >= 0 ? snapshots.get(snapshotDates[snapshotIndex]) : null;
+      const weight = snapshot?.get(ticker)?.weight_pct ?? 0;
+      const price = priceIndex >= 0 ? prices[priceIndex].price : null;
+      if (index > 0) {
+        let next = cumulative[index - 1];
+        if (priorPrice != null && price != null && priorPrice > 0) {
+          next += priorWeight * (price / priorPrice - 1);
+          hasComparableInterval = true;
+        }
+        cumulative.push(roundPct(next));
+      }
+      priorWeight = weight;
+      priorPrice = price;
+    }
+
+    if (hasComparableInterval) cumulativeByTicker.set(ticker, cumulative);
+  }
+
+  return navSeries.map((point, index) => ({
+    t: point.date,
+    returnPct: point.returnPct,
+    contributions: Object.fromEntries(
+      [...cumulativeByTicker.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([ticker, values]) => [ticker, values[index]])
+    ),
+  }));
+}
+
+function latestExitByTicker(
+  events: TableRow<'position_events'>[]
+): Map<string, TableRow<'position_events'>> {
+  const latest = new Map<string, TableRow<'position_events'>>();
+  for (const event of [...events].sort((a, b) => b.date.localeCompare(a.date))) {
+    const ticker = event.ticker.toUpperCase();
+    if (event.event === 'EXIT' && !latest.has(ticker)) latest.set(ticker, event);
+  }
+  return latest;
+}
+
+function latestPositionByTicker(
+  positions: TableRow<'positions'>[]
+): Map<string, TableRow<'positions'>> {
+  const latest = new Map<string, TableRow<'positions'>>();
+  for (const position of [...positions].sort((a, b) => b.date.localeCompare(a.date))) {
+    const ticker = position.ticker.toUpperCase();
+    if (ticker !== 'CASH' && !latest.has(ticker)) latest.set(ticker, position);
+  }
+  return latest;
 }
 
 export function buildOlympusTearsheet(args: {
   nav: TableRow<'nav_history'>[];
-  decisions: TableRow<'decision_log'>[];
+  positions: TableRow<'positions'>[];
   metrics: TableRow<'portfolio_metrics'> | null;
   attribution: TableRow<'position_attribution'>[];
-  now?: Date;
+  events?: TableRow<'position_events'>[];
+  benchmarkPrices?: Array<{ ticker?: string; date: string; close: number }>;
 }): OlympusTearsheet {
   const navAsc = [...args.nav].sort((a, b) => a.date.localeCompare(b.date));
-  const navPoints = navAsc.length;
-  const equity: TearsheetSeriesPoint[] = navAsc.map((r) => ({ t: r.date, v: r.nav }));
-  const snaps = navAsc.map((r) => ({ date: r.date, nav: r.nav }));
-  const drawdown = navPoints >= 2 ? drawdownFromEquity(equity) : [];
-  const risk = computeEffectivePortfolioRiskMetrics(
-    args.metrics
-      ? {
-          sharpe: args.metrics.sharpe,
-          volatility: args.metrics.volatility,
-          max_drawdown: args.metrics.max_drawdown,
-        }
-      : null,
-    snaps
-  );
   const inceptionDate = navAsc[0]?.date ?? null;
-  const latestNav = navAsc.length ? navAsc[navAsc.length - 1].nav : null;
-  const initial = navAsc[0]?.nav ?? 100;
-  const final = latestNav ?? initial;
-
-  const live: TearsheetData = {
-    schema_version: '1.0',
-    strategy: 'Olympus',
-    symbol: 'AI-INTELLIGENCE',
-    engine: 'live',
-    generated_at: (args.now ?? new Date()).toISOString(),
-    data_source: 'nav_history',
-    period_start: inceptionDate ?? '',
-    period_end: navAsc[navAsc.length - 1]?.date ?? '',
-    bars: navPoints,
-    initial_capital: initial,
-    final_equity: final,
-    net_profit: final - initial,
-    net_profit_pct: initial > 0 ? (final / initial - 1) * 100 : 0,
-    max_drawdown_pct: risk.maxDrawdownPct ?? 0,
-    sharpe_ratio: risk.sharpe,
-    sortino_ratio: null,
-    calmar_ratio: null,
-    profit_factor: 0,
-    win_rate_pct: 0,
-    total_trades: 0, // live track is NAV-level; trade-level fields stay empty (template renders empty-states)
-    avg_trade: 0,
-    overall: emptyBreakdown(),
-    long: emptyBreakdown(),
-    short: emptyBreakdown(),
-    equity_curve: equity,
-    drawdown_curve: drawdown,
-    trades: [],
-    notes: [],
-  };
-
-  const resolved = args.decisions.filter(
-    (d) => d.status === 'resolved' && d.alpha != null && d.actual_return != null
+  const navSeries = buildPortfolioReturnSeries(navAsc);
+  const currentSnapshot = latestDateRows(args.positions);
+  const currentPositions = currentSnapshot.rows.filter(
+    (position) => position.ticker.toUpperCase() !== 'CASH' && position.weight_pct > 0
   );
-  const inputs: DecisionInput[] = resolved.map((d) => ({
-    run_date: d.run_date,
-    return_frac: d.actual_return as number,
-    benchmark_frac: (d.actual_return as number) - (d.alpha as number), // alpha = return − benchmark
-    conviction: d.conviction,
-    holding_days: d.holding_days,
-  }));
-  const decision = backtestDecisions(inputs);
-  const decisionRows: DecisionLogRow[] = args.decisions.map((d) => ({
-    run_date: d.run_date,
-    ticker: d.ticker,
-    stance: d.stance,
-    conviction: d.conviction,
-    status: d.status,
-    alpha: d.alpha,
-    holding_days: d.holding_days,
-  }));
+  const attributionByTicker = latestAttributionByTicker(args.attribution);
+  const exitByTicker = latestExitByTicker(args.events ?? []);
+  const latestPosition = latestPositionByTicker(args.positions);
+  const latestAttribution = latestDateRows(args.attribution);
+  const currentTickers = new Set(
+    (currentPositions.length ? currentPositions : latestAttribution.rows)
+      .filter((row) => row.ticker.toUpperCase() !== 'CASH')
+      .map((row) => row.ticker.toUpperCase())
+  );
+  const positionByTicker = new Map(
+    currentPositions.map((position) => [position.ticker.toUpperCase(), position])
+  );
+  const currentHoldings = [...currentTickers]
+    .map((ticker) =>
+      toHoldingRow(
+        ticker,
+        positionByTicker.get(ticker) ?? null,
+        attributionByTicker.get(ticker) ?? null
+      )
+    )
+    .sort((a, b) => (b.weightPct ?? 0) - (a.weightPct ?? 0));
+  const historicalTickers = new Set([
+    ...[...attributionByTicker.keys()].filter((ticker) => !currentTickers.has(ticker)),
+    ...[...exitByTicker.keys()].filter((ticker) => !currentTickers.has(ticker)),
+  ]);
+  const historicalHoldings = [...historicalTickers]
+    .map((ticker) =>
+      toHoldingRow(
+        ticker,
+        latestPosition.get(ticker) ?? null,
+        attributionByTicker.get(ticker) ?? null,
+        exitByTicker.get(ticker) ?? null,
+        true
+      )
+    )
+    .sort(
+      (a, b) =>
+        (b.attributionDate ?? '').localeCompare(a.attributionDate ?? '') ||
+        Math.abs(b.realizedReturnPct ?? 0) - Math.abs(a.realizedReturnPct ?? 0)
+    );
+  const derivedNetReturnPct = periodReturnPct(navAsc.map((row) => row.nav));
+  const persistedBenchmarkTicker = args.metrics?.benchmark_ticker ?? 'SPY';
+  const benchmarkComparisons = buildBenchmarkComparisons(
+    navSeries,
+    args.benchmarkPrices ?? [],
+    persistedBenchmarkTicker
+  );
+  const defaultComparison =
+    benchmarkComparisons.find((comparison) => comparison.ticker === 'SPY') ??
+    benchmarkComparisons.find((comparison) => comparison.ticker === persistedBenchmarkTicker) ??
+    benchmarkComparisons[0];
+  const derivedBenchmarkReturnPct = defaultComparison?.returnPct ?? null;
+  const netReturnPct = args.metrics?.net_return_pct ?? derivedNetReturnPct;
+  const benchmarkReturnPct =
+    derivedBenchmarkReturnPct ?? args.metrics?.benchmark_return_pct;
+  const relativeReturnPct =
+    defaultComparison && netReturnPct != null && benchmarkReturnPct != null
+      ? roundPct(netReturnPct - benchmarkReturnPct)
+      : args.metrics?.relative_return_pct ??
+        (netReturnPct != null && benchmarkReturnPct != null
+          ? roundPct(netReturnPct - benchmarkReturnPct)
+          : null);
+  const persistedUsed = [
+    args.metrics?.net_return_pct,
+    args.metrics?.benchmark_return_pct,
+    args.metrics?.relative_return_pct,
+  ].some((value) => value != null);
+  const derivedUsed =
+    (args.metrics?.net_return_pct == null && derivedNetReturnPct != null) ||
+    (args.metrics?.benchmark_return_pct == null && derivedBenchmarkReturnPct != null) ||
+    (args.metrics?.relative_return_pct == null && relativeReturnPct != null);
+  const returnsSource = persistedUsed
+    ? derivedUsed
+      ? 'mixed'
+      : 'persisted'
+    : derivedUsed
+      ? 'derived'
+      : 'unavailable';
 
   return {
-    live,
-    navPoints,
-    decision,
-    decisionRows,
-    nResolved: resolved.length,
-    nPending: args.decisions.filter((d) => d.status === 'pending').length,
-    attribution: args.attribution,
-    attributionDate: latestDateRows(args.attribution).date,
+    currentNav: navAsc.at(-1)?.nav ?? null,
+    netReturnPct,
+    benchmarkReturnPct,
+    relativeReturnPct,
+    benchmarkTicker: defaultComparison?.ticker ?? persistedBenchmarkTicker,
+    benchmarkComparisons,
+    returnsSource,
+    metricsAsOf:
+      derivedUsed
+        ? navAsc.at(-1)?.date ?? args.metrics?.as_of_date ?? args.metrics?.date ?? null
+        : args.metrics?.as_of_date ?? args.metrics?.date ?? null,
     inceptionDate,
-    latestNav,
-    generatedAt: live.generated_at,
+    holdingsAsOf: currentSnapshot.date ?? latestAttribution.date,
+    generatedAt: args.metrics?.generated_at ?? null,
+    navSeries,
+    contributionSeries: buildPositionContributionSeries(
+      navSeries,
+      args.positions,
+      currentTickers
+    ),
+    currentHoldings,
+    historicalHoldings,
   };
 }
 
 export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
   if (!isSupabaseConfigured() || !supabase) {
     // Configured-but-empty must still render the empty-state tear sheet — return a zeroed build.
-    return buildOlympusTearsheet({ nav: [], decisions: [], metrics: null, attribution: [] });
+    return buildOlympusTearsheet({
+      nav: [],
+      positions: [],
+      metrics: null,
+      attribution: [],
+      events: [],
+    });
   }
-  const [navRes, decisionsRes, metricsRes, attributionRes] = await Promise.all([
+  const [navRes, positionsRes, metricsRes, attributionRes, eventsRes] = await Promise.all([
     safeSelect<TableRow<'nav_history'>>('nav_history', (sb) =>
-      sb.from('nav_history').select('*').order('date', { ascending: true }).limit(TEARSHEET_NAV_LIMIT)
+      sb.from('nav_history').select('*').order('date', { ascending: true }).limit(PERFORMANCE_HISTORY_LIMIT)
     ),
-    safeSelect<TableRow<'decision_log'>>('decision_log', (sb) =>
+    safeSelect<TableRow<'positions'>>('positions', (sb) =>
       sb
-        .from('decision_log')
-        .select(
-          'id,run_id,run_date,ticker,stance,conviction,thesis,benchmark,holding_days,status,actual_return,alpha,reflection,resolved_at,created_at'
-        )
-        .order('run_date', { ascending: false })
-        .limit(DECISION_LIMIT)
+        .from('positions')
+        .select('*')
+        .order('date', { ascending: false })
+        .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
     safeSelect<TableRow<'portfolio_metrics'>>('portfolio_metrics', (sb) =>
       sb.from('portfolio_metrics').select('*').order('date', { ascending: false }).limit(1)
@@ -285,12 +550,39 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
         .order('date', { ascending: false })
         .limit(ATTRIBUTION_LIMIT)
     ),
+    safeSelect<TableRow<'position_events'>>('position_events', (sb) =>
+      sb
+        .from('position_events')
+        .select('*')
+        .eq('event', 'EXIT')
+        .order('date', { ascending: false })
+        .limit(PERFORMANCE_HISTORY_LIMIT)
+    ),
   ]);
-  const attribution = latestDateRows(attributionRes.rows);
+    const navWindow = [...navRes.rows]
+      .filter((row) => Number.isFinite(row.nav) && row.nav > 0)
+      .sort((left, right) => left.date.localeCompare(right.date));
+    const benchmarkRes =
+      navWindow.length >= 2
+        ? await safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
+            'benchmark price_history',
+            (sb) =>
+              sb
+                .from('price_history')
+                .select('ticker,date,close')
+                .in('ticker', [...DASHBOARD_BENCHMARK_TICKERS])
+                .gte('date', navWindow[0].date)
+                .lte('date', navWindow.at(-1)!.date)
+                .order('date', { ascending: true })
+                .limit(PERFORMANCE_HISTORY_LIMIT)
+          )
+        : { rows: [], ok: true };
   return buildOlympusTearsheet({
     nav: navRes.rows,
-    decisions: decisionsRes.rows,
+    positions: positionsRes.rows,
     metrics: metricsRes.rows[0] ?? null,
-    attribution: attribution.rows,
+    attribution: attributionRes.rows,
+    events: eventsRes.rows,
+    benchmarkPrices: benchmarkRes.rows,
   });
 }

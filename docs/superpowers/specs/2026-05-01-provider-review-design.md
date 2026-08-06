@@ -8,11 +8,11 @@
 
 ## Problem
 
-DigiThings routes all LLM traffic through LiteLLM and depends heavily on free-tier providers to stay nimble. Free-tier quotas, model availability, and pricing change without notice. Today there is no automated mechanism to:
+digithings routes all LLM traffic through LiteLLM and depends heavily on free-tier providers to stay nimble. Free-tier quotas, model availability, and pricing change without notice. Today there is no automated mechanism to:
 
 - Detect when a free-tier limit drops or a model moves behind a paywall
 - Verify that configured models are actually reachable with the keys we have
-- Evaluate whether model/provider decisions made across the project (Atlas phases, Hermes, DigiChat defaults) are still optimal given the current free-tier landscape
+- Evaluate whether model/provider decisions made across the project (Atlas phases, Hermes, digichat defaults) are still optimal given the current free-tier landscape
 - Surface when a paid option becomes cost-justified relative to a free alternative
 
 ---

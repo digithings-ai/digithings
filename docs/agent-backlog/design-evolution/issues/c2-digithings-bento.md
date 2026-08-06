@@ -9,7 +9,7 @@ Replace digithings.ai long architecture-only scroll with a **Cursor-style bento 
 ## Acceptance Criteria
 
 - [ ] New section (or refactor existing architecture section) using `BentoGrid` + `CapabilityCard`
-- [ ] Minimum 4 cells covering primary modules (DigiGraph, DigiQuant, DigiSearch, DigiChat) with correct `--accent-*` treatment
+- [ ] Minimum 4 cells covering primary modules (digigraph, digiquant, digisearch, digichat) with correct `--accent-*` treatment
 - [ ] Each cell links to module docs or GitHub (real hrefs, no `#`)
 - [ ] Optional: **one** `ScrollyFeatures` section for "how the stack fits" — if added, must be the only pin on page
 - [ ] Remove or shorten redundant architecture prose that duplicates bento content

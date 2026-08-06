@@ -9,9 +9,10 @@ export const metadata: Metadata = {
     "running on a free model pool. No sign-up.",
 };
 
-// The /chat route is the full-screen signature DigiChat experience. The marketing
-// that used to live here (hero + canned transcript + feature cards) now streams as
-// the bot's own self-introduction inside DigiChatSession — the chat IS the pitch.
+/**
+ * /chat — full-screen digichat via shared digichat-ui + Pages Function digivault
+ * backend (free Cloudflare plan; no Containers / iframe).
+ */
 export default function ChatPage() {
   return (
     <>

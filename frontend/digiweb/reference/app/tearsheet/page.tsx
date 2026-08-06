@@ -23,9 +23,10 @@ export default function TearsheetPage() {
         <p>
           The finance-tearsheet family: the strategy tearsheet grammar reverse-promoted from
           digiquant.io — dependency-free SVG charts with synced zoom and trade markers, the KPI
-          strip, the returns matrix, the trade log, and the library card. Everything on this page
-          survives <code>window.print()</code>: hit Download PDF below and the same components
-          re-render at full span into a paper-white export.
+          strip, signed contribution with exact portfolio return, the returns matrix, the trade
+          log, and the library card. Everything on this page survives <code>window.print()</code>:
+          hit Download PDF below and the same components re-render at full span into a
+          paper-white export.
         </p>
       </header>
 
@@ -35,10 +36,11 @@ export default function TearsheetPage() {
         <p className="section-copy">
           The tearsheet core: headline KPIs over the tabbed chart deck. Candles carry
           TradingView-style entry/exit markers with hover cards (long entries buy-arrow from
-          below, shorts sell-arrow from above, exits flip); equity toggles linear-% / log-$;
-          drawdown hangs under a zero baseline in <code>--down</code>; per-trade P&amp;L
-          distinguishes realized bars from the accent-ringed unrealized open leg. Zoom any pane —
-          the others follow.
+          below, shorts sell-arrow from above, exits flip); the contribution composite keeps
+          additive weighted drivers beside the exact portfolio-return line; equity toggles
+          linear-% / log-$; drawdown hangs under a zero baseline in <code>--down</code>;
+          per-trade P&amp;L distinguishes realized bars from the accent-ringed unrealized open
+          leg. Zoom any pane — the others follow.
         </p>
         <div className="mt-[1.2rem]">
           <TearsheetChartsReference />

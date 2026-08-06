@@ -1,5 +1,5 @@
 /**
- * Security response headers for DigiChat (REM-077).
+ * Security response headers for digichat (REM-077).
  * Consumed by `next.config.ts` — keep in sync with README / ARCHITECTURE.
  */
 
@@ -8,6 +8,7 @@ import { getEmbedTenantRegistry } from "./embed-tenants";
 const FIRST_PARTY_FRAME_ANCESTORS = [
   "'self'",
   "https://digithings.ai",
+  "https://www.digithings.ai",
   "https://digiquant.io",
 ] as const;
 

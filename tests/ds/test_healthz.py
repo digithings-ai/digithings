@@ -1,4 +1,4 @@
-"""DigiSearch ``/healthz`` liveness contract.
+"""digisearch ``/healthz`` liveness contract.
 
 Contract (see AGENTS.md "Liveness vs status"):
 * returns HTTP 200 with ``{"ok": true}``
@@ -9,9 +9,8 @@ Contract (see AGENTS.md "Liveness vs status"):
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
-
 from digisearch.server import app
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture

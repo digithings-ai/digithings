@@ -1,18 +1,19 @@
-"""Per-request LLM auth funnel for DigiGraph's FastAPI service.
+"""Per-request LLM auth funnel for digigraph's FastAPI service.
 
 Relocated from the former monolithic ``digigraph.llm`` (#632 P2). Parses the
-per-request auth headers DigiChat/DigiKey forward and feeds digillm's
+per-request auth headers digichat/digikey forward and feeds digillm's
 provider-agnostic override contextvars:
 
 - ``X-LiteLLM-Proxy-Key`` → :func:`digillm.set_proxy_key` (the LiteLLM Bearer used
   on the default client path).
 - ``X-BYOK-Key`` / ``X-BYOK-Provider`` / ``X-BYOK-Model`` → :func:`digillm.set_byok` for
-  OpenAI BYOK (direct api.openai.com) and OpenRouter BYOK (openrouter.ai). Anthropic
-  BYOK is intentionally *not* wired into the OpenAI client path — it falls through
-  to the env-configured key, preserving the legacy behavior (DigiGraph has no
-  Anthropic SDK call path yet).
+  OpenAI BYOK (direct api.openai.com) and OpenRouter BYOK (openrouter.ai) — the two
+  entries in :data:`_BYOK_BASE_URLS`. A key for any other provider is REFUSED with a
+  400 by ``byok_header_context`` in server.py: digigraph has no call path that would
+  spend it, so accepting one meant answering on the operator's credentials while the
+  user believed theirs was active (#1873).
 
-DigiGraph keeps its own ``(key, provider)`` BYOK contextvar so
+digigraph keeps its own ``(key, provider)`` BYOK contextvar so
 :func:`get_byok_override` still reports the provider tag — digillm's ``get_byok``
 only carries ``(api_key, base_url)``.
 
@@ -23,7 +24,7 @@ accepts ``Request`` objects.
 from __future__ import annotations
 
 from contextvars import ContextVar
-from typing import Any, NamedTuple  # noqa: ANN401 — Starlette Request kept loose
+from typing import Any, NamedTuple  # score:allow untyped any — Starlette Request kept loose
 
 from digillm import reset_byok, reset_proxy_key, set_byok, set_proxy_key
 
@@ -31,7 +32,20 @@ from digillm import reset_byok, reset_proxy_key, set_byok, set_proxy_key
 _OPENAI_BYOK_BASE_URL = "https://api.openai.com/v1"
 _OPENROUTER_BYOK_BASE_URL = "https://openrouter.ai/api/v1"
 
-# DigiGraph's own per-request BYOK record: (api_key, provider) where provider is
+# The one table: a provider here is routed to its own endpoint with the user's key.
+_BYOK_BASE_URLS: dict[str, str] = {
+    "openai": _OPENAI_BYOK_BASE_URL,
+    "openrouter": _OPENROUTER_BYOK_BASE_URL,
+}
+BYOK_ROUTABLE_PROVIDERS = tuple(_BYOK_BASE_URLS)
+
+
+def byok_provider_supported(provider: str) -> bool:
+    """True when a BYOK key for *provider* is actually spent on that provider."""
+    return provider.strip().lower() in _BYOK_BASE_URLS
+
+
+# digigraph's own per-request BYOK record: (api_key, provider) where provider is
 # "openai" | "anthropic" | "openrouter". Distinct from digillm's (api_key, base_url)
 # override so get_byok_override() can still report the provider. Never logged or persisted.
 _byok_override: ContextVar[tuple[str, str] | None] = ContextVar("dg_byok_override", default=None)
@@ -56,7 +70,7 @@ def pop_lite_llm_proxy(token: object) -> None:
 
 
 class _ByokToken(NamedTuple):
-    """Reset tokens for the DigiGraph + digillm BYOK overrides (opaque to callers)."""
+    """Reset tokens for the digigraph + digillm BYOK overrides (opaque to callers)."""
 
     dg: object
     model: object
@@ -73,11 +87,13 @@ def _normalize_openrouter_model_slug(raw: str) -> str:
 def push_byok_header(request: Any) -> _ByokToken:
     """Parse ``X-BYOK-Key`` / ``X-BYOK-Provider`` / ``X-BYOK-Model`` and bind BYOK overrides.
 
-    Sets DigiGraph's ``(key, provider)`` contextvar (for :func:`get_byok_override`)
+    Sets digigraph's ``(key, provider)`` contextvar (for :func:`get_byok_override`)
     and, for OpenAI / OpenRouter providers, feeds digillm's BYOK override so the LLM
-    client talks directly to the provider with the user key. Anthropic keys are stored
-    on DigiGraph's contextvar only (no OpenAI-client override) — they fall through
-    to the env-configured credentials, as before.
+    client talks directly to the provider with the user key. Reaching this function with an unroutable provider no longer
+    happens over HTTP: ``byok_header_context`` in server.py refuses those with a
+    400 first, because storing such a key and then answering on the operator's
+    credentials is what #1873 was about. The unroutable branch is kept for direct
+    callers and to keep the contextvar's shape explicit.
 
     Returns an opaque token for :func:`pop_byok` (use in a ``finally`` block).
     """
@@ -90,10 +106,9 @@ def push_byok_header(request: Any) -> _ByokToken:
     model_token = _byok_model_override.set(model_slug or None)
     llm_token: object | None = None
     if val is not None:
-        if provider == "openai":
-            llm_token = set_byok(key, _OPENAI_BYOK_BASE_URL)
-        elif provider == "openrouter":
-            llm_token = set_byok(key, _OPENROUTER_BYOK_BASE_URL)
+        base_url = _BYOK_BASE_URLS.get(provider)
+        if base_url is not None:
+            llm_token = set_byok(key, base_url)
     return _ByokToken(dg=dg_token, model=model_token, llm=llm_token)
 
 

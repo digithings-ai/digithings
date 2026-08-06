@@ -8,7 +8,6 @@ installed.
 from __future__ import annotations
 
 import pytest
-
 from digiskills.security import is_allowed_scrape_url, redact_secrets, scan_for_prompt_injection
 
 pytestmark = pytest.mark.unit

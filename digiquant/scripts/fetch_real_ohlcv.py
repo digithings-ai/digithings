@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fetch real OHLCV data from Yahoo Finance and save as DigiQuant CSV format.
+Fetch real OHLCV data from Yahoo Finance and save as digiquant CSV format.
 
 Usage:
   python -m digiquant.scripts.fetch_real_ohlcv --symbols AAPL MSFT --start 2024-01-01 --end 2024-12-31

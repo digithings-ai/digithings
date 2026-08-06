@@ -14,13 +14,13 @@
 
 ## What is this?
 
-**DigiThings** is a modular, self-hosted platform for building **conversational agents** that research, search, analyze, and act. Chat goes in; agents call tools, hit your RAG index, run backtests, or drive custom workflows.
+**digithings** is a modular, self-hosted platform for building **conversational agents** that research, search, analyze, and act. Chat goes in; agents call tools, hit your RAG index, run backtests, or drive custom workflows.
 
 Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where one operator runs strategy research, backtesting, optimization, and execution monitoring through a single chat. The same stack powers RAG over your data, document search, and general agent apps.
 
 **Design principles**
 
-- **MCP-first** — every capability is a discoverable tool; DigiGraph orchestrates.
+- **MCP-first** — every capability is a discoverable tool; digigraph orchestrates.
 - **Run it yourself** — Docker Compose, no vendor lock-in. Loopback by default; use Tailscale or Cloudflare Tunnel for remote.
 - **Structured outputs** — Pydantic v2 everywhere, no dicts-over-the-wire.
 - **Polars + NautilusTrader** — no pandas; Rust-core backtests when the quant path is on.
@@ -43,18 +43,18 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 
 | Component | One-liner | Docs |
 |-----------|-----------|------|
-| **DigiGraph** | LangGraph orchestration brain; OpenAI-compatible API | [digigraph/ARCHITECTURE.md](digigraph/ARCHITECTURE.md) |
-| **DigiQuant** | NautilusTrader backtest/optimize, Polars-only | [digiquant/ARCHITECTURE.md](digiquant/ARCHITECTURE.md) |
-| **DigiSearch** | RAG + document search; Azure/Chroma backends | [digisearch/ARCHITECTURE.md](digisearch/ARCHITECTURE.md) |
-| **DigiChat** | Next.js BFF + chat UI (Auth.js, machine API keys) | `digichat/ARCHITECTURE.md` (nested repo) |
-| **DigiKey** | JWT + scoped API-key auth plane | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
-| **DigiSmith** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digismith/ARCHITECTURE.md](digismith/ARCHITECTURE.md) |
-| **DigiClaw** | Heartbeat, audit, MCP skill → DigiGraph | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
-| **DigiBase** | Shared HTTP/audit library + future data-plane service | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
-| **DigiVault** | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks) | [digivault/ARCHITECTURE.md](digivault/ARCHITECTURE.md) |
-| **DigiLLM** | Provider-agnostic LLM client/routing library | [digillm/ARCHITECTURE.md](digillm/ARCHITECTURE.md) |
-| **DigiFetch** | Shared web-scraping / headless-fetch engine library | [digifetch/ARCHITECTURE.md](digifetch/ARCHITECTURE.md) |
-| **DigiDev** | Drop-in agentic-coding workflow kit | [digidev/README.md](digidev/README.md) |
+| **digigraph** | LangGraph orchestration brain; OpenAI-compatible API | [digigraph/ARCHITECTURE.md](digigraph/ARCHITECTURE.md) |
+| **digiquant** | NautilusTrader backtest/optimize, Polars-only | [digiquant/ARCHITECTURE.md](digiquant/ARCHITECTURE.md) |
+| **digisearch** | RAG + document search; Azure/Chroma backends | [digisearch/ARCHITECTURE.md](digisearch/ARCHITECTURE.md) |
+| **digichat** | Next.js BFF + chat UI (Auth.js, machine API keys) | `digichat/ARCHITECTURE.md` (nested repo) |
+| **digikey** | JWT + scoped API-key auth plane | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
+| **digismith** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digismith/ARCHITECTURE.md](digismith/ARCHITECTURE.md) |
+| **digiclaw** | Heartbeat, audit, MCP skill → digigraph | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
+| **digibase** | Shared HTTP/audit library + future data-plane service | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
+| **digivault** | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks) | [digivault/ARCHITECTURE.md](digivault/ARCHITECTURE.md) |
+| **digillm** | Provider-agnostic LLM client/routing library | [digillm/ARCHITECTURE.md](digillm/ARCHITECTURE.md) |
+| **digifetch** | Shared web-scraping / headless-fetch engine library | [digifetch/ARCHITECTURE.md](digifetch/ARCHITECTURE.md) |
+| **digidev** | Drop-in agentic-coding workflow kit | [digidev/README.md](digidev/README.md) |
 | **config** | LiteLLM + model modes (test/medium/best) | [config/MODELS.md](config/MODELS.md) |
 
 ## Quick start
@@ -68,15 +68,15 @@ make up
 
 **LLM routing:** set `OPENROUTER_API_KEY` in `.env` (sign up at https://openrouter.ai). All Atlas/Hermes phases route through OpenRouter's Auto Router (`openrouter/openrouter/auto`), which selects the best model per request. Model strings must be explicit — the old `digi/fast`/`digi/balanced`/`digi/best` tier aliases have been removed. See `config/model_modes.yaml` and `.env.example`.
 
-**Stack + DigiChat web UI** (http://127.0.0.1:3005):
+**Stack + digichat web UI** (http://127.0.0.1:3005):
 
 ```bash
 make up-digichat
 ```
 
-DigiChat is behind the Compose profile `digichat` (not started by `make up` alone). See `digichat/ARCHITECTURE.md` in the nested repo for `AUTH_URL`, dev auth, and API keys.
+digichat is behind the Compose profile `digichat` (not started by `make up` alone). See `digichat/ARCHITECTURE.md` in the nested repo for `AUTH_URL`, dev auth, and API keys.
 
-**Faster UI iteration:** `make up` (core stack only), then `make digichat-dev` — Next.js on port **3000** with hot reload, talking to DigiGraph on **8000**.
+**Faster UI iteration:** `make up` (core stack only), then `make digichat-dev` — Next.js on port **3000** with hot reload, talking to digigraph on **8000**.
 
 **No Docker for backends:** `make stack-local` (Python services + LiteLLM on **8000–8003** / **4000**), then `make digichat-dev`. Stop with `make stack-local-stop`.
 
@@ -93,14 +93,14 @@ curl -s -X POST http://127.0.0.1:8000/workflow \
 
 | Service   | Port | Role              |
 |-----------|------|-------------------|
-| DigiGraph | 8000 | Orchestration, chat API |
-| DigiQuant | 8001 | Backtest, optimize, MCP |
-| DigiSearch| 8002 | Document search, RAG |
-| DigiSmith | 8003 | Observability status API |
+| digigraph | 8000 | Orchestration, chat API |
+| digiquant | 8001 | Backtest, optimize, MCP |
+| digisearch| 8002 | Document search, RAG |
+| digismith | 8003 | Observability status API |
 | LiteLLM   | 4000 | LLM routing       |
-| DigiKey   | 8005 | API keys + JWT exchange |
-| DigiVault | 8004 | Markdown vault management (profile `digivault`) |
-| DigiChat  | 3005 | Chat UI + BFF (profile `digichat`) |
+| digikey   | 8005 | API keys + JWT exchange |
+| digivault | 8004 | Markdown vault management (profile `digivault`) |
+| digichat  | 3005 | Chat UI + BFF (profile `digichat`) |
 
 All bind to `127.0.0.1`. Use Tailscale or Cloudflare Tunnel for remote access.
 
@@ -144,4 +144,4 @@ digithings/
 
 ## License
 
-**DigiThings** is open-core on GitHub under [MIT](LICENSE). Commercial options (managed hosting, Atlas execution layer, multi-tenant DigiBase, client consultancy) are tracked in [docs/VISION.md](docs/VISION.md).
+**digithings** is open-core on GitHub under [MIT](LICENSE). Commercial options (managed hosting, Atlas execution layer, multi-tenant digibase, client consultancy) are tracked in [docs/VISION.md](docs/VISION.md).

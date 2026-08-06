@@ -1,4 +1,4 @@
-"""Unit tests for DigiGraph MCP server bind defaults and lazy init."""
+"""Unit tests for digigraph MCP server bind defaults and lazy init."""
 
 from __future__ import annotations
 

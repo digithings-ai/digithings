@@ -1,5 +1,5 @@
 /**
- * DigiThings typewriter — types `text` into element `#elId` one char at a
+ * digithings typewriter — types `text` into element `#elId` one char at a
  * time.
  *
  * Usage:

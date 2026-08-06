@@ -21,7 +21,7 @@ function parseTokenPayload(data: TokenJson): DigikeyTokenExchange | null {
 }
 
 /**
- * Exchange a DigiKey-issued API key for a short-lived JWT (Authorization: Bearer … to DigiGraph).
+ * Exchange a digikey-issued API key for a short-lived JWT (Authorization: Bearer … to digigraph).
  */
 export async function exchangeDigikeyApiKey(
   digikeyBaseUrl: string,
@@ -39,7 +39,7 @@ export async function exchangeDigikeyApiKey(
 }
 
 /**
- * OIDC-backed session exchange (DigiChat BFF → DigiKey). Requires DIGIKEY_BFF_TOKEN on DigiKey.
+ * OIDC-backed session exchange (digichat BFF → digikey). Requires DIGIKEY_BFF_TOKEN on digikey.
  */
 export async function exchangeDigikeyBffSession(
   digikeyBaseUrl: string,

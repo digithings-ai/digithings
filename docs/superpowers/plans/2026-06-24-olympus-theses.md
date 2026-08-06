@@ -11,6 +11,15 @@
 ## Global Constraints
 
 - **Static export only** — no server components with runtime data; all data arrives via `useDashboard()` (client context). Routes under `/portfolio/theses/[thesisId]` are pre-rendered via `fetchThesisStaticParams()` — do not add new dynamic route params.
+  > **Superseded 2026-08** by [#1784](https://github.com/digithings-ai/digithings/pull/1784)
+  > (Fixes #1760): thesis detail is now `/portfolio/theses?thesis=<id>` — a single
+  > static page reading the id at runtime, with hrefs built by `thesisDetailHref()`
+  > in `lib/portfolio-url-state.ts`. The `[thesisId]` route and
+  > `lib/thesis-static-params.ts` are gone. The "no new dynamic route params" rule
+  > above still holds and is now **stricter**: under `output: 'export'` a dynamic
+  > segment only pre-builds the ids enumerated at build time and hard-404s on every
+  > other one, so add **no** dynamic segments under `/portfolio/theses`. Guarded by
+  > `lib/thesis-route-canon.test.ts`.
 - **Tailwind v4 design tokens, inherited exactly** — dark-first; cyan-phosphor `--accent` `#3DD6C4`; `font-display` (Instrument Serif) for claims/headlines; Geist sans/mono; `glass-card`; `bg-bg-primary`/`bg-bg-secondary`/`bg-bg-glass`; `border-border-subtle`; `text-text-primary`/`text-text-secondary`/`text-text-muted`.
 - **F5 token rule (verbatim):** cyan `--accent` `#3DD6C4` for links/chrome/the single conviction encoding/the live-fresh dot only; `fin-green`/`fin-red` **strictly** for signed financial values; `fin-amber` for caution/stale/carried/mixed-regime; **no gradients** beyond the existing faint regime wash; **no decorative numbering**. This surface specifically purges: the gradient panel headers (`bg-gradient-to-br`), the red "Risk radar" gradient (`bg-gradient-to-b from-fin-red/5`), and all `text-fin-blue` link/icon literals (→ `text-accent`).
 - **Tests stay green** — 150+ plumbing/page tests must pass. `npm test` runs `vitest run` from `frontend/olympus`. Page-level tests are updated as part of this work.
@@ -863,6 +872,8 @@ Replace the 5-table stack with the ledger artifact: claim/conviction/horizon/sta
 **Interfaces:**
 - Consumes: `useDashboard()` → `data.portfolio.strategy.theses: Thesis[]`, `data.positions: Position[]`, `data.portfolio.meta.last_updated`; `findThesisById` (Task 1); `joinPositionsToThesis` (Phase 0 `lib/thesis-id.ts`); `ConvictionMeter`, `AsOfBadge` (Phase 0); `ThesisCriteriaColumns`, `ThesisHoldingsExpressing`, `ThesisProvenanceStrip` (Task 5); `PortfolioSectionNav`, `SUBPAGE_MAX`, `AtlasLoader` (existing). `CONFIDENCE_PIPS = 4` matches Task 3.
 - Produces: the `/portfolio/theses/[thesisId]` detail body. Provenance `documentKey` = `'digest'` (the day's thesis-bearing node; `stageForDocumentKey('digest')` → `'synthesis'`).
+
+> **Superseded 2026-08** by [#1784](https://github.com/digithings-ai/digithings/pull/1784) (Fixes #1760): this component still produces the detail body, but it is served at `/portfolio/theses?thesis=<id>`; the `[thesisId]` route is gone. See the Global Constraints note above.
 
 - [ ] **Step 1: Rewrite ThesisDetailPageInner.tsx**
 

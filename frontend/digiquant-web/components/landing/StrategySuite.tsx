@@ -45,13 +45,16 @@ import { chartFullSpan, clipOhlc } from "@/components/tearsheet/series";
 import { avgTradePct, cagrPct, tradesPerYear } from "@/components/tearsheet/stats";
 import { symbolBase } from "@/components/tearsheet/strategy-names";
 import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsheet/types";
-import index from "@/public/strategies/index.json";
+import { fetchStrategyIndex, fetchTearsheet as fetchTearsheetLive } from "@/lib/live/strategies";
 
 const SLAPPER_ORDER = ["btc_slapper", "eth_slapper", "sol_slapper"] as const;
-const ALL_STRATS = index as StrategyIndexEntry[];
-const STRATEGIES = SLAPPER_ORDER.map(
-  (id) => ALL_STRATS.find((s) => s.strategy === id) ?? ALL_STRATS[0],
-).filter(Boolean) as StrategyIndexEntry[];
+
+/** Order the live index into the BTC → ETH → SOL spotlight sequence. */
+function orderSlappers(all: StrategyIndexEntry[]): StrategyIndexEntry[] {
+  return SLAPPER_ORDER.map((id) => all.find((s) => s.strategy === id)).filter(
+    (s): s is StrategyIndexEntry => Boolean(s),
+  );
+}
 
 const PREVIEW_PANE_H = 220;
 const PREVIEW_LOOKBACK = "6m" as const;
@@ -103,9 +106,9 @@ async function fetchTearsheet(strategyId: string): Promise<TearsheetData | null>
   loadStatus.set(strategyId, "loading");
   notifyTearsheetSubscribers();
 
-  const promise = fetch(`/strategies/${strategyId}.json`)
-    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-    .then((d: TearsheetData) => {
+  const promise = fetchTearsheetLive(strategyId)
+    .then((d: TearsheetData | null) => {
+      if (!d) throw new Error("live store returned no tearsheet");
       tearsheetCache.set(strategyId, d);
       loadStatus.set(strategyId, "loaded");
       notifyTearsheetSubscribers();
@@ -329,8 +332,19 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
 });
 
 export function StrategySuite() {
+  const [strategies, setStrategies] = useState<StrategyIndexEntry[]>([]);
+
   useEffect(() => {
-    prefetchAllTearsheets(STRATEGIES.map((s) => s.strategy));
+    let alive = true;
+    void fetchStrategyIndex().then((all) => {
+      if (!alive) return;
+      const ordered = orderSlappers(all);
+      setStrategies(ordered);
+      prefetchAllTearsheets(ordered.map((s) => s.strategy));
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   return (
@@ -341,7 +355,7 @@ export function StrategySuite() {
             <span className="kicker">{"// pre-built strategy library"}</span>
             <h2 className="dq-title">Research-grade systems, ready to explore.</h2>
             <p className="dq-sub">
-              Browse calibrated backtests from the DigiQuant library — equity, drawdown, trade
+              Browse calibrated backtests from the digiquant library — equity, drawdown, trade
               logs, and full tearsheets for every release. More assets join the catalog as they
               clear the pipeline.
             </p>
@@ -356,9 +370,9 @@ export function StrategySuite() {
 
         <DeckStack
           ariaLabel="Strategy tearsheets"
-          rail={STRATEGIES.map((s) => symbolBase(s.symbol))}
+          rail={strategies.map((s) => symbolBase(s.symbol))}
         >
-          {STRATEGIES.map((entry) => (
+          {strategies.map((entry) => (
             <DeckCard key={entry.strategy} className="dqss-card">
               <StrategyTearsheetCard entry={entry} />
             </DeckCard>

@@ -1,5 +1,7 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { formatUsd, formatTokens, cacheHitPct } from './run-economics-row';
+import { formatDuration, RunEconomicsRow } from './run-economics-row';
 import type { AtlasRunDiagnostics } from '@/lib/types';
 
 function diag(o: Partial<AtlasRunDiagnostics>): AtlasRunDiagnostics {
@@ -14,19 +16,32 @@ function diag(o: Partial<AtlasRunDiagnostics>): AtlasRunDiagnostics {
 }
 
 describe('run-economics formatting', () => {
-  it('formats cost to cents with a leading $', () => {
-    expect(formatUsd(0.616)).toBe('$0.62');
+  it('formats run duration compactly', () => {
+    expect(formatDuration(154)).toBe('2m 34s');
+    expect(formatDuration(42)).toBe('42s');
   });
-  it('renders null cost as an em-dash', () => {
-    expect(formatUsd(null)).toBe('—');
-  });
-  it('abbreviates tokens to millions', () => {
-    expect(formatTokens(1_640_000)).toBe('1.64M');
-  });
-  it('computes cache-hit pct from cached/total tokens', () => {
-    expect(cacheHitPct(diag({}))).toBe(39);
-  });
-  it('returns null cache-hit when total tokens absent', () => {
-    expect(cacheHitPct(diag({ total_tokens: null }))).toBeNull();
+
+  it('renders the public run-health values in a padded responsive grid', () => {
+    const html = renderToStaticMarkup(
+      createElement(RunEconomicsRow, {
+        latest: diag({
+          duration_s: 154,
+          segments_total: 27,
+          segments_ok: 24,
+          segments_carried: 2,
+          segments_failed: 1,
+        }),
+      }),
+    );
+
+    expect(html).toContain('Duration');
+    expect(html).toContain('2m 34s');
+    expect(html).toContain('Segments produced');
+    expect(html).toContain('24/27');
+    expect(html).toContain('Carried');
+    expect(html).toContain('Failed');
+    expect(html).toContain('grid-cols-2');
+    expect(html).toContain('md:grid-cols-4');
+    expect(html).toContain('p-4');
   });
 });

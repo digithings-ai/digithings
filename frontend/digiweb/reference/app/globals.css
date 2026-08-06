@@ -20,6 +20,7 @@
 @import "@digithings/web/styles/data-layout.css";
 @import "@digithings/web/styles/deck.css";
 @import "@digithings/web/styles/effects-chrome.css";
+@import "@digithings/web/styles/command-palette.css";
 
 /* Shared components (@digithings/web) carry token-backed utilities, and
    Tailwind never scans package sources on its own — point it at them
@@ -40,6 +41,8 @@
 @source "../../web/src/components/data-layout";
 @source "../../web/src/components/deck";
 @source "../../web/src/components/effects-chrome";
+@source "../../web/src/components/command-palette";
+@source "../../web/src/components/symbols";
 
 /* Shared base for every design-reference page. Family-specific styles live
    next to their page (app/<family>/<family>.css) — keep this file small. */

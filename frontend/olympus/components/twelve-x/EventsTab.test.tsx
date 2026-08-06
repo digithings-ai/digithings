@@ -66,6 +66,26 @@ const events: FxEconomicCalendarRow[] = [
 
 const noOpinions: FxEventSnapshotRow[] = [];
 
+/** Create a minimal opinion snapshot for testing evidence-based interactivity. */
+function opinion(
+  partial: Partial<FxEventSnapshotRow> & { event_key: string },
+): FxEventSnapshotRow {
+  return {
+    run_date: '2026-06-22',
+    event_name: 'Some Event',
+    event_date: null,
+    calendar_external_id: '',
+    release_at: null,
+    category: 'macro',
+    currencies: [],
+    mentions: 1,
+    brokers: ['Atlas Macro'],
+    citations: [],
+    as_of: '2026-06-22T00:00:00Z',
+    ...partial,
+  };
+}
+
 function render(props: Partial<Parameters<typeof EventsTab>[0]> = {}): string {
   return renderToStaticMarkup(
     createElement(EventsTab, {
@@ -128,7 +148,17 @@ describe('EventsTab view switcher (Task 4.2)', () => {
 
   it('renders an empty state in List view with no events', () => {
     const html = render({ events: [] });
-    expect(html).toContain('No upcoming economic events');
+    expect(html).toContain('No economic releases have been ingested');
+  });
+
+  // #1753: the feed's forward horizon is shorter than this surface's 14-day window, so
+  // the empty state is the normal state for days at a time. It must describe the FEED,
+  // not assert that no macro releases exist — a claim a real 14-day window disproves.
+  it('attributes the empty state to the feed rather than claiming there are no events', () => {
+    for (const html of [render({ events: [] }), render({ events: [], initialView: 'timeline' })]) {
+      expect(html).toContain('shared macro calendar feed does not currently cover this window');
+      expect(html).not.toContain('No upcoming economic events in the next 14 days.');
+    }
   });
 });
 
@@ -157,10 +187,36 @@ describe('EventsTab event-detail slide-over', () => {
 });
 
 describe('EventsTab timeline wiring', () => {
-  it('renders the timeline cards as clickable buttons in timeline view', () => {
-    const html = render({ initialView: 'timeline' });
-    // The tl-card is now a button element wired to onSelect.
+  it('renders timeline cards as clickable buttons when they have evidence', () => {
+    // Provide an opinion for the first event so it becomes selectable.
+    const withOpinions = [
+      opinion({
+        event_key: 'core-pce',
+        event_name: 'Core PCE Price Index',
+        event_date: '2026-06-22',
+        mentions: 2,
+        brokers: ['Goldman', 'JPM'],
+        citations: [
+          {
+            broker: 'Goldman',
+            expected_outcome: 'In line',
+            fx_impact: 'USD bid',
+            source_file: 'gs.pdf',
+            brief_key: 'gs',
+          },
+        ],
+      }),
+    ];
+    const html = render({ initialView: 'timeline', opinions: withOpinions });
+    // At least one tl-card should be a button (the one with evidence).
     expect(html).toMatch(/<button[^>]*tl-card/);
+  });
+
+  it('renders timeline cards as static divs when they have no evidence', () => {
+    const html = render({ initialView: 'timeline', opinions: noOpinions });
+    // All cards should be divs (no evidence = no interactivity).
+    expect(html).toMatch(/<div[^>]*tl-card/);
+    expect(html).not.toMatch(/<button[^>]*tl-card/);
   });
 });
 
@@ -203,5 +259,39 @@ describe('body-overlap fix holds for the multi-day timeline path', () => {
     for (const c of cards) expect(c.width).toBeGreaterThanOrEqual(88);
     // And, being visually overlapping, they sit on distinct lanes.
     expect(cards[0].lane).not.toBe(cards[1].lane);
+  });
+});
+
+describe('day grouping is viewer-local, not UTC (#1753)', () => {
+  it('files a UTC-tomorrow release under the local day its header shows', () => {
+    // 01:30Z Aug 1 is 21:30 Jul 31 in New York. The tab groups on eventLocalDateKey, so
+    // the header must read the LOCAL day — which is why the query bound in
+    // `getUpcomingEvents` has to be the local date too, or this row is never fetched.
+    const realTz = process.env.TZ;
+    process.env.TZ = 'America/New_York';
+    try {
+      const html = renderToStaticMarkup(
+        createElement(EventsTab, {
+          events: [
+            row({
+              id: 42,
+              event_date: '2026-08-01',
+              event_datetime_utc: '2026-08-01T01:30:00Z',
+              event_name: 'Late Tape Release',
+            }),
+          ],
+          opinions: noOpinions,
+          runDate: '2026-07-31',
+          focus: null,
+        }),
+      );
+      // Scoped to the day header's own text node: the row's event_date is 2026-08-01, so
+      // a 2026-07-31 header can only have come from eventLocalDateKey.
+      expect(html).toContain('>2026-07-31<');
+      expect(html).not.toContain('>2026-08-01<');
+    } finally {
+      if (realTz === undefined) delete process.env.TZ;
+      else process.env.TZ = realTz;
+    }
   });
 });

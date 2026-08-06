@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# commit_helper.sh — Conventional commit helper for DigiThings.
+# commit_helper.sh — Conventional commit helper for digithings.
 #
 # Validates and applies commits in the format:
 #   type(component): description
@@ -70,7 +70,7 @@ do_commit() {
 # ── Interactive mode ──────────────────────────────────────────────────────────
 
 interactive_mode() {
-  echo "── DigiThings Commit Helper ─────────────────────────────────────────"
+  echo "── digithings Commit Helper ─────────────────────────────────────────"
   echo ""
 
   echo "Type (${VALID_TYPES[*]}):"

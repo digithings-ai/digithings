@@ -57,6 +57,31 @@ describe('buildPipelineDayData', () => {
     expect(d.fanoutKeys['asset-classes']).toEqual([]);
     expect(d.fanoutCounts['analysts']).toBeUndefined();
   });
+
+  it('retains metadata for every persisted artifact, including keys outside the graph', () => {
+    const d = buildPipelineDayData([
+      {
+        document_key: 'macro',
+        title: 'Macro view',
+        doc_type: null,
+        category: 'macro',
+        segment: 'macro',
+      },
+      {
+        document_key: 'document-deltas/macro',
+        title: 'Macro change',
+        doc_type: 'Document Delta',
+        category: 'delta',
+        segment: 'document_delta',
+      },
+    ]);
+
+    expect(d.artifacts).toEqual([
+      expect.objectContaining({ documentKey: 'document-deltas/macro', docType: 'Document Delta' }),
+      expect.objectContaining({ documentKey: 'macro', title: 'Macro view' }),
+    ]);
+    expect(d.presentKeys.has('document-deltas/macro')).toBe(true);
+  });
 });
 
 describe('fanoutIdForKey', () => {

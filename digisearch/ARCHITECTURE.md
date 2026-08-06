@@ -1,4 +1,4 @@
-# DigiSearch Architecture
+# digisearch Architecture
 
 **Component:** `digisearch`
 **Port:** 8002 (HTTP); 8765 (MCP, `digisearch-mcp` profile)
@@ -25,18 +25,18 @@
 
 ## 1. Overview
 
-DigiSearch is the centralized RAG (Retrieval-Augmented Generation) and document-search component of the DigiThings stack. It owns the complete retrieval pipeline: document ingestion, parsing, chunking, embedding, vector indexing, hybrid keyword/vector search, reranking, and result normalization.
+digisearch is the centralized RAG (Retrieval-Augmented Generation) and document-search component of the digithings stack. It owns the complete retrieval pipeline: document ingestion, parsing, chunking, embedding, vector indexing, hybrid keyword/vector search, reranking, and result normalization.
 
 ### Role in the ecosystem
 
-DigiSearch is consumed as a **vertical** under DigiGraph (the hub). DigiGraph registers DigiSearch as an orchestrator connector and delegates tool calls to it via HTTP. DigiSearch may also be reached directly by:
+digisearch is consumed as a **vertical** under digigraph (the hub). digigraph registers digisearch as an orchestrator connector and delegates tool calls to it via HTTP. digisearch may also be reached directly by:
 
-- **DigiFlow** (Langflow) — via REST or MCP
+- **digiflow** (Langflow) — via REST or MCP
 - **CLI operators** — via the `digisearch` Typer CLI
-- **DigiClaw MCP clients** — via MCP attachment at `http://127.0.0.1:8765/mcp`
+- **digiclaw MCP clients** — via MCP attachment at `http://127.0.0.1:8765/mcp`
 - **Power users** — directly at `http://127.0.0.1:8002`
 
-In the federated hub model (`DIGI_HUB_MODE=federated`), DigiGraph exposes the `digisearch`, `digisearch_fetch_all`, and optionally `digisearch_research_delegate` tool names to its LLM. The tool schemas and dispatch logic live **entirely in DigiSearch**, not DigiGraph — which is the correct separation of concern.
+In the federated hub model (`DIGI_HUB_MODE=federated`), digigraph exposes the `digisearch`, `digisearch_fetch_all`, and optionally `digisearch_research_delegate` tool names to its LLM. The tool schemas and dispatch logic live **entirely in digisearch**, not digigraph — which is the correct separation of concern.
 
 ### RAG pipeline
 
@@ -70,7 +70,7 @@ POST /query → QueryResponse
 
 ### Multi-backend strategy
 
-DigiSearch uses a **backend registry** pattern (`search/_stub.py`). Backends register as callables `(Query, index_name) -> SearchResponse | None`. The router tries them in registration order (Azure first, then Chroma). Returning `None` means "not configured here; try next." This lets the same codebase serve both an Azure-hosted enterprise deployment and a local Chroma-on-disk deployment with zero code changes — only environment variables differ.
+digisearch uses a **backend registry** pattern (`search/_stub.py`). Backends register as callables `(Query, index_name) -> SearchResponse | None`. The router tries them in registration order (Azure first, then Chroma). Returning `None` means "not configured here; try next." This lets the same codebase serve both an Azure-hosted enterprise deployment and a local Chroma-on-disk deployment with zero code changes — only environment variables differ.
 
 The in-memory stub (`DIGISEARCH_ALLOW_STUB=1`) is permanently last and exists for unit tests only. Startup enforcement (`_require_real_search_backend`) prevents the stub from activating in production.
 
@@ -129,7 +129,7 @@ All paths under the FastAPI app in `server.py`. Base URL: `http://digisearch:800
 
 #### `GET /health` and `GET /healthz`
 
-Public (no auth). Both endpoints are rate-limit-exempt. `/health` returns `{"status": "ok", "service": "digisearch"}` (legacy, kept for back-compat). `/healthz` returns `{"ok": true}` — the preferred liveness probe for load balancers and k8s (see AGENTS.md "Liveness vs status"). Used by Docker healthcheck and DigiGraph startup dependency.
+Public (no auth). Both endpoints are rate-limit-exempt. `/health` returns `{"status": "ok", "service": "digisearch"}` (legacy, kept for back-compat). `/healthz` returns `{"ok": true}` — the preferred liveness probe for load balancers and k8s (see AGENTS.md "Liveness vs status"). Used by Docker healthcheck and digigraph startup dependency.
 
 **Gap:** Does not probe backend connectivity. A backend can be offline and both endpoints return 200. See [Redesign Recommendations](#12-redesign-recommendations).
 
@@ -198,7 +198,7 @@ Returns HTTP 501. Per-document delete is not implemented.
 
 Auth required (`digisearch:query` scope). Rate limited: 30 req/min.
 
-Returns OpenAI-style tool definitions for DigiGraph orchestration. Accepts optional `index_config` body to specialize tool schemas (filterable_fields, facetable_fields, result_metadata_fields).
+Returns OpenAI-style tool definitions for digigraph orchestration. Accepts optional `index_config` body to specialize tool schemas (filterable_fields, facetable_fields, result_metadata_fields).
 
 Returns 2 or 3 tools:
 - `digisearch` — standard search with pagination
@@ -209,7 +209,7 @@ Returns 2 or 3 tools:
 
 Auth required (`digisearch:query` scope). Rate limited: 10 req/min.
 
-Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, or `digisearch_research_delegate`. The hub calls this to execute search without importing DigiSearch Python code directly.
+Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, or `digisearch_research_delegate`. The hub calls this to execute search without importing digisearch Python code directly.
 
 #### `POST /v1/research_turn`
 
@@ -319,7 +319,7 @@ SearchResponse
 
 ### Standard JSON hit shape
 
-`normalize_query_hit()` in `core/standard_hits.py` converts `Result` to the portable dict shape that all consumers (DigiGraph, DigiChat, MCP) depend on:
+`normalize_query_hit()` in `core/standard_hits.py` converts `Result` to the portable dict shape that all consumers (digigraph, digichat, MCP) depend on:
 
 | Key | Type | Notes |
 |-----|------|-------|
@@ -367,11 +367,11 @@ digisearch/src/digisearch/
 │
 ├── server.py                  # FastAPI app: HTTP endpoints, rate limiting, correlation IDs
 ├── mcp_server.py              # FastMCP: MCP tool server (port 8765)
-├── orchestrator_tools.py      # OpenAI-style tool manifest for DigiGraph orchestration
+├── orchestrator_tools.py      # OpenAI-style tool manifest for digigraph orchestration
 ├── cli.py                     # Typer CLI (digisearch)
 ├── ingest_worker.py           # Bulk ingest placeholder (not implemented)
 ├── http_client.py             # HTTP client helpers for callers (query_digisearch, format_results_table)
-├── client.py                  # DigiSearch Python client
+├── client.py                  # digisearch Python client
 │
 ├── core/
 │   ├── models.py              # Document, Chunk, Query, Result, SearchResponse
@@ -438,12 +438,12 @@ attribute access via a `_LAZY = {name: module}` table:
 
 | Public name | Resolved from |
 |-------------|---------------|
-| `DigiSearch` | `digisearch.client` |
+| `digisearch` | `digisearch.client` |
 | `Chunk`, `Document`, `Query`, `Result` | `digisearch.core.models` |
 
 **Contract (do not regress):**
 
-- `from digisearch import DigiSearch` (and `Chunk`/`Document`/`Query`/`Result`)
+- `from digisearch import digisearch` (and `Chunk`/`Document`/`Query`/`Result`)
   keeps working — `__getattr__` imports the backing module on demand and caches
   the result in module `globals()`, so the cost is paid at most once.
 - Importing a **leaf submodule** (e.g. `digisearch.ingestion.parsers.pdf` or
@@ -470,7 +470,7 @@ core needs. The HTTP/MCP/CLI service stack and the parser deps are extras:
 | Extra | Adds | Needed by |
 |-------|------|-----------|
 | _(base)_ | `polars`, `pydantic`, `pyyaml`, `httpx`, `digibase` | core models/config/client, parser import chain |
-| `[server]` | `fastapi`, `uvicorn[standard]`, `mcp`, `typer`, `digikey`, `python-json-logger` | `server.py`, `mcp_server.py`, `cli.py`, `digisearch.logging`, DigiKey auth middleware |
+| `[server]` | `fastapi`, `uvicorn[standard]`, `mcp`, `typer`, `digikey`, `python-json-logger` | `server.py`, `mcp_server.py`, `cli.py`, `digisearch.logging`, digikey auth middleware |
 | `[ingestion]` | `beautifulsoup4`, `python-docx`, `pdfplumber`, `chardet` | functional parsers (html/docx/pdf/plaintext); `polars` for the CSV parser is already in base |
 | `[chroma]` | `chromadb` | Chroma backend |
 | `[azure]` | `azure-search-documents`, `azure-core` | Azure AI Search backend |
@@ -538,19 +538,19 @@ Default `alpha = 0.6` (60% weight on vector results). The RRF constant `k=60` is
 
 ### Orchestrator dispatch pattern
 
-DigiGraph registers DigiSearch via `POST /v1/orchestrator_tools`. When an LLM calls one of the tool names, DigiGraph calls `POST /v1/orchestrator_invoke` with `{tool, arguments, default_index_name}`. The dispatch code in `server.py` (`api_orchestrator_invoke`) maps tool names to internal query logic. This means:
+digigraph registers digisearch via `POST /v1/orchestrator_tools`. When an LLM calls one of the tool names, digigraph calls `POST /v1/orchestrator_invoke` with `{tool, arguments, default_index_name}`. The dispatch code in `server.py` (`api_orchestrator_invoke`) maps tool names to internal query logic. This means:
 
-- Tool schemas are owned and versioned by DigiSearch
-- DigiGraph has no search logic — it is a pass-through hub
+- Tool schemas are owned and versioned by digisearch
+- digigraph has no search logic — it is a pass-through hub
 - `digisearch_fetch_all` performs server-side pagination in a while loop (page size 500) and returns the full collected set in a single response, which can be very large
 
 ---
 
 ## 6. Security Analysis
 
-### DigiKey JWT auth scopes
+### digikey JWT auth scopes
 
-DigiSearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middleware`. The middleware validates DigiKey JWTs and enforces path-to-scope mappings defined in `digisearch_path_scopes`.
+digisearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middleware`. The middleware validates digikey JWTs and enforces path-to-scope mappings defined in `digisearch_path_scopes`.
 
 | Endpoint | Required scope |
 |----------|---------------|
@@ -656,7 +656,7 @@ The default `alpha=0.6` in `HybridSearcher` is a reasonable starting point biase
 - The RRF constant `k=60` is hardcoded; lower values (e.g. `k=20`) favor top-ranked results more strongly
 - For the Chroma backend, `mode` is passed as a hint but Chroma only supports vector search — the keyword leg is absent, making alpha irrelevant
 
-For Azure AI Search, the service uses its own internal hybrid ranking. The DigiSearch `mode` parameter maps to `query_type="simple"` in all cases — there is no `"semantic"` or `"vector"` query type being set. This means Azure's BM25 is always active and DigiSearch does not currently unlock Azure's native vector search or semantic ranker modes.
+For Azure AI Search, the service uses its own internal hybrid ranking. The digisearch `mode` parameter maps to `query_type="simple"` in all cases — there is no `"semantic"` or `"vector"` query type being set. This means Azure's BM25 is always active and digisearch does not currently unlock Azure's native vector search or semantic ranker modes.
 
 ### Embedding cache hit rates
 
@@ -701,37 +701,37 @@ For corpora beyond ~1M chunks, prefer Azure AI Search; Chroma is appropriate for
 
 ## 9. Integration Points
 
-### Orchestrator tools contract with DigiGraph
+### Orchestrator tools contract with digigraph
 
-DigiGraph calls DigiSearch via two HTTP routes:
+digigraph calls digisearch via two HTTP routes:
 
 1. `POST /v1/orchestrator_tools` — fetches tool schemas, optionally specializing them with index metadata (filterable fields, facetable fields, result columns, complex field structures). The hub caches these and presents them to the LLM.
 
 2. `POST /v1/orchestrator_invoke` — dispatches tool execution. The hub passes `{tool, arguments, default_index_name}` and receives `{ok, service, tool, data}`.
 
-The contract is versioned by `{"tools": [...], "version": 1}` in the tools response. DigiGraph should treat unknown tool names from `/v1/orchestrator_tools` gracefully.
+The contract is versioned by `{"tools": [...], "version": 1}` in the tools response. digigraph should treat unknown tool names from `/v1/orchestrator_tools` gracefully.
 
-`DIGISEARCH_INDEX` env on DigiGraph controls the default index name. When `DIGI_HUB_MODE=federated`, DigiGraph registers DigiSearch as a connector tool that the LLM can call directly.
+`DIGISEARCH_INDEX` env on digigraph controls the default index name. When `DIGI_HUB_MODE=federated`, digigraph registers digisearch as a connector tool that the LLM can call directly.
 
-### DigiClaw MCP attachment
+### digiclaw MCP attachment
 
-DigiClaw may attach to the DigiSearch MCP server at `http://127.0.0.1:8765/mcp` (loopback, `digisearch-mcp` Docker profile). Tools available: `digisearch_query`, `digisearch_research_turn` (when `[agent]` is installed).
+digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback, `digisearch-mcp` Docker profile). Tools available: `digisearch_query`, `digisearch_research_turn` (when `[agent]` is installed).
 
 MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is purely at network level (loopback binding).
 
-### DigiFlow integration
+### digiflow integration
 
-DigiFlow (Langflow) connects at `http://digisearch:8002` (HTTP) or MCP. Standard `POST /query` with `format=table` for display-ready results. DigiFlow can also import the `DigiSearch` Python client directly if running in the same process.
+digiflow (Langflow) connects at `http://digisearch:8002` (HTTP) or MCP. Standard `POST /query` with `format=table` for display-ready results. digiflow can also import the `digisearch` Python client directly if running in the same process.
 
 ### Sidecar YAML metadata loading
 
-At ingest time (both `POST /ingest` and CLI `digisearch ingest`), DigiSearch looks for a sidecar file at `{stem}.yaml` or `{stem}.yml` next to the source file. The sidecar `metadata:` block (or flat normative keys at root) is loaded first, then merged with parser-extracted metadata, then with the request body `metadata` field. The request body wins on conflicts.
+At ingest time (both `POST /ingest` and CLI `digisearch ingest`), digisearch looks for a sidecar file at `{stem}.yaml` or `{stem}.yml` next to the source file. The sidecar `metadata:` block (or flat normative keys at root) is loaded first, then merged with parser-extracted metadata, then with the request body `metadata` field. The request body wins on conflicts.
 
 This allows a document corpus to be annotated with evidence tier, DOI, venue, and tags without embedding metadata in the document itself.
 
 ### `DIGI_EXTRACT_STRATEGY_AFTER_DOCUMENT_RAG`
 
-When `DIGI_EXTRACT_STRATEGY_AFTER_DOCUMENT_RAG=1` is set on DigiGraph, DigiGraph performs structured extraction of `strategy_name` and `symbols` after receiving RAG context from DigiSearch. This is a DigiGraph concern — DigiSearch is unaware of it.
+When `DIGI_EXTRACT_STRATEGY_AFTER_DOCUMENT_RAG=1` is set on digigraph, digigraph performs structured extraction of `strategy_name` and `symbols` after receiving RAG context from digisearch. This is a digigraph concern — digisearch is unaware of it.
 
 ---
 
@@ -798,13 +798,13 @@ docker compose --profile digisearch-mcp up
 | `COHERE_API_KEY` | _(unset)_ | Cohere key for CohereEmbedder / CohereReranker |
 | `DIGI_CORS_ORIGINS` / `DIGISEARCH_CORS_ORIGINS` | (empty) | Comma-separated CORS allowed origins; legacy `DIGI_ALLOWED_ORIGINS` still honored |
 | `DIGI_DISABLE_RATE_LIMIT` | `0` | Disable per-IP rate limiting (testing) |
-| `DIGIKEY_JWKS_URL` | _(required)_ | DigiKey JWKS endpoint for JWT validation |
+| `DIGIKEY_JWKS_URL` | _(required)_ | digikey JWKS endpoint for JWT validation |
 | `DIGIKEY_ISSUER` | _(required)_ | JWT issuer |
 | `DIGIKEY_AUDIENCE` | _(required)_ | JWT audience |
 
 ### MCP server startup
 
-The MCP server is started via `digisearch mcp --port 8765` (CLI) or the `digisearch-mcp` Docker profile. Default transport: streamable HTTP. The server runs `FastMCP("DigiSearch")` from the `mcp` package.
+The MCP server is started via `digisearch mcp --port 8765` (CLI) or the `digisearch-mcp` Docker profile. Default transport: streamable HTTP. The server runs `FastMCP("digisearch")` from the `mcp` package.
 
 In the current implementation, `_digisearch_client` is only set by calling `create_mcp_with_indexes(client)` explicitly. The `mcp_server.py` module-level setup does not call this automatically — tools fall back to the stub unless caller code wires the client at startup.
 
@@ -905,7 +905,7 @@ ARQ (async Redis queue) is the lightest-weight option and avoids the Celery brok
 
 ### (d) Add `/v1/health/detailed` with backend connectivity checks
 
-**Problem:** `GET /health` always returns 200 regardless of backend state. DigiGraph and monitoring cannot distinguish "service up but backend offline" from "fully healthy."
+**Problem:** `GET /health` always returns 200 regardless of backend state. digigraph and monitoring cannot distinguish "service up but backend offline" from "fully healthy."
 
 **Recommendation:**
 
@@ -963,9 +963,9 @@ This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-fl
 
 ### Structured logging (#215)
 
-All DigiSearch entrypoints (`server.py`, `mcp_server.py`, `ingest_worker.py`) call `digisearch.logging.configure_logging()` at startup. The helper installs a `python-json-logger` stream handler on the root logger that renames `asctime`/`levelname` to `timestamp`/`level`, stamps every record with `service="digisearch"`, and attaches the `RequestIdLogFilter` from `digibase.http` (#213) so `request_id` is always present (defaults to `"-"` outside a request).
+All digisearch entrypoints (`server.py`, `mcp_server.py`, `ingest_worker.py`) call `digisearch.logging.configure_logging()` at startup. The helper installs a `python-json-logger` stream handler on the root logger that renames `asctime`/`levelname` to `timestamp`/`level`, stamps every record with `service="digisearch"`, and attaches the `RequestIdLogFilter` from `digibase.http` (#213) so `request_id` is always present (defaults to `"-"` outside a request).
 
-Every record emitted by a DigiSearch hot path includes the following JSON keys:
+Every record emitted by a digisearch hot path includes the following JSON keys:
 
 | Key | Source |
 | --- | --- |

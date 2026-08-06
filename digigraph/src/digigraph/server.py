@@ -1,4 +1,4 @@
-"""DigiGraph HTTP API. Phase 0: run_digigraph_workflow. Phase 1+: LangGraph + MCP."""
+"""digigraph HTTP API. Phase 0: run_digigraph_workflow. Phase 1+: LangGraph + MCP."""
 
 from __future__ import annotations
 
@@ -18,16 +18,17 @@ logger = logging.getLogger(__name__)
 _DEBUG_REQUEST_LOG: list[dict] = []
 _DEBUG_REQUEST_LOG_MAX = 5
 
-from fastapi import APIRouter, FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-
-from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS, STREAM_SSE_ERRORS
 from digibase.cors import install_cors, resolve_cors_origins
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digigraph_path_scopes
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+
+from digigraph import __version__
+from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS, STREAM_SSE_ERRORS
 from digigraph.formatters import get_stream_formatter
 from digigraph.llm_client import completion_text
 from digigraph.model_config import get_model_for_mode
@@ -38,7 +39,6 @@ from digigraph.models import (
     WorkflowResult,
 )
 from digigraph.policy import debug_endpoints_enabled, thread_api_enabled
-from digigraph import __version__
 from digigraph.thread_scope import (
     assert_thread_access,
     auth_subject_from_request,
@@ -85,8 +85,8 @@ def _allowed_origins() -> list[str]:
 
 
 app = FastAPI(
-    title="DigiGraph",
-    description="Orchestration brain: run_digigraph_workflow (DigiClaw custom skill)",
+    title="digigraph",
+    description="Orchestration brain: run_digigraph_workflow (digiclaw custom skill)",
     version=__version__,
 )
 install_metrics(app, service="digigraph", version=__version__)
@@ -96,7 +96,7 @@ app.add_middleware(DigiAuthMiddleware, service="digigraph", path_scopes=digigrap
 
 @app.middleware("http")
 async def lite_llm_proxy_header_context(request: Request, call_next):
-    """Apply per-request LiteLLM Bearer from X-LiteLLM-Proxy-Key (DigiKey funnel via DigiChat)."""
+    """Apply per-request LiteLLM Bearer from X-LiteLLM-Proxy-Key (digikey funnel via digichat)."""
     from digigraph.llm_auth import pop_lite_llm_proxy, push_lite_llm_proxy_header
 
     tok = push_lite_llm_proxy_header(request)
@@ -108,13 +108,32 @@ async def lite_llm_proxy_header_context(request: Request, call_next):
 
 @app.middleware("http")
 async def byok_header_context(request: Request, call_next):
-    """Apply per-request BYOK user API key from X-BYOK-Key / X-BYOK-Provider (DigiChat BYOK flow).
+    """Apply per-request BYOK user API key from X-BYOK-Key / X-BYOK-Provider (digichat BYOK flow).
 
     The key is bound to a ContextVar for the duration of the request only.
     It is never logged or persisted server-side. On each request the key
     overrides the LLM client credentials for that single execution.
     """
-    from digigraph.llm_auth import pop_byok, push_byok_header
+    from digigraph.llm_auth import (
+        BYOK_ROUTABLE_PROVIDERS,
+        byok_provider_supported,
+        pop_byok,
+        push_byok_header,
+    )
+
+    if (request.headers.get("x-byok-key") or "").strip():
+        provider = (request.headers.get("x-byok-provider") or "openai").strip().lower()
+        if not byok_provider_supported(provider):
+            return json_error_response(
+                status_code=400,
+                code="byok_provider_unsupported",
+                message=(
+                    f"BYOK provider {provider!r} is not routed by digigraph, so your key "
+                    f"would not be used. Supported: {', '.join(BYOK_ROUTABLE_PROVIDERS)}."
+                ),
+                request=request,
+                service="digigraph",
+            )
 
     tok = push_byok_header(request)
     try:
@@ -176,13 +195,13 @@ install_request_id_middleware(app)
 install_request_id_logging()
 
 
-# OpenAI-compatible API (expose DigiGraph as a model in Open WebUI)
+# OpenAI-compatible API (expose digigraph as a model in Open WebUI)
 v1 = APIRouter(prefix="/v1", tags=["openai-compatible"])
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Legacy health check for Docker and DigiClaw (kept for back-compat)."""
+    """Legacy health check for Docker and digiclaw (kept for back-compat)."""
     return {"status": "ok", "service": "digigraph"}
 
 
@@ -191,7 +210,7 @@ def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
     Contract: returns HTTP 200 with ``{"ok": true}``. Intended for load
-    balancers and k8s probes. For richer diagnostics, see DigiSmith's
+    balancers and k8s probes. For richer diagnostics, see digismith's
     ``/v1/status``.
     """
     return {"ok": True}
@@ -275,7 +294,7 @@ def serve_file(path: str):
 @app.get("/test_llm")
 def test_llm() -> dict[str, str | bool]:
     """
-    Test DigiGraph → LiteLLM → Ollama (or configured provider).
+    Test digigraph → LiteLLM → Ollama (or configured provider).
     Same code path as workflow research node; no backtest.
     """
     try:
@@ -301,8 +320,8 @@ def _resolve_request_id(request: Request) -> str | None:
 @app.post("/workflow", response_model=WorkflowResult, operation_id="run_digigraph_workflow")
 def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> WorkflowResult:
     """
-    DigiClaw custom skill: run_digigraph_workflow.
-    Phase 0: user idea → backtest via DigiQuant → result in < 10s.
+    digiclaw custom skill: run_digigraph_workflow.
+    Phase 0: user idea → backtest via digiquant → result in < 10s.
     """
     rid = _resolve_request_id(http_request)
     if rid and not (req.request_id and str(req.request_id).strip()):

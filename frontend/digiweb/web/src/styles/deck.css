@@ -30,11 +30,21 @@
    runway between pins. */
 .deck-slots {
   display: grid;
-  gap: 55svh;
-  /* tail runway: enough scroll after the last card enters for it to ride up
-     to its pinned offset, so the completed stack is the section's final state.
-     Consumers can shorten the hold via --deck-tail. */
-  padding-bottom: var(--deck-tail, 65svh);
+  gap: var(--deck-gap, 55svh);
+}
+/* Tail runway: enough scroll after the last card enters for it to ride up to its
+   pinned offset, so the completed stack is the section's final state. It MUST be
+   a trailing grid track, not the container's padding-bottom: a grid item's sticky
+   containing block is its own track, and container padding does not extend it —
+   so a padding tail leaves the LAST card with no room to pin (it slides straight
+   through and never rests, unlike the others, which get their runway from the
+   following card's track). The ::after is that following track for the last card.
+   Height = tail − the gap that precedes it, so the total hold stays --deck-tail.
+   Consumers can shorten the hold via --deck-tail. */
+.deck-slots::after {
+  content: "";
+  display: block;
+  height: max(0px, calc(var(--deck-tail, 65svh) - var(--deck-gap, 55svh)));
 }
 
 .deck-card {
@@ -101,7 +111,12 @@
 @media (max-width: 900px) {
   .deck-slots {
     gap: 0.9rem;
-    padding-bottom: 0;
+  }
+
+  /* no sticky = no runway needed; drop the tail track so it can't leave dead
+     space below the last card (matches the former padding-bottom: 0). */
+  .deck-slots::after {
+    display: none;
   }
 
   .deck-card {

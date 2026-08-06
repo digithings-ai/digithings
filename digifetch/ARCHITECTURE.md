@@ -1,4 +1,4 @@
-# DigiFetch – Architecture
+# digifetch – Architecture
 
 <!--
 Scorer false positive: this document references the stdlib ``sleep`` builtin in prose and
@@ -8,7 +8,7 @@ Suppress that rule for this file:
 -->
 
 `digifetch` is the **shared web-scraping / headless-fetch engine** for the
-DigiThings monorepo. It is a standalone **library** (no FastAPI, no port, no
+digithings monorepo. It is a standalone **library** (no FastAPI, no port, no
 service coupling) that extracts the *reusable mechanics* of web scraping —
 headless-browser session lifecycle, composable retry/backoff, polite-scraping
 rate limiting, and an HTTP fetch/download path with a Playwright→HTTP cookie

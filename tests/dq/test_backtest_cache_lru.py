@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
+from digiquant.models import BacktestResult
 
 from digiquant import backtest as bt
-from digiquant.models import BacktestResult
 
 
 def _fake_result(name: str) -> BacktestResult:

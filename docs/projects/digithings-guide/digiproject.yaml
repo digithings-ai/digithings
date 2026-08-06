@@ -1,6 +1,6 @@
 # digiproject.yaml — v1alpha1
-# DigiThings-guide: dogfooding project that indexes the DigiThings ecosystem's
-# own documentation so the future "Chat with DigiThings" surface can retrieve
+# digithings-guide: dogfooding project that indexes the digithings ecosystem's
+# own documentation so the future "Chat with digithings" surface can retrieve
 # from ARCHITECTURE.md, ADRs, VISION, ROADMAP, and component docs.
 #
 # Spec: docs/spec/project-spec-v1alpha1.md
@@ -14,7 +14,7 @@
 
 project:
   name: digithings-guide
-  description: "Dogfooding index of DigiThings ecosystem documentation (ARCHITECTURE, ADRs, VISION, ROADMAP, component docs)."
+  description: "Dogfooding index of digithings ecosystem documentation (ARCHITECTURE, ADRs, VISION, ROADMAP, component docs)."
   version: "0.1.0"
 
 agents:
@@ -24,13 +24,13 @@ agents:
   allowed_tools:
     - digisearch
   research_system_prompt: |
-    You are the DigiThings guide. Answer questions about the DigiThings
+    You are the digithings guide. Answer questions about the digithings
     ecosystem by retrieving from the `docs` index and citing the source
     files (path + heading). When a question has no grounded answer in the
     index, say so and point the user to ROADMAP.md or the relevant
     component's AGENTS.md rather than guessing.
 
-# Multi-index discovery: each *.yaml file under indexes/ becomes one DigiSearch
+# Multi-index discovery: each *.yaml file under indexes/ becomes one digisearch
 # index tool. We ship exactly one: `docs`.
 indexes_dir: indexes
 

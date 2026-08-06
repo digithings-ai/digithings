@@ -23,9 +23,6 @@ vi.mock('@/components/pipeline/PipelineCanvas', () => ({
 vi.mock('@/components/pipeline/PipelineNodeDetail', () => ({
   default: () => null,
 }));
-vi.mock('@/components/pipeline/PipelineSummaryStrip', () => ({
-  default: () => createElement('div', null, 'summary-strip'),
-}));
 vi.mock('@/components/pipeline/PipelineDaySelector', () => ({
   default: () => createElement('div', null, 'day-selector'),
 }));
@@ -42,6 +39,29 @@ describe('app/pipeline/page', () => {
   it('renders the Pipeline heading', () => {
     const html = renderToStaticMarkup(createElement(PipelinePage));
     expect(html).toContain('Pipeline');
+  });
+
+  it('carries an sr-only h1 so the prerendered artifact keeps its heading', () => {
+    const html = renderToStaticMarkup(createElement(PipelinePage));
+    expect(html).toContain('<h1');
+    expect(html).toContain('sr-only');
+    expect(html).not.toContain('<main');
+  });
+
+  it('renders one command band above the workflow canvas', () => {
+    const html = renderToStaticMarkup(createElement(PipelinePage));
+    expect(html).toContain('data-testid="pipeline-workspace"');
+    expect(html).toContain('data-testid="pipeline-command-band"');
+    expect(html).toContain('data-testid="pipeline-workflow"');
+    expect(html.indexOf('pipeline-command-band')).toBeLessThan(html.indexOf('pipeline-workflow'));
+    expect(html).toContain('min-h-[calc(100dvh-125px)]');
+    expect(html).toContain('md:min-h-0');
+    expect(html).toContain('min-h-12');
+    expect(html).not.toContain('How today');
+    expect(html).not.toContain('research → deliberation → selection');
+    expect(html).not.toContain('summary-strip');
+    expect(html).not.toContain('glass-card');
+    expect(html).not.toContain('<main'); // AppFrame owns the sole main landmark
   });
 
   it('no horizontal scroll class on page wrapper — overflow-hidden on viewport only', () => {

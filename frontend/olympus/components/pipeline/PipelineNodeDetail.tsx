@@ -1,20 +1,36 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, FileSearch } from 'lucide-react';
+import { Skeleton, SkeletonGroup } from '@digithings/web';
+import { BookOpen, ChevronsLeft, ChevronsRight, FileSearch, Maximize2, Minimize2, X } from 'lucide-react';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
+import { pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
+import type { LaidOutNode } from '@/lib/pipeline-layout';
+import { PIPELINE_TOPOLOGY, pipelineNodeExplanation } from '@/lib/pipeline-topology';
 import LibraryDocumentBody from '@/components/library/LibraryDocumentBody';
 
 export interface PipelineNodeDetailProps {
+  node?: LaidOutNode | null;
   documentKey: string | null;
   date: string;
   onClose: () => void;
 }
 
-export default function PipelineNodeDetail({ documentKey, date, onClose }: PipelineNodeDetailProps) {
+export default function PipelineNodeDetail({
+  node = null,
+  documentKey,
+  date,
+  onClose,
+}: PipelineNodeDetailProps) {
   const [doc, setDoc] = useState<LibraryDocumentResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Reader ergonomics (#1679): comfortable (default) / wide / full-screen. Desktop
+  // only — the mobile docked pane keeps its height-based layout untouched.
+  const [size, setSize] = useState<'default' | 'wide' | 'full'>('default');
+  const explanation = node ? pipelineNodeExplanation(node.stageId, node.id) : null;
+  const runStatus = node?.runStatus
+    ?? (documentKey ? 'persisted-artifact' : node?.stateOnly ? 'state-only' : null);
 
   useEffect(() => {
     // No selection: the render derives the empty state from `documentKey`, so
@@ -45,62 +61,154 @@ export default function PipelineNodeDetail({ documentKey, date, onClose }: Pipel
     return () => { cancelled = true; };
   }, [documentKey, date]);
 
-  // Responsive container: desktop = fixed side panel, mobile = bottom sheet
+  // Mobile detail replaces the browser as a full-page surface; closing it returns to
+  // the exact Pipeline selection. Desktop keeps the in-workspace side panel.
   return (
     <aside
       aria-label="Node detail"
       aria-live="polite"
       className={[
-        // Mobile: bottom sheet
-        'fixed inset-x-0 bottom-0 z-30 bg-term-bg border-t border-hair rounded-t-2xl',
-        'h-[60vh] flex flex-col',
-        // Desktop: right side panel (overrides the bottom sheet positioning)
-        'md:inset-auto md:relative md:h-full md:w-[372px] md:border-t-0 md:border-l md:rounded-none',
+        'fixed inset-0 z-[1100] flex h-dvh w-full shrink-0 flex-col overflow-hidden bg-term-bg',
+        'pt-[env(safe-area-inset-top)] md:pt-0',
+        // Desktop reader sizes (#1679): comfortable / wide / full-screen; mobile is
+        // always the full-page surface from the develop-side mobile pass.
+        size === 'full'
+          ? 'md:fixed md:inset-0 md:z-50 md:h-full md:w-full'
+          : size === 'wide'
+            ? 'md:relative md:inset-auto md:z-20 md:h-full md:w-[min(80vw,960px)] md:min-h-0 md:border-l md:border-hair'
+            : 'md:relative md:inset-auto md:z-20 md:h-full md:w-[min(58vw,680px)] md:min-h-0 md:border-l md:border-hair',
       ].join(' ')}
     >
       {/* Header */}
-      <div className="flex items-start justify-between px-5 py-4 border-b border-hair flex-shrink-0">
+      <div className="flex flex-shrink-0 items-start justify-between border-b border-hair px-4 py-3 md:px-5 md:py-4">
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-bold tracking-[0.14em] uppercase text-accent mb-1">
-            {documentKey ? 'Document' : 'No selection'}
+          <div className="mb-1 text-xs font-bold uppercase text-accent">
+            {runStatus
+              ? pipelineNodeRunStatusLabel(runStatus)
+              : explanation
+                ? 'Pipeline guide'
+                : 'No selection'}
           </div>
           <div className="font-mono text-sm truncate text-ink">
-            {documentKey ?? '—'}
+            {node?.label ?? documentKey ?? '—'}
           </div>
+          {explanation && (
+            <div className="mt-1 font-mono text-xs text-ink-mute">
+              Stage {explanation.stageNumber} of {PIPELINE_TOPOLOGY.length} · {explanation.stageLabel}
+            </div>
+          )}
         </div>
-        <button
-          type="button"
-          aria-label="Close"
-          onClick={onClose}
-          className="ml-3 flex-shrink-0 w-7 h-7 flex items-center justify-center border border-hair rounded-lg text-ink-mute hover:text-ink transition-colors"
-        >
-          <X size={13} />
-        </button>
+        <div className="ml-3 flex flex-shrink-0 items-center gap-1.5">
+          {/* Reader-size toggles (#1679) — desktop only; mobile is already full-page */}
+          {size !== 'full' && (
+            <button
+              type="button"
+              aria-label={size === 'wide' ? 'Narrow panel' : 'Widen panel'}
+              onClick={() => setSize(size === 'wide' ? 'default' : 'wide')}
+              className="hidden h-8 w-8 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:flex"
+            >
+              {size === 'wide' ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label={size === 'full' ? 'Exit full screen' : 'Full screen'}
+            onClick={() => setSize(size === 'full' ? 'default' : 'full')}
+            className="hidden h-8 w-8 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:flex"
+          >
+            {size === 'full' ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 text-sm text-ink-mute leading-relaxed">
+      <div
+        className={[
+          'flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-sm leading-relaxed text-ink-mute md:px-5 md:py-4',
+          size === 'full' ? 'md:mx-auto md:w-full md:max-w-3xl' : '',
+        ].join(' ')}
+      >
         {/* Empty state */}
-        {!documentKey && (
+        {!documentKey && !explanation && (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
             <FileSearch size={32} className="text-ink-mute opacity-40" />
             <p className="text-ink-mute text-sm">No document selected.</p>
-            <p className="text-[12px] text-ink-mute/60">
+            <p className="text-xs text-ink-mute/60">
               Select a node in the pipeline graph to view its output here.
             </p>
           </div>
         )}
 
-        {/* Loading */}
+        {!documentKey && explanation && (
+          <div className="space-y-5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-hair bg-surface text-accent">
+              <BookOpen size={17} aria-hidden />
+            </div>
+            <div>
+              <p className="font-display text-lg leading-snug text-ink">{explanation.title}</p>
+              <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+                {explanation.description}
+              </p>
+            </div>
+            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-hair bg-hair">
+              <div className="bg-term-bg px-3 py-2.5">
+                <dt className="font-mono text-xs uppercase text-ink-mute">
+                  Stage
+                </dt>
+                <dd className="mt-1 text-xs text-ink">{explanation.stageLabel}</dd>
+              </div>
+              <div className="bg-term-bg px-3 py-2.5">
+                <dt className="font-mono text-xs uppercase text-ink-mute">
+                  Execution
+                </dt>
+                <dd className="mt-1 text-xs text-ink">{explanation.behavior}</dd>
+              </div>
+            </dl>
+            <div className="border-t border-hair pt-4">
+              <p className="font-mono text-xs uppercase text-ink-mute">
+                This run
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-ink-mute">
+                {node?.kind === 'stage'
+                  ? 'The stage is a navigational overview. Expand it to inspect each operation and any artifacts published for the selected run.'
+                  : runStatus === 'not-run'
+                    ? 'This operation was not recorded for the selected run date.'
+                    : runStatus === 'state-only'
+                    ? 'This operation updates pipeline state and does not publish a standalone document.'
+                    : runStatus === 'expected-artifact-missing'
+                      ? 'The run was recorded, but the expected standalone artifact is missing.'
+                      : runStatus === 'parallel-dispatch'
+                        ? 'This operation dispatched parallel work. Expand it to inspect the persisted branch artifacts.'
+                        : 'No standalone artifact is attached to this node for the selected run. Its role in the process remains the same.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Loading — content-shaped sk shimmer stack (title line + body lines),
+            not placeholder text (#1548; one loading grammar app-wide). */}
         {documentKey && loading && (
-          <div className="text-ink-mute text-sm py-4">Loading document…</div>
+          <SkeletonGroup aria-label="Loading document" className="py-4 flex flex-col gap-3">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="w-full" />
+            <Skeleton className="w-11/12" />
+            <Skeleton className="w-4/5" />
+          </SkeletonGroup>
         )}
 
         {/* Error */}
         {documentKey && !loading && error && (
           <div className="space-y-2">
             <p className="text-warn text-sm">{error}</p>
-            <p className="text-[12px] text-ink-mute">
+            <p className="text-xs text-ink-mute">
               This document may not be available for the selected date.
             </p>
           </div>
@@ -108,13 +216,20 @@ export default function PipelineNodeDetail({ documentKey, date, onClose }: Pipel
 
         {/* Document content — reused LibraryDocumentBody dispatch */}
         {documentKey && !loading && !error && doc && (
-          <LibraryDocumentBody
-            view={doc.view}
-            markdown={doc.markdown}
-            payload={doc.payload}
-            documentKey={doc.document_key}
-            docDate={doc.date}
-          />
+          <div className="space-y-4">
+            {explanation && (
+              <p className="border-b border-hair pb-3 text-xs leading-relaxed text-ink-mute">
+                {explanation.description}
+              </p>
+            )}
+            <LibraryDocumentBody
+              view={doc.view}
+              markdown={doc.markdown}
+              payload={doc.payload}
+              documentKey={doc.document_key}
+              docDate={doc.date}
+            />
+          </div>
         )}
 
         {/* Not found */}
@@ -123,7 +238,7 @@ export default function PipelineNodeDetail({ documentKey, date, onClose }: Pipel
             <p className="text-ink-mute text-sm">
               No output found for <span className="font-mono text-ink">{documentKey}</span> on {date}.
             </p>
-            <p className="text-[12px] text-ink-mute/70">
+            <p className="text-xs text-ink-mute/70">
               This stage may not have run yet, or the output was not persisted.
             </p>
           </div>
@@ -144,13 +259,20 @@ async function fetchByDocumentKey(
   if (!url || !key) return null;
 
   const supabase = createClient(url, key);
+  // Defensive limit(1) rather than .maybeSingle(): maybeSingle ERRORS on >1
+  // row, which rendered as "No output found" — the same failure class as the
+  // #1538 digest headline (a retried/backfilled publish can duplicate a
+  // (document_key, date) pair even though none exist today).
   const { data, error } = await supabase
     .from('documents')
     .select('id')
     .eq('document_key', documentKey)
     .eq('date', date)
-    .maybeSingle();
+    // Deterministic tiebreaker only — documents has no created_at column.
+    .order('id', { ascending: false })
+    .limit(1);
 
-  if (error || !data?.id) return null;
-  return await getLibraryDocumentById(data.id as string);
+  const id = data?.[0]?.id;
+  if (error || !id) return null;
+  return await getLibraryDocumentById(id as string);
 }

@@ -48,7 +48,7 @@ erDiagram
 |-------|----|---------|
 | `daily_snapshots` | `(date)` | One consolidated JSON snapshot per calendar day. Root of the daily pipeline. |
 | `positions` | `(date, ticker)` | Daily position book; one row per held ticker. |
-| `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds `confidence`, `validation_criteria`, `invalidation_criteria`, `horizon`, `thesis_kind` (`market` \| `vehicle`), `linked_market_thesis_id`. |
+| `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds daily thesis fields. Migration 056 adds stable `topic_key` and a partial unique `(date, topic_key)` index so only one nonterminal market opinion exists per topic/date. |
 | `position_events` | `(id uuid)` | Every open / close / rebalance against a position with reason tag. |
 | `documents` | `(date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. |
 | `nav_history` | `(date)` | Daily portfolio NAV. |
@@ -77,7 +77,7 @@ erDiagram
 
 ### Strategy store — new in migration 046 (#1064)
 
-This project is the unified DigiQuant **`core`** backend (Supabase display name `core`;
+This project is the unified digiquant **`core`** backend (Supabase display name `core`;
 local alias still `project_id "digiquant-atlas"`). Migration 046 adds the strategy store
 (additive only — no existing table touched). See
 [`docs/adr/0021-digiquant-supabase-project-topology.md`](../../docs/adr/0021-digiquant-supabase-project-topology.md).
@@ -101,7 +101,71 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
 |------|-----------|---------|
 | `public_portfolio_positions` | `positions` | Latest-date position book, performance columns only. **Excludes** `rationale`, `pm_notes`, `thesis_id`, `conviction`, `stop_loss_pct`, `target_pct_gain`, `horizon_days`. |
 | `public_nav_history` | `nav_history` | NAV series + cash/invested % + derived `day_return_pct`. |
-| `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback while `prices-live` is dormant / market closed. |
+| `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
+
+### Live quote transport — new in migration 063 (#1807)
+
+The only **table** in the digiquant.io public read surface (the 050 trio are views), and the
+only table this migration chain adds to the `supabase_realtime` publication — `063` holds
+the chain's sole `ALTER PUBLICATION`. Written once a minute by the `functions/prices-live/`
+edge function under pg_cron; browsers subscribe to `postgres_changes` on it rather than to
+the retired `prices:live` broadcast channel.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `prices_live` | `(ticker)` | Latest intraday quote per symbol, upserted in place: `price` (Finnhub `c`, NOT NULL, may legitimately be `0` for a halted symbol), `change` (`d`), `change_pct` (`dp`, percent **points**), `quoted_at` (exchange clock — Finnhub's unix **seconds** `t`, converted), `updated_at` (our write clock). |
+
+- **RLS enabled, exactly one policy** — `prices_live_public_read`, `FOR SELECT TO anon,
+  authenticated USING (true)`. **Zero write policies**, and that absence is the whole
+  security model (see RLS below). `service_role` is the only writer.
+- **`REPLICA IDENTITY DEFAULT`**, set explicitly. Realtime's `walrus` decoder re-evaluates
+  the SELECT policy against the *live* row keyed by the replicated identity, so only the key
+  must survive replication. `FULL` would be needed only for a policy reading a non-key
+  column or a consumer needing non-key columns out of a DELETE — neither exists.
+- **Member of the `supabase_realtime` publication**, added under a guarded `DO` block
+  (`ALTER PUBLICATION … ADD TABLE` raises 42710 on re-run, which would roll the whole
+  migration back). Without publication membership the table is written and no browser ever
+  sees an update.
+- **No CHECK constraints and no secondary index**, both argued rather than accidental: this
+  is a ≤40-row throwaway cache refreshed every 60s and it should degrade, not abort — a
+  ticker-casing CHECK would turn a publisher bug into a 23514 that fails the whole minute's
+  upsert (the `documents` doc_type/category churn, #628/#1005/#1383), and a `price > 0`
+  CHECK would reject Finnhub's legitimate zero for a halted symbol.
+
+### Refresh rate lease — new in migration 064 (replaces the #1756 invocation secret)
+
+The rate guard on the `prices-live` publisher. Finnhub's free tier is 60 calls/min, and
+`verify_jwt: true` never protected it — the anon key ships in every digiquant.io bundle, so
+anyone can invoke the function. `064` bounds the **rate** instead of the caller's identity:
+every invocation must first win an atomic claim on this table, so at most one refresh happens
+per 50s window no matter how many callers arrive together. Unauthorized callers are not
+blocked; they are made pointless (`200 {"skipped": "not claimed"}`, nothing fetched).
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `prices_live_lease` | `(id smallint)` | Singleton lease — exactly one row, pinned by `PRIMARY KEY` **plus** `CHECK (id = 1)`. `claimed_at timestamptz NOT NULL DEFAULT '-infinity'` records when the refresh window was last claimed. |
+
+- **One row is a correctness requirement, not tidiness.** The guard's whole argument is that
+  concurrent callers contend for *the same row*; two rows would be two independent windows and
+  two simultaneous winners. Hence PK and CHECK on the same column.
+- **`claimed_at` defaults to `'-infinity'`** so the first claim after a fresh apply or a
+  restore wins immediately. `NULL` would make the age predicate NULL — never true, i.e. a
+  permanently dead feed with no error anywhere — and `now()` would blank the feed for the first
+  window after every restore. Re-seeding is `ON CONFLICT (id) DO NOTHING`, so replaying the
+  migration during market hours cannot reset a live lease.
+- **`claim_prices_live_refresh(min_age_seconds integer) → boolean`** is the only path that
+  touches it: ONE conditional `UPDATE … WHERE id = 1 AND claimed_at < clock_timestamp() -
+  make_interval(secs => min_age_seconds)`, returning `FOUND`. Concurrent callers block on the
+  row lock, re-evaluate the WHERE clause against the committed new value under READ COMMITTED,
+  and match zero rows. It raises if `min_age_seconds` is NULL or `< 1` — a `0` would let every
+  caller win and disable the guard silently. See the RLS and SECURITY DEFINER notes below.
+- **Never replace the claim with a freshness `SELECT` on `prices_live.updated_at`.** That
+  timestamp is written ~6s *after* a fetch starts (40 symbols × 150 ms stagger), so every
+  concurrent caller would read the same stale value and all would fetch — zero protection
+  against parallel callers, and a sequential test of it passes perfectly. Advisory locks cannot
+  substitute either: PostgREST hands out a fresh pooled session per RPC call, so the lock
+  releases long before the fetch it was meant to cover. Full argument, with measurements, in
+  `migrations/064_prices_live_lease.sql`.
 
 ## RLS (consistent across all tables above)
 
@@ -115,6 +179,13 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
   anon policy, so anon reads return an empty set (not an error) while the service
   role keeps full access. The fitted calibration is private; mirrors the
   `atlas_run_diagnostics` idiom (migration 033).
+- **Exception — `olympus_run_events` (migration 066, #1945):** ordered call telemetry is
+  service-role-only. RLS is enabled with zero policies and `anon`/`authenticated` grants are
+  revoked. The definer-rights `olympus_run_event_trace` view exposes a bounded, body-free
+  projection for Pipeline: labels, timing, status, retries, source counts, and code-generated
+  shape summaries. It excludes token/cost fields and has no columns for prompts, argument or
+  result values, document bodies, credentials, or reasoning. Migration 066 is not applied live
+  without the repository's human migration review gate.
 - **Exception — strategy store lockdown (migration 051, #1462):** `strategies`,
   `strategy_signals`, and `strategy_trades` had their anon policies dropped AND their
   anon/authenticated grants revoked — anon access to live signals would bypass the
@@ -123,16 +194,164 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
   (`documents`, `theses`, `decision_log`, `deliberation_*`, `positions` incl.
   `rationale`/`pm_notes`) stay anon-readable **by design** — see
   [`README.md`](README.md), "What is public on purpose".
-- **Views (migrations 041, 050):** RLS does not apply to views; the curated public
+- **Exception — `prices_live` (migration 063, #1807):** RLS enabled with exactly **one**
+  policy, `prices_live_public_read` (`SELECT TO anon, authenticated USING (true)`), and
+  **no** INSERT/UPDATE/DELETE policy for any role. Under RLS, absent policy = deny, so the
+  omission *is* the security control and must not be "completed". `service_role` is the
+  sole writer, and its `SELECT, INSERT, UPDATE` grant is stated explicitly in the migration
+  rather than inherited from the platform ACL. See the transport note below.
+- **Exception — `prices_live_lease` (migration 064): RLS enabled with ZERO policies for any
+  role, *and* every table grant revoked.** Stronger than the `strategy_calibrations` idiom
+  above, which keeps RLS with no *anon* policy: here there is no policy at all, so of the roles
+  that could otherwise reach a row only `rolbypassrls` holders (`postgres`, the owner, and
+  `service_role`) get past row security — and `REVOKE ALL … FROM PUBLIC, anon, authenticated`
+  means anon and authenticated never even reach RLS. Note the order of the two controls,
+  because it decides which error a misconfiguration produces: **table privileges are checked
+  before row security**, so a role with no grant gets a loud `42501 permission denied for
+  table` rather than a silent empty set. `rolbypassrls` waives row security, not privilege —
+  which is why `SET ROLE service_role; SELECT … FROM public.prices_live_lease` is *denied*
+  despite that role's BYPASSRLS, while its call to `claim_prices_live_refresh` succeeds. There
+  is no paired `GRANT SELECT` (unlike every other table here) and the migration grants
+  `service_role` nothing on the table either: the SECURITY DEFINER function is the single
+  audited path, and it needs the caller to hold no table privilege at all. Do not "complete"
+  the policy set — no client has any business reading, let alone advancing, the lease.
+- **Exception — `claim_prices_live_refresh(integer)` (migration 064): the SECOND `SECURITY
+  DEFINER` function in this schema**, the other being `prune_langgraph_checkpoints` (migration
+  061, see below). Same hardening: `SET search_path = ''`, `EXECUTE` revoked from
+  `PUBLIC`/`anon`/`authenticated` so PostgREST does not publish it as an anon-callable RPC.
+  It differs in one way worth stating — it is `VOLATILE` *explicitly* rather than by default,
+  because marked `STABLE` PostgREST would serve it over `GET` in a read-only transaction and
+  the UPDATE would raise `25006`. **EXECUTE is `service_role`-only in both directions.** The
+  obvious direction is that anon must not refresh. The one that bites: anon must not be able to
+  **burn** the lease. Every winning call advances `claimed_at`, so a caller hitting the RPC
+  directly — no edge function, therefore no Finnhub call and no upstream cost at all — could
+  win every window and leave the cron nothing to claim. The feed then stops updating with
+  nothing logged: a denial of *freshness*, cheaper for an attacker than the quota exhaustion
+  the lease exists to prevent. The REVOKE is half the control, not tidiness around a definer
+  function.
+- **Not an RLS surface — `realtime.messages` is unreachable, and `prices:live` is abandoned
+  rather than policed (#1807).** The `prices:live` Realtime *broadcast* topic used to carry
+  this feed and was forgeable: `anon` holds a platform-managed INSERT grant on
+  `realtime.messages`, `pg_policies WHERE schemaname = 'realtime'` returns **zero** rows,
+  and the anon key ships in every digiquant.io bundle. Migration `062` proposed the
+  textbook fix — topic-scoped policies on `realtime.messages` plus
+  `config: { private: true }` on both ends. Those policies **were never created and never
+  can be**: that table is owned by `supabase_realtime_admin`, a role with zero members over
+  which zero roles hold admin option, so `CREATE POLICY` raises 42501 for `postgres`
+  permanently (verified 2026-08-01). `062` was withdrawn and deleted; `063` moved the
+  transport onto `public.prices_live` instead. **`prices:live` therefore remains an open,
+  anon-writable broadcast topic on this project forever** — the INSERT grant cannot be
+  revoked. It is harmless only because nothing subscribes to it any more; a message pushed
+  there lands in an empty room. Adding any broadcast subscriber to this project re-opens the
+  hole in full. See [`README.md`](README.md), "The transport is a table we own".
+- **Views (migrations 041, 050, 066):** RLS does not apply to views; the curated public
   views are intentionally security-DEFINER (`security_invoker = false`) so the column
-  projection — not base-table policy — decides what anon sees, with explicit
-  `REVOKE ALL` + `GRANT SELECT TO anon, authenticated`. Supabase's advisor flags
-  `security_definer_view`; expected and accepted for this pattern.
+  projection — not base-table policy — decides what anon sees. Supabase's advisor flags
+  `security_definer_view`; expected and accepted for this pattern. Migrations **050 and
+  052** pair their `GRANT SELECT` with an explicit `REVOKE ALL`. Migrations 041 and 018
+  shipped no REVOKE at all and so left the platform-default DML grants standing — that
+  omission was #1757, closed by migration 060 (see "Grants" below). Migration 066 starts with
+  explicit `REVOKE ALL` on both its base table and public view, then grants view `SELECT` only.
+
+## Grants (migration 060, #1757)
+
+RLS is not the only layer, and before migration 060 it was. Supabase's project bootstrap
+grants `anon` and `authenticated` **full DML on every relation in `public`**, plus a
+matching `ALTER DEFAULT PRIVILEGES` so each new one inherits it. Because there is no
+non-`SELECT` policy anywhere (`pg_policies WHERE cmd <> 'SELECT'` → 0 rows), RLS alone
+stood between the *published* anon JWT and a write.
+
+- **What 060 does:** `REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL
+  TABLES IN SCHEMA public FROM PUBLIC, anon, authenticated`, the same list on `ALTER
+  DEFAULT PRIVILEGES … ON TABLES` so future relations inherit read-only, and an explicit
+  re-`GRANT SELECT` on the two views 041/018 had left on the platform default.
+- **`SELECT` is never revoked**, and no `REVOKE ALL` appears: taking reads away from a
+  curated view fails *silently* (the frontend's `safeSelect` turns PostgREST 42501 into an
+  empty panel, not an error). Any future lockdown must keep listing write privileges
+  explicitly.
+- **No `FOR ROLE` clause.** `pg_default_acl` carries two grantors for `public` —
+  `postgres` and `supabase_admin`. Every relation here is owned by `postgres` (the role the
+  migration chain runs as), so the implicit form is the effective one. `FOR ROLE
+  supabase_admin` raises *must be a member of role* and, under `psql
+  --single-transaction`, rolls the whole migration back.
+- **Why it mattered:** `atlas_run_health` is a single-table projection, so Postgres made it
+  auto-updatable, and `security_invoker = false` means writes through it run as `postgres`
+  and bypass `atlas_run_diagnostics`' RLS. With the standing anon DELETE grant, an
+  unauthenticated `DELETE /rest/v1/atlas_run_health` erased the whole run-telemetry
+  history. `price_history_tickers` carries `DISTINCT`, so it is not auto-updatable —
+  defense-in-depth only.
+- **Residuals:** the `supabase_admin` default-ACL entry (unreachable from `postgres`; only
+  applies to relations *it* creates), PG17's `MAINTAIN` (no matviews exist), and sequence
+  /function default grants. None is a data-write path once table INSERT is gone.
+- **`service_role` is untouched.** It is the only writer — all production workflows, every
+  Python connector, and the `prices-live` edge function.
+
+## LangGraph checkpointer tables — retention added in migration 061 (#1758)
+
+Not part of the Atlas schema: `checkpoints`, `checkpoint_writes`, `checkpoint_blobs`
+and `checkpoint_migrations` are auto-created in `public` by the LangGraph Postgres
+checkpointer (#665, `DIGI_CHECKPOINTER=postgres`). They are internal orchestration
+state — no frontend and no pipeline query reads them. Migration 036 locked them down
+with RLS; migration 061 bounds their growth.
+
+They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
+~50-58 MB/day since 2026-07-21, with `thread_id` = `"<GITHUB_RUN_ID>::atlas"` /
+`"::hermes"` (never reused, so nothing ever became collectable).
+
+| pg_cron job | Schedule (UTC) | Does |
+|---|---|---|
+| `langgraph-checkpoint-prune` | `20 5 * * *` | `SELECT public.prune_langgraph_checkpoints(14)` — deletes every row of the three tables for threads whose **newest** checkpoint is >14 days old |
+| `langgraph-checkpoint-vacuum` | `50 5 * * *` | plain `VACUUM (ANALYZE)` over the three tables |
+
+- **Retention is 14 days** by user ruling (D6, 2026-08-01). It is also the cap on
+  `pipeline-olympus.yml`'s `resume_run_id` input — a run older than the window can no
+  longer be resumed from its checkpoint. `retain_days` is validated `>= 1`.
+- **Pruning is thread-scoped, not checkpoint-scoped.** `checkpoint_blobs` is keyed
+  `(thread_id, checkpoint_ns, channel, version)` with no `checkpoint_id`, so anything
+  narrower orphans blobs. Staleness uses `max((checkpoint->>'ts')::timestamptz)` per
+  thread, so an in-flight run is never eligible. `checkpoint_migrations` is untouched.
+- **Never `VACUUM FULL`** — ACCESS EXCLUSIVE lock, and these tables are insert-only
+  with no bloat to reclaim (886 MB live compressed vs 940 MB on disk). Plain VACUUM
+  returns the pruned space to the free space map for reuse, **not** to the OS, so
+  `pg_database_size` will not fall by the pruned amount. 061 caps growth
+  (~700-800 MB steady state); it is not a disk-reclaim migration.
+- The `prune_langgraph_checkpoints` function is `SECURITY DEFINER` with
+  `search_path = ''` and `EXECUTE` revoked from `PUBLIC`/`anon`/`authenticated`, so it
+  is not reachable as a PostgREST RPC. It is one of **two** SECURITY DEFINER functions in this
+  schema; the other is `claim_prices_live_refresh(integer)` (migration 064, the `prices-live`
+  rate lease), which follows the same pattern and adds an explicit `service_role` GRANT.
+- **Pause:** `SELECT cron.unschedule('langgraph-checkpoint-prune');` /
+  `SELECT cron.unschedule('langgraph-checkpoint-vacuum');`
+- **Verify:** `SELECT jobname, username, database, schedule FROM cron.job WHERE jobname
+  LIKE 'langgraph-checkpoint%';` — expect two rows with `username = postgres`. The jobs
+  run as the role that applied the migration, and a non-owner both prunes 0 rows (RLS,
+  no policy) and skips the VACUUM, silently — so 061 asserts ownership at apply time.
+
+> **Still open:** 94% of the bytes are the `__pregel_tasks` channel — one full
+> `AtlasResearchState` copy per H5/H6 fan-out target (`hermes/focus_roster.py:29`),
+> which violates `digigraph/AGENTS.md` "State stays lean". Retention caps the
+> footprint but does not reduce the ~48 MB/day of write volume. Deferred from #1758
+> as a human-gated architecture change.
 
 ## Dead / deprecated
 
 - `sec_recent_filings` — dropped in migration 017.
 - `'Portfolio Recommendation'` doc_type — removed by migration 021.
+- **Migration `062` (`062_realtime_broadcast_authorization.sql`) — withdrawn and deleted,
+  and the number is burned.** It could never be applied (see the `realtime.messages` note
+  under RLS), so it never reached `olympus_schema_migrations` and left no orphan ledger row
+  to reconcile. Migration `063` supersedes it. Do not reuse `062`: unlike the never-written
+  `037`/`038`/`059` it already denotes a specific abandoned approach in the git history and
+  in PR #1813. Nothing in the repo enforces this — see [`README.md`](README.md), "`062` is
+  burned".
+- **The `prices:live` broadcast channel** — retired by migration 063; the feed now rides
+  `postgres_changes` on `public.prices_live`. One **applied** migration still describes it:
+  `052_public_price_latest_day_change.sql:9,13` ("the intraday broadcast was idle", "when
+  the `prices:live` broadcast is flowing"). That comment is deliberately **not** edited —
+  `db-migrate.yml` keys its ledger on the filename, so a rewrite would never re-run, and
+  editing applied history is not a thing we do. Read it as historical: the mechanism is now
+  the `prices_live` upsert stream; the behaviour it documents (a live tick overwriting the
+  daily-close seed) is unchanged. The supersession is recorded here and in `063`'s header.
 - Partitioned children (`daily_snapshots_y2025`, `documents_y2026`, …) are
   implementation details of the partition strategy and are not inventoried
   here. See migration 004 and 006.

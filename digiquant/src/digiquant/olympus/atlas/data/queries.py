@@ -9,7 +9,9 @@ from __future__ import annotations
 import logging
 import re
 from datetime import date, timedelta
-from typing import Any  # noqa  # scored-lint suppression: duck-typed Supabase client + rows
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: duck-typed Supabase client + rows
+)
 
 import polars as pl
 
@@ -157,7 +159,7 @@ def default_sector_etfs() -> list[str]:
             if members and members[0] not in etfs:
                 etfs.append(members[0])
         return etfs
-    except Exception as exc:  # noqa: BLE001 — missing/bad sectors.yaml → empty universe, never crash
+    except Exception as exc:  # missing/bad sectors.yaml → empty universe, never crash
         logger.warning("default_sector_etfs unavailable (%s)", exc)
         return []
 
@@ -430,7 +432,7 @@ def get_return_correlations(
             return None
         frame = pairwise_return_correlations(pl.DataFrame(rows))
         return frame if not frame.is_empty() else None
-    except Exception as exc:  # noqa: BLE001 — correlation is best-effort; caller uses None
+    except Exception as exc:  # correlation is best-effort; caller uses None
         logger.warning("get_return_correlations: failed (%s); skipping correlation", exc)
         return None
 

@@ -17,7 +17,7 @@ from digigraph.project_validate import validate_project_file
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="digi",
-        description="DigiThings CLI.",
+        description="digithings CLI.",
     )
     sub = parser.add_subparsers(dest="group", required=True)
 

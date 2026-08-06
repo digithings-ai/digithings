@@ -1,21 +1,64 @@
 name: db-migrate
 # Apply pending Olympus Supabase migrations to prod on release to main, so the
 # schema stops drifting behind the repo (#1016 — root cause of the 044/045
-# incidents). Forward-only and race-free:
-#   * A dedicated `olympus_schema_migrations` table records applied files.
-#   * Files with numeric prefix <= BASELINE_THROUGH are assumed already applied
-#     to prod (the schema state when this gate was introduced) and are recorded
-#     WITHOUT executing — no `ls`-based bootstrap, so a later-merged migration is
-#     never silently baselined.
-#   * Files with prefix > BASELINE_THROUGH are NEW: each is applied with its
-#     tracking-row INSERT in ONE transaction (--single-transaction), so a partial
-#     failure rolls back and is safely retried.
+# incidents). Forward-only, race-free, and with exactly ONE gate:
+#   * A dedicated `olympus_schema_migrations` table records applied files, keyed
+#     on the full filename. A row means prod ran that file; no row means pending.
+#   * Every pending file is EXECUTED. Nothing here records a version it has not
+#     run — that invariant holds on both apply paths below.
+#   * An unwrapped file and its tracking-row INSERT go through ONE psql
+#     invocation under --single-transaction, so the version is recorded iff the
+#     DDL commits and a partial failure is safely retried. Write migrations this
+#     way (058, 060, 063 and 064 all say so in their headers).
+#   * A file carrying its own `BEGIN;` is atomic already, so psql must not wrap
+#     it a second time — but that means its INSERT is a separate call in its own
+#     transaction. Die between the two and prod is migrated while the ledger
+#     stays silent, so the next run replays the file. That asymmetry is the
+#     reason the grep below exists and the reason not to hand-wrap a migration.
+#
+# There used to be a second gate: `BASELINE_THROUGH: 45` recorded any file whose
+# numeric prefix was <= 45 WITHOUT executing it, on the theory that those predate
+# this workflow. It was deleted in #1814, and reintroducing it would reopen the
+# hole it created. It keyed on the FILENAME PREFIX ALONE, so a migration merged
+# *today* numbered <= 45 would be stamped as applied while its DDL never touched
+# prod — and the ledger would report success. That is precisely the silent no-op
+# #1016 exists to prevent. 037, 038 and 059 are real unused gaps in the chain, so
+# filling one — a natural thing for someone to do — was all it took to trigger.
+# Meanwhile all 44 files <= 045 were already in the ledger, so the branch was
+# unreachable for every file that actually existed: pure downside.
+#
+# Do not add it back as an optimisation. But be precise about what the objection
+# it appears to answer — "an empty or restored ledger will now try to run 001
+# against a live schema" — actually costs, because the tempting answer is wrong.
+# Such a run does NOT fail loudly on the first file. 001 is composed entirely of
+# IF NOT EXISTS / DROP POLICY IF EXISTS statements, so it succeeds and COMMITS —
+# resurrecting `benchmark_history`, which 010 dropped. 002 is re-runnable too, so
+# its seven `UPDATE theses SET status` statements commit. And --single-transaction
+# is PER FILE, not per run, so the replay commits the idempotent early files and
+# only then aborts mid-chain (021 re-adds a doc_type CHECK that live rows now
+# violate; 044 raises 42710). The result is prod PARTIALLY re-migrated with a
+# ledger to match — a worse operator position than either extreme. 057's header
+# says the same thing in its own words. The right conclusion is still to delete
+# the baseline branch, because stamping 44 versions that were never applied is
+# worse again and it silently no-ops any NEW low-numbered file; it just is not
+# true that a replay is harmless or self-announcing. Migration 057 locked
+# the ledger against forged or truncated rows for the same reason: this workflow
+# trusts it completely, so it must be the only thing it trusts. Nor should you
+# back-fill 037/038/059 to work around anything — prod has already applied every
+# higher-numbered file, so a new 037 lands on a schema that 039 onward have
+# reshaped, not the one its number suggests. Take the next unused prefix (see
+# digiquant/supabase/README.md).
 #
 # Prod-mutating: runs under the `production` environment — configure a
 # required-reviewer protection rule on it so apply/dispatch needs human approval
-# (CLAUDE.md human gate). Historical note (#1016): confirm 001-045 are truly
-# applied on prod (the audit flagged 041/atlas_run_health_view as possibly
-# absent) before relying on the baseline.
+# (CLAUDE.md human gate). Schema state, two separately dated facts — do not
+# merge them, the earlier one cannot cover files that did not exist yet:
+#   * 2026-08-01 — all 59 migration files then on disk were verified applied
+#     against the live `core` project, retiring the #1016 doubt over
+#     041/atlas_run_health_view.
+#   * 2026-08-03 — 063 and 064 were authored, applied and ledger-recorded, so the
+#     ledger now runs through 064_prices_live_lease.sql (61 rows; 062 is burned
+#     and 037/038/059 were never used).
 on:
   push:
     branches: [main]
@@ -28,11 +71,6 @@ permissions:
 
 concurrency: db-migrate
 
-env:
-  # Migrations with prefix <= this are treated as the pre-gate baseline (recorded,
-  # not executed). Bump only via a deliberate reconciliation, never casually.
-  BASELINE_THROUGH: 45
-
 jobs:
   migrate:
     runs-on: ubuntu-latest
@@ -41,7 +79,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Ensure psql client
         run: psql --version || { sudo apt-get update && sudo apt-get install -y postgresql-client; }
-      - name: Apply pending migrations (atomic, baseline-aware)
+      - name: Apply pending migrations (atomic, ledger-gated)
         env:
           DB_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
         run: |
@@ -51,27 +89,23 @@ jobs:
           psql "${DB_URI}" -v ON_ERROR_STOP=1 -c \
             "CREATE TABLE IF NOT EXISTS olympus_schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());"
 
-          mapfile -t FILES < <(ls digiquant/supabase/migrations/*.sql | sort)
-          echo "Found ${#FILES[@]} migration files; baseline through prefix ${BASELINE_THROUGH}."
+          mapfile -t FILES < <(find digiquant/supabase/migrations -maxdepth 1 -name '*.sql' | sort)
+          echo "Found ${#FILES[@]} migration files; the ledger alone decides which are pending."
 
           # Fail fast on duplicate numeric prefixes (version key is the full filename,
           # so this is belt-and-suspenders for ordering clarity).
           dups="$(printf '%s\n' "${FILES[@]}" | sed -E 's#.*/##; s/_.*//' | sort | uniq -d || true)"
           [ -n "${dups}" ] && echo "::warning::duplicate migration prefixes present: ${dups}"
 
-          applied=0; baselined=0
+          applied=0; skipped=0
           for f in "${FILES[@]}"; do
             v="$(basename "$f")"
-            prefix="${v%%_*}"
-            num=$((10#${prefix}))   # strip leading zeros, base-10
 
+            # The one and only skip gate: a ledger row means prod already ran this file.
+            # Nothing below may record a version it has not executed (#1814).
             exists="$(psql "${DB_URI}" -tA -c "SELECT 1 FROM olympus_schema_migrations WHERE version='${v}';")"
-            [ -n "${exists}" ] && continue
-
-            if [ "${num}" -le "${BASELINE_THROUGH}" ]; then
-              # Pre-gate baseline: assumed already applied — record only, do NOT execute.
-              psql "${DB_URI}" -v ON_ERROR_STOP=1 -c "INSERT INTO olympus_schema_migrations(version) VALUES ('${v}') ON CONFLICT DO NOTHING;"
-              baselined=$((baselined + 1))
+            if [ -n "${exists}" ]; then
+              skipped=$((skipped + 1))
               continue
             fi
 
@@ -88,4 +122,4 @@ jobs:
             fi
             applied=$((applied + 1))
           done
-          echo "Done: applied ${applied} new migration(s); baselined ${baselined} pre-gate migration(s)."
+          echo "Done: applied ${applied} pending migration(s); skipped ${skipped} already in the ledger."

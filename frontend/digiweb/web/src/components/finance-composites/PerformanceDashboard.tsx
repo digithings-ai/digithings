@@ -164,7 +164,9 @@ export function PerformanceDashboard({
               key={a.name}
               className="grid grid-cols-[6rem_1fr_3rem] items-center gap-[0.9rem] py-[0.35rem] font-mono text-[0.78rem] text-ink-soft"
             >
-              <span className="text-ink">{a.name}</span>
+              <span className="min-w-0 truncate text-ink" title={a.name}>
+                {a.name}
+              </span>
               <span className="h-2 overflow-hidden rounded-full bg-ink/[0.08]">
                 <span
                   className="block h-full rounded-full bg-accent"

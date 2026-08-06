@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Mapping
-from typing import Any  # noqa: ANN401 — Playwright cookie dicts are untyped (browser optional)
+from typing import (
+    Any,  # score:allow untyped any — Playwright cookie dicts are untyped (browser optional)
+)
 
 import httpx
 from pydantic import BaseModel, ConfigDict
@@ -164,7 +166,7 @@ class HttpFetcher:
         method: str = "GET",
         params: Mapping[str, Any] | None = None,
         data: Mapping[str, Any] | None = None,
-        json: Any = None,  # noqa: ANN401 — arbitrary JSON-serializable body
+        json: Any = None,  # arbitrary JSON-serializable body
         headers: Mapping[str, str] | None = None,
         cookies: Mapping[str, str] | None = None,
     ) -> FetchResult:

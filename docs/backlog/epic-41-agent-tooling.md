@@ -6,7 +6,7 @@
 
 ## Summary
 
-Phase 0 (epic #34) locked down issue-linkage and cross-tool agent config sync. Phase 0b extends that foundation so multi-agent parallel development is safe, fast, and self-correcting before feature work begins. Scope is limited to agent tooling — no DigiGraph, DigiQuant, or other component feature work lands under this epic.
+Phase 0 (epic #34) locked down issue-linkage and cross-tool agent config sync. Phase 0b extends that foundation so multi-agent parallel development is safe, fast, and self-correcting before feature work begins. Scope is limited to agent tooling — no digigraph, digiquant, or other component feature work lands under this epic.
 
 The epic is a scoping container; each acceptance-criteria bullet on #41 becomes its own small sub-task issue.
 
@@ -28,5 +28,5 @@ Each item below should be filed as its own `agent-task` issue on [Project #1](ht
 
 ## Out of scope
 
-- Feature or refactor work on any DigiThings component.
+- Feature or refactor work on any digithings component.
 - Replacing or rewriting existing subagents/skills — extend only.

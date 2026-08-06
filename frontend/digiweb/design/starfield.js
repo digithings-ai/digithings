@@ -1,5 +1,5 @@
 /**
- * DigiThings shared starfield — cross-brand signature animation.
+ * digithings shared starfield — cross-brand signature animation.
  *
  * Usage:
  *   import { initStarfield } from './starfield.js';

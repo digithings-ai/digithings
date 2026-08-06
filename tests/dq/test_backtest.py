@@ -1,4 +1,4 @@
-"""Unit tests for DigiQuant backtest module (real Nautilus or raised error)."""
+"""Unit tests for digiquant backtest module (real Nautilus or raised error)."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from digiquant.backtest import run_backtest
 from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.models import BacktestResult
+
 from tests.dq.conftest import SKIP_NATIVE_CRASH
 
 

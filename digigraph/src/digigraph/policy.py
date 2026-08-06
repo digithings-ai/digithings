@@ -1,4 +1,4 @@
-"""Centralized policy flags for DigiGraph HTTP and tool execution (enterprise hardening)."""
+"""Centralized policy flags for digigraph HTTP and tool execution (enterprise hardening)."""
 
 from __future__ import annotations
 
