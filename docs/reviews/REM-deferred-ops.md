@@ -69,8 +69,8 @@ gh run list -w agent-quota-reset.yml -L 3
 ### Executable checklist
 
 - [x] ~~Confirm `copilot-quota-gate.yml` is enabled on schedule.~~ Deleted 2026-08-05 with the Copilot subscription.
-- [ ] When `quota:copilot-exhausted` on #387: new `exec:copilot` issues get comment + `pending:quota` (see workflow).
-- [ ] After billing/seat refresh: remove exhausted label on #387.
+- [x] ~~When `quota:copilot-exhausted` on #387: new `exec:copilot` issues get comment + `pending:quota` (see workflow).~~ Moot 2026-08-05: the workflow was deleted with the subscription and nothing files `exec:copilot` any more.
+- [x] ~~After billing/seat refresh: remove exhausted label on #387.~~ No subscription to refresh.
 
 ### Verify
 

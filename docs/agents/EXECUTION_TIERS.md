@@ -61,11 +61,11 @@ Autonomous, asynchronous. Describable in one paragraph with clear acceptance cri
 
 ### `exec:claude` — Tier 3 — Claude Code (human-supervised, LOCAL only)
 
-Interactive, local, human-in-the-loop. The top tier; takes everything above and adds judgment-heavy work. **Claude never auto-executes issues — only Copilot (Tier 1) and Cursor (Tier 2) do.** The label is a tier *marker*; execution is always a human on a workstation.
+Interactive, local, human-in-the-loop. The top tier; takes everything above and adds judgment-heavy work. **Claude never auto-executes issues — only Cursor (Tier 2) does.** The label is a tier *marker*; execution is always a human on a workstation.
 
 **Fits:** architecture and new-module scaffolding; complex debugging; cross-module integration; security review; strategy/iterative design; milestone decomposition; targeted `@claude` help.
 
-**PR code review (secondary, opt-in):** Claude's `/code-review` plugin via `.github/workflows/agent-claude-review.yml` is **off by default**. Enable it by setting repo variable `ENABLE_CLAUDE_PR_REVIEW = true` (Settings → Secrets and variables → Actions → Variables). Also requires `CLAUDE_CODE_OAUTH_TOKEN` secret. Use Copilot review first; enable Claude review only for projects that need deeper analysis.
+**PR code review (secondary, opt-in):** Claude's `/code-review` plugin via `.github/workflows/agent-claude-review.yml` is **off by default**. Enable it by setting repo variable `ENABLE_CLAUDE_PR_REVIEW = true` (Settings → Secrets and variables → Actions → Variables). Also requires `CLAUDE_CODE_OAUTH_TOKEN` secret. Bugbot is the primary reviewer; enable Claude review only for projects that need deeper analysis. When Bugbot is unavailable, `/review <N>` in-session is the honest fallback — see `CLAUDE.md`.
 
 **Weekly continuous-improvement digest:** `.github/workflows/pipeline-continuous-improvement.yml` runs every Sunday 22:00 UTC, synthesizes the past 7 days of PR/CI/review activity, and files a single tracker issue with 3–5 prioritized suggestions. See [HOUSEKEEPING.md](HOUSEKEEPING.md#continuous-improvement) — synthesis is judgment work, so it lives at Tier 3.
 
@@ -118,7 +118,7 @@ Applied by `scripts/create_issue.sh` and the `spec-writer` subagent:
 
 See `docs/agents/CURSOR_AGENT_ONBOARDING.md` for the full agent operating protocol.
 
-## Copilot setup (one-time)
+## Bugbot / maintenance setup (one-time)
 
 1. Confirm `DIGITHINGS_PROJECT_TOKEN` secret is set (needed for maintenance workflows).
 2. Raise the Cursor spend limit if Bugbot reports `usage limit reached`, and set
@@ -146,12 +146,12 @@ if the token is missing.
 
 ## Quota exhaustion
 
-Copilot and Cursor both have monthly-reset subscription quotas. When quota is exhausted, the agent session fails and the issue/PR stays incomplete — no automatic escalation or parking. When quota resets, re-apply the `exec:*` label (or use **Agent dispatch replay**) to re-fire dispatch.
+Cursor has a monthly-reset subscription quota. When quota is exhausted, the agent session fails and the issue/PR stays incomplete — no automatic escalation or parking. When quota resets, re-apply the `exec:*` label (or use **Agent dispatch replay**) to re-fire dispatch.
 
 If you want to track quota state manually, `agent-quota-reset.yml` runs on the 1st of each month and can clean up any stale labels on issue #387.
 
 ## Cost note
 
-- Copilot: flat subscription — use freely. Primary PR reviewer and housekeeping agent.
 - Cursor: burns compute credits — keep tasks scoped; 15 min good, 2 h bad. Prefer over Claude for implementable tasks.
+- Cursor Bugbot: usage-based since June 2026, roughly $1.00–$1.50 a run. Invoke by hand with `bugbot run` once a diff is final — never at PR open, never per push.
 - Claude Code Max: reserve for the hard work (architecture, judgment, security). PR review is opt-in (`ENABLE_CLAUDE_PR_REVIEW`). Cloud dispatch via GH Action is disabled (policy, issue #384); local dispatch via `make task ISSUE=N` always works.
