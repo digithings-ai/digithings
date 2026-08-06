@@ -17,16 +17,14 @@ The second half covers the two failure modes that are invisible in a green run:
 
 * a ``cron:`` whose ``github.event.schedule`` literal no longer appears in any
   job's ``if:`` — the workflow still succeeds, having run nothing at all;
-* the inline ET gate that picks between the two at-open crons. It is extracted
-  from the workflow and executed against an injected clock, because it has to be
-  inline: every job here checks out ``ref: main`` while the crons are read from
-  the default branch, so a helper script in the repo would be one promotion behind
-  the schedule it guards.
+* the ET gate that picks between the two at-open crons. The workflow command is
+    resolved to its helper and executed against an injected clock. The gate job
+    checks out the default-branch revision that supplied the schedule, while the
+    side-effecting writer remains pinned to released ``main``.
 """
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 import sys
@@ -266,31 +264,33 @@ def test_tracker_issue_bodies_quote_the_live_crons(workflow: dict) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# The inline ET gate
+# The ET gate helper
 # --------------------------------------------------------------------------- #
 
 
-def _gate_source(workflow: dict) -> str:
+def _gate_path(workflow: dict) -> Path:
     steps = workflow["jobs"]["at-open-clock"]["steps"]
     run = next(step["run"] for step in steps if step.get("id") == "clock")
-    _, marker, body = run.partition("<<'PY'\n")
-    assert marker, "the at-open gate is no longer an inline heredoc"
-    return body.rsplit("PY", 1)[0]
+    match = re.search(r"python3\s+(\S*market_open_gate\.py)", run)
+    assert match, "the at-open workflow no longer invokes the tested gate helper"
+    return REPO_ROOT / match.group(1)
 
 
-def _run_gate(source: str, now: str | None, force: str = "false") -> str:
-    """Execute the extracted gate against an injected clock.
+def _run_gate(path: Path, now: str | None, schedule: str = "", force: bool = False) -> str:
+    """Execute the workflow's gate helper against an injected clock.
 
     In the job, bash appends the script's stdout to ``$GITHUB_OUTPUT``, so stdout is
     exactly what GitHub parses — hence asserting on it here rather than on a file.
     """
-    env = dict(os.environ) | {"FORCE_IN_WINDOW": force, "MARKET_CLOCK_NOW_UTC": now or ""}
+    args = [sys.executable, str(path), "--schedule", schedule]
+    if now is not None:
+        args.extend(["--now-utc", now])
+    if force:
+        args.append("--force")
     done = subprocess.run(
-        [sys.executable, "-"],
-        input=source,
+        args,
         capture_output=True,
         text=True,
-        env=env,
         check=True,
         timeout=60,
     )
@@ -302,38 +302,38 @@ def _run_gate(source: str, now: str | None, force: str = "false") -> str:
 
 
 @pytest.mark.parametrize(
-    ("now_utc", "expected", "why"),
+    ("now_utc", "schedule", "expected", "why"),
     [
-        ("2026-07-15T13:35", "true", "EDT: 09:35 ET, the correct summer cron"),
-        ("2026-07-15T14:35", "false", "EDT: 10:35 ET, the winter cron out of season"),
-        ("2026-01-14T14:35", "true", "EST: 09:35 ET, the correct winter cron"),
-        ("2026-01-14T13:35", "false", "EST: 08:35 ET, pre-open — the unrepairable case"),
-        ("2026-03-09T13:35", "true", "first weekday after the spring transition"),
-        ("2026-03-09T14:35", "false", "spring transition, wrong cron"),
-        ("2026-11-02T14:35", "true", "first weekday after the autumn transition"),
-        ("2026-11-02T13:35", "false", "autumn transition, wrong cron"),
-        ("2026-07-15T13:55", "true", "a 20-minute GitHub delay must still be admitted"),
-        ("2026-07-15T14:29", "true", "delay is admitted right up to the cutoff"),
-        ("2026-07-15T14:30", "false", "the cutoff is exclusive"),
-        ("2026-07-15T13:29", "false", "one minute pre-open is still pre-open"),
+        ("2026-07-15T13:35", "35 13 * * MON-FRI", "true", "EDT: correct summer cron"),
+        ("2026-07-15T14:35", "35 14 * * MON-FRI", "false", "EDT: winter cron"),
+        ("2026-01-14T14:35", "35 14 * * MON-FRI", "true", "EST: correct winter cron"),
+        ("2026-01-14T13:35", "35 13 * * MON-FRI", "false", "EST: pre-open"),
+        ("2026-03-09T13:35", "35 13 * * MON-FRI", "true", "spring transition"),
+        ("2026-03-09T14:35", "35 14 * * MON-FRI", "false", "spring wrong cron"),
+        ("2026-11-02T14:35", "35 14 * * MON-FRI", "true", "autumn transition"),
+        ("2026-11-02T13:35", "35 13 * * MON-FRI", "false", "autumn wrong cron"),
+        ("2026-07-15T13:55", "35 13 * * MON-FRI", "true", "20-minute delay"),
+        ("2026-07-15T15:41", "35 13 * * MON-FRI", "true", "two-hour delay"),
+        ("2026-07-15T20:00", "35 13 * * MON-FRI", "true", "hours-late delivery"),
+        ("2026-07-15T13:29", "35 13 * * MON-FRI", "false", "pre-open"),
     ],
 )
 def test_gate_admits_only_the_in_season_cron(
-    workflow: dict, now_utc: str, expected: str, why: str
+    workflow: dict, now_utc: str, schedule: str, expected: str, why: str
 ) -> None:
-    assert _run_gate(_gate_source(workflow), now_utc) == expected, why
+    assert _run_gate(_gate_path(workflow), now_utc, schedule) == expected, why
 
 
 def test_gate_never_blocks_a_manual_dispatch(workflow: dict) -> None:
     """`workflow_dispatch` is an operator override; gating it would be a foot-gun."""
-    source = _gate_source(workflow)
-    assert _run_gate(source, "2026-07-15T19:00") == "false"
-    assert _run_gate(source, "2026-07-15T19:00", force="true") == "true"
+    path = _gate_path(workflow)
+    assert _run_gate(path, "2026-07-15T19:00") == "false"
+    assert _run_gate(path, "2026-07-15T19:00", force=True) == "true"
 
 
 def test_gate_falls_back_to_the_wall_clock(workflow: dict) -> None:
     """With no override the gate must read the real clock, not fail or default open."""
-    assert _run_gate(_gate_source(workflow), None) in {"true", "false"}
+    assert _run_gate(_gate_path(workflow), None) in {"true", "false"}
 
 
 def test_at_open_cannot_run_without_the_gate(workflow: dict) -> None:
@@ -343,8 +343,10 @@ def test_at_open_cannot_run_without_the_gate(workflow: dict) -> None:
     assert at_open["needs"] == "at-open-clock"
     assert "needs.at-open-clock.outputs.in_window == 'true'" in at_open["if"]
     assert clock["outputs"]["in_window"] == "${{ steps.clock.outputs.in_window }}"
-    # The gate must not depend on a checkout: `ref: main` resolves repo-side files to
-    # main's copy, one promotion behind the crons the gate exists to discriminate.
-    assert all("checkout" not in str(step.get("uses", "")) for step in clock["steps"])
+    assert clock["permissions"] == {"contents": "read"}
+    clock_checkout = next(step for step in clock["steps"] if "checkout" in step.get("uses", ""))
+    assert "ref" not in clock_checkout.get("with", {})
+    writer_checkout = next(step for step in at_open["steps"] if "checkout" in step.get("uses", ""))
+    assert writer_checkout["with"]["ref"] == "main"
     run = next(step["run"] for step in clock["steps"] if step.get("id") == "clock")
     assert '>> "$GITHUB_OUTPUT"' in run, "the gate's decision never reaches the job output"
