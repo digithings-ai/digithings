@@ -19,7 +19,7 @@
 #   --kind KIND        Kind: Epic, Feature, Task, Bug, Chore, Research
 #   --priority PRI     Priority: P0, P1, P2, P3
 #   --model MODEL      Model: sonnet (default) | opus (for high-risk tasks)
-#   --exec TIER        Execution tier: copilot | cursor | claude
+#   --exec TIER        Execution tier: cursor | claude
 #                      If omitted, derived from --risk and --type (see routing below).
 #                      See docs/agents/EXECUTION_TIERS.md.
 #
@@ -145,7 +145,7 @@ if [[ -z "$COMPONENT" && -z "$TITLE" ]]; then
   read -r _MODEL
   MODEL="${_MODEL:-sonnet}"
 
-  echo "Execution tier (copilot/cursor/claude) [auto — derived from risk/type]:"
+  echo "Execution tier (cursor/claude) [auto — derived from risk/type]:"
   read -r _EXEC_TIER
   EXEC_TIER="${_EXEC_TIER}"
 fi
