@@ -6,9 +6,15 @@
  * `@digithings/web`.
  *
  * Before #1418's gap 6 closed, this was a flat bordered `.dc-activities` box of
- * bespoke `.dc-act-*` paragraphs: the embed showed no tool-call chain, no
- * reasoning disclosure and no sources, while the canon shipped primitives for
- * all three. Now every row is a shared primitive:
+ * bespoke `.dc-act-*` paragraphs. It DID render all three kinds — a tool chain
+ * (`.dc-act-tool`), a reasoning disclosure (`<details class="dc-act-reasoning">`)
+ * and sources (`.dc-act-hits`, with title/tier/year/path/snippet) — and it
+ * rendered them identically on both surfaces, because both take the same session
+ * component. An earlier version of this docblock said the embed "showed no
+ * tool-call chain, no reasoning disclosure and no sources" while digithings.ai
+ * used canon primitives; neither half was true. What changed here is the *skin*,
+ * not the presence of the information: every row is now a shared primitive
+ * instead of a bespoke paragraph.
  *
  *   | activity      | primitive                          |
  *   |---------------|------------------------------------|
@@ -41,14 +47,19 @@ import { toCanonRows, type CanonActivityRow } from "../activity-view";
 import type { DigiChatActivity, VaultHitSummary } from "../types";
 
 /**
- * Retrieved documents, as the fold-out body of a `tool_result` row — the
- * citation list that the embed previously dropped on the floor entirely.
+ * Retrieved documents, as the fold-out body of a `tool_result` row.
+ *
+ * Not new: the previous `.dc-act-hits` list already rendered these on both
+ * surfaces. `activity-view.ts` sets `defaultOpen: true` for a non-empty hit list,
+ * so citations stay in the server-rendered markup rather than hiding behind a
+ * click.
  */
 function SourceList({ sources }: { sources: VaultHitSummary[] }) {
   return (
     <ul className="dc-act-hits">
-      {sources.map((hit) => (
-        <li key={hit.path}>
+      {/* path is not unique — two chunks of one vault document share it. */}
+      {sources.map((hit, i) => (
+        <li key={`${hit.path}-${i}`}>
           <span className="dc-act-hit-title">{hit.title}</span>
           {hit.tier ? <span className="dc-act-hit-tier">{hit.tier}</span> : null}
           {typeof hit.year === "number" ? (

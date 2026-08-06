@@ -1,4 +1,4 @@
--- 066_olympus_provider_telemetry.sql
+-- 067_olympus_provider_telemetry.sql
 --
 -- Private append-only vocabulary for node executions, logical provider calls, and physical
 -- provider attempts (#1951). This migration stores identity, lifecycle, usage, cost, and generic

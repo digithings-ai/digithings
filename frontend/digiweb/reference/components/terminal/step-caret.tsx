@@ -96,12 +96,28 @@ export function TerminalStepCaret({
       node.textContent = text;
     };
 
-    if (reduced || !word) {
+    let timer = 0;
+
+    // Reduced motion writes the label whole and stops. An EMPTY label must not:
+    // returning here skipped scheduling the advance, so one blank step (a stream
+    // handing over a nameless tool) froze the loader on an empty line forever.
+    if (reduced) {
       write(word);
       return;
     }
+    // An empty label must still advance. Returning early here (as the reduced
+    // branch does) skipped scheduling the next step, so one blank label — a
+    // stream handing over a nameless tool — froze the loader on an empty line
+    // forever. Same advance rule as the settled case in `type` below.
+    if (!word) {
+      write("");
+      if (controlled) return;
+      if (!loop && index >= count - 1) return;
+      timer = window.setTimeout(() => setOwnIndex((i) => (i + 1) % count), holdMs);
+      return () => window.clearTimeout(timer);
+    }
 
-    let timer = 0;
+
     const from = shownRef.current;
     let cut = from.length;
     let typed = 0;

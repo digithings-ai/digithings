@@ -1,8 +1,17 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import ConvictionHistory from './ConvictionHistory';
 import type { DecisionLogRow } from '@/lib/holdings-decisions';
+
+vi.mock('next/link', () => ({
+  default: ({ children, href, className }: any) =>
+    createElement('a', { href, className }, children),
+}));
+
+vi.mock('lucide-react', () => ({
+  ArrowUpRight: () => createElement('svg', { 'data-icon': 'arrow-up-right' }),
+}));
 
 const decision = (id: string, date: string, over: Partial<DecisionLogRow> = {}): DecisionLogRow =>
   ({
@@ -24,7 +33,7 @@ const decision = (id: string, date: string, over: Partial<DecisionLogRow> = {}):
     ...over,
   }) as DecisionLogRow;
 
-describe('ConvictionHistory — flat decision ledger', () => {
+describe('ConvictionHistory — analysis history', () => {
   it('renders a flat full-width structure, not glass-card', () => {
     const decisions = [decision('d1', '2026-01-01')];
     const html = renderToStaticMarkup(createElement(ConvictionHistory, { decisions }));
@@ -35,8 +44,24 @@ describe('ConvictionHistory — flat decision ledger', () => {
     expect(html).toContain('decision-ledger');
     // Should have hairline borders
     expect(html).toContain('border-');
-    expect(html).toContain('>Evaluation<');
-    expect(html).not.toContain('>Holding<');
+    expect(html).toContain('Analysis history');
+    expect(html).toContain('>Decision edge<');
+    expect(html).toContain('Open in Pipeline');
+    expect(html).toContain(
+      '/pipeline?date=2026-01-01&amp;stage=selection'
+    );
+    expect(html).not.toContain('show reasoning');
+  });
+
+  it('scores bearish outcomes directionally instead of exposing ambiguous raw alpha', () => {
+    const decisions = [
+      decision('d1', '2026-01-01', { stance: 'sell', alpha: -0.02, actual_return: -0.01 }),
+    ];
+
+    const html = renderToStaticMarkup(createElement(ConvictionHistory, { decisions }));
+
+    expect(html).toContain('+2.00%');
+    expect(html).toContain('text-up');
   });
 });
 

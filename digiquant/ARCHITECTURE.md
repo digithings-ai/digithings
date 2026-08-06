@@ -1068,7 +1068,7 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
 
 - `digillm.telemetry` defines the provider-agnostic `NodeRunRecord`, `ProviderCallRecord`,
   `ProviderAttemptRecord`, and `ArtifactRef` vocabulary. Migration
-  `066_olympus_provider_telemetry.sql` owns the corresponding private normalized ledger in the
+  `067_olympus_provider_telemetry.sql` owns the corresponding private normalized ledger in the
   `core` Supabase project. The records distinguish graph work, logical calls/cache outcomes, and
   physical attempts without storing prompts, responses, search text, secrets, or raw exceptions.
   Producer event times and database `recorded_at` remain distinct; unavailable token usage or cost
@@ -1080,6 +1080,16 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   state + the `digigraph.usage` LLM snapshot (calls/tokens/sources). `summarize_run` derives
   a `status` (`ok`/`degraded`/`failed`); a carry with reason `NODE_FAILED_REASON` counts as a
   failure, a deliberate carry does not.
+- The same writer bulk-upserts ordered `usage_snapshot.events` into
+  `olympus_run_events` on `(run_id, attempt, sequence)`. Rewrites reconcile stale higher
+  sequences; a snapshot with no `events` key preserves the prior trace, while an explicitly
+  empty list clears it. Malformed events are skipped and every cleanup/upsert remains fail-soft.
+- Migration `066_olympus_run_events.sql` keeps the base table private (RLS, no policies,
+  public-role grants revoked). The definer-rights `olympus_run_event_trace` view exposes only
+  fixed operation metadata, timing/status/retries, source counts, and bounded shape summaries.
+  Token/cost fields remain operator-only. Prompts, tool values/results, document bodies,
+  credentials, PII-heavy values, model output, and reasoning are not columns. **Migration 066
+  is human-gated and must not be applied to the live Supabase project without review.**
 - `chain.run_atlas_then_hermes` wraps each sub-graph (`_safe_invoke_graph`) and each terminal
   phase (`_run_terminal_phase`) so a late crash is recorded as a `PhaseError` and the run still
   reaches publish + materialize + the diagnostics write with last-good state. LLM usage is
@@ -1207,7 +1217,7 @@ error. See [`supabase/SCHEMA.md`](supabase/SCHEMA.md) "Grants" for the residuals
 the statement must not carry a `FOR ROLE` clause.
 
 **Private provider telemetry (#1951).** Migration
-[`supabase/migrations/066_olympus_provider_telemetry.sql`](supabase/migrations/066_olympus_provider_telemetry.sql)
+[`supabase/migrations/067_olympus_provider_telemetry.sql`](supabase/migrations/067_olympus_provider_telemetry.sql)
 adds `olympus_node_runs`, `olympus_provider_calls`, and `olympus_provider_attempts`. All three are
 service-role-only, RLS-enabled with no policies, and append-only: `service_role` receives only
 `SELECT`/`INSERT`, while database triggers reject `UPDATE` and `DELETE`. The schema stores generic
@@ -1395,6 +1405,11 @@ either (a) call `ingest_atlas_document` directly at the end of
 
 `digiquant/src/digiquant/olympus/atlas/diagnostics.py` derives **two** verdicts from a
 finished run's state, and they are deliberately not the same signal:
+
+Call-level transparency is a separate relation from this aggregate health row. Migration 066
+adds the ordered `olympus_run_events` base table and curated `olympus_run_event_trace` view;
+historical diagnostics rows are not backfilled because aggregate counters cannot reconstruct
+individual calls, ordering, retries, or timing without fabrication.
 
 | Field | Question | Consumers |
 |---|---|---|

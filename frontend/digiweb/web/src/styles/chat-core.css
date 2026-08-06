@@ -1,10 +1,3 @@
-/* KaTeX's own layout sheet — ~1000 rules of metric-accurate spacing that
-   cannot be reproduced from tokens, so it is imported rather than rewritten;
-   the palette on top of it IS tokens (see the math section below). It must
-   sit above every rule in this file: @import is only legal before them.
-   katex is a dependency of @digithings/web and hoists to the workspace root,
-   so the bare specifier resolves for every app that imports this file. */
-@import "katex/dist/katex.min.css";
 
 /* ==========================================================================
    Chat core (@digithings/web) — the digichat turn grammar (canon §16).
@@ -103,10 +96,17 @@
 
 /* Assistant turns flatten the heading scale — every level reads as the same
    display-face section head (the transcript, not the page, owns hierarchy). */
+/* h5/h6 are included because ChatMarkdownSource downshifts markdown headings two
+   levels (h1→h3 … h4→h6) so streamed model text cannot claim the page's <h1>.
+   Without them, a `###` in an answer would render structurally correct and
+   completely unstyled. h1/h2 stay listed for any caller that renders the
+   children path with its own heading tags. */
 .chat-md h1,
 .chat-md h2,
 .chat-md h3,
-.chat-md h4 {
+.chat-md h4,
+.chat-md h5,
+.chat-md h6 {
   margin: 0 0 0.5rem;
   font-family: var(--font-display);
   font-weight: 400;
@@ -158,6 +158,13 @@
 
 .chat-md li {
   padding-left: 0.2rem;
+}
+
+/* remark-gfm task lists carry their own checkbox; the disc from `.chat-md ul`
+   would sit beside it as a second marker. */
+.chat-md ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
 }
 
 .chat-md ul li::marker {
@@ -389,51 +396,6 @@
   }
 }
 
-/* ── math (KaTeX) ─────────────────────────────────────────────────────────
-   The imported katex sheet lays glyphs out; everything visible here is a
-   token, so `$e^{i\pi}$` converts with [data-theme] like any other ink. */
-
-.chat-md .katex {
-  color: var(--ink);
-  font-size: 1.04em;
-}
-
-/* Display math is a block of its own — scrolls inside its box rather than
-   widening the turn (a long derivation must not stretch the transcript). */
-.chat-md .katex-display {
-  margin: 0.9rem 0;
-  padding: 0.15rem 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-.chat-md .katex .mord,
-.chat-md .katex .mrel,
-.chat-md .katex .mbin,
-.chat-md .katex .mopen,
-.chat-md .katex .mclose,
-.chat-md .katex .mpunct {
-  color: inherit;
-}
-
-/* Rules (fraction bars, \overline, \sqrt) default to currentColor in katex —
-   pin them to ink so they never inherit a muted container colour. */
-.chat-md .katex .frac-line,
-.chat-md .katex .overline .overline-line,
-.chat-md .katex .underline .underline-line,
-.chat-md .katex .hline,
-.chat-md .katex .rule {
-  border-color: var(--ink);
-  background: var(--ink);
-}
-
-/* Unparseable TeX: KaTeX keeps the source, we tint it with the negative token
-   (ChatMarkdownSource passes errorColor: var(--down) for the same reason). */
-.chat-md .katex-error {
-  color: var(--down);
-  font-family: var(--font-mono);
-  font-size: 0.82em;
-}
 
 /* ── table scroll box ─────────────────────────────────────────────────────
    Wide GFM tables scroll inside their own box; the .chat-md table combinator

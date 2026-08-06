@@ -3,8 +3,12 @@
 DigiThings **marketing** chat runs on **Cloudflare Pages** (native digichat-ui +
 digivault Function). See Phase 3 ops checklist.
 
-[`frontend/digichat-cloudflare/`](../../frontend/digichat-cloudflare/README.md) is a
-**deferred** Workers Paid / Containers option — not required for `/chat`.
+The `frontend/digichat-cloudflare/` Workers Paid / Containers scaffold was **removed on
+2026-08-06**. It had no deploy path in the repo — Containers require Workers Paid and
+digithings is on Free (see the Phase 3 design spec) — and it was the only thing pulling
+`wrangler` (and five `workerd` platform binaries) into the root lockfile. The Cloudflare
+account itself was not checked. It is not required for `/chat`; recover it from git history if
+digithings ever adopts Workers Paid.
 
 ## Hard constraint
 

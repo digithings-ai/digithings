@@ -39,9 +39,25 @@ describe("ChatMarkdown — markdown grammar", () => {
     const html = renderToStaticMarkup(
       <ChatMarkdown source={"# Head\n\nA **bold** word.\n\n- one\n- two\n"} />,
     );
-    expect(html).toContain("<h1>Head</h1>");
     expect(html).toContain("<strong>bold</strong>");
     expect(html).toContain("<li>one</li>");
+  });
+
+  it("downshifts headings two levels so model output cannot claim the page h1", () => {
+    // Neither digichat /embed nor digithings.ai/chat has an <h1> on its transcript
+    // route, so an un-downshifted `#` from streamed text would become the
+    // document's top-level heading — a real outline and screen-reader defect. The
+    // renderer this replaced (digichat-ui's MiniMarkdown) mapped h1→h3 … h4→h6;
+    // this pins that behaviour so it cannot be dropped again silently.
+    const html = renderToStaticMarkup(
+      <ChatMarkdown source={"# One\n\n## Two\n\n### Three\n\n#### Four\n"} />,
+    );
+    expect(html).toContain("<h3>One</h3>");
+    expect(html).toContain("<h4>Two</h4>");
+    expect(html).toContain("<h5>Three</h5>");
+    expect(html).toContain("<h6>Four</h6>");
+    expect(html).not.toContain("<h1>");
+    expect(html).not.toContain("<h2>");
   });
 
   it("boxes a GFM table so a wide one scrolls instead of stretching the turn", () => {
@@ -73,14 +89,15 @@ describe("ChatMarkdown — markdown grammar", () => {
 });
 
 describe("ChatMarkdown — math", () => {
-  it("renders inline $…$ as KaTeX in the server markup", () => {
+  // Single-dollar inline math is deliberately OFF (`singleDollarTextMath: false`).
+  // It cannot coexist with currency: remark-math treats the second `$` in any
+  // paragraph as a closing delimiter, so "$29 ... $99" mangles into math. Currency
+  // is far commoner than inline math in a docs answer, so `$…$` stays literal and
+  // real notation uses `$$…$$`, which still renders. See ChatMarkdownSource.
+  it("leaves single-dollar spans literal rather than parsing them as math", () => {
     const html = renderToStaticMarkup(<ChatMarkdown source={"mass–energy: $E = mc^2$"} />);
-    expect(html).toContain("katex");
-    // inline math is not a display block
-    expect(html).not.toContain("katex-display");
-    // KaTeX ships MathML for AT alongside the visual HTML
-    expect(html).toContain("<math");
-    expect(html).toContain("katex-html");
+    expect(html).not.toContain("katex");
+    expect(html).toContain("$E = mc^2$");
   });
 
   it("renders fenced $$ … $$ (delimiters on their own lines) as display KaTeX", () => {
@@ -139,5 +156,64 @@ describe("ChatMarkdown — mermaid", () => {
     );
     expect(html).toContain("intro");
     expect(html).toContain("outro");
+  });
+});
+
+// Regression: remark-math defaults `singleDollarTextMath: true`, so any paragraph
+// with two `$` parsed as inline math — "$29 ... $99" re-set the prose between them
+// as italic math with the spaces collapsed and ate the second `$`. Currency is far
+// commoner than inline math in a docs answer, and this renders for a quant stack.
+describe("currency in prose", () => {
+  it("leaves two dollar figures in a sentence alone", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown source="Our starter plan is $29 per month and the team plan is $99 per month." />
+    );
+    expect(html).not.toContain("katex");
+    expect(html).toContain("$29");
+    expect(html).toContain("$99");
+  });
+
+  it("leaves shell variables alone", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown source="Use the $HOME var and the $PATH var in your shell." />
+    );
+    expect(html).not.toContain("katex");
+    expect(html).toContain("$HOME");
+    expect(html).toContain("$PATH");
+  });
+
+  it("still renders block math", () => {
+    const html = renderToStaticMarkup(<ChatMarkdown source={"$$e^{i\\pi}+1=0$$"} />);
+    expect(html).toContain("katex");
+  });
+});
+
+// Regression: block code was decided by guessing from the child string, so a bare
+// one-line fence — the commonest shape of model output — had no language and no
+// newline and fell through to inline <code>, losing its block frame and copy
+// button. Indented blocks lost leading whitespace for the same reason.
+describe("code blocks", () => {
+  it("gives a bare one-line fence the block frame, not inline code", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown source={"```\nnpm install digithings\n```"} />
+    );
+    expect(html).toContain("chat-md-code");
+    expect(html).toContain("<pre>");
+  });
+
+  it("keeps genuine inline code inline", () => {
+    const html = renderToStaticMarkup(<ChatMarkdown source={"use `npm ci` here"} />);
+    expect(html).not.toContain("chat-md-code");
+    expect(html).toContain("<code>npm ci</code>");
+  });
+
+  // KaTeX echoes the raw source in its MathML <annotation>, so the string itself
+  // survives legitimately. What must not survive is an inline style built from it.
+  it("bounds a hostile \\rule so it cannot blow out the page", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown source={"$$\\rule{99999em}{99999em}$$"} />
+    );
+    const styles = html.match(/style="[^"]*"/g) ?? [];
+    expect(styles.filter((s) => s.includes("99999"))).toEqual([]);
   });
 });

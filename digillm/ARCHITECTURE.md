@@ -96,7 +96,7 @@ attempt record means one observable SDK invocation, not proof of exactly one HTT
 canary test locks the SDK setting in place; changing or disabling it requires a separate measured
 decision. Cache hits produce no physical attempt record.
 
-DigiQuant migration `066_olympus_provider_telemetry.sql` owns the private normalized storage. Event
+DigiQuant migration `067_olympus_provider_telemetry.sql` owns the private normalized storage. Event
 times remain producer facts; the database adds `recorded_at` as its write clock. That schema is not
 part of `digillm` and does not create a persistence dependency for other consumers.
 
@@ -207,6 +207,20 @@ The silence budget for one `completion` is the product of three layers, not this
 value alone: the SDK's own `max_retries=2` (3 HTTP attempts) x `_create_with_retry`'s
 12 attempts, each attempt bounded by the read timeout. Lowering
 `DIGILLM_REQUEST_TIMEOUT_SECONDS` is the only single-knob way to shrink that product.
+
+### Usage observer contract
+
+`set_usage_observer(callback)` installs one process-level, best-effort observer used by
+`digigraph.usage`. A terminal model or search operation emits exactly one callback with fixed
+metadata: kind, model, success, duration, application-level retry count, usage totals, cost,
+and source count. `_create_with_retry` invokes an internal attempt callback immediately before
+each SDK call, so `retry_count` is the actual helper-attempt count minus one; empty-response and
+xAI 410 ungrounded fallbacks contribute to the same count. Direct Responses API searches report
+their wall-clock duration too.
+
+The observer receives no messages, prompts, response bodies, tool arguments/results,
+credentials, or reasoning. It is optional and observer exceptions are swallowed so telemetry
+cannot change the public completion/search return contract or fail a provider call.
 
 ## Per-request override contract (contextvars)
 
