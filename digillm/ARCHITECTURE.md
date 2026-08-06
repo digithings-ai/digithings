@@ -145,6 +145,20 @@ value alone: the SDK's own `max_retries=2` (3 HTTP attempts) x `_create_with_ret
 12 attempts, each attempt bounded by the read timeout. Lowering
 `DIGILLM_REQUEST_TIMEOUT_SECONDS` is the only single-knob way to shrink that product.
 
+### Usage observer contract
+
+`set_usage_observer(callback)` installs one process-level, best-effort observer used by
+`digigraph.usage`. A terminal model or search operation emits exactly one callback with fixed
+metadata: kind, model, success, duration, application-level retry count, usage totals, cost,
+and source count. `_create_with_retry` invokes an internal attempt callback immediately before
+each SDK call, so `retry_count` is the actual helper-attempt count minus one; empty-response and
+xAI 410 ungrounded fallbacks contribute to the same count. Direct Responses API searches report
+their wall-clock duration too.
+
+The observer receives no messages, prompts, response bodies, tool arguments/results,
+credentials, or reasoning. It is optional and observer exceptions are swallowed so telemetry
+cannot change the public completion/search return contract or fail a provider call.
+
 ## Per-request override contract (contextvars)
 
 This is the contract **digigraph** will use after migration (follow-up #12). The

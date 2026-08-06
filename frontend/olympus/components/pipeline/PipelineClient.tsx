@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { Files, ListTree } from 'lucide-react';
 import { buildPipelineDayData, fanoutIdForKey } from '@/lib/pipeline-graph-data';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import { PIPELINE_TOPOLOGY } from '@/lib/pipeline-topology';
@@ -12,6 +13,8 @@ import { parsePipelineParams, resolvePresentDigestKey } from '@/lib/pipeline-lin
 import PipelineDaySelector from './PipelineDaySelector';
 import PipelineCanvas from './PipelineCanvas';
 import PipelineNodeDetail from './PipelineNodeDetail';
+import PipelineArtifactLedger from './PipelineArtifactLedger';
+import PipelineTraceLedger from './PipelineTraceLedger';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -69,14 +72,18 @@ export default function PipelineClient() {
   const dateExplicit = useRef(Boolean(params.date));
   const [dayLoading, setDayLoading] = useState(true);
   const [dayData, setDayData] = useState<PipelineDayData>({
+    runRecorded: false,
     fanoutCounts: {},
     fanoutKeys: {},
     presentKeys: new Set(),
+    artifacts: [],
   });
 
   // Node detail
   const [activeNode, setActiveNode] = useState<LaidOutNode | null>(null);
   const [activeDocumentKey, setActiveDocumentKey] = useState<string | null>(params.node ?? null);
+  const [artifactLedgerOpen, setArtifactLedgerOpen] = useState(false);
+  const [traceLedgerOpen, setTraceLedgerOpen] = useState(false);
 
   const initialExpansion = useMemo(
     () => buildInitialExpansion(params.stage, params.node),
@@ -111,17 +118,21 @@ export default function PipelineClient() {
             .select('date')
             .gte('date', thirtyDaysAgo)
             .order('date', { ascending: false }),
-          supabase.from('documents').select('document_key').eq('date', selectedDate),
+          supabase
+            .from('documents')
+            .select('document_key,title,doc_type,phase,category,segment,sector,run_type')
+            .eq('date', selectedDate),
         ]);
 
         if (cancelled) return;
 
-        if (datesRes.data) {
-          const uniqueDates = [...new Set((datesRes.data as { date: string }[]).map((r) => r.date))]
+        const uniqueDates = datesRes.data
+          ? [...new Set((datesRes.data as { date: string }[]).map((r) => r.date))]
             .sort()
-            .reverse();
-          if (uniqueDates.length > 0) {
-            setAvailableDates(uniqueDates);
+            .reverse()
+          : [];
+        if (uniqueDates.length > 0) {
+          setAvailableDates(uniqueDates);
             // Landing-date snap: no explicit choice + the seeded date has no
             // run → jump to the latest run. Runs at most once per load (after
             // the snap, selectedDate IS in uniqueDates).
@@ -129,11 +140,13 @@ export default function PipelineClient() {
               setSelectedDate(uniqueDates[0]);
               return; // the effect re-runs for the snapped date
             }
-          }
         }
 
         if (docsRes.data) {
-          setDayData(buildPipelineDayData(docsRes.data as { document_key: string }[]));
+          setDayData({
+            ...buildPipelineDayData(docsRes.data),
+            runRecorded: uniqueDates.includes(selectedDate),
+          });
         }
 
       } catch {
@@ -156,6 +169,8 @@ export default function PipelineClient() {
   }, [activeDocumentKey, dayData]);
 
   const handleNodeActivate = useCallback((node: LaidOutNode) => {
+    setArtifactLedgerOpen(false);
+    setTraceLedgerOpen(false);
     setActiveNode(node);
     setActiveDocumentKey(node.documentKey ?? null);
   }, []);
@@ -170,7 +185,25 @@ export default function PipelineClient() {
     setSelectedDate(date);
   }, []);
 
-  const noRunForDate = !dayLoading && dayData.presentKeys.size === 0;
+  const handleArtifactSelect = useCallback((documentKey: string) => {
+    setArtifactLedgerOpen(false);
+    setActiveNode(null);
+    setActiveDocumentKey(documentKey);
+  }, []);
+
+  const handleArtifactLedgerOpen = useCallback(() => {
+    setTraceLedgerOpen(false);
+    setArtifactLedgerOpen(true);
+  }, []);
+
+  const handleTraceLedgerOpen = useCallback(() => {
+    setArtifactLedgerOpen(false);
+    setActiveNode(null);
+    setActiveDocumentKey(null);
+    setTraceLedgerOpen(true);
+  }, []);
+
+  const noRunForDate = !dayLoading && dayData.runRecorded === false;
 
   return (
     <section
@@ -180,7 +213,7 @@ export default function PipelineClient() {
     >
       <header
         data-testid="pipeline-command-band"
-        className="flex min-h-12 items-center justify-end border-y border-hair bg-surface px-4 py-2 md:px-4"
+        className="flex min-h-12 flex-wrap items-center justify-end gap-y-2 border-y border-hair bg-surface px-3 py-2 md:flex-nowrap md:px-4"
       >
         <h1 className="sr-only">Pipeline</h1>
         {noRunForDate && (
@@ -188,6 +221,27 @@ export default function PipelineClient() {
             No run recorded — showing the expected pipeline.
           </p>
         )}
+        <button
+          type="button"
+          aria-label="Open all pipeline artifacts"
+          title="All artifacts"
+          onClick={handleArtifactLedgerOpen}
+          className="mr-1 inline-flex h-9 w-9 items-center justify-center gap-2 rounded-lg border border-hair bg-term-bg font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
+        >
+          <Files size={15} aria-hidden />
+          <span className="hidden md:inline">All artifacts</span>
+          <span className="hidden tabular-nums text-ink-mute md:inline">{dayData.artifacts.length}</span>
+        </button>
+        <button
+          type="button"
+          aria-label="Open pipeline call trace"
+          title="Call trace"
+          onClick={handleTraceLedgerOpen}
+          className="mr-1 inline-flex h-9 w-9 items-center justify-center gap-2 rounded-lg border border-hair bg-term-bg font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
+        >
+          <ListTree size={15} aria-hidden />
+          <span className="hidden md:inline">Call trace</span>
+        </button>
         <PipelineDaySelector
           dates={availableDates}
           value={selectedDate}
@@ -206,7 +260,24 @@ export default function PipelineClient() {
           onNodeActivate={handleNodeActivate}
         />
 
-        {(activeNode !== null || resolvedActiveDocumentKey !== null) && (
+        {artifactLedgerOpen && (
+          <PipelineArtifactLedger
+            artifacts={dayData.artifacts}
+            date={selectedDate}
+            selectedDocumentKey={resolvedActiveDocumentKey}
+            onSelect={handleArtifactSelect}
+            onClose={() => setArtifactLedgerOpen(false)}
+          />
+        )}
+
+        {traceLedgerOpen && (
+          <PipelineTraceLedger
+            date={selectedDate}
+            onClose={() => setTraceLedgerOpen(false)}
+          />
+        )}
+
+        {!artifactLedgerOpen && !traceLedgerOpen && (activeNode !== null || resolvedActiveDocumentKey !== null) && (
           <PipelineNodeDetail
             node={activeNode}
             documentKey={resolvedActiveDocumentKey}

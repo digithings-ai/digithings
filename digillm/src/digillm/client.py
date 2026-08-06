@@ -543,7 +543,12 @@ def _sleep_transient_retry(delay: float, *, max_delay: float = 300.0) -> float:
     return min(delay * 2, max_delay)
 
 
-def _create_with_retry(client: OpenAI, **kwargs: Any) -> Any:
+def _create_with_retry(
+    client: OpenAI,
+    *,
+    on_attempt: Callable[[], None] | None = None,
+    **kwargs: Any,
+) -> Any:
     """Call ``client.chat.completions.create`` with backoff on transient errors.
 
     Retries on ``RateLimitError`` (429), ``InternalServerError`` (5xx),
@@ -564,6 +569,8 @@ def _create_with_retry(client: OpenAI, **kwargs: Any) -> Any:
     delay = 5.0
     for attempt in range(max_attempts):
         try:
+            if on_attempt is not None:
+                on_attempt()
             return client.chat.completions.create(**kwargs)
         except transient as exc:
             if attempt >= max_attempts - 1:
@@ -880,6 +887,15 @@ def completion(
     provider, model_id = _parse_provider_prefix(model)
     client = get_client_for_model(model)
     effective_model = model_id if provider is not None else model
+    usage_started = time.perf_counter()
+    provider_attempts = 0
+
+    def create_with_retry(call_kwargs: dict[str, Any]) -> ChatCompletion:
+        def count_attempt() -> None:
+            nonlocal provider_attempts
+            provider_attempts += 1
+
+        return _create_with_retry(client, on_attempt=count_attempt, **call_kwargs)
 
     # xAI Live Search rides the OpenAI-compatible client via ``extra_body`` and only
     # when the real xAI client is active (reaching here for an ``xai/`` model means its
@@ -922,19 +938,28 @@ def completion(
     kwargs = _with_openrouter_cost_controls(kwargs, provider)
 
     try:
-        r: ChatCompletion = _create_with_retry(client, **kwargs)
-    except Exception as exc:  # only the 410 case is soft; everything else re-raises
-        # xAI deprecated Live Search (HTTP 410) in favour of the Agent Tools API
-        # (:func:`web_search`). Fail soft: drop the deprecated extra_body and retry once
-        # ungrounded so the phase/pipeline keeps producing instead of crashing.
-        if getattr(exc, "status_code", None) == 410 and "extra_body" in kwargs:
+        try:
+            r = create_with_retry(kwargs)
+        except Exception as exc:  # only the 410 case is soft; everything else re-raises
+            # xAI deprecated Live Search (HTTP 410) in favour of the Agent Tools API
+            # (:func:`web_search`). Fail soft: drop the deprecated extra_body and retry once
+            # ungrounded so the phase/pipeline keeps producing instead of crashing.
+            if getattr(exc, "status_code", None) != 410 or "extra_body" not in kwargs:
+                raise
             logger.warning(
                 "xAI rejected search_parameters (410 deprecated); retrying without Live Search"
             )
             kwargs.pop("extra_body", None)
-            r = _create_with_retry(client, **kwargs)
-        else:
-            raise
+            r = create_with_retry(kwargs)
+    except Exception:
+        _record_usage(
+            kind=usage_kind,
+            model=effective_model,
+            ok=False,
+            duration_ms=round((time.perf_counter() - usage_started) * 1000),
+            retry_count=max(0, provider_attempts - 1),
+        )
+        raise
 
     # Empty-response self-heal. An empty body is transient; retry with backoff. The first
     # retry also adds OpenRouter provider-fallback routing for openrouter/ models (a flaky
@@ -954,7 +979,17 @@ def completion(
             _EMPTY_RETRY_DELAY,
         )
         time.sleep(_EMPTY_RETRY_DELAY)  # intentional short backoff on empty
-        r = _create_with_retry(client, **retry_kwargs)
+        try:
+            r = create_with_retry(retry_kwargs)
+        except Exception:
+            _record_usage(
+                kind=usage_kind,
+                model=effective_model,
+                ok=False,
+                duration_ms=round((time.perf_counter() - usage_started) * 1000),
+                retry_count=max(0, provider_attempts - 1),
+            )
+            raise
 
     _u = getattr(r, "usage", None)
     _cached_tokens = getattr(getattr(_u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
@@ -970,6 +1005,8 @@ def completion(
         # (usage accounting is on by default); the OpenAI SDK keeps unknown fields in
         # ``model_extra``. Other providers don't report it → 0.0.
         cost=_openrouter_usage_cost(_u),
+        duration_ms=round((time.perf_counter() - usage_started) * 1000),
+        retry_count=max(0, provider_attempts - 1),
     )
     # Cache the serialized response (tool-free, non-BYOK, non-empty content) so a
     # future hit rehydrates a ChatCompletion — keeping the return type consistent.
@@ -1059,7 +1096,6 @@ def openrouter_web_search(
             )
     except Exception as exc:  # grounding is best-effort; degrade gracefully
         logger.warning("openrouter_web_search failed (%s); continuing ungrounded", exc)
-        _record_usage(kind="web_search", model=model_id, ok=False)
         return None
 
     if not resp.choices:
@@ -1100,6 +1136,7 @@ def web_search(
     tool: dict[str, Any] = {"type": "web_search", "max_search_results": max_results}
     if allowed_domains:
         tool["filters"] = {"allowed_domains": list(allowed_domains)}
+    started = time.perf_counter()
     try:
         client = get_client_for_model(model)
         resp = client.responses.create(
@@ -1109,7 +1146,12 @@ def web_search(
         )
     except Exception as exc:  # grounding is best-effort; degrade gracefully
         logger.warning("web_search failed (%s); continuing ungrounded", exc)
-        _record_usage(kind="web_search", model=model_id, ok=False)
+        _record_usage(
+            kind="web_search",
+            model=model_id,
+            ok=False,
+            duration_ms=round((time.perf_counter() - started) * 1000),
+        )
         return None
     text = getattr(resp, "output_text", "") or ""
     sources: list[str] = []
@@ -1120,7 +1162,13 @@ def web_search(
             url = getattr(s, "url", None) or (s.get("url") if isinstance(s, dict) else None)
             if url and url not in sources:
                 sources.append(url)
-    _record_usage(kind="web_search", model=model_id, sources=len(sources), ok=True)
+    _record_usage(
+        kind="web_search",
+        model=model_id,
+        sources=len(sources),
+        ok=True,
+        duration_ms=round((time.perf_counter() - started) * 1000),
+    )
     return text, sources
 
 
@@ -1145,6 +1193,7 @@ def x_search(
     if not os.environ.get(_EXTERNAL_PROVIDERS["xai"]["api_key_env"], "").strip():
         logger.debug("x_search skipped: XAI_API_KEY not set")
         return None
+    started = time.perf_counter()
     try:
         client = get_client_for_model(model)
         resp = client.responses.create(
@@ -1154,11 +1203,22 @@ def x_search(
         )
     except Exception as exc:  # grounding is best-effort; degrade gracefully
         logger.warning("x_search failed (%s); continuing ungrounded", exc)
-        _record_usage(kind="x_search", model=model_id, ok=False)
+        _record_usage(
+            kind="x_search",
+            model=model_id,
+            ok=False,
+            duration_ms=round((time.perf_counter() - started) * 1000),
+        )
         return None
     text = getattr(resp, "output_text", "") or ""
     sources = _urls_from_grounding_text(text)
-    _record_usage(kind="x_search", model=model_id, sources=len(sources), ok=True)
+    _record_usage(
+        kind="x_search",
+        model=model_id,
+        sources=len(sources),
+        ok=True,
+        duration_ms=round((time.perf_counter() - started) * 1000),
+    )
     return text, sources
 
 

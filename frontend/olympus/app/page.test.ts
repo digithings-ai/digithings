@@ -69,23 +69,33 @@ describe('Today (Overview) page', () => {
     expect(html).not.toContain('glass-card');
   });
 
-  it('leads with the read, demotes the move, and shows honest NAV + all bands', () => {
+  it('orders the daily story from market state through decisions, risk, and drill-ins', () => {
     useDashboardMock.mockReturnValue({
       data: makeData([{ ticker: 'NVDA', current_pct: 8, recommended_pct: 6, action: 'TRIM' }]),
       loading: false,
       error: null,
     });
     const html = renderToStaticMarkup(createElement(OverviewPage));
-    expect(html).toContain('Mixed signals persist'); // read marquee
-    expect(html).toContain('since inception'); // honest NAV
-    expect(html).toContain('1 change today'); // demoted move
-    expect(html).toContain('Monitor DXY above 120.4'); // what to watch
+    expect(html.match(/Mixed signals persist as tech leads equities and USD strengthens\./g)).toHaveLength(1);
+    expect(html).toContain('Latest decision');
+    expect(html).toContain('1 allocation change');
+    expect(html).toContain('System state');
+    expect(html).toContain('Checking pipeline status');
+    expect(html).toContain('Since inception');
+    expect(html).toContain('Max drawdown');
+    expect(html).toContain('Volatility');
+    expect(html).toContain('Invested');
+    expect(html).not.toContain('>NAV<');
+    expect(html).not.toContain('Sharpe');
+    expect(html).toContain('Monitor DXY above 120.4');
     expect(html).toContain('BOJ intervention');
-    expect(html).toContain('Invested'); // book strip reconciled header
+    expect(html).toContain('AI capex supercycle');
+    expect(html).toContain('Allocation and movers');
     expect(html).toContain('EWT');
-    expect(html).toContain('-5.6'); // biggest mover
-    for (const label of ['The read', 'Holdings', 'Theses']) expect(html).toContain(label);
-    expect(html).not.toContain("How I'"); // perf doorway retired
+    expect(html).toContain('-5.6');
+    for (const label of ['Digest', 'Pipeline', 'Performance', 'Holdings', 'Theses']) {
+      expect(html).toContain(label);
+    }
   });
 
   it('shows the holding-the-book status on a no-change day', () => {
@@ -95,7 +105,8 @@ describe('Today (Overview) page', () => {
       error: null,
     });
     const html = renderToStaticMarkup(createElement(OverviewPage));
-    expect(html).toContain('No rebalance today — holding the book');
+    expect(html).toContain('Holding the book');
+    expect(html).toContain('No allocation change recommended');
   });
 
   it('keeps the localized regime accent, not a full-page wash', () => {
@@ -107,7 +118,7 @@ describe('Today (Overview) page', () => {
   it('renders the populated brief as a section inside the app shell main', () => {
     useDashboardMock.mockReturnValue({ data: makeData([]), loading: false, error: null });
     const html = renderToStaticMarkup(createElement(OverviewPage));
-    expect(html).toContain('data-testid="brief-workspace"');
+    expect(html).toContain('data-testid="daily-brief-workspace"');
     expect(html).toContain('aria-label="Daily investment brief"');
     expect(html).not.toContain('<main');
   });

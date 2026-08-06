@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AttributionTab from '@/components/observability/AttributionTab';
 import PageSkeleton from '@/components/page-skeleton';
-import DecisionQuality from '@/components/portfolio/DecisionQuality';
+import AttributionWorkspace from '@/components/portfolio/AttributionWorkspace';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import {
@@ -34,42 +33,18 @@ export default function AttributionPage() {
   return (
     <div className="flex min-h-full flex-col">
       <PortfolioSectionNav active="attribution" />
-      <main className={`${SUBPAGE_MAX} flex-1 space-y-10 py-8 md:py-10`}>
-        <header className="max-w-3xl space-y-2">
-          <p className="font-mono text-xs uppercase text-ink-mute">Portfolio intelligence</p>
-          <h1 className="font-display text-3xl text-ink md:text-4xl">Attribution</h1>
-          <p className="text-sm leading-relaxed text-ink-mute md:text-base">
-            Decompose the latest stored return window by position, then audit recommendation
-            outcomes and conviction calibration.
-          </p>
-        </header>
-
+      <main className={`${SUBPAGE_MAX} flex-1 py-4 md:py-5`}>
+        <h1 className="sr-only">Attribution</h1>
         {error ? (
           <p className="text-sm text-down">{error}</p>
         ) : !data ? (
           <PageSkeleton bare />
         ) : (
-          <div className="space-y-12">
-            <section aria-labelledby="position-attribution-heading" className="space-y-4">
-              <div className="space-y-1">
-                <h2
-                  id="position-attribution-heading"
-                  className="font-display text-2xl text-ink"
-                >
-                  Position attribution
-                </h2>
-                <p className="text-sm text-ink-mute">
-                  Contribution and active-return decomposition for the latest rolling window.
-                </p>
-              </div>
-              <AttributionTab
-                attribution={data.attribution}
-                date={data.attributionDate}
-              />
-            </section>
-
-            <DecisionQuality decisions={data.decisions} />
-          </div>
+          <AttributionWorkspace
+            attribution={data.attribution}
+            attributionDate={data.attributionDate}
+            decisions={data.decisions}
+          />
         )}
       </main>
     </div>

@@ -403,6 +403,30 @@ export interface Database {
           attempt: number;
         };
       };
+      // Body-free Pipeline call trace (migration 066). The base table remains
+      // service-role-only; this view excludes token and cost telemetry as well as
+      // prompts, tool values/results, document bodies, credentials, and reasoning.
+      olympus_run_event_trace: {
+        Row: {
+          run_id: string;
+          attempt: number;
+          run_date: string;
+          run_type: string | null;
+          sequence: number;
+          event_kind: 'model_call' | 'search_call' | 'tool_call';
+          phase: string | null;
+          operation: string | null;
+          document_key: string | null;
+          name: string;
+          status: 'ok' | 'error';
+          duration_ms: number | null;
+          retry_count: number;
+          sources: number;
+          input_summary: string;
+          output_summary: string;
+          created_at: string;
+        };
+      };
     };
     Functions: Record<string, never>;
     Enums: Record<string, never>;

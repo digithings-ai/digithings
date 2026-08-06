@@ -70,7 +70,7 @@ function html(data: OlympusTearsheet = sample) {
 describe('OlympusTearsheetView', () => {
   it('prioritizes NAV, persisted portfolio return, and active return', () => {
     const out = html();
-    expect(out).toContain('>NAV<');
+    expect(out).toContain('>NAV index<');
     expect(out).toContain('Portfolio return');
     expect(out).toContain('Active return');
     expect(out).toContain('112.50');
@@ -78,6 +78,8 @@ describe('OlympusTearsheetView', () => {
     expect(out).toContain('4.25%');
     expect(out).toContain('Benchmark return');
     expect(out).toContain('8.25%');
+    expect(out).toContain('>period<');
+    expect(out).toContain('2026-05-01–2026-07-17');
   });
 
   it('renders one additive contribution and exact portfolio-return chart', () => {
@@ -107,8 +109,13 @@ describe('OlympusTearsheetView', () => {
   });
 
   it('shows current persisted holding performance without decision diagnostics', () => {
-    const out = html();
+    const out = html({
+      ...sample,
+      currentHoldings: [{ ...sample.currentHoldings[0], category: 'sector-consumer-disc' }],
+    });
     expect(out).toContain('AAA');
+    expect(out).toContain('Consumer discretionary');
+    expect(out).not.toContain('sector-consumer-disc');
     expect(out).toContain('Unrealized');
     expect(out).not.toContain('Contribution');
     expect(out).not.toContain('hit rate');
@@ -146,15 +153,14 @@ describe('OlympusTearsheetView', () => {
 });
 
 describe('headline vs realized presentation (#1664)', () => {
-  it('uses the compact Holdings as-of stamp and no provenance prose', () => {
+  it('uses a compact measurement period and no provenance prose', () => {
     const out = html();
     expect(out).not.toContain('Portfolio return · live');
     expect(out).not.toContain('Active return · live');
-    expect(out).toContain('2026-07-17');
+    expect(out).toContain('2026-05-01–2026-07-17');
     expect(out).toContain('data-region="stamp"');
     expect(out).not.toContain('persisted metrics');
     expect(out).not.toContain('marks the open book · incl. unrealized');
-    expect(out).not.toContain('since 2026-05-01');
     expect(out).not.toContain('vs SPY');
   });
 
@@ -174,7 +180,9 @@ describe('headline vs realized presentation (#1664)', () => {
 
   it('contribution chart has no per-asset legend — popup carries the identification', () => {
     const out = html();
-    expect(out).toContain('hover for per-position contributions');
+    expect(out).toContain('Return contribution');
+    expect(out).not.toContain('hover for per-position contributions');
+    expect(out).not.toContain('Portfolio attribution');
     expect(out).not.toContain('aria-hidden="true" style="background-color');
   });
 });

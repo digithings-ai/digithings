@@ -31,9 +31,8 @@ function componentSources(): string[] {
  * imports the engine. The standalone drawdown chart left in #1548 — the
  * workspace's drawdown view rode the shared <SyncedTearsheet/>.
  *
- * The set is legitimately empty today: olympus has no app-local
- * lightweight-charts surface left. `lib/lw-chart.tsx` remains the sanctioned
- * scaffold for the next one (CHARTS.md "Grammar for new charts").
+ * The set stays derived so new app-local time-series surfaces are covered
+ * without maintaining a second hand-written inventory.
  */
 const ALL_COMPONENTS = componentSources();
 const MIGRATED = ALL_COMPONENTS.filter((rel) => read(rel).includes("from 'lightweight-charts'"));
