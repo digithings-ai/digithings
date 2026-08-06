@@ -92,6 +92,17 @@ const components: Components = {
       </a>
     );
   },
+  // Headings are downshifted two levels: a model that opens an answer with `#`
+  // must not take the page's <h1>. Neither digichat /embed nor digithings.ai/chat
+  // has an <h1> of its own on the transcript route, so an un-downshifted h1 from
+  // streamed text becomes the document's top-level heading — a real outline and
+  // screen-reader defect, not a cosmetic one. The renderer this replaced
+  // (digichat-ui's MiniMarkdown) mapped h1→h3, h2→h4, h3→h5, h4→h6; that
+  // behaviour is preserved here rather than dropped.
+  h1: ({ children }) => <h3>{children}</h3>,
+  h2: ({ children }) => <h4>{children}</h4>,
+  h3: ({ children }) => <h5>{children}</h5>,
+  h4: ({ children }) => <h6>{children}</h6>,
   // Tables scroll inside their own box rather than widening the turn.
   table: ({ children }) => (
     <div className="chat-md-table">

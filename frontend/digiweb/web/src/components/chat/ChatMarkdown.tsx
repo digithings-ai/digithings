@@ -21,8 +21,19 @@
  * combined — `source` renders first, then children, which is how a streaming
  * turn pins <ChatStreamCursor> to the end of the text.
  *
- * The children-only path stays directive-free and server-safe; passing
- * `source` pulls in the client renderer.
+ * The children-only path stays directive-free and server-safe.
+ *
+ * It does NOT, however, avoid the cost: `ChatMarkdownSource` is a **static**
+ * import below, so react-markdown, remark-gfm, remark-math, rehype-katex (→ katex,
+ * 266 KB raw / 76 KB gzipped) and <ChatMermaidBlock> are in the module graph of
+ * every consumer, including one that only ever passes children. An earlier version
+ * of this comment claimed "passing `source` pulls in the client renderer", implying
+ * the children path escaped it; that was wrong. Only `mermaid` itself (~2.9 MB) is
+ * genuinely deferred, via `await import("mermaid")` inside the effect.
+ *
+ * Making the whole renderer dynamic would be the real fix and is not done here: it
+ * would turn every `source` render into a suspense boundary and change the
+ * streaming behaviour, which needs its own change with its own review.
  */
 import type { ReactNode } from "react";
 

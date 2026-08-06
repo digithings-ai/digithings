@@ -21,6 +21,11 @@
    caret's animation shorthand when an element carries both .chat-cursor
    and .dt-cur). */
 @import "@digithings/web/styles/chat-core.css";
+/* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
+   (~1 MB). This app renders <DigiChatSession>, so it reaches
+   remark-math/rehype-katex and genuinely needs them; olympus and the design
+   reference deliberately do not import this. Must come AFTER chat-core.css. */
+@import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
 @import "@digithings/digichat-ui/styles/cursor.css";
 @import "@digithings/digichat-ui/styles/session.css";
@@ -172,14 +177,6 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
     padding-bottom: 2rem;
   }
 }
-
-/* Mermaid diagrams (MermaidBlock.tsx) — client-rendered SVG for pipeline/architecture
-   visualizations. Centered, contained; a view-source toggle reveals the raw code. */
-.dc-mermaid { margin: 0.7rem 0; }
-.dc-mermaid-fig { margin: 0; display: flex; justify-content: center; padding: 0.6rem; border: 1px solid var(--hair); border-radius: 9px; background: color-mix(in srgb, var(--ink) 3%, transparent); overflow-x: auto; }
-.dc-mermaid-fig svg { max-width: 100%; height: auto; }
-.dc-mermaid-toggle { font: inherit; font-size: 0.7rem; color: var(--ink-mute); background: transparent; border: 0; cursor: pointer; padding: 0.2rem 0; letter-spacing: 0.03em; }
-.dc-mermaid-toggle:hover { color: var(--ink-soft); }
 
 /* BYOK settings panel (ProviderSettings.tsx — digithings-web only) */
 .dc-settings-backdrop { position: fixed; inset: 0; z-index: 80; background: color-mix(in srgb, var(--bg) 35%, transparent); backdrop-filter: blur(4px); display: flex; justify-content: flex-end; }

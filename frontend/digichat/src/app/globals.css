@@ -38,6 +38,11 @@
    caret's animation shorthand when an element carries both .chat-cursor
    and .dt-cur). */
 @import "@digithings/web/styles/chat-core.css";
+/* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
+   (~1 MB). This app renders <DigiChatSession>, so it reaches
+   remark-math/rehype-katex and genuinely needs them; olympus and the design
+   reference deliberately do not import this. Must come AFTER chat-core.css. */
+@import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
 /* Controls layer (#1419) — dress for the shared controls that
    src/components/ui/* now re-export (Button/Badge/Card/Input/Label/Avatar

@@ -39,9 +39,25 @@ describe("ChatMarkdown — markdown grammar", () => {
     const html = renderToStaticMarkup(
       <ChatMarkdown source={"# Head\n\nA **bold** word.\n\n- one\n- two\n"} />,
     );
-    expect(html).toContain("<h1>Head</h1>");
     expect(html).toContain("<strong>bold</strong>");
     expect(html).toContain("<li>one</li>");
+  });
+
+  it("downshifts headings two levels so model output cannot claim the page h1", () => {
+    // Neither digichat /embed nor digithings.ai/chat has an <h1> on its transcript
+    // route, so an un-downshifted `#` from streamed text would become the
+    // document's top-level heading — a real outline and screen-reader defect. The
+    // renderer this replaced (digichat-ui's MiniMarkdown) mapped h1→h3 … h4→h6;
+    // this pins that behaviour so it cannot be dropped again silently.
+    const html = renderToStaticMarkup(
+      <ChatMarkdown source={"# One\n\n## Two\n\n### Three\n\n#### Four\n"} />,
+    );
+    expect(html).toContain("<h3>One</h3>");
+    expect(html).toContain("<h4>Two</h4>");
+    expect(html).toContain("<h5>Three</h5>");
+    expect(html).toContain("<h6>Four</h6>");
+    expect(html).not.toContain("<h1>");
+    expect(html).not.toContain("<h2>");
   });
 
   it("boxes a GFM table so a wide one scrolls instead of stretching the turn", () => {
