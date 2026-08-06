@@ -29,7 +29,8 @@ import type {
 import type { ContributionReturnPoint } from '@digithings/web';
 import { DASHBOARD_BENCHMARK_TICKERS } from './benchmark-tickers';
 
-const DECISION_LIMIT = 1000;
+const DECISION_PAGE_SIZE = 1000;
+const DECISION_MAX_ROWS = 50000;
 const PERFORMANCE_HISTORY_LIMIT = 5000;
 const ATTRIBUTION_LIMIT = 5000;
 
@@ -62,6 +63,24 @@ async function safeSelect<T>(
   }
 }
 
+async function fetchDecisionHistory(): Promise<TableRow<'decision_log'>[]> {
+  const decisions: TableRow<'decision_log'>[] = [];
+  for (let offset = 0; offset < DECISION_MAX_ROWS; offset += DECISION_PAGE_SIZE) {
+    const page = await safeSelect<TableRow<'decision_log'>>('decision_log', (sb) =>
+      sb
+        .from('decision_log')
+        .select(
+          'id,run_id,run_date,ticker,stance,conviction,thesis,benchmark,holding_days,status,actual_return,alpha,reflection,resolved_at,created_at'
+        )
+        .order('run_date', { ascending: false })
+        .range(offset, offset + DECISION_PAGE_SIZE - 1)
+    );
+    decisions.push(...page.rows);
+    if (!page.ok || page.rows.length < DECISION_PAGE_SIZE) break;
+  }
+  return decisions;
+}
+
 export async function fetchObservabilityData(): Promise<ObservabilityData> {
   // Distinguish a total misconfiguration (no Supabase env) from a configured-but-empty book:
   // throw so the page shows a clear error, matching the main data layer (lib/queries.ts).
@@ -71,16 +90,7 @@ export async function fetchObservabilityData(): Promise<ObservabilityData> {
         'Observability data cannot be loaded.'
     );
   }
-  const decisionsRes = await safeSelect<TableRow<'decision_log'>>('decision_log', (sb) =>
-    sb
-      .from('decision_log')
-      .select(
-        'id,run_id,run_date,ticker,stance,conviction,thesis,benchmark,holding_days,status,actual_return,alpha,reflection,resolved_at,created_at'
-      )
-      .order('run_date', { ascending: false })
-      .limit(DECISION_LIMIT)
-  );
-  return { decisions: decisionsRes.rows };
+  return { decisions: await fetchDecisionHistory() };
 }
 
 // Raised from 30 with migration 065 (#1762). The view now returns ONE ROW PER RETRY ATTEMPT,

@@ -16,6 +16,7 @@ import type { OlympusTearsheet, PerformanceHoldingRow } from './types';
 import {
   PortfolioContributionChart,
 } from './PortfolioPerformanceCharts';
+import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
 
 const PERFORMANCE_TABS = [
   { id: 'current', label: 'Open positions' },
@@ -62,7 +63,9 @@ function HoldingsPerformanceTable({
           {rows.map((row) => (
             <tr key={row.ticker} className="hover:bg-ink/[0.02]">
               <td className="px-5 py-2.5 font-semibold text-ink">{row.ticker}</td>
-              <td className="px-3 py-2.5 text-ink-soft">{row.category ?? '—'}</td>
+              <td className="px-3 py-2.5 text-ink-soft">
+                {formatAllocationCategory(row.category)}
+              </td>
               <td className="px-3 py-2.5 text-right text-ink">
                 {row.weightPct != null ? `${row.weightPct.toFixed(1)}%` : '—'}
               </td>
@@ -185,16 +188,15 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
     data.netReturnPct != null && benchmarkReturnPct != null
       ? data.netReturnPct - benchmarkReturnPct
       : data.relativeReturnPct;
+  const performancePeriod =
+    data.inceptionDate && data.metricsAsOf
+      ? `${data.inceptionDate}–${data.metricsAsOf}`
+      : null;
 
   return (
     <div className="ts-print-root space-y-0">
       <header className="flex items-center justify-between gap-4 border-b border-hair pb-3">
-        <div>
-          <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
-            portfolio performance
-          </p>
-          <h1 className="mt-1 font-display text-2xl font-normal text-ink">Performance</h1>
-        </div>
+        <h1 className="font-display text-2xl font-normal text-ink">Performance</h1>
         <IconButton
           aria-label="Download performance tear sheet as PDF"
           title="Download PDF"
@@ -212,15 +214,15 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
         className="grid grid-cols-1 border-x border-b border-hair bg-surface/80 md:grid-cols-[minmax(0,1fr)_auto]"
       >
         <dl className="m-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="NAV" value={data.currentNav} format="number" />
+          <Metric label="NAV index" value={data.currentNav} format="number" />
           <Metric label="Portfolio return" value={data.netReturnPct} />
           <Metric label="Benchmark return" value={benchmarkReturnPct} />
           <Metric label="Active return" value={relativeReturnPct} />
         </dl>
         <div data-region="stamp" className="flex min-w-[11rem] flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute md:items-end md:border-l md:border-t-0">
-          <span>{data.metricsAsOf ? 'as of' : 'status'}</span>
+          <span>{performancePeriod ? 'period' : data.metricsAsOf ? 'as of' : 'status'}</span>
           <strong className="font-medium text-accent">
-            {data.metricsAsOf ?? 'awaiting persisted metrics'}
+            {performancePeriod ?? data.metricsAsOf ?? 'awaiting persisted metrics'}
           </strong>
         </div>
       </section>

@@ -225,3 +225,99 @@
   color: var(--up);
   border-color: color-mix(in srgb, var(--up) 45%, var(--hair));
 }
+
+/* Step loaders — the house type-out, applied to waiting. Two product loaders
+   (<ContainerBootLoader>, <ChatResponseLoader>) share one engine,
+   <TerminalStepCaret>: the running step's label types out at the blinking
+   block cursor, holds, deletes, and the next one follows — the animated brand
+   lockup's grammar (AnimatedLockup, symbols family) applied to a wait.
+
+   The caret itself contributes NO rules here: it is <ChatStreamCursor>, and
+   chat-core.css owns its 7×14 accent block, its steps(1) blink and its
+   reduced-motion still. Everything below is the frame around it, which is why
+   nothing here animates or transitions. On promotion into @digithings/web the
+   .tl-* family moves to a shared sheet; the class names carry over. */
+
+/* The line stays INLINE flow, not flex: the caret's `vertical-align: -2px`
+   (chat-core.css) is what seats it against the baseline, and a flex container
+   would drop it and float the block high. */
+.tl-line {
+  font-family: var(--font-mono);
+}
+
+.tl-mark {
+  color: var(--accent);
+  margin-right: 0.5rem;
+}
+
+/* `pre` keeps a mid-word trailing space, so the caret never jumps back a cell
+   while typing. The line does not wrap — a wrapped caret lands in the margin —
+   so keep labels under ~30 characters, which is what the boot surface holds at
+   375px. */
+.tl-label {
+  white-space: pre;
+}
+
+/* Container boot — a terminal line caught mid-prompt, centred in the surface
+   with its block left-aligned on the mono grid. */
+
+.tl-boot {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 100%;
+  padding: clamp(1.5rem, 6vw, 4rem);
+  background: var(--bg);
+}
+
+/* The usual mode in a product app: pinned over an app that has not rendered. */
+.tl-boot.is-fixed {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  min-height: 100dvh;
+}
+
+.tl-boot-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: min(34rem, 100%);
+}
+
+.tl-boot-title {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.tl-boot-rule {
+  margin: 0;
+  border: 0;
+  height: 1px;
+  background: var(--hair);
+}
+
+.tl-boot .tl-line {
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+
+.tl-note {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+}
+
+/* Reference-page stage: the boot loader is a full-surface component, so the
+   specimen gives it a surface to fill instead of taking the viewport. */
+.tl-stage {
+  display: grid;
+  margin-top: 1.2rem;
+  min-height: 21rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  overflow: hidden;
+}

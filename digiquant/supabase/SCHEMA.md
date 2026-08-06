@@ -179,6 +179,13 @@ blocked; they are made pointless (`200 {"skipped": "not claimed"}`, nothing fetc
   anon policy, so anon reads return an empty set (not an error) while the service
   role keeps full access. The fitted calibration is private; mirrors the
   `atlas_run_diagnostics` idiom (migration 033).
+- **Exception — `olympus_run_events` (migration 066, #1945):** ordered call telemetry is
+  service-role-only. RLS is enabled with zero policies and `anon`/`authenticated` grants are
+  revoked. The definer-rights `olympus_run_event_trace` view exposes a bounded, body-free
+  projection for Pipeline: labels, timing, status, retries, source counts, and code-generated
+  shape summaries. It excludes token/cost fields and has no columns for prompts, argument or
+  result values, document bodies, credentials, or reasoning. Migration 066 is not applied live
+  without the repository's human migration review gate.
 - **Exception — strategy store lockdown (migration 051, #1462):** `strategies`,
   `strategy_signals`, and `strategy_trades` had their anon policies dropped AND their
   anon/authenticated grants revoked — anon access to live signals would bypass the
@@ -237,13 +244,14 @@ blocked; they are made pointless (`200 {"skipped": "not claimed"}`, nothing fetc
   revoked. It is harmless only because nothing subscribes to it any more; a message pushed
   there lands in an empty room. Adding any broadcast subscriber to this project re-opens the
   hole in full. See [`README.md`](README.md), "The transport is a table we own".
-- **Views (migrations 041, 050):** RLS does not apply to views; the curated public
+- **Views (migrations 041, 050, 066):** RLS does not apply to views; the curated public
   views are intentionally security-DEFINER (`security_invoker = false`) so the column
   projection — not base-table policy — decides what anon sees. Supabase's advisor flags
   `security_definer_view`; expected and accepted for this pattern. Migrations **050 and
   052** pair their `GRANT SELECT` with an explicit `REVOKE ALL`. Migrations 041 and 018
   shipped no REVOKE at all and so left the platform-default DML grants standing — that
-  omission was #1757, closed by migration 060 (see "Grants" below).
+  omission was #1757, closed by migration 060 (see "Grants" below). Migration 066 starts with
+  explicit `REVOKE ALL` on both its base table and public view, then grants view `SELECT` only.
 
 ## Grants (migration 060, #1757)
 

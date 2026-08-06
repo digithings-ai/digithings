@@ -38,6 +38,11 @@
    caret's animation shorthand when an element carries both .chat-cursor
    and .dt-cur). */
 @import "@digithings/web/styles/chat-core.css";
+/* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
+   (~1 MB). This app renders <DigiChatSession>, so it reaches
+   remark-math/rehype-katex and genuinely needs them; olympus and the design
+   reference deliberately do not import this. Must come AFTER chat-core.css. */
+@import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
 /* Controls layer (#1419) — dress for the shared controls that
    src/components/ui/* now re-export (Button/Badge/Card/Input/Label/Avatar
@@ -425,6 +430,35 @@
 @keyframes dc-settings-in {
   from { opacity: 0; transform: scale(0.98); }
   to   { opacity: 1; transform: scale(1); }
+}
+
+/* ---------------------------------------------------------------------------
+ * /embed readable measure.
+ *
+ * digichat-ui's `.dc-session-embed` (session.css) resets `max-width: none`, so
+ * the embed transcript ran full-bleed: in a 1280px+ iframe the lines spanned
+ * the whole viewport and read as a wall of text with no gutters.
+ *
+ * digithings.ai/chat solves this on `.dc-session` itself — `width: 100%;
+ * max-width: min(1080px, 96vw); margin: 0 auto` — and that is the grammar
+ * copied here, re-asserted at (0,2,0) so it outranks the embed reset. Scoped
+ * to `.dc-embed-shell` (embed/layout.tsx) so the app's own chat surfaces are
+ * untouched.
+ *
+ * The gutters are background, not padding on a fixed box: the shell stays
+ * 100% wide, so `bg-background` and the tenant accent still paint edge to
+ * edge, and only the column is capped. Selector targets `.dc-session` rather
+ * than `.dc-session-embed` so a tenant on `layout: "page"` centres identically.
+ *
+ * The `96vw` term is what keeps this safe at arbitrary iframe widths: below
+ * ~1125px the cap is proportional, never a fixed floor, so a 375px mobile
+ * iframe fills sensibly (~7px either side) and no width can produce
+ * horizontal scroll.
+ * ------------------------------------------------------------------------- */
+.dc-embed-shell .dc-session {
+  width: 100%;
+  max-width: min(1080px, 96vw);
+  margin-inline: auto;
 }
 
 .dc-grain {

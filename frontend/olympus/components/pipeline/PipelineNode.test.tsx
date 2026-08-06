@@ -91,6 +91,20 @@ describe('PipelineNode', () => {
       );
       expect(html).toContain('cursor-pointer');
       expect(html).not.toContain('aria-disabled');
+      expect(html).toContain('Persisted artifact');
+    });
+
+    it('surfaces a missing expected artifact as a warning status', () => {
+      const html = renderToStaticMarkup(
+        createElement(PipelineNode, {
+          node: { ...leafNoData, runStatus: 'expected-artifact-missing' },
+          expandable: false,
+          expanded: false,
+          onActivate: () => {},
+        }),
+      );
+      expect(html).toContain('Expected artifact missing');
+      expect(html).toContain('bg-warn');
     });
 
     it('does not render a fanout-parent substep as inert even without a documentKey', () => {

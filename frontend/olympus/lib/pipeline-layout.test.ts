@@ -7,6 +7,7 @@ const emptyDay: PipelineDayData = {
   fanoutCounts: { sectors: 11 },
   fanoutKeys: {},
   presentKeys: new Set<string>(),
+  artifacts: [],
 };
 const collapsed: ExpansionState = { expandedStages: new Set(), expandedFanouts: new Set() };
 
@@ -18,6 +19,18 @@ describe('layoutPipeline', () => {
     const xs = stages.map((n) => n.x);
     expect([...xs]).toEqual([...xs].sort((a, b) => a - b)); // strictly increasing order preserved
     expect(new Set(stages.map((n) => n.y)).size).toBe(1);   // one row
+    expect(stages.every((node) => node.runStatus === 'not-run')).toBe(true);
+  });
+
+  it('uses the snapshot marker when a recorded run published no documents', () => {
+    const l = layoutPipeline(
+      { ...emptyDay, runRecorded: true },
+      { expandedStages: new Set(['synthesis']), expandedFanouts: new Set() },
+    );
+    expect(l.nodes.find((node) => node.id === 'synthesis:consolidate')?.runStatus)
+      .toBe('state-only');
+    expect(l.nodes.find((node) => node.id === 'synthesis:digest')?.runStatus)
+      .toBe('expected-artifact-missing');
   });
 
   it('expanding sectors fan-out (no fanoutKeys) falls back to count-indexed branches with NO documentKey', () => {
@@ -43,6 +56,7 @@ describe('layoutPipeline', () => {
         'asset-classes': ['bonds', 'crypto'],
       },
       presentKeys: new Set(['analyst/QQQ', 'analyst/TLT', 'sector-financials', 'sector-technology', 'bonds', 'crypto']),
+      artifacts: [],
     };
     const exp: ExpansionState = {
       expandedStages: new Set(['research', 'selection']),
@@ -68,6 +82,7 @@ describe('layoutPipeline', () => {
       fanoutCounts: {},
       fanoutKeys: {},
       presentKeys: new Set(['macro', 'pm-direction-memo', 'sector-scorecard', 'beliefs', 'commit-run/123', 'commit-run/999']),
+      artifacts: [],
     };
     const exp: ExpansionState = {
       expandedStages: new Set(['research', 'synthesis', 'selection', 'decision', 'learning']),
@@ -77,16 +92,20 @@ describe('layoutPipeline', () => {
     const byId = (id: string) => l.nodes.find((n) => n.id === id);
 
     expect(byId('research:macro')?.documentKey).toBe('macro');
+    expect(byId('research:macro')?.runStatus).toBe('persisted-artifact');
     expect(byId('selection:pm-direction')?.documentKey).toBe('pm-direction-memo');
     // digest absent that day -> no documentKey (golden rule)
     expect(byId('synthesis:digest')?.documentKey).toBeUndefined();
+    expect(byId('synthesis:digest')?.runStatus).toBe('expected-artifact-missing');
     // sector-scorecard is a research leaf (Phase-5 equities output, #1538)
     expect(byId('research:scorecard')?.documentKey).toBe('sector-scorecard');
     // consolidate is state-only: never keyed, even when scorecard is present
     expect(byId('synthesis:consolidate')?.documentKey).toBeUndefined();
     expect(byId('synthesis:consolidate')?.stateOnly).toBe(true);
+    expect(byId('synthesis:consolidate')?.runStatus).toBe('state-only');
     // beliefs fold resolves when the on-demand doc is present (#1383)
     expect(byId('learning:beliefs')?.documentKey).toBe('beliefs');
+    expect(byId('learning:beliefs')?.runStatus).toBe('persisted-artifact');
     // commit resolves via a present commit-run/* (numerically-newest run_id)
     expect(byId('decision:commit')?.documentKey).toBe('commit-run/999');
     // thesis/screener are state-only: never keyed
@@ -101,6 +120,7 @@ describe('layoutPipeline', () => {
       fanoutKeys: {},
       // Lexicographically '9999999999' > '10000000000' — numerically the reverse.
       presentKeys: new Set(['commit-run/9999999999', 'commit-run/10000000000']),
+      artifacts: [],
     };
     const exp: ExpansionState = {
       expandedStages: new Set(['decision']),
@@ -116,13 +136,16 @@ describe('layoutPipeline', () => {
       fanoutCounts: {},
       fanoutKeys: {},
       presentKeys: new Set(['macro']),
+      artifacts: [],
     };
     const exp: ExpansionState = {
       expandedStages: new Set(['learning']),
       expandedFanouts: new Set(),
     };
     const l = layoutPipeline(day, exp);
-    expect(l.nodes.find((n) => n.id === 'learning:beliefs')?.documentKey).toBeUndefined();
+    const beliefs = l.nodes.find((n) => n.id === 'learning:beliefs');
+    expect(beliefs?.documentKey).toBeUndefined();
+    expect(beliefs?.runStatus).toBe('not-run');
   });
 
   it('#1259: digest node resolves via digest-delta on a delta day (no plain `digest` key)', () => {
@@ -130,6 +153,7 @@ describe('layoutPipeline', () => {
       fanoutCounts: {},
       fanoutKeys: {},
       presentKeys: new Set(['digest-delta', 'macro']),
+      artifacts: [],
     };
     const exp: ExpansionState = {
       expandedStages: new Set(['synthesis']),

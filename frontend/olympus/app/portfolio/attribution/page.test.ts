@@ -32,10 +32,6 @@ vi.mock('@/components/observability/AttributionTab', () => ({
   default: ({ date }: { date: string | null }) => createElement('div', null, `Position decomposition ${date}`),
 }));
 
-vi.mock('@/components/portfolio/DecisionQuality', () => ({
-  default: () => createElement('div', null, 'Recommendation quality'),
-}));
-
 vi.mock('@/components/page-skeleton', () => ({ default: () => null }));
 
 vi.mock('react', async () => {
@@ -59,12 +55,20 @@ beforeEach(() => {
 });
 
 describe('/portfolio/attribution route', () => {
-  it('renders position decomposition and recommendation quality once data loads', () => {
+  it('renders the three-view workspace with decision effectiveness active', () => {
     const html = renderToStaticMarkup(createElement(AttributionPage));
 
     expect(html).toContain('Attribution');
-    expect(html).toContain('Position decomposition 2026-06-23');
-    expect(html).toContain('Recommendation quality');
-    expect(html).not.toContain('Analyst ranking');
+    expect(html).toContain('Decision effectiveness');
+    expect(html).toContain('Book attribution');
+    expect(html).toContain('Audit');
+    expect(html).toContain('Decision monitor');
+    expect(html).toContain('As of');
+    expect(html).toContain('2026-06-23');
+    expect(html).not.toContain('Position decomposition 2026-06-23');
+    expect(html).not.toContain('Portfolio intelligence');
+    expect(html).not.toContain(
+      'Monitor decision edge, trace portfolio drivers, and inspect the underlying record.'
+    );
   });
 });

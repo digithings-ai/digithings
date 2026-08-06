@@ -57,6 +57,8 @@ export { ChatTranscript, type ChatTranscriptProps } from "./components/chat/Chat
 export { ChatMessage, type ChatMessageProps, type ChatRole, type ChatTone } from "./components/chat/ChatMessage";
 export { ChatStreamCursor, type ChatStreamCursorProps } from "./components/chat/ChatStreamCursor";
 export { ChatMarkdown, type ChatMarkdownProps } from "./components/chat/ChatMarkdown";
+export { ChatMarkdownSource, type ChatMarkdownSourceProps } from "./components/chat/ChatMarkdownSource";
+export { ChatMermaidBlock, type ChatMermaidBlockProps } from "./components/chat/ChatMermaidBlock";
 export { ChatCodeBlock, ChatCopyButton, type ChatCodeBlockProps, type ChatCopyButtonProps } from "./components/chat/ChatCodeBlock";
 export { ChatToolCall, type ChatToolCallProps, type ChatToolCallStatus, type ChatToolCallLine } from "./components/chat/ChatToolCall";
 export { ChatThinking, type ChatThinkingProps } from "./components/chat/ChatThinking";
