@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { buildOlympusTearsheet } from './observability-queries';
 import type { TableRow } from './database.types';
 
-const position = (date: string, ticker: string, weight: number): TableRow<'positions'> =>
+const position = (
+  date: string,
+  ticker: string,
+  weight: number,
+  currentPrice: number | null = null,
+  entryPrice: number | null = null
+): TableRow<'positions'> =>
   ({
     id: `${date}-${ticker}`,
     date,
@@ -12,8 +18,8 @@ const position = (date: string, ticker: string, weight: number): TableRow<'posit
     weight_pct: weight,
     thesis_id: null,
     rationale: null,
-    current_price: null,
-    entry_price: null,
+    current_price: currentPrice,
+    entry_price: entryPrice,
     entry_date: null,
     pm_notes: null,
   });
@@ -133,6 +139,50 @@ describe('buildOlympusTearsheet', () => {
     expect(result.metricsAsOf).toBe('2026-07-17');
   });
 
+  it('builds populated benchmark comparisons aligned to the NAV window', () => {
+    const result = buildOlympusTearsheet({
+      nav: [
+        { date: '2026-07-01', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-02', nav: 103, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-03', nav: 106, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [],
+      metrics,
+      attribution: [],
+      benchmarkPrices: [
+        { ticker: 'SPY', date: '2026-07-01', close: 500 },
+        { ticker: 'SPY', date: '2026-07-03', close: 510 },
+        { ticker: 'QQQ', date: '2026-07-01', close: 400 },
+        { ticker: 'QQQ', date: '2026-07-02', close: 412 },
+        { ticker: 'EMPTY', date: '2026-07-01', close: 100 },
+      ],
+    });
+
+    expect(result.benchmarkTicker).toBe('SPY');
+    expect(result.benchmarkReturnPct).toBe(2);
+    expect(result.relativeReturnPct).toBe(10);
+    expect(result.benchmarkComparisons).toEqual([
+      {
+        ticker: 'SPY',
+        returnPct: 2,
+        series: [
+          { date: '2026-07-01', returnPct: 0 },
+          { date: '2026-07-02', returnPct: 0 },
+          { date: '2026-07-03', returnPct: 2 },
+        ],
+      },
+      {
+        ticker: 'QQQ',
+        returnPct: 3,
+        series: [
+          { date: '2026-07-01', returnPct: 0 },
+          { date: '2026-07-02', returnPct: 3 },
+          { date: '2026-07-03', returnPct: 3 },
+        ],
+      },
+    ]);
+  });
+
   it('uses a clearly labeled live fallback when no persisted metrics row exists', () => {
     const result = buildOlympusTearsheet({
       nav: [
@@ -158,7 +208,10 @@ describe('buildOlympusTearsheet', () => {
   it('partitions full attribution history by the latest current book', () => {
     const result = buildOlympusTearsheet({
       nav: [],
-      positions: [position('2026-07-17', 'AAA', 20)],
+      positions: [
+        position('2026-06-20', 'OLD', 10, 90, 100),
+        position('2026-07-17', 'AAA', 20),
+      ],
       metrics,
       attribution: [
         attribution('2026-07-17', 'AAA', 1),
@@ -166,14 +219,34 @@ describe('buildOlympusTearsheet', () => {
         attribution('2026-06-20', 'OLD', -0.2),
         attribution('2026-06-10', 'OLD', 0.1),
       ],
-      events: [exitEvent('2026-06-21', 'OLD', -3.5)],
+      events: [exitEvent('2026-06-21', 'OLD', 18.5)],
     });
 
     expect(result.currentHoldings.map((row) => row.ticker)).toEqual(['AAA']);
     expect(result.currentHoldings[0].attributionDate).toBe('2026-07-17');
     expect(result.historicalHoldings.map((row) => row.ticker)).toEqual(['OLD']);
     expect(result.historicalHoldings[0].attributionDate).toBe('2026-06-21');
-    expect(result.historicalHoldings[0].realizedReturnPct).toBe(-3.5);
+    expect(result.historicalHoldings[0].realizedReturnPct).toBe(10);
+  });
+
+  it('keeps contribution keys scoped to the latest current book', () => {
+    const result = buildOlympusTearsheet({
+      nav: [
+        { date: '2026-06-20', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [
+        position('2026-06-20', 'OLD', 10, 100),
+        position('2026-07-17', 'OLD', 0, 110),
+        position('2026-06-20', 'AAA', 20, 100),
+        position('2026-07-17', 'AAA', 20, 110),
+      ],
+      metrics,
+      attribution: [],
+      events: [],
+    });
+
+    expect(Object.keys(result.contributionSeries.at(-1)?.contributions ?? {})).toEqual(['AAA']);
   });
 
   it('keeps current holdings visible when their attribution row is missing', () => {

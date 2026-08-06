@@ -21,11 +21,13 @@ import { supabase, isSupabaseConfigured } from './supabase';
 import type { TableRow, ViewRow } from './database.types';
 import type { AtlasRunDiagnostics } from './types';
 import type {
+  BenchmarkComparison,
   OlympusTearsheet,
   PerformanceHoldingRow,
   PortfolioReturnPoint,
 } from '@/components/tearsheet/types';
 import type { ContributionReturnPoint } from '@digithings/web';
+import { DASHBOARD_BENCHMARK_TICKERS } from './benchmark-tickers';
 
 const DECISION_LIMIT = 1000;
 const PERFORMANCE_HISTORY_LIMIT = 5000;
@@ -199,8 +201,15 @@ function toHoldingRow(
   ticker: string,
   position: TableRow<'positions'> | null,
   attribution: TableRow<'position_attribution'> | null,
-  exit: TableRow<'position_events'> | null = null
+  exit: TableRow<'position_events'> | null = null,
+  isClosed = false
 ): PerformanceHoldingRow {
+  const entryPrice = position?.entry_price;
+  const exitPrice = exit?.price ?? position?.current_price;
+  const realizedReturnPct =
+    isClosed && entryPrice != null && entryPrice > 0 && exitPrice != null && exitPrice > 0
+      ? roundPct((exitPrice / entryPrice - 1) * 100)
+      : null;
   return {
     ticker,
     category:
@@ -208,8 +217,13 @@ function toHoldingRow(
     weightPct: attribution?.weight_pct ?? position?.weight_pct ?? null,
     unrealizedReturnPct:
       position?.unrealized_pnl_pct ?? position?.since_entry_return_pct ?? null,
-    realizedReturnPct: exit?.cumulative_return_since_event_pct ?? null,
-    attributionDate: exit?.date ?? attribution?.date ?? position?.metrics_as_of ?? null,
+    realizedReturnPct,
+    attributionDate:
+      exit?.date ??
+      attribution?.date ??
+      position?.metrics_as_of ??
+      (isClosed ? position?.date : null) ??
+      null,
   };
 }
 
@@ -242,9 +256,51 @@ function buildPortfolioReturnSeries(
     }));
 }
 
+function buildBenchmarkComparisons(
+  navSeries: PortfolioReturnPoint[],
+  prices: Array<{ ticker?: string; date: string; close: number }>,
+  fallbackTicker: string
+): BenchmarkComparison[] {
+  if (navSeries.length < 2) return [];
+  const grouped = new Map<string, Array<{ date: string; close: number }>>();
+  for (const row of prices) {
+    if (!Number.isFinite(row.close) || row.close <= 0) continue;
+    const ticker = (row.ticker ?? fallbackTicker).toUpperCase();
+    if (!grouped.has(ticker)) grouped.set(ticker, []);
+    grouped.get(ticker)!.push(row);
+  }
+
+  const order = new Map<string, number>(
+    DASHBOARD_BENCHMARK_TICKERS.map((ticker, index) => [ticker, index])
+  );
+  return [...grouped.entries()]
+    .map(([ticker, rows]): BenchmarkComparison | null => {
+      const sorted = [...rows].sort((left, right) => left.date.localeCompare(right.date));
+      if (sorted.length < 2) return null;
+      const baseline = sorted[0].close;
+      let priceIndex = -1;
+      const series = navSeries.map((point) => {
+        while (priceIndex + 1 < sorted.length && sorted[priceIndex + 1].date <= point.date) {
+          priceIndex += 1;
+        }
+        const close = priceIndex >= 0 ? sorted[priceIndex].close : baseline;
+        return { date: point.date, returnPct: roundPct((close / baseline - 1) * 100) };
+      });
+      return { ticker, returnPct: series.at(-1)!.returnPct, series };
+    })
+    .filter((comparison): comparison is BenchmarkComparison => comparison != null)
+    .sort(
+      (left, right) =>
+        (order.get(left.ticker) ?? Number.MAX_SAFE_INTEGER) -
+          (order.get(right.ticker) ?? Number.MAX_SAFE_INTEGER) ||
+        left.ticker.localeCompare(right.ticker)
+    );
+}
+
 function buildPositionContributionSeries(
   navSeries: PortfolioReturnPoint[],
-  positions: TableRow<'positions'>[]
+  positions: TableRow<'positions'>[],
+  currentTickers: Set<string>
 ): ContributionReturnPoint[] {
   if (!navSeries.length) return [];
 
@@ -252,7 +308,7 @@ function buildPositionContributionSeries(
   const pricesByTicker = new Map<string, Array<{ date: string; price: number }>>();
   for (const row of positions) {
     const ticker = row.ticker.toUpperCase();
-    if (ticker === 'CASH') continue;
+    if (ticker === 'CASH' || !currentTickers.has(ticker)) continue;
     if (!snapshots.has(row.date)) snapshots.set(row.date, new Map());
     snapshots.get(row.date)!.set(ticker, row);
     if (row.current_price != null && row.current_price > 0) {
@@ -321,23 +377,35 @@ function latestExitByTicker(
   return latest;
 }
 
+function latestPositionByTicker(
+  positions: TableRow<'positions'>[]
+): Map<string, TableRow<'positions'>> {
+  const latest = new Map<string, TableRow<'positions'>>();
+  for (const position of [...positions].sort((a, b) => b.date.localeCompare(a.date))) {
+    const ticker = position.ticker.toUpperCase();
+    if (ticker !== 'CASH' && !latest.has(ticker)) latest.set(ticker, position);
+  }
+  return latest;
+}
+
 export function buildOlympusTearsheet(args: {
   nav: TableRow<'nav_history'>[];
   positions: TableRow<'positions'>[];
   metrics: TableRow<'portfolio_metrics'> | null;
   attribution: TableRow<'position_attribution'>[];
   events?: TableRow<'position_events'>[];
-  benchmarkPrices?: Array<{ date: string; close: number }>;
+  benchmarkPrices?: Array<{ ticker?: string; date: string; close: number }>;
 }): OlympusTearsheet {
   const navAsc = [...args.nav].sort((a, b) => a.date.localeCompare(b.date));
   const inceptionDate = navAsc[0]?.date ?? null;
   const navSeries = buildPortfolioReturnSeries(navAsc);
   const currentSnapshot = latestDateRows(args.positions);
   const currentPositions = currentSnapshot.rows.filter(
-    (position) => position.ticker.toUpperCase() !== 'CASH'
+    (position) => position.ticker.toUpperCase() !== 'CASH' && position.weight_pct > 0
   );
   const attributionByTicker = latestAttributionByTicker(args.attribution);
   const exitByTicker = latestExitByTicker(args.events ?? []);
+  const latestPosition = latestPositionByTicker(args.positions);
   const latestAttribution = latestDateRows(args.attribution);
   const currentTickers = new Set(
     (currentPositions.length ? currentPositions : latestAttribution.rows)
@@ -364,9 +432,10 @@ export function buildOlympusTearsheet(args: {
     .map((ticker) =>
       toHoldingRow(
         ticker,
-        null,
+        latestPosition.get(ticker) ?? null,
         attributionByTicker.get(ticker) ?? null,
-        exitByTicker.get(ticker) ?? null
+        exitByTicker.get(ticker) ?? null,
+        true
       )
     )
     .sort(
@@ -375,19 +444,27 @@ export function buildOlympusTearsheet(args: {
         Math.abs(b.realizedReturnPct ?? 0) - Math.abs(a.realizedReturnPct ?? 0)
     );
   const derivedNetReturnPct = periodReturnPct(navAsc.map((row) => row.nav));
-  const derivedBenchmarkReturnPct = periodReturnPct(
-    [...(args.benchmarkPrices ?? [])]
-      .sort((left, right) => left.date.localeCompare(right.date))
-      .map((row) => row.close)
+  const persistedBenchmarkTicker = args.metrics?.benchmark_ticker ?? 'SPY';
+  const benchmarkComparisons = buildBenchmarkComparisons(
+    navSeries,
+    args.benchmarkPrices ?? [],
+    persistedBenchmarkTicker
   );
+  const defaultComparison =
+    benchmarkComparisons.find((comparison) => comparison.ticker === 'SPY') ??
+    benchmarkComparisons.find((comparison) => comparison.ticker === persistedBenchmarkTicker) ??
+    benchmarkComparisons[0];
+  const derivedBenchmarkReturnPct = defaultComparison?.returnPct ?? null;
   const netReturnPct = args.metrics?.net_return_pct ?? derivedNetReturnPct;
   const benchmarkReturnPct =
-    args.metrics?.benchmark_return_pct ?? derivedBenchmarkReturnPct;
+    derivedBenchmarkReturnPct ?? args.metrics?.benchmark_return_pct;
   const relativeReturnPct =
-    args.metrics?.relative_return_pct ??
-    (netReturnPct != null && benchmarkReturnPct != null
+    defaultComparison && netReturnPct != null && benchmarkReturnPct != null
       ? roundPct(netReturnPct - benchmarkReturnPct)
-      : null);
+      : args.metrics?.relative_return_pct ??
+        (netReturnPct != null && benchmarkReturnPct != null
+          ? roundPct(netReturnPct - benchmarkReturnPct)
+          : null);
   const persistedUsed = [
     args.metrics?.net_return_pct,
     args.metrics?.benchmark_return_pct,
@@ -410,7 +487,8 @@ export function buildOlympusTearsheet(args: {
     netReturnPct,
     benchmarkReturnPct,
     relativeReturnPct,
-    benchmarkTicker: args.metrics?.benchmark_ticker ?? 'SPY',
+    benchmarkTicker: defaultComparison?.ticker ?? persistedBenchmarkTicker,
+    benchmarkComparisons,
     returnsSource,
     metricsAsOf:
       derivedUsed
@@ -420,7 +498,11 @@ export function buildOlympusTearsheet(args: {
     holdingsAsOf: currentSnapshot.date ?? latestAttribution.date,
     generatedAt: args.metrics?.generated_at ?? null,
     navSeries,
-    contributionSeries: buildPositionContributionSeries(navSeries, args.positions),
+    contributionSeries: buildPositionContributionSeries(
+      navSeries,
+      args.positions,
+      currentTickers
+    ),
     currentHoldings,
     historicalHoldings,
   };
@@ -470,16 +552,15 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
     const navWindow = [...navRes.rows]
       .filter((row) => Number.isFinite(row.nav) && row.nav > 0)
       .sort((left, right) => left.date.localeCompare(right.date));
-    const benchmarkTicker = metricsRes.rows[0]?.benchmark_ticker ?? 'SPY';
     const benchmarkRes =
       navWindow.length >= 2
-        ? await safeSelect<Pick<TableRow<'price_history'>, 'date' | 'close'>>(
-            `${benchmarkTicker} price_history`,
+        ? await safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
+            'benchmark price_history',
             (sb) =>
               sb
                 .from('price_history')
-                .select('date,close')
-                .eq('ticker', benchmarkTicker)
+                .select('ticker,date,close')
+                .in('ticker', [...DASHBOARD_BENCHMARK_TICKERS])
                 .gte('date', navWindow[0].date)
                 .lte('date', navWindow.at(-1)!.date)
                 .order('date', { ascending: true })
