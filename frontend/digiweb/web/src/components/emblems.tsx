@@ -119,6 +119,16 @@ const DigiStore = (p: P) => (
     <path d="M-12 0c0 2 5.4 3.5 12 3.5s12 -1.5 12 -3.5" />
   </Svg>
 );
+// markdown vault — a closed folio with a clasp: notes bound and secured
+const DigiVault = (p: P) => (
+  <Svg {...p}>
+    <rect x="-10" y="-12" width="20" height="24" rx="3" fill="currentColor" fillOpacity={TINT} />
+    <path d="M-4 -12v24" />
+    <path d="M1 -5h5M1 1h5" />
+    <rect x="7" y="-3" width="6" height="6" rx="1.5" fill="currentColor" stroke="none" />
+  </Svg>
+);
+
 // link (roadmap) — two interlocking chain links, one tinted (protocol bridge)
 const DigiLink = (p: P) => (
   <Svg {...p}>
@@ -159,6 +169,7 @@ const Kairos = (p: P) => (
 export const emblems: Record<string, (p: P) => React.ReactNode> = {
   digigraph: DigiGraph, digiquant: DigiQuant, digisearch: DigiSearch, digichat: DigiChat,
   digikey: DigiKey, digismith: DigiSmith, digiclaw: DigiClaw, digibase: DigiBase,
+  digivault: DigiVault,
   digistore: DigiStore, digilink: DigiLink, atlas: Atlas, hermes: Hermes, kairos: Kairos,
 };
 
