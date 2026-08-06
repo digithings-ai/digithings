@@ -28,9 +28,10 @@ COPY frontend/digiweb/design ./frontend/digiweb/design
 COPY frontend/digiweb/web ./frontend/digiweb/web
 COPY frontend/digichat-ui ./frontend/digichat-ui
 COPY frontend/digichat ./frontend/digichat
+# Only Tailwind's oxide binding is missing from the root lock (oxide-darwin-arm64
+# is its sole platform entry); rolldown's and lightningcss's musl builds are
+# locked and arrive with `npm ci`. See frontend/digichat/Dockerfile.
 RUN npm install \
-      @rolldown/binding-linux-x64-musl@1.0.0-rc.16 \
-      lightningcss-linux-x64-musl@1.32.0 \
       @tailwindcss/oxide-linux-x64-musl@4.2.2 \
       --no-save --no-audit --no-fund
 RUN npm run build --workspace frontend/digichat
