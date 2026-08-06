@@ -41,7 +41,7 @@ Phase 1–2 unified activity + digivault inside DigiChat for embed customers (Da
 4. **UI flags:** `showByok: true`, `showStatusBar: true`, `layout: "page"` (hardcoded for digithings marketing — not tenant JSON).
 5. **Seed:** `readAndClearHandoff()` inside the DigiChatSession wrapper (full transcript + pending).
 6. **Cutover:** one PR restores Function + native UI and removes iframe/`ChatEmbedShell` / embed-origin wiring for digithings-web.
-7. **Containers scaffold** remains in-tree as **deferred** documentation only — not required to merge or smoke marketing chat.
+7. **Containers scaffold** remains in-tree as **deferred** documentation only — not required to merge or smoke marketing chat. *(Superseded 2026-08-06 — the scaffold was deleted; see ADR-0018 historical note 4.)*
 
 ## Architecture
 

@@ -121,10 +121,11 @@ One public domain serves marketing + digichat UI. Phase 3 (amended):
   `docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`. ADR-0018 amended.
 - Customer digichat `/embed` (DataTap etc.) is separate from digithings marketing chat.
   The DigiThings Containers scaffold (`frontend/digichat-cloudflare/` +
-  `Dockerfile.digichat-cloudflare`) was **removed on 2026-08-06** — it was never deployed
-  (Containers need Workers Paid; digithings is on Free) and its `wrangler` devDependency was
-  pulling five `workerd` platform binaries into the root lockfile. Recover it from git history
-  if digithings ever adopts Workers Paid.
+  `Dockerfile.digichat-cloudflare`) was **removed on 2026-08-06** — it had no deploy path in
+  the repo (Containers need Workers Paid, digithings is on Free; routes stayed commented out
+  and no workflow built the image) and its `wrangler` devDependency was pulling five `workerd`
+  platform binaries into the root lockfile. The Cloudflare account itself was not checked.
+  Recover it from git history if digithings ever adopts Workers Paid.
 
 ### digithings.ai — static landing page
 
