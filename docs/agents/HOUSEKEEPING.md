@@ -16,29 +16,29 @@ the broader delegation framework.
 
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
-| Orphan issues (not in any project board) | `enforce-project-assignment.yml` | daily 09:00 UTC | Comments on unlisted issues so the routing workflow picks them up |
-| New issue → correct project board | `route-issues-to-projects.yml` | on `issues: labeled/opened` | Maps `component:*` label to the right module project; epics also go to digithings #1 |
-| Issue status transitions | `project-status-automation.yml` | on issue assign / branch push / PR open / PR merge | Todo → In Progress → Review → Done across all 11 project boards |
-| Stale issues (>90d no activity) | `scheduled-maintenance.yml` — `stale-issues` job | weekly Mon 08:00 UTC | Adds `stale` label + a reminder comment. Not auto-closed. Blocked issues use a 7d threshold |
-| Stale PRs (>14d no activity) | `scheduled-maintenance.yml` — `stale-prs` job | weekly Mon 08:00 UTC | Posts an escalation comment on task/cursor/claude/module branches |
-| Label coverage drift | `scheduled-maintenance.yml` — `label-coverage` job | weekly Mon 08:00 UTC | One tracker issue listing every open issue missing `exec:*`, `priority:*`, `component:*`, or (non-epic) `complexity:*` / `risk:*` |
-| Project-field coverage | `project-fields-coverage.yml` | scheduled | Ensures required project fields are populated |
+| Orphan issues (not in any project board) | `project-enforce-assignment.yml` | daily 09:00 UTC | Comments on unlisted issues so the routing workflow picks them up |
+| New issue → correct project board | `project-route-issues.yml` | on `issues: labeled/opened` | Maps `component:*` label to the right module project; epics also go to digithings #1 |
+| Issue status transitions | `project-status.yml` | on issue assign / branch push / PR open / PR merge | Todo → In Progress → Review → Done across all 11 project boards |
+| Stale issues (>90d no activity) | `pipeline-maintenance.yml` — `stale-issues` job | weekly Mon 08:00 UTC | Adds `stale` label + a reminder comment. Not auto-closed. Blocked issues use a 7d threshold |
+| Stale PRs (>14d no activity) | `pipeline-maintenance.yml` — `stale-prs` job | weekly Mon 08:00 UTC | Posts an escalation comment on task/cursor/claude/module branches |
+| Label coverage drift | `pipeline-maintenance.yml` — `label-coverage` job | weekly Mon 08:00 UTC | One tracker issue listing every open issue missing `exec:*`, `priority:*`, `component:*`, or (non-epic) `complexity:*` / `risk:*` |
+| Project-field coverage | `project-stub-fields.yml` | scheduled | Ensures required project fields are populated |
 | Agent backlog snapshot | `agent-backlog-snapshot.yml` | weekly Mon 06:00 UTC | Regenerates `docs/agent-backlog/generated-snapshot.md` |
 
 ## Documentation hygiene
 
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
-| Broken internal doc links | `scheduled-maintenance.yml` — `doc-links` job | weekly Mon 08:00 UTC | Runs `python3 scripts/check_doc_links.py`, files `[housekeeping] Broken internal doc links — <date>` if any found |
-| `agents.yml` ↔ `.claude/` drift | `scheduled-maintenance.yml` — `agents-drift` job | weekly Mon 08:00 UTC | Runs `make agents-init --check`, files an issue if regeneration is needed |
-| Doc-link check on every PR | `docs.yml` | on PR | Same check as above, gates PRs with broken links |
+| Broken internal doc links | `pipeline-maintenance.yml` — `doc-links` job | weekly Mon 08:00 UTC | Runs `python3 scripts/check_doc_links.py`, files `[housekeeping] Broken internal doc links — <date>` if any found |
+| `agents.yml` ↔ `.claude/` drift | `pipeline-maintenance.yml` — `agents-drift` job | weekly Mon 08:00 UTC | Runs `make agents-init --check`, files an issue if regeneration is needed |
+| Doc-link check on every PR | `ci-docs.yml` | on PR | Same check as above, gates PRs with broken links |
 
 ## Security
 
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
-| Python dependency CVEs | `scheduled-maintenance.yml` — `dependency-audit` job + `pip-audit.yml` | weekly + on PR | Runs `pip-audit`, files an `exec:claude` + `risk:high` issue per weekly batch of findings |
-| Secret leaks | `gitleaks.yml` | on push / PR | Scans for hard-coded secrets, fails CI if any found |
+| Python dependency CVEs | `pipeline-maintenance.yml` — `dependency-audit` job + `security-pip-audit.yml` | weekly + on PR | Runs `pip-audit`, files an `exec:claude` + `risk:high` issue per weekly batch of findings |
+| Secret leaks | `security-gitleaks.yml` | on push / PR | Scans for hard-coded secrets, fails CI if any found |
 | Protected-path edits | `scripts/claude-hooks/protected-path-guard.sh` | PreToolUse hook | Blocks `.github/workflows/`, `SECURITY.md`, `docs/scoring/`, `config/litellm.yaml`, `projects/` edits outside properly-named branches — in both the current checkout and the primary tree when the session is rooted in a linked worktree |
 | Live-trading path edits | `scripts/hooks/pre-push.sh` | pre-push | Requires `Human-Approved-By:` trailer on commits touching live-trading paths |
 
@@ -46,10 +46,10 @@ the broader delegation framework.
 
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
-| Scheduled-workflow failure digest | `scheduled-maintenance.yml` — `workflow-health` job | weekly Mon 08:00 UTC | Aggregates failed scheduled runs from the past 7 days, one tracker issue grouped by workflow name |
+| Scheduled-workflow failure digest | `pipeline-maintenance.yml` — `workflow-health` job | weekly Mon 08:00 UTC | Aggregates failed scheduled runs from the past 7 days, one tracker issue grouped by workflow name |
 | PR-branch CI failures | `agent-ci-failure-triage.yml` | on workflow_run failure | Files an `exec:cursor` triage issue per failed PR-branch workflow |
-| digiquant prices pipeline | `digiquant-prices.yml` — tracker update on failure | per-run | Maintains one persistent tracker issue per job instead of new issue each failure |
-| Stale branches | `scheduled-maintenance.yml` — `stale-branches` job | weekly | Identifies branches merged into develop >14d ago, files a cleanup issue |
+| digiquant prices pipeline | `pipeline-digiquant-prices.yml` — tracker update on failure | per-run | Maintains one persistent tracker issue per job instead of new issue each failure |
+| Stale branches | `pipeline-maintenance.yml` — `stale-branches` job | weekly | Identifies branches merged into develop >14d ago, files a cleanup issue |
 
 ## Continuous improvement
 
@@ -63,16 +63,16 @@ the broader delegation framework.
 
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
-| Auto PR review | `claude-code-review.yml` | on PR open / sync / reopened / ready_for_review | Runs Claude's `/code-review` plugin on the PR diff. Member-gated, 15-min timeout, concurrency-cancelled on updates |
-| `@claude` mention | `claude.yml` | on issue / comment / review `@claude` mention | Targeted Tier 3 help |
-| `exec:claude` label dispatch | `claude-code-dispatch.yml` | on `exec:claude` / `opened` | Local Tier-3 instructions (`make task ISSUE=N`) |
+| Auto PR review | `agent-claude-review.yml` | on PR open / sync / reopened / ready_for_review | Runs Claude's `/code-review` plugin on the PR diff. Member-gated, 15-min timeout, concurrency-cancelled on updates |
+| `@claude` mention | `agent-claude.yml` | on issue / comment / review `@claude` mention | Targeted Tier 3 help |
+| `exec:claude` label dispatch | `agent-claude-dispatch.yml` | on `exec:claude` / `opened` | Local Tier-3 instructions (`make task ISSUE=N`) |
 | `exec:cursor` label dispatch | Cursor Automation (cloud) | on `exec:cursor` label event | Starts Cursor Cloud Agent session; quota-checked; fallback: `agent-dispatch-replay.yml` |
 | Stuck dispatch replay | `agent-dispatch-replay.yml` | manual `workflow_dispatch` | Bounces `exec:*` labels on backlog issues |
 | Agent PR autolabel | `agent-pr-autolabel.yml` | on CI success | Adds `automerge-agent` to `cursor/*` / `copilot/*` PRs |
-| Agent PR auto-merge | `automerge-agent-prs.yml` | on `automerge-agent` label + green CI | Squash auto-merge for low-risk agent PRs |
+| Agent PR auto-merge | `agent-pr-automerge.yml` | on `automerge-agent` label + green CI | Squash auto-merge for low-risk agent PRs |
 | Agent PR finalizer | `agent-pr-finalizer.yml` | daily 07:00 UTC + manual | Backstop for `cursor/*` PRs; triage, fix dispatch, automerge when eligible |
-| PR quality gate | `pr-quality-gate.yml` | on PR open/edit | Blocks task/* branch merges without `/simplify` + `/review` checkboxes |
-| PR issue linkage | `pr-linkage.yml` | on PR open/edit | Blocks merge without `Fixes #N` / `Closes #N` |
+| PR quality gate | **not implemented** | — | A `/simplify` + `/review` checkbox gate on `task/*` merges was planned and never built: no workflow or job implements it, and the filename this row used to name (`pr-quality-gate.yml`) has never existed. Listed rather than deleted so the gap is visible instead of assumed-covered. |
+| PR issue linkage | the `check-linkage` job in `ci-pr-hygiene.yml` | on PR open/edit | Blocks merge without `Fixes #N` / `Closes #N` |
 
 ## Escalation paths
 
