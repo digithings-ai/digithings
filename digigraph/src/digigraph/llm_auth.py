@@ -31,6 +31,18 @@ from digillm import reset_byok, reset_proxy_key, set_byok, set_proxy_key
 _OPENAI_BYOK_BASE_URL = "https://api.openai.com/v1"
 _OPENROUTER_BYOK_BASE_URL = "https://openrouter.ai/api/v1"
 
+# The one table: a provider here is routed to its own endpoint with the user's key.
+_BYOK_BASE_URLS: dict[str, str] = {
+    "openai": _OPENAI_BYOK_BASE_URL,
+    "openrouter": _OPENROUTER_BYOK_BASE_URL,
+}
+BYOK_ROUTABLE_PROVIDERS = tuple(_BYOK_BASE_URLS)
+
+
+def byok_provider_supported(provider: str) -> bool:
+    """True when a BYOK key for *provider* is actually spent on that provider."""
+    return provider.strip().lower() in _BYOK_BASE_URLS
+
 # digigraph's own per-request BYOK record: (api_key, provider) where provider is
 # "openai" | "anthropic" | "openrouter". Distinct from digillm's (api_key, base_url)
 # override so get_byok_override() can still report the provider. Never logged or persisted.
@@ -90,10 +102,9 @@ def push_byok_header(request: Any) -> _ByokToken:
     model_token = _byok_model_override.set(model_slug or None)
     llm_token: object | None = None
     if val is not None:
-        if provider == "openai":
-            llm_token = set_byok(key, _OPENAI_BYOK_BASE_URL)
-        elif provider == "openrouter":
-            llm_token = set_byok(key, _OPENROUTER_BYOK_BASE_URL)
+        base_url = _BYOK_BASE_URLS.get(provider)
+        if base_url is not None:
+            llm_token = set_byok(key, base_url)
     return _ByokToken(dg=dg_token, model=model_token, llm=llm_token)
 
 

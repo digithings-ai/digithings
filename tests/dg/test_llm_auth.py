@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import pytest
 from digigraph.llm_auth import (
+    BYOK_ROUTABLE_PROVIDERS,
+    byok_provider_supported,
     get_byok_model_override,
     get_byok_override,
     pop_byok,
@@ -159,9 +161,13 @@ class TestByokHeader:
         assert digillm_get_byok() is None
 
     def test_anthropic_byok_does_not_feed_digillm(self) -> None:
-        """Anthropic BYOK is stored on digigraph's contextvar but NOT wired into the OpenAI client.
+        """Anthropic BYOK is stored on digigraph's contextvar but NOT wired into the client.
 
-        It falls through to the env-configured credentials, matching legacy behavior.
+        This is the state the middleware now refuses to reach: because the key is not
+        routed, the run would answer on the OPERATOR's credentials while the user
+        believes theirs is active. `byok_header_context` returns 400 before
+        `push_byok_header` is ever called, so this test exercises a path that is no
+        longer reachable over HTTP — kept because it pins WHY the guard exists (#1873).
         """
         tok = push_byok_header(_byok_request(key="sk-ant-xyz", provider="anthropic"))
         try:
@@ -169,3 +175,36 @@ class TestByokHeader:
             assert digillm_get_byok() is None
         finally:
             pop_byok(tok)
+
+
+class TestByokProviderGuard:
+    """The routability guard behind digigraph's 400 (#1873).
+
+    Before it, a pasted Anthropic or Gemini key was accepted, displayed as active, and
+    then the request was answered with the operator's credentials — which the operator
+    pays for, silently. The table in llm_auth is now the single source of truth for
+    which providers a key is actually spent on, and server.py refuses the rest.
+    """
+
+    @pytest.mark.parametrize("provider", ["openai", "openrouter"])
+    def test_routed_providers_are_supported(self, provider: str) -> None:
+        assert byok_provider_supported(provider)
+        assert provider in BYOK_ROUTABLE_PROVIDERS
+
+    @pytest.mark.parametrize("provider", ["anthropic", "gemini", "xai", "", "nonsense"])
+    def test_unrouted_providers_are_refused(self, provider: str) -> None:
+        """Each of these would otherwise have been billed to the operator."""
+        assert not byok_provider_supported(provider)
+
+    def test_the_guard_normalizes_like_the_middleware(self) -> None:
+        """server.py lowercases and strips before asking, so the guard must agree."""
+        assert byok_provider_supported("OpenAI")
+        assert byok_provider_supported("  openrouter  ")
+        assert not byok_provider_supported(" Anthropic ")
+
+    def test_every_routable_provider_has_a_base_url(self) -> None:
+        """A provider in the tuple with no URL would pass the guard and route nowhere."""
+        from digigraph.llm_auth import _BYOK_BASE_URLS
+
+        assert set(BYOK_ROUTABLE_PROVIDERS) == set(_BYOK_BASE_URLS)
+        assert all(u.startswith("https://") for u in _BYOK_BASE_URLS.values())

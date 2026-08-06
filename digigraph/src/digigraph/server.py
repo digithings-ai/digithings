@@ -114,7 +114,26 @@ async def byok_header_context(request: Request, call_next):
     It is never logged or persisted server-side. On each request the key
     overrides the LLM client credentials for that single execution.
     """
-    from digigraph.llm_auth import pop_byok, push_byok_header
+    from digigraph.llm_auth import (
+        BYOK_ROUTABLE_PROVIDERS,
+        byok_provider_supported,
+        pop_byok,
+        push_byok_header,
+    )
+
+    if (request.headers.get("x-byok-key") or "").strip():
+        provider = (request.headers.get("x-byok-provider") or "openai").strip().lower()
+        if not byok_provider_supported(provider):
+            return json_error_response(
+                status_code=400,
+                code="byok_provider_unsupported",
+                message=(
+                    f"BYOK provider {provider!r} is not routed by digigraph, so your key "
+                    f"would not be used. Supported: {', '.join(BYOK_ROUTABLE_PROVIDERS)}."
+                ),
+                request=request,
+                service="digigraph",
+            )
 
     tok = push_byok_header(request)
     try:
