@@ -14,15 +14,35 @@ cd "$(dirname "$0")/.."
 echo "--- installing workspaces ---"
 npm install --prefer-offline --no-audit --no-fund --include=optional
 
-# GHA/npm cache can omit platform optional deps (npm/cli#4828); Next + Tailwind v4
-# need these on Linux (same guard as build-digiquant.sh). @next/swc must match the
-# pinned next version exactly; if it's absent, next tries to download it at build
-# time via `yarn config get registry`, which crashes in the yarn-less CF image.
+# Two bindings installed by hand, for two different reasons (same guard as
+# build-digiquant.sh).
+#
+# @tailwindcss/oxide is genuinely not in the root lock: oxide-darwin-arm64 4.2.2 is
+# its sole platform entry, so nothing else puts a Linux oxide binary in the tree and
+# @tailwindcss/postcss fails the build without one.
+#
+# @next/swc-linux-x64-gnu IS locked (16.2.4, every platform) and must match the
+# pinned next version exactly. Kept anyway, because here a missing @next/swc is not a
+# clean error — next falls back to fetching it at build time via `yarn config get
+# registry`, which crashes the yarn-less Cloudflare image. Cheap insurance on a live
+# deploy path; do not remove it to tidy the list.
+#
+# lightningcss-linux-x64-gnu was dropped (#1940 removed it from CI for the same
+# reason). The lock carries it twice — 1.33.0 hoisted to the root for vite's
+# lightningcss 1.33.0, and 1.32.0 nested under the root lightningcss 1.32.0 — so
+# installing 1.32.0 at the root overwrote the hoisted 1.33.0, leaving vite's 1.33.0
+# JS resolving to a 1.32.0 binary. Latent, not active: this script only runs
+# `next build` (Turbopack), never vitest, so nothing here loads vite's lightningcss
+# — unlike the CI lanes #1940 fixed. The Tailwind path is the one that matters here,
+# and it was always served correctly (@tailwindcss/node → lightningcss 1.32.0 →
+# its own nested 1.32.0 binding, which the pin never reached). The old npm/cli#4828
+# rationale never covered any of this: that issue is the npm *cache* dropping
+# optionals, and the install above already passes --include=optional against a lock
+# that carries them.
 if [ "$(uname -s)" = "Linux" ]; then
   echo "--- installing Linux native bindings (Next SWC + Tailwind/PostCSS) ---"
   npm install \
     @next/swc-linux-x64-gnu@16.2.4 \
-    lightningcss-linux-x64-gnu@1.32.0 \
     @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
     --no-save --no-audit --no-fund
 fi
