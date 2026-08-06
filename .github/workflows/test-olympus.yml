@@ -34,12 +34,13 @@ jobs:
       # is its sole platform entry.
       #
       # The npm/cli#4828 cache worry this step used to cite does not reach those locked
-      # entries: setup-node caches ~/.npm and explicitly "does not cache node_modules",
-      # so the install always runs and always resolves against the lock — and
-      # `--include=optional` above is already explicit. The old rolldown 1.0.0-rc.16 pin
-      # installed a stale duplicate of a binding the lock has moved off, and the
-      # lightningcss 1.32.0 pin overwrote the hoisted 1.33.0, leaving vite's lightningcss
-      # 1.33.0 resolving to a 1.32.0 binary.
+      # entries: setup-node caches the machine's global npm cache rather than
+      # node_modules (per its advanced-usage docs), so the install always runs and always
+      # resolves against the lock — and `--include=optional` above is already explicit.
+      #
+      # The old rolldown 1.0.0-rc.16 pin installed a stale duplicate of a binding the lock
+      # has moved off, and the lightningcss 1.32.0 pin overwrote the hoisted 1.33.0,
+      # leaving vite's lightningcss 1.33.0 resolving to a 1.32.0 binary.
       - name: Install the Linux Tailwind binding
         run: |
           npm install @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
