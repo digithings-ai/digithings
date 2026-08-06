@@ -63,7 +63,27 @@ function remarkDisplayDollars() {
   };
 }
 
-const remarkPlugins: Options["remarkPlugins"] = [remarkGfm, remarkMath, remarkDisplayDollars];
+/**
+ * `singleDollarTextMath: false` is load-bearing, not a preference. remark-math
+ * defaults it to true, which makes any paragraph containing two `$` signs parse
+ * as inline math: "the starter plan is $29 and the team plan is $99" re-sets the
+ * prose between them as italic math with the spaces collapsed, and eats the
+ * second `$`. Currency is far commoner than inline math in a docs answer — and
+ * this renders for a quant-finance stack — so `$…$` stays literal.
+ *
+ * The cost, stated plainly: there is then NO inline math syntax. remark-math
+ * understands only `$`/`$$`, not `\(…\)`, so turning single-dollar off leaves
+ * block math (`$$…$$`, plus fenced math promoted by remarkDisplayDollars below)
+ * as the only route. That is the right trade for a docs chat — a mangled price
+ * is a wrong answer, a formula that needs its own line is a formatting nit — but
+ * it is a trade, not a free win. Revisit if inline notation ever outweighs
+ * currency on these surfaces.
+ */
+const remarkPlugins: Options["remarkPlugins"] = [
+  remarkGfm,
+  [remarkMath, { singleDollarTextMath: false }],
+  remarkDisplayDollars,
+];
 
 /**
  * KaTeX options. `strict: "ignore"` keeps half-typed model output from filling
