@@ -22,7 +22,7 @@ export const guides: Guide[] = [
     id: "getting-started",
     title: "Getting started",
     blocks: [
-      { kind: "p", text: "digithings is open-source, MIT-licensed AI infrastructure: eleven modules that plug into the stack you already run rather than replacing it. digigraph orchestrates the three specialist sub-graphs — quant research, retrieval, and chat. Self-hosted anywhere, BYOK, audit-on by default." },
+      { kind: "p", text: "digithings is open-source, MIT-licensed AI infrastructure: nine modules that plug into the stack you already run rather than replacing it. digigraph orchestrates the three specialist sub-graphs — quant research, retrieval, and chat. Self-hosted anywhere, BYOK, audit-on by default." },
       { kind: "h", text: "Prerequisites" },
       { kind: "list", items: ["Docker (with Compose)", "Python ≥ 3.12 (for running services outside Docker)", "Node.js LTS (for the frontends)"] },
       { kind: "h", text: "Run the whole stack" },

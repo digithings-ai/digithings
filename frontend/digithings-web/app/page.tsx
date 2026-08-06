@@ -46,7 +46,8 @@ const STACK: MarqueeItem[] = [
 // contradict the manifest right below it, which self-discloses "9 online · 2 on
 // the roadmap" (computed from the registry, so it tracks automatically):
 //   9  — non-roadmap modules in the shared `modules` registry (2 are roadmap:
-//        digistore, digilink). digivault joined the registry with #1846 — it ships
+//        digistore, digilink). digivault was missing from the registry until it was
+//        added here — it ships
 //        a FastAPI service on 8004 behind its own compose profile and had been
 //        missing. This deliberately does NOT say "11", which is what used to sit
 //        14 lines under "no asterisks".

@@ -644,6 +644,36 @@ for hit in r.json()["results"]:
   },
 
   // ─────────────────────────────────────────────────────────────────────────
+  digivault: {
+    authNote:
+      "DigiAuthMiddleware with a per-path scope map: digivault:read for reads and for both orchestrator routes, digivault:write for mutations. /v1/orchestrator_invoke is gated at read because most of its tools are reads — the one mutating tool re-checks digivault:write in the handler, so a read-only caller cannot reach it through the shared endpoint.",
+    run: {
+      cli: "docker compose --profile digivault up -d digivault   # opt-in profile, not up by default\ndigivault --root ./docs/vision lint",
+    },
+    env: [
+      { name: "DIGIVAULT_ROOT", def: "/data/vault", description: "Vault directory. Unset, every vault route answers 503 rather than guessing a path." },
+      { name: "DIGIKEY_JWKS_URL", def: "http://digikey:8005/.well-known/jwks.json", description: "Where the middleware fetches the public half to verify tokens." },
+      { name: "DIGIKEY_ISSUER", def: "http://digikey:8005", description: "Expected token issuer." },
+      { name: "DIGIKEY_AUDIENCE", def: "digi-ecosystem", description: "Expected token audience." },
+    ],
+    publicInterface: [
+      { signature: "GET /v1/notes", description: "List notes in the vault." },
+      { signature: "GET /v1/notes/{name}", description: "Read one note — body plus parsed YAML frontmatter." },
+      { signature: "POST /v1/notes", description: "Create a note. Requires digivault:write." },
+      { signature: "PATCH /v1/notes/{name}/frontmatter", description: "Update frontmatter in place." },
+      { signature: "POST /v1/notes/{name}/rename", description: "Rename a note and repair the [[wikilinks]] pointing at it." },
+      { signature: "GET /v1/notes/{name}/backlinks", description: "Every note linking to this one." },
+      { signature: "GET /v1/tags/{tag}", description: "Notes carrying a tag." },
+      { signature: "GET /v1/lint", description: "Vault health: broken wikilinks, missing frontmatter, taxonomy drift." },
+      { signature: "POST /v1/orchestrator_tools", description: "Tool manifest, so digigraph can discover what the vault offers." },
+      { signature: "POST /v1/orchestrator_invoke", description: "Invoke one of those tools by name." },
+    ],
+    notes: [
+      "The vault is a folder of markdown files — YAML frontmatter, [[wikilinks]], tags, folder taxonomy. There is no database; the filesystem is the store.",
+      "Its first consumer is this repository's own docs/vision/, which scripts/gen-api-vault.ts generates from the same module registry this page is built from.",
+    ],
+  },
+
   digistore: {
     authNote: "Roadmap. Today a session-scoped dataset manager lives inside digigraph; the standalone storage service is planned.",
     notes: [
