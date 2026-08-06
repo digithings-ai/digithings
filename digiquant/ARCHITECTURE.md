@@ -252,7 +252,12 @@ python digiquant/scripts/sync_strategy_calibrations.py --verify
 python digiquant/scripts/verify_strategy_calibrations_rls.py
 ```
 
-The separate `pipeline-digiquant-prices.yml` job feeds **Supabase price_history** for Atlas/Olympus — it does **not** regenerate these public tearsheets.
+The separate `pipeline-digiquant-prices.yml` job feeds **Supabase price_history**
+for Atlas/Olympus and owns `position_events` writes at the market open; it does
+**not** regenerate these public tearsheets. Two UTC crons cover New York daylight
+and standard time. `market_open_gate.py` selects the season-correct cron and keeps
+it valid after the open even when GitHub delivers it late, while rejecting the
+wrong-season duplicate and pre-open execution.
 
 Each `index.json` entry carries a `kind` slug (`long_short`, `long_only`, …) from `settings.json` for library filters as the catalog grows.
 

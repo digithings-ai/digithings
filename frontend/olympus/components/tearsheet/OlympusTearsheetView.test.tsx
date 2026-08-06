@@ -10,6 +10,24 @@ const sample: OlympusTearsheet = {
   benchmarkReturnPct: 8.25,
   relativeReturnPct: 4.25,
   benchmarkTicker: 'SPY',
+  benchmarkComparisons: [
+    {
+      ticker: 'SPY',
+      returnPct: 8.25,
+      series: [
+        { date: '2026-05-01', returnPct: 0 },
+        { date: '2026-07-17', returnPct: 8.25 },
+      ],
+    },
+    {
+      ticker: 'QQQ',
+      returnPct: 10,
+      series: [
+        { date: '2026-05-01', returnPct: 0 },
+        { date: '2026-07-17', returnPct: 10 },
+      ],
+    },
+  ],
   returnsSource: 'persisted',
   metricsAsOf: '2026-07-17',
   inceptionDate: '2026-05-01',
@@ -58,7 +76,8 @@ describe('OlympusTearsheetView', () => {
     expect(out).toContain('112.50');
     expect(out).toContain('12.50%');
     expect(out).toContain('4.25%');
-    expect(out).toContain('persisted metrics');
+    expect(out).toContain('Benchmark return');
+    expect(out).toContain('8.25%');
   });
 
   it('renders one additive contribution and exact portfolio-return chart', () => {
@@ -66,6 +85,7 @@ describe('OlympusTearsheetView', () => {
     expect(out).toContain('data-testid="portfolio-contribution-chart"');
     expect(out).toContain('data-chart-layer="contributions"');
     expect(out).toContain('data-chart-layer="portfolio-return"');
+    expect(out).toContain('data-chart-layer="benchmark-return"');
     expect(out).toContain('data-series="AAA"');
     expect(out).not.toContain('data-testid="portfolio-return-chart"');
     expect(out).not.toContain('data-testid="position-return-chart"');
@@ -126,13 +146,23 @@ describe('OlympusTearsheetView', () => {
 });
 
 describe('headline vs realized presentation (#1664)', () => {
-  it('dates persisted headline returns and notes the unrealized open book', () => {
+  it('uses the compact Holdings as-of stamp and no provenance prose', () => {
     const out = html();
     expect(out).not.toContain('Portfolio return · live');
     expect(out).not.toContain('Active return · live');
     expect(out).toContain('2026-07-17');
-    expect(out).toContain('persisted metrics');
-    expect(out).toContain('marks the open book · incl. unrealized');
+    expect(out).toContain('data-region="stamp"');
+    expect(out).not.toContain('persisted metrics');
+    expect(out).not.toContain('marks the open book · incl. unrealized');
+    expect(out).not.toContain('since 2026-05-01');
+    expect(out).not.toContain('vs SPY');
+  });
+
+  it('offers populated benchmark assets with SPY selected by default', () => {
+    const out = html();
+    expect(out).toContain('aria-label="Comparison benchmark"');
+    expect(out).toContain('<option value="SPY" selected="">SPY</option>');
+    expect(out).toContain('<option value="QQQ">QQQ</option>');
   });
 
   it('realized exits summarize below the band in the small mono strip', () => {

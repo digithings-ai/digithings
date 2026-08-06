@@ -19,13 +19,18 @@ finance-tearsheet grammars directly in `app/globals.css`:
 ```
 
 The performance tear sheet (`/portfolio/performance`) renders persisted NAV and
-return metrics, base-zero portfolio and position paths, and open/closed position
-outcomes. Persisted returns are labeled with their metrics date and source; they
-must not be presented as live quotes. The separate attribution workspace
+return metrics, a base-zero portfolio path, current-book contribution, and
+open/closed position outcomes. Its command band uses the same compact as-of stamp
+as Holdings. Closed rows derive realized return from the persisted entry and exit
+marks; `position_events.cumulative_return_since_event_pct` is post-event drift and
+must not be presented as trade return. The separate attribution workspace
 (`/portfolio/attribution`) owns the latest rolling position decomposition and the
 resolved-decision calibration scorecard. CASH remains outside holding counts and
 position charts, but its allocation effect is included in headline active return
 so the decomposition reconciles to portfolio return minus benchmark return.
+Performance fetches the populated approved benchmark universe from `price_history`,
+aligns each series to the NAV dates, defaults to SPY, and recomputes benchmark and
+active return when the comparison changes.
 Olympus keeps its finance-tearsheet variants and shell print rules app-side at the
 bottom of `globals.css`.
 
@@ -109,12 +114,14 @@ applies equally to the Brief book strip, its Holdings doorway, and Portfolio
 Holdings.
 
 `/portfolio/performance` applies the same flat grammar to the shared
-finance-tearsheet primitives. Its command band, asymmetric NAV workspace, bounded
-decision ledger, attribution section, and PDF action remain presentation over the
-existing `nav_history` + `decision_log` contract. Portfolio presentation changes
-must not introduce a second query path or replace that persisted truth model.
-Embedded attribution uses flat divided sections, and narrow finance chart panes
-reduce date axes to endpoint labels while preserving the complete print view.
+finance-tearsheet primitives. Its command band, contribution chart, position
+ledgers, and PDF action remain presentation over `nav_history`, `positions`,
+`portfolio_metrics`, `position_attribution`, `position_events`, and
+`price_history`. Contribution bars contain only tickers in the latest positive-weight
+book; the exact NAV return and selected benchmark remain separate line layers.
+Portfolio presentation changes must not introduce a second query path or replace
+that persisted truth model. Narrow finance chart panes reduce date axes to endpoint
+labels while preserving the complete print view.
 
 ## Supabase / RLS
 

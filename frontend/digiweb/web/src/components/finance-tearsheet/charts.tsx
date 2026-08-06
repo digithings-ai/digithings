@@ -237,10 +237,12 @@ function SeriesTipContent({ date, value }: { date: string; value: string }) {
 function ContributionReturnTipContent({
   point,
   colors,
+  benchmark,
 }: {
   point: ContributionReturnPoint;
   /** Per-series swatch colors — replaces a header legend, which does not scale past a handful of assets. */
   colors?: Record<string, string>;
+  benchmark?: { label: string; value: number };
 }) {
   const contributions = Object.entries(point.contributions)
     .filter(([, value]) => value !== 0)
@@ -250,6 +252,7 @@ function ContributionReturnTipContent({
       <dl className="ts-chart-tip-dl">
         <div><dt>Date</dt><dd>{point.t.slice(0, 10)}</dd></div>
         <div><dt>Portfolio</dt><dd>{fmtPct(point.returnPct)}</dd></div>
+        {benchmark ? <div><dt>{benchmark.label}</dt><dd>{fmtPct(benchmark.value)}</dd></div> : null}
         {contributions.map(([label, value]) => (
           <div key={label}>
             <dt>
@@ -1325,6 +1328,7 @@ export interface ContributionReturnChartProps {
   colors: Record<string, string>;
   height?: number;
   interactive?: boolean;
+  benchmark?: { label: string; values: number[] };
 }
 
 /** Signed cumulative contribution stacks with the exact portfolio return overlaid. */
@@ -1333,6 +1337,7 @@ export function ContributionReturnChart({
   colors,
   height = 360,
   interactive = true,
+  benchmark,
 }: ContributionReturnChartProps) {
   if (points.length < 2) return <Empty height={height} msg="not enough history" />;
   return (
@@ -1341,6 +1346,7 @@ export function ContributionReturnChart({
       colors={colors}
       height={height}
       interactive={interactive}
+      benchmark={benchmark}
     />
   );
 }
@@ -1350,7 +1356,8 @@ function ContributionReturnChartBody({
   colors,
   height,
   interactive,
-}: Required<ContributionReturnChartProps>) {
+  benchmark,
+}: ContributionReturnChartProps & { height: number; interactive: boolean }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<ChartHoverTip | null>(null);
   const { vbW, pad } = useChartLayout(wrapRef, height, false);
@@ -1369,6 +1376,7 @@ function ContributionReturnChartBody({
   });
   const values = [
     ...points.map((point) => point.returnPct),
+    ...(benchmark?.values ?? []),
     ...extents.flatMap((extent) => [extent.positive, extent.negative]),
     0,
   ];
@@ -1386,13 +1394,19 @@ function ContributionReturnChartBody({
   const line = points
     .map((point, index) => `${index ? 'L' : 'M'}${xCenter(index).toFixed(1)} ${yAt(point.returnPct).toFixed(1)}`)
     .join(' ');
+  const benchmarkLine =
+    benchmark && benchmark.values.length === points.length
+      ? benchmark.values
+          .map((value, index) => `${index ? 'L' : 'M'}${xCenter(index).toFixed(1)} ${yAt(value).toFixed(1)}`)
+          .join(' ')
+      : null;
 
   const grid: ReactNode[] = [];
   niceLinearTicks(lo, hi, 4).forEach((tick, index) => {
     const y = yAt(tick);
     grid.push(
       <line key={`g${index}`} x1={pad.left} y1={y} x2={vbW - pad.right} y2={y} className={`ts-grid${tick === 0 ? ' ts-grid-zero' : ''}`} />,
-      <text key={`gt${index}`} x={pad.left - 8} y={axisLabelY(y, pad.top, plotBottom)} textAnchor="end" className="ts-axis">{fmtCompact(tick)}%</text>,
+      <text key={`gt${index}`} x={pad.left - 8} y={axisLabelY(y, pad.top, plotBottom)} textAnchor="end" className="ts-axis ts-contribution-axis">{fmtCompact(tick)}%</text>,
     );
   });
 
@@ -1411,9 +1425,15 @@ function ContributionReturnChartBody({
     const index = Math.max(0, Math.min(points.length - 1, Math.floor((x - pad.left) / slot)));
     setHover({
       ...positionHoverTip(event.clientX, event.clientY, wrap, 220, 128),
-      content: <ContributionReturnTipContent point={points[index]} colors={colors} />,
+      content: (
+        <ContributionReturnTipContent
+          point={points[index]}
+          colors={colors}
+          benchmark={benchmarkLine && benchmark ? { label: benchmark.label, value: benchmark.values[index] } : undefined}
+        />
+      ),
     });
-  }, [height, pad.left, pad.right, pad.top, plotBottom, points, slot, vbW]);
+  }, [benchmark, benchmarkLine, colors, height, pad.left, pad.right, pad.top, plotBottom, points, slot, vbW]);
 
   return (
     <ChartHoverShell hover={interactive ? hover : null} wrapRef={wrapRef}>
@@ -1457,17 +1477,26 @@ function ContributionReturnChartBody({
           })}
           <line x1={pad.left} y1={zeroY} x2={vbW - pad.right} y2={zeroY} className="ts-grid ts-grid-zero" />
           <path d={line} className="ts-line ts-tone-accent ts-portfolio-return-line" fill="none" data-chart-layer="portfolio-return" />
+          {benchmarkLine && benchmark ? (
+            <path
+              d={benchmarkLine}
+              className="ts-line ts-benchmark-return-line"
+              fill="none"
+              data-chart-layer="benchmark-return"
+              data-series={benchmark.label}
+            />
+          ) : null}
           {points.map((point, index) => (
             <circle key={point.t} cx={xCenter(index)} cy={yAt(point.returnPct)} r="2.5" className="ts-portfolio-return-dot" />
           ))}
         </g>
-        {[0, Math.floor((points.length - 1) / 2), points.length - 1].map((index) => (
+        {[...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])].map((index) => (
           <text
             key={`${points[index].t}:${index}`}
             x={xCenter(index)}
             y={height - 10}
             textAnchor={index === 0 ? 'start' : index === points.length - 1 ? 'end' : 'middle'}
-            className="ts-axis"
+            className="ts-axis ts-contribution-axis"
           >
             {points[index].t.slice(0, 10)}
           </text>

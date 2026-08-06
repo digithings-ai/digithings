@@ -174,16 +174,17 @@ function RealizedSummary({ rows }: { rows: PerformanceHoldingRow[] }) {
 export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
   const [activeTab, setActiveTab] = useState(0);
   const [printing, setPrinting] = useState(false);
-  const hasReturns =
-    data.netReturnPct != null ||
-    data.benchmarkReturnPct != null ||
-    data.relativeReturnPct != null;
-  const sourceLabel = {
-    persisted: 'persisted metrics',
-    derived: 'live history fallback',
-    mixed: 'persisted + live fallback',
-    unavailable: 'returns unavailable',
-  }[data.returnsSource];
+  const [benchmarkTicker, setBenchmarkTicker] = useState(
+    data.benchmarkComparisons.find((comparison) => comparison.ticker === 'SPY')?.ticker ??
+      data.benchmarkTicker
+  );
+  const benchmark =
+    data.benchmarkComparisons.find((comparison) => comparison.ticker === benchmarkTicker) ?? null;
+  const benchmarkReturnPct = benchmark?.returnPct ?? data.benchmarkReturnPct;
+  const relativeReturnPct =
+    data.netReturnPct != null && benchmarkReturnPct != null
+      ? data.netReturnPct - benchmarkReturnPct
+      : data.relativeReturnPct;
 
   return (
     <div className="ts-print-root space-y-0">
@@ -210,28 +211,28 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
         aria-label="Portfolio returns"
         className="grid grid-cols-1 border-x border-b border-hair bg-surface/80 md:grid-cols-[minmax(0,1fr)_auto]"
       >
-        <dl className="m-0 grid grid-cols-1 sm:grid-cols-3">
+        <dl className="m-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="NAV" value={data.currentNav} format="number" />
           <Metric label="Portfolio return" value={data.netReturnPct} />
-          <Metric label="Active return" value={data.relativeReturnPct} />
+          <Metric label="Benchmark return" value={benchmarkReturnPct} />
+          <Metric label="Active return" value={relativeReturnPct} />
         </dl>
-        <div className="flex min-w-[11rem] flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute md:items-end md:border-l md:border-t-0">
-          <span>{hasReturns ? 'as of' : 'status'}</span>
+        <div data-region="stamp" className="flex min-w-[11rem] flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute md:items-end md:border-l md:border-t-0">
+          <span>{data.metricsAsOf ? 'as of' : 'status'}</span>
           <strong className="font-medium text-accent">
             {data.metricsAsOf ?? 'awaiting persisted metrics'}
           </strong>
-          <span>{sourceLabel}</span>
-          {hasReturns ? <span>marks the open book · incl. unrealized</span> : null}
-          {data.inceptionDate ? <span>since {data.inceptionDate}</span> : null}
-          {data.benchmarkReturnPct != null ? (
-            <span>vs {data.benchmarkTicker} {data.benchmarkReturnPct >= 0 ? '+' : ''}{data.benchmarkReturnPct.toFixed(2)}%</span>
-          ) : null}
         </div>
       </section>
 
       <RealizedSummary rows={data.historicalHoldings} />
 
-      <PortfolioContributionChart points={data.contributionSeries} />
+      <PortfolioContributionChart
+        points={data.contributionSeries}
+        benchmark={benchmark}
+        comparisons={data.benchmarkComparisons}
+        onBenchmarkChange={setBenchmarkTicker}
+      />
 
       <div className="border-x border-b border-hair bg-surface px-4 pt-2">
         <TabStrip

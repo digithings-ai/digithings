@@ -88,6 +88,14 @@ python3 scripts/backfill_simulated_runs.py --validate-all
 
 **New ledger rows are not created by the weekday GitHub “Daily Price Update” job.** That workflow runs [`refresh_performance_metrics.py`](scripts/refresh_performance_metrics.py), which can update **`cumulative_return_since_event_pct`** on existing `position_events` but does **not** insert ledger rows. Rows come from [`execute_at_open.py`](scripts/execute_at_open.py), normally after a `rebalance_decision` publish via [`run_db_first.py`](scripts/run_db_first.py). That script records **HOLD** as well as OPEN/EXIT/**TRIM**/**ADD** so no-trade days still appear in the Activity ledger. The `position_events.event` vocabulary is **TRIM** / **ADD** (sizing changes), not a generic “REBALANCE”.
 
+The scheduled owner is the `at-open` job in
+`.github/workflows/pipeline-digiquant-prices.yml`. GitHub may deliver a cron hours
+late. `market_open_gate.py` therefore selects the season-correct 13:35/14:35 UTC
+cron from the New York UTC offset and rejects only the wrong-season duplicate or
+a pre-open run; it does not impose a post-open cutoff. The bulk wrappers resolve
+child commands from their own `digiquant/scripts/atlas` directory, so a dry run
+must never print `scripts/scripts/...`.
+
 If the Activity table in the app ends on e.g. **April 6**, run execution for each **missing trading day** (after `rebalance_decision` + `price_history.open` exist for that story):
 
 ```bash
