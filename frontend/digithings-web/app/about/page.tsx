@@ -72,8 +72,8 @@ const POSITION: { title: string; body: string }[] = [
 ];
 
 // What the stack composes with, rather than competes against. These are the
-// dependencies the code actually imports — the same seven the homepage marquee
-// names, sourced from the root CLAUDE.md non-negotiables.
+// dependencies the code actually imports — the same seven the homepage's
+// #integrations section names, sourced from the root CLAUDE.md non-negotiables.
 const COMPOSES_WITH: { name: string; role: string }[] = [
   { name: "LangGraph", role: "supervisor + sub-graph orchestration" },
   { name: "NautilusTrader", role: "every backtest and optimise path" },

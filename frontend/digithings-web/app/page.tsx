@@ -1,13 +1,11 @@
 import {
   Colophon,
   Footer,
-  Marquee,
   NumberedStages,
   OdometerStrip,
   Reveal,
   StackRow,
   WordReveal,
-  type MarqueeItem,
   type NumberedStage,
   type OdometerStat,
   type StackItem,
@@ -16,30 +14,26 @@ import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "./_nav";
 import { DtNav } from "@/components/DtNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ModuleManifest } from "@/components/landing/ModuleManifest";
+import { RepoActivity } from "@/components/landing/RepoActivity";
+import { RepoStrip } from "@/components/landing/RepoStrip";
 
 // v8 landing for the digithings platform — 100% reference-sourced + expressive
 // (#1450). A mouse-following mesh-gradient hero (HeroMesh + reveal-field
 // HeroGraph) opens, then every visual block is a promoted @digithings/web
-// primitive or token-backed utility: a drifting Marquee stack strip, a
-// digit-roll OdometerStrip metrics band, the shared TerminalManifest, the
-// NumberedStages principles spine, and the one big WordReveal claim. The mesh /
-// graph / counters / reveal are client islands; the page stays a server
-// component and exports statically. Every motion moment honors
+// primitive or token-backed utility: the RepoStrip activity band, a digit-roll
+// OdometerStrip metrics band, the shared TerminalManifest, the NumberedStages
+// principles spine, the RepoActivity section, and the one big WordReveal claim.
+// The mesh / graph / counters / reveal are client islands; the page stays a
+// server component and exports statically. Every motion moment honors
 // prefers-reduced-motion and reads with no JS (html.no-js fallbacks).
-
-// The stack we build on — the core seven, drifting in the marquee right below
-// the hero. Each carries its Simple Icons glyph where one exists
-// (@digithings/web logos registry); NautilusTrader and LiteLLM have no mark
-// and read text-only.
-const STACK: MarqueeItem[] = [
-  { name: "LangGraph", icon: "langgraph" },
-  { name: "NautilusTrader" },
-  { name: "Polars", icon: "polars" },
-  { name: "Pydantic", icon: "pydantic" },
-  { name: "LiteLLM" },
-  { name: "MCP", icon: "modelcontextprotocol" },
-  { name: "Docker", icon: "docker" },
-];
+//
+// The slot under the hero used to hold a drifting <Marquee> of the seven core
+// dependencies. It was removed, not restyled: it named the same libraries the
+// #integrations section names deliberately and in full, so it added no
+// information and paid for that with perpetual motion under the hero. <RepoStrip>
+// takes the slot and spends it on live repository activity instead. The Marquee
+// primitive itself stays in @digithings/web — the design reference still
+// specimens it.
 
 // Every figure here is countable in the repo — no projections, no asterisks
 // (#1846). Each one is checked against the code, and the band must not
@@ -68,9 +62,10 @@ const METRICS: OdometerStat[] = [
   { value: "0", label: "keys stored" },
 ];
 
-// The packages the stack is actually assembled from, shown deliberately rather
-// than only drifting past in the marquee (#1846) — compatibility is the
-// differentiator, so the dependency list IS the pitch. Rendered by the shared
+// The packages the stack is actually assembled from, named deliberately and in
+// full (#1846) — compatibility is the differentiator, so the dependency list IS
+// the pitch. This section is also why the marquee above it was removable: it named
+// a subset of these on a loop and added nothing. Rendered by the shared
 // StackRow/StackLogo primitives (@digithings/web): a slug present in the logos
 // registry gets its real vendor mark, anything else degrades to a monogram
 // chip. NautilusTrader, LiteLLM, Chroma and Azure AI Search publish no
@@ -171,15 +166,7 @@ export default function Home() {
           </div>
         </HeroMesh>
 
-        <section className="border-y border-hair" aria-label="Built on">
-          <Marquee
-            items={STACK}
-            tone="mute"
-            speed={42}
-            aria-label="Built on LangGraph, NautilusTrader, Polars, Pydantic, LiteLLM, MCP, and Docker"
-            className="py-[0.95rem]"
-          />
-        </section>
+        <RepoStrip />
 
         <section className="section" id="metrics">
           <div className="wrap">
@@ -237,6 +224,13 @@ export default function Home() {
             ))}
           </div>
         </section>
+
+        {/* "built on what you already run" (open dependencies) → "maintained in
+            the open" (the repo itself). Placed here rather than under the hero so
+            its figures never sit adjacent to the #metrics odometer, where two
+            number-bearing blocks would read as one restated twice. Plain
+            .section: section-alt stays the single accent before the claim. */}
+        <RepoActivity />
 
         <section className="section section-alt" id="principles">
           <div className="wrap">
