@@ -23,12 +23,15 @@ to it later (their current in-tree LLM modules are superseded by this package).
 |--------|----------------|
 | `digillm/client.py` | Provider registry + routing, client cache, retry/backoff, SHA-256 response cache, `chat_completion`, the tool-calling loop, tool-call types, and the per-request override contextvars. |
 | `digillm/structured.py` | `structured_completion` (json_schema → validated Pydantic model) and `resolve_model` (opt-in test/medium/best resolution). |
+| `digillm/telemetry.py` | Strict provider-agnostic records for node runs, logical calls, physical attempts, artifact references, and fail-soft observer delivery. |
 | `digillm/__init__.py` | Public API surface (re-exports). |
 
 ## Public API
 
 ```python
 from digillm import (
+  ArtifactRef, CacheStatus, CallPurpose, NodeRunRecord,
+  ProviderCallRecord, ProviderAttemptRecord, TelemetryObserver, emit_telemetry,
     chat_completion, chat_completion_with_tools, structured_completion,
     get_client_for_model, get_client, register_provider, resolve_model,
     set_proxy_key, reset_proxy_key, get_proxy_key, proxy_key,   # proxy override
@@ -36,6 +39,107 @@ from digillm import (
     clear_caches,
 )
 ```
+
+### Provider telemetry contracts
+
+`NodeRunRecord`, `ProviderCallRecord`, and `ProviderAttemptRecord` separate graph work, one
+logical invocation, and each physical provider request. All are frozen Pydantic v2 models with
+`extra="forbid"`, producer-supplied stable UUIDs, closed lifecycle/retry enums, timezone-aware
+UTC event times, and deterministic serialization. `ArtifactRef` carries identity and version only;
+it never contains an artifact payload.
+
+A logical cache hit has `attempt_count=0`. A successful non-cache call has at least one physical
+attempt, and each retry after attempt 1 requires a closed `RetryReason`. Token usage and cost are
+nullable: unavailable provider evidence is never represented as zero. Prompts, responses, search
+text, API keys, secrets, and raw exceptions are not fields on any contract; only a sanitized
+exception type may be recorded.
+
+`TelemetryObserver` is an injectable synchronous sink boundary. `emit_telemetry` catches sink
+failures and optionally reports only the record UUID and exception class, so telemetry cannot abort
+the caller's portfolio work. The module starts no threads, opens no connections, and writes no
+files on import. Task #1951 defines the vocabulary; Task #1955 adds the physical-attempt producer.
+Task #1963 adds logical-call lifecycle and parentage. Full run/node/agent/ticker propagation and
+the durable DigiQuant writer remain separate follow-up tasks.
+
+### Logical provider-call instrumentation
+
+**Purpose:** emit one terminal `ProviderCallRecord` for each logical invocation, including cache
+hits, tool-loop turns, grounding, and structured repair. **Reason:** physical attempts prove that
+transport work occurred but cannot explain why it existed, whether a cache answered it, which
+call caused a follow-up, or what consumed the result. **Intent:** connect provider work to generic
+research purpose and artifact disposition without importing DigiGraph, Olympus, ticker, or
+portfolio semantics into this leaf library. **System contribution:** consumers can reconcile
+logical research operations with physical reliability and cost evidence while preserving the
+existing provider behavior.
+
+`provider_call_context(...)` supplies a real `node_run_id`, closed `CallPurpose`, optional parent,
+and exactly one successful disposition: immutable `ArtifactRef` values or a typed
+`NoArtifactReason`. The context is optional. Calls without it retain incumbent aggregate and
+physical-attempt behavior but do not fabricate a required node identity. Mutable call IDs, attempt
+counters, retry reasons, and tool-follow-up lineage remain context-local; the registered observer
+is process-wide so worker-thread attempts remain visible.
+
+The outermost public invocation owns finalization. Nested wrappers, including OpenRouter search
+through `completion()`, contribute to that one logical call rather than double-counting it. Each
+tool-loop turn receives a fresh call ID and attempt counter; a follow-up references the preceding
+selection call. Cache hits are successful zero-attempt calls with `CacheStatus.HIT`; direct search,
+tool, live-search, and BYOK paths are explicitly bypassed. Failures and cancellations override any
+prospective artifact disposition with `CALL_FAILED` or `CALL_CANCELLED`, and failures retain only
+the sanitized exception class.
+
+Consumers that validate a successful response after the provider wrapper returns may request
+deferred finalization. The context handle buffers only successful logical records, permits the
+latest success to receive its final no-artifact reason, and then delivers each record exactly once.
+Failed and cancelled calls are already authoritative at the provider boundary and emit immediately.
+This lets structured consumers append rejected output as `VALIDATION_REJECTED` instead of first
+recording it as consumed and attempting a later correction.
+
+Logical telemetry is observational and fail-soft. Record construction, optional provider evidence,
+and observer delivery cannot alter cache ordering, retries/backoff, routing, tool execution,
+return values, or raised exceptions. Unknown purpose or disposition must use the closed `UNKNOWN`
+value rather than being silently omitted. Rollback is to stop injecting `provider_call_context`;
+physical attempts and strict contracts remain intact. Task 1.4 owns complete
+run/node/agent/ticker propagation, and Task 1.5 owns durable buffering, flush, and reconciliation.
+
+### Physical provider-attempt instrumentation
+
+**Purpose:** emit one typed `ProviderAttemptRecord` for every provider request visible at
+`digillm`'s transport boundary. **Reason:** aggregate usage counters collapse retries, failures,
+latency, served-model identity, and missing evidence, so provider reliability and cost cannot be
+reconciled. **Intent:** observe the incumbent provider behavior without changing retry counts,
+backoff, routing, cache order, provider selection, response parsing, or exceptions. **System
+contribution:** later Olympus persistence and reconciliation can distinguish provider-attempt
+effects from logical-call, node, and portfolio effects.
+
+`set_telemetry_observer(observer)` registers one process-wide sink, matching the existing startup
+registration used by usage telemetry and ensuring provider calls made in worker threads remain
+visible. The mutable logical-call UUID, attempt number, and next retry reason are held in a
+`ContextVar`, so concurrent invocations cannot share counters. Passing `None` disables emission.
+Observer failure, optional SDK metadata access, record construction, and delivery are all fail-soft;
+none can alter the provider result or raised exception. Prompt/response/search payloads, secrets,
+and exception messages never enter the record.
+
+The attempt producer covers:
+
+- each repository-visible `client.chat.completions.create(...)` invocation, including transient
+  retries and empty-response retries under one generated call UUID;
+- `client.responses.create(...)` in xAI web and X search; OpenRouter search delegates to
+  `completion()` and is therefore counted once;
+- streaming from request initiation through iterator exhaustion, recording success and final usage
+  only after exhaustion, failure on iteration errors, and cancellation on generator or asyncio
+  cancellation;
+- served model, token usage, and cost only when the SDK/provider supplies valid evidence; missing or
+  malformed optional evidence remains `None`, never zero.
+
+The OpenAI SDK's default `max_retries=2` remains enabled. Those internal HTTP retries occur below
+the repository-visible `create(...)` boundary and are opaque to this instrumentation. Therefore an
+attempt record means one observable SDK invocation, not proof of exactly one HTTP exchange. A
+canary test locks the SDK setting in place; changing or disabling it requires a separate measured
+decision. Cache hits produce no physical attempt record.
+
+DigiQuant migration `067_olympus_provider_telemetry.sql` owns the private normalized storage. Event
+times remain producer facts; the database adds `recorded_at` as its write clock. That schema is not
+part of `digillm` and does not create a persistence dependency for other consumers.
 
 ### `chat_completion`
 

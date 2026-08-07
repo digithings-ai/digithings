@@ -1,9 +1,9 @@
 # Atlas Supabase Schema
 
 Live Atlas Supabase schema. Source of truth: the numbered migrations under
-`digiquant/supabase/migrations/`. This document inventories the
-17 live tables (12 pre-024 + 5 new in migration 024) and diagrams the
-high-value relationships.
+`digiquant/supabase/migrations/`. This document inventories the high-value tables and
+relationships; later sections cover internal operational tables added after the original Atlas
+schema.
 
 > ADRs: [ADR-0008 research schema](../../../docs/adr/0008-atlas-research-schema.md),
 > [ADR-0009 Supabase persistence](../../../docs/adr/0009-atlas-supabase-persistence.md),
@@ -34,6 +34,9 @@ erDiagram
     price_history_tickers ||..|| price_history   : "view"
 
     macro_series_observations ||..|| daily_snapshots : "obs_date"
+
+    olympus_node_runs ||--o{ olympus_provider_calls : "node_run_id"
+    olympus_provider_calls ||--o{ olympus_provider_attempts : "call_id"
 ```
 
 > Solid lines are FKs; dashed lines are logical pointers (documents.document_key
@@ -166,6 +169,34 @@ blocked; they are made pointless (`200 {"skipped": "not claimed"}`, nothing fetc
   substitute either: PostgREST hands out a fresh pooled session per RPC call, so the lock
   releases long before the fetch it was meant to cover. Full argument, with measurements, in
   `migrations/064_prices_live_lease.sql`.
+
+  ### Private provider telemetry — new in migration 067 (#1951)
+
+  Prospective internal evidence for provider-call economics and reliability. This schema separates a
+  graph node execution from a logical call and from each physical provider attempt. It does not
+  backfill historical calls from aggregate diagnostics and exposes no public view.
+
+  | Table | PK | Purpose |
+  |-------|----|---------|
+  | `olympus_node_runs` | `(node_run_id UUID)` | Stable graph-node execution identity, lifecycle, event time, and generic artifact references. |
+  | `olympus_provider_calls` | `(call_id UUID)` | Logical purpose, cache result, parent call, requested model, and physical-attempt count; FK to `olympus_node_runs`. |
+  | `olympus_provider_attempts` | `(attempt_id UUID)` | One physical transport attempt with unique `(call_id, attempt_number)`, served model, retry reason, nullable usage/cost, and sanitized error type. |
+
+  All three tables use `timestamptz` for producer event times and add `recorded_at` from the database
+  write clock. Missing provider usage and cost remain NULL. Prompts, responses, search text, API keys,
+  secrets, and raw exceptions have no storage columns.
+
+  RLS is enabled with no policies and all privileges are revoked from `PUBLIC`, `anon`, and
+  `authenticated`. Privileges are revoked from `service_role` **before** the grant, because a Supabase
+  project carries `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES TO service_role` and an additive
+  grant alone leaves the inherited `UPDATE`/`DELETE`/`TRUNCATE` in place; after the revoke,
+  `service_role` holds only `SELECT` and `INSERT`. Mutation-rejection triggers deny `UPDATE` and
+  `DELETE` per row and `TRUNCATE` per statement, including owner-class sessions, so any future
+  correction must append explicit superseding evidence rather than rewrite history. A
+  `chk_olympus_provider_calls_terminal_disposition` constraint mirrors the producer's Pydantic rule in
+  SQL — a `failed` call must carry `call_failed` and a `cancelled` call `call_cancelled` — so a
+  mislabelled terminal disposition cannot be persisted by a writer that bypasses the models. Task #1951 creates no writer or public
+  reader; later instrumentation registers the fail-soft observer and batches these records.
 
 ## RLS (consistent across all tables above)
 

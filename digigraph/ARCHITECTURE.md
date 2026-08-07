@@ -52,6 +52,7 @@ The following is built and functional as of this architecture review (March 2026
 | digismith tracing (`traceable` wrappers) | Built | `digillm` (via `digismith.trace.traceable`) |
 | OpenTelemetry export (opt-in) | Built | `server.py` (via `digibase.otel.setup_otel_fastapi`) |
 | Ordered body-free run call events | Built | `usage.py`, `graph/research_agent.py`, `digillm` observer |
+| Logical provider-call purpose and lineage | Built | `llm_client.py`, `usage.py`, `graph/research_agent.py`, `digillm` contracts |
 | Planning executor (topo-sort + parallel steps) | Built | `planning/executor.py` |
 | Graphiti graph memory | **Not built** | Phase 2 roadmap |
 | Remote MCP server enumeration | **Not built** | Phase 2 roadmap |
@@ -119,17 +120,52 @@ When `stream: true` in `POST /v1/chat/completions`:
 
 ### 4.0 Olympus call-event capture
 
-`usage.start()` activates one ordered, lock-protected event stream for an Olympus process.
-`digillm` contributes terminal model/search events; `graph/research_agent.py` times actual tool
-execution. `call_context(phase, operation, document_key)` labels model/search calls, while the
-tool wrapper also passes those labels explicitly because `ContextVar` state does not propagate
-into `ThreadPoolExecutor` workers.
+`usage.start()` activates ordered aggregate events and a temporary, lock-protected detailed
+telemetry buffer for an Olympus process. `digillm` contributes terminal model/search events;
+`graph/research_agent.py` times actual tool execution. `call_context(node_run_id, phase, operation,
+document_key)` labels model/search calls, while the tool wrapper also passes display labels
+explicitly because `ContextVar` state does not propagate into `ThreadPoolExecutor` workers.
 
 `RunCallEvent` is a frozen Pydantic v2 model. It stores fixed labels, status, duration, retries,
 usage totals, source count, and code-generated shape summaries. All public text is length-bounded.
 It never stores prompts, argument or result values, document bodies, credentials, PII-heavy
 values, model output, or chain-of-thought. `events_snapshot()` returns the ordered body-free
 records; aggregate `snapshot()` includes them under `events` for the Atlas diagnostics writer.
+
+#### Logical provider-call boundary
+
+**Purpose:** label each logical provider invocation with generic intent, parentage, and artifact
+disposition. **Reason:** the aggregate explains run totals and physical attempts explain transport,
+but neither explains why a call existed or which prior call caused a repair or follow-up.
+**Intent:** make provider work attributable without moving Olympus policy into DigiGraph or adding
+nodes to the canonical graph. **System contribution:** detailed usage, artifact linkage, and later
+research-policy evaluation can share one stable lineage.
+
+`llm_client.py` registers `usage.DETAILED_USAGE_OBSERVER` process-wide and wraps DigiLLM entry
+points with `provider_call_context(...)` only when `call_context` contains a real `node_run_id`.
+No placeholder identity is generated. `logical_call_context(...)` may override generic purpose,
+parent, artifact references, and no-artifact reason for a nearby call. Defaults distinguish initial
+generation, structured completion, tool selection/follow-up, web grounding, and X grounding;
+`graph/research_agent.py` marks validation retries as structured repairs and links each repair to
+the rejected call ID. Structured calls defer successful logical-record delivery until Pydantic
+validation assigns the final disposition, so a rejected parent is appended once as
+`validation_rejected`; provider failures and cancellations remain immediate terminal records.
+
+`detailed_usage_projection()` is a temporary reconciliation view, not a second accounting ledger.
+It selects one terminal successful physical attempt for each successful non-cache logical call so
+its call/token/cost totals match the incumbent one-event aggregate where provider evidence exists.
+Retries remain present in detailed attempt records, cache hits remain explicit zero-attempt logical
+calls, and any unavailable token or cost value makes the corresponding projection value `None`
+rather than fabricated zero.
+
+Collector and observer failures are fail-soft and cannot change cache ordering, retry/backoff,
+routing, tool execution, return values, or exceptions. Strict records have no prompt, response,
+search text, secret, API key, or raw exception fields. Task 1.4 owns full run/node/agent/ticker
+propagation; until that lands, production paths without a real `node_run_id` intentionally emit
+physical attempts but no logical records rather than fabricating identity. Task 1.5 owns
+persistence, flush, durable reconciliation, and any retirement of the aggregate-only writer.
+Rollback removes logical metadata injection and detailed observer registration while retaining
+strict contracts, physical attempts, and the incumbent aggregate.
 
 ### 4.1 WorkflowState (`graph/state.py`)
 

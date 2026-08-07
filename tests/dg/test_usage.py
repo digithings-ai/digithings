@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
-import pytest
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
-from digigraph import usage
+import pytest
+from openai.types.chat import ChatCompletion
+from openai.types.chat import ChatCompletionMessage as OpenAIMessage
+from openai.types.chat.chat_completion import Choice
+from openai.types.completion_usage import CompletionUsage, PromptTokensDetails
+
+from digigraph import llm_client, usage
+from digillm import CallPurpose, NoArtifactReason, set_telemetry_observer
+from digillm import client as digillm_client
 
 
 @pytest.fixture(autouse=True)
@@ -87,6 +97,128 @@ def test_aggregates_cost_usd():
     assert snap["cost_usd"] == pytest.approx(0.02)
     assert snap["by_kind"]["chat"]["cost"] == pytest.approx(0.02)
     assert snap["by_kind"]["web_search"]["cost"] == 0.0
+
+
+@pytest.mark.unit
+def test_detailed_successful_call_projection_matches_aggregate() -> None:
+    response = ChatCompletion(
+        id="cmpl-parity",
+        created=0,
+        model="served-model",
+        object="chat.completion",
+        choices=[
+            Choice(
+                index=0,
+                finish_reason="stop",
+                message=OpenAIMessage(role="assistant", content="result"),
+            )
+        ],
+    )
+    response.usage = CompletionUsage(
+        prompt_tokens=21,
+        completion_tokens=8,
+        total_tokens=29,
+        prompt_tokens_details=PromptTokensDetails(cached_tokens=5),
+        cost="0.0042",
+    )
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = response
+    usage.start()
+    set_telemetry_observer(usage.DETAILED_USAGE_OBSERVER)
+
+    with (
+        usage.call_context(node_run_id=uuid4()),
+        usage.logical_call_context(
+            purpose=CallPurpose.INITIAL_GENERATION,
+            no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+        ),
+        patch.object(digillm_client, "get_client_for_model", return_value=fake_client),
+    ):
+        llm_client.completion("gpt-4o-mini", [{"role": "user", "content": "hi"}])
+
+    aggregate = usage.snapshot()
+    detailed = usage.detailed_usage_projection()
+    assert detailed == {
+        "llm_calls": aggregate["llm_calls"],
+        "prompt_tokens": aggregate["prompt_tokens"],
+        "completion_tokens": aggregate["completion_tokens"],
+        "cost_usd": aggregate["cost_usd"],
+        "search_calls": aggregate["search_calls"],
+    }
+
+
+@pytest.mark.unit
+def test_detailed_projection_keeps_unavailable_provider_evidence_null() -> None:
+    response = ChatCompletion(
+        id="cmpl-unavailable",
+        created=0,
+        model="served-model",
+        object="chat.completion",
+        choices=[
+            Choice(
+                index=0,
+                finish_reason="stop",
+                message=OpenAIMessage(role="assistant", content="result"),
+            )
+        ],
+    )
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = response
+    usage.start()
+    set_telemetry_observer(usage.DETAILED_USAGE_OBSERVER)
+
+    with (
+        usage.call_context(node_run_id=uuid4()),
+        patch.object(digillm_client, "get_client_for_model", return_value=fake_client),
+    ):
+        llm_client.completion(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "unavailable usage"}],
+        )
+
+    assert usage.detailed_usage_projection() == {
+        "llm_calls": 1,
+        "prompt_tokens": None,
+        "completion_tokens": None,
+        "cost_usd": None,
+        "search_calls": 0,
+    }
+
+
+@pytest.mark.unit
+def test_detailed_grounding_projection_matches_aggregate_token_semantics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    response = SimpleNamespace(
+        model="grok-served",
+        output_text="grounded",
+        output=[],
+        usage=SimpleNamespace(
+            input_tokens=13,
+            output_tokens=4,
+            cost="0.0031",
+            model_extra={},
+        ),
+    )
+    fake_client = MagicMock()
+    fake_client.responses.create.return_value = response
+    usage.start()
+    set_telemetry_observer(usage.DETAILED_USAGE_OBSERVER)
+
+    with (
+        usage.call_context(node_run_id=uuid4()),
+        patch.object(digillm_client, "get_client_for_model", return_value=fake_client),
+    ):
+        llm_client.web_search("xai/grok-4", "ground this")
+
+    aggregate = usage.snapshot()
+    detailed = usage.detailed_usage_projection()
+    assert detailed["llm_calls"] == aggregate["llm_calls"] == 0
+    assert detailed["search_calls"] == aggregate["search_calls"] == 1
+    assert detailed["prompt_tokens"] == aggregate["prompt_tokens"] == 0
+    assert detailed["completion_tokens"] == aggregate["completion_tokens"] == 0
+    assert detailed["cost_usd"] == aggregate["cost_usd"] == 0.0031
 
 
 @pytest.mark.unit
