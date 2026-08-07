@@ -212,8 +212,18 @@ and run `make agents-init` (CI enforces idempotence).
 
 ## Build / CI posture
 
-The reference app is **not** built or linted in CI (no workflow references it);
-the gate is local — `npx tsc --noEmit` + `npx eslint .` from `reference/`, plus
-a live browser check. The suite has no auth, crypto, or live-trading surface, so
+The reference app is **not** built or linted in CI; the gate is local —
+`npx tsc --noEmit` + `npx eslint .` from `reference/`, plus a live browser check.
+
+One workflow reference exists and is not a build: both Cloudflare deploy checks
+watch `reference/package.json` in their `paths:` filters. That is an *install*
+input, not a build input — neither site compiles this app, but the root
+`npm install` both build scripts run resolves all eight workspace manifests
+before either site compiles, so an unresolvable range here fails both production
+builds. Of the eight this was the only manifest watched by nothing, until #1977.
+`tests/scripts/test_deploy_build_inputs.py` now asserts no workspace manifest is
+orphaned, so a new workspace scaffolded here cannot silently reopen that hole.
+The directory itself is deliberately left out of those filters — see the comment
+beside the entry — so the "not built or linted in CI" line above still holds. The suite has no auth, crypto, or live-trading surface, so
 the human-gate items in `CLAUDE.md` do not apply to component work here (a
 physical relocation of the shared packages, which touches deploy config, does).

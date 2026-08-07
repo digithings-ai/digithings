@@ -110,10 +110,11 @@ on:
       #
       # And be equally plain about what has NOT happened: across all 38, some lane
       # running a root install always fired, so nothing has yet reached production
-      # through this hole. The two manifests with no lane of their own — digichat-ui and
-      # digiweb/reference — have simply never been edited alone; all three PRs touching
-      # frontend/digichat-ui/package.json also touched frontend/digithings-web/**. This
-      # closes a structural hole before it bites. It is not the fix for an incident.
+      # through this hole. The one manifest with no lane of its own was
+      # digiweb/reference, named at the end of this list. (An earlier draft counted
+      # digichat-ui here too; that was wrong — ci.yml's `digichat` and `web` filters both
+      # list frontend/digichat-ui/**, and both lanes install at the root.) This closes a
+      # structural hole before it bites. It is not the fix for an incident.
       #
       # This site's build closure, read off the @digithings/* deps, is digithings-web →
       # design + digichat-ui + web, digichat-ui → web, web → design. All four are covered
@@ -128,21 +129,30 @@ on:
       # reason from everything above it. The root `npm install` resolves all eight
       # workspace manifests before either site compiles, so an unresolvable range in any
       # of them fails this build even though nothing here imports that workspace. Four of
-      # the eight sit outside this site's closure; three are reached by a lane that runs
-      # its own root install — frontend/digichat by ci.yml's `digichat`,
-      # frontend/digiquant-web by its `web`, frontend/olympus by its `olympus`. The
-      # fourth, frontend/digiweb/reference, was in no path filter in this repo at all: of
-      # the eight it was the one manifest watched by nothing, so a bad range there took
-      # both production sites down with no CI job running. (#1956 reports verifying that
-      # empirically — ETARGET out of the root install. Not re-run here; the mechanism is
-      # just what `npm install` does with a workspaces root.)
+      # the eight sit outside this site's closure; three are reached by a lane that
+      # installs at the root — frontend/digichat by ci.yml's `digichat`,
+      # frontend/digiquant-web by its `web`, frontend/olympus by its `olympus`. Two of
+      # those lanes run `npm ci`, which catches a bad range by a different route than the
+      # distinction drawn above: not by resolving it, but by refusing to run at all when
+      # manifest and lock disagree. Cover either way. The fourth,
+      # frontend/digiweb/reference, was in no path filter in this repo at all — of the
+      # eight it was the one manifest watched by nothing — so a bad range there *would*
+      # take both production sites down with no CI job running. Counterfactual, not
+      # history: nothing has reached production through this hole. (#1956 reports
+      # verifying the failure empirically — ETARGET out of the root install. Not re-run
+      # here; the mechanism is just what `npm install` does with a workspaces root.)
       #
-      # Only the manifest, not `frontend/digiweb/reference/**`. The directory is
-      # deliberately reachable only by ci.yml's unconditional frontend-canon guard, and
-      # nothing in CI has ever built or linted that app — see ci.yml's comment above that
-      # guard. Widening to the directory would fire two full Next builds on every edit to
-      # a design reference that has changed 64 times since May while its manifest changed
-      # once. This closes a structural hole; it is not the fix for an incident.
+      # Only the manifest, not `frontend/digiweb/reference/**`. Nothing in CI has ever
+      # built or linted that app — verified across all workflows and their history, not
+      # inferred from ci.yml's frontend-canon comment, which says only why that guard is
+      # unconditional. Widening to the directory would fire this site's Next build, and
+      # digiquant's two, on every edit to a design reference with ~137 commits in the
+      # month since it was scaffolded (2026-07-06) — while the manifest's *content* has
+      # not changed since that same day; the lone commit at this path is the `git mv` that
+      # created it. Note that path history alone would not license this, for the reason
+      # given above about #1702/#1708/#1712: the path is younger than the claim. Content
+      # stability is the evidence, and `git log --follow` is not — it walks back to
+      # 2026-04-27, before this app existed.
       - "frontend/digiweb/reference/package.json"
   workflow_dispatch:
 

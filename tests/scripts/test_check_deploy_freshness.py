@@ -17,7 +17,7 @@ import importlib.util
 import json
 import sys
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any  # score:allow untyped any — dynamically loaded module
 from urllib.parse import urlsplit
 
@@ -353,4 +353,11 @@ def test_build_check_watches_the_root_manifests(workflow_path: Path, manifest: s
     would go stale the next time a frontend dependency edge changes, silently, which is
     the failure mode this whole module exists to refuse.
     """
-    assert manifest in _trigger_paths(workflow_path)
+    paths = _trigger_paths(workflow_path)
+    # Accept a covering directory glob as well as the literal path. A later PR widening
+    # `frontend/digiweb/reference/package.json` to `frontend/digiweb/reference/**`
+    # strictly improves coverage; a literal-membership assertion would go red on it and
+    # the obvious fix would be to keep both — which is exactly the dead entry the comment
+    # at the top of that filter warns #1966 had to remove.
+    covering = f"{PurePosixPath(manifest).parent}/**"
+    assert manifest in paths or covering in paths

@@ -164,6 +164,44 @@ def test_deploy_check_watches_every_workspace_it_builds(workflow: Path, build_sc
     )
 
 
+def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
+    """No workspace manifest may be orphaned — the hole the eighth one sat in.
+
+    The root ``npm install`` resolves all eight workspace manifests before either site
+    compiles, so a bad range in any of them fails both production builds. Seven were
+    reached by some filter; ``frontend/digiweb/reference/package.json`` was in none at
+    all, and both deploy checks now name it.
+
+    Naming it fixed the instance. This fixes the class: the set of workspaces moves —
+    ``frontend/digiweb/reference`` was itself scaffolded and then moved into place — and
+    a ninth one lands unwatched by default, reopening the identical hole with no test
+    failing. So assert the union, not a list.
+
+    Deliberately the *weak* invariant: watched by something, not watched by something
+    that runs a root install. The strong version would have to decide whether a lane's
+    ``npm ci`` is equivalent cover to a build's ``npm install`` — they fail on different
+    conditions — and that judgement does not belong in an assertion. This is a floor:
+    ``frontend/digichat``'s second cover is ``ruff_and_scripts``, which installs nothing.
+    A floor that fails on a new orphan is worth more than a ceiling nobody can state.
+    """
+    filters: dict[str, Any] = yaml.safe_load(
+        (REPO_ROOT / "scripts" / "ci_paths.yaml").read_text(encoding="utf-8")
+    )
+    watched = {glob for globs in filters.values() if isinstance(globs, list) for glob in globs}
+    watched.update(glob for p in DEPLOY_CHECKS for glob in _trigger_paths(p.values[0]))
+
+    orphans = sorted(
+        f"{directory}/package.json"
+        for directory, _deps in _workspace_packages().values()
+        if f"{directory}/package.json" not in watched and f"{directory}/**" not in watched
+    )
+    assert not orphans, (
+        f"workspace manifests watched by no path filter in this repo: {orphans}. "
+        f"The root `npm install` resolves them, so a bad range there fails both "
+        f"production builds with no CI job running. Add each to both deploy checks."
+    )
+
+
 def test_digichat_ui_is_a_digithings_build_input_but_not_a_digiquant_one() -> None:
     """Pin the asymmetry, so the one-sided fix stays legible.
 
