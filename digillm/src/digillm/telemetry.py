@@ -228,6 +228,9 @@ def emit_telemetry(
             try:
                 on_failure(_record_id(record), type(error).__name__)
             except Exception:
+                # The failure reporter is itself best-effort. Swallowing its error keeps the
+                # contract this function exists for — telemetry never aborts caller work — and
+                # the return value already says the record was not delivered.
                 return False
         return False
     return True

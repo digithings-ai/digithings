@@ -158,11 +158,24 @@ def test_failed_calls_require_sanitized_error_type(sql: str) -> None:
 
 
 def test_terminal_calls_require_matching_artifact_disposition(sql: str) -> None:
+    """The terminal-disposition CHECK must be NULL-safe.
+
+    Postgres admits a CHECK that evaluates to NULL, so plain ``=`` against a NULL
+    ``no_artifact_reason`` accepts ``(failed, NULL, artifacts)`` and ``(cancelled, NULL,
+    artifacts)`` — rows the Pydantic producer rejects, and which the append-only triggers
+    then make permanent. ``IS NOT DISTINCT FROM`` is the discriminating detail.
+    """
     body = _table_body(sql, "olympus_provider_calls")
     normalized = " ".join(body.split())
-    assert "outcome = 'failed' AND no_artifact_reason = 'call_failed'" in normalized
-    assert "outcome = 'cancelled' AND no_artifact_reason = 'call_cancelled'" in normalized
+    assert (
+        "outcome = 'failed' AND no_artifact_reason IS NOT DISTINCT FROM 'call_failed'"
+    ) in normalized
+    assert (
+        "outcome = 'cancelled' AND no_artifact_reason IS NOT DISTINCT FROM 'call_cancelled'"
+    ) in normalized
     assert "outcome IN ('started', 'succeeded')" in normalized
+    assert "no_artifact_reason = 'call_failed'" not in normalized
+    assert "no_artifact_reason = 'call_cancelled'" not in normalized
 
 
 @pytest.mark.parametrize("table", ("olympus_provider_calls", "olympus_provider_attempts"))

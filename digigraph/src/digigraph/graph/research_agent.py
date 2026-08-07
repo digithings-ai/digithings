@@ -327,106 +327,112 @@ def run_research_agent(
     with _usage.call_context(phase=phase_slug, operation=schema_name):
         for attempt in range(max_retries + 1):
             call = None
-            # Only the FIRST attempt runs the tool loop. Retries drop the tools so that
-            # ``response_format`` survives into the request (#1739) — see "Tool-path retry".
-            if tool_grounded and attempt == 0:
-                with _usage.logical_call_context(
-                    purpose=CallPurpose.TOOL_SELECTION,
-                    no_artifact_reason=NoArtifactReason.TOOL_DISPATCH,
-                    follow_up_purpose=CallPurpose.TOOL_FOLLOW_UP,
-                    follow_up_no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
-                    defer_finalization=True,
-                ) as call:
-                    raw = run_tools(
-                        effective_model,
-                        messages,
-                        tools=tools,
-                        execute_tool=traced_execute_tool,
-                        temperature=temperature,
-                        search_parameters=search_parameters,
-                    )
-                    parent_call_id = call.last_call_id
-            else:
-                purpose = (
-                    CallPurpose.STRUCTURED_REPAIR
-                    if attempt > 0
-                    else CallPurpose.STRUCTURED_COMPLETION
-                )
-                try:
+            # The `finally` must span every deferral site, not just the parse block: a
+            # deferred logical record is held in the handle until `finalize()` delivers it,
+            # so an exception out of the tool loop below would otherwise discard it. That
+            # would leave a physical attempt row whose `call_id` has no logical row —
+            # unpersistable once the Task 1.5 writer enforces the 067 foreign keys.
+            try:
+                # Only the FIRST attempt runs the tool loop. Retries drop the tools so that
+                # ``response_format`` survives into the request (#1739) — see "Tool-path retry".
+                if tool_grounded and attempt == 0:
                     with _usage.logical_call_context(
-                        purpose=purpose,
-                        parent_call_id=parent_call_id,
-                        no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+                        purpose=CallPurpose.TOOL_SELECTION,
+                        no_artifact_reason=NoArtifactReason.TOOL_DISPATCH,
+                        follow_up_purpose=CallPurpose.TOOL_FOLLOW_UP,
+                        follow_up_no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
                         defer_finalization=True,
                     ) as call:
-                        raw = completion_text(
+                        raw = run_tools(
                             effective_model,
                             messages,
+                            tools=tools,
+                            execute_tool=traced_execute_tool,
                             temperature=temperature,
-                            response_format=response_format,
-                            max_tokens=max_tokens,
                             search_parameters=search_parameters,
                         )
-                    parent_call_id = call.last_call_id
-                except Exception:
-                    # Never-worse-than-today guarantee. ``last_error`` is set only on a retry,
-                    # i.e. only once a prior attempt already produced an unusable body. If the
-                    # enforced retry itself fails at the provider we surface that ORIGINAL parse
-                    # error, so callers (Atlas/Hermes fail-soft, which key off the parse error)
-                    # see exactly the exception they would have seen before this change. Bare
-                    # ``Exception`` is deliberate: the guarantee is "any failure degrades to the
-                    # prior error", which a narrower tuple would not deliver — an un-enumerated
-                    # provider error would escape as a brand-new failure class. On attempt 0 of
-                    # the tool-free path ``last_error`` is None and the error propagates as-is.
-                    if last_error is None:
-                        raise
+                        parent_call_id = call.last_call_id
+                else:
+                    purpose = (
+                        CallPurpose.STRUCTURED_REPAIR
+                        if attempt > 0
+                        else CallPurpose.STRUCTURED_COMPLETION
+                    )
+                    try:
+                        with _usage.logical_call_context(
+                            purpose=purpose,
+                            parent_call_id=parent_call_id,
+                            no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+                            defer_finalization=True,
+                        ) as call:
+                            raw = completion_text(
+                                effective_model,
+                                messages,
+                                temperature=temperature,
+                                response_format=response_format,
+                                max_tokens=max_tokens,
+                                search_parameters=search_parameters,
+                            )
+                        parent_call_id = call.last_call_id
+                    except Exception:
+                        # Never-worse-than-today guarantee. ``last_error`` is set only on a retry,
+                        # i.e. only once a prior attempt already produced an unusable body. If the
+                        # enforced retry itself fails at the provider we surface that ORIGINAL parse
+                        # error, so callers (Atlas/Hermes fail-soft, which key off the parse error)
+                        # see exactly the exception they would have seen before this change. Bare
+                        # ``Exception`` is deliberate: the guarantee is "any failure degrades to the
+                        # prior error", which a narrower tuple would not deliver — an un-enumerated
+                        # provider error would escape as a brand-new failure class. On attempt 0 of
+                        # the tool-free path ``last_error`` is None and the error propagates as-is.
+                        if last_error is None:
+                            raise
+                        logger.warning(
+                            "research_agent enforced retry failed at the provider for %s; "
+                            "re-raising the original parse failure",
+                            schema_name,
+                            exc_info=True,
+                        )
+                        raise last_error from None
+                try:
+                    # Guard empty/whitespace before json.loads: an empty body from the provider
+                    # (openrouter/auto under high cost_quality_tradeoff + 25-analyst fan-out) surfaces
+                    # as raw="" here. Let it fail with a clear ValueError so the retry/fail-soft path
+                    # can diagnose and handle it — a bare json.loads("") raises JSONDecodeError with a
+                    # generic message that buries the real cause in the logs (#814).
+                    stripped = _strip_json_fence(raw or "")
+                    if not stripped:
+                        raise ValueError(
+                            f"empty LLM response from {effective_model!r} "
+                            f"(attempt {attempt + 1}/{max_retries + 1})"
+                        )
+                    data = json.loads(stripped)
+                    return output_model.model_validate(data)
+                except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+                    last_error = exc
                     logger.warning(
-                        "research_agent enforced retry failed at the provider for %s; "
-                        "re-raising the original parse failure",
+                        "research_agent attempt %d/%d failed for %s: %s",
+                        attempt + 1,
+                        max_retries + 1,
                         schema_name,
-                        exc_info=True,
+                        exc,
                     )
-                    raise last_error from None
-            try:
-                # Guard empty/whitespace before json.loads: an empty body from the provider
-                # (openrouter/auto under high cost_quality_tradeoff + 25-analyst fan-out) surfaces
-                # as raw="" here. Let it fail with a clear ValueError so the retry/fail-soft path
-                # can diagnose and handle it — a bare json.loads("") raises JSONDecodeError with a
-                # generic message that buries the real cause in the logs (#814).
-                stripped = _strip_json_fence(raw or "")
-                if not stripped:
-                    raise ValueError(
-                        f"empty LLM response from {effective_model!r} "
-                        f"(attempt {attempt + 1}/{max_retries + 1})"
-                    )
-                data = json.loads(stripped)
-                return output_model.model_validate(data)
-            except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-                last_error = exc
-                logger.warning(
-                    "research_agent attempt %d/%d failed for %s: %s",
-                    attempt + 1,
-                    max_retries + 1,
-                    schema_name,
-                    exc,
-                )
-                if attempt == max_retries:
+                    if attempt == max_retries:
+                        if call is not None:
+                            call.set_no_artifact_reason(NoArtifactReason.VALIDATION_REJECTED)
+                        break
                     if call is not None:
                         call.set_no_artifact_reason(NoArtifactReason.VALIDATION_REJECTED)
-                    break
-                if call is not None:
-                    call.set_no_artifact_reason(NoArtifactReason.VALIDATION_REJECTED)
-                messages = messages + [
-                    {"role": "assistant", "content": raw or ""},
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Your previous response did not validate against {schema_name}. "
-                            f"Error: {exc}\n\nRe-emit a single JSON object that validates. "
-                            f"No prose, no code fences."
-                        ),
-                    },
-                ]
+                    messages = messages + [
+                        {"role": "assistant", "content": raw or ""},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Your previous response did not validate against {schema_name}. "
+                                f"Error: {exc}\n\nRe-emit a single JSON object that validates. "
+                                f"No prose, no code fences."
+                            ),
+                        },
+                    ]
             finally:
                 if call is not None:
                     call.finalize()

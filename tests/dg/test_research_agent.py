@@ -17,12 +17,17 @@ from digigraph.graph.research_agent import (
 from openai.types.chat import ChatCompletion
 from openai.types.chat import ChatCompletionMessage as OpenAIMessage
 from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_message_function_tool_call import (
+    ChatCompletionMessageFunctionToolCall,
+    Function,
+)
 from pydantic import BaseModel, Field, ValidationError
 
 from digigraph import usage
 from digillm import (
     CallPurpose,
     NoArtifactReason,
+    ProviderAttemptRecord,
     ProviderCallContextHandle,
     ProviderCallRecord,
     TelemetryRecord,
@@ -356,6 +361,88 @@ class TestRunResearchAgent:
             NoArtifactReason.CONSUMED_INLINE,
         ]
         assert calls[1].parent_call_id == calls[0].call_id
+
+    def test_tool_path_deferral_survives_a_failing_tool(self) -> None:
+        """A deferred tool-selection record must outlive an exception from the tool loop.
+
+        ``defer_finalization`` holds the successful tool-selection record in the handle until
+        ``finalize()`` delivers it. If the ``finally`` did not span the tool-loop call, an
+        exception out of ``execute_tool`` would discard that record while its physical attempt
+        row survives — an attempt whose ``call_id`` has no logical row, which migration 067's
+        ``fk_olympus_provider_attempts_call`` will reject once the writer lands.
+        """
+        tool_call = ChatCompletion(
+            id="cmpl-tool-call",
+            created=0,
+            model="served-model",
+            object="chat.completion",
+            choices=[
+                Choice(
+                    index=0,
+                    finish_reason="tool_calls",
+                    message=OpenAIMessage(
+                        role="assistant",
+                        content=None,
+                        tool_calls=[
+                            ChatCompletionMessageFunctionToolCall(
+                                id="call-1",
+                                type="function",
+                                function=Function(name="probe", arguments="{}"),
+                            )
+                        ],
+                    ),
+                )
+            ],
+        )
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.return_value = tool_call
+        records: list[TelemetryRecord] = []
+
+        class Collector:
+            def observe(self, record: TelemetryRecord) -> None:
+                records.append(record)
+
+        def exploding_tool(name: str, arguments: dict[str, object]) -> str:
+            raise RuntimeError("tool blew up")
+
+        previous_observer = digillm_client._telemetry_observer
+        digillm_client.clear_caches()
+        set_telemetry_observer(Collector())
+        try:
+            with (
+                usage.call_context(node_run_id=uuid4()),
+                patch.object(digillm_client, "get_client_for_model", return_value=fake_client),
+                pytest.raises(RuntimeError, match="tool blew up"),
+            ):
+                run_research_agent(
+                    skill_text="x",
+                    phase_inputs={},
+                    shared_context={},
+                    output_model=_SampleOutput,
+                    model="test-model",
+                    max_retries=0,
+                    tools=[
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "probe",
+                                "description": "probe",
+                                "parameters": {"type": "object", "properties": {}},
+                            },
+                        }
+                    ],
+                    execute_tool=exploding_tool,
+                )
+        finally:
+            set_telemetry_observer(previous_observer)
+            digillm_client.clear_caches()
+
+        calls = [record for record in records if isinstance(record, ProviderCallRecord)]
+        attempts = [record for record in records if isinstance(record, ProviderAttemptRecord)]
+        assert calls, "the deferred tool-selection record was dropped"
+        logical_ids = {call.call_id for call in calls}
+        orphans = [attempt.call_id for attempt in attempts if attempt.call_id not in logical_ids]
+        assert not orphans, f"attempt rows with no logical call: {orphans}"
 
     def test_deferred_record_survives_an_unexpected_consumer_exception(self) -> None:
         """A deferred logical record must still reach the observer when the consumer raises.

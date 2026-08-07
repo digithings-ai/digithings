@@ -8,9 +8,12 @@
 -- Event times come from the producer (`started_at`, `finished_at`); `recorded_at` is the database
 -- write clock. Missing provider usage and cost remain NULL rather than being fabricated as zero.
 --
--- RLS is enabled with no policies, and all privileges are revoked from client roles. service_role
--- receives SELECT and INSERT only. A trigger rejects UPDATE and DELETE for every role, including
--- owner-class maintenance sessions, so corrections must append superseding records in later work.
+-- RLS is enabled with no policies, and all privileges are revoked from client roles. Privileges are
+-- revoked from service_role before the grant as well: a Supabase project ships ALTER DEFAULT
+-- PRIVILEGES ... GRANT ALL ON TABLES TO service_role, so an additive grant alone would leave the
+-- inherited UPDATE/DELETE/TRUNCATE in place. After the revoke, service_role receives SELECT and
+-- INSERT only. Triggers reject UPDATE and DELETE per row and TRUNCATE per statement for every role,
+-- including owner-class maintenance sessions, so corrections must append superseding records.
 --
 -- Unwrapped on purpose: db-migrate.yml applies the file and its ledger row in one psql
 -- single-transaction call. All DDL is replay-safe through IF NOT EXISTS and trigger replacement.
@@ -103,11 +106,15 @@ CREATE TABLE IF NOT EXISTS public.olympus_provider_calls (
             (outcome = 'failed' AND error_type IS NOT NULL)
             OR (outcome <> 'failed' AND error_type IS NULL)
         ),
+    -- IS NOT DISTINCT FROM, not `=`: a NULL no_artifact_reason makes `=` evaluate to NULL, and
+    -- Postgres admits a NULL CHECK. Plain equality therefore let `(failed, NULL, artifacts)` and
+    -- `(cancelled, NULL, artifacts)` through — rows the Pydantic producer rejects, and which the
+    -- append-only triggers would then make permanent and uncorrectable.
     CONSTRAINT chk_olympus_provider_calls_terminal_disposition
         CHECK (
-            (outcome = 'failed' AND no_artifact_reason = 'call_failed')
-            OR (outcome = 'cancelled' AND no_artifact_reason = 'call_cancelled')
-            OR outcome IN ('started', 'succeeded')
+            outcome IN ('started', 'succeeded')
+            OR (outcome = 'failed' AND no_artifact_reason IS NOT DISTINCT FROM 'call_failed')
+            OR (outcome = 'cancelled' AND no_artifact_reason IS NOT DISTINCT FROM 'call_cancelled')
         )
 );
 
