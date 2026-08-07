@@ -3,12 +3,34 @@ import type { UIMessage } from "ai";
 import {
   mapFoundryEvent,
   createFoundryStreamResponse,
+  FoundryToolLeakFilter,
+  stripFoundryCitationMarkers,
   type OpenAIResponsesClientLike,
   type FoundryStreamEvent,
 } from "./foundry-stream";
 import { toDigiChatActivity, type ActivitySpan } from "./chat-activity";
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("FoundryToolLeakFilter", () => {
+  it("drops the fragmented remote_functions.azure_ai_search tool leak", () => {
+    const filter = new FoundryToolLeakFilter();
+    const parts = ["(remote", "_functions", ".azure", "_ai", "_search", ")"];
+    expect(parts.map((p) => filter.push(p))).toEqual([null, null, null, null, null, null]);
+  });
+
+  it("passes through normal answer text", () => {
+    const filter = new FoundryToolLeakFilter();
+    expect(filter.push("Send ")).toBe("Send ");
+    expect(filter.push("the key")).toBe("the key");
+  });
+
+  it("strips Foundry citation markers from a delta", () => {
+    expect(stripFoundryCitationMarkers("key.【9:0†source】")).toBe("key.");
+    const filter = new FoundryToolLeakFilter();
+    expect(filter.push("X-API-KEY【6:2†source】")).toBe("X-API-KEY");
+  });
+});
 
 function userMessage(text: string): UIMessage {
   return { id: "u1", role: "user", parts: [{ type: "text", text }] } as UIMessage;
