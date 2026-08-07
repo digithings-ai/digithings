@@ -139,6 +139,14 @@ describe("the rows a reader ends up seeing", () => {
     }
   });
 
+  it("does not invent a second file_search row from opaque doc_N annotations", () => {
+    // The fixture's message carries doc_0/doc_3 → search.windows.net citations.
+    // Those have no chunk body; real hits already sit on azure_ai_search.
+    expect(rows().filter((r) => r.kind === "tool_result" && r.name === "file_search")).toHaveLength(
+      0,
+    );
+  });
+
   it("shows no thinking row at all while the agent emits no reasoning text", () => {
     // Six reasoning items in this stream, none with text — so none on screen.
     expect(rows().filter((r) => r.kind === "trace")).toHaveLength(0);

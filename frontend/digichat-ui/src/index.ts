@@ -4,7 +4,13 @@ export { CopyButton } from "./components/CopyButton";
 export { DigiChatMark, DigiChatWordmark } from "./components/DigiChatMark";
 export { ChatActivities } from "./components/ChatActivities";
 export { MiniMarkdown } from "./components/MiniMarkdown";
-export { toCanonRows, outcomeMeta, type CanonActivityRow } from "./activity-view";
+export {
+  toCanonRows,
+  outcomeMeta,
+  citationHits,
+  stripFoundryCitationMarkers,
+  type CanonActivityRow,
+} from "./activity-view";
 export type {
   DigiChatActivity,
   DigiChatBranding,

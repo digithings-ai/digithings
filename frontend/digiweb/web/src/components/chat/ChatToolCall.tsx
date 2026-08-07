@@ -1,7 +1,7 @@
 "use client";
 /**
  * ChatToolCall — the collapsible tool-call block promoted from the chatbot
- * reference family (#1418): one mono line — caret · tool(args) · status mark ·
+ * reference family (#1418): one mono line — tool(args) · status mark ·
  * timing — that folds its output away, the Claude Code / opencode chain
  * pattern. The tool name takes the surface accent; ok/error wear the
  * money-adjacent up/down reads; a running call breathes its mark. Sits on the
@@ -11,10 +11,10 @@
  * `{ text, tone }` for up/down reads) and/or arbitrary `children` rendered
  * after them — enough surface for digichat-ui's ChatActivities to rebuild its
  * tool_call / tool_result / trace kinds on this primitive. A call with no
- * body renders its head as a plain row (no button, caret hidden). Caret art,
- * the aria-expanded rotate, color-mix rails, and the running pulse live in
- * styles/chat-widgets.css (import it once app-wide; see the wiring note
- * there).
+ * body renders its head as a plain row (no button). The left rail, color-mix
+ * borders, and the running pulse live in styles/chat-widgets.css (import it
+ * once app-wide; see the wiring note there). Click the head to expand —
+ * no caret glyph; `aria-expanded` carries the disclosure state.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -56,18 +56,15 @@ function HeadContent({
   args,
   status,
   duration,
-  expandable,
 }: {
   name: string;
   args?: string;
   status: ChatToolCallStatus;
   duration?: string;
-  expandable: boolean;
 }) {
   const mark = MARKS[status];
   return (
     <>
-      <span className={`tc-caret${expandable ? "" : " invisible"}`} aria-hidden="true" />
       {/* `shrink-0 whitespace-nowrap`: the name is the one thing on this line
           that must never break. Without them a flex row under width pressure
           (a narrow embed, a long args string) shrinks every item somewhat
@@ -127,7 +124,7 @@ export function ChatToolCall({
 
   return (
     <div
-      className={`tc pl-[0.7rem]${status === "error" ? " tc--err" : ""}${
+      className={`tc${status === "error" ? " tc--err" : ""}${
         className ? ` ${className}` : ""
       }`}
     >
@@ -138,17 +135,11 @@ export function ChatToolCall({
           aria-expanded={isOpen}
           onClick={toggle}
         >
-          <HeadContent name={name} args={args} status={status} duration={duration} expandable />
+          <HeadContent name={name} args={args} status={status} duration={duration} />
         </button>
       ) : (
         <div className={HEAD_CLS}>
-          <HeadContent
-            name={name}
-            args={args}
-            status={status}
-            duration={duration}
-            expandable={false}
-          />
+          <HeadContent name={name} args={args} status={status} duration={duration} />
         </div>
       )}
       {hasBody && isOpen ? (

@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { liveActivityLabel, outcomeMeta, toCanonRows, type CanonActivityRow } from "./activity-view";
+import {
+  citationHits,
+  chainActivities,
+  distinctHitPath,
+  liveActivityLabel,
+  outcomeMeta,
+  stripFoundryCitationMarkers,
+  toCanonRows,
+  WORKING_LABEL,
+  type CanonActivityRow,
+} from "./activity-view";
 import type { DigiChatActivity } from "./types";
 
 function rowsOf(activities: DigiChatActivity[]): CanonActivityRow[] {
@@ -53,9 +63,7 @@ describe("toCanonRows — tool calls", () => {
       status: "ok",
       meta: "2 notes",
     });
-    // Folded by default — a Claude Code / opencode tool row, not a citations
-    // panel forced open. A search's chunks can run long; several searches on
-    // one answer used to unfold every one of them onto the screen at once.
+    // Folded under the tool row — how the retrieve arrived, not a separate panel.
     expect(row).not.toHaveProperty("defaultOpen");
     expect(row.kind === "tool" && row.sources).toEqual([
       { title: "Auth", path: "docs/auth.md", tier: "peer_reviewed", year: 2024 },
@@ -88,6 +96,7 @@ describe("toCanonRows — tool calls", () => {
     expect(call).not.toHaveProperty("defaultOpen");
     expect(trace).not.toHaveProperty("defaultOpen");
     expect(result).not.toHaveProperty("defaultOpen");
+    expect(result.kind === "tool" && result.sources).toHaveLength(1);
   });
 
   it("maps a trace step to a bodyless tool row, running until done", () => {
@@ -245,5 +254,81 @@ describe("liveActivityLabel", () => {
         { kind: "tool_result", name: "azure_ai_search", query: "auth", count: 1, hits: [] },
       ]),
     ).toBeUndefined();
+  });
+});
+
+describe("chainActivities", () => {
+  it("strips Working… so it never becomes a permanent chain row", () => {
+    expect(
+      chainActivities([
+        { kind: "trace", label: WORKING_LABEL, done: false },
+        { kind: "tool_call", name: "azure_ai_search", query: "docs" },
+        { kind: "trace", label: WORKING_LABEL, done: true },
+      ]),
+    ).toEqual([{ kind: "tool_call", name: "azure_ai_search", query: "docs" }]);
+  });
+
+  it("keeps real traces", () => {
+    expect(chainActivities([{ kind: "trace", label: "Planning", done: true }])).toEqual([
+      { kind: "trace", label: "Planning", done: true },
+    ]);
+  });
+});
+
+describe("distinctHitPath", () => {
+  it("drops the path when Foundry (and kin) set title === path", () => {
+    expect(distinctHitPath("page__docs___chunk0", "page__docs___chunk0")).toBeNull();
+  });
+
+  it("keeps a real path that differs from the title", () => {
+    expect(distinctHitPath("Auth overview", "docs/auth.md")).toBe("docs/auth.md");
+  });
+});
+
+describe("citationHits", () => {
+  it("collects unique hits from every settled search on the turn", () => {
+    expect(
+      citationHits([
+        {
+          kind: "tool_result",
+          name: "azure_ai_search",
+          query: "auth",
+          count: 2,
+          hits: [
+            { title: "A", path: "a", snippet: "one" },
+            { title: "B", path: "b" },
+          ],
+        },
+        {
+          kind: "tool_result",
+          name: "azure_ai_search",
+          query: "auth again",
+          count: 1,
+          hits: [{ title: "A", path: "a", snippet: "dup" }],
+        },
+      ]),
+    ).toEqual([
+      { title: "A", path: "a", snippet: "one" },
+      { title: "B", path: "b" },
+    ]);
+  });
+
+  it("ignores non-search activities", () => {
+    expect(
+      citationHits([
+        { kind: "trace", label: "Planning", done: true },
+        { kind: "tool_call", name: "azure_ai_search", query: "auth" },
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("stripFoundryCitationMarkers", () => {
+  it("removes 【N:M†source】 glyphs from the prose", () => {
+    expect(
+      stripFoundryCitationMarkers(
+        "Use the X-API-Key header\u30109:0\u2020source\u3011 on every request\u30109:3\u2020source\u3011.",
+      ),
+    ).toBe("Use the X-API-Key header on every request.");
   });
 });

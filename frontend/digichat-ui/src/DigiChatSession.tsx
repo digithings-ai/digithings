@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChatStreamCursor, TerminalStepCaret } from "@digithings/web";
-import { liveActivityLabel } from "./activity-view";
+import { ChatStreamCursor } from "@digithings/web";
+import { stripFoundryCitationMarkers, chainActivities } from "./activity-view";
 import { ChatActivities } from "./components/ChatActivities";
 import { CopyButton } from "./components/CopyButton";
 import { DigiChatWordmark } from "./components/DigiChatMark";
@@ -96,9 +96,10 @@ export function DigiChatSession({
     .join(" ");
 
   const renderAssistant = (content: string, streaming: boolean) => {
-    if (renderAssistantContent) return renderAssistantContent(content, streaming);
-    if (!content) return null;
-    return <MiniMarkdown text={content} />;
+    const clean = stripFoundryCitationMarkers(content);
+    if (renderAssistantContent) return renderAssistantContent(clean, streaming);
+    if (!clean) return null;
+    return <MiniMarkdown text={clean} />;
   };
 
   return (
@@ -189,14 +190,9 @@ export function DigiChatSession({
 
         {messages.map((m, i) => {
           const streaming = busy && m.role === "assistant" && i === messages.length - 1;
-          /* No prose yet. Once the answer starts arriving the text itself is
-             the progress, so the caret goes back to a bare trailing blink.
-             Activities do NOT end the wait any more: they are what the caret
-             now reports on, so ending it there would hide the one state where
-             we can actually name what is happening. */
-          const waiting = streaming && !m.content;
-          /* From the stream, or absent — never invented. See liveActivityLabel. */
-          const liveLabel = waiting ? liveActivityLabel(m.activities ?? []) : undefined;
+          /* Working… (and any other Foundry ack) is caret-only noise in the
+             chain — strip it. Tool rows carry their own running/ok state. */
+          const chain = chainActivities(m.activities ?? []);
           return (
             <div key={i} className={`dc-msg dc-${m.role}`}>
               <span className="dc-who" aria-hidden="true">
@@ -205,24 +201,14 @@ export function DigiChatSession({
               <div className="dc-body">
                 {m.role === "assistant" ? (
                   <>
-                    {m.activities?.length ? <ChatActivities activities={m.activities} /> : null}
+                    {chain.length ? <ChatActivities activities={chain} /> : null}
                     {renderAssistant(m.content, streaming)}
-                    {/* Exactly one caret, whichever state we are in — and it
-                        never says more than the stream told us. A real step
-                        gets typed out; with no step to name, the bare cursor
-                        blinks and claims nothing. What this replaced cycled a
-                        fixed script ("thinking", "routing through digigraph",
-                        …) tied to no actual step, which read as a placeholder
-                        because that is what it was. */}
-                    {waiting ? (
-                      liveLabel ? (
-                        <TerminalStepCaret steps={[liveLabel]} activeIndex={0} />
-                      ) : (
-                        <ChatStreamCursor className="dt-cur" />
-                      )
-                    ) : streaming ? (
-                      <ChatStreamCursor className="dt-cur" />
-                    ) : null}
+                    {/* One bare flash for the whole turn: under an empty wait,
+                        under the growing tool chain, then under the answer as
+                        it streams. Tool rows themselves say Searching/done —
+                        no typed "Working…" / "Searching for…" line on top.
+                        Gone the moment busy clears. */}
+                    {streaming ? <ChatStreamCursor className="dt-cur" /> : null}
                   </>
                 ) : (
                   m.content
@@ -231,11 +217,30 @@ export function DigiChatSession({
               {/* No copy button on embed: the clipboard API is unavailable in a
                   cross-origin iframe, so the button silently no-ops. */}
               {layout !== "embed" && m.role === "assistant" && !streaming && m.content ? (
-                <CopyButton text={m.content} className="dc-msg-copy" ariaLabel="Copy answer" />
+                <CopyButton
+                  text={stripFoundryCitationMarkers(m.content)}
+                  className="dc-msg-copy"
+                  ariaLabel="Copy answer"
+                />
               ) : null}
             </div>
           );
         })}
+
+        {/* useChat only appends the assistant message once the first stream
+            chunk arrives — often seconds after submit (Foundry create +
+            empty reasoning). Until then the last row is still the user turn,
+            so mount a placeholder assistant with the same bare caret. */}
+        {busy && (messages.length === 0 || messages[messages.length - 1]?.role === "user") ? (
+          <div className="dc-msg dc-assistant" aria-busy="true">
+            <span className="dc-who" aria-hidden="true">
+              ·
+            </span>
+            <div className="dc-body">
+              <ChatStreamCursor className="dt-cur" />
+            </div>
+          </div>
+        ) : null}
 
         {showByok && quotaPrompt && !providerIsSet ? (
           <div className="dc-quota-banner" role="status">

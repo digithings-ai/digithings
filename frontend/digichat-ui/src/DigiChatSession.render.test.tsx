@@ -1,13 +1,14 @@
 /**
- * SSR smoke tests for the assistant turn's caret. The transcript shows exactly
- * one waiting indicator at a time, and which one it is carries meaning: the house
- * type-out while nothing has come back, the bare streaming caret once prose is
- * arriving, none at all when the turn is settled.
+ * SSR smoke tests for the assistant turn's caret.
  *
- * Regression: waiting rendered BOTH — a <ChatStreamCursor> stacked above a
- * local "thinking …" row with three bouncing dots — so two indicators blinked
- * at once saying the same thing, and the dots' reduced-motion branch swapped
- * one infinite animation for another instead of settling.
+ * Model: one bare flash cursor for the whole busy turn — under an empty wait,
+ * under the growing tool chain, then under the streaming answer. Tool rows
+ * carry their own running/ok state; we do not type "Working…" / "Searching…"
+ * into a second indicator. Cursor gone when busy clears.
+ *
+ * Regression: waiting used to render BOTH a stream caret and a typed step
+ * line (or a local "thinking …" + bouncing dots), so two indicators blinked
+ * at once.
  */
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -29,56 +30,37 @@ function sessionWith(messages: DigiChatMessage[], busy: boolean): string {
   return renderToStaticMarkup(<DigiChatSession chat={chat} showIntro={false} />);
 }
 
-/** The typed line's frame — present only when the step loader is mounted. */
+/** Typed step loader — must never appear; progress is the chain + bare caret. */
 const STEP_LINE = "tl-line";
 /** The bare streaming caret digichat dresses with .dt-cur. */
 const STREAM_CARET = "dt-cur";
 
-describe("assistant turn — waiting", () => {
-  /** Nothing has come back at all — the stream has named no step. */
-  const waiting: DigiChatMessage[] = [
-    { role: "user", content: "how does auth work" },
-    { role: "assistant", content: "" },
-  ];
+describe("assistant turn — busy", () => {
+  it("shows a placeholder caret immediately after submit, before any assistant message exists", () => {
+    const html = sessionWith([{ role: "user", content: "how does auth work" }], true);
+    expect(html).toContain(STREAM_CARET);
+    expect(html).toContain('aria-busy="true"');
+    expect(html).not.toContain(STEP_LINE);
+  });
 
-  /** The stream has named a step; the caret has something true to say. */
-  const withStep: DigiChatMessage[] = [
-    { role: "user", content: "how does auth work" },
-    {
-      role: "assistant",
-      content: "",
-      activities: [{ kind: "trace", label: "Thinking", done: false }],
-    },
-  ];
-
-  // With nothing to report, the caret claims nothing: a bare blink, no words.
-  // It used to cycle a fixed script here regardless of what was happening.
-  it("shows a bare cursor — not invented words — when the stream has said nothing", () => {
-    const html = sessionWith(waiting, true);
+  it("shows a bare cursor — not invented words — while waiting for the first event", () => {
+    const html = sessionWith(
+      [
+        { role: "user", content: "how does auth work" },
+        { role: "assistant", content: "" },
+      ],
+      true,
+    );
     expect(html).toContain(STREAM_CARET);
     expect(html).not.toContain(STEP_LINE);
-    for (const invented of ["thinking", "routing through", "gathering context", "composing"]) {
+    // Real assistant row owns the caret — no second placeholder.
+    expect(html).not.toContain('aria-busy="true"');
+    for (const invented of ["thinking", "working", "routing through", "gathering context"]) {
       expect(html.toLowerCase()).not.toContain(invented);
     }
   });
 
-  it("types the REAL step once the stream names one", () => {
-    const html = sessionWith(
-      [
-        { role: "user", content: "hi" },
-        {
-          role: "assistant",
-          content: "",
-          activities: [{ kind: "trace", label: "Thinking", done: false }],
-        },
-      ],
-      true,
-    );
-    expect(html).toContain(STEP_LINE);
-    expect(html).toContain("Thinking");
-  });
-
-  it("names the tool's own query while a search is in flight", () => {
+  it("keeps the bare cursor under an in-flight tool chain (no typed status line)", () => {
     const html = sessionWith(
       [
         { role: "user", content: "hi" },
@@ -90,70 +72,15 @@ describe("assistant turn — waiting", () => {
       ],
       true,
     );
-    expect(html).toContain('Searching for &quot;/api/config&quot;');
+    expect(html).toContain(STREAM_CARET);
+    expect(html).not.toContain(STEP_LINE);
+    expect(html).not.toContain("Searching for");
+    expect(html).toContain("dc-activities");
+    expect(html).toContain("azure_ai_search");
+    expect(html).toContain("/api/config");
   });
 
-  it("shows only ONE caret while waiting, never a step line plus a stream caret", () => {
-    const html = sessionWith(
-      [
-        { role: "user", content: "hi" },
-        {
-          role: "assistant",
-          content: "",
-          activities: [{ kind: "trace", label: "Thinking", done: false }],
-        },
-      ],
-      true,
-    );
-    expect(html).toContain(STEP_LINE);
-    expect(html).not.toContain(STREAM_CARET);
-  });
-
-  it("keeps the live step readable with scripts off", () => {
-    const html = sessionWith(
-      [
-        { role: "user", content: "hi" },
-        {
-          role: "assistant",
-          content: "",
-          activities: [{ kind: "trace", label: "Thinking", done: false }],
-        },
-      ],
-      true,
-    );
-    // The label is typed imperatively, so <noscript> carries it.
-    expect(html).toContain("<noscript>");
-    expect(html).toContain("Thinking");
-  });
-
-  // Regression: the caret's screen-reader line used Tailwind's `.sr-only`, a
-  // utility only emitted into an app whose own source uses the class. This app
-  // is consumed by digithings-web, which never does — so the hidden span
-  // rendered as ordinary visible text, printing the step word a second time
-  // beside the one being typed. The class now ships with the component.
-  it("hides the screen-reader line behind a class the component owns", () => {
-    const html = sessionWith(withStep, true);
-    expect(html).toContain('class="tl-sr"');
-    expect(html).not.toContain("sr-only");
-  });
-
-  // Regression: role="status" is aria-live=polite, and its text was the step
-  // label, which changes ~every 2.5s forever while uncontrolled. A screen
-  // reader got four invented phrases on a loop for the length of the wait,
-  // where the indicator this replaced announced one static line once.
-  // The caret is now always caller-driven, so it announces the real step —
-  // which is correct: a step that came off the stream IS progress, and the
-  // "Working…" fallback exists for callers that have no step to give.
-  it("announces the real step, since the session only ever supplies a real one", () => {
-    const html = sessionWith(withStep, true);
-    const status = html.match(/<span class="tl-sr" role="status">([^<]*)</)?.[1];
-    expect(status).toBe("Thinking");
-    expect(status).not.toContain("digigraph");
-  });
-});
-
-describe("assistant turn — past the wait", () => {
-  it("drops the step loader for the bare caret once prose is streaming", () => {
+  it("keeps the bare cursor under streaming prose", () => {
     const html = sessionWith(
       [
         { role: "user", content: "hi" },
@@ -165,27 +92,46 @@ describe("assistant turn — past the wait", () => {
     expect(html).not.toContain(STEP_LINE);
   });
 
-  // Superseded: a tool chain used to END the wait, which threw away the one
-  // state where we can actually name what is happening. It now DRIVES it.
-  it("keeps naming the step while a tool chain runs with no prose yet", () => {
+  it("never mounts a typed step loader alongside the stream caret", () => {
     const html = sessionWith(
       [
         { role: "user", content: "hi" },
         {
           role: "assistant",
           content: "",
-          activities: [{ kind: "tool_call", name: "digivault.search", query: "auth" }],
+          activities: [{ kind: "trace", label: "Thinking", done: false }],
         },
       ],
       true,
     );
-    expect(html).toContain(STEP_LINE);
-    expect(html).toContain('Searching for &quot;auth&quot;');
-    // The chain renders too — the caret is the at-a-glance line above it.
-    expect(html).toContain("dc-activities");
+    expect(html).toContain(STREAM_CARET);
+    expect(html).not.toContain(STEP_LINE);
   });
 
-  it("shows no caret at all when the turn is settled", () => {
+  it("strips ephemeral Working… from the chain while the caret still flashes", () => {
+    const html = sessionWith(
+      [
+        { role: "user", content: "hi" },
+        {
+          role: "assistant",
+          content: "",
+          activities: [
+            { kind: "trace", label: "Working…", done: false },
+            { kind: "tool_call", name: "azure_ai_search", query: "docs" },
+          ],
+        },
+      ],
+      true,
+    );
+    expect(html).toContain(STREAM_CARET);
+    expect(html).toContain("azure_ai_search");
+    // Working… must not appear as a chain row (caret is unlabeled).
+    expect(html).not.toMatch(/Working…/);
+  });
+});
+
+describe("assistant turn — settled", () => {
+  it("shows no caret when the turn is settled", () => {
     const html = sessionWith(
       [
         { role: "user", content: "hi" },
@@ -195,5 +141,31 @@ describe("assistant turn — past the wait", () => {
     );
     expect(html).not.toContain(STEP_LINE);
     expect(html).not.toContain(STREAM_CARET);
+  });
+
+  it("strips Foundry 【N:M†source】 markers from the answer prose", () => {
+    const html = sessionWith(
+      [
+        { role: "user", content: "how does auth work" },
+        {
+          role: "assistant",
+          content: "Use the X-API-Key header\u30109:0\u2020source\u3011.",
+          activities: [
+            {
+              kind: "tool_result",
+              name: "azure_ai_search",
+              query: "auth",
+              count: 1,
+              hits: [{ title: "page__docs___chunk0", path: "page__docs___chunk0", snippet: "Keys…" }],
+            },
+          ],
+        },
+      ],
+      false,
+    );
+    expect(html).toContain("Use the X-API-Key header.");
+    expect(html).not.toContain("\u3010");
+    expect(html).not.toContain("dc-citations");
+    expect(html).toContain("azure_ai_search");
   });
 });

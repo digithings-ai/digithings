@@ -170,6 +170,17 @@ function searchOutputDocuments(raw: unknown): ActivityDocument[] {
   return documents;
 }
 
+/** Foundry's azure_ai_search message annotations: `doc_N` + search-service root.
+ *  No chunk body; the real hits already came from azure_ai_search_call_output. */
+function isOpaqueSearchCitation(title: string, path: string): boolean {
+  if (/^doc_\d+$/i.test(title)) return true;
+  try {
+    return new URL(path).hostname.endsWith(".search.windows.net");
+  } catch {
+    return false;
+  }
+}
+
 function extractTextDelta(value: unknown): string | null {
   if (typeof value === "string") return value;
   if (!value || typeof value !== "object") return null;
@@ -271,15 +282,22 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
     // annotates with `filename`, while the azure_ai_search tool emits
     // `{type: "url_citation", url, title}` with no filename at all. Handle both
     // so sources show up regardless of which grounding tool an agent uses.
+    //
+    // Skip the opaque azure_ai_search citation shape: title `doc_0`/`doc_3`
+    // and url `*.search.windows.net/` — no chunk body, nothing a reader can
+    // open. Real chunks already arrived on `azure_ai_search_call_output` with
+    // id + content (see searchOutputDocuments). Surfacing these as a second
+    // `file_search` row was the empty `doc_0` + search-service-root hit.
     const documents: ActivityDocument[] = [];
     const seen = new Set<string>();
     for (const content of item.content ?? []) {
       for (const annotation of content.annotations ?? []) {
         const path = annotation.type === "url_citation" ? annotation.url : annotation.filename;
         if (!path || seen.has(path)) continue;
-        seen.add(path);
         const title =
           (annotation.type === "url_citation" ? annotation.title : annotation.filename) || path;
+        if (isOpaqueSearchCitation(title, path)) continue;
+        seen.add(path);
         documents.push({ title, path });
       }
     }

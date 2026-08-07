@@ -43,31 +43,52 @@ import {
   ChatToolCall,
   ChatWidgetFrame,
 } from "@digithings/web";
-import { toCanonRows, type CanonActivityRow } from "../activity-view";
+import { distinctHitPath, toCanonRows, type CanonActivityRow } from "../activity-view";
 import type { DigiChatActivity, VaultHitSummary } from "../types";
 
 /**
- * Retrieved documents, as the fold-out body of a `tool_result` row.
- *
- * Folded by default — `activity-view.ts` attaches `sources` but does not set
- * `defaultOpen`, so the head is the scannable Claude Code / opencode tool row
- * and the hit list mounts only when the reader expands.
+ * Retrieved documents, as the fold-out body of a `tool_result` row — the
+ * chunks Foundry (or digivault) already attached to that search. Each snippet
+ * is a nested `<details>`, closed by default.
  */
+function HitHead({ hit, path }: { hit: VaultHitSummary; path: string | null }) {
+  return (
+    <>
+      <span className="dc-act-hit-title">{hit.title}</span>
+      {hit.tier ? <span className="dc-act-hit-tier">{hit.tier}</span> : null}
+      {typeof hit.year === "number" ? (
+        <span className="dc-act-hit-year">{hit.year}</span>
+      ) : null}
+      {path ? <span className="dc-act-hit-path">{path}</span> : null}
+    </>
+  );
+}
+
 function SourceList({ sources }: { sources: VaultHitSummary[] }) {
   return (
     <ul className="dc-act-hits">
       {/* path is not unique — two chunks of one vault document share it. */}
-      {sources.map((hit, i) => (
-        <li key={`${hit.path}-${i}`}>
-          <span className="dc-act-hit-title">{hit.title}</span>
-          {hit.tier ? <span className="dc-act-hit-tier">{hit.tier}</span> : null}
-          {typeof hit.year === "number" ? (
-            <span className="dc-act-hit-year">{hit.year}</span>
-          ) : null}
-          <span className="dc-act-hit-path">{hit.path}</span>
-          {hit.snippet ? <p className="dc-act-hit-snippet">{hit.snippet}</p> : null}
-        </li>
-      ))}
+      {sources.map((hit, i) => {
+        const path = distinctHitPath(hit.title, hit.path);
+        const key = `${hit.path}-${i}`;
+        if (!hit.snippet) {
+          return (
+            <li key={key}>
+              <HitHead hit={hit} path={path} />
+            </li>
+          );
+        }
+        return (
+          <li key={key}>
+            <details className="dc-act-hit">
+              <summary className="dc-act-hit-summary">
+                <HitHead hit={hit} path={path} />
+              </summary>
+              <p className="dc-act-hit-snippet">{hit.snippet}</p>
+            </details>
+          </li>
+        );
+      })}
     </ul>
   );
 }
