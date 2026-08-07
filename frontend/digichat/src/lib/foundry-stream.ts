@@ -87,8 +87,11 @@ const FILE_SEARCH_LABEL = "Searching knowledge base…";
  * `400 Not allowed when agent is specified` for "auto" / "concise" /
  * "detailed" alike. A reasoning SUMMARY has to be enabled on the agent
  * definition in Foundry; it cannot be requested per-call alongside
- * `agent_reference`. So a reasoning item is rendered as the fact that a step
- * happened, never as invented text.
+ * `agent_reference`. So a reasoning item with no text is DROPPED, not rendered
+ * as a bare "Thinking ✓": a row asserting a step happened while showing
+ * nothing is chrome, and it landed on every answer including two-word
+ * greetings that ran no tools. Enable a summary upstream and the rows appear
+ * on their own, carrying the real text.
  */
 const SEARCH_TOOL = "azure_ai_search";
 const SEARCH_LABEL = "Searching the knowledge base…";
@@ -102,11 +105,31 @@ interface OutputItemDoneEvent extends FoundryStreamEvent {
     arguments?: string;
     /** azure_ai_search_call_output: JSON string, `{"documents":[…]}`. */
     output?: string;
+    /** reasoning: `{type, text}` parts — empty unless a summary is enabled. */
+    summary?: unknown;
     status?: string;
     content?: Array<{
       annotations?: Array<{ type?: string; filename?: string; url?: string; title?: string }>;
     }>;
   };
+}
+
+/**
+ * The reasoning text on a reasoning item, or "" when there is none — which is
+ * every item today, since the agent runs with `reasoning.summary: null`.
+ * Both `summary` and `content` are arrays of `{type, text}` parts; take
+ * whichever is populated so enabling a summary upstream needs no change here.
+ */
+function reasoningText(item: { summary?: unknown; content?: unknown }): string {
+  const parts: string[] = [];
+  for (const list of [item.summary, item.content]) {
+    if (!Array.isArray(list)) continue;
+    for (const part of list) {
+      const text = (part as { text?: unknown } | null)?.text;
+      if (typeof text === "string" && text.trim()) parts.push(text.trim());
+    }
+  }
+  return parts.join("\n\n");
 }
 
 /** `arguments`/`output` arrive as JSON strings; a malformed one must not throw. */
@@ -202,16 +225,26 @@ function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | nul
     };
   }
 
-  // A reasoning step happened. Its text is NOT available (see the docblock
-  // above), so this row asserts only that the model thought — never a
-  // fabricated summary of what it thought.
+  // Reasoning, but ONLY when it carries text. The agent emits a reasoning item
+  // per internal step with `summary: [] content: []` unless a reasoning summary
+  // is enabled on its definition, so mapping these unconditionally put a
+  // "Thinking ✓" row on every answer — including a two-word greeting that ran
+  // no tools and had nothing to show. A row that asserts a step happened and
+  // then shows nothing is chrome, not transparency; the chain earns its space
+  // by carrying real output or it does not appear.
+  //
+  // When a summary IS enabled upstream these start arriving populated and the
+  // rows appear on their own, with the actual text, as a thinking disclosure.
   if (item?.type === "reasoning") {
+    const text = reasoningText(item);
+    if (!text) return null;
     return {
       type: "activity",
       span: {
         operation: "chat",
         status: "completed",
         label: REASONING_LABEL,
+        reasoningDelta: text,
       },
     };
   }
@@ -308,15 +341,15 @@ export function mapFoundryEvent(event: FoundryStreamEvent): FoundryServerEvent |
           },
         };
       }
-      if (item?.type === "reasoning") {
-        return {
-          type: "activity",
-          span: { operation: "chat", status: "started", label: REASONING_LABEL },
-        };
-      }
-      // message/…_output add nothing a reader can act on: the first is the
-      // answer itself (already streaming as text), the second is the tail of
-      // a search whose row is open.
+      // Reasoning is deliberately NOT opened here. At `.added` its text is
+      // never present (it is not present at `.done` either, today), and an
+      // opened row whose `.done` declines to settle it would hang as a
+      // permanently running "Thinking". Reasoning appears when it has
+      // something to say, or not at all.
+      //
+      // message/…_output add nothing a reader can act on either: the first is
+      // the answer itself (already streaming as text), the second is the tail
+      // of a search whose row is already open.
       return null;
     }
     case "response.output_item.done":
