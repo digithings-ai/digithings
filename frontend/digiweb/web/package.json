@@ -15,6 +15,7 @@
     "./styles/word-reveal.css": "./src/styles/word-reveal.css",
     "./styles/marquee.css": "./src/styles/marquee.css",
     "./styles/terminal-manifest.css": "./src/styles/terminal-manifest.css",
+    "./styles/terminal-loaders.css": "./src/styles/terminal-loaders.css",
     "./styles/chat-core.css": "./src/styles/chat-core.css",
     "./styles/chat-math.css": "./src/styles/chat-math.css",
     "./styles/chat-widgets.css": "./src/styles/chat-widgets.css",

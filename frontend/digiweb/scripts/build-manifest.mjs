@@ -84,13 +84,54 @@ function docSummary(src) {
   return (stop > 0 ? text.slice(0, stop + 1) : text).trim();
 }
 
-/** Exported component/const names, PascalCase or hook-like only. */
+/**
+ * Exported component/const names, PascalCase or hook-like only.
+ *
+ * Both declaration and re-export forms count. A component PROMOTED into
+ * @digithings/web leaves a `export { X } from "@digithings/web"` behind so the
+ * specimen keeps a stable import path against one implementation — and matching
+ * only `export function` silently dropped all three of the first batch out of
+ * the index, which is the one place an agent is told to look for them.
+ */
 function exportNames(src) {
   const names = new Set();
-  const re = /export\s+(?:async\s+)?(?:function|const)\s+([A-Za-z0-9_]+)/g;
+  const declRe = /export\s+(?:async\s+)?(?:function|const)\s+([A-Za-z0-9_]+)/g;
   let m;
-  while ((m = re.exec(src))) names.add(m[1]);
+  while ((m = declRe.exec(src))) names.add(m[1]);
+
+  // `export { A, B as C, type D } from "…"` — value exports only; a re-exported
+  // type is not a component and would otherwise index as one.
+  const reexportRe = /export\s*\{([^}]*)\}\s*from\s*"[^"]+"/g;
+  while ((m = reexportRe.exec(src))) {
+    for (const part of m[1].split(",")) {
+      const spec = part.trim();
+      if (!spec || spec.startsWith("type ")) continue;
+      const local = spec.split(/\s+as\s+/).pop().trim();
+      if (local) names.add(local);
+    }
+  }
   return [...names];
+}
+
+/**
+ * The entry's headline export. Declaration order alone is not enough once a
+ * file mixes a promoted re-export with a local helper: product-frame.tsx
+ * re-exports <ProductFrame> and declares <MockTearsheet> beside it, and taking
+ * the first found renamed the entry after the helper. The filename is the
+ * component's identity, so match against it and fall back to first-found.
+ */
+function primaryName(names, id) {
+  const pascal = id.split("-").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join("");
+  return (
+    names.find((n) => n === pascal) ?? names.find((n) => n.endsWith(pascal)) ?? names[0]
+  );
+}
+
+/** The shared module a pure re-export stub forwards to, if that is all it is. */
+function promotedTo(src) {
+  if (/export\s+(?:async\s+)?(?:function|const)\s/.test(src)) return null;
+  const m = src.match(/export\s*\{[^}]*\}\s*from\s*"(@digithings\/[^"]+)"/);
+  return m ? m[1] : null;
 }
 
 const families = {};
@@ -109,10 +150,14 @@ for (const file of walk(COMPONENTS, ".tsx").sort()) {
   const family = familyByFile.get(file) || (subdir && subdir !== "." ? subdir : "shared");
   const summary = docSummary(src);
   if (summary) described += 1;
+  const shared = promotedTo(src);
   (families[family] ||= []).push({
-    name: names[0],
+    name: primaryName(names, id),
     id,
     path: relPath,
+    // Where the implementation actually lives, when `path` is only the stub
+    // left behind by a promotion. Consume from here, not from the reference.
+    ...(shared ? { promotedTo: shared } : {}),
     summary,
     ...(names.length > 1 ? { exports: names } : {}),
   });

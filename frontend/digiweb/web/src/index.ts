@@ -71,6 +71,21 @@ export {
   type ChatWidgetButtonTone,
 } from "./components/chat/ChatWidgetFrame";
 
+// terminal loaders — the house type-out applied to waiting. Styles:
+// @digithings/web/styles/terminal-loaders.css (needs chat-core.css first).
+export { TerminalStepCaret, type TerminalStepCaretProps } from "./components/terminal/TerminalStepCaret";
+export {
+  ContainerBootLoader,
+  CONTAINER_BOOT_STEPS,
+  type ContainerBootLoaderProps,
+} from "./components/terminal/ContainerBootLoader";
+export {
+  ChatResponseLoader,
+  CHAT_RESPONSE_STEPS,
+  CHAT_RESPONSE_HOLD_MS,
+  type ChatResponseLoaderProps,
+} from "./components/terminal/ChatResponseLoader";
+
 // controls layer (#1419)
 export { Button, type ButtonProps, type ButtonDress, type ButtonReferenceVariant, type ButtonChatVariant, type ButtonChatSize } from "./components/controls/Button";
 export { Badge, type BadgeProps, type BadgeDress, type BadgeReferenceVariant, type BadgeChatVariant } from "./components/controls/Badge";
