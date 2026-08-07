@@ -362,13 +362,28 @@ function EmbedChat({
   // see gateTimeoutState above for the same avoidance), and it needs no
   // render of its own. `sentHeld` is what makes the release idempotent, since
   // the effect re-runs on every chat identity change while the answer streams.
+  //
+  // Call chat.send (not wrappedSend) here: wrappedSend is defined below and
+  // would re-capture this effect. Increment the turn counter ourselves so the
+  // held fourth question counts the same as any other send.
   useEffect(() => {
     const question = heldQuestionRef.current;
     if (!trialUnlocked || !question || chat.busy) return;
     if (sentHeldRef.current === question) return;
     sentHeldRef.current = question;
     void chat.send(question);
-  }, [trialUnlocked, chat]);
+    if (!ungated) gate.increment();
+    emit("embed_turn_submitted", {
+      accent,
+      turn: gate.turns + 1,
+      byok: byokIsSet,
+    });
+  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet]);
+
+  const reopenTrialForm = useCallback(() => {
+    lastGatedPost.current = null;
+    setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
+  }, []);
 
   // Fallback for a parent that never answers the gated postMessage (design
   // spec, "Error handling & fallbacks") — see PARENT_GATE_TIMEOUT_MS for the
@@ -504,7 +519,20 @@ function EmbedChat({
       showByok={showByok}
       showStatusBar={uiFlags.showStatusBar}
       layout={uiFlags.layout}
-      chat={{ ...chat, send: wrappedSend }}
+      chat={{
+        ...chat,
+        send: wrappedSend,
+        // While the trial overlay path is active, the formReplacement notice is
+        // the warning (with "the trial form" + Retry). Hiding the raw trial_gate
+        // string avoids a duplicate banner whose Retry only regenerated a 402.
+        error: trialLocked ? null : chat.error,
+        onRetry:
+          isTrialForm &&
+          !trialLocked &&
+          !!chat.error?.toLowerCase().includes("trial form")
+            ? reopenTrialForm
+            : chat.onRetry,
+      }}
       headerSlot={headerSlot}
       footerSlot={footerSlot}
       formReplacement={
@@ -512,12 +540,7 @@ function EmbedChat({
           resolveGateFallbackCard({ noParentChannel, parentUnresponsive }) === "paywall" ? (
             <PaywallCard lockedContact={tenantCfg.lockedContact} />
           ) : (
-            <TrialGatePlaceholder
-              onOpen={() => {
-                lastGatedPost.current = null;
-                setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
-              }}
-            />
+            <TrialGatePlaceholder onOpen={reopenTrialForm} />
           )
         ) : gate.locked && !ungated && !isTrialForm ? (
           <PaywallCard lockedContact={tenantCfg.lockedContact} />
@@ -704,32 +727,37 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
 /**
  * The notice shown in place of the composer once the free turns are spent.
  *
- * The headline is a BUTTON, not a sentence. Dismissing the parent's overlay
- * used to be a dead end: the notice said to complete the form, the only
- * control was Retry, and nothing on screen could bring the form back — the
- * visitor had to reload and ask something new to discover that. Anything that
- * tells a reader to do something has to be the thing that lets them do it.
+ * Dismissing the parent's overlay used to be a dead end: the notice said to
+ * complete the form, Retry only regenerated the failed turn, and nothing on
+ * screen could bring the form back — reload + a fresh question was the only
+ * route. Anything that tells a reader to do something has to be the thing that
+ * lets them do it: "the trial form" is a control, and Retry reopens the same
+ * overlay (via onOpen → gated postMessage with a bumped nonce).
  */
 function TrialGatePlaceholder({ onOpen }: { onOpen: () => void }) {
   return (
     <div className="border-t border-border bg-muted/40 p-4">
-      <button
-        type="button"
-        onClick={onOpen}
-        className="text-left text-sm font-medium underline underline-offset-2 hover:opacity-80"
-      >
-        Complete the form to keep chatting.
-      </button>
-      <p className="mt-1 text-xs text-muted-foreground">
-        You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions.{" "}
+      <p className="text-sm font-medium">
+        You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions. Complete{" "}
         <button
           type="button"
           onClick={onOpen}
           className="underline underline-offset-2 hover:opacity-80"
         >
-          Open the short form
+          the trial form
         </button>{" "}
-        to unlock more.
+        to keep chatting.
+      </p>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Closed the form by mistake?{" "}
+        <button
+          type="button"
+          onClick={onOpen}
+          className="font-medium underline underline-offset-2 hover:opacity-80"
+          style={{ color: "var(--accent)" }}
+        >
+          Retry
+        </button>
       </p>
     </div>
   );
