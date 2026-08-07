@@ -402,15 +402,21 @@ def test_the_web_lane_runs_the_site_test_suite() -> None:
     """A vitest file no lane executes cannot fail, so it is not a test."""
     lane = WEB_LANE.read_text(encoding="utf-8")
     assert "npm run test --workspace digithings-web" in lane
-    assert "@tailwindcss/oxide-linux-x64-gnu" in lane, (
-        "the only native binding the lock does not carry for Linux"
-    )
     # The digichat and olympus lanes also install rolldown at 1.0.0-rc.16, which the
     # locked rolldown 1.2.2 has moved off — a stale duplicate. This lane must not
     # acquire it by someone copying that step across. Commands only: the lane's own
     # comment names that version while explaining why it is not installed.
     commands = "\n".join(line for line in lane.splitlines() if not line.lstrip().startswith("#"))
     assert "1.0.0-rc.16" not in commands, "npm ci already installs the locked Linux rolldown"
+    # This assertion used to run the other way, requiring the lane to hand-install
+    # @tailwindcss/oxide-linux-x64-gnu because the lock carried oxide-darwin-arm64
+    # alone. The lock now carries all eleven installable oxide platform entries with
+    # their libc fields, so npm ci supplies the right one and the step was removed.
+    # Inverted rather than deleted: it is the ratchet that stops the hand-install
+    # being reintroduced, which would pin a binding the lock already resolves.
+    assert "@tailwindcss/oxide" not in commands, (
+        "the lock carries every installable oxide platform entry — do not hand-install it"
+    )
     # Shape validation of the snapshot the homepage imports, but NOT a freshness gate:
     # a missed cron run must not redden an unrelated website PR. Commands again — the
     # step's comment says "no --max-age-days" in prose.

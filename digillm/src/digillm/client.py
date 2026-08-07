@@ -33,7 +33,9 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import functools
 import hashlib
 import json
 import logging
@@ -45,13 +47,31 @@ import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import ContextVar
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from typing import (  # score:allow untyped any — OpenAI message dict payloads are heterogeneous
     Any,
     TypedDict,
 )
+from uuid import UUID, uuid4
 
 from openai import OpenAI, Timeout
 from openai.types.chat import ChatCompletion
+
+from digillm.telemetry import (
+    ArtifactRef,
+    CacheStatus,
+    CallPurpose,
+    NoArtifactReason,
+    ProviderAttemptOutcome,
+    ProviderAttemptRecord,
+    ProviderCallOutcome,
+    ProviderCallRecord,
+    RetryReason,
+    TelemetryObserver,
+    emit_telemetry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -458,6 +478,414 @@ def clear_caches() -> None:
     _client_cache.clear()
 
 
+# ── Physical-attempt telemetry ───────────────────────────────────────────────
+
+_telemetry_observer: TelemetryObserver | None = None
+
+
+def set_telemetry_observer(observer: TelemetryObserver | None) -> None:
+    """Register a process-wide provider telemetry sink; pass ``None`` to disable."""
+    global _telemetry_observer
+    _telemetry_observer = observer
+
+
+@dataclass
+class ProviderCallContextHandle:
+    """Mutable logical-call result and deferred-disposition handle."""
+
+    last_call_id: UUID | None = None
+    _pending_records: list[ProviderCallRecord] = field(default_factory=list, repr=False)
+
+    def set_no_artifact_reason(self, reason: NoArtifactReason) -> bool:
+        """Replace the latest deferred successful disposition when one exists."""
+        if not self._pending_records:
+            return False
+        record = self._pending_records[-1]
+        if record.outcome is not ProviderCallOutcome.SUCCEEDED:
+            return False
+        self._pending_records[-1] = record.model_copy(
+            update={"artifacts": (), "no_artifact_reason": reason}
+        )
+        return True
+
+    def finalize(self) -> None:
+        """Deliver and clear all deferred logical records exactly once."""
+        records = tuple(self._pending_records)
+        self._pending_records.clear()
+        observer = _telemetry_observer
+        if observer is None:
+            return
+        for record in records:
+            emit_telemetry(observer, record)
+
+
+@dataclass(frozen=True)
+class _ProviderCallMetadata:
+    node_run_id: UUID
+    purpose: CallPurpose
+    parent_call_id: UUID | None
+    artifacts: tuple[ArtifactRef, ...]
+    no_artifact_reason: NoArtifactReason | None
+    follow_up_purpose: CallPurpose | None
+    follow_up_artifacts: tuple[ArtifactRef, ...]
+    follow_up_no_artifact_reason: NoArtifactReason | None
+    defer_finalization: bool
+    handle: ProviderCallContextHandle
+
+
+_provider_call_metadata: ContextVar[_ProviderCallMetadata | None] = ContextVar(
+    "digillm_provider_call_metadata", default=None
+)
+
+
+@contextlib.contextmanager
+def provider_call_context(
+    *,
+    node_run_id: UUID,
+    purpose: CallPurpose,
+    parent_call_id: UUID | None = None,
+    artifacts: tuple[ArtifactRef, ...] = (),
+    no_artifact_reason: NoArtifactReason | None = None,
+    follow_up_purpose: CallPurpose | None = None,
+    follow_up_artifacts: tuple[ArtifactRef, ...] = (),
+    follow_up_no_artifact_reason: NoArtifactReason | None = None,
+    defer_finalization: bool = False,
+    handle: ProviderCallContextHandle | None = None,
+) -> Iterator[ProviderCallContextHandle]:
+    """Inject generic logical-call metadata without changing provider call signatures."""
+    if bool(artifacts) == (no_artifact_reason is not None):
+        raise ValueError("provide either artifacts or one no_artifact_reason")
+    if follow_up_purpose is not None and bool(follow_up_artifacts) == (
+        follow_up_no_artifact_reason is not None
+    ):
+        raise ValueError("provide either follow_up_artifacts or one follow_up_no_artifact_reason")
+    call_handle = handle or ProviderCallContextHandle()
+    token = _provider_call_metadata.set(
+        _ProviderCallMetadata(
+            node_run_id=node_run_id,
+            purpose=purpose,
+            parent_call_id=parent_call_id,
+            artifacts=artifacts,
+            no_artifact_reason=no_artifact_reason,
+            follow_up_purpose=follow_up_purpose,
+            follow_up_artifacts=follow_up_artifacts,
+            follow_up_no_artifact_reason=follow_up_no_artifact_reason,
+            defer_finalization=defer_finalization,
+            handle=call_handle,
+        )
+    )
+    try:
+        yield call_handle
+    finally:
+        _provider_call_metadata.reset(token)
+
+
+@dataclass
+class _AttemptScope:
+    call_id: UUID
+    requested_model: str
+    started_at: datetime
+    metadata: _ProviderCallMetadata | None
+    next_attempt_number: int = 1
+    next_retry_reason: RetryReason = RetryReason.NOT_APPLICABLE
+    cache_status: CacheStatus = CacheStatus.UNAVAILABLE
+    finalized: bool = False
+    terminal_outcome: ProviderCallOutcome | None = None
+    logical_error_type: str | None = None
+
+    def start(self) -> tuple[int, RetryReason, datetime]:
+        attempt_number = self.next_attempt_number
+        retry_reason = self.next_retry_reason
+        self.next_attempt_number += 1
+        self.next_retry_reason = RetryReason.UNKNOWN
+        return attempt_number, retry_reason, datetime.now(UTC)
+
+
+_attempt_scope: ContextVar[_AttemptScope | None] = ContextVar("digillm_attempt_scope", default=None)
+
+
+@contextlib.contextmanager
+def _logical_attempt_scope(requested_model: str = "unknown") -> Iterator[_AttemptScope]:
+    existing = _attempt_scope.get()
+    if existing is not None:
+        yield existing
+        return
+    context_metadata = _provider_call_metadata.get()
+    metadata = context_metadata
+    if (
+        context_metadata is not None
+        and context_metadata.handle.last_call_id is not None
+        and context_metadata.follow_up_purpose is not None
+    ):
+        metadata = _ProviderCallMetadata(
+            node_run_id=context_metadata.node_run_id,
+            purpose=context_metadata.follow_up_purpose,
+            parent_call_id=context_metadata.handle.last_call_id,
+            artifacts=context_metadata.follow_up_artifacts,
+            no_artifact_reason=context_metadata.follow_up_no_artifact_reason,
+            follow_up_purpose=context_metadata.follow_up_purpose,
+            follow_up_artifacts=context_metadata.follow_up_artifacts,
+            follow_up_no_artifact_reason=context_metadata.follow_up_no_artifact_reason,
+            defer_finalization=context_metadata.defer_finalization,
+            handle=context_metadata.handle,
+        )
+    scope = _AttemptScope(
+        call_id=uuid4(),
+        requested_model=requested_model,
+        started_at=datetime.now(UTC),
+        metadata=metadata,
+    )
+    if metadata is not None:
+        metadata.handle.last_call_id = scope.call_id
+    token = _attempt_scope.set(scope)
+    try:
+        yield scope
+    finally:
+        _attempt_scope.reset(token)
+
+
+def _with_logical_attempt_scope(function: Callable[..., Any]) -> Callable[..., Any]:
+    @functools.wraps(function)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if _attempt_scope.get() is not None:
+            return function(*args, **kwargs)
+        requested_model = str(args[0]) if args else str(kwargs.get("model") or "unknown")
+        with _logical_attempt_scope(requested_model) as scope:
+            try:
+                result = function(*args, **kwargs)
+            except (GeneratorExit, asyncio.CancelledError):
+                _emit_logical_call(
+                    scope,
+                    scope.terminal_outcome or ProviderCallOutcome.CANCELLED,
+                    error_type=scope.logical_error_type,
+                )
+                raise
+            except Exception as error:
+                _emit_logical_call(
+                    scope,
+                    scope.terminal_outcome or ProviderCallOutcome.FAILED,
+                    error_type=scope.logical_error_type or type(error).__name__,
+                )
+                raise
+            if scope.next_attempt_number > 1 or scope.cache_status is CacheStatus.HIT:
+                _emit_logical_call(
+                    scope,
+                    scope.terminal_outcome or ProviderCallOutcome.SUCCEEDED,
+                    error_type=scope.logical_error_type,
+                )
+            return result
+
+    return wrapped
+
+
+def _emit_logical_call(
+    scope: _AttemptScope,
+    outcome: ProviderCallOutcome,
+    *,
+    error_type: str | None = None,
+) -> None:
+    if scope.finalized:
+        return
+    scope.finalized = True
+    observer = _telemetry_observer
+    metadata = scope.metadata
+    if observer is None or metadata is None:
+        return
+    try:
+        artifacts = metadata.artifacts
+        no_artifact_reason = metadata.no_artifact_reason
+        if outcome is ProviderCallOutcome.FAILED:
+            artifacts = ()
+            no_artifact_reason = NoArtifactReason.CALL_FAILED
+        elif outcome is ProviderCallOutcome.CANCELLED:
+            artifacts = ()
+            no_artifact_reason = NoArtifactReason.CALL_CANCELLED
+            error_type = None
+        record = ProviderCallRecord(
+            call_id=scope.call_id,
+            node_run_id=metadata.node_run_id,
+            parent_call_id=metadata.parent_call_id,
+            purpose=metadata.purpose,
+            requested_model=scope.requested_model,
+            cache_status=scope.cache_status,
+            outcome=outcome,
+            attempt_count=scope.next_attempt_number - 1,
+            artifacts=artifacts,
+            no_artifact_reason=no_artifact_reason,
+            error_type=error_type,
+            started_at=scope.started_at,
+            finished_at=datetime.now(UTC),
+        )
+        if metadata.defer_finalization and outcome is ProviderCallOutcome.SUCCEEDED:
+            metadata.handle._pending_records.append(record)
+        else:
+            emit_telemetry(observer, record)
+    except Exception as telemetry_error:
+        logger.debug("logical-call telemetry failed: %s", type(telemetry_error).__name__)
+
+
+def _provider_name(provider: str | None) -> str:
+    return provider or "default"
+
+
+def _retry_reason(error: Exception) -> RetryReason:
+    from openai import APIConnectionError, APITimeoutError, InternalServerError, RateLimitError
+
+    if isinstance(error, RateLimitError):
+        return RetryReason.RATE_LIMIT
+    if isinstance(error, APITimeoutError):
+        return RetryReason.TIMEOUT
+    if isinstance(error, APIConnectionError):
+        return RetryReason.CONNECTION_ERROR
+    if isinstance(error, InternalServerError):
+        return RetryReason.SERVER_ERROR
+    return RetryReason.UNKNOWN
+
+
+def _optional_nonnegative_int(value: Any) -> int | None:
+    return value if isinstance(value, int) and value >= 0 else None
+
+
+def _optional_attribute(value: Any, name: str) -> Any:
+    try:
+        return getattr(value, name, None)
+    except Exception:
+        return None
+
+
+def _response_usage(response: Any) -> tuple[int | None, int | None, Decimal | None]:
+    usage = _optional_attribute(response, "usage")
+    prompt_tokens = _optional_attribute(usage, "prompt_tokens")
+    if prompt_tokens is None:
+        prompt_tokens = _optional_attribute(usage, "input_tokens")
+    completion_tokens = _optional_attribute(usage, "completion_tokens")
+    if completion_tokens is None:
+        completion_tokens = _optional_attribute(usage, "output_tokens")
+    cost = _optional_attribute(usage, "cost")
+    if cost is None:
+        extra = _optional_attribute(usage, "model_extra")
+        if isinstance(extra, dict):
+            cost = extra.get("cost")
+    cost_usd: Decimal | None = None
+    if cost is not None:
+        try:
+            parsed_cost = Decimal(str(cost))
+        except (InvalidOperation, ValueError):
+            pass
+        else:
+            if parsed_cost.is_finite() and parsed_cost >= 0:
+                cost_usd = parsed_cost
+    return (
+        _optional_nonnegative_int(prompt_tokens),
+        _optional_nonnegative_int(completion_tokens),
+        cost_usd,
+    )
+
+
+@dataclass
+class _StreamEvidence:
+    model: str | None = None
+    usage: Any = None
+
+    def observe(self, chunk: Any) -> None:
+        chunk_model = _optional_attribute(chunk, "model")
+        if isinstance(chunk_model, str) and chunk_model:
+            self.model = chunk_model
+        chunk_usage = _optional_attribute(chunk, "usage")
+        if chunk_usage is not None:
+            self.usage = chunk_usage
+
+
+def _emit_attempt(
+    *,
+    scope: _AttemptScope,
+    attempt_number: int,
+    retry_reason: RetryReason,
+    provider: str,
+    requested_model: str,
+    started_at: datetime,
+    outcome: ProviderAttemptOutcome,
+    response: Any = None,
+    error: Exception | None = None,
+) -> None:
+    observer = _telemetry_observer
+    if observer is None:
+        return
+    try:
+        prompt_tokens, completion_tokens, cost_usd = _response_usage(response)
+        served_model = _optional_attribute(response, "model")
+        record = ProviderAttemptRecord(
+            attempt_id=uuid4(),
+            call_id=scope.call_id,
+            attempt_number=attempt_number,
+            provider=provider,
+            requested_model=requested_model,
+            served_model=served_model if isinstance(served_model, str) and served_model else None,
+            started_at=started_at,
+            finished_at=datetime.now(UTC),
+            outcome=outcome,
+            retry_reason=retry_reason,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=cost_usd,
+            error_type=type(error).__name__ if error is not None else None,
+        )
+        emit_telemetry(observer, record)
+    except Exception as telemetry_error:
+        logger.debug("attempt telemetry failed: %s", type(telemetry_error).__name__)
+
+
+def _responses_create_with_attempt(
+    client: OpenAI,
+    *,
+    provider: str,
+    requested_model: str,
+    **kwargs: Any,
+) -> Any:
+    with _logical_attempt_scope() as scope:
+        scope.cache_status = CacheStatus.BYPASSED
+        attempt_number, retry_reason, started_at = scope.start()
+        try:
+            response = client.responses.create(**kwargs)
+        except asyncio.CancelledError:
+            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=provider,
+                requested_model=requested_model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.CANCELLED,
+            )
+            raise
+        except Exception as error:
+            scope.terminal_outcome = ProviderCallOutcome.FAILED
+            scope.logical_error_type = type(error).__name__
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=provider,
+                requested_model=requested_model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.FAILED,
+                error=error,
+            )
+            raise
+        _emit_attempt(
+            scope=scope,
+            attempt_number=attempt_number,
+            retry_reason=retry_reason,
+            provider=provider,
+            requested_model=requested_model,
+            started_at=started_at,
+            outcome=ProviderAttemptOutcome.SUCCEEDED,
+            response=response,
+        )
+        return response
+
+
 # ── Usage observer ──────────────────────────────────────────────────────────────
 # digillm stays a leaf library (no digigraph/service imports), so it can't write into
 # a consumer's per-run usage accumulator directly. Instead the consuming app registers
@@ -546,6 +974,9 @@ def _sleep_transient_retry(delay: float, *, max_delay: float = 300.0) -> float:
 def _create_with_retry(
     client: OpenAI,
     *,
+    _provider: str | None = None,
+    _requested_model: str | None = None,
+    _defer_success: bool = False,
     on_attempt: Callable[[], None] | None = None,
     **kwargs: Any,
 ) -> Any:
@@ -567,22 +998,63 @@ def _create_with_retry(
     transient = (RateLimitError, InternalServerError, APIConnectionError, APITimeoutError)
     max_attempts = 12
     delay = 5.0
-    for attempt in range(max_attempts):
-        try:
-            if on_attempt is not None:
-                on_attempt()
-            return client.chat.completions.create(**kwargs)
-        except transient as exc:
-            if attempt >= max_attempts - 1:
+    with _logical_attempt_scope() as scope:
+        requested_model = _requested_model or str(kwargs.get("model") or "unknown")
+        provider = _provider_name(_provider)
+        for attempt in range(max_attempts):
+            attempt_number, retry_reason, started_at = scope.start()
+            try:
+                if on_attempt is not None:
+                    on_attempt()
+                response = client.chat.completions.create(**kwargs)
+            except asyncio.CancelledError:
+                scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+                _emit_attempt(
+                    scope=scope,
+                    attempt_number=attempt_number,
+                    retry_reason=retry_reason,
+                    provider=provider,
+                    requested_model=requested_model,
+                    started_at=started_at,
+                    outcome=ProviderAttemptOutcome.CANCELLED,
+                )
                 raise
-            logger.warning(
-                "%s (attempt %d/%d): backing off %.1fs before retry",
-                type(exc).__name__,
-                attempt + 1,
-                max_attempts,
-                delay,
+            except Exception as error:
+                _emit_attempt(
+                    scope=scope,
+                    attempt_number=attempt_number,
+                    retry_reason=retry_reason,
+                    provider=provider,
+                    requested_model=requested_model,
+                    started_at=started_at,
+                    outcome=ProviderAttemptOutcome.FAILED,
+                    error=error,
+                )
+                if not isinstance(error, transient) or attempt >= max_attempts - 1:
+                    raise
+                scope.next_retry_reason = _retry_reason(error)
+                logger.warning(
+                    "%s (attempt %d/%d): backing off %.1fs before retry",
+                    type(error).__name__,
+                    attempt + 1,
+                    max_attempts,
+                    delay,
+                )
+                delay = _sleep_transient_retry(delay)
+                continue
+            if _defer_success:
+                return response, scope, attempt_number, retry_reason, started_at
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=provider,
+                requested_model=requested_model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.SUCCEEDED,
+                response=response,
             )
-            delay = _sleep_transient_retry(delay)
+            return response
     raise RuntimeError("chat completion failed after all retry attempts")  # pragma: no cover
 
 
@@ -848,6 +1320,7 @@ _with_openrouter_fallback = _with_openrouter_cost_controls
 
 
 @_traceable("completion")
+@_with_logical_attempt_scope
 def completion(
     model: str,
     messages: list[ChatCompletionMessage],
@@ -895,13 +1368,28 @@ def completion(
             nonlocal provider_attempts
             provider_attempts += 1
 
-        return _create_with_retry(client, on_attempt=count_attempt, **call_kwargs)
+        return _create_with_retry(
+            client,
+            _provider=provider,
+            _requested_model=model,
+            on_attempt=count_attempt,
+            **call_kwargs,
+        )
 
     # xAI Live Search rides the OpenAI-compatible client via ``extra_body`` and only
     # when the real xAI client is active (reaching here for an ``xai/`` model means its
     # key was set — get_client_for_model raises otherwise). It is time-sensitive and not
     # captured by the cache key, so a search request bypasses the cache like tool calls.
     xai_live_search = search_parameters is not None and provider == "xai"
+
+    attempt_scope = _attempt_scope.get()
+    cache_status = (
+        CacheStatus.BYPASSED
+        if tools or xai_live_search or _byok_override.get() is not None
+        else CacheStatus.MISS
+    )
+    if attempt_scope is not None:
+        attempt_scope.cache_status = cache_status
 
     # Cache only tool-free, search-free, non-BYOK requests (BYOK keys must not pollute or
     # read the shared in-process cache; tool calls / live search may have side effects).
@@ -913,6 +1401,8 @@ def completion(
         cached = _llm_cache_get(cache_key)
         if cached is not None:
             logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
+            if attempt_scope is not None:
+                attempt_scope.cache_status = CacheStatus.HIT
             return ChatCompletion.model_validate_json(cached)
 
     kwargs: dict[str, Any] = {
@@ -950,6 +1440,9 @@ def completion(
                 "xAI rejected search_parameters (410 deprecated); retrying without Live Search"
             )
             kwargs.pop("extra_body", None)
+            attempt_scope = _attempt_scope.get()
+            if attempt_scope is not None:
+                attempt_scope.next_retry_reason = RetryReason.UNKNOWN
             r = create_with_retry(kwargs)
     except Exception:
         _record_usage(
@@ -979,6 +1472,9 @@ def completion(
             _EMPTY_RETRY_DELAY,
         )
         time.sleep(_EMPTY_RETRY_DELAY)  # intentional short backoff on empty
+        attempt_scope = _attempt_scope.get()
+        if attempt_scope is not None:
+            attempt_scope.next_retry_reason = RetryReason.EMPTY_RESPONSE
         try:
             r = create_with_retry(retry_kwargs)
         except Exception:
@@ -1106,6 +1602,7 @@ def openrouter_web_search(
     return text, _urls_from_grounding_text(text)
 
 
+@_with_logical_attempt_scope
 def web_search(
     model: str,
     query: str,
@@ -1139,7 +1636,10 @@ def web_search(
     started = time.perf_counter()
     try:
         client = get_client_for_model(model)
-        resp = client.responses.create(
+        resp = _responses_create_with_attempt(
+            client,
+            provider=provider,
+            requested_model=model,
             model=model_id,
             input=[{"role": "user", "content": query}],
             tools=[tool],
@@ -1162,9 +1662,11 @@ def web_search(
             url = getattr(s, "url", None) or (s.get("url") if isinstance(s, dict) else None)
             if url and url not in sources:
                 sources.append(url)
+    _, _, cost_usd = _response_usage(resp)
     _record_usage(
         kind="web_search",
         model=model_id,
+        cost=float(cost_usd) if cost_usd is not None else 0.0,
         sources=len(sources),
         ok=True,
         duration_ms=round((time.perf_counter() - started) * 1000),
@@ -1172,6 +1674,7 @@ def web_search(
     return text, sources
 
 
+@_with_logical_attempt_scope
 def x_search(
     model: str,
     query: str,
@@ -1196,7 +1699,10 @@ def x_search(
     started = time.perf_counter()
     try:
         client = get_client_for_model(model)
-        resp = client.responses.create(
+        resp = _responses_create_with_attempt(
+            client,
+            provider=provider,
+            requested_model=model,
             model=model_id,
             input=[{"role": "user", "content": query}],
             tools=[{"type": "x_search", "max_search_results": max_results}],
@@ -1212,9 +1718,11 @@ def x_search(
         return None
     text = getattr(resp, "output_text", "") or ""
     sources = _urls_from_grounding_text(text)
+    _, _, cost_usd = _response_usage(resp)
     _record_usage(
         kind="x_search",
         model=model_id,
+        cost=float(cost_usd) if cost_usd is not None else 0.0,
         sources=len(sources),
         ok=True,
         duration_ms=round((time.perf_counter() - started) * 1000),
@@ -1263,6 +1771,7 @@ def _message_from_response(resp: ChatCompletion) -> tuple[str, list[ToolCallDict
     return content, tc_list
 
 
+@_with_logical_attempt_scope
 def _stream_completion_one_turn(
     model: str,
     messages: list[ChatCompletionMessage],
@@ -1298,52 +1807,140 @@ def _stream_completion_one_turn(
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
 
-    stream = _create_with_retry(client, **kwargs)
+    stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
+        client,
+        _provider=provider,
+        _requested_model=model,
+        _defer_success=True,
+        **kwargs,
+    )
     content_parts: list[str] = []
     tool_calls_accum: dict[int, ToolCallDict] = {}
+    evidence = _StreamEvidence()
 
-    for chunk in stream:
-        if not chunk.choices:
-            continue
-        delta = chunk.choices[0].delta
-        if not delta:
-            continue
-
-        reasoning_piece = getattr(delta, "reasoning_content", None)
-        if reasoning_piece is not None and on_reasoning_delta:
-            on_reasoning_delta(str(reasoning_piece))
-
-        if getattr(delta, "content", None):
-            piece = delta.content or ""
-            accumulated = "".join(content_parts)
-            content_parts.append(piece)
-            # Some providers resend the full message in the final chunk; emit only
-            # the new suffix so callers never see duplicated content.
-            if on_content_delta and piece:
-                if accumulated and piece.startswith(accumulated) and len(piece) > len(accumulated):
-                    piece = piece[len(accumulated) :]
-                elif accumulated and piece == accumulated:
-                    piece = ""
-                if piece:
-                    on_content_delta(piece)
-
-        for tc in getattr(delta, "tool_calls", None) or []:
-            idx = getattr(tc, "index", None)
-            if idx is None:
-                continue
-            acc = tool_calls_accum.setdefault(
-                idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+    stream_iterator = iter(stream)
+    while True:
+        try:
+            chunk = next(stream_iterator)
+        except StopIteration:
+            break
+        except (GeneratorExit, asyncio.CancelledError):
+            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=_provider_name(provider),
+                requested_model=model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.CANCELLED,
+                response=evidence,
             )
-            if getattr(tc, "id", None):
-                acc["id"] = tc.id
-            fn = getattr(tc, "function", None)
-            if fn:
-                if getattr(fn, "name", None):
-                    acc["function"]["name"] = (acc["function"]["name"] or "") + (fn.name or "")
-                if getattr(fn, "arguments", None):
-                    acc["function"]["arguments"] = (acc["function"]["arguments"] or "") + (
-                        fn.arguments or ""
-                    )
+            raise
+        except Exception as error:
+            scope.terminal_outcome = ProviderCallOutcome.FAILED
+            scope.logical_error_type = type(error).__name__
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=_provider_name(provider),
+                requested_model=model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.FAILED,
+                response=evidence,
+                error=error,
+            )
+            raise
+
+        evidence.observe(chunk)
+        try:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if not delta:
+                continue
+
+            reasoning_piece = getattr(delta, "reasoning_content", None)
+            if reasoning_piece is not None and on_reasoning_delta:
+                on_reasoning_delta(str(reasoning_piece))
+
+            if getattr(delta, "content", None):
+                piece = delta.content or ""
+                accumulated = "".join(content_parts)
+                content_parts.append(piece)
+                # Some providers resend the full message in the final chunk; emit only
+                # the new suffix so callers never see duplicated content.
+                if on_content_delta and piece:
+                    if (
+                        accumulated
+                        and piece.startswith(accumulated)
+                        and len(piece) > len(accumulated)
+                    ):
+                        piece = piece[len(accumulated) :]
+                    elif accumulated and piece == accumulated:
+                        piece = ""
+                    if piece:
+                        on_content_delta(piece)
+
+            for tc in getattr(delta, "tool_calls", None) or []:
+                idx = getattr(tc, "index", None)
+                if idx is None:
+                    continue
+                acc = tool_calls_accum.setdefault(
+                    idx,
+                    {
+                        "id": "",
+                        "type": "function",
+                        "function": {"name": "", "arguments": ""},
+                    },
+                )
+                if getattr(tc, "id", None):
+                    acc["id"] = tc.id
+                fn = getattr(tc, "function", None)
+                if fn:
+                    if getattr(fn, "name", None):
+                        acc["function"]["name"] = (acc["function"]["name"] or "") + (fn.name or "")
+                    if getattr(fn, "arguments", None):
+                        acc["function"]["arguments"] = (acc["function"]["arguments"] or "") + (
+                            fn.arguments or ""
+                        )
+        except (GeneratorExit, asyncio.CancelledError):
+            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=_provider_name(provider),
+                requested_model=model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.CANCELLED,
+                response=evidence,
+            )
+            raise
+        except Exception:
+            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=_provider_name(provider),
+                requested_model=model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.CANCELLED,
+                response=evidence,
+            )
+            raise
+    _emit_attempt(
+        scope=scope,
+        attempt_number=attempt_number,
+        retry_reason=retry_reason,
+        provider=_provider_name(provider),
+        requested_model=model,
+        started_at=started_at,
+        outcome=ProviderAttemptOutcome.SUCCEEDED,
+        response=evidence,
+    )
 
     content = "".join(content_parts).strip()
     if not tool_calls_accum:

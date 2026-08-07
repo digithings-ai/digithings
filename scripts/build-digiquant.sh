@@ -18,29 +18,19 @@ mkdir -p dist
 echo "--- installing workspaces ---"
 npm install --prefer-offline --no-audit --no-fund --include=optional
 
-# Two bindings installed by hand; build-digithings.sh carries the full rationale.
-#
-# @tailwindcss/oxide is genuinely absent from the root lock — oxide-darwin-arm64
-# 4.2.2 is its sole platform entry.
+# One binding installed by hand; build-digithings.sh carries the full rationale.
 #
 # @next/swc-linux-x64-gnu is locked, but kept deliberately: it must match the pinned
 # next version exactly, and if next can't find it, it fetches it at build time via
 # `yarn config get registry`, which crashes the yarn-less CF image ("Failed to get
 # registry from yarn"). Insurance on a live deploy path; do not tidy it away.
 #
-# lightningcss-linux-x64-gnu was dropped (#1940 removed it from CI for the same
-# reason): the lock has it twice over — 1.33.0 hoisted to the root, 1.32.0 nested
-# under the root lightningcss — and pinning 1.32.0 at the root overwrote the hoisted
-# 1.33.0 that vite's lightningcss 1.33.0 resolves to. Latent, not active: the builds
-# below are `next build` only, never vitest, so nothing here loads vite's
-# lightningcss — unlike the CI lanes #1940 fixed. The old npm/cli#4828 rationale
-# never covered it; that issue is the npm *cache* dropping optionals, and the install
-# above already passes --include=optional against a lock that carries them.
+# @tailwindcss/oxide-linux-x64-gnu used to be installed here too; the root lock now
+# carries every installable oxide platform entry, so the install above supplies it.
 if [ "$(uname -s)" = "Linux" ]; then
-  echo "--- installing Linux native bindings (Next SWC + Tailwind/PostCSS) ---"
+  echo "--- installing Linux native binding (Next SWC) ---"
   npm install \
     @next/swc-linux-x64-gnu@16.2.4 \
-    @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
     --no-save --no-audit --no-fund
 fi
 

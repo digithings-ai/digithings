@@ -160,62 +160,10 @@
   color: var(--ink-mute);
 }
 
-/* "Thinking" indicator: shown while the assistant turn is streaming but no
-   content/activities have arrived yet. Replaces the old static "connecting…". */
-.dc-thinking {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
+/* Busy turn: one bare <ChatStreamCursor> under the chain / answer. Tool rows
+   carry running/ok themselves — no typed TerminalStepCaret status line. */
+.dc-body > .tl-line {
   color: var(--ink-mute);
-  font-size: 0.8rem;
-}
-.dc-thinking-label::after {
-  content: "…";
-}
-.dc-thinking-dots {
-  display: inline-flex;
-  gap: 0.2rem;
-}
-.dc-thinking-dots span {
-  width: 0.3rem;
-  height: 0.3rem;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.35;
-  animation: dc-thinking-bounce 1.2s ease-in-out infinite;
-}
-.dc-thinking-dots span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-.dc-thinking-dots span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-@keyframes dc-thinking-bounce {
-  0%,
-  80%,
-  100% {
-    opacity: 0.35;
-    transform: translateY(0);
-  }
-  40% {
-    opacity: 1;
-    transform: translateY(-0.15rem);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dc-thinking-dots span {
-    animation: dc-thinking-fade 1.4s ease-in-out infinite;
-    transform: none;
-  }
-  @keyframes dc-thinking-fade {
-    0%,
-    100% {
-      opacity: 0.35;
-    }
-    50% {
-      opacity: 1;
-    }
-  }
 }
 
 .dc-body a {
@@ -382,6 +330,11 @@
   list-style: disc;
   font-size: 0.74rem;
   line-height: 1.5;
+  /* Cap so a 5-note search with 4-line snippets can't own the transcript —
+     same scroll grammar as `.dc-act-reasoning-text`. */
+  max-height: 14rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .dc-act-hits li {
   margin: 0.12rem 0;
@@ -403,6 +356,18 @@
   margin-left: 0.35rem;
   color: var(--ink-mute);
   font-size: 0.88em;
+}
+/* Snippet disclosure — closed by default so a 5-note search shows titles
+   only; click a title to read the chunk. Native <details>, no JS. */
+.dc-act-hit {
+  display: block;
+}
+.dc-act-hit-summary {
+  cursor: pointer;
+  list-style: none;
+}
+.dc-act-hit-summary::-webkit-details-marker {
+  display: none;
 }
 .dc-act-hit-snippet {
   margin: 0.2rem 0 0;

@@ -150,6 +150,33 @@ describe("mapFoundryEvent", () => {
     });
   });
 
+  it("drops opaque azure_ai_search citations (doc_N + search.windows.net) — no body to show", () => {
+    expect(
+      mapFoundryEvent({
+        type: "response.output_item.done",
+        item: {
+          type: "message",
+          content: [
+            {
+              annotations: [
+                {
+                  type: "url_citation",
+                  url: "https://dg-search-datatap-web.search.windows.net/",
+                  title: "doc_0",
+                },
+                {
+                  type: "url_citation",
+                  url: "https://dg-search-datatap-web.search.windows.net/",
+                  title: "doc_3",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("returns null for unrecognized event types", () => {
     expect(mapFoundryEvent({ type: "response.output_item.added" })).toBeNull();
   });
@@ -456,6 +483,58 @@ describe("createFoundryStreamResponse activity detail", () => {
         name: "file_search",
         query: "",
         hits: [{ title: "A", path: "https://x/a" }],
+        count: 1,
+      },
+    ]);
+  });
+
+  // Progressive azure_ai_search: `.added` → running row; `.done` fills the
+  // query without settling to "no hits"; output `.done` populates hits.
+  // The session shows a bare flash caret under the chain — no Working… label.
+  it("keeps azure_ai_search progressive across added → done → output", () => {
+    const progressive: FoundryStreamEvent[] = [
+      {
+        type: "response.output_item.added",
+        item: { type: "azure_ai_search_call", arguments: "" },
+      },
+      {
+        type: "response.output_item.done",
+        item: {
+          type: "azure_ai_search_call",
+          status: "completed",
+          arguments: JSON.stringify({ query: "auth config" }),
+        },
+      },
+      {
+        type: "response.output_item.done",
+        item: {
+          type: "azure_ai_search_call_output",
+          status: "completed",
+          output: JSON.stringify({
+            documents: [{ id: "chunk-1", content: "Auth lives in /api/config." }],
+          }),
+        },
+      },
+    ];
+
+    const spans = progressive
+      .map((event) => mapFoundryEvent(event))
+      .filter((mapped): mapped is { type: "activity"; span: ActivitySpan } => mapped?.type === "activity")
+      .map((mapped) => mapped.span);
+
+    expect(toDigiChatActivity(spans.slice(0, 1), { settle: false })).toEqual([
+      { kind: "tool_call", name: "azure_ai_search", query: "" },
+    ]);
+
+    expect(toDigiChatActivity(spans.slice(0, 2), { settle: false })).toEqual([
+      { kind: "tool_call", name: "azure_ai_search", query: "auth config" },
+    ]);
+
+    expect(toDigiChatActivity(spans, { settle: false })).toMatchObject([
+      {
+        kind: "tool_result",
+        name: "azure_ai_search",
+        query: "auth config",
         count: 1,
       },
     ]);

@@ -44,6 +44,11 @@
    reference deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
+/* The .tl-* frame for <TerminalStepCaret>, which <DigiChatSession> shows while
+   an answer is still on its way. Also AFTER chat-core.css: the caret inside it
+   is <ChatStreamCursor>, so the block, blink and reduced-motion still all come
+   from there and this sheet only frames the line. */
+@import "@digithings/web/styles/terminal-loaders.css";
 /* Controls layer (#1419) — dress for the shared controls that
    src/components/ui/* now re-export (Button/Badge/Card/Input/Label/Avatar
    in controls-core, DropdownMenu/Sheet/Tooltip in controls-overlay).
@@ -62,6 +67,8 @@
 /* … and the utilities the shared behavioral controls carry (#1419) — the
    @source is load-bearing for controls-overlay's components. */
 @source "../../../digiweb/web/src/components/controls";
+/* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
+@source "../../../digiweb/web/src/components/terminal";
 
 @custom-variant dark (&:is(.dark *));
 

@@ -215,14 +215,30 @@ export function chatActivitySpan(
 const KEY_SEP = "\x1f";
 const toolKey = (name: string, query: string) => `${name}${KEY_SEP}${query}`;
 
+export type ToDigiChatActivityOptions = {
+  /**
+   * When true (default), a completed search with no retrieve yet becomes a
+   * zero-hit `tool_result`. Mid-stream that flashes "no hits" before documents
+   * arrive — pass `settle: false` while the turn is still open so the row stays
+   * a running `tool_call` (query visible, status pulsing) until retrieve or the
+   * turn settles.
+   */
+  settle?: boolean;
+};
+
 /**
  * Projects provider spans onto the union the shared UI renders.
  *
  * Called over the whole span list on each render (not incrementally), which is
  * what lets the trailing pass rewrite a finished-but-empty search into a
- * "no hits" row: whether citations followed is only knowable once the list ends.
+ * "no hits" row: whether citations followed is only knowable once the list ends
+ * *and* the turn has settled (`settle: true`).
  */
-export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
+export function toDigiChatActivity(
+  spans: ActivitySpan[],
+  opts: ToDigiChatActivityOptions = {},
+): DigiChatActivity[] {
+  const settle = opts.settle !== false;
   const rows: DigiChatActivity[] = [];
   const toolRows = new Map<string, number>();
   const traceRows = new Map<string, number>();
@@ -371,18 +387,23 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
   }
 
   // A search that completed and never produced citations is a "no hits" answer,
-  // not a perpetually-pending tool call. A search that errored is neither —
-  // rendering it as count: 0 would tell the user it ran and found nothing,
-  // when it never actually finished.
+  // not a perpetually-pending tool call — but only once the turn has settled.
+  // Mid-stream the call `.done` often arrives a few events before the output
+  // `.done`; converting early flashes "no hits" then rewrites to real hits.
+  // A search that errored is terminal either way — never leave it spinning,
+  // and never pretend it ran clean with zero hits.
   for (const [key, idx] of toolRows) {
     const row = rows[idx];
-    if (row.kind === "tool_call" && completedTools.has(key)) {
-      rows[idx] = failedTools.has(key)
-        ? {
-            kind: "status",
-            message: row.query ? `Search for "${row.query}" failed.` : "Search failed.",
-          }
-        : { kind: "tool_result", name: row.name, query: row.query, hits: [], count: 0 };
+    if (row.kind !== "tool_call" || !completedTools.has(key)) continue;
+    if (failedTools.has(key)) {
+      rows[idx] = {
+        kind: "status",
+        message: row.query ? `Search for "${row.query}" failed.` : "Search failed.",
+      };
+      continue;
+    }
+    if (settle) {
+      rows[idx] = { kind: "tool_result", name: row.name, query: row.query, hits: [], count: 0 };
     }
   }
 
@@ -390,7 +411,10 @@ export function toDigiChatActivity(spans: ActivitySpan[]): DigiChatActivity[] {
   return orphanedRows.size ? rows.filter((_, idx) => !orphanedRows.has(idx)) : rows;
 }
 
-export function messageActivities(message: UIMessage): DigiChatActivity[] {
+export function messageActivities(
+  message: UIMessage,
+  opts: ToDigiChatActivityOptions = {},
+): DigiChatActivity[] {
   const spans = message.parts
     .filter(
       (part): part is { type: typeof ACTIVITY_PART_TYPE; data: unknown } =>
@@ -398,5 +422,5 @@ export function messageActivities(message: UIMessage): DigiChatActivity[] {
     )
     .map((part) => sanitizeActivitySpan(part.data))
     .filter((span): span is ActivitySpan => span !== null);
-  return toDigiChatActivity(spans);
+  return toDigiChatActivity(spans, opts);
 }

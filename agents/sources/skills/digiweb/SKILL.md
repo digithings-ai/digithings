@@ -40,7 +40,8 @@ here.
      state/effects) with a leading `/** … */` docblock (the manifest reads it).
    - Styles in the owning page's `<family>.css` with a unique class prefix.
    - Place it in `reference/app/<family>/page.tsx` using the section grammar.
-   - From `reference/`: `npx tsc --noEmit` and `npx eslint .` clean; verify live.
+   - From `reference/`: `npm run typecheck` and `npm run lint` clean; verify live.
+     CI runs both in the `web` lane (#1981), so a failure here is a red PR.
    - Regenerate the index: `node frontend/digiweb/scripts/build-manifest.mjs`.
    - *Then* consume it in the product app.
 

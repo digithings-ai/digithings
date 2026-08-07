@@ -31,6 +31,7 @@ pytestmark = pytest.mark.unit
 @pytest.fixture(autouse=True)
 def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear module-global caches and provider env vars before each test."""
+    previous_usage_observer = client_mod._usage_observer
     digillm.clear_caches()
     digillm.set_usage_observer(None)
     for var in (
@@ -51,7 +52,7 @@ def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
     ):
         monkeypatch.delenv(var, raising=False)
     yield
-    digillm.set_usage_observer(None)
+    digillm.set_usage_observer(previous_usage_observer)
     digillm.clear_caches()
 
 
@@ -928,6 +929,13 @@ def test_create_with_retry_propagates_non_transient() -> None:
     fake_client.chat.completions.create.side_effect = ValueError("bad request")
     with pytest.raises(ValueError, match="bad request"):
         client_mod._create_with_retry(fake_client, model="m", messages=[])
+
+
+def test_sdk_hidden_retries_remain_enabled_and_opaque() -> None:
+    """Attempt telemetry observes SDK create calls, not the SDK's internal HTTP retries."""
+    made = _capture_client_kwargs(digillm.get_client)
+    assert len(made) == 1
+    assert "max_retries" not in made[0]
 
 
 @pytest.mark.parametrize(

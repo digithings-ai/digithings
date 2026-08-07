@@ -1,11 +1,11 @@
 /**
  * Renders the agent chain and asserts the canon primitives actually reach the
  * markup — the regression this suite exists for is the embed silently showing
- * no tool chain, no reasoning and no sources (#1418 gap 6).
+ * no tool chain / no reasoning (#1418 gap 6).
  *
- * Asserted against SERVER-rendered output on purpose: the embed must read
- * without client JS, so a tool call, a reasoning step and a citation each have
- * to be present in the first paint rather than appear on hydration.
+ * Asserted against SERVER-rendered output on purpose. Tool heads and meta
+ * counts land in the first paint; hit lists stay folded on the tool row
+ * (Claude Code grammar) and mount only on expand.
  */
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -48,9 +48,9 @@ describe("ChatActivities — tool calls render in the canon grammar", () => {
     expect(html).toContain("digivault.search");
     expect(html).toContain("✓");
     expect(html).toContain("2 notes");
-    // A body exists, so the head becomes a real disclosure control — and it
-    // starts open, so the citations are in the first paint.
-    expect(html).toContain('aria-expanded="true"');
+    // Hits fold under the tool — closed by default.
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("docs/auth.md");
   });
 
   it("renders a failed-search aside rather than a fake empty result", () => {
@@ -92,7 +92,7 @@ describe("ChatActivities — reasoning renders as a disclosure", () => {
 });
 
 describe("ChatActivities — sources render as citations", () => {
-  it("renders every retrieved document with its path", () => {
+  it("folds retrieved documents behind the tool disclosure (body mounts on expand)", () => {
     const html = render([
       {
         kind: "tool_result",
@@ -112,15 +112,11 @@ describe("ChatActivities — sources render as citations", () => {
       },
     ]);
 
-    expect(html).toContain("dc-act-hits");
-    expect(html).toContain("Auth overview");
-    expect(html).toContain("docs/auth.md");
-    expect(html).toContain("JWT exchange");
-    expect(html).toContain("docs/jwt.md");
-    // Provenance metadata survives the migration.
-    expect(html).toContain("peer_reviewed");
-    expect(html).toContain("2024");
-    expect(html).toContain("RS256 token exchange…");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("2 notes");
+    expect(html).not.toContain("dc-act-hits");
+    expect(html).not.toContain("docs/auth.md");
+    expect(html).not.toContain("RS256 token exchange…");
   });
 
   it("says so plainly when a search found nothing", () => {
@@ -163,9 +159,11 @@ describe("ChatActivities — the chain as a whole", () => {
     ]);
 
     expect(html).toContain('aria-label="Agent steps"');
-    expect(html).toContain("docs/auth.md");
-    expect(html.indexOf("Planning")).toBeLessThan(html.indexOf("docs/auth.md"));
-    expect(html.indexOf("docs/auth.md")).toBeLessThan(html.indexOf("think-chip"));
+    // Order of heads: Planning → running search → settled search (folded) → reasoning.
+    expect(html.indexOf("Planning")).toBeLessThan(html.indexOf("tc-run"));
+    expect(html.indexOf("1 note")).toBeLessThan(html.indexOf("think-chip"));
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("docs/auth.md");
   });
 
   it("renders nothing at all for an empty or absent chain", () => {

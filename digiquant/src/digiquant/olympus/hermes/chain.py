@@ -256,6 +256,19 @@ def _run_terminal_phase(
         return state
 
 
+def resolve_run_id(atlas_input: AtlasInput) -> str:
+    """CI run id when present, else a deterministic, self-labelled local id.
+
+    ``-local`` is a suffix no GitHub run id can carry, so an off-CI run can never be mistaken
+    for — or joined to — a CI run. Deliberately resolved once at the CLI boundary rather than
+    recomputed deeper in the call stack: two unrelated in-process runs on the same cadence and
+    date would otherwise share one identifier.
+    """
+    return os.environ.get("GITHUB_RUN_ID") or (
+        f"{atlas_input.cadence}-{atlas_input.run_date.isoformat()}-local"
+    )
+
+
 def _run_beliefs_fold(state: AtlasResearchState, deps: ChainDeps, atlas_input: AtlasInput) -> None:
     """Fold the beliefs backlog, fail-soft (#1737).
 
@@ -315,7 +328,12 @@ def run_atlas_then_hermes(
     # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
     # the way out (telemetry is fail-soft inside write_row, so this never crashes the run).
     started_at = datetime.now(tz=timezone.utc)
-    _usage.start()
+    # Detailed telemetry is keyed by the same run id the diagnostics row uses (GITHUB_RUN_ID
+    # via DiagnosticsDeps, written with on_conflict="run_id,attempt"), so Task 1.5 can
+    # reconcile the two against one value. With no diagnostics wiring there is no run to
+    # attribute to: capture stays at today's no-identity behaviour rather than minting an
+    # identifier that could silently join two unrelated in-process runs.
+    _usage.start(run_id=deps.diagnostics.run_id if deps.diagnostics is not None else None)
     try:
         # Operator escape hatch: beliefs-only run (no Atlas/Hermes research).
         if atlas_input.refresh_scope == "beliefs":
@@ -542,9 +560,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         risk_sizing=RiskSizingDeps(client=client),
         commit_run=CommitRunDeps(client=client),
     )
-    run_id = os.environ.get("GITHUB_RUN_ID") or (
-        f"{atlas_input.cadence}-{atlas_input.run_date.isoformat()}-local"
-    )
+    run_id = resolve_run_id(atlas_input)
     chain_deps = ChainDeps(
         atlas=atlas_deps,
         hermes=hermes_deps,

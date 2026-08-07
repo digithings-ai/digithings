@@ -52,6 +52,7 @@ The following is built and functional as of this architecture review (March 2026
 | digismith tracing (`traceable` wrappers) | Built | `digillm` (via `digismith.trace.traceable`) |
 | OpenTelemetry export (opt-in) | Built | `server.py` (via `digibase.otel.setup_otel_fastapi`) |
 | Ordered body-free run call events | Built | `usage.py`, `graph/research_agent.py`, `digillm` observer |
+| Logical provider-call purpose and lineage | Built | `llm_client.py`, `usage.py`, `graph/research_agent.py`, `digillm` contracts |
 | Planning executor (topo-sort + parallel steps) | Built | `planning/executor.py` |
 | Graphiti graph memory | **Not built** | Phase 2 roadmap |
 | Remote MCP server enumeration | **Not built** | Phase 2 roadmap |
@@ -119,17 +120,92 @@ When `stream: true` in `POST /v1/chat/completions`:
 
 ### 4.0 Olympus call-event capture
 
-`usage.start()` activates one ordered, lock-protected event stream for an Olympus process.
-`digillm` contributes terminal model/search events; `graph/research_agent.py` times actual tool
-execution. `call_context(phase, operation, document_key)` labels model/search calls, while the
-tool wrapper also passes those labels explicitly because `ContextVar` state does not propagate
-into `ThreadPoolExecutor` workers.
+`usage.start()` activates ordered aggregate events and a temporary, lock-protected detailed
+telemetry buffer for an Olympus process. `digillm` contributes terminal model/search events;
+`graph/research_agent.py` times actual tool execution. `call_context(node_run_id, phase, operation,
+document_key)` labels model/search calls, while the tool wrapper also passes display labels
+explicitly because `ContextVar` state does not propagate into `ThreadPoolExecutor` workers.
 
 `RunCallEvent` is a frozen Pydantic v2 model. It stores fixed labels, status, duration, retries,
 usage totals, source count, and code-generated shape summaries. All public text is length-bounded.
 It never stores prompts, argument or result values, document bodies, credentials, PII-heavy
 values, model output, or chain-of-thought. `events_snapshot()` returns the ordered body-free
 records; aggregate `snapshot()` includes them under `events` for the Atlas diagnostics writer.
+
+#### Logical provider-call boundary
+
+**Purpose:** label each logical provider invocation with generic intent, parentage, and artifact
+disposition. **Reason:** the aggregate explains run totals and physical attempts explain transport,
+but neither explains why a call existed or which prior call caused a repair or follow-up.
+**Intent:** make provider work attributable without moving Olympus policy into DigiGraph or adding
+nodes to the canonical graph. **System contribution:** detailed usage, artifact linkage, and later
+research-policy evaluation can share one stable lineage.
+
+`llm_client.py` registers `usage.DETAILED_USAGE_OBSERVER` process-wide and wraps DigiLLM entry
+points with `provider_call_context(...)` only when `call_context` contains a real `node_run_id`.
+No placeholder identity is generated. `logical_call_context(...)` may override generic purpose,
+parent, artifact references, and no-artifact reason for a nearby call. Defaults distinguish initial
+generation, structured completion, tool selection/follow-up, web grounding, and X grounding;
+`graph/research_agent.py` marks validation retries as structured repairs and links each repair to
+the rejected call ID. Structured calls defer successful logical-record delivery until Pydantic
+validation assigns the final disposition, so a rejected parent is appended once as
+`validation_rejected`; provider failures and cancellations remain immediate terminal records.
+
+`detailed_usage_projection()` is a temporary reconciliation view, not a second accounting ledger.
+It selects one terminal successful physical attempt for each successful non-cache logical call so
+its call/token/cost totals match the incumbent one-event aggregate where provider evidence exists.
+Retries remain present in detailed attempt records, cache hits remain explicit zero-attempt logical
+calls, and any unavailable token or cost value makes the corresponding projection value `None`
+rather than fabricated zero.
+
+Collector and observer failures are fail-soft and cannot change cache ordering, retry/backoff,
+routing, tool execution, return values, or exceptions. Strict records have no prompt, response,
+search text, secret, API key, or raw exception fields. Task 1.5 owns persistence, flush, durable
+reconciliation, and any retirement of the aggregate-only writer. Rollback removes logical metadata
+injection and detailed observer registration while retaining strict contracts, physical attempts,
+and the incumbent aggregate.
+
+#### Run and node context (#1978, Task 1.4)
+
+`build_pipeline` registers every node wrapped in `usage.node_run_scope(...)`, so a node's provider
+calls carry its identity and each execution emits exactly one terminal `NodeRunRecord`. There is no
+node-name registry: identity is `NodeSpec.name` plus the per-`Send` cursor, and nothing parses a
+ticker out of `phase` or `phase_slug`.
+
+The wrapper is `functools.wraps` + `*args/**kwargs`, and the form is load-bearing. LangGraph decides
+what to inject from `inspect.signature(func).parameters`, matched on parameter name *and*
+annotation, and `inspect.signature` follows `__wrapped__`. A `(state)`-only wrapper — with or
+without `wraps` — raises `TypeError` for any node declaring `config`, `writer`, `store`, or
+`runtime`. `tests/dg/test_node_run_context.py::test_node_declaring_runnable_config_still_receives_it`
+is the regression guard.
+
+**Run identity.** `usage.start(run_id=...)` takes the `GITHUB_RUN_ID` that `atlas_run_diagnostics`
+already writes with `on_conflict="run_id,attempt"`, so detailed telemetry and the diagnostics row
+join on one value. It is stored verbatim — truncating a join key would corrupt reconciliation. No
+second identifier is minted; `AtlasResearchState.run_id` is a per-process `uuid4` that joins to
+nothing and is deliberately not used.
+
+**When identity is unavailable, nothing is recorded.** This is the honest case, not a gap:
+
+| Case | `run_id` | Effect |
+|------|----------|--------|
+| CI, via `cli_main` | `GITHUB_RUN_ID` | Node records join the diagnostics row |
+| Off CI, via `cli_main` | `{cadence}-{run_date}-local` — reused, not minted | `-local` is a suffix no CI run id can carry, so the two can never be confused |
+| `deps.diagnostics is None` (library/test callers) | `None` | No node records, no logical calls; physical attempts unchanged. Such a run writes no diagnostics row either, so there is nothing to reconcile against |
+| Blank/whitespace | normalised to `None` | `run_id text NOT NULL CHECK (length(run_id) > 0)` can never be violated from this producer |
+| `usage.start()` with no argument (operator scripts, the Atlas simulator, the chat workflow) | `None` | Emits nothing **by design** |
+
+**A NULL `fanout_key` means "this execution had no fan-out cursor", never "instrumentation
+missing".** Atlas `phase5_sectors` nodes and the compile-time per-ticker H5/H6 variants already
+carry their discriminator in `node_name`, so they leave `fanout_key` NULL correctly. A worker that
+no-ops on a falsy cursor still emits an honest `SUCCEEDED` record with no child provider call.
+
+`node_run_scope` records `FAILED` on `BaseException`, deliberately broader than DigiLLM's
+`except Exception`: losing a record on the exact path where a run dies is the worst place to lose
+one, and an incomplete run has to be a counted signal. A LangGraph control-flow exception would be
+recorded `FAILED`; no `build_pipeline` node uses `interrupt()` today, so that path is dead rather
+than wrong. Synthetic barriers are not wrapped — they run no user code, so reconciliation counts
+real node executions rather than compiled graph nodes.
 
 ### 4.1 WorkflowState (`graph/state.py`)
 

@@ -212,8 +212,37 @@ and run `make agents-init` (CI enforces idempotence).
 
 ## Build / CI posture
 
-The reference app is **not** built or linted in CI (no workflow references it);
-the gate is local — `npx tsc --noEmit` + `npx eslint .` from `reference/`, plus
-a live browser check. The suite has no auth, crypto, or live-trading surface, so
+The reference app is **linted and type-checked** in CI by the `web` lane
+(`test-web.yml`), gated on `frontend/digiweb/reference/**`: `npm run lint` and
+`npm run typecheck` (`tsc --noEmit`) for the `design-reference` workspace (#1981).
+Run the same two commands locally from `reference/`, plus a live browser check —
+that last half is the only one CI cannot do.
+
+It is deliberately **not built** in CI. Neither Cloudflare site compiles this
+workspace, so a `next build` here would cost two app builds with no consumer.
+
+Both Cloudflare deploy checks nevertheless watch `reference/package.json` in their
+`paths:` filters (#1977). That is an *install* input, not a build input: the root
+`npm install` both build scripts run resolves all eight workspace manifests before
+either site compiles, so an unresolvable range here fails both production builds,
+and of the eight this was the only manifest watched by nothing.
+`tests/scripts/test_deploy_build_inputs.py` now asserts no workspace manifest is
+orphaned, so a newly scaffolded workspace cannot silently reopen that hole. The
+*directory* stays out of those two filters — see the comment beside the entry —
+because neither site builds it; `frontend/digiweb/reference/**` is watched by the
+`web` lane instead, which lints and type-checks rather than building.
+
+Before #1981 nothing built, linted or type-checked this app, but "no coverage at
+all" would overstate it. `scripts/check_frontend_canon.py` (the unconditional
+`frontend-canon` job) does scan this workspace for raw palette utilities, legacy
+vocabulary and colour literals. What it does *not* scan here is new CSS class
+families: digiweb is exempt from that census by design, because the reference is
+where new families are supposed to be born. `make score` also reaches this
+directory — only `frontend/digiweb/design/` sits in `score.py`'s skip list — but
+`ci.yml`'s `score` path filter excludes `frontend/**` (#1310), so the lane does
+not fire on a frontend-only PR. Note the distinction: the CI *filter* excludes
+`frontend/**`, the *tool* does not.
+
+The suite has no auth, crypto, or live-trading surface, so
 the human-gate items in `CLAUDE.md` do not apply to component work here (a
 physical relocation of the shared packages, which touches deploy config, does).
