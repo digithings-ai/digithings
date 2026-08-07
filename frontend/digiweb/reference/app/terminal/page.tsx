@@ -51,12 +51,13 @@ export default function TerminalPage() {
         <h2 className="title">One module waits; the family performs.</h2>
         <p className="section-copy">
           The default loader for any single module surface — a customer&apos;s embedded chat
-          widget, a dashboard&apos;s cold boot — is the module&apos;s own lowercase name, static,
-          with only the block cursor blinking beside it. No typing, no note, no cycling: a
-          one-tenant wait is not a tour of the platform, so it does not perform one. This is{" "}
-          <code>ContainerBootLoader</code> with a single, non-looping step —{" "}
+          widget, a dashboard&apos;s cold boot — is the module&apos;s own lowercase name: it types
+          in once, holds, and the block cursor keeps blinking beside it. No note, no erase, no
+          cycling back to itself: a one-tenant wait is not a tour of the platform, so it does not
+          perform one. This is <code>ContainerBootLoader</code> with a single, non-looping step —{" "}
           <code>{'steps={["digichat"]}'}</code> — same primitive as the boot loader above, just
-          held on one word.
+          held on one word. Reduced motion renders the word whole from the first frame, caret
+          still.
         </p>
         <div className="tl-stage">
           <ContainerBootLoader steps={["digichat"]} note={null} />
