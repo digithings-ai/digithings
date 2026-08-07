@@ -89,12 +89,34 @@ describe("mapFoundryEvent over the recorded stream", () => {
     expect(retrieve?.documents?.[0].snippet).toBeTruthy();
   });
 
-  it("reports that reasoning happened without inventing what was reasoned", () => {
-    const reasoning = spansFromFixture().filter((s) => s.label === "Thinking");
-    expect(reasoning.length).toBeGreaterThan(0);
-    // The agent returns summary:[] content:[] and refuses a per-call
-    // reasoning summary alongside agent_reference, so there is no text to show.
-    for (const span of reasoning) expect(span.reasoningDelta).toBeUndefined();
+  // Superseded: reasoning items used to map unconditionally, which put a bare
+  // "Thinking ✓" on every answer — including a two-word greeting that ran no
+  // tools and had nothing behind the row. A step that shows nothing is chrome.
+  it("drops textless reasoning rather than asserting a step it cannot show", () => {
+    // The fixture carries six reasoning items, every one summary:[] content:[].
+    const reasoningItems = events.filter(
+      (e) =>
+        e.type === "response.output_item.done" &&
+        (e as { item?: { type?: string } }).item?.type === "reasoning",
+    );
+    expect(reasoningItems.length).toBeGreaterThan(0);
+    expect(spansFromFixture().filter((s) => s.label === "Thinking")).toHaveLength(0);
+  });
+
+  it("renders reasoning the moment it carries text", () => {
+    // What arrives once a reasoning summary is enabled on the agent definition.
+    const withText = mapFoundryEvent({
+      type: "response.output_item.done",
+      item: {
+        type: "reasoning",
+        summary: [{ type: "summary_text", text: "Checked the OpenAPI chunks first." }],
+        content: [],
+      },
+    } as unknown as FoundryStreamEvent);
+    expect(withText).toMatchObject({
+      type: "activity",
+      span: { label: "Thinking", reasoningDelta: "Checked the OpenAPI chunks first." },
+    });
   });
 });
 
@@ -117,9 +139,17 @@ describe("the rows a reader ends up seeing", () => {
     }
   });
 
-  it("shows the thinking step once, not once per reasoning item", () => {
-    // The stream carried six reasoning items for this one answer.
-    const thinking = rows().filter((r) => r.kind === "trace" && r.label === "Thinking");
-    expect(thinking).toHaveLength(1);
+  it("shows no thinking row at all while the agent emits no reasoning text", () => {
+    // Six reasoning items in this stream, none with text — so none on screen.
+    expect(rows().filter((r) => r.kind === "trace")).toHaveLength(0);
+  });
+
+  it("leaves a greeting with an empty chain instead of a lone Thinking row", () => {
+    // "hi" runs no tools; every item it produces is a textless reasoning step.
+    const greeting = [
+      { type: "response.output_item.done", item: { type: "reasoning", summary: [], content: [] } },
+    ] as unknown as FoundryStreamEvent[];
+    const spans = greeting.map(mapFoundryEvent).filter((m) => m?.type === "activity");
+    expect(spans).toHaveLength(0);
   });
 });
