@@ -291,3 +291,52 @@ def test_build_check_validates_the_stamp_it_just_wrote(workflow_path: Path) -> N
     )
     assert "dist/build-info.json" in runs
     assert "scripts/check_deploy_freshness.py" in runs
+
+
+def _trigger_paths(workflow_path: Path) -> list[str]:
+    # PyYAML resolves a bare top-level `on:` key to the boolean True (YAML 1.1), so
+    # the trigger block is not reachable under the string "on".
+    return _workflow(workflow_path)[True]["pull_request"]["paths"]
+
+
+@pytest.mark.parametrize("workflow_path", _BUILD_CHECK_WORKFLOWS, ids=lambda p: p.name)
+@pytest.mark.parametrize(
+    "callee", ["scripts/write-build-info.sh", "scripts/check_deploy_freshness.py"]
+)
+def test_build_check_watches_the_files_it_runs(workflow_path: Path, callee: str) -> None:
+    """A check that does not fire on its own inputs proves nothing about them.
+
+    Both deploy checks listed only ``scripts/build-*.sh``, never its callees. So an
+    edit to ``write-build-info.sh`` — which the real Cloudflare build runs under
+    ``set -euo pipefail``, and whose absent output hard-fails that build — matched no
+    glob and ran neither check; likewise ``check_deploy_freshness.py``, the evaluator
+    both the "Assert deploy build stamp" step and the daily probe call.
+    """
+    assert callee in _trigger_paths(workflow_path)
+
+
+@pytest.mark.parametrize("workflow_path", _BUILD_CHECK_WORKFLOWS, ids=lambda p: p.name)
+@pytest.mark.parametrize(
+    "manifest",
+    ["pyproject.toml", "requirements.txt", "setup.py", "package.json", "package-lock.json"],
+)
+def test_build_check_watches_the_root_manifests(workflow_path: Path, manifest: str) -> None:
+    """The root manifests every deploy build resolves, pinned like the callees above.
+
+    Two routes into the same failure. Cloudflare's build image auto-detects languages
+    from the repo root and runs ``pip install .`` *before* the configured build command,
+    so a Python manifest can freeze a site without a frontend file being touched — #1714
+    edited only the root pyproject.toml and uv.lock, and both sites silently built
+    nothing for three days with every PR green. The npm manifests break it more
+    directly: each build script runs its own root ``npm install`` (#1956), which
+    reconciles the lock against the workspace manifests rather than installing from it,
+    so a bad resolution fails the build with nothing else touched. Each workflow's own
+    comment records both; nothing enforced either.
+
+    Root-anchored entries only. Which *workspace* directories a site must watch is a
+    moving function of the import graph, so it is answered by deriving the closure from
+    the manifests rather than by a list in this file — a list here would go stale the
+    next time a frontend dependency edge changes, silently, which is the failure mode
+    this whole module exists to refuse.
+    """
+    assert manifest in _trigger_paths(workflow_path)
