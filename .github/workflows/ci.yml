@@ -108,6 +108,7 @@ jobs:
               - 'frontend/digichat-ui/**'
               - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
+              - 'frontend/digiweb/reference/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
@@ -197,9 +198,13 @@ jobs:
   # ── Frontend canon guard (#1404, #1434) — UNCONDITIONAL ─────────────────────
   # No `needs`/`if` gate on purpose: check_frontend_canon.py does
   # `git ls-files frontend` and scans ALL frontend files regardless of the
-  # diff, so path-gating it (as the per-app test jobs still do) let a PR
-  # touching only frontend/digichat-ui/** or frontend/digiweb/reference/**
-  # skip the guard entirely — even though digichat-ui is a census app.
+  # diff, so its verdict is a property of the whole tree while a path filter is a
+  # property of the diff. Gate it on any filter and a PR whose diff falls outside
+  # that filter skips a check whose scope was never the diff in the first place —
+  # which is what happened when frontend/digichat-ui/** and
+  # frontend/digiweb/reference/** were in no lane at all. Both are covered now
+  # (digichat + web, and web respectively), and that changes nothing here: the
+  # mismatch is structural, not a gap in the glob list.
   # Stdlib-only; no npm/pip install needed.
   frontend-canon:
     name: Frontend canon guard

@@ -66,3 +66,30 @@ jobs:
 
       - name: Lint digiquant-web
         run: npm run lint --workspace digiquant-web
+
+      # The design reference had no automated coverage at all until these two steps:
+      # nothing in .github/workflows built, linted or type-checked it, `make score`
+      # excludes frontend/** (#1310), and its only other guard is ci.yml's
+      # frontend-canon job, which reads CSS class families and nothing else. It is the
+      # surface the other frontends copy patterns from (.claude/skills/digiweb/SKILL.md
+      # routes web work through it), so a broken pattern here propagates by design —
+      # and it took ~137 commits in the month after it was scaffolded (2026-07-06) with
+      # nothing able to fail. It belongs in this lane rather than one of its own
+      # because the root `npm ci` above already wires the @digithings/design and
+      # @digithings/web symlinks it declares.
+      - name: Lint design-reference
+        run: npm run lint --workspace design-reference
+
+      # Type-checked as well as linted, because eslint-config-next does not type-check:
+      # a bad prop type or a broken import in the reference passes `eslint .` clean.
+      # Run through the workspace's own `typecheck` script, not a bare root `tsc` —
+      # digichat pins typescript ^5 while this app pins ^6, so which binary a root
+      # invocation resolves is a hoisting accident.
+      #
+      # No `next build` here on purpose: neither Cloudflare site builds this workspace,
+      # so a production build would be cost with no consumer. That leaves tsc's
+      # `include` of `.next/types/**` unsatisfied on a fresh checkout — verified not to
+      # matter, `tsc --noEmit` reports 0 errors with `.next/` absent. This is the same
+      # pair frontend/digiweb/reference/README.md documents as the local gate.
+      - name: Typecheck design-reference
+        run: npm run typecheck --workspace design-reference
