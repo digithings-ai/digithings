@@ -29,8 +29,12 @@ import { ChatStreamCursor } from "../chat/ChatStreamCursor";
  * - **The label is written straight to the DOM, not re-rendered.** A character
  *   is not a state change; `shownRef` tracks what is on screen so a step swap
  *   erases what was actually there. That also keeps the typed node out of the
- *   a11y tree — a live region on it would announce every keystroke — so the
- *   step is announced once, whole, from an `sr-only` `role="status"` sibling.
+ *   a11y tree — a live region on it would announce every keystroke — so what a
+ *   screen reader gets comes from a visually-hidden `role="status"` sibling.
+ *   That sibling narrates the STEP only when `activeIndex` is supplied, since
+ *   only then does a step mean progress; left to cycle its own script it
+ *   announces `waitingLabel` once instead of reciting invented phrases on a
+ *   ~10s loop for the length of the wait.
  *
  * Steps advance on the internal clock, or pass `activeIndex` to drive them
  * from real progress (a stream's tool-call names, a health-check phase) and
@@ -58,6 +62,8 @@ export type TerminalStepCaretProps = {
   eraseMs?: number;
   holdMs?: number;
   restMs?: number;
+  /** What a screen reader hears while the steps are the internal script. */
+  waitingLabel?: string;
   className?: string;
 };
 
@@ -68,6 +74,9 @@ const ERASE_MS = 37;
 const HOLD_MS = 1200;
 const REST_MS = 220;
 
+/** Announced once while the steps are the internal script. See the a11y note. */
+const WAITING_LABEL = "Working…";
+
 export function TerminalStepCaret({
   steps,
   activeIndex,
@@ -77,6 +86,7 @@ export function TerminalStepCaret({
   eraseMs = ERASE_MS,
   holdMs = HOLD_MS,
   restMs = REST_MS,
+  waitingLabel = WAITING_LABEL,
   className,
 }: TerminalStepCaretProps) {
   const reduced = useReducedMotion();
@@ -104,6 +114,15 @@ export function TerminalStepCaret({
     // Reduced motion writes the label whole and stops.
     if (reduced) {
       write(word);
+      return;
+    }
+    // No steps at all: nothing to type and nothing to advance to. Falling
+    // through would schedule `setOwnIndex(i => (i + 1) % 0)` — NaN, which is
+    // absorbing: `steps[NaN]` is undefined forever after, and since
+    // Object.is(NaN, NaN) React bails out of both the state update and the
+    // effect, so the caret never recovers even once real steps arrive.
+    if (count === 0) {
+      write("");
       return;
     }
     // An empty label must still advance. Returning early here (as the reduced
@@ -164,8 +183,19 @@ export function TerminalStepCaret({
         <span className="tl-label">{steps[0] ?? ""}</span>
       </noscript>
       <ChatStreamCursor />
-      <span className="sr-only" role="status">
-        {word}
+      {/* `.tl-sr` and not Tailwind's `.sr-only`: a utility only exists in an app
+          whose own source happens to use it, and digithings.ai's does not — so
+          the shared component shipped a screen-reader span that rendered as
+          ordinary visible text, duplicating the label beside itself. A
+          component's a11y must not depend on the consumer's build config.
+
+          Announce the STEP only when a caller drives it, because only then is
+          it progress. The self-cycling script is invented — narrating it to a
+          screen reader repeats four fabricated phrases every ~10s for as long
+          as the wait lasts, which is worse than the one static line it
+          replaced. */}
+      <span className="tl-sr" role="status">
+        {controlled ? word : waitingLabel}
       </span>
     </span>
   );

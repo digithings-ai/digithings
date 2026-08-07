@@ -211,7 +211,9 @@ export function DigiChatSession({
                         gets the house type-out; streaming gets the bare blink
                         trailing the text. Rendering both — as this did before,
                         a cursor stacked above a "thinking …" dots row — put two
-                        blinking blocks on screen saying the same thing. */}
+                        waiting indicators on screen — a blinking block above a
+                        "thinking …" row of bouncing dots — saying one thing
+                        twice. */}
                     {waiting ? (
                       <TerminalStepCaret
                         steps={CHAT_RESPONSE_STEPS}

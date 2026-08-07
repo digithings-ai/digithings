@@ -90,8 +90,9 @@ function docSummary(src) {
  * Both declaration and re-export forms count. A component PROMOTED into
  * @digithings/web leaves a `export { X } from "@digithings/web"` behind so the
  * specimen keeps a stable import path against one implementation — and matching
- * only `export function` silently dropped all three of the first batch out of
- * the index, which is the one place an agent is told to look for them.
+ * only the DECLARATION forms (`export function` / `export const`) silently
+ * dropped all three of the first batch out of the index, which is the one place
+ * an agent is told to look for them.
  */
 function exportNames(src) {
   const names = new Set();
@@ -115,7 +116,7 @@ function exportNames(src) {
 
 /**
  * The entry's headline export. Declaration order alone is not enough once a
- * file mixes a promoted re-export with a local helper: product-frame.tsx
+ * file mixes a promoted re-export with a local helper: product-frame-reference.tsx
  * re-exports <ProductFrame> and declares <MockTearsheet> beside it, and taking
  * the first found renamed the entry after the helper. The filename is the
  * component's identity, so match against it and fall back to first-found.
@@ -127,11 +128,20 @@ function primaryName(names, id) {
   );
 }
 
-/** The shared module a pure re-export stub forwards to, if that is all it is. */
-function promotedTo(src) {
-  if (/export\s+(?:async\s+)?(?:function|const)\s/.test(src)) return null;
-  const m = src.match(/export\s*\{[^}]*\}\s*from\s*"(@digithings\/[^"]+)"/);
-  return m ? m[1] : null;
+/**
+ * The shared module this entry's HEADLINE component is re-exported from, if it
+ * is. Keyed on the primary name rather than on the file being a pure stub,
+ * because the mixed case is the one that misleads: product-frame-reference.tsx
+ * re-exports <ProductFrame> and declares a local <MockTearsheet>, so an agent
+ * following `path` lands on a file that only forwards the component it came
+ * for. Emitting `promotedTo` there is the whole point of the field.
+ */
+function promotedTo(src, name) {
+  for (const m of src.matchAll(/export\s*\{([^}]*)\}\s*from\s*"(@digithings\/[^"]+)"/g)) {
+    const names = m[1].split(",").map((s) => s.trim().split(/\s+as\s+/).pop().trim());
+    if (names.includes(name)) return m[2];
+  }
+  return null;
 }
 
 const families = {};
@@ -150,9 +160,10 @@ for (const file of walk(COMPONENTS, ".tsx").sort()) {
   const family = familyByFile.get(file) || (subdir && subdir !== "." ? subdir : "shared");
   const summary = docSummary(src);
   if (summary) described += 1;
-  const shared = promotedTo(src);
+  const name = primaryName(names, id);
+  const shared = promotedTo(src, name);
   (families[family] ||= []).push({
-    name: primaryName(names, id),
+    name,
     id,
     path: relPath,
     // Where the implementation actually lives, when `path` is only the stub

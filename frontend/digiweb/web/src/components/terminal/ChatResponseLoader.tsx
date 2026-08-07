@@ -23,8 +23,9 @@ import { TerminalStepCaret } from "./TerminalStepCaret";
  * usually replaced within a second or two, and a slow hold there reads as a
  * stall rather than as work.
  *
- * One motion moment: the caret. `prefers-reduced-motion` shows the first
- * step's label whole with the caret still — see <TerminalStepCaret>.
+ * One motion moment: the caret. `prefers-reduced-motion` shows the active
+ * step's label whole with the caret still — which uncontrolled is the first,
+ * since the internal clock never starts; see <TerminalStepCaret>.
  */
 export type ChatResponseLoaderProps = {
   /** Stages, in order. Defaults to the common path. */

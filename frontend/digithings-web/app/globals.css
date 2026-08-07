@@ -27,6 +27,12 @@
    reference deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
+/* The .tl-* frame for <TerminalStepCaret>, which <DigiChatSession> shows while
+   an answer is still on its way. This app is the second consumer of that
+   session component (digichat is the first), so it needs the sheet too — the
+   chat page renders the caret whether or not this line is here, just unstyled.
+   AFTER chat-core.css: the caret inside it is <ChatStreamCursor>. */
+@import "@digithings/web/styles/terminal-loaders.css";
 @import "@digithings/digichat-ui/styles/cursor.css";
 @import "@digithings/digichat-ui/styles/session.css";
 
@@ -40,6 +46,8 @@
 @source "../../digiweb/web/src/components/data-layout";
 @source "../../digiweb/web/src/components/typography";
 @source "../../digiweb/web/src/components/symbols";
+/* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
+@source "../../digiweb/web/src/components/terminal";
 
 /* Point the token font families at the self-hosted next/font variables. */
 :root[data-theme] {

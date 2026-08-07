@@ -1,6 +1,6 @@
 /**
  * SSR smoke tests for the assistant turn's caret. The transcript shows exactly
- * one blinking block at a time, and which one it is carries meaning: the house
+ * one waiting indicator at a time, and which one it is carries meaning: the house
  * type-out while nothing has come back, the bare streaming caret once prose is
  * arriving, none at all when the turn is settled.
  *
@@ -56,6 +56,29 @@ describe("assistant turn — waiting", () => {
     // The label is typed imperatively, so <noscript> carries the first step.
     expect(html).toContain("<noscript>");
     expect(html).toContain("thinking");
+  });
+
+  // Regression: the caret's screen-reader line used Tailwind's `.sr-only`, a
+  // utility only emitted into an app whose own source uses the class. This app
+  // is consumed by digithings-web, which never does — so the hidden span
+  // rendered as ordinary visible text, printing the step word a second time
+  // beside the one being typed. The class now ships with the component.
+  it("hides the screen-reader line behind a class the component owns", () => {
+    const html = sessionWith(waiting, true);
+    expect(html).toContain('class="tl-sr"');
+    expect(html).not.toContain("sr-only");
+  });
+
+  // Regression: role="status" is aria-live=polite, and its text was the step
+  // label, which changes ~every 2.5s forever while uncontrolled. A screen
+  // reader got four invented phrases on a loop for the length of the wait,
+  // where the indicator this replaced announced one static line once.
+  it("announces one static line rather than reciting the invented script", () => {
+    const html = sessionWith(waiting, true);
+    const status = html.match(/<span class="tl-sr" role="status">([^<]*)</)?.[1];
+    expect(status).toBe("Working…");
+    // …and specifically NOT a step name from the cycling script.
+    expect(status).not.toContain("digigraph");
   });
 });
 

@@ -25,8 +25,9 @@ import { TerminalStepCaret } from "./TerminalStepCaret";
  * them (a health-check poller, a readiness probe).
  *
  * One motion moment: the caret. No spinner, no progress rail, no counter.
- * `prefers-reduced-motion` shows the first step's label whole with the caret
- * still — see <TerminalStepCaret>. Frame styles: `.tl-boot*` in
+ * `prefers-reduced-motion` shows the active step's label whole with the caret
+ * still — which for an uncontrolled loader is the first, since its clock never
+ * starts; see <TerminalStepCaret>. Frame styles: `.tl-boot*` in
  * `@digithings/web/styles/terminal-loaders.css`.
  */
 export type ContainerBootLoaderProps = {
