@@ -191,3 +191,30 @@ def test_a_raising_item_key_leaves_the_node_unchanged() -> None:
     records = usage.node_runs_snapshot()
     assert len(records) == 3
     assert all(record.fanout_key is None for record in records)
+
+
+@pytest.mark.asyncio
+async def test_an_async_node_stays_async_and_is_still_scoped() -> None:
+    """A coroutine node needs a coroutine wrapper.
+
+    ``functools.wraps`` copies the inner signature, so a sync wrapper around an ``async def``
+    looks synchronous to LangGraph while handing back an un-awaited coroutine — the node dies
+    with ``InvalidUpdateError: Expected dict, got <coroutine>``. Nothing registers an async node
+    today, so this guards a capability rather than a live path: without it, adding one would be
+    impossible rather than merely unused.
+    """
+    captured: dict[str, Any] = {}
+
+    async def _anode(state: _State) -> dict[str, Any]:
+        captured["node_run_id"] = usage.provider_call_metadata()[0]
+        return {"seen": ["async"]}
+
+    usage.start(run_id="gha-1978")
+    graph = build_pipeline(_State, [PipelinePhase(name="solo", nodes=(NodeSpec("n", _anode),))])
+    result = await graph.ainvoke(_State())
+
+    assert result["seen"] == ["async"]
+    assert captured["node_run_id"] is not None
+    (record,) = usage.node_runs_snapshot()
+    assert record.node_name == "n"
+    assert record.outcome is NodeRunOutcome.SUCCEEDED

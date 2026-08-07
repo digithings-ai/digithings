@@ -19,6 +19,7 @@ Design:
 from __future__ import annotations
 
 import functools
+import inspect
 import logging
 from dataclasses import dataclass
 
@@ -120,7 +121,23 @@ def _instrumented(
     annotation, and ``inspect.signature`` follows ``__wrapped__``. A ``(state)``-only wrapper
     breaks any node declaring ``config``/``writer``/``store``/``runtime``. ``wraps`` also
     preserves ``__name__``, which LangGraph reads for the trace name.
+
+    A coroutine node needs a coroutine wrapper. ``functools.wraps`` copies the inner signature,
+    so a sync wrapper around an ``async def`` looks synchronous to LangGraph while returning an
+    un-awaited coroutine: the node fails with ``InvalidUpdateError: Expected dict, got
+    <coroutine>`` instead of being routed to the async path. No node registered here is async
+    today and nothing calls ``ainvoke``, so this is latent — but a sync-only wrapper would make
+    an async node permanently unroutable rather than merely unused.
     """
+    if inspect.iscoroutinefunction(run):
+
+        @functools.wraps(run)
+        async def _awrapped(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            state = args[0] if args else kwargs.get("state")
+            with node_run_scope(node_name, fanout_key=_fanout_key(key_of, state)):
+                return await run(*args, **kwargs)
+
+        return _awrapped
 
     @functools.wraps(run)
     def _wrapped(*args: Any, **kwargs: Any) -> dict[str, Any]:
