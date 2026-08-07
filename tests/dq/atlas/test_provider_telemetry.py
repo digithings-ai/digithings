@@ -386,6 +386,42 @@ def test_a_record_that_fails_revalidation_is_counted_and_never_submitted() -> No
     assert [row["run_id"] for row in client.rows(pt.NODE_RUNS_TABLE)] == ["gha-1"]
 
 
+def test_a_record_whose_enum_field_holds_a_raw_string_still_serializes() -> None:
+    """Serialize the REVALIDATED instance, not the one handed in.
+
+    Found by review. `model_construct` can seat a plain `str` in a `StrEnum` field. That dumps to
+    something `model_validate` accepts, so the record passes the gate — but the original object
+    has no `.value` for the row builder to read, and the resulting `AttributeError` would abort
+    the flush *after* an earlier tier had already landed, leaving a permanently partial batch in
+    a ledger that admits no repair.
+    """
+    node = _node()
+    sneaky = ProviderCallRecord.model_construct(
+        call_id=uuid4(),
+        node_run_id=node.node_run_id,
+        parent_call_id=None,
+        purpose="chat_completion",  # a str, not CallPurpose — no `.value`
+        requested_model="openai/gpt-5",
+        cache_status="miss",
+        outcome="succeeded",
+        attempt_count=1,
+        artifacts=(),
+        no_artifact_reason="consumed_inline",
+        error_type=None,
+        started_at=START,
+        finished_at=END,
+    )
+    client = _Client()
+
+    result = _flush(client, node_runs=[node], provider_calls=[sneaky])
+
+    assert result.provider_calls.inserted == 1
+    row = client.rows(pt.PROVIDER_CALLS_TABLE)[0]
+    assert row["purpose"] == "chat_completion"
+    assert row["cache_status"] == "miss"
+    assert row["outcome"] == "succeeded"
+
+
 def test_a_call_referencing_a_rejected_node_run_is_quarantined() -> None:
     """A dropped record is not a resolvable referent — eligibility follows what LANDED."""
     bogus_node = NodeRunRecord.model_construct(

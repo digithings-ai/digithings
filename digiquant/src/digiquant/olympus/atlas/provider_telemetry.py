@@ -284,20 +284,26 @@ def _provider_attempt_row(record: ProviderAttemptRecord) -> dict[str, Any]:
     }
 
 
-def _revalidate(record: Any, model: type[Any]) -> bool:
-    """Re-run every validator on an already-constructed record.
+def _revalidate(record: Any, model: type[Any]) -> Any:
+    """Re-run every validator on an already-constructed record, returning the validated instance.
 
     Not redundant. ``model_construct`` bypasses validation entirely, and a record can also be
     built by a producer that has since drifted from the contract. Round-tripping through
     ``model_dump`` → ``model_validate`` re-runs the field constraints *and* the cross-field
     ``model_validator``s that encode the lifecycle rules migration 067 also enforces as CHECKs.
     Against a ledger with no correction path, paying this on every record is cheap insurance.
+
+    Returns the *revalidated* instance, not a boolean, and callers must serialize that rather
+    than the record handed in. Validating a throwaway copy and then serializing the original
+    proves less than it looks: `model_construct` can seat a plain `str` in a `StrEnum` field,
+    which dumps to something `model_validate` happily accepts while the original still has no
+    `.value` for the row builder to read. Serializing the validated object closes that gap
+    instead of documenting it.
     """
     try:
-        model.model_validate(record.model_dump())
+        return model.model_validate(record.model_dump())
     except ValidationError:
-        return False
-    return True
+        return None
 
 
 def _order_calls_by_lineage(
@@ -413,8 +419,9 @@ def _reconcile(
 
 
 def _partition_valid(records: Sequence[Any], model: type[Any], table: str) -> tuple[list[Any], int]:
-    """Split records into those that survive re-validation and a count of those that do not."""
-    valid = [record for record in records if _revalidate(record, model)]
+    """Split records into the *revalidated* instances and a count of those that did not survive."""
+    validated = (_revalidate(record, model) for record in records)
+    valid = [record for record in validated if record is not None]
     rejected = len(records) - len(valid)
     if rejected:
         logger.warning(
