@@ -203,6 +203,14 @@ ruff_and_scripts:
   # export and every attempt collides on (run_id, 1) again with no error anywhere; the only
   # symptom is a cost figure that is quietly a floor.
   - .github/workflows/pipeline-olympus.yml
+  # tests/scripts/test_check_deploy_freshness.py pins both deploy checks' own `paths:` filters —
+  # that each lists the build script's callees, not just the build script. Same shape as the
+  # three entries above: a PR deleting one of those globs touches only .github/workflows/, which
+  # matches the `workflows` (actionlint) filter and nothing else, so the guard against that
+  # deletion would never run on the deletion. actionlint does not read trigger filters for
+  # coverage, and the failure is silent by construction — the check simply stops firing.
+  - .github/workflows/deploy-digithings-cloudflare.yml
+  - .github/workflows/deploy-digiquant-cloudflare.yml
 
 # Repo-wide actionlint. Deliberately the whole directory: before this filter the
 # only actionlint in CI was a job inside test-atlas-graph.yml pinned to
