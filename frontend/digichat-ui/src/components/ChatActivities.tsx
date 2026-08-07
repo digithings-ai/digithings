@@ -49,10 +49,9 @@ import type { DigiChatActivity, VaultHitSummary } from "../types";
 /**
  * Retrieved documents, as the fold-out body of a `tool_result` row.
  *
- * Not new: the previous `.dc-act-hits` list already rendered these on both
- * surfaces. `activity-view.ts` sets `defaultOpen: true` for a non-empty hit list,
- * so citations stay in the server-rendered markup rather than hiding behind a
- * click.
+ * Folded by default — `activity-view.ts` attaches `sources` but does not set
+ * `defaultOpen`, so the head is the scannable Claude Code / opencode tool row
+ * and the hit list mounts only when the reader expands.
  */
 function SourceList({ sources }: { sources: VaultHitSummary[] }) {
   return (

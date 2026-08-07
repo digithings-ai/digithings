@@ -145,16 +145,14 @@ export function toCanonRows(activities: readonly DigiChatActivity[]): CanonActiv
           // A zero-hit result gets no body at all — an expandable block that
           // folds open onto nothing is worse than a plain settled row.
           //
-          // Retrieved documents, by contrast, start EXPANDED. The canon folds
-          // tool output by default because it is usually noise, but citations
-          // are the opposite: "I cite real docs rather than guess" is the whole
-          // claim this product makes, and the sources are what lets a reader
-          // check it. Folding them would also put them behind a click —
-          // `ChatToolCall` renders no body at all while closed, so they would
-          // be missing from the server markup, invisible without client JS and
-          // invisible to a crawler. The genuinely noisy rows (reasoning chains,
-          // bare trace steps) stay folded.
-          ...(activity.hits.length ? { sources: activity.hits, defaultOpen: true } : {}),
+          // Non-empty hits attach as `sources` but stay folded (`defaultOpen`
+          // unset). Claude Code / opencode tool-row grammar: head on one line,
+          // reader expands for the body. A retrieved chunk can run to several
+          // hundred characters, and several searches on one answer used to
+          // unfold every one onto the screen at once. (Closed `ChatToolCall`
+          // mounts no body, so citations are absent from SSR until expand —
+          // accepted trade for the chain staying scannable.)
+          ...(activity.hits.length ? { sources: activity.hits } : {}),
         };
 
       case "trace":
