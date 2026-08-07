@@ -91,8 +91,11 @@ is the only shared chrome.
    <h2 className="title">Claim.</h2><p className="section-copy">…</p>…</section>`.
 4. Verify from `frontend/digiweb/reference/`: `npm run typecheck` and `npm run lint`
    both clean; then check it live in the preview (and toggle theme / mobile).
-   CI runs the same two commands in the `web` lane, so a failure here is a red PR —
-   the live check is the only half of this step that stays yours alone.
+   CI runs the same two commands in the `web` lane, so a failure there is a red PR.
+   Your local run is the *stronger* one, though: if you have run `npm run dev`,
+   tsc also reads `.next/types/**` (route/layout export validation), which CI never
+   has because the lane runs no build and `.next/` is gitignored. A failure only in
+   those generated types will not redden the PR. The live check stays yours alone.
 
 ## Pitfalls learned the hard way
 

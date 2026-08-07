@@ -102,9 +102,13 @@ on:
       # build input, and it is here because the root `npm install` above resolves all
       # eight manifests before either site compiles.
       #
-      # Only the manifest, not `frontend/digiweb/reference/**`. That directory is
-      # deliberately reachable only by ci.yml's unconditional frontend-canon guard, and
-      # nothing in CI has ever built or linted that app. Widening to the directory would
+      # Only the manifest, not `frontend/digiweb/reference/**`. Nothing in CI *builds*
+      # that app. Since #1981 the directory is reached by ci.yml's `web` lane, which
+      # lints and type-checks it, as well as by the unconditional frontend-canon guard —
+      # so the narrow entry here is a division of labour, not the app's only coverage:
+      # an install input for this build, a lint/typecheck input for that lane, and no
+      # `next build` anywhere. (Before #1981 nothing built or linted it at all; do not
+      # restore that wording.) Widening this entry to the directory would
       # fire this site's two-app Next build, and digithings' one, on every edit to a
       # design reference with ~137 commits in the month since it was scaffolded
       # (2026-07-06) — while the manifest's *content* has not changed since that same day.
