@@ -68,8 +68,18 @@ function HeadContent({
   return (
     <>
       <span className={`tc-caret${expandable ? "" : " invisible"}`} aria-hidden="true" />
-      <span className="text-accent">{name}</span>
-      {args ? <span className="min-w-0 truncate text-term-mute">({args})</span> : null}
+      {/* `shrink-0 whitespace-nowrap`: the name is the one thing on this line
+          that must never break. Without them a flex row under width pressure
+          (a narrow embed, a long args string) shrinks every item somewhat
+          evenly, and a shrunk name span with the default `white-space: normal`
+          wraps mid-word — "file_search" split "file_ / searc / h" across three
+          lines, observed live. `args` carries `min-w-0 flex-1 truncate` so it
+          is the one thing that absorbs the missing space, ellipsised, never
+          the name. */}
+      <span className="shrink-0 whitespace-nowrap text-accent">{name}</span>
+      {args ? (
+        <span className="min-w-0 flex-1 truncate text-term-mute">({args})</span>
+      ) : null}
       <span className={`ml-auto shrink-0 ${mark.cls}`}>{mark.glyph}</span>
       {duration ? (
         <span className="min-w-[3rem] shrink-0 text-right text-[0.7rem] text-term-mute">

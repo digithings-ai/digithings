@@ -1,11 +1,13 @@
 /**
  * Renders the agent chain and asserts the canon primitives actually reach the
  * markup — the regression this suite exists for is the embed silently showing
- * no tool chain, no reasoning and no sources (#1418 gap 6).
+ * no tool chain / no reasoning (#1418 gap 6).
  *
- * Asserted against SERVER-rendered output on purpose: the embed must read
- * without client JS, so a tool call, a reasoning step and a citation each have
- * to be present in the first paint rather than appear on hydration.
+ * Asserted against SERVER-rendered output on purpose. Tool heads, status marks
+ * and meta counts land in the first paint; hit lists and reasoning bodies stay
+ * folded (Claude Code / opencode grammar) and mount only on expand — so this
+ * suite checks the disclosure is present and closed, not that citations are
+ * inlined in the SSR HTML.
  */
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -48,9 +50,12 @@ describe("ChatActivities — tool calls render in the canon grammar", () => {
     expect(html).toContain("digivault.search");
     expect(html).toContain("✓");
     expect(html).toContain("2 notes");
-    // A body exists, so the head becomes a real disclosure control — and it
-    // starts open, so the citations are in the first paint.
-    expect(html).toContain('aria-expanded="true"');
+    // A body exists, so the head becomes a real disclosure control — but it
+    // starts FOLDED: a Claude Code / opencode tool row, not a citations panel
+    // forced open, and a chunk can run long enough that several searches on
+    // one answer used to unfold every one onto the screen at once.
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("docs/auth.md");
   });
 
   it("renders a failed-search aside rather than a fake empty result", () => {
@@ -92,7 +97,7 @@ describe("ChatActivities — reasoning renders as a disclosure", () => {
 });
 
 describe("ChatActivities — sources render as citations", () => {
-  it("renders every retrieved document with its path", () => {
+  it("folds retrieved documents behind a disclosure (body mounts on expand)", () => {
     const html = render([
       {
         kind: "tool_result",
@@ -112,15 +117,14 @@ describe("ChatActivities — sources render as citations", () => {
       },
     ]);
 
-    expect(html).toContain("dc-act-hits");
-    expect(html).toContain("Auth overview");
-    expect(html).toContain("docs/auth.md");
-    expect(html).toContain("JWT exchange");
-    expect(html).toContain("docs/jwt.md");
-    // Provenance metadata survives the migration.
-    expect(html).toContain("peer_reviewed");
-    expect(html).toContain("2024");
-    expect(html).toContain("RS256 token exchange…");
+    // First paint: expandable head with the outcome count — not the hit list.
+    // Provenance fields (title/path/tier/year/snippet) ride on the row data;
+    // activity-view.test.ts asserts they survive the mapping.
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("2 notes");
+    expect(html).not.toContain("dc-act-hits");
+    expect(html).not.toContain("docs/auth.md");
+    expect(html).not.toContain("RS256 token exchange…");
   });
 
   it("says so plainly when a search found nothing", () => {
@@ -163,9 +167,12 @@ describe("ChatActivities — the chain as a whole", () => {
     ]);
 
     expect(html).toContain('aria-label="Agent steps"');
-    expect(html).toContain("docs/auth.md");
-    expect(html.indexOf("Planning")).toBeLessThan(html.indexOf("docs/auth.md"));
-    expect(html.indexOf("docs/auth.md")).toBeLessThan(html.indexOf("think-chip"));
+    // Order of heads on the page: Planning → running search → settled search
+    // (folded, so no path in the SSR) → reasoning chip.
+    expect(html.indexOf("Planning")).toBeLessThan(html.indexOf("tc-run"));
+    expect(html.indexOf("1 note")).toBeLessThan(html.indexOf("think-chip"));
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("docs/auth.md");
   });
 
   it("renders nothing at all for an empty or absent chain", () => {

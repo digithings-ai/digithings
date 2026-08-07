@@ -52,11 +52,15 @@ describe("toCanonRows — tool calls", () => {
       args: "how does auth work",
       status: "ok",
       meta: "2 notes",
-      // ChatToolCall renders no body while folded, so citations must start
-      // open or they are absent from the server markup entirely.
-      defaultOpen: true,
     });
-    expect(row.kind === "tool" && row.sources).toHaveLength(2);
+    // Folded by default — a Claude Code / opencode tool row, not a citations
+    // panel forced open. A search's chunks can run long; several searches on
+    // one answer used to unfold every one of them onto the screen at once.
+    expect(row).not.toHaveProperty("defaultOpen");
+    expect(row.kind === "tool" && row.sources).toEqual([
+      { title: "Auth", path: "docs/auth.md", tier: "peer_reviewed", year: 2024 },
+      { title: "JWT", path: "docs/jwt.md", snippet: "RS256 exchange…" },
+    ]);
   });
 
   it("gives a zero-hit result an honest head and no fold-out body", () => {
@@ -69,13 +73,21 @@ describe("toCanonRows — tool calls", () => {
     expect(row).not.toHaveProperty("defaultOpen");
   });
 
-  it("leaves the noisy rows folded — only citations open by default", () => {
-    const [call, trace] = rowsOf([
+  it("leaves every tool-shaped row folded by default", () => {
+    const [call, trace, result] = rowsOf([
       { kind: "tool_call", name: "digivault.search", query: "auth" },
       { kind: "trace", label: "Planning", done: true },
+      {
+        kind: "tool_result",
+        name: "digivault.search",
+        query: "auth",
+        count: 1,
+        hits: [{ title: "Auth", path: "docs/auth.md" }],
+      },
     ]);
     expect(call).not.toHaveProperty("defaultOpen");
     expect(trace).not.toHaveProperty("defaultOpen");
+    expect(result).not.toHaveProperty("defaultOpen");
   });
 
   it("maps a trace step to a bodyless tool row, running until done", () => {
