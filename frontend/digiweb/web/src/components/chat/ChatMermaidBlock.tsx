@@ -42,6 +42,35 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ChatCopyButton } from "./ChatCodeBlock";
 
 /**
+ * Quotes unquoted `[...]` flowchart node labels that contain characters the
+ * classic flowchart grammar cannot parse unquoted — `(`, `)`, `{`, `}` — so a
+ * model-written label like `C[List locations (Exchange, OneDrive, Blob)]`
+ * (a real observed failure: `Parse error ... got 'PS'` on the `(`) renders
+ * instead of falling back to source. Mermaid's own fix for this is quoting
+ * the label (`C["List locations (Exchange, OneDrive, Blob)"]`); this applies
+ * that mechanically rather than relying on the model to always remember to.
+ *
+ * Deliberately narrow: only touches `ID[label]` shapes (the commonest node
+ * form in model output), only when the label is not already quoted, and only
+ * when it contains one of the four unparseable characters — anything else
+ * (round `(...)`, diamond `{...}`, decorated shapes) is left alone rather than
+ * guessed at. The `[^\]"]*` capture excludes any label already containing a
+ * literal `"` from the match entirely — such a label is already ambiguous
+ * (unquoted-but-quoted), so this leaves it for mermaid's own parser to reject
+ * rather than guessing at an escape.
+ *
+ * Applied only to the copy handed to `mermaid.parse`/`render` — the `code`
+ * prop keeps the model's exact text for the copy button and the source
+ * fallback, so a reader never sees text the model didn't write.
+ */
+export function sanitizeMermaidLabels(code: string): string {
+  return code.replace(/(\b[\w-]+)\[([^\]"]*)\]/g, (whole, id: string, label: string) => {
+    if (!/[(){}]/.test(label)) return whole;
+    return `${id}["${label}"]`;
+  });
+}
+
+/**
  * mermaid themeVariable → design token. Kept explicit (rather than letting
  * mermaid derive everything from `primaryColor`) because its derivation runs
  * khroma lighten/darken on whatever it is given, and the canon palette is not
@@ -174,8 +203,9 @@ export function ChatMermaidBlock({ code, label = "mermaid", className }: ChatMer
         });
         // Validate first: parse throws on a malformed graph without touching
         // the document, so the failure path never leaves stray nodes behind.
-        await mermaid.parse(code);
-        const rendered = await mermaid.render(id, code);
+        const sanitized = sanitizeMermaidLabels(code);
+        await mermaid.parse(sanitized);
+        const rendered = await mermaid.render(id, sanitized);
         if (cancelled) return;
         setSvg(rendered.svg);
         setFailed(false);
