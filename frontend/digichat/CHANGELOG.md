@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.8.0...digichat-v0.9.0) (2026-08-07)
+
+
+### Features
+
+* **chat:** ship the house type-out as digichat's waiting state ([c98ceab](https://github.com/digithings-ai/digithings/commit/c98ceab87ea8b6aa5f73550e567de40632908444))
+* **chat:** ship the house type-out as digichat's waiting state ([3656503](https://github.com/digithings-ai/digithings/commit/365650323cd92014990d60ac832fc9df8e9b67fa))
+* **digichat:** unify the chat UI — canon transcript, mermaid/LaTeX, centred embed ([ead37ba](https://github.com/digithings-ai/digithings/commit/ead37baec4a0063f7c8a77eb8add362bbc73c73e))
+
+
+### Bug Fixes
+
+* **chat:** repair what the in-session review of [#1971](https://github.com/digithings-ai/digithings/issues/1971) found ([ab54c67](https://github.com/digithings-ai/digithings/commit/ab54c679d9b4a05e2a11a95b04563eeaecd38d4c))
+* **design-system:** scope KaTeX to math-rendering apps, and correct what [#1941](https://github.com/digithings-ai/digithings/issues/1941) and [#1940](https://github.com/digithings-ai/digithings/issues/1940) claimed ([#1948](https://github.com/digithings-ai/digithings/issues/1948)) ([286fc87](https://github.com/digithings-ai/digithings/commit/286fc875489e4c62a283b08d956fb6ffd4d793dd))
+
 ## [0.8.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.7.0...digichat-v0.8.0) (2026-08-06)
 
 
