@@ -316,19 +316,27 @@ def test_build_check_watches_the_files_it_runs(workflow_path: Path, callee: str)
 
 
 @pytest.mark.parametrize("workflow_path", _BUILD_CHECK_WORKFLOWS, ids=lambda p: p.name)
-@pytest.mark.parametrize("manifest", ["pyproject.toml", "requirements.txt", "setup.py"])
-def test_build_check_watches_the_root_packaging_manifests(
-    workflow_path: Path, manifest: str
-) -> None:
-    """The #1714 globs, pinned for the same reason as the callees above.
+@pytest.mark.parametrize(
+    "manifest",
+    ["pyproject.toml", "requirements.txt", "setup.py", "package.json", "package-lock.json"],
+)
+def test_build_check_watches_the_root_manifests(workflow_path: Path, manifest: str) -> None:
+    """The root manifests every deploy build resolves, pinned like the callees above.
 
-    Cloudflare's build image auto-detects languages from the repo root and runs
-    ``pip install .`` *before* the configured build command, so a root manifest can
-    freeze a site without a frontend file being touched — #1714 edited only the root
-    pyproject.toml and uv.lock and both sites silently built nothing for three days
-    with every PR green. Each workflow's own comment records that; nothing enforced it.
+    Two routes into the same failure. Cloudflare's build image auto-detects languages
+    from the repo root and runs ``pip install .`` *before* the configured build command,
+    so a Python manifest can freeze a site without a frontend file being touched — #1714
+    edited only the root pyproject.toml and uv.lock, and both sites silently built
+    nothing for three days with every PR green. The npm manifests break it more
+    directly: each build script runs its own root ``npm install`` (#1956), which
+    reconciles the lock against the workspace manifests rather than installing from it,
+    so a bad resolution fails the build with nothing else touched. Each workflow's own
+    comment records both; nothing enforced either.
 
-    Deliberately not exhaustive: ``package.json``/``package-lock.json`` are the same
-    class and are added by #1956, so they belong on this list once that merges.
+    Root-anchored entries only. Which *workspace* directories a site must watch is a
+    moving function of the import graph, so it is answered by deriving the closure from
+    the manifests rather than by a list in this file — a list here would go stale the
+    next time a frontend dependency edge changes, silently, which is the failure mode
+    this whole module exists to refuse.
     """
     assert manifest in _trigger_paths(workflow_path)
