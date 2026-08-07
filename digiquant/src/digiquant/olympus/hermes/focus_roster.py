@@ -19,6 +19,15 @@ def focus_roster_tickers(state: HermesState) -> list[str]:
     return [entry.ticker for entry in state.phase_hermes.focus_roster]
 
 
+def fanout_ticker(state: HermesState) -> str | None:
+    """Read back the per-Send cursor ``with_fanout_ticker`` injected.
+
+    Telemetry label only — the fan-out discriminator recorded as ``NodeRunRecord.fanout_key``.
+    It never affects dispatch, routing, or reducers.
+    """
+    return state.hermes_fanout_ticker or None
+
+
 def with_fanout_ticker(state: HermesState, ticker: str) -> HermesState:
     """Return a state copy carrying ``ticker`` as the per-Send fan-out cursor (H5/H6 map).
 

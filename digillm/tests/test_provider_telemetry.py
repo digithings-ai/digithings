@@ -152,7 +152,24 @@ def _attempt(call_id: UUID, **overrides: object) -> ProviderAttemptRecord:
     return ProviderAttemptRecord.model_validate(values)
 
 
-@pytest.mark.parametrize("field", ("prompt", "response", "api_key", "raw_exception"))
+def test_fanout_key_is_absent_by_default() -> None:
+    assert _node_run().fanout_key is None
+
+
+@pytest.mark.parametrize("value", ("", "f" * 201))
+def test_fanout_key_rejects_empty_and_overlong_labels(value: str) -> None:
+    with pytest.raises(ValidationError):
+        _node_run(fanout_key=value)
+
+
+def test_fanout_key_accepts_the_bound() -> None:
+    assert _node_run(fanout_key="f" * 200).fanout_key == "f" * 200
+
+
+# "ticker" is listed deliberately: `fanout_key` is an opaque producer-supplied label, and
+# DigiLLM must never grow Olympus vocabulary of its own. extra="forbid" turns that anti-goal
+# into a test rather than prose.
+@pytest.mark.parametrize("field", ("prompt", "response", "api_key", "raw_exception", "ticker"))
 def test_records_reject_payload_and_secret_fields(field: str) -> None:
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         _node_run(**{field: "must-not-persist"})

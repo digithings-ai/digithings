@@ -125,6 +125,11 @@ class NodeRunRecord(TimedTelemetryModel):
     node_run_id: UUID
     run_id: Annotated[str, Field(min_length=1)]
     node_name: Annotated[str, Field(min_length=1)]
+    # Which fan-out item this execution was for — an opaque label the producer supplies and
+    # DigiLLM never interprets. Bounded like `error_type` and nullable, because a node with no
+    # fan-out cursor genuinely has no key: absent, never `""` and never fabricated. Deliberately
+    # not named `ticker`; DigiGraph owns that vocabulary and this contract must stay generic.
+    fanout_key: Annotated[str, Field(min_length=1, max_length=200)] | None = None
     outcome: NodeRunOutcome
     artifacts: tuple[ArtifactRef, ...] = ()
 

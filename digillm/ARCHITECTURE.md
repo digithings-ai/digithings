@@ -98,8 +98,14 @@ Logical telemetry is observational and fail-soft. Record construction, optional 
 and observer delivery cannot alter cache ordering, retries/backoff, routing, tool execution,
 return values, or raised exceptions. Unknown purpose or disposition must use the closed `UNKNOWN`
 value rather than being silently omitted. Rollback is to stop injecting `provider_call_context`;
-physical attempts and strict contracts remain intact. Task 1.4 owns complete
-run/node/agent/ticker propagation, and Task 1.5 owns durable buffering, flush, and reconciliation.
+physical attempts and strict contracts remain intact. Task 1.5 owns durable buffering, flush, and
+reconciliation.
+
+`NodeRunRecord.fanout_key` (#1978) is an optional, bounded (1–200) label naming which fan-out item
+one node execution was for. It is **opaque to DigiLLM**: the producer supplies the string and this
+package never interprets it. It is deliberately not called `ticker` — DigiGraph owns that
+vocabulary, and `extra="forbid"` plus a test pin that boundary. A node with no fan-out cursor has no
+key: absent, never `""` and never fabricated.
 
 ### Physical provider-attempt instrumentation
 

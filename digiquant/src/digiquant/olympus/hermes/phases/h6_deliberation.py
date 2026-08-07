@@ -20,6 +20,7 @@ from digiquant.olympus.atlas.phases._node_factory import (
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.focus_roster import (
+    fanout_ticker,
     focus_roster_tickers,
     ticker_in_focus_roster,
     with_fanout_ticker,
@@ -406,4 +407,5 @@ def build_h6_from_state() -> FanOutPhase:
         worker=NodeSpec(name=f"{NODE_ID}-worker", run=_worker),
         items=focus_roster_tickers,
         with_item=with_fanout_ticker,
+        item_key=fanout_ticker,
     )

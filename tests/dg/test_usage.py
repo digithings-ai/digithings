@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -13,7 +14,13 @@ from openai.types.chat.chat_completion import Choice
 from openai.types.completion_usage import CompletionUsage, PromptTokensDetails
 
 from digigraph import llm_client, usage
-from digillm import CallPurpose, NoArtifactReason, set_telemetry_observer
+from digillm import (
+    CallPurpose,
+    NoArtifactReason,
+    NodeRunOutcome,
+    NodeRunRecord,
+    set_telemetry_observer,
+)
 from digillm import client as digillm_client
 
 
@@ -22,6 +29,149 @@ def _clean():
     usage.reset()
     yield
     usage.reset()
+
+
+def _node_record(**overrides: object) -> NodeRunRecord:
+    now = datetime.now(tz=timezone.utc)
+    fields: dict[str, object] = {
+        "node_run_id": uuid4(),
+        "run_id": "r",
+        "node_name": "n",
+        "outcome": NodeRunOutcome.SUCCEEDED,
+        "started_at": now,
+        "finished_at": now,
+    }
+    fields.update(overrides)
+    return NodeRunRecord(**fields)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_detailed_observer_retains_node_records() -> None:
+    usage.start()
+    record = _node_record()
+    # Delivered through the production observer, not observe_telemetry directly, so the test
+    # fails if the sink is wired anywhere other than the real path.
+    usage.DETAILED_USAGE_OBSERVER.observe(record)
+    assert usage.node_runs_snapshot() == [record]
+
+
+@pytest.mark.unit
+def test_node_records_cleared_by_start_and_reset() -> None:
+    usage.start()
+    usage.DETAILED_USAGE_OBSERVER.observe(_node_record())
+    usage.start()
+    assert usage.node_runs_snapshot() == []
+    usage.DETAILED_USAGE_OBSERVER.observe(_node_record())
+    usage.reset()
+    assert usage.node_runs_snapshot() == []
+
+
+@pytest.mark.unit
+def test_record_snapshots_return_copies() -> None:
+    usage.start()
+    usage.DETAILED_USAGE_OBSERVER.observe(_node_record())
+    usage.node_runs_snapshot().clear()
+    assert len(usage.node_runs_snapshot()) == 1
+    assert usage.provider_calls_snapshot() == []
+    assert usage.provider_attempts_snapshot() == []
+
+
+@pytest.mark.unit
+def test_start_stores_the_run_id_verbatim() -> None:
+    usage.start(run_id="gha-1978")
+    assert usage.active_run_id() == "gha-1978"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", (None, "", "   "))
+def test_blank_or_absent_run_id_leaves_the_run_unidentified(value: str | None) -> None:
+    usage.start() if value is None else usage.start(run_id=value)
+    assert usage.active_run_id() is None
+
+
+@pytest.mark.unit
+def test_reset_clears_the_run_id() -> None:
+    usage.start(run_id="gha-1978")
+    usage.reset()
+    assert usage.active_run_id() is None
+
+
+@pytest.mark.unit
+def test_node_scope_without_a_run_id_yields_nothing_and_emits_nothing() -> None:
+    usage.start()
+    with usage.node_run_scope("n") as node_run_id:
+        assert node_run_id is None
+        assert usage.provider_call_metadata()[0] is None
+    assert usage.node_runs_snapshot() == []
+
+
+@pytest.mark.unit
+def test_node_scope_labels_calls_and_emits_one_terminal_record() -> None:
+    usage.start(run_id="r")
+    with usage.node_run_scope("n", fanout_key="AAPL") as node_run_id:
+        assert node_run_id is not None
+        assert usage.provider_call_metadata()[0] == node_run_id
+    assert usage.provider_call_metadata()[0] is None  # token reset in the finally
+    (record,) = usage.node_runs_snapshot()
+    assert (record.node_run_id, record.run_id, record.node_name, record.fanout_key) == (
+        node_run_id,
+        "r",
+        "n",
+        "AAPL",
+    )
+    assert record.outcome is NodeRunOutcome.SUCCEEDED
+    assert record.finished_at is not None
+
+
+@pytest.mark.unit
+def test_node_scope_records_failure_and_reraises_the_original_error() -> None:
+    usage.start(run_id="r")
+    with pytest.raises(RuntimeError, match="boom"):
+        with usage.node_run_scope("n"):
+            raise RuntimeError("boom")
+    (record,) = usage.node_runs_snapshot()
+    assert record.outcome is NodeRunOutcome.FAILED
+    assert record.finished_at is not None
+
+
+@pytest.mark.unit
+def test_node_scope_never_replaces_the_node_error_with_a_telemetry_error() -> None:
+    # An over-length key would otherwise raise ValidationError out of the `finally` and mask
+    # the node's real exception — telemetry inventing a new failure on the failure path.
+    usage.start(run_id="r")
+    with pytest.raises(RuntimeError, match="boom"):
+        with usage.node_run_scope("n", fanout_key="x" * 5000):
+            raise RuntimeError("boom")
+    (record,) = usage.node_runs_snapshot()
+    assert record.fanout_key is not None
+    assert len(record.fanout_key) == 200
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", ("", "   "))
+def test_blank_fanout_key_becomes_absent_not_empty_string(value: str) -> None:
+    usage.start(run_id="r")
+    with usage.node_run_scope("n", fanout_key=value):
+        pass
+    assert usage.node_runs_snapshot()[0].fanout_key is None
+
+
+@pytest.mark.unit
+def test_nested_call_context_inherits_the_node_run_id() -> None:
+    usage.start(run_id="r")
+    with usage.node_run_scope("n") as node_run_id:
+        with usage.call_context(phase="p", operation="o"):
+            inner = usage.provider_call_metadata()[0]
+    assert inner is not None
+    assert inner == node_run_id
+
+
+@pytest.mark.unit
+def test_start_still_accepts_no_arguments() -> None:
+    # Pins the operator scripts (validate-providers.py, openrouter_diagnose.py) and chain.py
+    # against a future required-argument regression.
+    usage.start()
+    assert usage.is_active() is True
 
 
 @pytest.mark.unit
