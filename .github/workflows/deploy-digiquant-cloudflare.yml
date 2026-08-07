@@ -65,34 +65,53 @@ on:
       # name reached nested files. Each workspace manifest is matched, or not, one by one.
       - "package.json"
       - "package-lock.json"
-      # No per-workspace manifest is listed here, and that is a derived result rather
-      # than an omission. This site's build closure, read off the @digithings/* deps, is
-      # digiquant-web → design + web and olympus → design + web, with web → design — and
-      # all four of those manifests already fall under the directory globs at the top of
-      # this list. The root lock would not stand in for them if they did not: counted at
-      # PR granularity, 17 of the 38 PRs that have touched one of the eight left
-      # package-lock.json out of the PR entirely.
+      # No per-workspace manifest is listed here *for build reasons*, and that is a
+      # derived result rather than an omission. This site's build closure, read off the
+      # @digithings/* deps, is digiquant-web → design + web and olympus → design + web,
+      # with web → design — and all four of those manifests already fall under the
+      # directory globs at the top of this list. The root lock would not stand in for them
+      # if they did not: counted at PR granularity, 17 of the 38 PRs that have touched one
+      # of the eight left package-lock.json out of the PR entirely. The one per-workspace
+      # manifest that *is* listed, at the end, is there for an install reason instead; see
+      # the paragraph that names it.
       #
       # The digithings check carries one extra entry, frontend/digichat-ui/**, because
       # digithings-web imports digichat-ui at build time; nothing built here does. (It
       # began as frontend/digichat-ui/package.json in #1956 and was widened to the whole
       # directory in #1966, which supersedes the manifest line.) Re-derive the closure
-      # before adding a glob rather than mirroring that file — `**/package.json` was
-      # rejected precisely because it would fire this check on digichat and
-      # digiweb/reference, which this site never builds.
+      # before adding a glob rather than mirroring that file — `**/package.json` is still
+      # rejected, because it would fire this check on every unrelated workspace including
+      # digigraph's vendored echarts manifest. Naming digiweb/reference's manifest one by
+      # one is the opposite of that sweep, not a step toward it.
       #
       # Residual, deliberate: the root `npm install` above resolves all eight
       # workspaces, so an unresolvable manifest in one outside that closure still fails
-      # this build. Four sit outside it. Three are covered by a lane that runs its own
-      # root install — frontend/digichat and frontend/digithings-web by ci.yml's
-      # `digichat` and `web`, and frontend/digichat-ui by the digithings deploy check,
-      # whose frontend/digichat-ui/** glob covers that manifest and which runs a
-      # byte-identical root `npm install`. Note what that last one is: a coupling, not a
-      # guarantee. Narrow or drop the digichat-ui entry over there and this site silently
-      # loses its only cover for it — though since #1966 that narrowing now fails
-      # tests/scripts/test_deploy_build_inputs.py rather than passing quietly. The fourth,
-      # frontend/digiweb/reference/package.json, is in no path filter in this repo — of
-      # the eight it is the one manifest watched by nothing.
+      # this build. Four sit outside it. Three are covered by a lane that installs at the
+      # root — frontend/digichat and frontend/digithings-web by ci.yml's `digichat` and
+      # `web`, and frontend/digichat-ui by those same two filters, which both list
+      # frontend/digichat-ui/**. (An earlier draft said the digithings deploy check was
+      # digichat-ui's *only* cover and called it a coupling rather than a guarantee. The
+      # coupling is real but it is not the only cover, and #1966 made narrowing it fail
+      # tests/scripts/test_deploy_build_inputs.py rather than pass quietly.) Those lanes
+      # run `npm ci`, which catches a bad range by refusing to run when manifest and lock
+      # disagree rather than by resolving it — a different route to the same cover. The
+      # fourth,
+      # frontend/digiweb/reference, was in no path filter in this repo at all — of the
+      # eight it was the one manifest watched by nothing — so it is now named below. Note
+      # that this site never builds that workspace: the entry is an install input, not a
+      # build input, and it is here because the root `npm install` above resolves all
+      # eight manifests before either site compiles.
+      #
+      # Only the manifest, not `frontend/digiweb/reference/**`. That directory is
+      # deliberately reachable only by ci.yml's unconditional frontend-canon guard, and
+      # nothing in CI has ever built or linted that app. Widening to the directory would
+      # fire this site's two-app Next build, and digithings' one, on every edit to a
+      # design reference with ~137 commits in the month since it was scaffolded
+      # (2026-07-06) — while the manifest's *content* has not changed since that same day.
+      # Content stability is the evidence for that, not path history: the lone commit at
+      # this path is the `git mv` that created it, and `git log --follow` is unreliable
+      # here (it walks back past the app's own creation).
+      - "frontend/digiweb/reference/package.json"
   workflow_dispatch:
 
 concurrency:

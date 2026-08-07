@@ -17,7 +17,7 @@ import importlib.util
 import json
 import sys
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any  # score:allow untyped any — dynamically loaded module
 from urllib.parse import urlsplit
 
@@ -318,10 +318,23 @@ def test_build_check_watches_the_files_it_runs(workflow_path: Path, callee: str)
 @pytest.mark.parametrize("workflow_path", _BUILD_CHECK_WORKFLOWS, ids=lambda p: p.name)
 @pytest.mark.parametrize(
     "manifest",
-    ["pyproject.toml", "requirements.txt", "setup.py", "package.json", "package-lock.json"],
+    [
+        "pyproject.toml",
+        "requirements.txt",
+        "setup.py",
+        "package.json",
+        "package-lock.json",
+        # Not root-anchored, and the exception proves the rule below: it is an *install*
+        # input, not a build input. The root `npm install` resolves all eight workspace
+        # manifests before either site compiles, and of the eight this was the only one in
+        # no path filter anywhere in the repo — so a bad range there failed both
+        # production builds with no CI job running. Nothing derives it, because nothing
+        # about it moves: it is not reached through any import edge.
+        "frontend/digiweb/reference/package.json",
+    ],
 )
 def test_build_check_watches_the_root_manifests(workflow_path: Path, manifest: str) -> None:
-    """The root manifests every deploy build resolves, pinned like the callees above.
+    """The manifests every deploy build resolves, pinned like the callees above.
 
     Two routes into the same failure. Cloudflare's build image auto-detects languages
     from the repo root and runs ``pip install .`` *before* the configured build command,
@@ -333,10 +346,18 @@ def test_build_check_watches_the_root_manifests(workflow_path: Path, manifest: s
     so a bad resolution fails the build with nothing else touched. Each workflow's own
     comment records both; nothing enforced either.
 
-    Root-anchored entries only. Which *workspace* directories a site must watch is a
-    moving function of the import graph, so it is answered by deriving the closure from
-    the manifests rather than by a list in this file — a list here would go stale the
-    next time a frontend dependency edge changes, silently, which is the failure mode
-    this whole module exists to refuse.
+    Install inputs only — the manifests a build *resolves*. Which workspace *directories*
+    a site must watch is a different question, and a moving one: it follows the import
+    graph, so it is answered by deriving the closure from the manifests in
+    test_deploy_build_inputs.py rather than by a list here. A hardcoded list of those
+    would go stale the next time a frontend dependency edge changes, silently, which is
+    the failure mode this whole module exists to refuse.
     """
-    assert manifest in _trigger_paths(workflow_path)
+    paths = _trigger_paths(workflow_path)
+    # Accept a covering directory glob as well as the literal path. A later PR widening
+    # `frontend/digiweb/reference/package.json` to `frontend/digiweb/reference/**`
+    # strictly improves coverage; a literal-membership assertion would go red on it and
+    # the obvious fix would be to keep both — which is exactly the dead entry the comment
+    # at the top of that filter warns #1966 had to remove.
+    covering = f"{PurePosixPath(manifest).parent}/**"
+    assert manifest in paths or covering in paths
