@@ -572,6 +572,68 @@ def test_a_genuine_disagreement_is_mismatched_not_unavailable() -> None:
     assert not result.reconciliation.billing_exact
 
 
+def test_an_unknown_key_does_not_suppress_a_mismatch_on_a_different_key(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The two facts are orthogonal and must both be reported.
+
+    Found by review: `_log_result` chained these as `if unavailable / elif mismatched`, and
+    `cost_usd` is unknown whenever any contributing attempt omits cost — so on the common path a
+    real disagreement was computed into `mismatched_keys` and then never logged anywhere. The
+    suite exercised the two states only in isolation, which is exactly why it passed.
+    """
+    detailed = {
+        "llm_calls": 2,
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "cost_usd": None,  # a provider omitted cost — unknown
+        "search_calls": 0,
+    }
+    aggregate = {**detailed, "llm_calls": 9, "cost_usd": 0.5}  # and the counts disagree
+
+    with caplog.at_level("INFO", logger=pt.logger.name):
+        result = _flush(_Client(), aggregate_snapshot=aggregate, detailed_projection=detailed)
+
+    assert result.reconciliation.unavailable_keys == ("cost_usd",)
+    assert result.reconciliation.mismatched_keys == ("llm_calls",)
+    # `status` answers one question — may an exact-billing claim be made — and unknown wins it.
+    assert result.reconciliation.status == "unavailable"
+    assert not result.reconciliation.billing_exact
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    assert "unavailable for cost_usd" in messages
+    assert "disagree with the aggregate on llm_calls" in messages, (
+        "a detected mismatch must never be computed and then silently dropped"
+    )
+
+
+def test_a_detail_shortfall_is_reported_as_explainable_but_an_excess_is_not(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """`usage.record` gates only on capture being active; a `ProviderCallRecord` also needs an
+    open node scope. So the aggregate legitimately counts calls the detail cannot see, and detail
+    BELOW aggregate has a standing explanation. Detail ABOVE it has none — nothing can inflate the
+    detailed side except double-counting, so that direction must read differently."""
+    base = {"llm_calls": 5, "prompt_tokens": 10, "completion_tokens": 2, "cost_usd": 0.1}
+
+    with caplog.at_level("INFO", logger=pt.logger.name):
+        _flush(
+            _Client(),
+            aggregate_snapshot={**base, "search_calls": 0},
+            detailed_projection={**base, "llm_calls": 2, "search_calls": 0},
+        )
+    assert "consistent with calls made outside a node scope" in caplog.text
+
+    caplog.clear()
+    pt.reset_flush_guard()
+    with caplog.at_level("INFO", logger=pt.logger.name):
+        _flush(
+            _Client(),
+            aggregate_snapshot={**base, "search_calls": 0},
+            detailed_projection={**base, "llm_calls": 8, "search_calls": 0},
+        )
+    assert "un-scoped calls cannot explain" in caplog.text
+
+
 def test_reconciliation_is_still_reported_when_the_flush_is_skipped() -> None:
     """A double flush writes nothing, but the run's coverage question still has an answer."""
     projection = {

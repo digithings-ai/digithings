@@ -1084,12 +1084,19 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   detailed and aggregate writes independent in both directions without altering the aggregate
   path.
   - **Quarantine, not insertion.** A record whose foreign-key referent is absent from the same
-    flush is counted and reported as incomplete coverage, never submitted. This is a live path,
-    not a guard: the beliefs-distillation fold runs outside any graph node, so its provider calls
-    emit orphaned attempts on every run, and a run with no `DiagnosticsDeps` has no run
-    identifier at all — meaning no node runs and no logical calls are produced *at the source*.
-    A normal run therefore flushes attributed and orphaned records together, and eligibility is
-    decided per record.
+    flush is counted and reported as incomplete coverage, never submitted. This is a reachable
+    path, not a theoretical guard, and it has two sources. The beliefs-distillation fold runs
+    outside any graph node, so its provider calls are orphaned when it runs — which is *not*
+    every run: `should_distill_beliefs` gates it on `refresh_scope == "beliefs"` or an unfolded
+    backlog above `OLYMPUS_BELIEFS_BACKLOG` (default 20). And a run with no `DiagnosticsDeps` has
+    no run identifier at all, so no node runs and no logical calls are produced *at the source*.
+    A flush can therefore carry attributed and orphaned records together, which is why
+    eligibility is decided per record rather than per flush.
+  - **Reconciliation direction is the signal.** `usage.record` gates only on capture being
+    active, while a `ProviderCallRecord` also needs an open node scope, so the aggregate counts
+    calls the detailed side structurally cannot see. Detail *below* the aggregate is therefore
+    explainable; detail *above* it is not, and only double-counting could produce it. An unknown
+    key never suppresses a mismatch reported on a different key — those are orthogonal facts.
   - **Validation is the gate.** The ledger revokes `UPDATE`/`DELETE`/`TRUNCATE` from every role
     and rejects them by trigger besides, so a bad row is permanent. Every record is re-validated
     through its Pydantic model immediately before insert; a failure is counted and dropped. A

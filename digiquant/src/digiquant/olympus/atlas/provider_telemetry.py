@@ -35,11 +35,21 @@ Two gates decide whether a provider call is attributed or orphaned:
    still are, because ``_emit_attempt`` guards only on a missing observer.
 2. The call must originate inside a ``build_pipeline`` node, since only ``_instrumented`` opens
    a node scope. Atlas phases, Hermes phases, and the publish terminal phase all qualify. The
-   beliefs-distillation fold does not: ``chain.py`` calls it directly, outside any graph, so its
-   provider calls emit orphaned attempts on every run.
+   beliefs-distillation fold does not: ``chain.py`` calls it directly, outside any graph. When
+   it runs, its provider calls are orphaned. It does not run on every run —
+   ``should_distill_beliefs`` gates it on ``refresh_scope == "beliefs"`` or an unfolded-decision
+   backlog above ``OLYMPUS_BELIEFS_BACKLOG`` (default 20) — so quarantine is an occasional path,
+   not a constant one.
 
-So a normal run flushes attributed records and orphaned attempts *together*. Both paths are
-live; neither is the exception.
+So a flush can carry attributed records and orphaned attempts *together*, and eligibility is
+therefore decided per record rather than per flush.
+
+One consequence for reconciliation. ``usage.record`` gates only on capture being active
+(``usage.py:279``), while a ``ProviderCallRecord`` additionally needs an open node scope. So the
+aggregate counts calls the detailed side structurally cannot see, and whenever an un-scoped call
+happens the detailed counts are a strict *subset* of the aggregate. A detailed count BELOW the
+aggregate is therefore explainable; a detailed count ABOVE it never is. ``_log_result`` says
+which of the two it saw rather than reporting a bare disagreement.
 """
 
 from __future__ import annotations
@@ -499,7 +509,7 @@ def flush_run_telemetry(
     )
 
     # Tier 3 — physical attempts. An attempt whose logical call is absent is the orphan shape the
-    # beliefs-distillation fold produces on every run; it is quarantined and counted, never sent.
+    # beliefs-distillation fold produces when it runs; it is quarantined and counted, never sent.
     known_calls = (
         {record.call_id for record in ordered_calls} if calls_error is None else set[UUID]()
     )
@@ -569,23 +579,53 @@ def _log_result(result: FlushResult) -> None:
             result.run_id,
             result.attempt,
         )
-    if result.reconciliation.status == "unavailable":
+    # Two independent `if`s, deliberately not `if/elif`. `status` is a single scalar answering one
+    # question — "may an exact-billing claim be made?" — and `unavailable` rightly wins it. But a
+    # key being unknown and a *different* key being known-and-wrong are orthogonal facts, and
+    # chaining these would discard the second whenever the first held. `cost_usd` is unknown
+    # whenever any contributing attempt omits cost, so the chained form suppressed real
+    # disagreements on the common path.
+    reconciliation = result.reconciliation
+    if reconciliation.unavailable_keys:
         logger.info(
             "provider telemetry[%s attempt=%d]: billing reconciliation unavailable for %s "
             "(%d attempt(s) missing usage, %d missing cost) — not reconciled, not zero",
             result.run_id,
             result.attempt,
-            ", ".join(result.reconciliation.unavailable_keys),
-            result.reconciliation.attempts_missing_usage,
-            result.reconciliation.attempts_missing_cost,
+            ", ".join(reconciliation.unavailable_keys),
+            reconciliation.attempts_missing_usage,
+            reconciliation.attempts_missing_cost,
         )
-    elif result.reconciliation.status == "mismatched":
+    if reconciliation.mismatched_keys:
+        # Direction is the whole signal. The aggregate counts calls made outside a node scope and
+        # the detailed side cannot see them, so detail-below-aggregate has a standing explanation
+        # and detail-above-aggregate has none — that one can only mean double-counting.
+        unexplained = [
+            key
+            for key in reconciliation.mismatched_keys
+            if _exceeds(reconciliation.detailed.get(key), reconciliation.aggregate.get(key))
+        ]
         logger.warning(
-            "provider telemetry[%s attempt=%d]: detailed records disagree with the aggregate on %s",
+            "provider telemetry[%s attempt=%d]: detailed records disagree with the aggregate on "
+            "%s%s",
             result.run_id,
             result.attempt,
-            ", ".join(result.reconciliation.mismatched_keys),
+            ", ".join(reconciliation.mismatched_keys),
+            (
+                f" — {', '.join(unexplained)} exceed(s) the aggregate, which un-scoped calls "
+                "cannot explain"
+                if unexplained
+                else " — detail is below the aggregate, consistent with calls made outside a "
+                "node scope"
+            ),
         )
+
+
+def _exceeds(detailed: int | float | None, aggregate: int | float | None) -> bool:
+    """Whether the detailed side claims MORE than the aggregate. Never legitimate."""
+    if detailed is None or aggregate is None:
+        return False
+    return float(detailed) > float(aggregate)
 
 
 __all__ = [
