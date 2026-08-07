@@ -124,15 +124,26 @@ on:
       # both deploy checks on every unrelated workspace, digigraph's vendored echarts
       # manifest included.
       #
-      # Residual, deliberate: the root `npm install` resolves all eight workspaces, so an
-      # unresolvable manifest OUTSIDE this closure still breaks this build. Four manifests
-      # sit outside it, and three are covered by a lane that runs its own root install —
-      # frontend/digichat by ci.yml's `digichat`, frontend/digiquant-web by its `web`,
-      # frontend/olympus by its `olympus`. The fourth,
-      # frontend/digiweb/reference/package.json, is in no path filter in this repo: of the
-      # eight it is the one manifest watched by nothing, and an unresolvable range there
-      # fails this build (verified — ETARGET out of the root install). Left out because it
-      # is in no site's closure; add it the day that stops being an acceptable trade.
+      # The last entry is an install input, not a build input, and is here for a different
+      # reason from everything above it. The root `npm install` resolves all eight
+      # workspace manifests before either site compiles, so an unresolvable range in any
+      # of them fails this build even though nothing here imports that workspace. Four of
+      # the eight sit outside this site's closure; three are reached by a lane that runs
+      # its own root install — frontend/digichat by ci.yml's `digichat`,
+      # frontend/digiquant-web by its `web`, frontend/olympus by its `olympus`. The
+      # fourth, frontend/digiweb/reference, was in no path filter in this repo at all: of
+      # the eight it was the one manifest watched by nothing, so a bad range there took
+      # both production sites down with no CI job running. (#1956 reports verifying that
+      # empirically — ETARGET out of the root install. Not re-run here; the mechanism is
+      # just what `npm install` does with a workspaces root.)
+      #
+      # Only the manifest, not `frontend/digiweb/reference/**`. The directory is
+      # deliberately reachable only by ci.yml's unconditional frontend-canon guard, and
+      # nothing in CI has ever built or linted that app — see ci.yml's comment above that
+      # guard. Widening to the directory would fire two full Next builds on every edit to
+      # a design reference that has changed 64 times since May while its manifest changed
+      # once. This closes a structural hole; it is not the fix for an incident.
+      - "frontend/digiweb/reference/package.json"
   workflow_dispatch:
 
 concurrency:

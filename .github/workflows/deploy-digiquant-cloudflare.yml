@@ -91,8 +91,18 @@ on:
       # guarantee. Narrow or drop the digichat-ui entry over there and this site silently
       # loses its only cover for it — though since #1966 that narrowing now fails
       # tests/scripts/test_deploy_build_inputs.py rather than passing quietly. The fourth,
-      # frontend/digiweb/reference/package.json, is in no path filter in this repo — of
-      # the eight it is the one manifest watched by nothing.
+      # frontend/digiweb/reference, was in no path filter in this repo at all — of the
+      # eight it was the one manifest watched by nothing — so it is now named below. Note
+      # that this site never builds that workspace: the entry is an install input, not a
+      # build input, and it is here because the root `npm install` above resolves all
+      # eight manifests before either site compiles.
+      #
+      # Only the manifest, not `frontend/digiweb/reference/**`. That directory is
+      # deliberately reachable only by ci.yml's unconditional frontend-canon guard, and
+      # nothing in CI has ever built or linted that app. Widening to the directory would
+      # fire a full two-app Next build here on every edit to a design reference that has
+      # changed 64 times since May while its manifest changed once.
+      - "frontend/digiweb/reference/package.json"
   workflow_dispatch:
 
 concurrency:
