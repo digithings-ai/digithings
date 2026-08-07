@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { outcomeMeta, toCanonRows, type CanonActivityRow } from "./activity-view";
+import { liveActivityLabel, outcomeMeta, toCanonRows, type CanonActivityRow } from "./activity-view";
 import type { DigiChatActivity } from "./types";
 
 function rowsOf(activities: DigiChatActivity[]): CanonActivityRow[] {
@@ -183,5 +183,55 @@ describe("row keys survive the stream", () => {
     const running = keyOf({ kind: "tool_call", name: "search", query: "a" });
     const done = keyOf({ kind: "tool_result", name: "search", query: "a", hits: [], count: 0 });
     expect(done).toBe(running);
+  });
+});
+
+// The caret says what the stream said, or says nothing. It used to cycle a
+// fixed script — "thinking", "routing through digigraph", … — regardless of
+// what was happening, which read as a placeholder because it was one.
+describe("liveActivityLabel", () => {
+  it("returns nothing when the stream has named no step", () => {
+    expect(liveActivityLabel([])).toBeUndefined();
+    expect(liveActivityLabel([{ kind: "status", message: "hi" }])).toBeUndefined();
+  });
+
+  it("names the unfinished trace step", () => {
+    expect(liveActivityLabel([{ kind: "trace", label: "Thinking", done: false }])).toBe("Thinking");
+  });
+
+  it("goes quiet once every step has finished", () => {
+    expect(liveActivityLabel([{ kind: "trace", label: "Thinking", done: true }])).toBeUndefined();
+  });
+
+  it("prefers the newest unfinished step", () => {
+    expect(
+      liveActivityLabel([
+        { kind: "trace", label: "Thinking", done: false },
+        { kind: "trace", label: "Searching", done: false },
+      ]),
+    ).toBe("Searching");
+  });
+
+  it("names an in-flight tool by its own query", () => {
+    expect(
+      liveActivityLabel([{ kind: "tool_call", name: "azure_ai_search", query: "/api/config" }]),
+    ).toBe('Searching for "/api/config"');
+  });
+
+  // A call's query is often still empty while it is in flight — that is the
+  // whole reason the tool match is on name alone.
+  it("still names a tool whose query has not arrived yet", () => {
+    expect(liveActivityLabel([{ kind: "tool_call", name: "azure_ai_search", query: "" }])).toBe(
+      "Searching…",
+    );
+  });
+
+  it("goes quiet once the tool has returned", () => {
+    expect(
+      liveActivityLabel([
+        { kind: "tool_call", name: "azure_ai_search", query: "auth" },
+        { kind: "tool_result", name: "azure_ai_search", query: "auth", count: 1, hits: [] },
+      ]),
+    ).toBeUndefined();
   });
 });
