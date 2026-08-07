@@ -98,6 +98,34 @@ web:
   - frontend/digichat-ui/**
   - frontend/digiweb/web/**
   - frontend/digiweb/design/**
+  # The design reference is the canonical surface every other frontend copies patterns
+  # from (.claude/skills/digiweb/SKILL.md routes all web work through it), and until this
+  # entry nothing built, linted or type-checked it: the only `run build` calls in
+  # .github/workflows are test-digichat.yml and test-olympus.yml. ~137 commits in the
+  # month after it was scaffolded (2026-07-06), none of which could fail on a broken
+  # import or a bad type — in the one app whose defects propagate by being copied.
+  #
+  # Be precise about what it did have, because "no coverage" would overstate it:
+  # check_frontend_canon.py scans this workspace for raw palette utilities, legacy
+  # vocabulary and colour literals. Only its CSS class-family census skips digiweb, and
+  # that is deliberate — the reference is where new families are born (CENSUS_APPS in
+  # that script). score.py reaches this directory too; what excludes frontend/** is the
+  # `score` filter below, not the tool. None of those is a lint or a typecheck.
+  #
+  # It rides the `web` lane rather than a lane of its own because test-web.yml already
+  # pays the root `npm ci` that wires the @digithings/design and @digithings/web symlinks
+  # this workspace declares; a separate workflow would duplicate that install to run two
+  # commands.
+  #
+  # Note what this is NOT: neither Cloudflare deploy check watches this *directory*, and
+  # this entry does not change that — neither site builds this app, so firing two
+  # production builds per edit here would be cost with no consumer. This lane runs lint
+  # + tsc, never `next build`. Both checks do watch `frontend/digiweb/reference/package.json`
+  # (#1977, merged 2026-08-07) as an *install* input, since the root `npm install`
+  # resolves all eight manifests before either site compiles. Different claim, and the
+  # two compose: that PR's union guard reads every glob in this file, so this directory
+  # entry independently satisfies it.
+  - frontend/digiweb/reference/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml

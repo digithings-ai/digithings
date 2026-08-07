@@ -66,3 +66,47 @@ jobs:
 
       - name: Lint digiquant-web
         run: npm run lint --workspace digiquant-web
+
+      # Nothing in .github/workflows built, linted or type-checked the design reference
+      # until these two steps — the only `run build` calls are test-digichat.yml and
+      # test-olympus.yml. It is the surface the other frontends copy patterns from
+      # (.claude/skills/digiweb/SKILL.md routes web work through it), so a broken pattern
+      # here propagates by design, and it took ~137 commits in the month after it was
+      # scaffolded (2026-07-06) with nothing able to fail.
+      #
+      # Not "no coverage at all", which overstates it: check_frontend_canon.py already
+      # scanned this workspace for raw palette utilities, legacy vocabulary and colour
+      # literals — only its CSS class-family census skips digiweb, deliberately, since
+      # the reference is where new families are born. What was missing is a lint and a
+      # typecheck. It belongs in this lane rather than one of its own because the root
+      # `npm ci` above already wires the @digithings/design and @digithings/web symlinks
+      # it declares.
+      - name: Lint design-reference
+        run: npm run lint --workspace design-reference
+
+      # Type-checked as well as linted, because eslint-config-next does not type-check:
+      # a bad prop type or a broken import in the reference passes `eslint .` clean.
+      #
+      # Scope is wider than the step name: @digithings/web exports raw `src/index.ts`, so
+      # tsc pulls ~103 of its sources into the program. A type error in that package —
+      # which digichat and olympus work also edits — reddens this step. Extra coverage,
+      # but read the error path before assuming the reference is at fault.
+      #
+      # Run through the workspace's own `typecheck` script rather than a bare root `tsc`
+      # so cwd and tsconfig selection are unambiguous. Today both resolve the same binary
+      # (root typescript 6.0.3; only frontend/digichat nests its own, 5.9.3, for its ^5
+      # pin) — the script is what keeps that true if the reference ever nests one.
+      #
+      # No `next build` here on purpose: neither Cloudflare site builds this workspace,
+      # so a production build would be cost with no consumer. The consequence to know
+      # about is that `.next/` never exists in CI, and the TRACKED `next-env.d.ts` line 3
+      # is `import "./.next/dev/types/routes.d.ts"` — a hard side-effect import of a
+      # gitignored path. This step is green only because tsconfig sets
+      # `skipLibCheck: true`, which swallows it; with `skipLibCheck: false` it fails
+      # TS2882 on a fresh checkout (and TS2309 out of simple-icons' .d.ts, so that flag
+      # is not a one-fix change). Do not "tighten" it without regenerating or excluding
+      # next-env.d.ts, and note Next rewrites that line itself on upgrade
+      # (`next dev` writes .next/dev/types, `next build` writes .next/types).
+      # Same pair frontend/digiweb/reference/README.md documents as the local gate.
+      - name: Typecheck design-reference
+        run: npm run typecheck --workspace design-reference
