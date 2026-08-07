@@ -102,6 +102,12 @@ CREATE TABLE IF NOT EXISTS public.olympus_provider_calls (
         CHECK (
             (outcome = 'failed' AND error_type IS NOT NULL)
             OR (outcome <> 'failed' AND error_type IS NULL)
+        ),
+    CONSTRAINT chk_olympus_provider_calls_terminal_disposition
+        CHECK (
+            (outcome = 'failed' AND no_artifact_reason = 'call_failed')
+            OR (outcome = 'cancelled' AND no_artifact_reason = 'call_cancelled')
+            OR outcome IN ('started', 'succeeded')
         )
 );
 
@@ -163,6 +169,10 @@ REVOKE ALL ON public.olympus_node_runs FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON public.olympus_provider_calls FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON public.olympus_provider_attempts FROM PUBLIC, anon, authenticated;
 
+REVOKE ALL ON public.olympus_node_runs FROM service_role;
+REVOKE ALL ON public.olympus_provider_calls FROM service_role;
+REVOKE ALL ON public.olympus_provider_attempts FROM service_role;
+
 GRANT SELECT, INSERT ON public.olympus_node_runs TO service_role;
 GRANT SELECT, INSERT ON public.olympus_provider_calls TO service_role;
 GRANT SELECT, INSERT ON public.olympus_provider_attempts TO service_role;
@@ -182,18 +192,32 @@ DROP TRIGGER IF EXISTS reject_olympus_node_runs_mutation ON public.olympus_node_
 CREATE TRIGGER reject_olympus_node_runs_mutation
     BEFORE UPDATE OR DELETE ON public.olympus_node_runs
     FOR EACH ROW EXECUTE FUNCTION public.reject_olympus_provider_telemetry_mutation();
+DROP TRIGGER IF EXISTS reject_olympus_node_runs_truncate ON public.olympus_node_runs;
+CREATE TRIGGER reject_olympus_node_runs_truncate
+    BEFORE TRUNCATE ON public.olympus_node_runs
+    FOR EACH STATEMENT EXECUTE FUNCTION public.reject_olympus_provider_telemetry_mutation();
 
 DROP TRIGGER IF EXISTS reject_olympus_provider_calls_mutation
     ON public.olympus_provider_calls;
 CREATE TRIGGER reject_olympus_provider_calls_mutation
     BEFORE UPDATE OR DELETE ON public.olympus_provider_calls
     FOR EACH ROW EXECUTE FUNCTION public.reject_olympus_provider_telemetry_mutation();
+DROP TRIGGER IF EXISTS reject_olympus_provider_calls_truncate
+    ON public.olympus_provider_calls;
+CREATE TRIGGER reject_olympus_provider_calls_truncate
+    BEFORE TRUNCATE ON public.olympus_provider_calls
+    FOR EACH STATEMENT EXECUTE FUNCTION public.reject_olympus_provider_telemetry_mutation();
 
 DROP TRIGGER IF EXISTS reject_olympus_provider_attempts_mutation
     ON public.olympus_provider_attempts;
 CREATE TRIGGER reject_olympus_provider_attempts_mutation
     BEFORE UPDATE OR DELETE ON public.olympus_provider_attempts
     FOR EACH ROW EXECUTE FUNCTION public.reject_olympus_provider_telemetry_mutation();
+DROP TRIGGER IF EXISTS reject_olympus_provider_attempts_truncate
+    ON public.olympus_provider_attempts;
+CREATE TRIGGER reject_olympus_provider_attempts_truncate
+    BEFORE TRUNCATE ON public.olympus_provider_attempts
+    FOR EACH STATEMENT EXECUTE FUNCTION public.reject_olympus_provider_telemetry_mutation();
 
 REVOKE ALL ON FUNCTION public.reject_olympus_provider_telemetry_mutation()
     FROM PUBLIC, anon, authenticated;
@@ -211,4 +235,4 @@ COMMENT ON TABLE public.olympus_provider_attempts IS
     'cost remain NULL, never zero.';
 
 COMMENT ON FUNCTION public.reject_olympus_provider_telemetry_mutation() IS
-    'Rejects UPDATE and DELETE on the provider telemetry ledger; corrections append new evidence.';
+    'Rejects UPDATE, DELETE, and TRUNCATE on provider telemetry; corrections append evidence.';

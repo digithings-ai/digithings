@@ -187,9 +187,15 @@ blocked; they are made pointless (`200 {"skipped": "not claimed"}`, nothing fetc
   secrets, and raw exceptions have no storage columns.
 
   RLS is enabled with no policies and all privileges are revoked from `PUBLIC`, `anon`, and
-  `authenticated`. `service_role` receives only `SELECT` and `INSERT`. Mutation-rejection triggers
-  also deny `UPDATE` and `DELETE`, including owner-class sessions, so any future correction must append
-  explicit superseding evidence rather than rewrite history. Task #1951 creates no writer or public
+  `authenticated`. Privileges are revoked from `service_role` **before** the grant, because a Supabase
+  project carries `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES TO service_role` and an additive
+  grant alone leaves the inherited `UPDATE`/`DELETE`/`TRUNCATE` in place; after the revoke,
+  `service_role` holds only `SELECT` and `INSERT`. Mutation-rejection triggers deny `UPDATE` and
+  `DELETE` per row and `TRUNCATE` per statement, including owner-class sessions, so any future
+  correction must append explicit superseding evidence rather than rewrite history. A
+  `chk_olympus_provider_calls_terminal_disposition` constraint mirrors the producer's Pydantic rule in
+  SQL — a `failed` call must carry `call_failed` and a `cancelled` call `call_cancelled` — so a
+  mislabelled terminal disposition cannot be persisted by a writer that bypasses the models. Task #1951 creates no writer or public
   reader; later instrumentation registers the fail-soft observer and batches these records.
 
 ## RLS (consistent across all tables above)

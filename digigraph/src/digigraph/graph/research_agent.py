@@ -326,6 +326,7 @@ def run_research_agent(
     tool_grounded = bool(tools) and execute_tool is not None
     with _usage.call_context(phase=phase_slug, operation=schema_name):
         for attempt in range(max_retries + 1):
+            call = None
             # Only the FIRST attempt runs the tool loop. Retries drop the tools so that
             # ``response_format`` survives into the request (#1739) — see "Tool-path retry".
             if tool_grounded and attempt == 0:
@@ -334,6 +335,7 @@ def run_research_agent(
                     no_artifact_reason=NoArtifactReason.TOOL_DISPATCH,
                     follow_up_purpose=CallPurpose.TOOL_FOLLOW_UP,
                     follow_up_no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+                    defer_finalization=True,
                 ) as call:
                     raw = run_tools(
                         effective_model,
@@ -355,6 +357,7 @@ def run_research_agent(
                         purpose=purpose,
                         parent_call_id=parent_call_id,
                         no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+                        defer_finalization=True,
                     ) as call:
                         raw = completion_text(
                             effective_model,
@@ -408,7 +411,11 @@ def run_research_agent(
                     exc,
                 )
                 if attempt == max_retries:
+                    if call is not None:
+                        call.set_no_artifact_reason(NoArtifactReason.VALIDATION_REJECTED)
                     break
+                if call is not None:
+                    call.set_no_artifact_reason(NoArtifactReason.VALIDATION_REJECTED)
                 messages = messages + [
                     {"role": "assistant", "content": raw or ""},
                     {
@@ -420,5 +427,8 @@ def run_research_agent(
                         ),
                     },
                 ]
+            finally:
+                if call is not None:
+                    call.finalize()
     assert last_error is not None  # loop always records on failure
     raise last_error

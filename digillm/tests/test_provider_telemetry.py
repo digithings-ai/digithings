@@ -443,6 +443,32 @@ def test_terminal_error_is_preserved_and_only_its_type_is_recorded() -> None:
     assert "secret response body" not in attempts[0].model_dump_json()
 
 
+def test_chat_request_cancellation_closes_attempt_and_logical_call() -> None:
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = asyncio.CancelledError()
+    records = TelemetryCollector()
+    digillm.set_telemetry_observer(records)
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        digillm.provider_call_context(
+            node_run_id=uuid4(),
+            purpose=CallPurpose.INITIAL_GENERATION,
+            no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+        ),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        digillm.completion("gpt-4o-mini", [{"role": "user", "content": "hello"}])
+
+    call = next(record for record in records if isinstance(record, ProviderCallRecord))
+    attempt = next(record for record in records if isinstance(record, ProviderAttemptRecord))
+    assert call.outcome is ProviderCallOutcome.CANCELLED
+    assert call.attempt_count == 1
+    assert attempt.call_id == call.call_id
+    assert attempt.outcome is ProviderAttemptOutcome.CANCELLED
+    assert attempt.error_type is None
+
+
 def test_broken_attempt_observer_does_not_change_completion() -> None:
     fake_client = MagicMock()
     fake_client.chat.completions.create.return_value = _completion("unchanged")
@@ -923,6 +949,35 @@ def test_xai_search_failure_emits_attempt_and_preserves_fail_soft_result(
     assert attempts[0].outcome is ProviderAttemptOutcome.FAILED
     assert attempts[0].error_type == "RuntimeError"
     assert "private provider response" not in attempts[0].model_dump_json()
+
+
+def test_responses_request_cancellation_closes_attempt_and_logical_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    fake_client = MagicMock()
+    fake_client.responses.create.side_effect = asyncio.CancelledError()
+    records = TelemetryCollector()
+    digillm.set_telemetry_observer(records)
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        digillm.provider_call_context(
+            node_run_id=uuid4(),
+            purpose=CallPurpose.WEB_GROUNDING,
+            no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
+        ),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        digillm.web_search("xai/grok-4", "query")
+
+    call = next(record for record in records if isinstance(record, ProviderCallRecord))
+    attempt = next(record for record in records if isinstance(record, ProviderAttemptRecord))
+    assert call.outcome is ProviderCallOutcome.CANCELLED
+    assert call.attempt_count == 1
+    assert attempt.call_id == call.call_id
+    assert attempt.outcome is ProviderAttemptOutcome.CANCELLED
+    assert attempt.error_type is None
 
 
 def test_xai_grounding_failure_emits_sanitized_logical_failure(

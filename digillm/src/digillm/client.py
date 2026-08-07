@@ -47,7 +47,7 @@ import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import (  # score:allow untyped any — OpenAI message dict payloads are heterogeneous
@@ -491,9 +491,32 @@ def set_telemetry_observer(observer: TelemetryObserver | None) -> None:
 
 @dataclass
 class ProviderCallContextHandle:
-    """Mutable result handle populated with the latest logical call ID in the scope."""
+    """Mutable logical-call result and deferred-disposition handle."""
 
     last_call_id: UUID | None = None
+    _pending_records: list[ProviderCallRecord] = field(default_factory=list, repr=False)
+
+    def set_no_artifact_reason(self, reason: NoArtifactReason) -> bool:
+        """Replace the latest deferred successful disposition when one exists."""
+        if not self._pending_records:
+            return False
+        record = self._pending_records[-1]
+        if record.outcome is not ProviderCallOutcome.SUCCEEDED:
+            return False
+        self._pending_records[-1] = record.model_copy(
+            update={"artifacts": (), "no_artifact_reason": reason}
+        )
+        return True
+
+    def finalize(self) -> None:
+        """Deliver and clear all deferred logical records exactly once."""
+        records = tuple(self._pending_records)
+        self._pending_records.clear()
+        observer = _telemetry_observer
+        if observer is None:
+            return
+        for record in records:
+            emit_telemetry(observer, record)
 
 
 @dataclass(frozen=True)
@@ -506,6 +529,7 @@ class _ProviderCallMetadata:
     follow_up_purpose: CallPurpose | None
     follow_up_artifacts: tuple[ArtifactRef, ...]
     follow_up_no_artifact_reason: NoArtifactReason | None
+    defer_finalization: bool
     handle: ProviderCallContextHandle
 
 
@@ -525,6 +549,8 @@ def provider_call_context(
     follow_up_purpose: CallPurpose | None = None,
     follow_up_artifacts: tuple[ArtifactRef, ...] = (),
     follow_up_no_artifact_reason: NoArtifactReason | None = None,
+    defer_finalization: bool = False,
+    handle: ProviderCallContextHandle | None = None,
 ) -> Iterator[ProviderCallContextHandle]:
     """Inject generic logical-call metadata without changing provider call signatures."""
     if bool(artifacts) == (no_artifact_reason is not None):
@@ -533,7 +559,7 @@ def provider_call_context(
         follow_up_no_artifact_reason is not None
     ):
         raise ValueError("provide either follow_up_artifacts or one follow_up_no_artifact_reason")
-    handle = ProviderCallContextHandle()
+    call_handle = handle or ProviderCallContextHandle()
     token = _provider_call_metadata.set(
         _ProviderCallMetadata(
             node_run_id=node_run_id,
@@ -544,11 +570,12 @@ def provider_call_context(
             follow_up_purpose=follow_up_purpose,
             follow_up_artifacts=follow_up_artifacts,
             follow_up_no_artifact_reason=follow_up_no_artifact_reason,
-            handle=handle,
+            defer_finalization=defer_finalization,
+            handle=call_handle,
         )
     )
     try:
-        yield handle
+        yield call_handle
     finally:
         _provider_call_metadata.reset(token)
 
@@ -599,6 +626,7 @@ def _logical_attempt_scope(requested_model: str = "unknown") -> Iterator[_Attemp
             follow_up_purpose=context_metadata.follow_up_purpose,
             follow_up_artifacts=context_metadata.follow_up_artifacts,
             follow_up_no_artifact_reason=context_metadata.follow_up_no_artifact_reason,
+            defer_finalization=context_metadata.defer_finalization,
             handle=context_metadata.handle,
         )
     scope = _AttemptScope(
@@ -688,7 +716,10 @@ def _emit_logical_call(
             started_at=scope.started_at,
             finished_at=datetime.now(UTC),
         )
-        emit_telemetry(observer, record)
+        if metadata.defer_finalization and outcome is ProviderCallOutcome.SUCCEEDED:
+            metadata.handle._pending_records.append(record)
+        else:
+            emit_telemetry(observer, record)
     except Exception as telemetry_error:
         logger.debug("logical-call telemetry failed: %s", type(telemetry_error).__name__)
 
@@ -816,6 +847,18 @@ def _responses_create_with_attempt(
         attempt_number, retry_reason, started_at = scope.start()
         try:
             response = client.responses.create(**kwargs)
+        except asyncio.CancelledError:
+            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=provider,
+                requested_model=requested_model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.CANCELLED,
+            )
+            raise
         except Exception as error:
             scope.terminal_outcome = ProviderCallOutcome.FAILED
             scope.logical_error_type = type(error).__name__
@@ -964,6 +1007,18 @@ def _create_with_retry(
                 if on_attempt is not None:
                     on_attempt()
                 response = client.chat.completions.create(**kwargs)
+            except asyncio.CancelledError:
+                scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+                _emit_attempt(
+                    scope=scope,
+                    attempt_number=attempt_number,
+                    retry_reason=retry_reason,
+                    provider=provider,
+                    requested_model=requested_model,
+                    started_at=started_at,
+                    outcome=ProviderAttemptOutcome.CANCELLED,
+                )
+                raise
             except Exception as error:
                 _emit_attempt(
                     scope=scope,

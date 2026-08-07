@@ -113,6 +113,7 @@ class LogicalCallContext(BaseModel):
     follow_up_purpose: CallPurpose | None = None
     follow_up_artifacts: tuple[ArtifactRef, ...] = ()
     follow_up_no_artifact_reason: NoArtifactReason | None = None
+    defer_finalization: bool = False
     handle: ProviderCallContextHandle
 
 
@@ -166,6 +167,7 @@ def logical_call_context(
     follow_up_purpose: CallPurpose | None = None,
     follow_up_artifacts: tuple[ArtifactRef, ...] = (),
     follow_up_no_artifact_reason: NoArtifactReason | None = None,
+    defer_finalization: bool = False,
 ) -> Iterator[ProviderCallContextHandle]:
     """Describe one generic provider invocation without requiring Olympus semantics."""
     handle = ProviderCallContextHandle()
@@ -178,6 +180,7 @@ def logical_call_context(
             follow_up_purpose=follow_up_purpose,
             follow_up_artifacts=follow_up_artifacts,
             follow_up_no_artifact_reason=follow_up_no_artifact_reason,
+            defer_finalization=defer_finalization,
             handle=handle,
         )
     )

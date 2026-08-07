@@ -147,7 +147,9 @@ No placeholder identity is generated. `logical_call_context(...)` may override g
 parent, artifact references, and no-artifact reason for a nearby call. Defaults distinguish initial
 generation, structured completion, tool selection/follow-up, web grounding, and X grounding;
 `graph/research_agent.py` marks validation retries as structured repairs and links each repair to
-the rejected call ID.
+the rejected call ID. Structured calls defer successful logical-record delivery until Pydantic
+validation assigns the final disposition, so a rejected parent is appended once as
+`validation_rejected`; provider failures and cancellations remain immediate terminal records.
 
 `detailed_usage_projection()` is a temporary reconciliation view, not a second accounting ledger.
 It selects one terminal successful physical attempt for each successful non-cache logical call so
@@ -159,9 +161,11 @@ rather than fabricated zero.
 Collector and observer failures are fail-soft and cannot change cache ordering, retry/backoff,
 routing, tool execution, return values, or exceptions. Strict records have no prompt, response,
 search text, secret, API key, or raw exception fields. Task 1.4 owns full run/node/agent/ticker
-propagation; Task 1.5 owns persistence, flush, durable reconciliation, and any retirement of the
-aggregate-only writer. Rollback removes logical metadata injection and detailed observer
-registration while retaining strict contracts, physical attempts, and the incumbent aggregate.
+propagation; until that lands, production paths without a real `node_run_id` intentionally emit
+physical attempts but no logical records rather than fabricating identity. Task 1.5 owns
+persistence, flush, durable reconciliation, and any retirement of the aggregate-only writer.
+Rollback removes logical metadata injection and detailed observer registration while retaining
+strict contracts, physical attempts, and the incumbent aggregate.
 
 ### 4.1 WorkflowState (`graph/state.py`)
 

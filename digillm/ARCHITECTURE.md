@@ -87,6 +87,13 @@ tool, live-search, and BYOK paths are explicitly bypassed. Failures and cancella
 prospective artifact disposition with `CALL_FAILED` or `CALL_CANCELLED`, and failures retain only
 the sanitized exception class.
 
+Consumers that validate a successful response after the provider wrapper returns may request
+deferred finalization. The context handle buffers only successful logical records, permits the
+latest success to receive its final no-artifact reason, and then delivers each record exactly once.
+Failed and cancelled calls are already authoritative at the provider boundary and emit immediately.
+This lets structured consumers append rejected output as `VALIDATION_REJECTED` instead of first
+recording it as consumed and attempting a later correction.
+
 Logical telemetry is observational and fail-soft. Record construction, optional provider evidence,
 and observer delivery cannot alter cache ordering, retries/backoff, routing, tool execution,
 return values, or raised exceptions. Unknown purpose or disposition must use the closed `UNKNOWN`

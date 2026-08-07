@@ -101,6 +101,8 @@ def _logical_call_scope(
         follow_up_purpose=metadata.follow_up_purpose,
         follow_up_artifacts=metadata.follow_up_artifacts,
         follow_up_no_artifact_reason=metadata.follow_up_no_artifact_reason,
+        defer_finalization=metadata.defer_finalization,
+        handle=metadata.handle,
     ) as handle:
         metadata.handle.last_call_id = handle.last_call_id
         try:

@@ -88,6 +88,8 @@ class TestCompletion:
             "follow_up_purpose": None,
             "follow_up_artifacts": (),
             "follow_up_no_artifact_reason": None,
+            "defer_finalization": False,
+            "handle": ProviderCallContextHandle(),
         }
 
     def test_missing_node_context_does_not_fabricate_detailed_metadata(self) -> None:

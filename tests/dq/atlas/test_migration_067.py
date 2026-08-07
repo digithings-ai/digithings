@@ -157,6 +157,14 @@ def test_failed_calls_require_sanitized_error_type(sql: str) -> None:
     assert "outcome <> 'failed' AND error_type IS NULL" in normalized
 
 
+def test_terminal_calls_require_matching_artifact_disposition(sql: str) -> None:
+    body = _table_body(sql, "olympus_provider_calls")
+    normalized = " ".join(body.split())
+    assert "outcome = 'failed' AND no_artifact_reason = 'call_failed'" in normalized
+    assert "outcome = 'cancelled' AND no_artifact_reason = 'call_cancelled'" in normalized
+    assert "outcome IN ('started', 'succeeded')" in normalized
+
+
 @pytest.mark.parametrize("table", ("olympus_provider_calls", "olympus_provider_attempts"))
 def test_provider_identifiers_have_length_bounds(sql: str, table: str) -> None:
     body = " ".join(_table_body(sql, table).split())
@@ -254,12 +262,21 @@ def test_tables_are_private(sql: str, table: str) -> None:
 
 @pytest.mark.parametrize("table", TABLES)
 def test_service_role_can_only_insert_and_read(sql: str, table: str) -> None:
+    revoke = re.search(
+        rf"REVOKE\s+ALL\s+ON\s+public\.{table}\s+FROM\s+service_role;",
+        sql,
+        re.IGNORECASE,
+    )
     grant = re.search(
         rf"GRANT\s+(?P<privileges>[^;]+?)\s+ON\s+public\.{table}\s+TO\s+service_role;",
         sql,
         re.IGNORECASE,
     )
+    assert revoke, f"missing service_role reset for {table}"
     assert grant, f"missing service_role grant for {table}"
+    assert revoke.end() < grant.start(), (
+        f"service_role privileges are not reset before {table} grant"
+    )
     privileges = {item.strip().upper() for item in grant.group("privileges").split(",")}
     assert privileges == {"SELECT", "INSERT"}
 
@@ -269,6 +286,12 @@ def test_mutation_rejection_trigger_guards_each_table(sql: str, table: str) -> N
     assert re.search(
         rf"CREATE TRIGGER reject_{table}_mutation\s+BEFORE UPDATE OR DELETE\s+"
         rf"ON public\.{table}",
+        sql,
+        re.IGNORECASE | re.DOTALL,
+    )
+    assert re.search(
+        rf"CREATE TRIGGER reject_{table}_truncate\s+BEFORE TRUNCATE\s+"
+        rf"ON public\.{table}\s+FOR EACH STATEMENT",
         sql,
         re.IGNORECASE | re.DOTALL,
     )
