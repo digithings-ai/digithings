@@ -43,32 +43,52 @@ import {
   ChatToolCall,
   ChatWidgetFrame,
 } from "@digithings/web";
-import { toCanonRows, type CanonActivityRow } from "../activity-view";
+import { distinctHitPath, toCanonRows, type CanonActivityRow } from "../activity-view";
 import type { DigiChatActivity, VaultHitSummary } from "../types";
 
 /**
- * Retrieved documents, as the fold-out body of a `tool_result` row.
- *
- * Not new: the previous `.dc-act-hits` list already rendered these on both
- * surfaces. `activity-view.ts` sets `defaultOpen: true` for a non-empty hit list,
- * so citations stay in the server-rendered markup rather than hiding behind a
- * click.
+ * Retrieved documents, as the fold-out body of a `tool_result` row — the
+ * chunks Foundry (or digivault) already attached to that search. Each snippet
+ * is a nested `<details>`, closed by default.
  */
+function HitHead({ hit, path }: { hit: VaultHitSummary; path: string | null }) {
+  return (
+    <>
+      <span className="dc-act-hit-title">{hit.title}</span>
+      {hit.tier ? <span className="dc-act-hit-tier">{hit.tier}</span> : null}
+      {typeof hit.year === "number" ? (
+        <span className="dc-act-hit-year">{hit.year}</span>
+      ) : null}
+      {path ? <span className="dc-act-hit-path">{path}</span> : null}
+    </>
+  );
+}
+
 function SourceList({ sources }: { sources: VaultHitSummary[] }) {
   return (
     <ul className="dc-act-hits">
       {/* path is not unique — two chunks of one vault document share it. */}
-      {sources.map((hit, i) => (
-        <li key={`${hit.path}-${i}`}>
-          <span className="dc-act-hit-title">{hit.title}</span>
-          {hit.tier ? <span className="dc-act-hit-tier">{hit.tier}</span> : null}
-          {typeof hit.year === "number" ? (
-            <span className="dc-act-hit-year">{hit.year}</span>
-          ) : null}
-          <span className="dc-act-hit-path">{hit.path}</span>
-          {hit.snippet ? <p className="dc-act-hit-snippet">{hit.snippet}</p> : null}
-        </li>
-      ))}
+      {sources.map((hit, i) => {
+        const path = distinctHitPath(hit.title, hit.path);
+        const key = `${hit.path}-${i}`;
+        if (!hit.snippet) {
+          return (
+            <li key={key}>
+              <HitHead hit={hit} path={path} />
+            </li>
+          );
+        }
+        return (
+          <li key={key}>
+            <details className="dc-act-hit">
+              <summary className="dc-act-hit-summary">
+                <HitHead hit={hit} path={path} />
+              </summary>
+              <p className="dc-act-hit-snippet">{hit.snippet}</p>
+            </details>
+          </li>
+        );
+      })}
     </ul>
   );
 }

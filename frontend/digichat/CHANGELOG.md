@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.1](https://github.com/digithings-ai/digithings/compare/digichat-v0.9.0...digichat-v0.9.1) (2026-08-07)
+
+
+### Features
+
+* **digichat:** map Foundry azure_ai_search activity into the shared DigiChat chain
+
+
+### Bug Fixes
+
+* **digichat:** progressive tool stream + bare wait caret; fourth-turn trial form polish ([#1983](https://github.com/digithings-ai/digithings/issues/1983))
+
 ## [0.9.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.8.0...digichat-v0.9.0) (2026-08-07)
 
 

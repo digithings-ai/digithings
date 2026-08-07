@@ -221,6 +221,26 @@ describe("toDigiChatActivity", () => {
     ]);
   });
 
+  it("keeps a completed search as a running tool_call until the turn settles", () => {
+    expect(
+      toDigiChatActivity([started("file_search"), finished("file_search", "auth")], {
+        settle: false,
+      }),
+    ).toEqual([{ kind: "tool_call", name: "file_search", query: "auth" }]);
+  });
+
+  it("still settles a failed search mid-stream", () => {
+    expect(
+      toDigiChatActivity(
+        [
+          started("file_search"),
+          { ...finished("file_search", "auth"), status: "failed" },
+        ],
+        { settle: false },
+      ),
+    ).toEqual([{ kind: "status", message: 'Search for "auth" failed.' }]);
+  });
+
   it("keeps two different queries as separate rows", () => {
     const rows = toDigiChatActivity([
       finished("file_search", "auth"),

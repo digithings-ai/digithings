@@ -160,12 +160,8 @@
   color: var(--ink-mute);
 }
 
-/* Waiting for the first token: <TerminalStepCaret> (@digithings/web) types the
-   response stages at the brand's block cursor. It replaced a local "thinking …"
-   plus three bouncing dots, whose reduced-motion branch swapped one infinite
-   animation for another instead of settling — the caret's still is a real one.
-   Only the label needs restating; .tl-* ships with the component, and the
-   cursor keeps its accent so the mute label reads as the quiet half. */
+/* Busy turn: one bare <ChatStreamCursor> under the chain / answer. Tool rows
+   carry running/ok themselves — no typed TerminalStepCaret status line. */
 .dc-body > .tl-line {
   color: var(--ink-mute);
 }
@@ -334,6 +330,11 @@
   list-style: disc;
   font-size: 0.74rem;
   line-height: 1.5;
+  /* Cap so a 5-note search with 4-line snippets can't own the transcript —
+     same scroll grammar as `.dc-act-reasoning-text`. */
+  max-height: 14rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .dc-act-hits li {
   margin: 0.12rem 0;
@@ -355,6 +356,18 @@
   margin-left: 0.35rem;
   color: var(--ink-mute);
   font-size: 0.88em;
+}
+/* Snippet disclosure — closed by default so a 5-note search shows titles
+   only; click a title to read the chunk. Native <details>, no JS. */
+.dc-act-hit {
+  display: block;
+}
+.dc-act-hit-summary {
+  cursor: pointer;
+  list-style: none;
+}
+.dc-act-hit-summary::-webkit-details-marker {
+  display: none;
 }
 .dc-act-hit-snippet {
   margin: 0.2rem 0 0;

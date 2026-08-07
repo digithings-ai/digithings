@@ -230,7 +230,33 @@ function EmbedChat({
 
   // trial_form is locked when EITHER the client counter hit the free limit
   // (normal path) OR the server reported a gate (localStorage-bypass path).
-  const trialLocked = isTrialForm && !trialUnlocked && (gate.locked || serverGated);
+  /**
+   * The form is raised when the visitor ASKS for it, not the moment the free
+   * turns run out.
+   *
+   * Gating on `gate.locked` put the form up as soon as the third answer
+   * finished streaming — on top of the answer, which the visitor had not read
+   * yet. (The `!chat.busy` guard on the post below was an earlier attempt at
+   * the same problem; it only delayed the cover to the last token.) The
+   * natural moment to ask is the FOURTH question: that submission is the
+   * visitor telling us they want more, so it is held, the form goes up, and
+   * the held question is sent once they are through.
+   *
+   * `requested` is also what the notice's own button sets, which is the only
+   * way back after dismissing the overlay. `nonce` exists because the repost
+   * effect dedupes on payload: re-opening produces a byte-identical gated
+   * message, so without a changing input the parent would never be told
+   * again — the exact dead end where the visitor is left with a notice, a
+   * Retry button, and no form.
+   */
+  const [gateRequest, setGateRequest] = useState({ requested: false, nonce: 0 });
+  /** The question that arrived after the free turns were spent, and the one
+   *  already released — refs, so neither triggers a render of its own. */
+  const heldQuestionRef = useRef<string | null>(null);
+  const sentHeldRef = useRef<string | null>(null);
+
+  const serverGatedOrAsked = serverGated || gateRequest.requested;
+  const trialLocked = isTrialForm && !trialUnlocked && serverGatedOrAsked;
 
   // Standalone (top-level, not embedded) => no parent will show a form. Fall back
   // to the lockedContact card so a visitor is never dead-ended (design spec).
@@ -322,7 +348,42 @@ function EmbedChat({
     if (lastGatedPost.current === key) return;
     lastGatedPost.current = key;
     window.parent.postMessage(payload, host);
-  }, [trialLocked, isStandalone, host, gate.host, chat.messages, chat.busy]);
+    // gateRequest.nonce is a dependency, not decoration: re-opening the form
+    // after a dismissal produces the same payload, and the ref above would
+    // swallow the repost. The re-open handler clears the ref AND bumps the
+    // nonce so this effect runs again and the parent actually hears about it.
+  }, [trialLocked, isStandalone, host, gate.host, chat.messages, chat.busy, gateRequest.nonce]);
+
+  // Through the form: release the question that was held at the gate, so the
+  // visitor gets the answer they asked for rather than having to retype it.
+  //
+  // The held question is a ref, not state, for two reasons: clearing it would
+  // be a synchronous setState inside an effect (which this codebase forbids —
+  // see gateTimeoutState above for the same avoidance), and it needs no
+  // render of its own. `sentHeld` is what makes the release idempotent, since
+  // the effect re-runs on every chat identity change while the answer streams.
+  //
+  // Call chat.send (not wrappedSend) here: wrappedSend is defined below and
+  // would re-capture this effect. Increment the turn counter ourselves so the
+  // held fourth question counts the same as any other send.
+  useEffect(() => {
+    const question = heldQuestionRef.current;
+    if (!trialUnlocked || !question || chat.busy) return;
+    if (sentHeldRef.current === question) return;
+    sentHeldRef.current = question;
+    void chat.send(question);
+    if (!ungated) gate.increment();
+    emit("embed_turn_submitted", {
+      accent,
+      turn: gate.turns + 1,
+      byok: byokIsSet,
+    });
+  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet]);
+
+  const reopenTrialForm = useCallback(() => {
+    lastGatedPost.current = null;
+    setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
+  }, []);
 
   // Fallback for a parent that never answers the gated postMessage (design
   // spec, "Error handling & fallbacks") — see PARENT_GATE_TIMEOUT_MS for the
@@ -386,7 +447,15 @@ function EmbedChat({
 
   const wrappedSend = useCallback(
     (question: string) => {
-      if ((gate.locked || trialLocked) && !ungated) return;
+      // Out of free turns: HOLD the question and raise the form. Dropping it
+      // on the floor (what this did) meant the visitor's fourth question just
+      // vanished — they had typed it, pressed send, and got nothing back.
+      if ((gate.locked || trialLocked) && !ungated) {
+        heldQuestionRef.current = question;
+        lastGatedPost.current = null;
+        setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
+        return;
+      }
       void chat.send(question);
       emit("embed_turn_submitted", {
         accent,
@@ -450,7 +519,20 @@ function EmbedChat({
       showByok={showByok}
       showStatusBar={uiFlags.showStatusBar}
       layout={uiFlags.layout}
-      chat={{ ...chat, send: wrappedSend }}
+      chat={{
+        ...chat,
+        send: wrappedSend,
+        // While the trial overlay path is active, the formReplacement notice is
+        // the warning (with "the trial form" + Retry). Hiding the raw trial_gate
+        // string avoids a duplicate banner whose Retry only regenerated a 402.
+        error: trialLocked ? null : chat.error,
+        onRetry:
+          isTrialForm &&
+          !trialLocked &&
+          !!chat.error?.toLowerCase().includes("trial form")
+            ? reopenTrialForm
+            : chat.onRetry,
+      }}
       headerSlot={headerSlot}
       footerSlot={footerSlot}
       formReplacement={
@@ -458,7 +540,7 @@ function EmbedChat({
           resolveGateFallbackCard({ noParentChannel, parentUnresponsive }) === "paywall" ? (
             <PaywallCard lockedContact={tenantCfg.lockedContact} />
           ) : (
-            <TrialGatePlaceholder />
+            <TrialGatePlaceholder onOpen={reopenTrialForm} />
           )
         ) : gate.locked && !ungated && !isTrialForm ? (
           <PaywallCard lockedContact={tenantCfg.lockedContact} />
@@ -642,13 +724,40 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
   );
 }
 
-function TrialGatePlaceholder() {
+/**
+ * The notice shown in place of the composer once the free turns are spent.
+ *
+ * Dismissing the parent's overlay used to be a dead end: the notice said to
+ * complete the form, Retry only regenerated the failed turn, and nothing on
+ * screen could bring the form back — reload + a fresh question was the only
+ * route. Anything that tells a reader to do something has to be the thing that
+ * lets them do it: "the trial form" is a control, and Retry reopens the same
+ * overlay (via onOpen → gated postMessage with a bumped nonce).
+ */
+function TrialGatePlaceholder({ onOpen }: { onOpen: () => void }) {
   return (
     <div className="border-t border-border bg-muted/40 p-4">
-      <p className="text-sm font-medium">Complete the form to keep chatting.</p>
-      <p className="mt-1 text-xs text-muted-foreground">
-        You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions. Fill in the
-        short form to unlock more.
+      <p className="text-sm font-medium">
+        You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions. Complete{" "}
+        <button
+          type="button"
+          onClick={onOpen}
+          className="underline underline-offset-2 hover:opacity-80"
+        >
+          the trial form
+        </button>{" "}
+        to keep chatting.
+      </p>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Closed the form by mistake?{" "}
+        <button
+          type="button"
+          onClick={onOpen}
+          className="font-medium underline underline-offset-2 hover:opacity-80"
+          style={{ color: "var(--accent)" }}
+        >
+          Retry
+        </button>
       </p>
     </div>
   );
