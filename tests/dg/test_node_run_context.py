@@ -7,6 +7,7 @@ assert only on merged results and would pass even if context never propagated at
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from typing import Annotated, Any
@@ -193,8 +194,7 @@ def test_a_raising_item_key_leaves_the_node_unchanged() -> None:
     assert all(record.fanout_key is None for record in records)
 
 
-@pytest.mark.asyncio
-async def test_an_async_node_stays_async_and_is_still_scoped() -> None:
+def test_an_async_node_stays_async_and_is_still_scoped() -> None:
     """A coroutine node needs a coroutine wrapper.
 
     ``functools.wraps`` copies the inner signature, so a sync wrapper around an ``async def``
@@ -202,6 +202,10 @@ async def test_an_async_node_stays_async_and_is_still_scoped() -> None:
     with ``InvalidUpdateError: Expected dict, got <coroutine>``. Nothing registers an async node
     today, so this guards a capability rather than a live path: without it, adding one would be
     impossible rather than merely unused.
+
+    Driven through ``asyncio.run`` rather than ``@pytest.mark.asyncio`` on purpose: the digigraph
+    CI lane installs ``digigraph[dev]``, which has no ``pytest-asyncio``, so a marked coroutine
+    test collects locally and fails in CI with "async def functions are not natively supported".
     """
     captured: dict[str, Any] = {}
 
@@ -211,7 +215,7 @@ async def test_an_async_node_stays_async_and_is_still_scoped() -> None:
 
     usage.start(run_id="gha-1978")
     graph = build_pipeline(_State, [PipelinePhase(name="solo", nodes=(NodeSpec("n", _anode),))])
-    result = await graph.ainvoke(_State())
+    result = asyncio.run(graph.ainvoke(_State()))
 
     assert result["seen"] == ["async"]
     assert captured["node_run_id"] is not None
