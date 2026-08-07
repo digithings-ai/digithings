@@ -190,3 +190,46 @@ export function toCanonRows(activities: readonly DigiChatActivity[]): CanonActiv
     }
   });
 }
+
+/**
+ * The step to show in the waiting caret: what the agent is doing *right now*,
+ * or nothing.
+ *
+ * The caret used to cycle a hard-coded script — "thinking", "routing through
+ * digigraph", "gathering context", "composing the answer" — on a ~10s loop
+ * regardless of what was happening. It read as a placeholder because it was
+ * one: none of those words were tied to any real step, and two of them named
+ * a backend this transcript may not even be talking to.
+ *
+ * So the label comes from the stream or there is no label. `undefined` means
+ * the caller shows a bare blinking cursor — an honest "something is happening"
+ * beats a confident sentence about the wrong thing.
+ *
+ * Scans from the end because the newest unfinished step is the current one.
+ * A tool row is "unfinished" until a tool_result for the same name arrives;
+ * matching on name alone (not name+query) is deliberate, since a call's query
+ * is often still empty while it is in flight — that is exactly the case this
+ * has to cover.
+ */
+export function liveActivityLabel(activities: DigiChatActivity[]): string | undefined {
+  const settledTools = new Set<string>();
+  for (let i = activities.length - 1; i >= 0; i -= 1) {
+    const activity = activities[i];
+    switch (activity.kind) {
+      case "tool_result":
+        settledTools.add(activity.name);
+        break;
+      case "tool_call": {
+        if (settledTools.has(activity.name)) break;
+        const query = activity.query?.trim();
+        return query ? `Searching for "${query}"` : "Searching…";
+      }
+      case "trace":
+        if (!activity.done) return activity.label;
+        break;
+      default:
+        break;
+    }
+  }
+  return undefined;
+}

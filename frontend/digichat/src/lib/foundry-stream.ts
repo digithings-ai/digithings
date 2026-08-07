@@ -63,14 +63,88 @@ class FoundryProtocolError extends Error {}
 
 const FILE_SEARCH_LABEL = "Searching knowledge base…";
 
+/**
+ * What this agent ACTUALLY emits, recorded off the live DataTap agent across
+ * four question shapes (docs lookup, news, multi-step reasoning, greeting).
+ * Every `response.output_item.done` carried one of exactly four item types:
+ *
+ *   reasoning                    23   — always summary:[] content:[] (see below)
+ *   azure_ai_search_call         10   — `arguments` is JSON: {"query": "..."}
+ *   azure_ai_search_call_output  10   — `output` is JSON: {"documents":[{id,content}]}
+ *   message                       4   — annotations → citations
+ *
+ * Two things that look like they should exist and do not:
+ *
+ * - **`file_search_call` never fires for this agent.** It is wired to the
+ *   `azure_ai_search` tool, so the file_search branches below are dead for
+ *   DataTap. They are kept because a Foundry agent using the native
+ *   file_search tool does emit them, and both shapes are legitimate.
+ * - **There is no web-search tool.** "What is the latest news…" still routed
+ *   to azure_ai_search. Do not render a web-search row that cannot happen.
+ *
+ * And the reason reasoning rows carry no text: the request echoes
+ * `reasoning: {..., summary: null}`, and asking for one is refused —
+ * `400 Not allowed when agent is specified` for "auto" / "concise" /
+ * "detailed" alike. A reasoning SUMMARY has to be enabled on the agent
+ * definition in Foundry; it cannot be requested per-call alongside
+ * `agent_reference`. So a reasoning item is rendered as the fact that a step
+ * happened, never as invented text.
+ */
+const SEARCH_TOOL = "azure_ai_search";
+const SEARCH_LABEL = "Searching the knowledge base…";
+const REASONING_LABEL = "Thinking";
+
 interface OutputItemDoneEvent extends FoundryStreamEvent {
   item?: {
     type?: string;
     queries?: string[];
+    /** azure_ai_search_call: JSON string, `{"query": "..."}`. */
+    arguments?: string;
+    /** azure_ai_search_call_output: JSON string, `{"documents":[…]}`. */
+    output?: string;
+    status?: string;
     content?: Array<{
       annotations?: Array<{ type?: string; filename?: string; url?: string; title?: string }>;
     }>;
   };
+}
+
+/** `arguments`/`output` arrive as JSON strings; a malformed one must not throw. */
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Documents out of an `azure_ai_search_call_output`. The chunks carry an `id`
+ * and the retrieved `content`, which is strictly better than the `message`
+ * annotations for the same search: those come back titled `doc_0`/`doc_3` with
+ * every url pointing at the search service root, which names nothing a reader
+ * can act on. `id` at least identifies the chunk it came from.
+ */
+function searchOutputDocuments(raw: unknown): ActivityDocument[] {
+  const parsed = parseJsonObject(raw);
+  const list = parsed?.documents;
+  if (!Array.isArray(list)) return [];
+  const documents: ActivityDocument[] = [];
+  const seen = new Set<string>();
+  for (const entry of list) {
+    if (!entry || typeof entry !== "object") continue;
+    const doc = entry as Record<string, unknown>;
+    const id = typeof doc.id === "string" ? doc.id : undefined;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const content = typeof doc.content === "string" ? doc.content : undefined;
+    documents.push({ title: id, path: id, ...(content ? { snippet: content } : {}) });
+  }
+  return documents;
 }
 
 function extractTextDelta(value: unknown): string | null {
@@ -94,6 +168,54 @@ function extractTextDelta(value: unknown): string | null {
 
 function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | null {
   const item = event.item;
+
+  // The tool this agent actually calls. `arguments` is the model's own search
+  // query — the tool INPUT a reader wants to see, and the only honest label
+  // for what is happening while it runs.
+  if (item?.type === "azure_ai_search_call") {
+    const query = parseJsonObject(item.arguments)?.query;
+    const q = typeof query === "string" && query.trim() ? query.trim() : undefined;
+    return {
+      type: "activity",
+      span: {
+        operation: "execute_tool",
+        toolName: SEARCH_TOOL,
+        status: item.status === "failed" ? "failed" : "completed",
+        ...(q ? { query: q } : {}),
+        label: q ? `Searched for: "${q}"` : SEARCH_LABEL,
+      },
+    };
+  }
+
+  // The tool OUTPUT: the chunks the search returned.
+  if (item?.type === "azure_ai_search_call_output") {
+    const documents = searchOutputDocuments(item.output);
+    return {
+      type: "activity",
+      span: {
+        operation: "retrieve",
+        toolName: SEARCH_TOOL,
+        status: item.status === "failed" ? "failed" : "completed",
+        label: "Sources",
+        ...(documents.length ? { documents } : {}),
+      },
+    };
+  }
+
+  // A reasoning step happened. Its text is NOT available (see the docblock
+  // above), so this row asserts only that the model thought — never a
+  // fabricated summary of what it thought.
+  if (item?.type === "reasoning") {
+    return {
+      type: "activity",
+      span: {
+        operation: "chat",
+        status: "completed",
+        label: REASONING_LABEL,
+      },
+    };
+  }
+
   if (item?.type === "file_search_call") {
     const queries = item.queries ?? [];
     const query = queries[0];
@@ -167,6 +289,36 @@ export function mapFoundryEvent(event: FoundryStreamEvent): FoundryServerEvent |
           label: FILE_SEARCH_LABEL,
         },
       };
+    // The live half. At `.added` the call exists but `arguments` is still ""
+    // (observed), so a started span can name the tool but not yet the query —
+    // which is precisely the contract toDigiChatActivity's `pendingRow`
+    // expects: it opens one placeholder per tool name and the matching
+    // `.done` fills the query into that same row rather than opening a second.
+    // Without this the chain only ever appeared after the work had finished.
+    case "response.output_item.added": {
+      const item = (event as OutputItemDoneEvent).item;
+      if (item?.type === "azure_ai_search_call") {
+        return {
+          type: "activity",
+          span: {
+            operation: "execute_tool",
+            toolName: SEARCH_TOOL,
+            status: "started",
+            label: SEARCH_LABEL,
+          },
+        };
+      }
+      if (item?.type === "reasoning") {
+        return {
+          type: "activity",
+          span: { operation: "chat", status: "started", label: REASONING_LABEL },
+        };
+      }
+      // message/…_output add nothing a reader can act on: the first is the
+      // answer itself (already streaming as text), the second is the tail of
+      // a search whose row is open.
+      return null;
+    }
     case "response.output_item.done":
       return mapOutputItemDone(event as OutputItemDoneEvent);
     case "response.completed":

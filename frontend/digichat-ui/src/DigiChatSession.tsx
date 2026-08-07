@@ -1,12 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  ChatStreamCursor,
-  TerminalStepCaret,
-  CHAT_RESPONSE_STEPS,
-  CHAT_RESPONSE_HOLD_MS,
-} from "@digithings/web";
+import { ChatStreamCursor, TerminalStepCaret } from "@digithings/web";
+import { liveActivityLabel } from "./activity-view";
 import { ChatActivities } from "./components/ChatActivities";
 import { CopyButton } from "./components/CopyButton";
 import { DigiChatWordmark } from "./components/DigiChatMark";
@@ -193,10 +189,14 @@ export function DigiChatSession({
 
         {messages.map((m, i) => {
           const streaming = busy && m.role === "assistant" && i === messages.length - 1;
-          /* Nothing has come back yet — no prose, no tool chain. This is the
-             only state that gets the step loader; once either arrives there is
-             real progress on screen and a script about it would be noise. */
-          const waiting = streaming && !m.content && !m.activities?.length;
+          /* No prose yet. Once the answer starts arriving the text itself is
+             the progress, so the caret goes back to a bare trailing blink.
+             Activities do NOT end the wait any more: they are what the caret
+             now reports on, so ending it there would hide the one state where
+             we can actually name what is happening. */
+          const waiting = streaming && !m.content;
+          /* From the stream, or absent — never invented. See liveActivityLabel. */
+          const liveLabel = waiting ? liveActivityLabel(m.activities ?? []) : undefined;
           return (
             <div key={i} className={`dc-msg dc-${m.role}`}>
               <span className="dc-who" aria-hidden="true">
@@ -207,18 +207,19 @@ export function DigiChatSession({
                   <>
                     {m.activities?.length ? <ChatActivities activities={m.activities} /> : null}
                     {renderAssistant(m.content, streaming)}
-                    {/* Exactly one caret, whichever state we are in. Waiting
-                        gets the house type-out; streaming gets the bare blink
-                        trailing the text. Rendering both — as this did before,
-                        a cursor stacked above a "thinking …" dots row — put two
-                        waiting indicators on screen — a blinking block above a
-                        "thinking …" row of bouncing dots — saying one thing
-                        twice. */}
+                    {/* Exactly one caret, whichever state we are in — and it
+                        never says more than the stream told us. A real step
+                        gets typed out; with no step to name, the bare cursor
+                        blinks and claims nothing. What this replaced cycled a
+                        fixed script ("thinking", "routing through digigraph",
+                        …) tied to no actual step, which read as a placeholder
+                        because that is what it was. */}
                     {waiting ? (
-                      <TerminalStepCaret
-                        steps={CHAT_RESPONSE_STEPS}
-                        holdMs={CHAT_RESPONSE_HOLD_MS}
-                      />
+                      liveLabel ? (
+                        <TerminalStepCaret steps={[liveLabel]} activeIndex={0} />
+                      ) : (
+                        <ChatStreamCursor className="dt-cur" />
+                      )
                     ) : streaming ? (
                       <ChatStreamCursor className="dt-cur" />
                     ) : null}
