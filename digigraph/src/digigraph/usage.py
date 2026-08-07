@@ -9,36 +9,49 @@ threads, so all mutation is under a lock.
 
 from __future__ import annotations
 
+import logging
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
+from datetime import datetime, timezone
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous call records
     Iterator,
     Literal,
 )
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from digillm import (
     ArtifactRef,
     CacheStatus,
     CallPurpose,
     NoArtifactReason,
+    NodeRunOutcome,
+    NodeRunRecord,
     ProviderAttemptOutcome,
     ProviderAttemptRecord,
     ProviderCallContextHandle,
     ProviderCallOutcome,
     ProviderCallRecord,
     TelemetryRecord,
+    emit_telemetry,
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+logger = logging.getLogger(__name__)
+
 _LOCK = threading.Lock()
 _ACTIVE = False
+# The durable identifier every record in this run is keyed by. A module global rather than a
+# ContextVar: `start()` and `reset()` are plain functions, so a token minted in one and reset in
+# the other only survives if both run in the same Context — a mismatch would raise out of
+# `reset()`, i.e. telemetry inventing a new exception on the run's exit path. Matches `_ACTIVE`.
+_RUN_ID: str | None = None
 _CALLS: list[dict[str, Any]] = []
 _EVENTS: list["RunCallEvent"] = []
 _PROVIDER_CALLS: list[ProviderCallRecord] = []
 _PROVIDER_ATTEMPTS: list[ProviderAttemptRecord] = []
+_NODE_RUNS: list[NodeRunRecord] = []
 
 _SEARCH_KINDS = {"web_search", "x_search"}
 _PHASE_MAX = 120
@@ -195,26 +208,46 @@ def provider_call_metadata() -> tuple[UUID | None, LogicalCallContext | None]:
     return _CALL_CONTEXT.get().node_run_id, _LOGICAL_CALL_CONTEXT.get()
 
 
-def start() -> None:
-    """Activate capture and clear any prior calls."""
-    global _ACTIVE
+def start(*, run_id: str | None = None) -> None:
+    """Activate capture and clear any prior calls.
+
+    ``run_id`` is the durable identifier every record in this run is keyed by — the
+    ``GITHUB_RUN_ID`` that ``atlas_run_diagnostics`` already uses, so detailed telemetry and
+    the diagnostics row join on one value. It is stored verbatim and never truncated, because
+    it is a join key. A blank or absent value leaves the run without node identity rather than
+    inventing one: nodes then keep the existing no-identity behaviour of emitting physical
+    attempts and no logical records. Keyword-only with a default, so every existing zero-arg
+    caller is untouched.
+    """
+    global _ACTIVE, _RUN_ID
+    raw = str(run_id) if run_id is not None else ""
     with _LOCK:
         _ACTIVE = True
+        _RUN_ID = raw if raw.strip() else None
         _CALLS.clear()
         _EVENTS.clear()
         _PROVIDER_CALLS.clear()
         _PROVIDER_ATTEMPTS.clear()
+        _NODE_RUNS.clear()
 
 
 def reset() -> None:
     """Deactivate capture and clear."""
-    global _ACTIVE
+    global _ACTIVE, _RUN_ID
     with _LOCK:
         _ACTIVE = False
+        _RUN_ID = None
         _CALLS.clear()
         _EVENTS.clear()
         _PROVIDER_CALLS.clear()
         _PROVIDER_ATTEMPTS.clear()
+        _NODE_RUNS.clear()
+
+
+def active_run_id() -> str | None:
+    """Run identifier of the live capture, or ``None`` when there is no identity to attribute to."""
+    with _LOCK:
+        return _RUN_ID if _ACTIVE else None
 
 
 def is_active() -> bool:
@@ -304,6 +337,8 @@ def observe_telemetry(record: TelemetryRecord) -> None:
             _PROVIDER_CALLS.append(record)
         elif isinstance(record, ProviderAttemptRecord):
             _PROVIDER_ATTEMPTS.append(record)
+        elif isinstance(record, NodeRunRecord):
+            _NODE_RUNS.append(record)
 
 
 class DetailedUsageObserver:
@@ -314,6 +349,84 @@ class DetailedUsageObserver:
 
 
 DETAILED_USAGE_OBSERVER = DetailedUsageObserver()
+
+_FANOUT_KEY_MAX = 200  # keep in step with NodeRunRecord.fanout_key and migration 067's CHECK
+
+
+@contextmanager
+def node_run_scope(node_name: str, *, fanout_key: str | None = None) -> Iterator[UUID | None]:
+    """Scope one graph-node execution.
+
+    Mints the node's identity, labels every provider call it makes, and emits exactly one
+    terminal ``NodeRunRecord``. Yields the ``node_run_id``, or ``None`` when the run has no
+    identifier — a node executed outside an identified run keeps today's no-identity behaviour
+    rather than fabricating a parent that could never be persisted against 067's foreign keys.
+
+    The ``ContextVar`` work is delegated to :func:`call_context`, whose set and reset are
+    lexically paired in one frame, so a token can never be reset from a different Context.
+    ``phase`` is deliberately not set: populating it would change the ``events`` JSON the
+    diagnostics writer already stores.
+    """
+    run_id = active_run_id()
+    name = _bounded(node_name, _NAME_MAX) or ""
+    if run_id is None or not name:
+        yield None
+        return
+    node_run_id = uuid4()
+    bounded_key = _bounded(fanout_key, _FANOUT_KEY_MAX) if fanout_key is not None else None
+    key = (bounded_key.strip() or None) if bounded_key is not None else None
+    started_at = datetime.now(tz=timezone.utc)
+    outcome = NodeRunOutcome.SUCCEEDED
+    try:
+        with call_context(node_run_id=node_run_id):
+            yield node_run_id
+    except BaseException:
+        # Deliberately broader than digillm's `except Exception`: losing the record on the exact
+        # path where a run dies is the worst place to lose it, and an incomplete run must be a
+        # counted signal. A LangGraph control-flow exception would be recorded FAILED; no
+        # build_pipeline node uses interrupt() today, so that path is dead rather than wrong.
+        outcome = NodeRunOutcome.FAILED
+        raise
+    finally:
+        _emit_node_run(
+            node_run_id=node_run_id,
+            run_id=run_id,
+            node_name=name,
+            fanout_key=key,
+            outcome=outcome,
+            started_at=started_at,
+        )
+
+
+def _emit_node_run(
+    *,
+    node_run_id: UUID,
+    run_id: str,
+    node_name: str,
+    fanout_key: str | None,
+    outcome: NodeRunOutcome,
+    started_at: datetime,
+) -> None:
+    """Deliver one terminal node record; telemetry failure never reaches the caller."""
+    try:
+        finished_at = datetime.now(tz=timezone.utc)
+        record = NodeRunRecord(
+            node_run_id=node_run_id,
+            run_id=run_id,
+            node_name=node_name,
+            fanout_key=fanout_key,
+            outcome=outcome,
+            started_at=started_at,
+            # A backwards clock step would fail the `finished_at < started_at` validator and
+            # drop the record. Clamping preserves the identity reconciliation needs; duration
+            # is not an identity claim.
+            finished_at=max(finished_at, started_at),
+        )
+        emit_telemetry(DETAILED_USAGE_OBSERVER, record)
+    except Exception as telemetry_error:
+        # Construction and delivery share one guard: a ValidationError raised from the caller's
+        # `finally` would otherwise replace the node's real exception.
+        logger.debug("node-run telemetry failed: %s", type(telemetry_error).__name__)
 
 
 def _nullable_sum(values: list[int | float | None]) -> int | float | None:
@@ -364,6 +477,28 @@ def detailed_usage_projection() -> dict[str, int | float | None]:
         "cost_usd": round(float(cost_usd), 6) if cost_usd is not None else None,
         "search_calls": sum(call.purpose in search_purposes for call in aggregate_calls),
     }
+
+
+def node_runs_snapshot() -> list[NodeRunRecord]:
+    """Return this run's node execution records in completion order."""
+    with _LOCK:
+        return list(_NODE_RUNS)
+
+
+def provider_calls_snapshot() -> list[ProviderCallRecord]:
+    """Return this run's logical provider-call records.
+
+    Typed records rather than dicts: reconciliation joins on ``UUID`` identity, and the Task 1.5
+    writer wants rows it can persist without re-parsing.
+    """
+    with _LOCK:
+        return list(_PROVIDER_CALLS)
+
+
+def provider_attempts_snapshot() -> list[ProviderAttemptRecord]:
+    """Return this run's physical provider-attempt records."""
+    with _LOCK:
+        return list(_PROVIDER_ATTEMPTS)
 
 
 def _is_sensitive_field(name: str) -> bool:

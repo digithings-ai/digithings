@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS public.olympus_node_runs (
     node_run_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     run_id text NOT NULL CHECK (length(run_id) > 0),
     node_name text NOT NULL CHECK (length(node_name) > 0),
+    fanout_key text CHECK (fanout_key IS NULL OR length(fanout_key) BETWEEN 1 AND 200),
     outcome text NOT NULL CHECK (outcome IN ('started', 'succeeded', 'failed', 'cancelled')),
     artifacts jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(artifacts) = 'array'),
     started_at timestamptz NOT NULL,

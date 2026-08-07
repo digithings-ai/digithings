@@ -32,6 +32,10 @@ FORBIDDEN_COLUMNS = (
     "secret",
     "raw_exception",
     "search_text",
+    # The fan-out discriminator is stored as the deliberately generic `fanout_key`. These names
+    # would mean the Olympus vocabulary leaked into the shared ledger.
+    "ticker",
+    "symbol",
 )
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 
@@ -80,6 +84,21 @@ def test_tables_use_stable_uuid_primary_keys(sql: str, table: str) -> None:
         "olympus_provider_attempts": "attempt_id",
     }[table]
     assert re.search(rf"\b{expected_id}\s+uuid\s+PRIMARY KEY\b", body, re.IGNORECASE)
+
+
+def test_node_run_fanout_key_is_nullable(sql: str) -> None:
+    """A node with no fan-out cursor has no key — absent, never a fabricated placeholder."""
+    body = _table_body(sql, "olympus_node_runs")
+    definition = re.search(r"\bfanout_key\s+text(?P<tail>[^,\n]*)", body, re.IGNORECASE)
+    assert definition, "missing fanout_key"
+    assert "NOT NULL" not in definition.group("tail").upper()
+    assert "DEFAULT" not in definition.group("tail").upper()
+
+
+def test_node_run_fanout_key_is_length_bounded(sql: str) -> None:
+    """Same literal bound as NodeRunRecord.fanout_key; no cross-layer parity test binds them."""
+    body = " ".join(_table_body(sql, "olympus_node_runs").split())
+    assert "fanout_key IS NULL OR length(fanout_key) BETWEEN 1 AND 200" in body
 
 
 def test_calls_require_node_parent_and_support_logical_parent(sql: str) -> None:
