@@ -178,9 +178,16 @@ blocked; they are made pointless (`200 {"skipped": "not claimed"}`, nothing fetc
 
   | Table | PK | Purpose |
   |-------|----|---------|
-  | `olympus_node_runs` | `(node_run_id UUID)` | Stable graph-node execution identity, lifecycle, event time, and generic artifact references. |
+  | `olympus_node_runs` | `(node_run_id UUID)` | Stable graph-node execution identity, lifecycle, event time, generic artifact references, and a nullable bounded `fanout_key` naming which fan-out item the execution was for. |
   | `olympus_provider_calls` | `(call_id UUID)` | Logical purpose, cache result, parent call, requested model, and physical-attempt count; FK to `olympus_node_runs`. |
   | `olympus_provider_attempts` | `(attempt_id UUID)` | One physical transport attempt with unique `(call_id, attempt_number)`, served model, retry reason, nullable usage/cost, and sanitized error type. |
+
+  `fanout_key` (#1978) is an opaque producer-supplied label, bounded 1–200 to match
+  `NodeRunRecord.fanout_key`. NULL means *this execution had no fan-out cursor* — never
+  *instrumentation missing*: Atlas sector nodes and the compile-time per-ticker Hermes variants
+  carry their discriminator in `node_name` instead. The column is deliberately generic; `ticker`
+  and `symbol` are in the migration test's forbidden-column list so the Olympus vocabulary cannot
+  leak into the shared ledger.
 
   All three tables use `timestamptz` for producer event times and add `recorded_at` from the database
   write clock. Missing provider usage and cost remain NULL. Prompts, responses, search text, API keys,

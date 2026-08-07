@@ -14,6 +14,7 @@ from digiquant.olympus.atlas.state import PhaseHermesState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.edit_mode import artifact_document_key
 from digiquant.olympus.hermes.focus_roster import (
+    fanout_ticker,
     focus_roster_tickers,
     ticker_in_focus_roster,
     with_fanout_ticker,
@@ -137,4 +138,5 @@ def build_h5_from_state(client: SupabaseClient | None = None) -> FanOutPhase:
         worker=NodeSpec(name=f"{NODE_ID}-worker", run=_worker),
         items=focus_roster_tickers,
         with_item=with_fanout_ticker,
+        item_key=fanout_ticker,
     )
