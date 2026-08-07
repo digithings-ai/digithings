@@ -181,7 +181,7 @@ describe("row keys survive the stream", () => {
   it("keeps a tool row's key stable when it settles from call to result", () => {
     const keyOf = (a: DigiChatActivity) => toCanonRows([a])[0]?.key;
     const running = keyOf({ kind: "tool_call", name: "search", query: "a" });
-    const done = keyOf({ kind: "tool_result", name: "search", query: "a", hits: [] } as DigiChatActivity);
+    const done = keyOf({ kind: "tool_result", name: "search", query: "a", hits: [], count: 0 });
     expect(done).toBe(running);
   });
 });

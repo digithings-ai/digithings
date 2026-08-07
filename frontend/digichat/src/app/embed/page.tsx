@@ -50,7 +50,7 @@ import {
   useEmbedTenantConfig,
   type EmbedTenantClientConfig,
 } from "@/hooks/use-embed-tenant-config";
-import { resolveEmbedUiFlags } from "@/lib/embed-ui-flags";
+import { resolveAttributionPlacement, resolveEmbedUiFlags } from "@/lib/embed-ui-flags";
 import { applyEmbedSeed } from "@/lib/embed-seed-apply";
 import {
   READY_MESSAGE,
@@ -398,11 +398,19 @@ function EmbedChat({
     [chat, gate, trialLocked, ungated, accent, byokIsSet],
   );
 
+  /* At most one credit, and the footer wins — see resolveAttributionPlacement. */
+  const attributionAt = resolveAttributionPlacement({
+    attribution: tenantCfg.attribution,
+    headerTitle,
+  });
+  const footerAttribution = attributionAt === "footer";
+  const headerAttribution = attributionAt === "header";
+
   const headerSlot =
     headerTitle || !ungated ? (
       <header className="dc-brand">
         {headerTitle ? <span>{headerTitle}</span> : <span>digichat</span>}
-        {headerTitle ? (
+        {headerAttribution ? (
           <span className="dc-brand-by">
             (
             <a
@@ -424,16 +432,15 @@ function EmbedChat({
       </header>
     ) : null;
 
-  const footerSlot =
-    tenantCfg.attribution && !headerTitle ? (
-      <p className="dc-attribution">
-        powered by digichat — a{" "}
-        <a href="https://digithings.ai" target="_blank" rel="noreferrer noopener">
-          digithings
-        </a>{" "}
-        product.
-      </p>
-    ) : null;
+  const footerSlot = footerAttribution ? (
+    <p className="dc-attribution">
+      powered by digichat — a{" "}
+      <a href="https://digithings.ai" target="_blank" rel="noreferrer noopener">
+        digithings
+      </a>{" "}
+      product.
+    </p>
+  ) : null;
 
   return (
     <DigiChatSession
