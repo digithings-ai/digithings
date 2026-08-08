@@ -28,6 +28,32 @@ describe("sanitizeMermaidLabels", () => {
     expect(out).toContain('C["Config {retries}"]');
   });
 
+  // These four all overload the character right after the node's opening `[`
+  // for a different bracket shape. A label-content regex that only looks for
+  // the first `]` either stops at the shape's own inner delimiter (subroutine)
+  // or swallows the shape marker into the "label" and downgrades the node to
+  // a plain rectangle (cylinder/parallelogram/trapezoid) — both are worse than
+  // leaving an already-unparseable shape alone.
+  it("does not corrupt a subroutine shape (id[[text]])", () => {
+    const line = "A[[Subroutine (x)]]";
+    expect(sanitizeMermaidLabels(`flowchart TD\n ${line}`)).toContain(line);
+  });
+
+  it("does not downgrade a cylinder shape (id[(text)]) to a rectangle", () => {
+    const line = "A[(Database (x))]";
+    expect(sanitizeMermaidLabels(`flowchart TD\n ${line}`)).toContain(line);
+  });
+
+  it("does not downgrade a parallelogram shape (id[/text/]) to a rectangle", () => {
+    const line = "A[/Input (x)/]";
+    expect(sanitizeMermaidLabels(`flowchart TD\n ${line}`)).toContain(line);
+  });
+
+  it("does not downgrade a trapezoid shape (id[\\text\\]) to a rectangle", () => {
+    const line = "A[\\Trapezoid (x)\\]";
+    expect(sanitizeMermaidLabels(`flowchart TD\n ${line}`)).toContain(line);
+  });
+
   it("fixes the real diagram observed failing in production", () => {
     const code = [
       "flowchart TD",

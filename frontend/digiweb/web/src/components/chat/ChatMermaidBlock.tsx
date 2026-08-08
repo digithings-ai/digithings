@@ -59,12 +59,26 @@ import { ChatCopyButton } from "./ChatCodeBlock";
  * (unquoted-but-quoted), so this leaves it for mermaid's own parser to reject
  * rather than guessing at an escape.
  *
+ * A label starting with `[`, `(`, `/`, or `\` right after the node's opening
+ * `[` is bailed out on rather than sanitized: that is the four OTHER `[...]`
+ * bracket shapes mermaid overloads the same opening character for — subroutine
+ * `id[[text]]`, cylinder `id[(text)]`, parallelogram `id[/text/]`, trapezoid
+ * `id[\text\]`. The regex only looks for the FIRST `]`, so on a subroutine it
+ * stops at the shape's own inner `]]` instead of the outer one, and on a
+ * cylinder/parallelogram/trapezoid it captures the whole shape delimiter as
+ * part of the "label" and silently downgrades the node to a plain rectangle
+ * when it quotes it. Left untouched, these still fail the same way they did
+ * before this function existed (a genuinely paren-bearing cylinder label was
+ * already unparseable) — worse than not fixing it would be corrupting a shape
+ * that was rendering fine.
+ *
  * Applied only to the copy handed to `mermaid.parse`/`render` — the `code`
  * prop keeps the model's exact text for the copy button and the source
  * fallback, so a reader never sees text the model didn't write.
  */
 export function sanitizeMermaidLabels(code: string): string {
   return code.replace(/(\b[\w-]+)\[([^\]"]*)\]/g, (whole, id: string, label: string) => {
+    if (/^[[(/\\]/.test(label)) return whole;
     if (!/[(){}]/.test(label)) return whole;
     return `${id}["${label}"]`;
   });
