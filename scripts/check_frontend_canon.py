@@ -40,7 +40,9 @@ REPO = Path(__file__).resolve().parent.parent
 # Sanctioned homes for concrete color values.
 ALLOWLIST = {
     "frontend/olympus/lib/chart-colors.ts",  # categorical/benchmark chart hues
-    "frontend/digichat/src/app/embed/page.tsx",  # tenant embed accent overrides
+    # tenant embed accent overrides — ACCENT_CSS moved here with the client
+    # tree when /embed/page.tsx became the server shell (#2001).
+    "frontend/digichat/src/app/embed/embed-client.tsx",
     "frontend/digiweb/web/src/components/ThemeProvider.tsx",  # SSR theme-color meta
     # Canvas scenes compose runtime colors from token-derived channels
     # (migrate-vs-leave: canvas art stays concrete).
