@@ -396,6 +396,32 @@ describe("createFoundryStreamResponse", () => {
     expect(out).toContain('"delta":"(remote"');
   });
 
+  it("flushes a held leak-prefix when the stream exhausts naturally, not just on a done break", async () => {
+    // Same risk as above, but the fake source ends by running out of events
+    // rather than emitting response.completed — the for-await loop exits by
+    // falling through, not via the `mapped.type === "done"` break. The flush
+    // sits after the loop either way, but this proves it isn't accidentally
+    // reachable only from the break arm.
+    const { client } = fakeClient([
+      { type: "response.output_text.delta", delta: "See the " },
+      { type: "response.output_text.delta", delta: "(remote" },
+    ]);
+
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("hello?")],
+      conversationId: null,
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+    });
+    const out = await drain(res);
+
+    expect(out).toContain('"delta":"See the "');
+    expect(out).toContain('"delta":"(remote"');
+  });
+
   it("reuses a supplied conversationId instead of creating a new one", async () => {
     const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
     await drain(
