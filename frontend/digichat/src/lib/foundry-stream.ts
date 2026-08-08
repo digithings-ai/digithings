@@ -290,6 +290,23 @@ export class FoundryToolLeakFilter {
 
     return cleaned || null;
   }
+
+  /**
+   * Drains whatever `push` is still holding, for when the stream ends with no
+   * further delta to disambiguate it. Without this, a legitimate reply whose
+   * final delta happens to look like an in-progress leak token (ends on
+   * exactly `(remote` or `remote_functions.azure`, say) was silently dropped:
+   * `push` only ever resolves a held prefix by flushing it AHEAD OF a later
+   * delta, and a stream that ends here never sends one.
+   *
+   * @returns the held text, or `null` if nothing was buffered.
+   */
+  flush(): string | null {
+    if (!this.buf) return null;
+    const flushed = this.buf;
+    this.buf = "";
+    return flushed;
+  }
 }
 
 function isRemoteFunctionsLeakPrefix(text: string): boolean {
@@ -565,6 +582,16 @@ export async function createFoundryStreamResponse(opts: {
           } else if (mapped.type === "done") {
             break;
           }
+        }
+        // The loop above only ever resolves a held leak-prefix by flushing it
+        // ahead of a LATER delta (see FoundryToolLeakFilter.push) — a stream
+        // that ends while still ambiguous never sends one. Drain it here so a
+        // legitimate reply that happens to end on leak-shaped text is never
+        // silently dropped.
+        const tail = textFilter.flush();
+        if (tail) {
+          openText();
+          writer.write({ type: "text-delta", id: textId, delta: tail });
         }
       } catch (err) {
         if (opts.signal?.aborted) return;
