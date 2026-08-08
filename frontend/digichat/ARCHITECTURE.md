@@ -425,6 +425,29 @@ resolution (`src/lib/embed-chat-tenant.ts`) and the client-safe
 `GET /api/embed/tenant-config` endpoint — both runtime-only, reading
 `process.env.DIGICHAT_EMBED_TENANTS` fresh per request.
 
+**Tenant presentation is resolved server-side, before first paint.** `/embed`
+is a server component (`src/app/embed/page.tsx`, `dynamic = "force-dynamic"`)
+that reads the iframe URL's own `?token=`/`?host=` and resolves the tenant via
+`resolveEmbedClientConfigFromParams` (`src/lib/embed-client-config.ts`), then
+pins `<html data-theme>` with a pre-paint inline script and seeds the client
+hook through `initialTenantCfg`. This exists because the root layout hardcodes
+`data-theme="dark"` as its no-JS default (`src/app/layout.tsx`) and
+`useEmbedTenantConfig` could previously only learn the tenant by fetching
+`/api/embed/tenant-config` after mount — so every light-themed tenant painted
+dark for a full round-trip and then flipped, a visible dark→light flash baked
+into the SSR HTML itself. Measured after the change: FCP at 44 ms with
+`data-theme="light"` already applied, while the config fetch only settled at
+47.9 ms.
+
+Two invariants keep it honest. The authorization rule is **identical** to the
+header path (`resolveVerifiedEmbedTenant`) — a registered host alone never
+unlocks a customer tenant's config, only its matching token does (#1339) — so
+the earlier render discloses nothing the endpoint would not. And both paths
+project through the *same* `toEmbedClientConfig`, because the client re-fetches
+the endpoint after mount: any field drift between the two would repaint, which
+is the flash this whole indirection removes. `token` and `backend` have no
+branch in that projection and so can never reach the browser.
+
 The `/embed` CSP frame-ancestors (`src/lib/security-headers.ts`) is
 different: Next.js evaluates `next.config.ts`'s `headers()` during `next
 build` and bakes the result into the routes manifest, so whatever feeds it
