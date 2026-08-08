@@ -22,6 +22,30 @@ Formal automation (release workflow, PyPI publish, Docker image publish) is trac
 
 Either works; pick one and stay consistent within a release cycle.
 
+### digichat: patch-granular pre-1.0 versions
+
+digichat is released by release-please (`release-please-config.json`), which
+by default bumps the **minor** on every `feat` — so a component still under
+1.0 marched 0.5.0 → 0.6.0 → 0.7.0 → 0.8.0 → 0.9.0, skipping every patch number
+and burning a minor on single features.
+
+Two flags make every release a `+1` on the patch instead, for as long as
+digichat is pre-1.0:
+
+- `bump-patch-for-minor-pre-major: true` — a `feat` bumps patch, not minor.
+- `bump-minor-pre-major: true` — a breaking change bumps minor, not straight
+  to 1.0.0.
+
+So 0.9.2 → 0.9.3 → 0.9.4 …, regardless of whether the release carries fixes
+or features. Neither flag rewrites history: 0.5.0–0.9.2 are already tagged and
+published, and stay as they are.
+
+**Tag every release.** 0.9.1 and 0.9.2 were bumped inside ordinary PRs
+(`6f7d5a30`, `8c166c50`) and never tagged, so release-please lost its baseline
+and proposed a bogus 0.10.0 whose changelog re-listed ~28 already-shipped
+features. Those two tags have since been created. If you bump a version by
+hand, cut the matching `digichat-vX.Y.Z` tag in the same change.
+
 ## Pinning policy
 
 - Deploy **one git SHA** across services built from this repo, or
