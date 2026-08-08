@@ -146,11 +146,10 @@ function parseJsonObject(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * Documents out of an `azure_ai_search_call_output`. The chunks carry an `id`
- * and the retrieved `content`, which is strictly better than the `message`
- * annotations for the same search: those come back titled `doc_0`/`doc_3` with
- * every url pointing at the search service root, which names nothing a reader
- * can act on. `id` at least identifies the chunk it came from.
+ * Documents out of an `azure_ai_search_call_output`. Prefer human fields the
+ * DataTap corpus sync writes (`title`/`url`/`SourceName`/`Url`) over the raw
+ * chunk `id`, and skip HTML/OpenAPI JSON blobs as snippets — those were
+ * rendering in the embed as "weird API JSON strings".
  */
 function searchOutputDocuments(raw: unknown): ActivityDocument[] {
   const parsed = parseJsonObject(raw);
@@ -164,10 +163,53 @@ function searchOutputDocuments(raw: unknown): ActivityDocument[] {
     const id = typeof doc.id === "string" ? doc.id : undefined;
     if (!id || seen.has(id)) continue;
     seen.add(id);
+
+    const title =
+      pickString(doc, "title", "SourceName") ??
+      humanizeChunkId(id);
+    const path =
+      pickString(doc, "url", "Url") ??
+      id;
     const content = typeof doc.content === "string" ? doc.content : undefined;
-    documents.push({ title: id, path: id, ...(content ? { snippet: content } : {}) });
+    const snippet = content && isReadableSnippet(content) ? content : undefined;
+    documents.push({ title, path, ...(snippet ? { snippet } : {}) });
   }
   return documents;
+}
+
+function pickString(record: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+/** Chunk ids like `openapi_public_GET__api_config__tenantId___chunk0`. */
+function humanizeChunkId(id: string): string {
+  const openapi = id.match(/^openapi_([^_]+)_(GET|POST|PUT|PATCH|DELETE)__(.+?)(?:__chunk\d+)?$/i);
+  if (openapi) {
+    const method = openapi[2].toUpperCase();
+    const pathPart = openapi[3]
+      .replace(/__/g, "/")
+      .replace(/_/g, "/")
+      .replace(/\/+/g, "/")
+      .replace(/\/$/, "");
+    return `${method} /${pathPart.replace(/^\//, "")}`;
+  }
+  const page = id.match(/^page__(.+?)(?:__chunk\d+)?$/);
+  if (page) {
+    return page[1].replace(/__/g, "/").replace(/_/g, "/");
+  }
+  return id;
+}
+
+function isReadableSnippet(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  // Raw HTML narrative pages / OpenAPI JSON bodies — not useful in the chat UI.
+  if (trimmed.startsWith("<") || trimmed.startsWith("{")) return false;
+  return true;
 }
 
 /** Foundry's azure_ai_search message annotations: `doc_N` + search-service root.
@@ -198,6 +240,80 @@ function extractTextDelta(value: unknown): string | null {
   }
 
   return null;
+}
+
+/**
+ * Strip Foundry's opaque inline citation markers (e.g. `【9:0†source】`) that
+ * otherwise land in the assistant bubble as raw protocol noise.
+ *
+ * Markers have been observed arriving in a single delta; if a marker ever
+ * spans deltas, the unmatched open is left alone rather than eating real text.
+ */
+export function stripFoundryCitationMarkers(text: string): string {
+  return text.replace(/【[^】]*】/g, "");
+}
+
+/**
+ * Foundry occasionally streams the azure_ai_search *tool invocation itself*
+ * as `response.output_text.delta` fragments — observed live as the entire
+ * assistant answer: `(remote` + `_functions` + `.azure` + `_ai` + `_search` + `)`.
+ * Buffer those identifier fragments and drop the completed token so visitors
+ * never see the internal tool name as a reply.
+ */
+export class FoundryToolLeakFilter {
+  private buf = "";
+
+  /**
+   * @returns text that is safe to stream, or `null` when the delta was held /
+   * discarded as tool-leak noise.
+   */
+  push(delta: string): string | null {
+    const cleaned = stripFoundryCitationMarkers(delta);
+    if (!cleaned && !this.buf) return null;
+
+    const candidate = this.buf + cleaned;
+    // Still (or newly) matching the tool-leak token — hold until complete or broken.
+    if (isRemoteFunctionsLeakPrefix(candidate)) {
+      this.buf = candidate;
+      if (/^\(?remote_functions(\.[\w]+)*\)$/.test(candidate.trim())) {
+        this.buf = "";
+      }
+      return null;
+    }
+
+    if (this.buf) {
+      // Held bytes were not a leak after all — flush them ahead of this delta.
+      const flushed = this.buf;
+      this.buf = "";
+      return flushed + cleaned;
+    }
+
+    return cleaned || null;
+  }
+
+  /**
+   * Drains whatever `push` is still holding, for when the stream ends with no
+   * further delta to disambiguate it. Without this, a legitimate reply whose
+   * final delta happens to look like an in-progress leak token (ends on
+   * exactly `(remote` or `remote_functions.azure`, say) was silently dropped:
+   * `push` only ever resolves a held prefix by flushing it AHEAD OF a later
+   * delta, and a stream that ends here never sends one.
+   *
+   * @returns the held text, or `null` if nothing was buffered.
+   */
+  flush(): string | null {
+    if (!this.buf) return null;
+    const flushed = this.buf;
+    this.buf = "";
+    return flushed;
+  }
+}
+
+function isRemoteFunctionsLeakPrefix(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  // Incomplete or complete `(remote_functions.azure_ai_search)` with no whitespace.
+  return /^\(?remote(_functions(\.[\w]+)*)?\)?$/.test(t);
 }
 
 function mapOutputItemDone(event: OutputItemDoneEvent): FoundryServerEvent | null {
@@ -435,12 +551,15 @@ export async function createFoundryStreamResponse(opts: {
         );
 
         let traceSeq = 0;
+        const textFilter = new FoundryToolLeakFilter();
         for await (const event of responseStream) {
           const mapped = mapFoundryEvent(event);
           if (!mapped) continue;
           if (mapped.type === "text-delta") {
+            const delta = textFilter.push(mapped.delta);
+            if (!delta) continue;
             openText();
-            writer.write({ type: "text-delta", id: textId, delta: mapped.delta });
+            writer.write({ type: "text-delta", id: textId, delta });
           } else if (mapped.type === "activity") {
             // Foundry's own event carries unbounded upstream strings (a query
             // list, citation titles/urls); the digigraph and relay providers
@@ -463,6 +582,16 @@ export async function createFoundryStreamResponse(opts: {
           } else if (mapped.type === "done") {
             break;
           }
+        }
+        // The loop above only ever resolves a held leak-prefix by flushing it
+        // ahead of a LATER delta (see FoundryToolLeakFilter.push) — a stream
+        // that ends while still ambiguous never sends one. Drain it here so a
+        // legitimate reply that happens to end on leak-shaped text is never
+        // silently dropped.
+        const tail = textFilter.flush();
+        if (tail) {
+          openText();
+          writer.write({ type: "text-delta", id: textId, delta: tail });
         }
       } catch (err) {
         if (opts.signal?.aborted) return;

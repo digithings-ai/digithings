@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/digithings-ai/digithings/compare/digichat-v0.9.1...digichat-v0.9.2) (2026-08-08)
+
+
+### Bug Fixes
+
+* **chat:** mermaid diagrams with punctuation in node labels now render instead of falling back to source ([#1996](https://github.com/digithings-ai/digithings/issues/1996))
+
 ## [0.9.1](https://github.com/digithings-ai/digithings/compare/digichat-v0.9.0...digichat-v0.9.1) (2026-08-07)
 
 

@@ -3,12 +3,76 @@ import type { UIMessage } from "ai";
 import {
   mapFoundryEvent,
   createFoundryStreamResponse,
+  FoundryToolLeakFilter,
+  stripFoundryCitationMarkers,
   type OpenAIResponsesClientLike,
   type FoundryStreamEvent,
 } from "./foundry-stream";
 import { toDigiChatActivity, type ActivitySpan } from "./chat-activity";
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("FoundryToolLeakFilter", () => {
+  it("drops the fragmented remote_functions.azure_ai_search tool leak", () => {
+    const filter = new FoundryToolLeakFilter();
+    const parts = ["(remote", "_functions", ".azure", "_ai", "_search", ")"];
+    expect(parts.map((p) => filter.push(p))).toEqual([null, null, null, null, null, null]);
+  });
+
+  it("passes through normal answer text", () => {
+    const filter = new FoundryToolLeakFilter();
+    expect(filter.push("Send ")).toBe("Send ");
+    expect(filter.push("the key")).toBe("the key");
+  });
+
+  it("strips Foundry citation markers from a delta", () => {
+    expect(stripFoundryCitationMarkers("key.【9:0†source】")).toBe("key.");
+    const filter = new FoundryToolLeakFilter();
+    expect(filter.push("X-API-KEY【6:2†source】")).toBe("X-API-KEY");
+  });
+
+  describe("flush", () => {
+    it("returns null when nothing is buffered", () => {
+      const filter = new FoundryToolLeakFilter();
+      expect(filter.flush()).toBeNull();
+      filter.push("ordinary text");
+      expect(filter.flush()).toBeNull();
+    });
+
+    it("drains a held prefix the stream never disambiguated", () => {
+      const filter = new FoundryToolLeakFilter();
+      // Ends exactly on an incomplete leak-token prefix — push holds it and
+      // never got a later delta to resolve it one way or the other.
+      expect(filter.push("(remote")).toBeNull();
+      expect(filter.flush()).toBe("(remote");
+    });
+
+    it("empties the buffer once flushed, so a second flush returns null", () => {
+      const filter = new FoundryToolLeakFilter();
+      filter.push("remote_functions.azure");
+      filter.flush();
+      expect(filter.flush()).toBeNull();
+    });
+
+    it("does not flush a completed leak token — push already discarded it", () => {
+      const filter = new FoundryToolLeakFilter();
+      for (const p of ["(remote", "_functions", ".azure", "_ai", "_search", ")"]) filter.push(p);
+      expect(filter.flush()).toBeNull();
+    });
+
+    it("a legitimate reply that starts like the leak token but diverges is not truncated", () => {
+      // "(remote work example)" never matches the leak grammar past "(remote" —
+      // isRemoteFunctionsLeakPrefix requires the token to continue with
+      // "_functions" (or close immediately), so " work example)" flushes the
+      // held "(remote" ahead of itself. flush() at the end is a null-op here;
+      // the real assertion is that push() already returned everything.
+      const filter = new FoundryToolLeakFilter();
+      expect(filter.push("(remote")).toBeNull();
+      expect(filter.push(" work example)")).toBe("(remote work example)");
+      expect(filter.flush()).toBeNull();
+    });
+  });
+});
 
 function userMessage(text: string): UIMessage {
   return { id: "u1", role: "user", parts: [{ type: "text", text }] } as UIMessage;
@@ -182,6 +246,94 @@ describe("mapFoundryEvent", () => {
   });
 });
 
+// searchOutputDocuments/pickString/humanizeChunkId/isReadableSnippet are
+// module-private — reached the same way production code reaches them, through
+// an azure_ai_search_call_output output_item.done event.
+describe("searchOutputDocuments (via mapFoundryEvent)", () => {
+  function searchOutputEvent(documents: unknown[]): FoundryStreamEvent {
+    return {
+      type: "response.output_item.done",
+      item: {
+        type: "azure_ai_search_call_output",
+        status: "completed",
+        output: JSON.stringify({ documents }),
+      },
+    };
+  }
+
+  it("prefers title/url over the raw chunk id", () => {
+    const mapped = mapFoundryEvent(
+      searchOutputEvent([
+        { id: "chunk-1", title: "Auth Config", url: "https://datatap.stream/docs/auth" },
+      ]),
+    );
+    expect(mapped).toMatchObject({
+      span: { documents: [{ title: "Auth Config", path: "https://datatap.stream/docs/auth" }] },
+    });
+  });
+
+  it("falls back to SourceName/Url when title/url are absent", () => {
+    const mapped = mapFoundryEvent(
+      searchOutputEvent([
+        { id: "chunk-2", SourceName: "Billing Guide", Url: "https://datatap.stream/docs/billing" },
+      ]),
+    );
+    expect(mapped).toMatchObject({
+      span: { documents: [{ title: "Billing Guide", path: "https://datatap.stream/docs/billing" }] },
+    });
+  });
+
+  it("humanizes an OpenAPI chunk id when no title/url field resolves", () => {
+    const mapped = mapFoundryEvent(
+      searchOutputEvent([{ id: "openapi_public_GET__api_config__tenantId___chunk0" }]),
+    );
+    expect(mapped).toMatchObject({
+      span: {
+        documents: [{ title: "GET /api/config/tenantId", path: "openapi_public_GET__api_config__tenantId___chunk0" }],
+      },
+    });
+  });
+
+  it("humanizes a page chunk id when no title/url field resolves", () => {
+    const mapped = mapFoundryEvent(searchOutputEvent([{ id: "page__docs__auth__chunk2" }]));
+    expect(mapped).toMatchObject({
+      span: { documents: [{ title: "docs/auth", path: "page__docs__auth__chunk2" }] },
+    });
+  });
+
+  it("falls back to the raw id verbatim when it matches no known chunk-id shape", () => {
+    const mapped = mapFoundryEvent(searchOutputEvent([{ id: "unrecognized-shape-42" }]));
+    expect(mapped).toMatchObject({
+      span: { documents: [{ title: "unrecognized-shape-42", path: "unrecognized-shape-42" }] },
+    });
+  });
+
+  it("keeps a readable snippet", () => {
+    const mapped = mapFoundryEvent(
+      searchOutputEvent([{ id: "chunk-3", content: "Auth lives in /api/config." }]),
+    );
+    expect(mapped).toMatchObject({
+      span: { documents: [{ snippet: "Auth lives in /api/config." }] },
+    });
+  });
+
+  it("drops an HTML snippet", () => {
+    const mapped = mapFoundryEvent(
+      searchOutputEvent([{ id: "chunk-4", content: "<div>raw page markup</div>" }]),
+    );
+    const doc = (mapped as { span: { documents: Array<{ snippet?: string }> } }).span.documents[0];
+    expect(doc.snippet).toBeUndefined();
+  });
+
+  it("drops a JSON-blob snippet", () => {
+    const mapped = mapFoundryEvent(
+      searchOutputEvent([{ id: "chunk-5", content: '{"openapi":"3.0.4","paths":{}}' }]),
+    );
+    const doc = (mapped as { span: { documents: Array<{ snippet?: string }> } }).span.documents[0];
+    expect(doc.snippet).toBeUndefined();
+  });
+});
+
 describe("createFoundryStreamResponse", () => {
   it("creates a conversation and translates Foundry events into UI message stream parts", async () => {
     const { client, createSpy } = fakeClient([
@@ -217,6 +369,57 @@ describe("createFoundryStreamResponse", () => {
     expect(createSpy.calls[0][1]).toMatchObject({
       body: { agent_reference: { name: "digichat", type: "agent_reference" } },
     });
+  });
+
+  it("flushes a held leak-prefix instead of silently dropping the tail of a reply", async () => {
+    // The final delta ends the stream exactly on an incomplete leak-token
+    // prefix ("(remote") — nothing downstream ever disambiguates it, so
+    // without the post-loop flush this text is dropped with no error.
+    const { client } = fakeClient([
+      { type: "response.output_text.delta", delta: "See the " },
+      { type: "response.output_text.delta", delta: "(remote" },
+      { type: "response.completed" },
+    ]);
+
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("hello?")],
+      conversationId: null,
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+    });
+    const out = await drain(res);
+
+    expect(out).toContain('"delta":"See the "');
+    expect(out).toContain('"delta":"(remote"');
+  });
+
+  it("flushes a held leak-prefix when the stream exhausts naturally, not just on a done break", async () => {
+    // Same risk as above, but the fake source ends by running out of events
+    // rather than emitting response.completed — the for-await loop exits by
+    // falling through, not via the `mapped.type === "done"` break. The flush
+    // sits after the loop either way, but this proves it isn't accidentally
+    // reachable only from the break arm.
+    const { client } = fakeClient([
+      { type: "response.output_text.delta", delta: "See the " },
+      { type: "response.output_text.delta", delta: "(remote" },
+    ]);
+
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("hello?")],
+      conversationId: null,
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+    });
+    const out = await drain(res);
+
+    expect(out).toContain('"delta":"See the "');
+    expect(out).toContain('"delta":"(remote"');
   });
 
   it("reuses a supplied conversationId instead of creating a new one", async () => {

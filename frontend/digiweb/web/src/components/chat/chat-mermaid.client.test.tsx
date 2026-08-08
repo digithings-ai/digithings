@@ -116,6 +116,26 @@ describe("ChatMermaidBlock — drawn", { retry: 2 }, () => {
     expect(host.querySelector(".chat-md-mermaid pre")?.textContent).toContain("A-->B;");
   });
 
+  it("hands mermaid a quoted label, but shows the model's raw text as source", async () => {
+    const raw = "flowchart TD\n C[List locations (Exchange, OneDrive, Blob)]";
+    const { host } = await mount(<ChatMermaidBlock code={raw} />);
+
+    expect(parse).toHaveBeenCalledWith('flowchart TD\n C["List locations (Exchange, OneDrive, Blob)"]');
+    expect(render).toHaveBeenCalledWith(
+      expect.any(String),
+      'flowchart TD\n C["List locations (Exchange, OneDrive, Blob)"]',
+    );
+
+    const toggle = host.querySelector<HTMLButtonElement>("button[aria-expanded]");
+    await act(async () => {
+      toggle?.click();
+    });
+    // The reader still sees exactly what the model wrote, unquoted.
+    expect(host.querySelector(".chat-md-mermaid pre")?.textContent).toContain(
+      "C[List locations (Exchange, OneDrive, Blob)]",
+    );
+  });
+
   it("initializes strict + token-themed, and gives mermaid a selector-safe id", async () => {
     await mount(<ChatMermaidBlock code={DIAGRAM} />);
     const config = initialize.mock.calls[0]?.[0];

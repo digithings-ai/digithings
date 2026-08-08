@@ -1072,9 +1072,42 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   `core` Supabase project. The records distinguish graph work, logical calls/cache outcomes, and
   physical attempts without storing prompts, responses, search text, secrets, or raw exceptions.
   Producer event times and database `recorded_at` remain distinct; unavailable token usage or cost
-  stays NULL. Tasks #1955 and #1963 now produce physical attempts and generic logical-call lineage
-  in process. Existing aggregate diagnostics remain the only active durable writer; Task 1.5
-  owns buffering, flush, and durable reconciliation into these private tables.
+  stays NULL. #1955 produces physical attempts at the transport boundary and #1963 the generic
+  logical-call lineage; #1978 supplies the node identity that lineage hangs from, so logical calls
+  are produced in process — not merely producible — for every call originating inside a
+  `build_pipeline` node.
+- `digiquant.olympus.atlas.provider_telemetry` — the durable writer for that ledger (#1979).
+  `flush_run_telemetry` drains the `digigraph.usage` buffers and appends them in foreign-key
+  order: node runs, then logical calls with parents ahead of children, then physical attempts.
+  Called from `hermes/chain.py`'s `finally`, ahead of both `write_row` and `_usage.reset()` —
+  `reset()` clears the buffers a later flush would read, and going first is what makes the
+  detailed and aggregate writes independent in both directions without altering the aggregate
+  path.
+  - **Quarantine, not insertion.** A record whose foreign-key referent is absent from the same
+    flush is counted and reported as incomplete coverage, never submitted. This is a reachable
+    path, not a theoretical guard, and it has two sources. The beliefs-distillation fold runs
+    outside any graph node, so its provider calls are orphaned when it runs — which is *not*
+    every run: `should_distill_beliefs` gates it on `refresh_scope == "beliefs"` or an unfolded
+    backlog above `OLYMPUS_BELIEFS_BACKLOG` (default 20). And a run with no `DiagnosticsDeps` has
+    no run identifier at all, so no node runs and no logical calls are produced *at the source*.
+    A flush can therefore carry attributed and orphaned records together, which is why
+    eligibility is decided per record rather than per flush.
+  - **Reconciliation direction is the signal.** `usage.record` gates only on capture being
+    active, while a `ProviderCallRecord` also needs an open node scope, so the aggregate counts
+    calls the detailed side structurally cannot see. Detail *below* the aggregate is therefore
+    explainable; detail *above* it is not, and only double-counting could produce it. An unknown
+    key never suppresses a mismatch reported on a different key — those are orthogonal facts.
+  - **Validation is the gate.** The ledger revokes `UPDATE`/`DELETE`/`TRUNCATE` from every role
+    and rejects them by trigger besides, so a bad row is permanent. Every record is re-validated
+    through its Pydantic model immediately before insert; a failure is counted and dropped. A
+    tier that fails cascades to its dependents as quarantine, and a batch that lands partially
+    is reported as permanently inconsistent, because no correction is possible.
+  - **Reconciliation reports three states, not two.** `reconciled`, `mismatched` (known and
+    wrong), and `unavailable` (unknown). Missing provider usage or cost yields `unavailable` and
+    a quantified shortfall — never a fabricated zero, and never an exact-billing claim.
+  - **Failure is fail-soft throughout.** A flush failure cannot change the run's return value,
+    its exit code, the portfolio commit, or the `atlas_run_diagnostics` row. No reader is cut
+    over to these tables; the aggregate remains the active read path (plan Invariant 14).
 - `digiquant.olympus.atlas.diagnostics` — writes one `atlas_run_diagnostics` row per run
   **attempt** (`write_row`, keyed on `(run_id, attempt)`, fail-soft): fresh/carried/failed
   segment counts from
