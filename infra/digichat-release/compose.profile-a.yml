@@ -4,17 +4,31 @@
 # digigraph + LiteLLM + digivault. Does NOT start digiquant / digisearch /
 # digismith / heartbeat / observability.
 #
-# Honesty (v1): digichat pulls from GHCR; digikey / digigraph / digivault still
-# build from this monorepo (no GHCR tags yet). Run from the repo root:
+# All digithings images pull from GHCR (no local Dockerfile build):
+#   digichat  → ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}
+#   digikey / digigraph / digivault → ghcr.io/digithings-ai/<svc>:${DIGI_IMAGE_TAG}
+# LiteLLM stays the public berriai image (not republished by digithings).
+#
+# Pin stack and digichat tags separately (never :latest in production):
+#   DIGICHAT_VERSION=0.9.3
+#   DIGI_IMAGE_TAG=sha-<12>   # preferred after first publish on main
+#   DIGI_IMAGE_TAG=v0.1.0     # pyproject version tag
+#
+# From repo root (or a checkout of this directory alone once config/ is present):
 #
 #   cp infra/digichat-release/.env.profile-a.example \
 #      infra/digichat-release/.env.profile-a
-#   # edit secrets, then:
+#   # edit secrets + DIGI_IMAGE_TAG, then:
+#   make digichat-profile-a-up
+#   # or:
 #   docker compose -f infra/digichat-release/compose.profile-a.yml \
-#     --env-file infra/digichat-release/.env.profile-a up -d --build
+#     --env-file infra/digichat-release/.env.profile-a up -d
 #
-# Paths below are relative to this file (Compose resolves against the compose
-# file directory): ../.. = monorepo root.
+# Config mount: ./config (vendored under this directory) → /app/config for
+# LiteLLM and digigraph. See config/README.md.
+#
+# Ops note: stack GHCR packages exist only after publish-service-images.yml runs
+# on main (promote develop including #2023, then workflow_dispatch if needed).
 
 name: digichat-profile-a
 
@@ -29,10 +43,8 @@ services:
       start_period: 5s
 
   digikey:
-    build:
-      context: ../..
-      dockerfile: digikey/Dockerfile
-    image: digi-digikey:latest
+    image: ghcr.io/digithings-ai/digikey:${DIGI_IMAGE_TAG:-latest}
+    pull_policy: always
     ports:
       - "127.0.0.1:8005:8005"
     env_file:
@@ -62,10 +74,8 @@ services:
       start_period: 10s
 
   digivault:
-    build:
-      context: ../..
-      dockerfile: digivault/Dockerfile
-    image: digi-digivault:latest
+    image: ghcr.io/digithings-ai/digivault:${DIGI_IMAGE_TAG:-latest}
+    pull_policy: always
     ports:
       - "127.0.0.1:8004:8004"
     env_file:
@@ -103,7 +113,7 @@ services:
       REDIS_URL: ${REDIS_URL:-}
     command: ["--config", "/app/config/litellm.yaml", "--port", "4000"]
     volumes:
-      - ../../config:/app/config:ro
+      - ./config:/app/config:ro
     healthcheck:
       test:
         [
@@ -128,10 +138,8 @@ services:
       start_period: 5s
 
   digigraph:
-    build:
-      context: ../..
-      dockerfile: digigraph/Dockerfile
-    image: digi-digigraph:latest
+    image: ghcr.io/digithings-ai/digigraph:${DIGI_IMAGE_TAG:-latest}
+    pull_policy: always
     ports:
       - "127.0.0.1:8000:8000"
     env_file:
@@ -157,7 +165,7 @@ services:
       PYTHONUNBUFFERED: "1"
       AUDIT_LOG_PATH: /audit/events.jsonl
     volumes:
-      - ../../config:/app/config:ro
+      - ./config:/app/config:ro
       - digigraph_audit:/audit
     depends_on:
       digikey:

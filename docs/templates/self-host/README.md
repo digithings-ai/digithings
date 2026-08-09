@@ -77,3 +77,10 @@ Committed OpenAPI snapshots live under [`docs/openapi/`](../../openapi/) (when e
 - [SECURITY.md](../../../SECURITY.md) — loopback + Tunnel only
 - Overlay file: [`compose.ghcr.yml`](../../../infra/self-host/compose.ghcr.yml)
 - Epic: https://github.com/digithings-ai/digithings/issues/2016
+
+## Minimal digichat Profile A
+
+Clients who only need digichat + digikey + digigraph + LiteLLM + digivault should use
+[`infra/digichat-release/`](../../../infra/digichat-release/) and
+[`docs/digichat/INSTALL.md`](../../digichat/INSTALL.md) — not the full-stack
+`make up-ghcr` path (which also starts digiquant / digisearch / digismith by default).

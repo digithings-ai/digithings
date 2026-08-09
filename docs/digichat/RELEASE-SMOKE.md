@@ -23,6 +23,21 @@ Prefer the version pin. Do not use `:latest` in production.
 3. [ ] Embed smoke: Profile A tenant fixture (`backend.type: digigraph`) — tool rows + answer via digigraph (not direct OpenRouter from digichat)
 4. [ ] Optional: Foundry smoke only when Azure credentials are available (CI secrets or local MI) — skip if unavailable
 
+## Profile A stack pull (Pick 2)
+
+Requires stack images on GHCR (`DIGI_IMAGE_TAG` after `publish-service-images.yml` on `main`).
+
+1. [ ] `docker pull ghcr.io/digithings-ai/digikey:${DIGI_IMAGE_TAG}`
+2. [ ] `docker pull ghcr.io/digithings-ai/digigraph:${DIGI_IMAGE_TAG}`
+3. [ ] `docker pull ghcr.io/digithings-ai/digivault:${DIGI_IMAGE_TAG}`
+4. [ ] `docker pull ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}`
+5. [ ] `make digichat-profile-a-up` (no `--build`)
+6. [ ] `curl -sf http://127.0.0.1:8005/healthz` (digikey)
+7. [ ] `curl -sf http://127.0.0.1:8000/healthz` (digigraph)
+8. [ ] `curl -sf http://127.0.0.1:8004/healthz` (digivault)
+9. [ ] `curl -sf http://127.0.0.1:3005/api/health` (digichat)
+10. [ ] Embed smoke: digigraph tool row (not direct OpenRouter from digichat)
+
 ## Related
 
 - Client install: [INSTALL.md](INSTALL.md)

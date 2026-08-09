@@ -203,13 +203,13 @@ First-party digithings hosts (`digithings.ai` / `www.digithings.ai`) may skip em
 | ~~**`DIGICHAT_EMBED_HOSTS` baked into published image**~~ | **Addressed:** runtime CSP via `src/proxy.ts` + INSTALL.md § Custom embed parent hosts. Plan: [`docs/superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md`](../superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md). |
 | ~~**Docs drift**~~ | **Addressed:** [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) aligns digithings.ai/chat with digigraph + Tunnel (no live Pages Function chat path). |
 | ~~**No Foundry-only Compose snippet**~~ | **Addressed:** [`compose.profile-b.yml`](../../infra/digichat-release/compose.profile-b.yml) + `.env.profile-b.example` (digithings stays Azure-free). |
-| ~~**Profile A “minimal” not named**~~ | **Addressed:** [`compose.profile-a.yml`](../../infra/digichat-release/compose.profile-a.yml). **Remaining:** digikey / digigraph / digivault still build from monorepo until GHCR exists (Follow-ups). |
+| ~~**Profile A “minimal” not named**~~ | **Addressed:** [`compose.profile-a.yml`](../../infra/digichat-release/compose.profile-a.yml) + GHCR pull via `DIGI_IMAGE_TAG` (see INSTALL). **Ops remaining:** first `publish-service-images.yml` run on `main` so packages exist. |
 | ~~**npm confusion risk**~~ | **Addressed:** INSTALL.md + RELEASE-SMOKE state install unit = GHCR image, not npm (`private: true`). |
 
 ### Still open (Follow-ups — not v1)
 
 - ~~Runtime CSP `frame-ancestors`~~ (**Addressed** — see plan above)
-- GHCR for digikey / digigraph / digivault (Profile A without monorepo clone)
+- ~~GHCR for digikey / digigraph / digivault~~ — **Addressed** in compose/INSTALL (`DIGI_IMAGE_TAG`); packages land after promote to `main` + publish workflow
 - Corpus / crawl / OCR / vault ingest pipelines
 - CI automation of RELEASE-SMOKE
 - Helm / ACA stubs beyond Compose Profile B
