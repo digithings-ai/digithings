@@ -7,7 +7,8 @@
 # Or: make digichat-release-up VERSION=0.9.3
 #
 # Clients without the monorepo should prefer compose.profile-a.yml /
-# compose.profile-b.yml (later tasks) which are self-contained.
+# compose.profile-b.yml which are self-contained (Profile A still builds
+# digikey/digigraph/digivault from the monorepo until those have GHCR tags).
 #
 # Requires Docker Compose that supports `build: !reset null` (Compose v2.24+ /
 # Compose specification merge; verified on Compose v5).

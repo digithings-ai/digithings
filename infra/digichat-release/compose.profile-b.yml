@@ -1,0 +1,61 @@
+# Profile B — digichat (+ Postgres) only. Backend = Foundry on the host identity.
+# digithings does not run this. Clients mirror DataTap ACA pattern with Compose or ACA.
+#
+# Usage:
+#   cp infra/digichat-release/.env.profile-b.example \
+#      infra/digichat-release/.env.profile-b
+#   # edit AUTH_SECRET, AUTH_URL, DIGICHAT_EMBED_TENANTS, then:
+#   docker compose -f infra/digichat-release/compose.profile-b.yml \
+#     --env-file infra/digichat-release/.env.profile-b up -d
+#
+# Host must provide Azure credentials for Foundry calls (DefaultAzureCredential /
+# managed identity). Do not put a Foundry API key in digichat env.
+
+name: digichat-profile-b
+
+services:
+  digichat-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: digichat
+      POSTGRES_PASSWORD: ${DIGICHAT_POSTGRES_PASSWORD:-digichat}
+      POSTGRES_DB: digichat
+    volumes:
+      - digichat_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U digichat -d digichat"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  digichat:
+    image: ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION:?set DIGICHAT_VERSION e.g. 0.9.3}
+    pull_policy: always
+    ports:
+      - "${DIGICHAT_PUBLISH_HOST:-127.0.0.1}:${DIGICHAT_PUBLISH_PORT:-3005}:3000"
+    env_file:
+      - path: .env.profile-b
+        required: false
+    environment:
+      NODE_ENV: production
+      AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
+      AUTH_URL: ${AUTH_URL:-https://digichat.client.example}
+      DIGICHAT_DATABASE_URL: postgresql://digichat:${DIGICHAT_POSTGRES_PASSWORD:-digichat}@digichat-db:5432/digichat
+      DIGICHAT_AUTO_MIGRATE: ${DIGICHAT_AUTO_MIGRATE:-1}
+      DIGICHAT_EMBED_ENABLED: ${DIGICHAT_EMBED_ENABLED:-1}
+      DIGICHAT_EMBED_TENANTS: ${DIGICHAT_EMBED_TENANTS:-}
+    depends_on:
+      digichat-db:
+        condition: service_healthy
+    healthcheck:
+      # Same probe as root Compose / published digichat image (curl in image)
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3000/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+volumes:
+  digichat_pg:

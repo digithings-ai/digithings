@@ -15,6 +15,12 @@ Browser digithings.ai/chat
 
 See [`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md).
 
+## Client / release installs
+
+digithings’ Tunnel host is **this** operator path. Clients installing digichat
+themselves should use [`infra/digichat-release/`](../digichat-release/) and
+[`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) (Profile A or B).
+
 ## Hard constraints
 
 - digithings has **no Azure**.

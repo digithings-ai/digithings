@@ -271,7 +271,7 @@ EOF
 - Consumes: Existing service images / Dockerfiles for digikey, digigraph, LiteLLM, digivault from root Compose (or documented build-from-repo for stack services until those are also GHCR-published — digichat image is the primary client install unit; stack services may still build from source in v1 if no GHCR tags exist).
 - Produces: Named minimal Profile A: digichat + digichat-db + digikey + digigraph + LiteLLM + digivault only (optional Redis via comment / profile).
 
-- [ ] **Step 1: Inventory which stack services already have pullable images**
+- [x] **Step 1: Inventory which stack services already have pullable images**
 
 Run:
 
@@ -285,7 +285,7 @@ Document in README:
 - digichat-db / digikey data → postgres / local volumes
 - digikey / digigraph / digivault → if only `build:` exists today, Profile A overlay **builds those from repo** OR documents “clone monorepo for Profile A stack services until GHCR exists”. Prefer honesty: v1 Profile A for external clients who want digigraph may still need the monorepo for Python services; digichat Node itself must not require a monorepo build.
 
-- [ ] **Step 2: Write `.env.profile-a.example`**
+- [x] **Step 2: Write `.env.profile-a.example`**
 
 ```bash
 # Profile A — digigraph-backed digichat
@@ -313,7 +313,7 @@ DIGIVAULT_URL=http://digivault:8004
 # GROQ_API_KEY=...
 ```
 
-- [ ] **Step 3: Write `compose.profile-a.yml`**
+- [x] **Step 3: Write `compose.profile-a.yml`**
 
 Self-contained or monorepo-relative compose that:
 1. Includes digichat from GHCR (`v${DIGICHAT_VERSION}`)
@@ -330,7 +330,7 @@ Browser → digichat → digigraph → digillm/LiteLLM
                            └─ digivault_hub → digivault
 ```
 
-- [ ] **Step 4: Validate config + document operator vs client**
+- [x] **Step 4: Validate config + document operator vs client**
 
 Run:
 
@@ -354,7 +354,7 @@ themselves should use [`infra/digichat-release/`](../digichat-release/) and
 [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) (Profile A or B).
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add infra/digichat-release/compose.profile-a.yml \
@@ -381,7 +381,7 @@ EOF
 - Consumes: digichat Foundry adapter (`backend.type: foundry`, `projectEndpoint`, `agentName`); host Azure identity via `DefaultAzureCredential`.
 - Produces: Minimal digichat(+db) compose + env template. digithings remains Azure-free; snippet is for client Azure environments (DataTap-like).
 
-- [ ] **Step 1: Write `.env.profile-b.example`**
+- [x] **Step 1: Write `.env.profile-b.example`**
 
 ```bash
 # Profile B — Foundry-backed digichat (client Azure only; digithings has no Azure)
@@ -400,7 +400,7 @@ DIGICHAT_EMBED_ENABLED=1
 DIGICHAT_EMBED_TENANTS={"client.example.com":{"slug":"client","gateMode":"token","activityDetail":"full","layout":"page","token":"replace-embed-token","backend":{"type":"foundry","projectEndpoint":"https://YOUR_FOUNDRY_PROJECT.services.ai.azure.com/api/projects/YOUR_PROJECT","agentName":"YOUR_AGENT"}}}
 ```
 
-- [ ] **Step 2: Write `compose.profile-b.yml`**
+- [x] **Step 2: Write `compose.profile-b.yml`**
 
 ```yaml
 # Profile B — digichat (+ Postgres) only. Backend = Foundry on the host identity.
@@ -449,7 +449,7 @@ volumes:
 
 Adjust healthcheck / curl availability to match the published image (same as root Compose). Document: host must provide Azure credentials for Foundry calls; no Foundry API key in digichat env.
 
-- [ ] **Step 3: Validate compose config**
+- [x] **Step 3: Validate compose config**
 
 Run:
 
@@ -463,11 +463,11 @@ rg -n "ghcr.io/digithings-ai/digichat|digigraph|digikey|foundry" /tmp/profile-b.
 
 Expected: digichat GHCR only (+ postgres); no digigraph/digikey services.
 
-- [ ] **Step 4: README table update**
+- [x] **Step 4: README table update**
 
 Ensure `infra/digichat-release/README.md` lists Profile B files and states digithings has no Azure / DataTap ACA is client-only.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add infra/digichat-release/compose.profile-b.yml \
@@ -494,7 +494,7 @@ EOF
 - Consumes: Tasks 1–4 artifacts + config tables from the sketch §3.
 - Produces: First-class client page: pull GHCR → choose A/B → env checklist → smoke.
 
-- [ ] **Step 1: Write INSTALL.md**
+- [x] **Step 1: Write INSTALL.md**
 
 Create `docs/digichat/INSTALL.md` covering:
 
@@ -516,7 +516,7 @@ curl -sf http://127.0.0.1:3005/api/health | jq .
 # open http://127.0.0.1:3005/embed?host=client.example.com&token=…
 ```
 
-- [ ] **Step 2: Cross-link**
+- [x] **Step 2: Cross-link**
 
 In `digichat-modular-frontend.md` §5 after “Near-term foundation”, add:
 
@@ -526,7 +526,7 @@ In `digichat-modular-frontend.md` §5 after “Near-term foundation”, add:
 
 In sketch See also + OPERATIONS, add the same link.
 
-- [ ] **Step 3: Verify links**
+- [x] **Step 3: Verify links**
 
 Run:
 
@@ -541,7 +541,7 @@ test -f docs/digichat/INSTALL.md
 
 Expected: all four reference INSTALL; file exists.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/digichat/INSTALL.md \
@@ -566,7 +566,7 @@ EOF
 - Consumes: Truth from `infra/digichat-digithings/README.md` + ADR-0018 (iframe → digichat Node via Tunnel; digigraph path).
 - Produces: DEPLOYMENT.md that no longer claims Pages Function + native digichat-ui OpenRouter loop for `/chat`.
 
-- [ ] **Step 1: Locate stale claims**
+- [x] **Step 1: Locate stale claims**
 
 Run:
 
@@ -574,7 +574,7 @@ Run:
 rg -n "Pages Function|useStackChat|functions/api/chat|native @digithings/digichat-ui|OpenRouter" docs/DEPLOYMENT.md
 ```
 
-- [ ] **Step 2: Replace public routing /chat sections**
+- [x] **Step 2: Replace public routing /chat sections**
 
 Replace the Phase 3 “native digichat-ui + Pages Function” bullets with:
 
@@ -595,7 +595,7 @@ One public domain serves marketing + chat shell:
 
 Update “digithings.ai/chat — digichat marketing pane” to describe iframe + Tunnel + digigraph (retire Function/OpenRouter/Supabase copy). Update smoke: remove `POST https://digithings.ai/api/chat` Pages Function check; keep `GET /chat` shell + point operators to Tunnel origin `/api/health` and vault-grounded browser smoke from infra README.
 
-- [ ] **Step 3: Verify no stale Function claims remain**
+- [x] **Step 3: Verify no stale Function claims remain**
 
 Run:
 
@@ -606,7 +606,7 @@ rg -n "digigraph|Tunnel|INSTALL.md|digichat-digithings" docs/DEPLOYMENT.md
 
 Expected: no live Function chat path as current truth; digigraph/Tunnel/install links present.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/DEPLOYMENT.md
@@ -631,7 +631,7 @@ EOF
 - Consumes: Build-arg `DIGICHAT_EMBED_HOSTS` in `frontend/digichat/Dockerfile` and publish workflow reading `embed-hosts.txt`. CSP evaluated at `next build` via `next.config.ts` importing `security-headers.ts`.
 - Produces: Documented rebuild path for new parent domains. **Do not** implement runtime `frame-ancestors` in v1 unless a separate issue explicitly expands scope (sketch lists evaluate-runtime as optional).
 
-- [ ] **Step 1: Document rebuild commands in INSTALL.md**
+- [x] **Step 1: Document rebuild commands in INSTALL.md**
 
 Add section:
 
@@ -654,7 +654,7 @@ docker build -f frontend/digichat/Dockerfile \
 Still set `DIGICHAT_EMBED_TENANTS` at **runtime** with tokens — never as a build-arg.
 ```
 
-- [ ] **Step 2: Comment in embed-hosts.txt**
+- [x] **Step 2: Comment in embed-hosts.txt**
 
 Extend the file header:
 
@@ -665,11 +665,11 @@ Extend the file header:
 # DIGICHAT_EMBED_HOSTS=... — see docs/digichat/INSTALL.md § Custom embed parent hosts.
 ```
 
-- [ ] **Step 3: ARCHITECTURE.md one-liner**
+- [x] **Step 3: ARCHITECTURE.md one-liner**
 
 Under `DIGICHAT_EMBED_HOSTS` env row, add: “Stock GHCR image uses `embed-hosts.txt`; other parents need rebuild or a future runtime CSP change.”
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run:
 
@@ -678,7 +678,7 @@ rg -n "Custom embed parent hosts|rebuild" docs/digichat/INSTALL.md
 rg -n "DIGICHAT_EMBED_HOSTS" frontend/digichat/Dockerfile
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/digichat/INSTALL.md frontend/digichat/embed-hosts.txt frontend/digichat/ARCHITECTURE.md
@@ -702,7 +702,7 @@ EOF
 - Consumes: Tasks 1–7 deliverables.
 - Produces: Single acceptance checklist an implementer can run before opening the PR.
 
-- [ ] **Step 1: Acceptance checklist (run all)**
+- [x] **Step 1: Acceptance checklist (run all)**
 
 ```bash
 # Docs present
@@ -732,11 +732,11 @@ DIGICHAT_VERSION=0.9.3 docker compose \
 rg -n 'INSTALL.md' docs/architecture/digichat-modular-frontend.md
 ```
 
-- [ ] **Step 2: Update sketch §5 Gaps table**
+- [x] **Step 2: Update sketch §5 Gaps table**
 
 For each gap that this plan’s implementation closes, change Detail to “Addressed: see INSTALL.md / infra/digichat-release/ …” or strike through. Leave runtime CSP + stack-service GHCR + ingest as open if not done.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add Makefile infra/digichat-release/README.md docs/architecture/digichat-self-hosted-release.md

@@ -1,5 +1,7 @@
 # Plain hostnames for DIGICHAT_EMBED_HOSTS (build-time CSP frame-ancestors).
 # No secrets — safe as a Docker build-arg. One hostname per line; # comments ignored.
+# Clients with new parents: add a line here (PR) or rebuild with --build-arg
+# DIGICHAT_EMBED_HOSTS=... — see docs/digichat/INSTALL.md § Custom embed parent hosts.
 # Also listed in ARCHITECTURE.md §10.
 digithings.ai
 www.digithings.ai

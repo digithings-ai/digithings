@@ -66,6 +66,16 @@ up-observability:
 down-observability:
 	docker compose --profile observability down
 
+# ---------------------------------------------------------------------------
+# digichat targets
+#   make up-digichat / down-digichat     — local build from monorepo (dev/ops)
+#   make digichat-release-up VERSION=…  — pull pinned GHCR (no monorepo build)
+#   make digichat-release-down VERSION=…
+#   make digichat-dev / digichat-health  — host Next.js + /api/health smoke
+#   make up-digichat-db / down-digichat-db
+# Client install: docs/digichat/INSTALL.md | overlays: infra/digichat-release/
+# ---------------------------------------------------------------------------
+
 # Stack + digichat UI (Next.js on host port DIGICHAT_PUBLISH_PORT, default 3005). Does not include `heartbeat` profile.
 # Tip: set DIGICHAT_DEV_AUTH=1 in .env for password login without OIDC; set AUTH_URL to the URL you use in the browser.
 up-digichat:
@@ -75,6 +85,7 @@ down-digichat:
 	docker compose --profile digichat down
 
 # Pull published digichat from GHCR (requires VERSION=0.9.3). Does not build from the monorepo.
+# Example: make digichat-release-up VERSION=0.9.3
 digichat-release-up:
 	@test -n "$(VERSION)" || (echo "Usage: make digichat-release-up VERSION=0.9.3"; exit 1)
 	DIGICHAT_VERSION=$(VERSION) docker compose \
