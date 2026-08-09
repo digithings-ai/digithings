@@ -49,7 +49,7 @@ thread state. On mount it merges `localStorage` threads with a server `GET
 chat button, rename/delete overflow menus, and the main `ChatPanel`.
 
 **AI SDK `useChat`** (`src/components/chat-panel.tsx`): Uses `@ai-sdk/react` with a
-`DefaultChatTransport` pointed at `POST /api/chat`. Sends `X-digichat-Session` header
+`DefaultChatTransport` pointed at `POST /api/chat`. Sends `X-Digichat-Session` header
 so upstream digigraph can correlate the same conversation across turns. Scroll
 stick-to-bottom with a "New messages" chip when scrolled up. Copy and Regenerate
 actions on assistant bubbles.
@@ -181,7 +181,7 @@ probe).
 **`POST /api/chat`** (also aliased at `POST /api/v1/chat`):
 - Auth: Auth.js session cookie or `Authorization: Bearer <machine-key>`.
 - Request body: `{ messages: UIMessage[] }` (AI SDK UI message format).
-- Notable request headers: `X-digichat-Session` / `X-Session-Id` (stable UUID for upstream tracing), `X-Request-ID` (propagated to digigraph), `X-digichat-Trace: 0` (opt out of trace stream), `X-Embed-Chat-Token` (optional per-tenant trial-gate token).
+- Notable request headers: `X-Digichat-Session` / `X-Session-Id` (stable UUID for upstream tracing), `X-Request-ID` (propagated to digigraph), `X-Digichat-Trace: 0` (opt out of trace stream), `X-Embed-Chat-Token` (optional per-tenant trial-gate token).
 - Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus optional `data-digichatActivity` parts.
 - The route resolves upstream auth, builds a `createdigigraphClient`, then either (a) calls `createdigigraphTraceStreamResponse` for the trace path or (b) calls `streamText` with `smoothStream` for the legacy path.
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
@@ -324,7 +324,7 @@ never sent to the client.
 
 ```
 Browser (useChat)
-  │  POST /api/chat  {messages, X-digichat-Session}
+  │  POST /api/chat  {messages, X-Digichat-Session}
   ▼
 BFF route handler
   ├─ Auth: session cookie OR machine key bcrypt check
@@ -338,7 +338,7 @@ BFF route handler
   │   │   └─ delta.digigraph_trace → data-digichatActivity parts (typed mapper)
   │   └─ createUIMessageStreamResponse → SSE to browser
   │
-  └─ Legacy path (DIGICHAT_TRACE_UI=0 or X-digichat-Trace: 0)
+  └─ Legacy path (DIGICHAT_TRACE_UI=0 or X-Digichat-Trace: 0)
       ├─ createdigigraphClient → AI SDK OpenAI provider
       ├─ streamText + smoothStream(chunking: "word")
       └─ toUIMessageStreamResponse → SSE to browser

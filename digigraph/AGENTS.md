@@ -37,7 +37,7 @@ Beyond root `AGENTS.md`:
 
 - **MCP-first**: Every new capability must be a discoverable tool registered in the orchestration registry. Never add logic directly to a LangGraph node.
 - **No tight coupling**: digigraph must never import digisearch or digiquant Python packages. All vertical calls go through `POST /v1/orchestrator_invoke`.
-- **State stays lean**: `WorkflowState` carries only refs and summaries. No full document bodies, no large DataFrames in state or LangGraph checkpoints. Use Digistore (`digistore.py`) for large data.
+- **State stays lean**: `WorkflowState` carries only refs and summaries. No full document bodies, no large DataFrames in state or LangGraph checkpoints. Use digistore (`digistore.py`) for large data.
 - **Tool allowlist respected**: New tools must work correctly when `ToolContext.allowed_tool_names` is set to a subset. Never bypass the allowlist check.
 - **LLM routing via digillm**: All LLM calls go through `digigraph.llm_client` (`completion` / `completion_text` / `run_tools`), which wraps the `digillm` toolkit client. No direct OpenAI SDK `chat.completions.create()` calls.
 - **Never MemorySaver in production**: Default is fine for dev, but document `DIGI_CHECKPOINTER=postgres` for production.

@@ -13,7 +13,7 @@ digigraph is the central orchestration brain of the digithings stack. Every user
 
 1. **LangGraph state machine.** Maintains a compiled `StateGraph[WorkflowState]` that routes through research, strategy validation, backtest, and optional optimize nodes. Profile-driven conditional edges control which path executes.
 
-2. **Tool registry and dispatcher.** Provides an in-process registry of named orchestrator tools (search, agents, Digistore introspection, planning primitives). Verticals (digisearch, digiquant) own their own OpenAI tool schemas, published via `POST /v1/orchestrator_tools`; digigraph fetches those schemas lazily and invokes them via `POST /v1/orchestrator_invoke`.
+2. **Tool registry and dispatcher.** Provides an in-process registry of named orchestrator tools (search, agents, digistore introspection, planning primitives). Verticals (digisearch, digiquant) own their own OpenAI tool schemas, published via `POST /v1/orchestrator_tools`; digigraph fetches those schemas lazily and invokes them via `POST /v1/orchestrator_invoke`.
 
 3. **HTTP + MCP API surface.** Exposes a `POST /workflow` endpoint (digiclaw custom skill), a `POST /v1/chat/completions` endpoint (Open WebUI / digichat), thread state APIs (opt-in), and an MCP server for Claude Desktop and digiclaw agent integration.
 
@@ -46,7 +46,7 @@ The following is built and functional as of this architecture review (March 2026
 | Correlation ID middleware (`X-Request-ID`) | Built | `server.py` |
 | Tool allowlist enforcement | Built | `orchestration/registry.py`, `tool_policy.py` |
 | Policy flags (code exec, debug, thread API) | Built | `policy.py` |
-| Digistore (session-scoped named datasets) | Built | `digistore.py`, `run_storage.py` |
+| digistore (session-scoped named datasets) | Built | `digistore.py`, `run_storage.py` |
 | MCP server (FastMCP, streamable-http + stdio) | Built | `mcp_server.py` |
 | Thread state / history / resume endpoints (opt-in) | Built | `server.py` |
 | digismith tracing (`traceable` wrappers) | Built | `digillm` (via `digismith.trace.traceable`) |
@@ -137,11 +137,11 @@ records; aggregate `snapshot()` includes them under `events` for the Atlas diagn
 **Purpose:** label each logical provider invocation with generic intent, parentage, and artifact
 disposition. **Reason:** the aggregate explains run totals and physical attempts explain transport,
 but neither explains why a call existed or which prior call caused a repair or follow-up.
-**Intent:** make provider work attributable without moving Olympus policy into DigiGraph or adding
+**Intent:** make provider work attributable without moving Olympus policy into digigraph or adding
 nodes to the canonical graph. **System contribution:** detailed usage, artifact linkage, and later
 research-policy evaluation can share one stable lineage.
 
-`llm_client.py` registers `usage.DETAILED_USAGE_OBSERVER` process-wide and wraps DigiLLM entry
+`llm_client.py` registers `usage.DETAILED_USAGE_OBSERVER` process-wide and wraps digillm entry
 points with `provider_call_context(...)` only when `call_context` contains a real `node_run_id`.
 No placeholder identity is generated. `logical_call_context(...)` may override generic purpose,
 parent, artifact references, and no-artifact reason for a nearby call. Defaults distinguish initial
@@ -200,7 +200,7 @@ missing".** Atlas `phase5_sectors` nodes and the compile-time per-ticker H5/H6 v
 carry their discriminator in `node_name`, so they leave `fanout_key` NULL correctly. A worker that
 no-ops on a falsy cursor still emits an honest `SUCCEEDED` record with no child provider call.
 
-`node_run_scope` records `FAILED` on `BaseException`, deliberately broader than DigiLLM's
+`node_run_scope` records `FAILED` on `BaseException`, deliberately broader than digillm's
 `except Exception`: losing a record on the exact path where a run dies is the worst place to lose
 one, and an incomplete run has to be a counted signal. A LangGraph control-flow exception would be
 recorded `FAILED`; no `build_pipeline` node uses `interrupt()` today, so that path is dead rather
@@ -214,7 +214,7 @@ real node executions rather than compiled graph nodes.
 | Key | Type | Purpose |
 |-----|------|---------|
 | `prompt` | `str` | User input |
-| `session_id` | `str \| None` | Conversation ID; maps to LangGraph `thread_id` and Digistore namespace |
+| `session_id` | `str \| None` | Conversation ID; maps to LangGraph `thread_id` and digistore namespace |
 | `request_id` | `str \| None` | Correlation ID propagated to outbound HTTP |
 | `workflow_id` | `str \| None` | Per-run UUID for audit log correlation |
 | `digi_bearer` | `str \| None` | JWT forwarded to digisearch and digiquant |
@@ -608,7 +608,7 @@ This provides meaningful speedup for repeated identical prompts (e.g. heartbeat 
 
 Three modes: `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`.
 
-### 8.3 Digistore for LLM Context Reduction
+### 8.3 digistore for LLM Context Reduction
 
 Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `builtin.py:58`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
 

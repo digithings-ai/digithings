@@ -116,11 +116,11 @@ One public domain serves marketing + digichat UI. Phase 3 (amended):
 
 - **Visitor chat:** `digithings.ai/chat` — Cloudflare Pages native `@digithings/digichat-ui`
   + digivault Pages Function (`functions/api/chat.ts`). Free plan; **no** Containers / iframe.
-- **Do not** use DataTap Azure for DigiThings. Do not use `chat.digithings.ai` as the marketing host.
+- **Do not** use DataTap Azure for digithings. Do not use `chat.digithings.ai` as the marketing host.
 - Spec/ops: `docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md`,
   `docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`. ADR-0018 amended.
 - Customer digichat `/embed` (DataTap etc.) is separate from digithings marketing chat.
-  The DigiThings Containers scaffold (`frontend/digichat-cloudflare/` +
+  The digithings Containers scaffold (`frontend/digichat-cloudflare/` +
   `Dockerfile.digichat-cloudflare`) was **removed on 2026-08-06** — it had no deploy path in
   the repo (Containers need Workers Paid, digithings is on Free; routes stayed commented out
   and no workflow built the image) and its `wrangler` devDependency was pulling five `workerd`
@@ -139,7 +139,7 @@ To update the landing page: edit `frontend/digithings-web/`, run the build scrip
 
 ### digithings.ai/chat — digichat marketing pane (Phase 3)
 
-> DigiThings has **no Azure**. Marketing chat runs on **Cloudflare Pages** (Function +
+> digithings has **no Azure**. Marketing chat runs on **Cloudflare Pages** (Function +
 > digichat-ui). DataTap Azure digichat is client-only.
 
 - **UI:** `DtNav` + `DigiChatSession` (`showByok` / `showStatusBar` / `layout: page`).

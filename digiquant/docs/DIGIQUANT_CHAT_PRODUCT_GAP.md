@@ -134,7 +134,7 @@ For each area: **goal**, **today**, **gap**, **leverage existing code**, **optio
 |--|--|
 | **Goal** | Chat says “gold”; system resolves to **correct CSV / feed** and bar size. |
 | **Today** | Operator sets **`DIGIQUANT_DATA_DIR`**; files must be **`{symbol}.csv`**. **`scripts/fetch_real_ohlcv.py`** exists for ad hoc fetch. Chat has **no** upload flow to digiquant volume. |
-| **Gap** | No **session-scoped dataset registry** linking `X-Digichat-Session` → approved data refs (Digistore / blob URI). |
+| **Gap** | No **session-scoped dataset registry** linking `X-Digichat-Session` → approved data refs (digistore / blob URI). |
 | **Leverage** | `data/loader.py` and env **`DIGIQUANT_DATA_DIR`**; `WorkflowState.stored_datasets` hook exists in state typed dict but is **not** wired to digiquant paths in `backtest_node`. |
 | **Options** | (A) Pre-load tenant datasets on volume — ops-heavy. (B) **digichat upload** → object store + **signed path** passed as `data_path` — product-friendly. (C) **Data catalog service** — longer-term. |
 | **Direction** | Minimal: extend **`backtest_node`** to accept **`data_path`** or **`dataset_ref`** from state populated by an upload/metadata tool. digiquant adds **`POST /datasets/register` (optional)** only if BFF cannot map refs to paths. |

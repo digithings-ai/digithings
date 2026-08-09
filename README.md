@@ -118,7 +118,7 @@ With venv: `pytest -v` or `pytest -m unit -v`.
 
 ```
 digithings/
-├── digigraph/    # LangGraph orchestration, agents, Digistore
+├── digigraph/    # LangGraph orchestration, agents, digistore
 ├── digiquant/    # Nautilus + Polars, backtest/optimize
 ├── digisearch/   # RAG, document search, ingestion
 ├── digichat/     # Next.js BFF + chat UI

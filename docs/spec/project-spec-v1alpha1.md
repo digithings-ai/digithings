@@ -52,7 +52,7 @@ agents:
     # When set, the node runs in document-mode RAG (tool loop + digisearch).
     # When omitted, quant strategy extraction is used.
 
-run_data_dir: string      # Absolute path to session dataset storage (default: null — disables Digistore).
+run_data_dir: string      # Absolute path to session dataset storage (default: null — disables digistore).
                           # In Docker: mount a named volume here (e.g. /data/run).
                           # When set, enables the sitaas_rag skill:
                           #   digistore_list, digistore_profile, visualization_agent,
@@ -154,7 +154,7 @@ digigraph reads the project config on every request (cached by mtime). No restar
 | Capability | How to enable | How to disable |
 |---|---|---|
 | Custom research prompt (document RAG) | Set `agents.research_system_prompt` | Remove field → quant mode |
-| Digistore + delegate tools | Set `run_data_dir` | Remove field or set to `null` |
+| digistore + delegate tools | Set `run_data_dir` | Remove field or set to `null` |
 | digisearch tool | Set `DIGISEARCH_URL` | Unset env var |
 | Code execution (`data_engineer_agent`) | `run_data_dir` + `DIGI_ALLOW_CODE_EXEC=1` | Remove env var |
 | MCP server | `mcp.enabled: true` | `mcp.enabled: false` or remove |
@@ -231,7 +231,7 @@ services:
 
 This config activates:
 - Custom research prompt (document RAG mode)
-- Digistore + delegate agent tools (via `run_data_dir`)
+- digistore + delegate agent tools (via `run_data_dir`)
 - Multi-index discovery (via `indexes_dir`)
 - MCP server
 
