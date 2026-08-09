@@ -1,6 +1,6 @@
-# Digithings DigiChat hosting
+# digithings digichat hosting
 
-DigiThings **marketing** chat runs on **Cloudflare Pages** (native digichat-ui +
+digithings **marketing** chat runs on **Cloudflare Pages** (native digichat-ui +
 digivault Function). See Phase 3 ops checklist.
 
 The `frontend/digichat-cloudflare/` Workers Paid / Containers scaffold was **removed on
@@ -12,8 +12,8 @@ digithings ever adopts Workers Paid.
 
 ## Hard constraint
 
-- DigiThings has **no Azure**.
-- DataTap DigiChat ACA is **client-only** — do not use for DigiThings.
-- **2026-08-05:** a DigiThings misdeploy on DataTap WebSite was torn down.
+- digithings has **no Azure**.
+- DataTap digichat ACA is **client-only** — do not use for digithings.
+- **2026-08-05:** a digithings misdeploy on DataTap WebSite was torn down.
 
 Azure ACA scripts previously in this directory were removed — do not recreate them.

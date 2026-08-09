@@ -112,7 +112,7 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
   follow-up against `apps/digiquant-atlas/frontend/`.
 - Physical relocation of Atlas frontend to `frontend/atlas/`. Keeping
   it nested under the research project is fine for now.
-- Digiquant.io separate Pages deploy. The current `static.yml` only
+- digiquant.io separate Pages deploy. The current `static.yml` only
   publishes `frontend/digithings/`. Parallel workflow for
   `frontend/digiquant/` → digiquant.io is tracked under epic #9.
 

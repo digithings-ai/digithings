@@ -1187,7 +1187,7 @@ Sourced from [`2026-06-audit-plan-gap-check.md`](./2026-06-audit-plan-gap-check.
 | Baseline gate | `make test-baseline` | no | imports/schemas |
 | digichat | `cd frontend/digichat && npm run lint && npm run test && npm run build` | no | TS/UI |
 | Olympus | `cd frontend/olympus && npm run lint && npm run test && npm run build` | no | after REM-038 |
-| Digibase integration | `pytest tests/integration/test_request_id_hops.py -v` | partial | REM-069 |
+| digibase integration | `pytest tests/integration/test_request_id_hops.py -v` | partial | REM-069 |
 | Contracts | `pytest tests/contracts/ -v` | no | REM-088 |
 | Provider review | `pytest tests/provider_review/ -m unit -v` | no | REM-089 |
 | E2E | `make up && make test-e2e` | **yes** Docker | REM-046,133 |

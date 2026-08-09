@@ -20,7 +20,7 @@
 
 ### Features
 
-* **digichat:** map Foundry azure_ai_search activity into the shared DigiChat chain
+* **digichat:** map Foundry azure_ai_search activity into the shared digichat chain
 
 
 ### Bug Fixes
@@ -73,7 +73,7 @@
 * **digichat:** parse independent embed UI flags from tenant config ([984c0d6](https://github.com/digithings-ai/digithings/commit/984c0d6c3167161a2adc0f211370b951b825dd87))
 * **digichat:** Phase 2 unification — digivault port + digigraph rich mapping ([#1859](https://github.com/digithings-ai/digithings/issues/1859)) ([8f56e17](https://github.com/digithings-ai/digithings/commit/8f56e1783c62d93131472707daef6c61b918412f))
 * **digichat:** project embed UI flags through tenant-config API ([e4373f0](https://github.com/digithings-ai/digithings/commit/e4373f031d058f26467fa82970e1c8de871fc199))
-* **digichat:** scaffold DigiThings DigiChat on Cloudflare Containers ([032493e](https://github.com/digithings-ai/digithings/commit/032493e33b6a22525769319d51724683626b3085))
+* **digichat:** scaffold digithings digichat on Cloudflare Containers ([032493e](https://github.com/digithings-ai/digithings/commit/032493e33b6a22525769319d51724683626b3085))
 * **digichat:** shared activity protocol (unification phase 1) ([#1817](https://github.com/digithings-ai/digithings/issues/1817)) ([32f8e92](https://github.com/digithings-ai/digithings/commit/32f8e92626c2ffe905cd5a8bfd8d0806c9ceebbd))
 * **digichat:** wire ready/seed protocol into embed session ([2a6c075](https://github.com/digithings-ai/digithings/commit/2a6c0752bcc1a50cf25c7954051e68e63d02cd4e))
 * **website:** Phase 3 Pages-native digichat-ui (no Containers) ([eefac60](https://github.com/digithings-ai/digithings/commit/eefac60179db807088335cca1f6177a5183dbb70))

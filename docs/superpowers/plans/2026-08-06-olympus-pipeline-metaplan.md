@@ -57,7 +57,7 @@ symbol/path from a plan into an issue without confirming it against the then-cur
 15. Portfolio replay uses one shared-cash multi-instrument Nautilus engine per isolated arm/fold.
 16. Shadow/replay can recommend eligibility but cannot activate, promote, rollback, trade, or mutate
     production policy.
-17. No broker adapter, live-order path, or DigiKey/auth code is changed without its explicit human
+17. No broker adapter, live-order path, or digikey/auth code is changed without its explicit human
     gate and separate issue.
 18. UI work is limited to required reader-contract cutovers; broad frontend redesign remains outside
     this program.

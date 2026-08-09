@@ -400,7 +400,7 @@ prohibited.
 - **Red:** approval requires eligible evaluation; reject/defer allowed with rationale; rollback links
   evaluation/current version; identity from principal, not request; immutable/superseding; no policy
   mutation/deploy/broker; MCP cannot impersonate.
-- **Human gate:** if trusted principal cannot be propagated without DigiKey/auth changes, stop and
+- **Human gate:** if trusted principal cannot be propagated without digikey/auth changes, stop and
   obtain the repository-required auth human review. Do not edit `digikey/` under this plan.
 - **Metric:** every decision has verified actor, rationale, prior/evaluation IDs, and no activation
   side effect.
