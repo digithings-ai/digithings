@@ -184,13 +184,18 @@ from digichat). Profile B: Foundry smoke only when Azure credentials are availab
 
 Operator post-publish checklist: [`RELEASE-SMOKE.md`](RELEASE-SMOKE.md).
 
-## Out of scope (v1)
+## Populate client docs
 
-Corpus / crawl / OCR / vault ingest for client doc chatbots is **not** part of this
-install. See Follow-ups in
-[`digichat-self-hosted-release.md`](../architecture/digichat-self-hosted-release.md)
-and “Later” in
-[`digichat-modular-frontend.md`](../architecture/digichat-modular-frontend.md) §5.
+Client documentation chatbots use an **offline ops pipeline** (not this install
+unit and not a digichat fork): `scripts/docs_onboard/` crawls a docs site and
+writes digivault notes and/or a digisearch index for Profile A grounding.
+
+- Runbook: [`CLIENT-DOCS-ONBOARD.md`](CLIENT-DOCS-ONBOARD.md)
+- Ops index: [`docs/ops/CLIENT_PIPELINES.md`](../ops/CLIENT_PIPELINES.md)
+
+OCR stays in digisearch. Pick 1 (runtime CSP) and Pick 2 (GHCR Profile A) are
+orthogonal — see
+[`digichat-self-host-picks-fit.md`](../architecture/digichat-self-host-picks-fit.md).
 
 ## Related
 
@@ -198,3 +203,4 @@ and “Later” in
 - digithings operator Tunnel host: [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md)
 - Local ops: [`frontend/digichat/OPERATIONS.md`](../../frontend/digichat/OPERATIONS.md)
 - Product model: [`digichat-modular-frontend.md`](../architecture/digichat-modular-frontend.md) §5
+- Docs onboard: [`CLIENT-DOCS-ONBOARD.md`](CLIENT-DOCS-ONBOARD.md)

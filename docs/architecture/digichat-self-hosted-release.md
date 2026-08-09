@@ -5,8 +5,8 @@
 > §5 (product model) and the digithings operator runbook
 > [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
 
-**Status:** Sketch (2026-08-09) — Gaps in §5 updated for Tasks 1–8 of the implementation plan  
-**Related:** [ADR-0018](../adr/0018-digichat-path-routing.md), [`frontend/digichat/ARCHITECTURE.md`](../../frontend/digichat/ARCHITECTURE.md)  
+**Status:** Sketch (2026-08-09) — Gaps in §5 updated for Pick 3 docs onboard MVP  
+**Related:** [ADR-0018](../adr/0018-digichat-path-routing.md), [`frontend/digichat/ARCHITECTURE.md`](../../frontend/digichat/ARCHITECTURE.md), picks fit [`digichat-self-host-picks-fit.md`](digichat-self-host-picks-fit.md)  
 **Naming:** Digi module names are always lowercase in prose.
 
 ## Implementation plan
@@ -208,9 +208,14 @@ First-party digithings hosts (`digithings.ai` / `www.digithings.ai`) may skip em
 
 ### Still open (Follow-ups — not v1)
 
-- Runtime CSP `frame-ancestors`
-- GHCR for digikey / digigraph / digivault (Profile A without monorepo clone)
-- Corpus / crawl / OCR / vault ingest pipelines
+- Runtime CSP `frame-ancestors` (Pick 1)
+- GHCR for digikey / digigraph / digivault (Profile A without monorepo clone — Pick 2)
+- ~~Corpus / crawl / OCR / vault ingest pipelines~~ **MVP landed:** offline
+  `scripts/docs_onboard/` — plan
+  [`2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md),
+  runbook [`CLIENT-DOCS-ONBOARD.md`](../digichat/CLIENT-DOCS-ONBOARD.md),
+  ops index [`CLIENT_PIPELINES.md`](../ops/CLIENT_PIPELINES.md).
+  Remaining: Profile A Compose attach, richer crawl, digiquant entry (Pick 3 later).
 - CI automation of RELEASE-SMOKE
 - Helm / ACA stubs beyond Compose Profile B
 
@@ -234,6 +239,8 @@ Short backlog (file as separate `agent-task` issues; no epic required):
 ## See also
 
 - Client install: [`docs/digichat/INSTALL.md`](../digichat/INSTALL.md)
+- Client docs onboard: [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../digichat/CLIENT-DOCS-ONBOARD.md)
+- Picks fit: [`digichat-self-host-picks-fit.md`](digichat-self-host-picks-fit.md)
 - Product end-state: [`digichat-modular-frontend.md`](digichat-modular-frontend.md) §5
 - digithings operator host: [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md)
 - Path routing: [ADR-0018](../adr/0018-digichat-path-routing.md)

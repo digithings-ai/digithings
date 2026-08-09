@@ -94,11 +94,16 @@ Host must supply Azure identity for Foundry; do not put a Foundry API key in dig
 | Profile B (Foundry) | `docker compose -f infra/digichat-release/compose.profile-b.yml --env-file infra/digichat-release/.env.profile-b up -d` |
 | Local monorepo build | `make up-digichat` |
 | Client install guide | [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) |
+| Populate client docs (offline) | [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../docs/digichat/CLIENT-DOCS-ONBOARD.md) |
 | Post-publish smoke | [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md) |
 | Custom embed CSP hosts | [`INSTALL.md` § Custom embed parent hosts](../../docs/digichat/INSTALL.md#custom-embed-parent-hosts-csp) |
 
 digithings’ own Tunnel host remains the operator path in
 [`infra/digichat-digithings/`](../digichat-digithings/). Clients should prefer these overlays
 and [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md).
+
+Docs onboard (URL → digivault / digisearch) is an offline ops job beside Profile A —
+see [`CLIENT-DOCS-ONBOARD.md`](../../docs/digichat/CLIENT-DOCS-ONBOARD.md) and
+[`CLIENT_PIPELINES.md`](../../docs/ops/CLIENT_PIPELINES.md).
 
 See also [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md).
