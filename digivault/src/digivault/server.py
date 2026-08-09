@@ -52,7 +52,11 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="digivault",
-    description="Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags).",
+    description=(
+        "Obsidian-style markdown vault management for digithings "
+        "(frontmatter, wikilinks, backlinks, tags, lint). "
+        "Interactive docs: `/docs` (Swagger) and `/redoc`."
+    ),
     version=__version__,
 )
 install_metrics(app, service="digivault", version=__version__)

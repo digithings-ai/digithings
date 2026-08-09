@@ -9,6 +9,16 @@ build:
 up:
 	docker compose up -d
 
+# Pull prebuilt GHCR images (no local Dockerfile build). See infra/self-host/ and docs/DEPLOYMENT.md.
+.PHONY: up-ghcr up-ghcr-digichat pull-ghcr
+GHCR_COMPOSE := -f docker-compose.yml -f infra/self-host/compose.ghcr.yml
+pull-ghcr:
+	docker compose $(GHCR_COMPOSE) pull
+up-ghcr:
+	docker compose $(GHCR_COMPOSE) up -d
+up-ghcr-digichat:
+	docker compose $(GHCR_COMPOSE) --profile digichat up -d
+
 down:
 	docker compose down
 
@@ -130,11 +140,18 @@ seed-digisearch-edgar-dev-host:
 # Export then seed (requires stack up + DIGISEARCH_SEED_API_KEY; uses Docker ingest paths).
 edgar-digisearch-dev: export-edgar-digisearch-dev seed-digisearch-edgar-dev
 
-# Regenerate OpenAPI JSON for digigraph (requires editable digigraph + digibase).
-.PHONY: openapi-digigraph
-openapi-digigraph:
+# Export OpenAPI JSON for all FastAPI services → docs/openapi/<svc>.json
+# --check: fail if committed specs drift from app.openapi()
+.PHONY: openapi-export openapi-check openapi-digigraph
+openapi-export:
 	@mkdir -p docs/openapi
-	@python -c 'import json; from digigraph.server import app; open("docs/openapi/digigraph.json","w").write(json.dumps(app.openapi(), indent=2))'
+	@python scripts/export_openapi.py
+
+openapi-check:
+	@python scripts/export_openapi.py --check
+
+# Back-compat alias
+openapi-digigraph: openapi-export
 
 # Regenerate the digivault API-reference notes (docs/vision/api/) from the authored
 # /docs content (frontend/digithings-web/lib/apiDocs.ts + sharedDocs.ts). Commit the

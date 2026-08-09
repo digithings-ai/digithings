@@ -598,14 +598,54 @@ for hit in r.json()["results"]:
           },
         ],
       },
+      {
+        method: "GET",
+        path: "/api/conversations",
+        summary: "List persisted conversations (Docker BFF).",
+        auth: "session",
+      },
+      {
+        method: "POST",
+        path: "/api/conversations",
+        summary: "Create a conversation (Docker BFF).",
+        auth: "session",
+      },
+      {
+        method: "GET",
+        path: "/api/conversations/{id}",
+        summary: "Fetch one conversation (Docker BFF).",
+        auth: "session",
+      },
+      {
+        method: "DELETE",
+        path: "/api/conversations/{id}",
+        summary: "Delete a conversation (Docker BFF).",
+        auth: "session",
+      },
+      {
+        method: "GET",
+        path: "/api/ecosystem/config",
+        summary: "Ecosystem config for the chat shell.",
+        auth: "none / session",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/chat",
+        summary: "OpenAI-compatible chat proxy through the BFF.",
+        auth: "session",
+      },
+    ],
+    notes: [
+      "Committed OpenAPI: docs/openapi/digichat.json (authored; path existence checked in tests/contracts).",
+      "Self-host: make up-ghcr-digichat pulls ghcr.io/digithings-ai/digichat (see infra/self-host/compose.ghcr.yml).",
     ],
   },
 
   // ─────────────────────────────────────────────────────────────────────────
   digiclaw: {
-    authNote: "CLI-only — no HTTP service. A heartbeat runner pings service health and appends an immutable audit log.",
+    authNote: "CLI-only — no HTTP service / OpenAPI. Heartbeat runner pings service health and appends an immutable audit log. Container image: ghcr.io/digithings-ai/digiclaw (Compose profile heartbeat).",
     run: {
-      cli: "python -m digiclaw            # one cycle\ndocker compose --profile heartbeat up -d heartbeat",
+      cli: "python -m digiclaw            # one cycle\ndocker compose --profile heartbeat up -d heartbeat\n# GHCR: docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml --profile heartbeat up -d",
     },
     env: [
       { name: "DIGIGRAPH_URL", description: "digigraph base URL for health checks." },

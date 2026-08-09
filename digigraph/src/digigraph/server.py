@@ -86,7 +86,11 @@ def _allowed_origins() -> list[str]:
 
 app = FastAPI(
     title="digigraph",
-    description="Orchestration brain: run_digigraph_workflow (digiclaw custom skill)",
+    description=(
+        "Orchestration brain for digithings: LangGraph workflows, OpenAI-compatible chat, "
+        "and federated vertical tools (digisearch, digiquant, digivault). "
+        "Interactive docs: `/docs` (Swagger) and `/redoc`."
+    ),
     version=__version__,
 )
 install_metrics(app, service="digigraph", version=__version__)
