@@ -5,9 +5,26 @@ Install unit: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (not npm, not `:latest`).
 | File | Purpose |
 |---|---|
 | `compose.digichat-release.yml` | Override root Compose digichat to **pull** GHCR |
-| `compose.profile-a.yml` | Minimal Profile A (digigraph stack) — added in Task 3 |
+| `compose.profile-a.yml` | Minimal Profile A (digigraph stack) |
 | `compose.profile-b.yml` | Profile B digichat-only (Foundry) — added in Task 4 |
-| `.env.profile-a.example` / `.env.profile-b.example` | Env templates |
+| `.env.profile-a.example` | Env template for Profile A |
+| `.env.profile-b.example` | Env template for Profile B — added in Task 4 |
+
+## Image inventory (Profile A)
+
+| Service | Source |
+|---|---|
+| digichat | **GHCR** `ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}` |
+| digichat-db | Public `postgres:16-alpine` |
+| digikey-blocklist-redis | Public `redis:7-alpine` |
+| litellm | Public `docker.litellm.ai/berriai/litellm:main-stable` |
+| digikey / digigraph / digivault | **Build from monorepo** (`digi-*:latest`) — no GHCR tags yet |
+
+v1 honesty: external clients who want Profile A (digigraph) still need a clone of this
+monorepo to build the Python stack services. digichat Node itself must **not** require a
+monorepo build — it always pulls the pinned GHCR image. Stack-service GHCR is a follow-up.
+
+Optional: LiteLLM cache Redis via `--profile litellm-cache` and `REDIS_URL=redis://redis:6379`.
 
 ## Pull pinned digichat (monorepo operators)
 
@@ -26,4 +43,29 @@ The overlay sets `image: ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}` an
 
 Tear down: `make digichat-release-down VERSION=0.9.3`.
 
-See [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) (added in a later task) and [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md).
+## Profile A — digigraph stack
+
+Self-contained compose under this directory (paths `../..` → monorepo root). Flattened
+profiles: one `up -d --build` brings digichat + db + digikey + digigraph + LiteLLM + digivault.
+
+```text
+Browser → digichat → digigraph → digillm/LiteLLM
+                           └─ digivault_hub → digivault
+```
+
+```bash
+cp infra/digichat-release/.env.profile-a.example \
+   infra/digichat-release/.env.profile-a
+# edit AUTH_SECRET, DIGIKEY_BFF_TOKEN, DIGICHAT_EMBED_TENANTS, provider keys
+
+docker compose -f infra/digichat-release/compose.profile-a.yml \
+  --env-file infra/digichat-release/.env.profile-a up -d --build
+```
+
+Does **not** start digiquant / digisearch / digismith / heartbeat / observability.
+
+digithings’ own Tunnel host remains the operator path in
+[`infra/digichat-digithings/`](../digichat-digithings/). Clients should prefer this overlay
+(and [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md), added in a later task).
+
+See also [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md).

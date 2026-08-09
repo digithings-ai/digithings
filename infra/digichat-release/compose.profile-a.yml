@@ -1,0 +1,232 @@
+# Profile A — minimal digigraph-backed digichat install
+#
+# Services: digichat (GHCR) + digichat-db + digikey (+ blocklist Redis) +
+# digigraph + LiteLLM + digivault. Does NOT start digiquant / digisearch /
+# digismith / heartbeat / observability.
+#
+# Honesty (v1): digichat pulls from GHCR; digikey / digigraph / digivault still
+# build from this monorepo (no GHCR tags yet). Run from the repo root:
+#
+#   cp infra/digichat-release/.env.profile-a.example \
+#      infra/digichat-release/.env.profile-a
+#   # edit secrets, then:
+#   docker compose -f infra/digichat-release/compose.profile-a.yml \
+#     --env-file infra/digichat-release/.env.profile-a up -d --build
+#
+# Paths below are relative to this file (Compose resolves against the compose
+# file directory): ../.. = monorepo root.
+
+name: digichat-profile-a
+
+services:
+  digikey-blocklist-redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  digikey:
+    build:
+      context: ../..
+      dockerfile: digikey/Dockerfile
+    image: digi-digikey:latest
+    ports:
+      - "127.0.0.1:8005:8005"
+    env_file:
+      - path: .env.profile-a
+        required: false
+    environment:
+      DIGIKEY_DATABASE_URL: ${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}
+      DIGIKEY_ISSUER: ${DIGIKEY_ISSUER:-http://digikey:8005}
+      DIGIKEY_BLOCKLIST_REDIS_URL: ${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://digikey-blocklist-redis:6379/0}
+      DIGIKEY_REQUIRE_BLOCKLIST: ${DIGIKEY_REQUIRE_BLOCKLIST:-0}
+      DIGIKEY_LITELLM_PROXY_KEY: ${DIGIKEY_LITELLM_PROXY_KEY:-${LITELLM_MASTER_KEY:-}}
+      DIGIKEY_ADMIN_TOKEN: ${DIGIKEY_ADMIN_TOKEN:-}
+      DIGIKEY_BFF_TOKEN: ${DIGIKEY_BFF_TOKEN:?set DIGIKEY_BFF_TOKEN}
+      DIGIKEY_ALLOW_DEV_GLOBAL: ${DIGIKEY_ALLOW_DEV_GLOBAL:-0}
+      DIGIKEY_ALLOW_EPHEMERAL_KEY: ${DIGIKEY_ALLOW_EPHEMERAL_KEY:-1}
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - digikey_data:/data
+    depends_on:
+      digikey-blocklist-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8005/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  digivault:
+    build:
+      context: ../..
+      dockerfile: digivault/Dockerfile
+    image: digi-digivault:latest
+    ports:
+      - "127.0.0.1:8004:8004"
+    env_file:
+      - path: .env.profile-a
+        required: false
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DIGIVAULT_ROOT: ${DIGIVAULT_ROOT:-/data/vault}
+      DIGIKEY_JWKS_URL: ${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+      DIGIKEY_ISSUER: ${DIGIKEY_ISSUER:-http://digikey:8005}
+      DIGIKEY_AUDIENCE: ${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      DIGIKEY_PUBLIC_KEY_PEM: ${DIGIKEY_PUBLIC_KEY_PEM:-}
+    volumes:
+      - digivault_data:/data/vault
+    depends_on:
+      digikey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8004/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  litellm:
+    image: docker.litellm.ai/berriai/litellm:main-stable
+    ports:
+      - "127.0.0.1:4000:4000"
+    env_file:
+      - path: .env.profile-a
+        required: false
+    environment:
+      # Optional cache: set REDIS_URL=redis://redis:6379 and enable the
+      # commented `redis` service below (or pass --profile litellm-cache).
+      REDIS_URL: ${REDIS_URL:-}
+    command: ["--config", "/app/config/litellm.yaml", "--port", "4000"]
+    volumes:
+      - ../../config:/app/config:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=4)\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+
+  # Optional LiteLLM cache Redis (enable with: --profile litellm-cache)
+  redis:
+    image: redis:7-alpine
+    profiles:
+      - litellm-cache
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  digigraph:
+    build:
+      context: ../..
+      dockerfile: digigraph/Dockerfile
+    image: digi-digigraph:latest
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - path: .env.profile-a
+        required: false
+    environment:
+      # Profile A: digivault on; digiquant / digisearch / digismith off
+      DIGIVAULT_URL: ${DIGIVAULT_URL:-http://digivault:8004}
+      DIGIQUANT_URL: ${DIGIQUANT_URL:-}
+      DIGISEARCH_URL: ${DIGISEARCH_URL:-}
+      DIGISMITH_URL: ${DIGISMITH_URL:-}
+      DIGIKEY_JWKS_URL: ${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+      DIGIKEY_ISSUER: ${DIGIKEY_ISSUER:-http://digikey:8005}
+      DIGIKEY_AUDIENCE: ${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      DIGIKEY_PUBLIC_KEY_PEM: ${DIGIKEY_PUBLIC_KEY_PEM:-}
+      OPENAI_API_BASE: http://litellm:4000/v1
+      DIGI_CONFIG_PATH: /app/config
+      DIGI_PROJECT_CONFIG: ${DIGI_PROJECT_CONFIG:-}
+      DIGI_LLM_MODE: ${DIGI_LLM_MODE:-test}
+      DIGI_ENABLE_DEBUG_ENDPOINTS: ${DIGI_ENABLE_DEBUG_ENDPOINTS:-0}
+      DIGI_ENABLE_THREAD_API: ${DIGI_ENABLE_THREAD_API:-0}
+      LITELLM_PROXY_API_KEY: ${LITELLM_PROXY_API_KEY:-}
+      PYTHONUNBUFFERED: "1"
+      AUDIT_LOG_PATH: /audit/events.jsonl
+    volumes:
+      - ../../config:/app/config:ro
+      - digigraph_audit:/audit
+    depends_on:
+      digikey:
+        condition: service_healthy
+      digivault:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  digichat-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: digichat
+      POSTGRES_PASSWORD: ${DIGICHAT_POSTGRES_PASSWORD:-digichat}
+      POSTGRES_DB: digichat
+    volumes:
+      - digichat_pg:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U digichat -d digichat"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  digichat:
+    image: ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION:?set DIGICHAT_VERSION e.g. 0.9.3}
+    pull_policy: always
+    ports:
+      - "${DIGICHAT_PUBLISH_HOST:-127.0.0.1}:${DIGICHAT_PUBLISH_PORT:-3005}:3000"
+    env_file:
+      - path: .env.profile-a
+        required: false
+    environment:
+      NODE_ENV: production
+      AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
+      AUTH_URL: ${AUTH_URL:-http://127.0.0.1:3005}
+      DIGICHAT_DATABASE_URL: postgresql://digichat:${DIGICHAT_POSTGRES_PASSWORD:-digichat}@digichat-db:5432/digichat
+      DIGICHAT_AUTO_MIGRATE: ${DIGICHAT_AUTO_MIGRATE:-1}
+      DIGICHAT_EMBED_ENABLED: ${DIGICHAT_EMBED_ENABLED:-1}
+      DIGICHAT_EMBED_TENANTS: ${DIGICHAT_EMBED_TENANTS:-}
+      DIGIGRAPH_INTERNAL_URL: ${DIGIGRAPH_INTERNAL_URL:-http://digigraph:8000}
+      DIGIKEY_URL: ${DIGIKEY_URL:-http://digikey:8005}
+      DIGIKEY_BFF_TOKEN: ${DIGIKEY_BFF_TOKEN:?set DIGIKEY_BFF_TOKEN}
+      DIGIGRAPH_UPSTREAM_API_KEY: ${DIGIGRAPH_UPSTREAM_API_KEY:-}
+    depends_on:
+      digichat-db:
+        condition: service_healthy
+      digikey:
+        condition: service_healthy
+      digigraph:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3000/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+volumes:
+  digikey_data:
+  digivault_data:
+  digigraph_audit:
+  digichat_pg:

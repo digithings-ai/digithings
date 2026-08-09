@@ -271,7 +271,7 @@ EOF
 - Consumes: Existing service images / Dockerfiles for digikey, digigraph, LiteLLM, digivault from root Compose (or documented build-from-repo for stack services until those are also GHCR-published — digichat image is the primary client install unit; stack services may still build from source in v1 if no GHCR tags exist).
 - Produces: Named minimal Profile A: digichat + digichat-db + digikey + digigraph + LiteLLM + digivault only (optional Redis via comment / profile).
 
-- [ ] **Step 1: Inventory which stack services already have pullable images**
+- [x] **Step 1: Inventory which stack services already have pullable images**
 
 Run:
 
@@ -285,7 +285,7 @@ Document in README:
 - digichat-db / digikey data → postgres / local volumes
 - digikey / digigraph / digivault → if only `build:` exists today, Profile A overlay **builds those from repo** OR documents “clone monorepo for Profile A stack services until GHCR exists”. Prefer honesty: v1 Profile A for external clients who want digigraph may still need the monorepo for Python services; digichat Node itself must not require a monorepo build.
 
-- [ ] **Step 2: Write `.env.profile-a.example`**
+- [x] **Step 2: Write `.env.profile-a.example`**
 
 ```bash
 # Profile A — digigraph-backed digichat
@@ -313,7 +313,7 @@ DIGIVAULT_URL=http://digivault:8004
 # GROQ_API_KEY=...
 ```
 
-- [ ] **Step 3: Write `compose.profile-a.yml`**
+- [x] **Step 3: Write `compose.profile-a.yml`**
 
 Self-contained or monorepo-relative compose that:
 1. Includes digichat from GHCR (`v${DIGICHAT_VERSION}`)
@@ -330,7 +330,7 @@ Browser → digichat → digigraph → digillm/LiteLLM
                            └─ digivault_hub → digivault
 ```
 
-- [ ] **Step 4: Validate config + document operator vs client**
+- [x] **Step 4: Validate config + document operator vs client**
 
 Run:
 
@@ -354,7 +354,7 @@ themselves should use [`infra/digichat-release/`](../digichat-release/) and
 [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) (Profile A or B).
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add infra/digichat-release/compose.profile-a.yml \
