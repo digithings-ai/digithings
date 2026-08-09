@@ -1,97 +1,103 @@
-# Corpus / ingest → digivault Implementation Plan
+# Client docs onboard (Pick 3) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship a client-side corpus ingest path that turns a website crawl and PDF text into page-level digivault notes, so a self-hosted Profile A digichat → digigraph → digivault_search_notes stack can answer from **that client's** documentation — without forking digichat or growing digithings-hosted per-client backends.
+**Goal:** Ship a reusable offline ops pipeline under `scripts/docs_onboard/` that turns a client website URL into documentation-focused vault notes and/or a digisearch index — without creating a digicorpus peer module — so Profile A digichat → digigraph → digivault (and/or digisearch) can ground answers on that client's docs.
 
-**Architecture:** Ingest is a **separate offline/job package** (`digicorpus`) that writes markdown notes into the client's `DIGIVAULT_ROOT` via digivault's core `Vault` (preferred) or `POST /v1/notes` (remote). Runtime chat stays unchanged: digichat BFF → digigraph → `digivault_hub` → `digivault_search_notes`. digivault today searches Supabase FTS only; MVP therefore includes a **local filesystem search fallback** so Profile A clients without digithings' core Supabase still ground answers on ingested notes. OCR, images, and base64 embeds are Phase 2.
+**Architecture:** Pick 3 is an **offline ops workflow**, not a Digi peer module. Leaf scripts under `scripts/docs_onboard/` scrape (via digifetch), classify/prioritize docs pages, fetch PDFs/docs, write digivault notes, and/or POST digisearch ingest. A parent orchestrator (`run_onboard.py`) pieces leaves for “URL → docs-focused crawl → dual sink.” Module roles stay fixed: digifetch = transport; digisearch = parse/OCR/chunk/embed/index; digivault = Obsidian notes + graph + MCP. Client-specific config lives in `docs/projects/<client>/` (or private `projects/`), never as pipeline code. digivault **local** filesystem search (when `DIGIVAULT_ROOT` is set) is a digivault task required for Profile A chat grounding — not a scrape script.
 
-**Tech Stack:** Python 3.12, Pydantic v2, digivault core (`Vault.create_note`), digifetch (HTTP crawl transport), html-to-markdown (or stdlib + selective parser), pdfplumber (PDF text), digigraph `digivault_hub`, Profile A Compose (`DIGIVAULT_ROOT` volume). Optional later: pdf2image + pytesseract (OCR), image assets under vault `_assets/`.
+**Tech Stack:** Python 3.12, Pydantic v2, digifetch (`HttpFetcher`), digivault core (`Vault`), digisearch (`POST /ingest` + in-process parsers for vault PDF text), stdlib HTML parsing, pytest under `tests/scripts/docs_onboard/`. Optional later: Profile A Compose attach; digiquant as another pipeline entry.
 
-**Spec input:** [`docs/architecture/digichat-modular-frontend.md`](../../architecture/digichat-modular-frontend.md) §5; [`docs/architecture/digichat-self-hosted-release.md`](../../architecture/digichat-self-hosted-release.md) (corpus listed as open Follow-up). digivault reference: [`digivault/ARCHITECTURE.md`](../../../digivault/ARCHITECTURE.md), [`digivault/AGENTS.md`](../../../digivault/AGENTS.md). digigraph hub: `digigraph/src/digigraph/vertical_orchestrator/digivault_hub.py`.
+**Spec input:** Agreed Pick 3 product model (this plan — authoritative). Fit synthesis: [`docs/architecture/digichat-self-host-picks-fit.md`](../../architecture/digichat-self-host-picks-fit.md). Product sketches: [`digichat-modular-frontend.md`](../../architecture/digichat-modular-frontend.md) §5; [`digichat-self-hosted-release.md`](../../architecture/digichat-self-hosted-release.md). Module refs: [`digifetch/ARCHITECTURE.md`](../../../digifetch/ARCHITECTURE.md), [`digisearch/ARCHITECTURE.md`](../../../digisearch/ARCHITECTURE.md), [`digivault/ARCHITECTURE.md`](../../../digivault/ARCHITECTURE.md). Precedent scripts: [`scripts/seed_digisearch_local.py`](../../../scripts/seed_digisearch_local.py), [`scripts/reindex_digithings_guide.py`](../../../scripts/reindex_digithings_guide.py), [`scripts/provider_review/`](../../../scripts/provider_review/).
 
 ## Global Constraints
 
-- Digi module names are always lowercase in prose (`digichat`, `digigraph`, `digikey`, `digivault`, `digicorpus`, `digifetch`, `digithings`) — never DigiChat / DigiVault.
-- **Do not design or ship a digichat fork.** digichat stays the modular frontend + BFF; corpus work never lands under `frontend/digichat/` as a second app.
-- digichat does **not** grow per-client backends. Ingest runs in the **client's** environment (or as a one-shot job digithings helps them run against **their** vault).
-- digivault / digisearch are **not** digichat HTTP backends — they are digigraph tools (`digivault_hub` → digivault `:8004`).
-- digivault core hard deps stay `pydantic` + `pyyaml` only. Crawl/PDF/OCR deps must **not** enter digivault core; they live in `digicorpus` (and digivault `[service]` only if a thin local-search helper needs nothing heavier than stdlib).
-- Polars only if tabular work appears (unlikely for MVP). No pandas.
-- Pydantic v2 models everywhere — no bare dicts on public surfaces.
+- Digi module names are always lowercase in prose (`digichat`, `digigraph`, `digikey`, `digivault`, `digisearch`, digifetch, digithings) — never DigiChat / DigiVault / DigiCorpus.
+- **There is no digicorpus package.** Do not create `digicorpus/`, do not register `component:digicorpus`, do not name a Digi peer module for this work.
+- Pipeline code lives under **`scripts/docs_onboard/`** (shared, multi-client). Client manifests/config live under **`docs/projects/<client>/`** or private **`projects/<client>/`**.
+- digifetch = web fetch/scrape **transport only** (no site policy, no PDF parse). digisearch = document intelligence (parse, OCR, chunk, embed, index). digivault = notes + graph + agent tools over notes.
+- digichat does **not** grow crawl/ingest backends. digigraph does **not** gain a live crawl tool in MVP (batch stays offline).
+- digivault core hard deps stay `pydantic` + `pyyaml`. Crawl/PDF deps must not enter digivault core; OCR stays behind digisearch (`DIGISEARCH_OCR_ENABLED` / `digisearch[ocr]`).
+- digisearch `POST /ingest` `source` is a **server-side filesystem path** — scripts download to a workdir first; never pass a raw URL as `source` without a sandboxed fetch path in digisearch itself.
+- Polars only if tabular work appears. No pandas. Pydantic v2 on public script surfaces — no bare dicts.
 - Never touch live-trading paths.
 - Every shipping PR links a GitHub Issue (`task/<N>-slug` or `Fixes #<N>`).
-- Human gate if adding new network-capable hard deps to digivault core (prefer extras / new package).
+- Pick 1 (runtime CSP) and Pick 2 (GHCR Profile A) are **orthogonal** — this plan does not change embed CSP or stack image publish.
 
 ---
 
-## Fit with picks 1–2
+## Architectural change vs prior plan
 
-| Pick | What it delivers | Seam with this plan (corpus) |
+| Prior framing (superseded) | Agreed model (this plan) |
+|---|---|
+| New Digi peer module `digicorpus/` with pyproject, AGENTS, CLI entrypoint | **Offline ops scripts** under `scripts/docs_onboard/` |
+| digisearch out of MVP; copy pdfplumber patterns into digicorpus | **digisearch owns** parse/OCR/index; scripts call it |
+| Vault-only sink | **Dual sink optional:** digivault notes and/or digisearch vector index |
+| Every crawled page → note | **Classify/prioritize** — docs pages first; skip noise; map metadata to source URL |
+| Client logic baked into package | **Client manifests** under `docs/projects/<client>/` |
+
+---
+
+## Fit with picks 1–2 (orthogonal)
+
+| Pick | Delivers | Seam with Pick 3 |
 |---|---|---|
-| **Pick 1 — embed any parent** | Stock digichat GHCR works for arbitrary parent hosts (runtime CSP `frame-ancestors` / tenant-driven hosts) so a client's product site can iframe the same digichat release. | Corpus does **not** change embed CSP or `DIGICHAT_EMBED_TENANTS`. Client wires parent host + token + `backend.type: digigraph`; ingested vault content is what the agent retrieves. No digichat code required for ingest. |
-| **Pick 2 — GHCR / Profile A stack** | Client pulls digichat (+ eventually digikey/digigraph/digivault images) and runs Profile A: digichat → digigraph → digivault. | Corpus writes into the **same** `DIGIVAULT_ROOT` volume Profile A mounts. Runtime path is already `digivault_search_notes` via `digivault_hub`. digicorpus is a **job/CLI beside** the stack, not a new digichat service and not a Compose service that must scale with chat RPS. |
-| **Pick 3 — this plan** | Crawl / PDF → page notes in **their** digivault; same digichat release. | Depends on Pick 2's Profile A having digivault reachable and `DIGIVAULT_URL` set on digigraph. Benefits from Pick 1 so the parent site can embed that install. |
+| **1 — runtime CSP** | Stock digichat GHCR allows any parent via `DIGICHAT_EMBED_HOSTS` / tenant host keys | Docs onboard does **not** touch CSP. Parent site iframes stock digichat; ingested content is what the agent retrieves. |
+| **2 — GHCR Profile A** | Client pulls digikey / digigraph / digivault; Profile A without monorepo `docker compose build` | Onboard writes into the **same** `DIGIVAULT_ROOT` volume (and/or a digisearch index). Runtime remains digichat → digigraph → tools. Scripts run **beside** the stack as a job, not a chat-tier Compose service. |
+| **3 — this plan** | Offline URL → docs crawl → vault and/or digisearch | E2E chat smoke wants Pick 2’s digivault up. digivault **local search** (Task 1) can land earlier. Soft benefit from Pick 1 for parent-site demos. |
 
 ```text
-Pick 1: parent site ──iframe──► digichat (stock release)
-Pick 2: digichat ──► digigraph ──digivault_hub──► digivault :8004
-Pick 3: digicorpus job ──writes──► DIGIVAULT_ROOT ──(search)──► digivault_search_notes
+Pick 1: parent site ──iframe──► digichat (stock release)          [orthogonal]
+Pick 2: digichat ──► digigraph ──► digivault / digisearch tools   [orthogonal stack]
+Pick 3: scripts/docs_onboard ──writes──► DIGIVAULT_ROOT and/or digisearch index
 ```
 
-**Non-seams (do not couple):** digicorpus must not import digichat Node/TS; digichat must not call digicorpus; digigraph must not grow crawl tools in MVP (ingest stays offline).
+**Non-seams:** scripts must not import digichat Node/TS; digichat must not call docs_onboard; digigraph must not grow crawl tools in MVP.
 
 ---
 
-## Component ownership
+## Module roles (do not blur)
 
-| Piece | Owner | Rationale |
+| Module | Owns | Does not own |
 |---|---|---|
-| Crawl / PDF extract / note shaping / CLI | **New package `digicorpus/`** | Heavy optional deps; client-run job; keeps digivault core FastAPI-free and dep-light. Mirrors digifetch / digiskills library shape. |
-| Note persistence semantics | **digivault core** (`Vault.create_note`, frontmatter, `_safe_path`) | Already owns vault layout; ingest must not invent a second note format. |
-| HTTP note API (optional remote write) | **digivault service** `POST /v1/notes` (`digivault:write`) | When vault is only reachable over the stack network. |
-| Chat-time retrieval | **digivault** `digivault_search_notes` + **digigraph** `digivault_hub` | Unchanged tool name; add **local FTS/keyword fallback** so client vaults work without digithings Supabase. |
-| digichat | **No changes for MVP** | Activity mapper for `digivault_search_notes` already exists under `adapters/digithings/activity/`. |
-| digisearch | **Out of MVP path** | Do not require digisearch for doc chatbots. May **copy patterns** from `digisearch/ingestion/parsers/pdf.py` (pdfplumber → OCR) into digicorpus — do **not** import digisearch from digicorpus. |
-| digifetch | **Transport only** | digicorpus composes digifetch HTTP fetch/retry/ratelimit for crawl; site-specific URL policy stays in digicorpus. |
-
-**Rejected alternatives**
-
-- ❌ Scripts dumped only under `digivault/scripts/` with pdfplumber/OCR deps — pollutes digivault packaging and AGENTS import-cost rules.
-- ❌ digichat API route that crawls on demand — grows digichat backends; violates §5 hard rule.
-- ❌ digigraph tool `corpus_ingest` in MVP — mixes online orchestration with long batch jobs; rate limits and timeouts fight crawls.
+| **digifetch** | HTTP fetch/download, retry, rate limit, optional browser session | URL allowlists, docs-vs-skip policy, HTML→note shaping, PDF OCR |
+| **digisearch** | Parse, OCR, chunk, embed, vector index (`POST /ingest`, parsers) | Site crawl BFS, vault note graph, client manifest schema |
+| **digivault** | Markdown notes, frontmatter, wikilinks, MCP/orchestrator tools, **local search** when `DIGIVAULT_ROOT` set | Scraping, PDF libraries in core |
+| **scripts/docs_onboard** | Ops orchestration + classification + workdir layout + sink writers | New Digi service / peer module |
+| **docs/projects/\<client\>** | Seed URL, allow hosts, sink flags, index name, path prefixes | Pipeline implementation |
 
 ---
 
-## Critical gap (must fix for end-to-end MVP)
+## Proposed script tree
 
-Today `digivault_search_notes` **bypasses `DIGIVAULT_ROOT`** and queries Supabase FTS (`SupabaseStore.search` / `search_architecture_notes`). Profile A clients writing notes to a local volume would **ingest successfully but chat would not see them** unless they also run digithings' core Supabase mirror.
+```text
+scripts/docs_onboard/
+  __init__.py
+  models.py              # Pydantic: OnboardManifest, DiscoveredPage, PageClass, WorkItem, OnboardResult
+  workspace.py           # Workdir layout: pages.jsonl, assets/, notes meta map
+  scrape_site.py         # Leaf: URL → discovered pages/assets (digifetch transport)
+  classify_pages.py      # Leaf: prioritize docs vs skip; attach class + score
+  fetch_docs.py          # Leaf: download PDFs/other docs into workdir/assets
+  write_vault_notes.py   # Leaf: classified docs → digivault notes (+ source_url metadata)
+  write_search_index.py  # Leaf: workdir files → digisearch POST /ingest (+ source_url metadata)
+  run_onboard.py         # Parent: load manifest → scrape → classify → fetch → sinks
 
-**MVP fix:** When `DIGIVAULT_ROOT` is set, `digivault_search_notes` searches the local vault (simple ranked keyword / title+body scan is enough for v1). Prefer local when root is configured; keep Supabase path when root is unset and Supabase creds exist (digithings.ai reference install). Document the precedence in `digivault/ARCHITECTURE.md`.
+docs/ops/CLIENT_PIPELINES.md          # Index of offline client ops workflows
+docs/digichat/CLIENT-DOCS-ONBOARD.md  # Operator runbook for this pipeline
+docs/projects/<client>/onboard.yaml   # Per-client manifest (example + real clients)
+```
 
----
+CLI invocation convention (match existing scripts):
 
-## MVP vs later split
+```bash
+python scripts/docs_onboard/run_onboard.py \
+  --manifest docs/projects/acme/onboard.yaml \
+  --workdir /tmp/acme-onboard \
+  --vault-root /data/vault \
+  --sinks vault,search
+```
 
-### MVP (ship first — working client doc chatbot)
-
-1. Local filesystem backend for `digivault_search_notes` (gap above).
-2. `digicorpus` package scaffold + note writer (idempotent upsert by stable note name).
-3. Website crawl (same-origin allowlist, depth/limit caps) → one markdown note per HTML page.
-4. PDF text extract (pdfplumber / pymupdf) → one note per PDF **page** (or per doc with page markers if page count is huge — default **per page**).
-5. Frontmatter contract: `title`, `tags`, `source_url` / `source_path`, `ingested_at`, `content_type`.
-6. CLI: `digicorpus crawl …` and `digicorpus pdf …` writing into `--vault-root` (or `DIGIVAULT_ROOT`).
-7. Operator runbook: run ingest against Profile A volume; smoke digigraph tool search.
-8. Unit tests with `tmp_path` fixtures — no live network in CI.
-
-### Later (Phase 2 — images / OCR / richness)
-
-1. OCR fallback for scanned PDFs (`digicorpus[ocr]` → pdf2image + pytesseract), patterned after digisearch's gated OCR.
-2. Image extraction from HTML/PDF → vault `_assets/<note>/…` plus markdown image links; base64 embeds only when asset files are impractical (size-capped).
-3. Incremental re-crawl (etag / content-hash skip), sitemap.xml seed, robots.txt respect hardening.
-4. Optional `POST /v1/notes` batch writer with digikey JWT for remote vaults.
-5. Optional sync job to Supabase for digithings' own mirrored vault (not required for clients).
-6. Helm/k8s CronJob example beside Compose.
+Leaf scripts are also runnable alone for debugging (same flags subset).
 
 ---
 
@@ -99,41 +105,41 @@ Today `digivault_search_notes` **bypasses `DIGIVAULT_ROOT`** and queries Supabas
 
 | File | Responsibility |
 |---|---|
-| `digicorpus/pyproject.toml` | Package metadata; deps: pydantic, digivault (path/editable), digifetch; extras: `pdf`, `ocr`, `dev` |
-| `digicorpus/ARCHITECTURE.md` | Module map, note frontmatter contract, CLI, non-goals |
-| `digicorpus/AGENTS.md` | Pre-flight, anti-patterns (no digichat imports, no digisearch imports) |
-| `digicorpus/src/digicorpus/models.py` | Pydantic: `IngestSource`, `PageDocument`, `IngestResult`, `IngestConfig` |
-| `digicorpus/src/digicorpus/note_writer.py` | Map `PageDocument` → vault note name + frontmatter + body; create/overwrite via `Vault` |
-| `digicorpus/src/digicorpus/naming.py` | Stable slug from URL or PDF path+page (filesystem-safe, unique) |
-| `digicorpus/src/digicorpus/html_extract.py` | HTML bytes → title + main text markdown (boilerplate strip) |
-| `digicorpus/src/digicorpus/crawl.py` | BFS crawl using digifetch; allowlist host; depth/page caps |
-| `digicorpus/src/digicorpus/pdf_text.py` | PDF bytes → list of page texts (pdfplumber; optional pymupdf) |
-| `digicorpus/src/digicorpus/cli.py` | Typer CLI entrypoints |
-| `digicorpus/tests/` | Unit tests (`tmp_path`, fake HTML/PDF fixtures) |
-| `digivault/src/digivault/local_search.py` | Ranked keyword search over filesystem vault notes |
-| `digivault/src/digivault/server.py` | `digivault_search_notes` precedence: local root → else Supabase |
-| `digivault/src/digivault/orchestrator_tools.py` | Update tool description (local vault and/or Supabase) |
+| `scripts/docs_onboard/models.py` | Shared Pydantic models + manifest load |
+| `scripts/docs_onboard/workspace.py` | Atomic JSONL write helpers; workdir paths |
+| `scripts/docs_onboard/scrape_site.py` | BFS crawl via digifetch; emit `pages.jsonl` |
+| `scripts/docs_onboard/classify_pages.py` | Heuristic docs priority; rewrite JSONL with `page_class` |
+| `scripts/docs_onboard/fetch_docs.py` | Download PDF/doc URLs into `assets/` |
+| `scripts/docs_onboard/write_vault_notes.py` | HTML/PDF → vault notes with source metadata |
+| `scripts/docs_onboard/write_search_index.py` | Assets + HTML exports → digisearch ingest |
+| `scripts/docs_onboard/run_onboard.py` | Parent orchestrator |
+| `tests/scripts/docs_onboard/test_*.py` | Unit tests (no network) |
+| `digivault/src/digivault/local_search.py` | Filesystem keyword search for `digivault_search_notes` |
+| `digivault/src/digivault/server.py` | Search precedence: local root → else Supabase |
 | `digivault/ARCHITECTURE.md` | Document search precedence |
-| `docs/digichat/CORPUS-INGEST.md` | Client operator runbook (Profile A volume + digicorpus CLI) |
-| `docs/architecture/digichat-self-hosted-release.md` | Mark corpus Follow-up addressed / link plan |
-| `tests/dv/test_local_search.py` | digivault local search unit tests |
-| `scripts/project_routing.json` / `scripts/ci_paths.yaml` | Register `digicorpus` when package lands (follow digifetch precedent) |
+| `docs/ops/CLIENT_PIPELINES.md` | Ops workflow index |
+| `docs/digichat/CLIENT-DOCS-ONBOARD.md` | Client operator runbook |
+| `docs/projects/example-docs-client/onboard.yaml` | Example manifest (public dogfood shape) |
+| `docs/architecture/digichat-self-host-picks-fit.md` | Pick 3 section rewritten off digicorpus |
+| `docs/architecture/digichat-self-hosted-release.md` | Mark corpus follow-up → this plan |
 
 ---
 
 ### Task 1: digivault local search for `digivault_search_notes`
 
+**Why in this plan:** Profile A clients write notes to a volume. Today `digivault_search_notes` ignores `DIGIVAULT_ROOT` and queries Supabase FTS only — ingest would succeed and chat would miss it. This is a **digivault** change, not a scrape script.
+
 **Files:**
 - Create: `digivault/src/digivault/local_search.py`
 - Create: `tests/dv/test_local_search.py`
-- Modify: `digivault/src/digivault/server.py` (orchestrator_invoke branch for `TOOL_VAULT_SEARCH_NOTES`)
+- Modify: `digivault/src/digivault/server.py` (`TOOL_VAULT_SEARCH_NOTES` branch)
 - Modify: `digivault/src/digivault/orchestrator_tools.py` (tool description)
 - Modify: `digivault/ARCHITECTURE.md` (search precedence)
-- Modify: `tests/dv/test_server.py` (keep Supabase tests; add local-root path)
+- Modify: `tests/dv/test_server.py` (local-root path; keep Supabase fakes)
 
 **Interfaces:**
-- Consumes: `Vault` note index + note file bodies under `DIGIVAULT_ROOT`; existing `VaultSearchHit` shape from `supabase_store.py` (reuse so digigraph/tool callers see the same hit schema).
-- Produces: `search_local_vault(vault: Vault, query: str, *, limit: int) -> list[VaultSearchHit]` used by `orchestrator_invoke` when `DIGIVAULT_ROOT` is set.
+- Consumes: `Vault` under `DIGIVAULT_ROOT`; existing `VaultSearchHit` from `digivault.supabase_store`.
+- Produces: `search_local_vault(vault: Vault, query: str, *, limit: int) -> list[VaultSearchHit]`. Precedence: if `DIGIVAULT_ROOT` set → local; else Supabase.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -173,7 +179,7 @@ def test_search_local_vault_ranks_title_and_body(tmp_path: Path) -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/dv/test_local_search.py::test_search_local_vault_ranks_title_and_body -v`  
-Expected: FAIL with `ModuleNotFoundError: digivault.local_search` (or import error).
+Expected: FAIL with `ModuleNotFoundError: No module named 'digivault.local_search'`.
 
 - [ ] **Step 3: Implement `local_search.py`**
 
@@ -220,7 +226,6 @@ def search_local_vault(vault: Vault, query: str, *, limit: int = 7) -> list[Vaul
             score += float(counts.get(t, 0))
         if score <= 0:
             continue
-        tags = tuple(note.tags)
         scored.append(
             VaultSearchHit(
                 vault_path=note.rel_path,
@@ -228,7 +233,7 @@ def search_local_vault(vault: Vault, query: str, *, limit: int = 7) -> list[Vaul
                 note_type="local",
                 summary=(body.strip().split("\n") or [""])[0][:240],
                 body_markdown=body,
-                tags=tags,
+                tags=tuple(note.tags),
                 wikilinks=tuple(link.target for link in note.outlinks),
                 rank=score,
             )
@@ -254,6 +259,8 @@ In `digivault/src/digivault/server.py`, replace the Supabase-only branch for `TO
 
         root = (os.environ.get("DIGIVAULT_ROOT") or "").strip()
         if root:
+            from digivault.local_search import search_local_vault
+
             hits = search_local_vault(_open_vault(), query, limit=limit)
         else:
             hits = _open_supabase_store().search(query, limit=limit)
@@ -261,18 +268,18 @@ In `digivault/src/digivault/server.py`, replace the Supabase-only branch for `TO
         return OrchestratorInvokeResponse(ok=True, tool=tool, data=data)
 ```
 
-Update `orchestrator_tools.py` description to say: searches the configured local vault (`DIGIVAULT_ROOT`) when set; otherwise Supabase FTS when credentials exist.
+Update `orchestrator_tools.py` description: searches the configured local vault (`DIGIVAULT_ROOT`) when set; otherwise Supabase FTS when credentials exist. Document precedence in `digivault/ARCHITECTURE.md`.
+
+> Note: prefer a top-of-module import for `search_local_vault` if that does not create a cycle; the inline import above is only acceptable if a cycle is documented — follow repo no-inline-imports rule when implementing.
 
 - [ ] **Step 5: Run tests**
-
-Run:
 
 ```bash
 pytest tests/dv/test_local_search.py tests/dv/test_server.py -m unit -v
 ruff check digivault/src/digivault/local_search.py digivault/src/digivault/server.py
 ```
 
-Expected: PASS; existing Supabase fakes still pass when `DIGIVAULT_ROOT` unset.
+Expected: PASS; Supabase path still works when `DIGIVAULT_ROOT` unset.
 
 - [ ] **Step 6: Commit**
 
@@ -284,47 +291,449 @@ git commit -m "$(cat <<'EOF'
 feat(digivault): local filesystem search for digivault_search_notes
 
 Profile A client vaults under DIGIVAULT_ROOT become searchable without
-digithings core Supabase, unblocking corpus ingest → chat grounding.
+digithings core Supabase, unblocking docs onboard → chat grounding.
 EOF
 )"
 ```
 
 ---
 
-### Task 2: `digicorpus` package scaffold + note writer
+### Task 2: Shared models, workspace, example manifest
 
 **Files:**
-- Create: `digicorpus/pyproject.toml`
-- Create: `digicorpus/ARCHITECTURE.md`
-- Create: `digicorpus/AGENTS.md`
-- Create: `digicorpus/src/digicorpus/__init__.py`
-- Create: `digicorpus/src/digicorpus/models.py`
-- Create: `digicorpus/src/digicorpus/naming.py`
-- Create: `digicorpus/src/digicorpus/note_writer.py`
-- Create: `digicorpus/tests/test_note_writer.py`
+- Create: `scripts/docs_onboard/__init__.py`
+- Create: `scripts/docs_onboard/models.py`
+- Create: `scripts/docs_onboard/workspace.py`
+- Create: `docs/projects/example-docs-client/onboard.yaml`
+- Create: `tests/scripts/docs_onboard/test_models.py`
+- Create: `tests/scripts/docs_onboard/test_workspace.py`
 
 **Interfaces:**
-- Consumes: `digivault.Vault.create_note` / overwrite path (see Step 3 — upsert).
-- Produces: `write_page(vault: Vault, doc: PageDocument, *, subdir: str = "corpus") -> Note` and `slug_for_url(url: str) -> str`.
+- Consumes: YAML manifest path.
+- Produces:
+  - `OnboardManifest` (seed_url, allowed_hosts, max_pages, max_depth, sinks, digisearch_index, vault_subdir, docs_path_prefixes, skip_path_prefixes)
+  - `DiscoveredPage` (url, final_url, content_type, title, depth, link_text, discovered_from)
+  - `PageClass` enum: `docs` | `pdf` | `asset` | `skip`
+  - `ClassifiedPage` (page + page_class + score + reasons)
+  - `OnboardResult` (pages_seen, docs_kept, skipped, vault_notes, search_docs, errors)
+  - `Workspace` paths: `pages.jsonl`, `classified.jsonl`, `assets/`, `html/`, `meta/source_map.jsonl`
 
-- [ ] **Step 1: Write failing tests for naming + writer**
+- [ ] **Step 1: Write failing tests**
 
 ```python
-# digicorpus/tests/test_note_writer.py
+# tests/scripts/docs_onboard/test_models.py
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-from digivault.vault import Vault
 
-from digicorpus.models import PageDocument
-from digicorpus.naming import slug_for_url
-from digicorpus.note_writer import write_page
+from scripts.docs_onboard.models import OnboardManifest, PageClass, load_manifest
 
 
 @pytest.mark.unit
+def test_load_manifest_roundtrip(tmp_path: Path) -> None:
+    path = tmp_path / "onboard.yaml"
+    path.write_text(
+        """
+client: example-docs-client
+seed_url: https://docs.example.com/
+allowed_hosts:
+  - docs.example.com
+max_pages: 50
+max_depth: 3
+sinks: [vault, search]
+digisearch_index: example_docs
+vault_subdir: clients/example
+docs_path_prefixes: ["/docs", "/guide", "/api"]
+skip_path_prefixes: ["/blog", "/careers"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    m = load_manifest(path)
+    assert m.client == "example-docs-client"
+    assert m.seed_url.startswith("https://")
+    assert "vault" in m.sinks and "search" in m.sinks
+    assert m.digisearch_index == "example_docs"
+```
+
+```python
+# tests/scripts/docs_onboard/test_workspace.py
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from scripts.docs_onboard.models import DiscoveredPage
+from scripts.docs_onboard.workspace import Workspace
+
+
+@pytest.mark.unit
+def test_workspace_append_pages(tmp_path: Path) -> None:
+    ws = Workspace.create(tmp_path / "work")
+    page = DiscoveredPage(
+        url="https://docs.example.com/guide",
+        final_url="https://docs.example.com/guide",
+        content_type="text/html",
+        title="Guide",
+        depth=1,
+    )
+    ws.append_page(page)
+    loaded = list(ws.iter_pages())
+    assert len(loaded) == 1
+    assert loaded[0].url.endswith("/guide")
+```
+
+- [ ] **Step 2: Run to verify fail**
+
+Run: `pytest tests/scripts/docs_onboard/test_models.py tests/scripts/docs_onboard/test_workspace.py -v`  
+Expected: FAIL (import / module missing).
+
+- [ ] **Step 3: Implement models + workspace**
+
+```python
+# scripts/docs_onboard/models.py (essential surface)
+from __future__ import annotations
+
+from enum import Enum
+from pathlib import Path
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+
+
+class PageClass(str, Enum):
+    docs = "docs"
+    pdf = "pdf"
+    asset = "asset"
+    skip = "skip"
+
+
+class OnboardManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client: str
+    seed_url: str
+    allowed_hosts: tuple[str, ...] = ()
+    max_pages: int = Field(default=100, ge=1, le=5000)
+    max_depth: int = Field(default=3, ge=0, le=20)
+    sinks: tuple[str, ...] = ("vault",)  # vault | search
+    digisearch_index: str = "default"
+    vault_subdir: str = "corpus"
+    docs_path_prefixes: tuple[str, ...] = ()
+    skip_path_prefixes: tuple[str, ...] = ()
+
+
+def load_manifest(path: Path) -> OnboardManifest:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return OnboardManifest.model_validate(data)
+
+
+class DiscoveredPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str
+    final_url: str
+    content_type: str = ""
+    title: str = ""
+    depth: int = 0
+    link_text: str = ""
+    discovered_from: str | None = None
+
+
+class ClassifiedPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    page: DiscoveredPage
+    page_class: PageClass
+    score: float = 0.0
+    reasons: tuple[str, ...] = ()
+
+
+class OnboardResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pages_seen: int = 0
+    docs_kept: int = 0
+    skipped: int = 0
+    vault_notes: int = 0
+    search_docs: int = 0
+    errors: tuple[str, ...] = ()
+```
+
+`Workspace.create(root)` makes `assets/`, `html/`, `meta/`; `append_page` / `iter_pages` read-write `pages.jsonl` as one JSON object per line via `model_dump(mode="json")`.
+
+Ship example manifest:
+
+```yaml
+# docs/projects/example-docs-client/onboard.yaml
+client: example-docs-client
+seed_url: https://docs.example.com/
+allowed_hosts:
+  - docs.example.com
+max_pages: 100
+max_depth: 3
+sinks: [vault, search]
+digisearch_index: example_docs
+vault_subdir: clients/example-docs-client
+docs_path_prefixes: ["/docs", "/guide", "/api", "/reference"]
+skip_path_prefixes: ["/blog", "/careers", "/pricing"]
+```
+
+- [ ] **Step 4: Run tests + commit**
+
+```bash
+pytest tests/scripts/docs_onboard/test_models.py tests/scripts/docs_onboard/test_workspace.py -v
+git add scripts/docs_onboard docs/projects/example-docs-client tests/scripts/docs_onboard
+git commit -m "$(cat <<'EOF'
+feat(scripts): docs_onboard models and workspace scaffold
+
+Shared Pydantic manifest/page types for the offline client docs
+onboard pipeline (no digicorpus module).
+EOF
+)"
+```
+
+---
+
+### Task 3: `scrape_site.py` — discover pages/assets
+
+**Files:**
+- Create: `scripts/docs_onboard/scrape_site.py`
+- Create: `scripts/docs_onboard/html_links.py` (link extraction helper)
+- Create: `tests/scripts/docs_onboard/test_scrape_site.py`
+- Create: `tests/scripts/docs_onboard/fixtures/sample_docs_index.html`
+
+**Interfaces:**
+- Consumes: `OnboardManifest`; injectable `fetch_html: Callable[[str], tuple[str, str, str]]` returning `(final_url, content_type, text)` (tests never hit network; production wraps digifetch `HttpFetcher.fetch`).
+- Produces: `scrape_site(manifest, workspace, *, fetch_html=...) -> int` pages written; discovers HTML + linked `.pdf`/doc URLs.
+
+- [ ] **Step 1: Failing test (injectable fetch)**
+
+```python
+# tests/scripts/docs_onboard/test_scrape_site.py
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from scripts.docs_onboard.models import OnboardManifest
+from scripts.docs_onboard.scrape_site import scrape_site
+from scripts.docs_onboard.workspace import Workspace
+
+FIXTURE = Path(__file__).parent / "fixtures" / "sample_docs_index.html"
+
+
+@pytest.mark.unit
+def test_scrape_site_bfs_respects_caps(tmp_path: Path) -> None:
+    html = FIXTURE.read_text(encoding="utf-8")
+    pages = {
+        "https://docs.example.com/": html,
+        "https://docs.example.com/guide/start": "<html><title>Start</title><body><main>Hello</main></body></html>",
+        "https://docs.example.com/blog/news": "<html><title>News</title><body>skip me</body></html>",
+    }
+
+    def fetch_html(url: str) -> tuple[str, str, str]:
+        return url, "text/html", pages[url]
+
+    manifest = OnboardManifest(
+        client="example",
+        seed_url="https://docs.example.com/",
+        allowed_hosts=("docs.example.com",),
+        max_pages=10,
+        max_depth=2,
+    )
+    ws = Workspace.create(tmp_path / "work")
+    n = scrape_site(manifest, ws, fetch_html=fetch_html)
+    urls = {p.url for p in ws.iter_pages()}
+    assert n >= 2
+    assert "https://docs.example.com/guide/start" in urls
+```
+
+Fixture `sample_docs_index.html` must include links to `/guide/start`, `/blog/news`, and `/files/manual.pdf`.
+
+- [ ] **Step 2: Run to verify fail**
+
+Run: `pytest tests/scripts/docs_onboard/test_scrape_site.py -v`  
+Expected: FAIL (module missing).
+
+- [ ] **Step 3: Implement scrape**
+
+Rules:
+- BFS from `seed_url`; only enqueue hosts in `allowed_hosts` (default: seed host if empty).
+- Cap `max_pages` / `max_depth`.
+- Record PDF/doc hrefs as discovered pages with `content_type` hint `application/pdf` when extension matches (do not download yet — Task 5).
+- Persist raw HTML for HTML pages under `workspace.html_dir / <slug>.html` for later sinks.
+- Production default `fetch_html` uses digifetch:
+
+```python
+from digifetch.http import HttpFetcher
+
+def default_fetch_html(url: str) -> tuple[str, str, str]:
+    fetcher = HttpFetcher()
+    result = fetcher.fetch(url)
+    return result.url, result.content_type or "text/html", result.text
+```
+
+- [ ] **Step 4: CLI entry for leaf**
+
+```bash
+python scripts/docs_onboard/scrape_site.py \
+  --manifest docs/projects/example-docs-client/onboard.yaml \
+  --workdir /tmp/example-onboard
+```
+
+- [ ] **Step 5: Tests + commit**
+
+```bash
+pytest tests/scripts/docs_onboard/test_scrape_site.py -v
+git add scripts/docs_onboard tests/scripts/docs_onboard
+git commit -m "$(cat <<'EOF'
+feat(scripts): docs_onboard scrape_site leaf via digifetch
+
+Discover same-host HTML and PDF URLs into a workdir for classify/fetch.
+EOF
+)"
+```
+
+---
+
+### Task 4: `classify_pages.py` — docs priority vs skip
+
+**Files:**
+- Create: `scripts/docs_onboard/classify_pages.py`
+- Create: `tests/scripts/docs_onboard/test_classify_pages.py`
+
+**Interfaces:**
+- Consumes: `Workspace` pages + `OnboardManifest` prefixes.
+- Produces: `classify_pages(manifest, workspace) -> int` writing `classified.jsonl`; every page gets `PageClass` + score + reasons.
+
+Intelligence rules (v1 heuristics — explicit, testable):
+
+1. URL path starts with any `skip_path_prefixes` → `skip`.
+2. URL ends with `.pdf` (or content_type pdf) → `pdf` (always keep; high score).
+3. Path starts with any `docs_path_prefixes` → `docs` (boost).
+4. Path contains `/docs`, `/guide`, `/api`, `/reference`, `/manual` → `docs`.
+5. Otherwise HTML → `skip` by default (YAGNI: do not vault the marketing homepage unless prefixes match). Optional: if path is `/` and host looks like `docs.*`, classify as `docs` with low score.
+
+- [ ] **Step 1: Failing test**
+
+```python
+# tests/scripts/docs_onboard/test_classify_pages.py
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from scripts.docs_onboard.classify_pages import classify_pages
+from scripts.docs_onboard.models import DiscoveredPage, OnboardManifest, PageClass
+from scripts.docs_onboard.workspace import Workspace
+
+
+@pytest.mark.unit
+def test_classify_prefers_docs_and_pdfs(tmp_path: Path) -> None:
+    manifest = OnboardManifest(
+        client="example",
+        seed_url="https://docs.example.com/",
+        docs_path_prefixes=("/guide",),
+        skip_path_prefixes=("/blog",),
+    )
+    ws = Workspace.create(tmp_path / "work")
+    for url, _ in [
+        ("https://docs.example.com/guide/start", "text/html"),
+        ("https://docs.example.com/blog/news", "text/html"),
+        ("https://docs.example.com/files/manual.pdf", "application/pdf"),
+    ]:
+        ws.append_page(
+            DiscoveredPage(url=url, final_url=url, content_type="text/html" if not url.endswith(".pdf") else "application/pdf", depth=1)
+        )
+    classify_pages(manifest, ws)
+    by_url = {c.page.url: c for c in ws.iter_classified()}
+    assert by_url["https://docs.example.com/guide/start"].page_class == PageClass.docs
+    assert by_url["https://docs.example.com/blog/news"].page_class == PageClass.skip
+    assert by_url["https://docs.example.com/files/manual.pdf"].page_class == PageClass.pdf
+```
+
+- [ ] **Step 2: Implement + run tests + commit**
+
+```bash
+pytest tests/scripts/docs_onboard/test_classify_pages.py -v
+git commit -m "$(cat <<'EOF'
+feat(scripts): docs_onboard classify_pages prioritizes docs and PDFs
+
+Not every crawled page belongs in digivault; skip noise via manifest prefixes.
+EOF
+)"
+```
+
+---
+
+### Task 5: `fetch_docs.py` — download PDFs and doc assets
+
+**Files:**
+- Create: `scripts/docs_onboard/fetch_docs.py`
+- Create: `tests/scripts/docs_onboard/test_fetch_docs.py`
+
+**Interfaces:**
+- Consumes: classified `pdf` (and optional `asset`) pages; injectable `download: Callable[[str], bytes]`.
+- Produces: files under `workspace.assets_dir`; append `meta/source_map.jsonl` rows `{local_path, source_url, content_type}`.
+
+- [ ] **Step 1: Failing test**
+
+```python
+@pytest.mark.unit
+def test_fetch_docs_writes_asset_and_source_map(tmp_path: Path) -> None:
+    # seed workspace with one ClassifiedPage pdf; inject download returning b"%PDF-1.4..."
+    # assert asset file exists and source_map maps it back to URL
+    ...
+```
+
+(Implement the full test body in-repo — assert `source_url` preserved.)
+
+- [ ] **Step 2: Implement with digifetch `HttpFetcher.download` as default**
+
+Respect digifetch `DEFAULT_MAX_BYTES`. Skip pages already present (same URL hash) for idempotent re-runs.
+
+- [ ] **Step 3: Tests + commit**
+
+```bash
+pytest tests/scripts/docs_onboard/test_fetch_docs.py -v
+git commit -m "$(cat <<'EOF'
+feat(scripts): docs_onboard fetch_docs downloads PDFs with source map
+
+Assets land in the workdir; metadata maps local files back to source URLs.
+EOF
+)"
+```
+
+---
+
+### Task 6: `write_vault_notes.py` — digivault sink
+
+**Files:**
+- Create: `scripts/docs_onboard/write_vault_notes.py`
+- Create: `scripts/docs_onboard/naming.py`
+- Create: `scripts/docs_onboard/html_to_markdown.py`
+- Create: `tests/scripts/docs_onboard/test_write_vault_notes.py`
+- Modify if needed: `digivault/src/digivault/vault.py` — add `write_note(..., overwrite=True)` if create-only blocks idempotent re-runs (keep `_safe_path` guarantees).
+
+**Interfaces:**
+- Consumes: classified `docs` HTML (from `html/`) + fetched PDFs; `Vault` / `--vault-root` / `DIGIVAULT_ROOT`.
+- Produces: `write_vault_notes(manifest, workspace, vault) -> int` notes written.
+- Frontmatter contract: `title`, `tags`, `source_url`, `content_type`, `ingested_at` (UTC ISO), optional `page`, `client`.
+- PDF text: use digisearch parsers in-process (`ParserRegistry` / PDF parser) — **do not** vendor pdfplumber into the script package. If digisearch not installed, skip PDFs with a clear error listing `pip install -e ./digisearch`.
+
+- [ ] **Step 1: Failing tests for naming + HTML note**
+
+```python
+@pytest.mark.unit
 def test_slug_for_url_stable() -> None:
+    from scripts.docs_onboard.naming import slug_for_url
+
     assert slug_for_url("https://docs.example.com/guides/Start/") == slug_for_url(
         "https://docs.example.com/guides/Start"
     )
@@ -332,258 +741,223 @@ def test_slug_for_url_stable() -> None:
 
 
 @pytest.mark.unit
-def test_write_page_creates_markdown_note(tmp_path: Path) -> None:
-    vault = Vault(tmp_path)
-    doc = PageDocument(
-        source_url="https://docs.example.com/guides/start",
-        title="Getting started",
-        body_markdown="Install the agent.\n\nSee next steps.",
-        content_type="text/html",
-        tags=("corpus", "web"),
-    )
-    note = write_page(vault, doc, subdir="corpus")
-    assert note.name
-    path = tmp_path / note.rel_path
-    text = path.read_text(encoding="utf-8")
-    assert "Getting started" in text
-    assert "source_url: https://docs.example.com/guides/start" in text
-    assert "Install the agent" in text
-```
-
-- [ ] **Step 2: Run to verify fail**
-
-Run: `pytest digicorpus/tests/test_note_writer.py -v`  
-Expected: FAIL (package missing).
-
-- [ ] **Step 3: Implement models, naming, writer**
-
-`PageDocument` fields (Pydantic v2): `source_url: str | None`, `source_path: str | None`, `title: str`, `body_markdown: str`, `content_type: str`, `tags: tuple[str, ...] = ()`, `page_number: int | None = None`.
-
-`slug_for_url`: lowercase host+path, strip trailing slash, replace non-alnum with `-`, collapse dashes, max length ~80, prefix `web-`.
-
-`slug_for_pdf(path: str, page: int) -> str`: `pdf-<stem>-p{page:04d}` sanitized.
-
-`write_page`: build frontmatter `title`, `tags`, `source_url`/`source_path`, `content_type`, `ingested_at` (UTC ISO), optional `page`; body = markdown. If note exists, overwrite file via safe path + `reindex` (add `Vault.upsert_note` **or** delete+create in digicorpus using path write through a small helper that still goes through `_safe_path` — prefer adding `Vault.write_note(name, *, frontmatter, body, subdir, overwrite=True)` in digivault if missing; keep sandbox guarantees).
-
-If digivault lacks overwrite, add a focused digivault helper in the same PR:
-
-```python
-def write_note(
-    self,
-    name: str,
-    *,
-    frontmatter: dict[str, Any] | None = None,
-    body: str = "",
-    subdir: str = "",
-    overwrite: bool = False,
-) -> Note:
+def test_write_vault_notes_html_includes_source_url(tmp_path: Path) -> None:
+    # workspace with one docs ClassifiedPage + saved HTML containing "Ship agents safely"
+    # Vault(tmp_path); write_vault_notes(...); assert frontmatter source_url + body phrase
     ...
 ```
 
-- [ ] **Step 4: Scaffold `pyproject.toml`**
+- [ ] **Step 2: Implement writer**
 
-```toml
-[project]
-name = "digicorpus"
-version = "0.1.0"
-description = "digicorpus – crawl/PDF ingest into digivault notes for client documentation chatbots"
-requires-python = ">=3.12"
-dependencies = [
-  "pydantic>=2",
-  # digivault + digifetch installed editable from monorepo in CI / workspace
-]
+Idempotent upsert by stable slug. Tags include `onboard`, `docs` or `pdf`, and `client:<name>`.
 
-[project.optional-dependencies]
-pdf = ["pdfplumber>=0.11"]
-ocr = ["pdfplumber>=0.11", "pdf2image>=1.17", "pytesseract>=0.3"]
-dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
-
-[project.scripts]
-digicorpus = "digicorpus.cli:app"
-```
-
-Document in ARCHITECTURE: install via `pip install -e ./digicorpus -e ./digivault -e ./digifetch`.
-
-- [ ] **Step 5: Run tests + commit**
+- [ ] **Step 3: Tests + commit**
 
 ```bash
-pip install -e ./digivault -e ./digicorpus
-pytest digicorpus/tests/test_note_writer.py -v
-git add digicorpus digivault/src/digivault/vault.py  # if write_note added
+pytest tests/scripts/docs_onboard/test_write_vault_notes.py -v
 git commit -m "$(cat <<'EOF'
-feat(digicorpus): scaffold package and vault note writer
+feat(scripts): docs_onboard write_vault_notes sink with source_url
 
-Client documentation ingest writes page-level digivault notes without
-touching digichat.
+Docs-priority HTML/PDF content becomes digivault notes mapped to origin URLs.
 EOF
 )"
 ```
 
 ---
 
-### Task 3: HTML crawl → page notes (MVP)
+### Task 7: `write_search_index.py` — digisearch sink
 
 **Files:**
-- Create: `digicorpus/src/digicorpus/html_extract.py`
-- Create: `digicorpus/src/digicorpus/crawl.py`
-- Create: `digicorpus/src/digicorpus/cli.py` (crawl command)
-- Create: `digicorpus/tests/test_html_extract.py`
-- Create: `digicorpus/tests/test_crawl.py`
-- Create: `digicorpus/tests/fixtures/sample.html`
+- Create: `scripts/docs_onboard/write_search_index.py`
+- Create: `tests/scripts/docs_onboard/test_write_search_index.py`
 
 **Interfaces:**
-- Consumes: digifetch HTTP fetch (sync); `write_page`; `IngestConfig(max_pages: int, max_depth: int, allowed_hosts: tuple[str, ...])`.
-- Produces: `crawl_site(start_url: str, vault: Vault, config: IngestConfig) -> IngestResult` with `notes_written: int`, `urls_seen: int`, `errors: list[str]`.
-
-- [ ] **Step 1: Failing extract test**
+- Consumes: workdir HTML exports + `assets/` PDFs; digisearch URL + digikey token (same pattern as `scripts/seed_digisearch_local.py`).
+- Produces: `write_search_index(manifest, workspace, *, digisearch_url, token, post_ingest=...) -> int`.
+- Each `POST /ingest` body:
 
 ```python
-# digicorpus/tests/test_html_extract.py
-from digicorpus.html_extract import html_to_page
-
-SAMPLE = b"""<!doctype html><html><head><title>Acme Docs</title></head>
-<body><nav>Ignore</nav><main><h1>Acme Docs</h1><p>Ship agents safely.</p></main></body></html>"""
-
-
-def test_html_to_page_prefers_main() -> None:
-    doc = html_to_page(SAMPLE, source_url="https://docs.acme.test/index")
-    assert "Ship agents safely" in doc.body_markdown
-    assert "Acme" in doc.title
+{
+  "source": str(local_path),           # server-visible path
+  "index_name": manifest.digisearch_index,
+  "doc_type": "html" | "pdf",
+  "metadata": {
+    "source_url": "...",
+    "client": manifest.client,
+    "page_class": "docs" | "pdf",
+  },
+}
 ```
 
-- [ ] **Step 2: Implement extract (stdlib `html.parser` first; avoid BeautifulSoup unless needed)**
+**Path constraint:** When digisearch runs in Docker, local host paths are not visible. MVP documents two operator modes:
 
-Keep MVP extraction simple: title from `<title>` / first `h1`; body text from `<main>` else `<article>` else `<body>`; strip `script`/`style`/`nav`; emit paragraphs as markdown lines.
+1. **Host digisearch** (`make stack-local`): workdir on host; `source` is host path.
+2. **Compose digisearch:** mount workdir into the digisearch container (e.g. `/data/onboard`) and pass `--source-prefix /data/onboard` so posted paths match the container filesystem (mirror `DIGISEARCH_SEED_REMOTE_PREFIX` pattern).
 
-- [ ] **Step 3: Crawl with caps + allowlist**
+Tests inject `post_ingest(payload) -> dict` — no network.
 
-BFS from `start_url`; only enqueue links whose host is in `allowed_hosts` (default: start URL host); skip non-http(s); stop at `max_pages` / `max_depth`; use digifetch fetcher with injectable transport in tests (pass `fetch: Callable[[str], bytes]`).
-
-- [ ] **Step 4: CLI**
-
-```bash
-digicorpus crawl https://docs.example.com \
-  --vault-root /data/vault \
-  --max-pages 200 \
-  --max-depth 3 \
-  --subdir corpus/web
-```
-
-- [ ] **Step 5: Tests + commit**
-
-```bash
-pytest digicorpus/tests/test_html_extract.py digicorpus/tests/test_crawl.py -v
-git commit -m "feat(digicorpus): crawl HTML sites into digivault page notes"
-```
-
----
-
-### Task 4: PDF text → page notes (MVP)
-
-**Files:**
-- Create: `digicorpus/src/digicorpus/pdf_text.py`
-- Create: `digicorpus/tests/test_pdf_text.py`
-- Create: `digicorpus/tests/fixtures/hello.pdf` (tiny text PDF checked in or generated in test)
-- Modify: `digicorpus/src/digicorpus/cli.py` (`pdf` command)
-- Modify: `digicorpus/pyproject.toml` (`[pdf]` extra)
-
-**Interfaces:**
-- Consumes: PDF bytes; `write_page` with `page_number` and `source_path`.
-- Produces: `ingest_pdf(path: Path, vault: Vault, *, subdir: str = "corpus/pdf") -> IngestResult`.
-
-- [ ] **Step 1: Failing test with generated PDF**
-
-Prefer generating a one-page PDF in the test with a minimal writer **or** skip-if-no-pdfplumber and use a checked-in fixture. Assert page-1 note body contains known string.
-
-- [ ] **Step 2: Implement pdfplumber extraction**
+- [ ] **Step 1: Failing test**
 
 ```python
-def extract_pdf_pages(raw: bytes) -> list[str]:
-    import pdfplumber
-    import io
-    pages: list[str] = []
-    with pdfplumber.open(io.BytesIO(raw)) as pdf:
-        for page in pdf.pages:
-            pages.append(page.extract_text() or "")
-    return pages
+@pytest.mark.unit
+def test_write_search_index_posts_metadata(tmp_path: Path) -> None:
+    posted: list[dict] = []
+
+    def post_ingest(payload: dict) -> dict:
+        posted.append(payload)
+        return {"doc_id": "x", "chunks_created": 1, "index_name": payload["index_name"], "status": "ok"}
+
+    # seed workspace with one docs html file + source_map; call write_search_index
+    assert posted[0]["metadata"]["source_url"].startswith("https://")
+    assert posted[0]["index_name"] == "example_docs"
 ```
 
-One `PageDocument` per page; title `"{filename} (p. N)"`; tag `corpus`, `pdf`.
-
-- [ ] **Step 3: CLI**
+- [ ] **Step 2: Implement + commit**
 
 ```bash
-digicorpus pdf ./manual.pdf --vault-root /data/vault --subdir corpus/pdf
+pytest tests/scripts/docs_onboard/test_write_search_index.py -v
+git commit -m "$(cat <<'EOF'
+feat(scripts): docs_onboard write_search_index digisearch sink
+
+Optional vector index sink posts local paths with source_url metadata.
+EOF
+)"
 ```
 
-- [ ] **Step 4: Tests + commit**
-
-```bash
-pip install -e "./digicorpus[pdf]"
-pytest digicorpus/tests/test_pdf_text.py -v
-git commit -m "feat(digicorpus): ingest PDF text pages into digivault notes"
-```
+OCR: scanned PDFs are handled **inside digisearch** when `DIGISEARCH_OCR_ENABLED=true` and `digisearch[ocr]` is installed — do not reimplement OCR in scripts.
 
 ---
 
-### Task 5: Operator runbook + architecture links (MVP acceptance docs)
+### Task 8: `run_onboard.py` — parent orchestrator
 
 **Files:**
-- Create: `docs/digichat/CORPUS-INGEST.md`
-- Modify: `docs/architecture/digichat-self-hosted-release.md` (§5 Follow-ups — mark corpus in progress / link this plan)
-- Modify: `docs/architecture/digichat-modular-frontend.md` §5 Later bullet — link CORPUS-INGEST.md
-- Modify: `docs/digichat/INSTALL.md` (short “Populate the vault” pointer)
-- Modify: `infra/digichat-release/README.md` (optional one-liner: ingest is offline digicorpus)
+- Create: `scripts/docs_onboard/run_onboard.py`
+- Create: `tests/scripts/docs_onboard/test_run_onboard.py`
 
 **Interfaces:**
-- Consumes: Profile A Compose `DIGIVAULT_ROOT` volume path; digikey scopes for live API writes (document only).
-- Produces: Documented smoke path end-to-end.
+- Consumes: `--manifest`, `--workdir`, `--vault-root`, `--sinks` (override), digisearch auth env.
+- Produces: `OnboardResult` printed as JSON; exit `0` on success, `2` if any sink errors.
 
-- [ ] **Step 1: Write `docs/digichat/CORPUS-INGEST.md`** with:
+Pipeline order:
 
-1. Prerequisites: Profile A up; `DIGIVAULT_URL` on digigraph; vault volume mounted.
-2. Install digicorpus editable from monorepo (or future GHCR job image — later).
-3. Example crawl + PDF commands writing into the Compose volume path.
-4. Smoke: `curl` digivault orchestrator_invoke `digivault_search_notes` with a known phrase from ingested page **or** digichat embed question expecting that phrase.
-5. Explicit: **not** a digichat fork; digichat unchanged.
-6. Explicit: OCR/images = Phase 2.
+```text
+scrape_site → classify_pages → fetch_docs → [write_vault_notes?] → [write_search_index?]
+```
 
-- [ ] **Step 2: Link from modular-frontend §5 and self-hosted-release Follow-ups**
+- [ ] **Step 1: Failing integration-style unit test with all leaves injected / monkeypatched**
 
-- [ ] **Step 3: Commit**
+Assert order of calls and that `skip` pages never reach vault writer.
+
+- [ ] **Step 2: Implement argparse CLI**
 
 ```bash
-git commit -m "docs(digichat): corpus ingest runbook for Profile A digivault"
+python scripts/docs_onboard/run_onboard.py \
+  --manifest docs/projects/example-docs-client/onboard.yaml \
+  --workdir /tmp/example-onboard \
+  --vault-root "${DIGIVAULT_ROOT:-/tmp/demo-vault}" \
+  --sinks vault,search \
+  --digisearch-url "${DIGISEARCH_URL:-http://127.0.0.1:8002}" \
+  --digikey-url "${DIGIKEY_URL:-http://127.0.0.1:8005}" \
+  --api-key "${DIGISEARCH_SEED_API_KEY}"
+```
+
+- [ ] **Step 3: Tests + commit**
+
+```bash
+pytest tests/scripts/docs_onboard/ -v
+git commit -m "$(cat <<'EOF'
+feat(scripts): docs_onboard run_onboard parent orchestrator
+
+URL → docs-focused crawl → optional digivault and digisearch sinks.
+EOF
+)"
 ```
 
 ---
 
-### Task 6 (Later): OCR + images + base64
+### Task 9: Ops index, runbook, fit-doc Pick 3 rewrite
 
-**Files (when started):**
-- `digicorpus/src/digicorpus/pdf_ocr.py`
-- `digicorpus/src/digicorpus/assets.py`
-- `digicorpus/tests/test_pdf_ocr.py`
-- Update `CORPUS-INGEST.md` Phase 2 section
+**Files:**
+- Create: `docs/ops/CLIENT_PIPELINES.md`
+- Create: `docs/digichat/CLIENT-DOCS-ONBOARD.md`
+- Modify: `docs/architecture/digichat-self-host-picks-fit.md` (Pick 3 rows/sections — remove digicorpus framing)
+- Modify: `docs/architecture/digichat-self-hosted-release.md` (§5 follow-up → link this plan + CLIENT-DOCS-ONBOARD)
+- Modify: `docs/digichat/INSTALL.md` (short “Populate client docs” pointer)
+- Modify: `docs/architecture/digichat-modular-frontend.md` §5 Later bullet — link CLIENT-DOCS-ONBOARD
 
-**Acceptance for this task only when scheduled:**
+**Interfaces:**
+- Consumes: Tasks 1–8 behaviors.
+- Produces: Operator-discoverable docs index + corrected fit synthesis.
 
-- [ ] Scanned PDF with no text layer yields OCR text when `digicorpus[ocr]` installed and `DIGICORPUS_OCR=1`.
-- [ ] HTML `<img>` / PDF images saved under `DIGIVAULT_ROOT/_assets/<note-slug>/` with relative markdown links.
-- [ ] Base64 data-URI embeds allowed only below a documented byte cap (e.g. 100 KiB); larger assets must be files.
-- [ ] digivault core still has no OCR deps.
+- [ ] **Step 1: Write `docs/ops/CLIENT_PIPELINES.md`**
 
-Do **not** start Task 6 until Tasks 1–5 are merged and a client smoke has validated text-only ingest.
+```markdown
+# Client ops pipelines
+
+Offline, multi-client workflows that live under `scripts/` with per-client
+manifests under `docs/projects/<client>/` (or private `projects/`). These are
+**not** Digi peer modules.
+
+| Pipeline | Parent script | Purpose | Sinks |
+|---|---|---|---|
+| **Client docs onboard** | `scripts/docs_onboard/run_onboard.py` | Website URL → docs-focused crawl → PDFs → store | digivault and/or digisearch |
+| *(later)* digiquant research ingest | TBD | Separate entry for quant research corpora | digisearch / vault as designed |
+
+## Module roles
+
+- **digifetch** — fetch/scrape transport
+- **digisearch** — parse, OCR, chunk, embed, index
+- **digivault** — notes, graph, MCP/agent over notes (local search when `DIGIVAULT_ROOT` set)
+
+## Related
+
+- Runbook: [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../digichat/CLIENT-DOCS-ONBOARD.md)
+- Plan: [`docs/superpowers/plans/2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md)
+- Fit: [`docs/architecture/digichat-self-host-picks-fit.md`](../architecture/digichat-self-host-picks-fit.md)
+```
+
+- [ ] **Step 2: Write `docs/digichat/CLIENT-DOCS-ONBOARD.md`**
+
+Cover: prerequisites; install editable digifetch/digivault/digisearch; example `run_onboard.py`; Profile A volume path; smoke via `digivault_search_notes` / digisearch query; explicit **not** a digichat fork; Pick 1/2 orthogonal; OCR via digisearch env.
+
+- [ ] **Step 3: Rewrite fit doc Pick 3 seams**
+
+Replace digicorpus language in `digichat-self-host-picks-fit.md`:
+
+| Location | New wording |
+|---|---|
+| §1 Pick 3 purpose | Offline `scripts/docs_onboard` crawl → digivault and/or digisearch for that client's docs |
+| §2 diagram | `local search → docs_onboard scripts → runbook` (not digicorpus) |
+| §3 `DIGIVAULT_ROOT` owner | digivault (+ docs_onboard scripts) |
+| §3 volumes row | docs_onboard writes volume / notes API — offline job beside stack |
+| Stage D checklist | digivault local search; scripts/docs_onboard leaves + parent; CLIENT-DOCS-ONBOARD + CLIENT_PIPELINES; Profile A smoke |
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add docs/ops/CLIENT_PIPELINES.md docs/digichat/CLIENT-DOCS-ONBOARD.md \
+  docs/architecture/digichat-self-host-picks-fit.md \
+  docs/architecture/digichat-self-hosted-release.md \
+  docs/digichat/INSTALL.md docs/architecture/digichat-modular-frontend.md
+git commit -m "$(cat <<'EOF'
+docs: client docs onboard runbook and ops pipeline index
+
+Replace digicorpus-as-module framing with scripts/docs_onboard ops workflow.
+EOF
+)"
+```
 
 ---
 
-### Task 7 (Later): CI registration + optional HTTP writer
+### Task 10 (Later — out of MVP core)
 
-**Files:**
-- `scripts/ci_paths.yaml`, `.github/workflows/test-digicorpus.yml`, `scripts/project_routing.json` (`component:digicorpus` → `develop`)
-- Optional: `digicorpus/src/digicorpus/http_writer.py` posting `CreateNoteRequest` to digivault with digikey JWT
+Do **not** start until Tasks 1–9 have a green client smoke.
 
-Only after MVP package is stable.
+1. **Profile A attach** — document env/Compose mounts so onboard workdir + `DIGIVAULT_ROOT` share a volume; optional one-shot service profile (not a chat-tier replica). Soft-depends Pick 2.
+2. **digiquant entry** — second parent under `scripts/` (or docs_onboard sibling) for research corpora; listed in `CLIENT_PIPELINES.md`.
+3. **Richer crawl** — sitemap.xml seed, robots.txt hardening, digifetch `[browser]` for JS apps, etag/content-hash skip.
+4. **Image assets** — vault `_assets/` + markdown links; size-capped embeds.
+5. **Remote vault writer** — `POST /v1/notes` with digikey JWT when filesystem root is unavailable.
 
 ---
 
@@ -591,21 +965,21 @@ Only after MVP package is stable.
 
 ### MVP done when
 
-1. **No digichat fork / no digichat backend growth** — diff has no new digichat HTTP backend types; digichat still only `digigraph` | `foundry`.
-2. **Local search works** — with `DIGIVAULT_ROOT` set and no Supabase env, `digivault_search_notes` returns hits from filesystem notes.
-3. **Crawl ingest** — `digicorpus crawl <url> --vault-root <tmp>` writes ≥1 note with `source_url` frontmatter; re-run is idempotent (same slug overwritten).
-4. **PDF ingest** — `digicorpus pdf <file> --vault-root <tmp>` writes one note per text page.
-5. **Runtime path unchanged** — digichat → digigraph → `digivault_hub` → `digivault_search_notes` retrieves an ingested phrase in a Profile A smoke (manual or documented curl).
-6. **Ownership clean** — crawl/PDF deps live in `digicorpus`; digivault core remains pydantic+pyyaml.
-7. **Docs** — `docs/digichat/CORPUS-INGEST.md` exists and is linked from modular-frontend §5 / self-hosted-release.
-8. **Tests** — `pytest tests/dv/test_local_search.py digicorpus/tests -m unit` green without network.
+1. **No digicorpus module** — no `digicorpus/` package; no `component:digicorpus` routing.
+2. **No digichat backend growth** — digichat still only `digigraph` | `foundry` adapters.
+3. **Local search** — with `DIGIVAULT_ROOT` set and no Supabase, `digivault_search_notes` hits filesystem notes.
+4. **Classify intelligence** — docs prefixes kept; skip prefixes excluded; PDFs fetched; source_url in vault frontmatter and digisearch metadata.
+5. **Dual sink** — `--sinks vault`, `--sinks search`, and `--sinks vault,search` all work in unit tests with fakes.
+6. **Parent CLI** — `run_onboard.py --manifest … --workdir …` runs the leaf chain.
+7. **Docs** — `docs/ops/CLIENT_PIPELINES.md` + `docs/digichat/CLIENT-DOCS-ONBOARD.md`; fit doc Pick 3 no longer describes digicorpus-as-module.
+8. **Tests** — `pytest tests/dv/test_local_search.py tests/scripts/docs_onboard -m unit` green without network.
 
 ### Explicitly out of MVP
 
-- OCR / image assets / base64 embeds
-- digisearch requirement for doc chatbots
-- Publishing digicorpus to PyPI / GHCR job image
-- robots.txt perfection, JS-rendered SPA crawl (Playwright crawl can follow via digifetch `[browser]` later)
+- digicorpus peer module / PyPI package / GHCR job image named digicorpus
+- digigraph live crawl tool
+- digiquant pipeline entry (Task 10)
+- Perfect SPA crawl / robots perfection
 - Multi-tenant vault routing inside one digivault process
 
 ---
@@ -614,31 +988,42 @@ Only after MVP package is stable.
 
 ```bash
 # 1. Unit
-pip install -e ./digivault -e ./digifetch -e "./digicorpus[pdf,dev]"
-pytest tests/dv/test_local_search.py digicorpus/tests -m unit -v
+pip install -e ./digivault -e ./digifetch -e "./digisearch[dev]"
+pytest tests/dv/test_local_search.py tests/scripts/docs_onboard -m unit -v
 
-# 2. Local vault search smoke
+# 2. Local vault smoke
 export DIGIVAULT_ROOT=/tmp/demo-vault
-digivault init --root "$DIGIVAULT_ROOT"   # or mkdir + .digivault.yml
-digicorpus crawl https://example.com --vault-root "$DIGIVAULT_ROOT" --max-pages 3
-# start digivault with DIGIVAULT_ROOT; invoke digivault_search_notes for a known word
+mkdir -p "$DIGIVAULT_ROOT"
+python scripts/docs_onboard/run_onboard.py \
+  --manifest docs/projects/example-docs-client/onboard.yaml \
+  --workdir /tmp/example-onboard \
+  --vault-root "$DIGIVAULT_ROOT" \
+  --sinks vault \
+  # use a real docs host allowlisted in a private manifest for live smoke
+# start digivault with DIGIVAULT_ROOT; invoke digivault_search_notes
 
-# 3. Profile A (Compose) — after Pick 2 overlays exist
-# mount same volume digivault uses; run digicorpus against that path; ask digichat a doc question
+# 3. digisearch sink smoke (host stack)
+# DIGISEARCH_SEED_API_KEY=… python scripts/docs_onboard/run_onboard.py … --sinks search
+
+# 4. Profile A (after Pick 2) — mount same volume; ask digichat a doc question
 ```
 
 ---
 
 ## Self-review checklist
 
-| Spec / product claim | Task |
+| Agreed requirement | Task |
 |---|---|
-| Ingest separate from digichat; not a digichat fork | Ownership + Tasks 2–5; acceptance #1 |
-| Crawl site / PDFs → page-level digivault notes | Tasks 3–4 |
-| Images + OCR + base64 later | Task 6 |
-| Runtime digichat → digigraph → digivault_search | Task 1 + acceptance #5 |
-| Profile A self-hosted client vault | Tasks 1, 5; Fit with picks 1–2 |
-| digithings does not host multi-client digichat | Global constraints + Fit section |
-| Supabase-only search gap for clients | Task 1 |
+| Offline ops workflow, not digicorpus module | Goal, Global Constraints, Tasks 2–8 |
+| digifetch / digisearch / digivault role split | Module roles + Tasks 3, 5–7 |
+| Code under `scripts/`; manifests under `docs/projects/` | Script tree, Task 2, Task 9 |
+| Leaf scripts + parent orchestrator | Tasks 3–8 |
+| Docs priority / skip / PDF scan / source URL metadata | Tasks 4–7 |
+| Dual sink optional | Tasks 6–8 |
+| `docs/ops/CLIENT_PIPELINES.md` | Task 9 |
+| digivault local search as digivault task | Task 1 |
+| Fit doc Pick 3 seams | Task 9 |
+| Cross-link picks 1–2 orthogonal | Fit section + Task 9 |
+| Profile A / digiquant later | Task 10 |
 
-Placeholder scan: none intentional — Phase 2 tasks are explicit deferred work with acceptance gates, not TBD stubs inside MVP steps.
+Placeholder scan: Task 10 is explicitly deferred with gates — not TBD inside MVP steps. Test stubs marked `...` in Tasks 5–6 must be expanded to full assertions when implementing (same patterns as Tasks 2–4).
