@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability atlas-validate supabase-migrations-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability atlas-validate supabase-migrations-check
 
 build:
 	docker compose build
@@ -73,6 +73,21 @@ up-digichat:
 
 down-digichat:
 	docker compose --profile digichat down
+
+# Pull published digichat from GHCR (requires VERSION=0.9.3). Does not build from the monorepo.
+digichat-release-up:
+	@test -n "$(VERSION)" || (echo "Usage: make digichat-release-up VERSION=0.9.3"; exit 1)
+	DIGICHAT_VERSION=$(VERSION) docker compose \
+	  -f docker-compose.yml \
+	  -f infra/digichat-release/compose.digichat-release.yml \
+	  --profile digichat up -d
+
+digichat-release-down:
+	@test -n "$(VERSION)" || (echo "Usage: make digichat-release-down VERSION=0.9.3"; exit 1)
+	DIGICHAT_VERSION=$(VERSION) docker compose \
+	  -f docker-compose.yml \
+	  -f infra/digichat-release/compose.digichat-release.yml \
+	  --profile digichat down
 
 # digichat Next.js dev server (http://127.0.0.1:3000, hot reload). Backend: `make up`, `make stack-local`, or ./scripts/run_local.sh
 digichat-dev:

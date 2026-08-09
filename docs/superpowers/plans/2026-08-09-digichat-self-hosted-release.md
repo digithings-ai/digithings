@@ -154,7 +154,7 @@ EOF
 - Consumes: Root `docker-compose.yml` service names `digichat` / `digichat-db` for merge patterns OR a standalone digichat(+db) definition that does **not** use `build:`.
 - Produces: Overlay that sets `image: ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}` and disables local build.
 
-- [ ] **Step 1: Create release compose overlay**
+- [x] **Step 1: Create release compose overlay**
 
 Create `infra/digichat-release/compose.digichat-release.yml`:
 
@@ -179,7 +179,7 @@ Notes for implementer:
 - Confirm Compose file version / merge semantics on the machine (`docker compose config`). If `build: !reset null` is unsupported on the installed Compose, use an explicit override that replaces the service block without a `build:` key (document the chosen pattern in README).
 - Do **not** put secrets in this file.
 
-- [ ] **Step 2: Write infra README stub**
+- [x] **Step 2: Write infra README stub**
 
 Create `infra/digichat-release/README.md`:
 
@@ -198,7 +198,7 @@ Install unit: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (not npm, not `:latest`).
 See [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md).
 ```
 
-- [ ] **Step 3: Makefile targets**
+- [x] **Step 3: Makefile targets**
 
 In `Makefile`, add to `.PHONY` and body:
 
@@ -229,7 +229,7 @@ digichat-release-down:
 	  --profile digichat down
 ```
 
-- [ ] **Step 4: Validate compose config (no pull required if offline)**
+- [x] **Step 4: Validate compose config (no pull required if offline)**
 
 Run:
 
@@ -245,7 +245,7 @@ rg -n "digichat:" -A20 /tmp/digichat-release-config.yml | head -40
 
 Expected: resolved image is GHCR pin; digichat service has no monorepo `build` context (or build is empty/null).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add infra/digichat-release/compose.digichat-release.yml \
