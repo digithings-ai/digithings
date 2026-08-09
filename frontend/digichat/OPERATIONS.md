@@ -8,7 +8,7 @@ digichat is the **production** web client for tenants that run digigraph. The br
 
 - Install digichat from GHCR (`ghcr.io/digithings-ai/digichat:vX.Y.Z`), not npm.
 - Post-publish smoke: [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md)
-- Client / operator install: [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) (added in later task)
+- Client / operator install: [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md)
 
 ## Design
 

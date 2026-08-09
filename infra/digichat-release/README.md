@@ -86,6 +86,6 @@ Host must supply Azure identity for Foundry; do not put a Foundry API key in dig
 
 digithings’ own Tunnel host remains the operator path in
 [`infra/digichat-digithings/`](../digichat-digithings/). Clients should prefer these overlays
-(and [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md), added in a later task).
+and [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md).
 
 See also [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md).

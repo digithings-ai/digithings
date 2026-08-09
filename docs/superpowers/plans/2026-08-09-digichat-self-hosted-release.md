@@ -494,7 +494,7 @@ EOF
 - Consumes: Tasks 1–4 artifacts + config tables from the sketch §3.
 - Produces: First-class client page: pull GHCR → choose A/B → env checklist → smoke.
 
-- [ ] **Step 1: Write INSTALL.md**
+- [x] **Step 1: Write INSTALL.md**
 
 Create `docs/digichat/INSTALL.md` covering:
 
@@ -516,7 +516,7 @@ curl -sf http://127.0.0.1:3005/api/health | jq .
 # open http://127.0.0.1:3005/embed?host=client.example.com&token=…
 ```
 
-- [ ] **Step 2: Cross-link**
+- [x] **Step 2: Cross-link**
 
 In `digichat-modular-frontend.md` §5 after “Near-term foundation”, add:
 
@@ -526,7 +526,7 @@ In `digichat-modular-frontend.md` §5 after “Near-term foundation”, add:
 
 In sketch See also + OPERATIONS, add the same link.
 
-- [ ] **Step 3: Verify links**
+- [x] **Step 3: Verify links**
 
 Run:
 
@@ -541,7 +541,7 @@ test -f docs/digichat/INSTALL.md
 
 Expected: all four reference INSTALL; file exists.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/digichat/INSTALL.md \

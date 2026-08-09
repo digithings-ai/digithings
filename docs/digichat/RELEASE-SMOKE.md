@@ -25,5 +25,5 @@ Prefer the version pin. Do not use `:latest` in production.
 
 ## Related
 
-- Client install: `INSTALL.md` (added when install guide lands)
+- Client install: [INSTALL.md](INSTALL.md)
 - Product model: [digichat-self-hosted-release.md](../architecture/digichat-self-hosted-release.md)

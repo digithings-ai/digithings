@@ -117,6 +117,8 @@ Same pattern as DataTap today: client-hosted digichat Node + their backend (Foun
 2. Release packaging / runbooks so a client can `install digichat + stack` without digithings hosting it
 3. Tenant/backend config as the only per-deploy digichat surface
 
+**Install guide:** [`docs/digichat/INSTALL.md`](../digichat/INSTALL.md)
+
 **Later (client documentation chatbot)**
 
 - Client (or digithings helping them) runs **their** digichat + digigraph + digivault

@@ -225,8 +225,10 @@ Short backlog (file as separate `agent-task` issues; no epic required):
 
 ## See also
 
+- Client install: [`docs/digichat/INSTALL.md`](../digichat/INSTALL.md)
 - Product end-state: [`digichat-modular-frontend.md`](digichat-modular-frontend.md) §5
 - digithings operator host: [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md)
 - Path routing: [ADR-0018](../adr/0018-digichat-path-routing.md)
 - Env / embed schema: [`frontend/digichat/ARCHITECTURE.md`](../../frontend/digichat/ARCHITECTURE.md) § Embed tenant registry, § Environment variables
 - Local ops: [`frontend/digichat/OPERATIONS.md`](../../frontend/digichat/OPERATIONS.md)
+- Release smoke: [`docs/digichat/RELEASE-SMOKE.md`](../digichat/RELEASE-SMOKE.md)
