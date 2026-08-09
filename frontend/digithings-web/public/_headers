@@ -1,8 +1,9 @@
 # Cloudflare Pages headers for digithings.ai. Fonts are self-hosted (next/font).
-# /chat is native DigiChatSession (no iframe). X-Frame-Options: DENY blocks framing.
+# /chat iframes digichat Node (digigraph). frame-src allows digichat.digithings.ai.
+# X-Frame-Options: DENY still blocks third parties framing digithings.ai itself.
 /*
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-src https://digichat.digithings.ai; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'

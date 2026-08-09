@@ -7,8 +7,8 @@ import {
   stripFoundryCitationMarkers,
   type OpenAIResponsesClientLike,
   type FoundryStreamEvent,
-} from "./foundry-stream";
-import { toDigiChatActivity, type ActivitySpan } from "./chat-activity";
+} from "./stream";
+import { toDigiChatActivity, type ActivitySpan } from "@/lib/chat-activity";
 
 afterEach(() => vi.restoreAllMocks());
 

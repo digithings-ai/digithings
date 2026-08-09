@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { mapFoundryEvent, type FoundryStreamEvent } from "./foundry-stream";
+import { mapFoundryEvent, type FoundryStreamEvent } from "./adapters/foundry/stream";
 import { toDigiChatActivity, sanitizeActivitySpan, type ActivitySpan } from "./chat-activity";
 
 const events: FoundryStreamEvent[] = JSON.parse(

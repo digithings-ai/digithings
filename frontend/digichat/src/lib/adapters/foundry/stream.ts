@@ -3,7 +3,8 @@
  * @azure/ai-projects (DefaultAzureCredential — the digichat container's own
  * managed identity, no relay hop, no stored key). Conversation state lives
  * in Foundry; the client echoes the conversation id back each turn using the
- * same generic contract external-relay-stream.ts already established
+ * same generic conversation-id contract (`X-External-Conversation`) used for
+ * Foundry turn continuity.
  * (data-externalConversation / X-External-Conversation).
  *
  * Supersedes the standalone datatap-digichat-relay Azure Function (digithings#1396):
@@ -14,7 +15,7 @@
 import { DefaultAzureCredential } from "@azure/identity";
 import { AIProjectClient } from "@azure/ai-projects";
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
-import { lastUserMessageText } from "./external-relay-stream";
+import { lastUserMessageText } from "@/lib/adapters/shared/messages";
 import {
   ACTIVITY_PART_TYPE,
   applyActivityDetail,
@@ -22,7 +23,7 @@ import {
   type ActivityDetail,
   type ActivityDocument,
   type ActivitySpan,
-} from "./chat-activity";
+} from "@/lib/chat-activity";
 
 export interface FoundryStreamEvent {
   type: string;
@@ -606,8 +607,7 @@ export async function createFoundryStreamResponse(opts: {
           // An unexpected SDK/network exception, not Foundry's own protocol
           // error — can carry stack traces or internal hostnames, and this
           // response reaches anonymous embed visitors. Log it server-side;
-          // never stream it. Same pattern as stream-digigraph-trace.ts and
-          // external-relay-stream.ts.
+          // never stream it. Same pattern as adapters/digithings/stream.ts.
           console.error(
             "[foundry] stream error",
             err instanceof Error ? err.message : String(err)

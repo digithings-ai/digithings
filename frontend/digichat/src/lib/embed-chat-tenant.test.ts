@@ -5,7 +5,11 @@ import { resetEmbedTenantRegistryForTests } from "./embed-tenants";
 const REGISTRY = JSON.stringify({
   "datatapstream.com": {
     slug: "datatapstream",
-    backend: { type: "external-relay", url: "https://relay.example.com/api/digichat" },
+    backend: {
+      type: "foundry",
+      projectEndpoint: "https://example.services.ai.azure.com",
+      agentName: "agent",
+    },
     gateMode: "ungated",
     token: "datatapstream-secret",
   },
@@ -45,8 +49,9 @@ describe("resolveEmbedChatTenant with a registered host", () => {
     expect(result.tenantSlug).toBe("datatapstream");
     expect(result.ownerUserSub).toBe("embed:anonymous");
     expect(result.embedConfig?.backend).toEqual({
-      type: "external-relay",
-      url: "https://relay.example.com/api/digichat",
+      type: "foundry",
+      projectEndpoint: "https://example.services.ai.azure.com",
+      agentName: "agent",
     });
   });
 
@@ -104,12 +109,7 @@ const DIGITHINGS_REGISTRY = JSON.stringify({
   "digithings.ai": {
     slug: "digithings",
     aliases: ["www.digithings.ai"],
-    backend: {
-      type: "digivault",
-      supabaseUrlEnv: "DIGITHINGS_SUPABASE_URL",
-      supabaseAnonKeyEnv: "DIGITHINGS_SUPABASE_ANON_KEY",
-      openRouterKeyEnv: "DIGITHINGS_OPENROUTER_API_KEY",
-    },
+    backend: { type: "digigraph" },
     gateMode: "ungated",
     activityDetail: "full",
     token: "digithings-schema-token",

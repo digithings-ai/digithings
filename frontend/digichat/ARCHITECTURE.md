@@ -13,6 +13,12 @@ never speaks directly to digigraph or any Python service. All LLM calls, auth to
 exchanges, and upstream probes are handled in Next.js Route Handlers running on the
 server.
 
+**Modular frontend:** one shared UI (`@digithings/digichat-ui`) and activity protocol,
+with backends selected per tenant (`digigraph` | `foundry`). digithings tenants use
+digigraph (digillm + digivault hub). See
+[`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md)
+and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
+
 ### Capability matrix
 
 | Capability | Status |
@@ -26,7 +32,8 @@ server.
 | Conversation persistence — Postgres (optional) | Built |
 | digigraph activity stream (`data-digichatActivity` parts) | Built |
 | Shared activity UI (rich vault hits + research brief) | Built |
-| digivault embed backend (env-name secrets, AI SDK stream) | Built |
+| digigraph digithings adapter (`adapters/digithings/`) | Built |
+| Foundry client adapter (`adapters/foundry/`) | Built |
 | Quant comparison strip (inline `BacktestResult` parsing) | Built |
 | Quant run persistence (`quant_runs` table) | Built |
 | Ecosystem side panel (service URLs + health badges) | Built |
@@ -145,11 +152,11 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/lib/digigraph-messages.ts` | Content coercion for digigraph OpenAI body |
 | `src/lib/digigraph-upstream.ts` | `resolvedigigraphUpstreamAuth` — JWT resolution |
 | `src/lib/digikey-exchange.ts` | digikey token exchange (both grant types) |
-| `src/lib/stream-digigraph-trace.ts` | digigraph SSE → `data-digichatActivity` via typed mapper |
-| `src/lib/digigraph-activity-map.ts` | `rag_sources` / `graph_update` → `ActivitySpan` |
-| `src/lib/digivault-stream.ts` | digivault agentic loop → AI SDK UI message stream |
-| `src/lib/digivault-env.ts` | Per-tenant env-name secret resolution (fail closed) |
-| `src/lib/digivault-ip-rate-limit.ts` | digivault 60/min per-IP limiter |
+| `src/lib/adapters/digithings/stream.ts` | digigraph SSE → `data-digichatActivity` |
+| `src/lib/adapters/digithings/activity/` | digivault / digisearch activity mappers (digigraph tools) |
+| `src/lib/adapters/foundry/stream.ts` | Azure Foundry → AI SDK UI message stream |
+| `src/lib/adapters/shared/messages.ts` | Shared helpers (e.g. `lastUserMessageText`) |
+| `src/lib/digigraph-activity-map.ts` | Re-export of digithings activity mappers |
 | `src/lib/embed-gate-provider.ts` | Consume per-tenant embed chat access tokens |
 | `src/lib/chat-activity.ts` | Activity allowlist, detail gate, projector |
 | `src/lib/conversations-repo.ts` | Drizzle query helpers (conversations + quant runs) |
@@ -406,24 +413,28 @@ calls only `useChat` against `POST /api/chat` — it never imports `saveLocalThr
 anonymous request before any read/write — so no Postgres row can be created for
 `ownerUserSub: "embed:anonymous"` (verified by inspection for #1251, not assumed).
 
-### Embed tenant registry & external backends
+### Embed tenant registry & backends
 
 `DIGICHAT_EMBED_TENANTS` (JSON, keyed by hostname) declares embed tenants:
-per-host `slug`, `backend` (`digigraph` | `external-relay` + https URL |
-`foundry` + https `projectEndpoint` + `agentName` | `digivault` + env-name
-refs `supabaseUrlEnv` / `supabaseAnonKeyEnv` / `openRouterKeyEnv`),
-`gateMode` (`turn_limited` | `ungated` | `trial_form`), `theme` (`dark` | `light`),
-optional `accent` hex pair, `activityDetail` (`off` | `labels` | `full`),
-optional UI flags `showByok` / `showStatusBar` / `layout` (`page` | `embed`) —
-independent of `gateMode` (never derive `showByok = !ungated`),
-`attribution` flag, `aliases`, and a required `token`. digivault backends
-store only env **names** (pattern `/^[A-Z][A-Z0-9_]{0,127}$/`) — raw URLs/keys
-are rejected at parse time; values resolve via `process.env` at request time
-(`src/lib/digivault-env.ts`) and fail closed with a safe 503. Parsed fail-fast
-in `src/lib/embed-tenants.ts`; the same registry feeds `/api/chat` tenant
-resolution (`src/lib/embed-chat-tenant.ts`) and the client-safe
-`GET /api/embed/tenant-config` endpoint — both runtime-only, reading
-`process.env.DIGICHAT_EMBED_TENANTS` fresh per request.
+per-host `slug`, `backend` (`digigraph` | `foundry` + https `projectEndpoint` +
+`agentName`), `gateMode` (`turn_limited` | `ungated` | `trial_form`), `theme`
+(`dark` | `light`), optional `accent` hex pair, `activityDetail`
+(`off` | `labels` | `full`), optional UI flags `showByok` / `showStatusBar` /
+`layout` (`page` | `embed`) — independent of `gateMode` (never derive
+`showByok = !ungated`), `attribution` flag, `aliases`, and a required `token`.
+
+**digithings rule:** digithings tenants use `backend.type: digigraph` only.
+digivault and digisearch are digigraph tools (activity mappers under
+`src/lib/adapters/digithings/activity/`), not digichat HTTP backends. Client
+Azure tenants use `foundry`. Removed: `external-relay` and digichat-Node
+`digivault` backends.
+
+Parsed fail-fast in `src/lib/embed-tenants.ts`; the same registry feeds
+`/api/chat` tenant resolution (`src/lib/embed-chat-tenant.ts`) and the
+client-safe `GET /api/embed/tenant-config` endpoint — both runtime-only,
+reading `process.env.DIGICHAT_EMBED_TENANTS` fresh per request. Adapter
+layout and contract:
+[`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md).
 
 **Tenant presentation is resolved server-side, before first paint.** `/embed`
 is a server component (`src/app/embed/page.tsx`, `dynamic = "force-dynamic"`)
@@ -462,66 +473,31 @@ registry there for a value the build never actually reads would leak every
 tenant's token. `DIGICHAT_EMBED_TENANTS` itself stays runtime-only (a
 container env var, never a build-arg).
 
-`external-relay` tenants bypass digigraph entirely: `/api/chat` proxies to
-the configured relay via `src/lib/external-relay-stream.ts`, translating
-the relay's SSE contract (`conversation`, `text-delta`, `trace`, `done`,
-`error`) into AI SDK UI message stream parts. Conversation state lives on
-the relay's side (e.g. Azure Foundry conversations); the client echoes the
-relay's conversation id via `X-External-Conversation` (sessionStorage,
-`digichat_embed_conversation:<host>`). The Foundry relay streams incremental
-deltas then re-sends the COMPLETE text as one terminal frame; `external-relay-stream.ts`
-suppresses that duplicate by *holding* a delta equal to the accumulated text and only
-dropping it when the next frame is `done` (a later `text-delta` flushes it) — so a
-legitimately doubled chunk mid-stream is no longer lost (#1434). Both rate limiters (per-IP embed +
-shared BFF bucket, now keyed by the tenant's real slug) run before the
-backend branch. Relay URLs come from config, never the request, so there
-is no open-proxy/SSRF surface. First consumer: DataTapStream (datatap-web)
-via its Azure Function relay.
+`foundry` tenants call Azure AI Foundry directly via
+`src/lib/adapters/foundry/stream.ts` (`@azure/ai-projects` +
+`DefaultAzureCredential` — the container's own managed identity, no stored
+key). Conversation state lives in Foundry; the client echoes the conversation
+id via `X-External-Conversation` / `data-externalConversation`. Foundry
+behavior polish is tracked separately from digithings digigraph work.
 
-`foundry` tenants call Azure AI Foundry directly via `src/lib/foundry-stream.ts`
-(`@azure/ai-projects` + `DefaultAzureCredential` — the container's own managed
-identity, no relay hop, no stored key). Conversation state lives in Foundry;
-the client echoes the conversation id the same way as `external-relay`
-(`X-External-Conversation` / `data-externalConversation` — the wire contract
-is generic, not relay-specific). This backend supersedes the standalone
-`datatap-digichat-relay` Azure Function (digithings#1396): that Function's
-source was never committed to any repo, so `mapFoundryEvent` fixes its two
-known bugs from the start rather than porting them — `response.output_text.done`
-(the complete answer re-sent after already streaming it via `.delta`) and
-`response.file_search_call.searching` (fired alongside `.in_progress` for the
-same search step) are both intentionally unmapped, so neither the answer nor
-the "Searching…" trace is duplicated. `external-relay` stays available as the
-generic option for tenants whose backend isn't reachable via this container's
-own managed identity.
+digithings.ai `/chat` is a Pages shell (`DtNav` + iframe) pointing at digichat
+`/embed` on the tunnel hostname (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, typically
+`https://digichat.digithings.ai`) with `backend.type: digigraph`. digigraph
+must have `DIGIVAULT_URL` set so `digivault_search_notes` registers. Runbook:
+[`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
+ADR: [`docs/adr/0018-digichat-path-routing.md`](../../docs/adr/0018-digichat-path-routing.md).
 
-`digivault` tenants run the digivault RAG + OpenRouter free-pool / BYOK agentic
-loop inside the digichat container (`src/lib/digivault-stream.ts`), peer to
-Foundry. Secrets are per-tenant env-name refs (above). An additional IP rate
-limit of **60 req / 60 s** (`checkdigivaultIpRateLimit`, wording
-`"rate limit exceeded — slow down a moment"`) runs before the stream.
-Activity is emitted only as `data-digichatActivity` (sanitized +
-`activityDetail`-gated); vault `body_markdown` stays server-side in tool
-messages. The Cloudflare Pages Function at
-`frontend/digithings-web/functions/api/chat.ts` is **retired in Phase 3** —
-digithings.ai `/chat` is a Pages shell (`DtNav` + iframe) pointing at
-digichat `/embed` on the same origin (`https://digithings.ai/embed`, CF route
-to digithings-owned digichat Node — see
-`docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md`
-and `docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md`).
-Accent URL/theme handling is
-out of scope for this provider (separate fix).
-
-**First-party digithings hosts (Phase 3).** Prod hostnames `digithings.ai`
-and `www.digithings.ai` (`src/lib/embed-first-party.ts`) may embed without
-presenting `X-Embed-Token` when registered in `DIGICHAT_EMBED_TENANTS`.
+**First-party digithings hosts.** Prod hostnames `digithings.ai` and
+`www.digithings.ai` (`src/lib/embed-first-party.ts`) may use digichat `/embed`
+without presenting `X-Embed-Token` when registered in `DIGICHAT_EMBED_TENANTS`.
 Customer embeds (e.g. DataTap) still require a matching token. Preview
 `*.pages.dev` hosts are **not** allowlisted.
 
-**postMessage seed (Phase 3).** Embed emits `{ type: "digichat:ready" }` to
-the parent origin; the digithings.ai parent posts
-`{ type: "digichat:seed", messages, pending, ts }` after origin checks.
-Validators and caps live in `src/lib/embed-seed-messages.ts`. DataTap's
-`datatap:gated` / `datatap:unlocked` channel is unchanged.
+**postMessage seed.** Embed emits `{ type: "digichat:ready" }` to the parent
+origin; digithings.ai posts `{ type: "digichat:seed", messages, pending, ts }`
+after origin checks (`ChatEmbedShell`). Validators and caps live in
+`src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` / `datatap:unlocked`
+channel is unchanged.
 
 **`X-Embed-Host` alone is not sufficient authorization (#1339).** A tenant's
 host string is its own public domain, so `resolveEmbedTenantByHost` never

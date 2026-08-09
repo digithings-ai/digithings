@@ -9,13 +9,11 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
-import type { DigivaultBackendConfig } from "@/lib/digivault-env";
 
+/** digichat Node backends: digigraph (digithings stack) or foundry (client Azure). */
 export type EmbedBackendConfig =
   | { type: "digigraph" }
-  | { type: "external-relay"; url: string }
-  | { type: "foundry"; projectEndpoint: string; agentName: string }
-  | DigivaultBackendConfig;
+  | { type: "foundry"; projectEndpoint: string; agentName: string };
 
 export type EmbedTenantConfig = {
   slug: string;
@@ -75,14 +73,6 @@ export type EmbedTenantConfig = {
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
-export const EMBED_ENV_NAME = /^[A-Z][A-Z0-9_]{0,127}$/;
-
-function requireEnvName(ctx: string, field: string, value: unknown): string {
-  if (typeof value !== "string" || !EMBED_ENV_NAME.test(value)) {
-    throw new Error(`${ctx}: digivault "${field}" must be an env var name (A-Z[A-Z0-9_]*)`);
-  }
-  return value;
-}
 
 export function normalizeEmbedHost(input: string | null | undefined): string | null {
   if (!input) return null;
@@ -116,20 +106,6 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   let backendCfg: EmbedBackendConfig;
   if (backend?.type === "digigraph") {
     backendCfg = { type: "digigraph" };
-  } else if (backend?.type === "external-relay") {
-    if (typeof backend.url !== "string") {
-      throw new Error(`${ctx}: external-relay backend requires a "url"`);
-    }
-    let parsed: URL;
-    try {
-      parsed = new URL(backend.url);
-    } catch {
-      throw new Error(`${ctx}: backend.url is not a valid URL`);
-    }
-    if (parsed.protocol !== "https:") {
-      throw new Error(`${ctx}: backend.url must be https`);
-    }
-    backendCfg = { type: "external-relay", url: backend.url };
   } else if (backend?.type === "foundry") {
     if (typeof backend.projectEndpoint !== "string" || !backend.projectEndpoint.trim()) {
       throw new Error(`${ctx}: foundry backend requires a "projectEndpoint"`);
@@ -147,20 +123,8 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       throw new Error(`${ctx}: foundry backend requires an "agentName"`);
     }
     backendCfg = { type: "foundry", projectEndpoint: backend.projectEndpoint, agentName: backend.agentName };
-  } else if (backend?.type === "digivault") {
-    for (const banned of ["supabaseUrl", "supabaseAnonKey", "openRouterKey", "url"]) {
-      if (banned in backend) {
-        throw new Error(`${ctx}: digivault must not include raw "${banned}" — use *Env name refs`);
-      }
-    }
-    backendCfg = {
-      type: "digivault",
-      supabaseUrlEnv: requireEnvName(ctx, "supabaseUrlEnv", backend.supabaseUrlEnv),
-      supabaseAnonKeyEnv: requireEnvName(ctx, "supabaseAnonKeyEnv", backend.supabaseAnonKeyEnv),
-      openRouterKeyEnv: requireEnvName(ctx, "openRouterKeyEnv", backend.openRouterKeyEnv),
-    };
   } else {
-    throw new Error(`${ctx}: backend.type must be "digigraph", "external-relay", "foundry", or "digivault"`);
+    throw new Error(`${ctx}: backend.type must be "digigraph" or "foundry"`);
   }
 
   if (v.gateMode !== "turn_limited" && v.gateMode !== "ungated" && v.gateMode !== "trial_form") {

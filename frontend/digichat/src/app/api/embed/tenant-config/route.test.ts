@@ -11,7 +11,11 @@ afterEach(() => {
 const REGISTRY = JSON.stringify({
   "datatapstream.com": {
     slug: "datatapstream",
-    backend: { type: "external-relay", url: "https://relay.example.com/api/digichat" },
+    backend: {
+      type: "foundry",
+      projectEndpoint: "https://example.services.ai.azure.com",
+      agentName: "agent",
+    },
     gateMode: "ungated",
     theme: "light",
     accent: { color: "#b5562b", foreground: "#fff7f2" },
@@ -46,7 +50,7 @@ describe("GET /api/embed/tenant-config", () => {
       showStatusBar: false,
       layout: "embed",
     });
-    expect(JSON.stringify(body)).not.toContain("relay.example.com");
+    expect(JSON.stringify(body)).not.toContain("example.services.ai.azure.com");
   });
 
   it("returns legacy defaults for a registered host when the token is missing (#1339)", async () => {
@@ -88,12 +92,7 @@ describe("GET /api/embed/tenant-config", () => {
     "digithings.ai": {
       slug: "digithings",
       aliases: ["www.digithings.ai"],
-      backend: {
-        type: "digivault",
-        supabaseUrlEnv: "DIGITHINGS_SUPABASE_URL",
-        supabaseAnonKeyEnv: "DIGITHINGS_SUPABASE_ANON_KEY",
-        openRouterKeyEnv: "DIGITHINGS_OPENROUTER_API_KEY",
-      },
+      backend: { type: "digigraph" },
       gateMode: "ungated",
       activityDetail: "full",
       token: "digithings-schema-token",
@@ -120,12 +119,7 @@ describe("GET /api/embed/tenant-config", () => {
       JSON.stringify({
         "digithings.ai": {
           slug: "digithings",
-          backend: {
-            type: "digivault",
-            supabaseUrlEnv: "A_URL",
-            supabaseAnonKeyEnv: "A_ANON",
-            openRouterKeyEnv: "A_OR",
-          },
+          backend: { type: "digigraph" },
           gateMode: "ungated",
           showByok: true,
           showStatusBar: true,

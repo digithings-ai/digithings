@@ -67,7 +67,11 @@ describe("registry-derived frame-ancestors", () => {
         "datatapstream.com": {
           slug: "datatapstream",
           aliases: ["dev.datatap.stream"],
-          backend: { type: "external-relay", url: "https://relay.example.com/api/x" },
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://example.services.ai.azure.com",
+            agentName: "agent",
+          },
           gateMode: "ungated",
           token: "datatapstream-secret",
         },
@@ -109,7 +113,11 @@ describe("DIGICHAT_EMBED_HOSTS (build-time CSP without the secret registry)", ()
       JSON.stringify({
         "registry-var.example.com": {
           slug: "registryvar",
-          backend: { type: "external-relay", url: "https://relay.example.com/api/x" },
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://example.services.ai.azure.com",
+            agentName: "agent",
+          },
           gateMode: "ungated",
           token: "secret",
         },
@@ -127,7 +135,11 @@ describe("DIGICHAT_EMBED_HOSTS (build-time CSP without the secret registry)", ()
       JSON.stringify({
         "registry-var.example.com": {
           slug: "registryvar",
-          backend: { type: "external-relay", url: "https://relay.example.com/api/x" },
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://example.services.ai.azure.com",
+            agentName: "agent",
+          },
           gateMode: "ungated",
           token: "secret",
         },

@@ -1,6 +1,6 @@
 import { it, expect, vi, afterEach } from "vitest";
 import type { UIMessage } from "ai";
-import { createDigigraphTraceStreamResponse } from "./stream-digigraph-trace";
+import { createDigigraphTraceStreamResponse } from "./stream";
 
 afterEach(() => vi.restoreAllMocks());
 
