@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""Leaf: POST workdir HTML/PDF files to digisearch ``/ingest``."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any  # score:allow untyped any — ingest JSON payloads are open dicts
+
+from scripts.docs_onboard.models import OnboardManifest, PageClass, load_manifest
+from scripts.docs_onboard.workspace import Workspace
+
+PostIngest = Callable[[dict[str, Any]], dict[str, Any]]
+
+
+def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={**headers, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            body = resp.read().decode()
+            return json.loads(body) if body else {}
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()[:2000]
+        raise RuntimeError(f"HTTP {e.code} {url}: {detail}") from e
+
+
+def _oauth_token(digikey_url: str, api_key: str) -> str:
+    out = _post_json(
+        f"{digikey_url.rstrip('/')}/v1/oauth/token",
+        {"grant_type": "api_key", "api_key": api_key},
+        headers={},
+    )
+    token = out.get("access_token")
+    if not token:
+        raise RuntimeError(f"No access_token in digikey response: {out}")
+    return str(token)
+
+
+def write_search_index(
+    manifest: OnboardManifest,
+    workspace: Workspace,
+    *,
+    digisearch_url: str = "http://127.0.0.1:8002",
+    digikey_url: str = "http://127.0.0.1:8005",
+    api_key: str = "",
+    source_prefix: str | None = None,
+    post_ingest: PostIngest | None = None,
+) -> int:
+    """Ingest workdir docs HTML + PDF assets into digisearch. Returns docs posted."""
+    if post_ingest is None:
+        key = api_key.strip()
+        if not key:
+            raise ValueError("api_key required when post_ingest is not injected")
+        token = _oauth_token(digikey_url, key)
+        base = digisearch_url.rstrip("/")
+        auth = {"Authorization": f"Bearer {token}"}
+
+        def post_ingest(payload: dict[str, Any]) -> dict[str, Any]:
+            return _post_json(f"{base}/ingest", payload, auth)
+
+    posted = 0
+    # HTML docs from classified pages
+    for classified in workspace.iter_classified():
+        if classified.page_class != PageClass.docs:
+            continue
+        html_rel = classified.page.html_path
+        if not html_rel:
+            continue
+        local = workspace.root / html_rel
+        if not local.is_file():
+            continue
+        if source_prefix:
+            source = f"{source_prefix.rstrip('/')}/{html_rel}"
+        else:
+            source = str(local.resolve())
+        url = classified.page.final_url or classified.page.url
+        payload = {
+            "source": source,
+            "index_name": manifest.digisearch_index,
+            "doc_type": "html",
+            "metadata": {
+                "source_url": url,
+                "client": manifest.client,
+                "page_class": PageClass.docs.value,
+            },
+        }
+        post_ingest(payload)
+        posted += 1
+
+    # PDF assets via source_map
+    for entry in workspace.iter_source_map():
+        if not entry.local_path or entry.content_type.startswith("error:"):
+            continue
+        if "pdf" not in entry.content_type.lower() and not entry.local_path.lower().endswith(
+            ".pdf"
+        ):
+            continue
+        local = workspace.root / entry.local_path
+        if not local.is_file():
+            continue
+        if source_prefix:
+            source = f"{source_prefix.rstrip('/')}/{entry.local_path}"
+        else:
+            source = str(local.resolve())
+        payload = {
+            "source": source,
+            "index_name": manifest.digisearch_index,
+            "doc_type": "pdf",
+            "metadata": {
+                "source_url": entry.source_url,
+                "client": manifest.client,
+                "page_class": PageClass.pdf.value,
+            },
+        }
+        post_ingest(payload)
+        posted += 1
+
+    return posted
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--manifest", type=Path, required=True)
+    ap.add_argument("--workdir", type=Path, required=True)
+    ap.add_argument(
+        "--digisearch-url",
+        default=os.environ.get("DIGISEARCH_URL", "http://127.0.0.1:8002"),
+    )
+    ap.add_argument(
+        "--digikey-url",
+        default=os.environ.get("DIGIKEY_URL", "http://127.0.0.1:8005"),
+    )
+    ap.add_argument(
+        "--api-key",
+        default=os.environ.get("DIGISEARCH_SEED_API_KEY", ""),
+    )
+    ap.add_argument(
+        "--source-prefix",
+        default=os.environ.get("DIGISEARCH_ONBOARD_REMOTE_PREFIX", "").strip() or None,
+        help="Container-visible prefix (Compose digisearch); mirrors DIGISEARCH_SEED_REMOTE_PREFIX",
+    )
+    args = ap.parse_args(argv)
+    manifest = load_manifest(args.manifest)
+    ws = Workspace.create(args.workdir)
+    n = write_search_index(
+        manifest,
+        ws,
+        digisearch_url=args.digisearch_url,
+        digikey_url=args.digikey_url,
+        api_key=args.api_key,
+        source_prefix=args.source_prefix,
+    )
+    print(f"write_search_index: posted {n} docs → index={manifest.digisearch_index}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
