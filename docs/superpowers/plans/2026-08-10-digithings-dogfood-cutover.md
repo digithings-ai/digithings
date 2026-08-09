@@ -1,6 +1,6 @@
 # digithings dogfood cutover — implementation plan
 
-> **For agentic workers:** Plan only — do **not** implement from this document until the wait-for-merge gate clears. After gate: use superpowers:subagent-driven-development or superpowers:executing-plans task-by-task.
+> **For agentic workers:** Plan only — do **not** implement from this document until **Stage A** (GHCR publish on `main`) clears. After gate: use superpowers:subagent-driven-development or superpowers:executing-plans task-by-task.
 >
 > **Status:** Draft 2026-08-10 — dogfood digithings.ai as self-host client #0.
 > **Parent program:** [`2026-08-09-digichat-self-host-picks-metaplan.md`](./2026-08-09-digichat-self-host-picks-metaplan.md)
@@ -34,14 +34,16 @@ Deliver incrementally: deploy a slice, compare to the current production chat, r
 
 ### 1. Wait-for-merge: PRs #2028–#2031 on `develop`
 
-| PR | Title (short) | State (2026-08-10) | Needed for dogfood |
+| PR | Title (short) | State on `develop` (2026-08-10) | Needed for dogfood |
 |---|---|---|---|
-| [#2028](https://github.com/digithings-ai/digithings/pull/2028) | Self-host picks meta-plan | **MERGED** | Plans + sequencing |
-| [#2029](https://github.com/digithings-ai/digithings/pull/2029) | Profile A GHCR pull | **MERGED** | `compose.profile-a.yml` pull-not-build |
-| [#2030](https://github.com/digithings-ai/digithings/pull/2030) | docs_onboard + digivault local search | **OPEN** | `scripts/docs_onboard/`, runbook |
-| [#2031](https://github.com/digithings-ai/digithings/pull/2031) | Runtime CSP frame-ancestors | **MERGED** | `DIGICHAT_EMBED_HOSTS` without rebuild |
+| [#2028](https://github.com/digithings-ai/digithings/pull/2028) | Self-host picks meta-plan | **MERGED** (`a5c264f`) | Plans + sequencing |
+| [#2029](https://github.com/digithings-ai/digithings/pull/2029) | Profile A GHCR pull | **MERGED** (`8211e7c`) | `compose.profile-a.yml` pull-not-build |
+| [#2030](https://github.com/digithings-ai/digithings/pull/2030) | docs_onboard + digivault local search | **MERGED** (`e13eaf5`) | `scripts/docs_onboard/`, runbook |
+| [#2031](https://github.com/digithings-ai/digithings/pull/2031) | Runtime CSP frame-ancestors | **MERGED** (`2c30ee4`) | `DIGICHAT_EMBED_HOSTS` without rebuild |
 
-**Gate rule:** Do not start dogfood **implementation** until **#2030 is merged to `develop`** (and local `develop` is pulled). #2028 / #2029 / #2031 are already on `develop`.
+Squash SHAs on `develop`: #2028 `a5c264f31da0d971fbf9cf31937f0af886166828`, #2029 `8211e7c321b7ed496300b029225c18e2593cf0cd`, #2030 `e13eaf5036fc379ffeebe980092d24b48d46bc6e`, #2031 `2c30ee40c30fe95edb23f4d4985d7d19e8329d44`.
+
+**Gate rule:** Pick PRs #2028–#2031 are **merged on `develop`**. Do not start dogfood **implementation** until **Stage A** (§2 below) is complete and local `develop` is pulled.
 
 ### 2. Stage A — GHCR stack images pullable (Pick 2 ops)
 
@@ -206,7 +208,7 @@ Each stage = one PR (or ops-only step) with acceptance criteria. **Compare-and-g
 
 ### Stage 0 — Gate verification (no code)
 
-- [ ] `develop` contains #2028, #2029, #2030, #2031.
+- [x] `develop` contains #2028, #2029, #2030, #2031 (merged 2026-08-10).
 - [ ] Stage A GHCR pulls verified; pins recorded.
 - [ ] Gap list doc started: `docs/projects/digithings/GAPLOG.md` (questions, missing citations, UX deltas).
 
@@ -232,11 +234,11 @@ Each stage = one PR (or ops-only step) with acceptance criteria. **Compare-and-g
 - [ ] Cross-link from `docs/digichat/CLIENT-DOCS-ONBOARD.md` and `infra/digichat-digithings/README.md`.
 - [ ] Deprecation note: `digithings-guide` remains until cutover completes; single manifest wins later.
 
-**Acceptance:** `python scripts/docs_onboard/run_onboard.py --manifest docs/projects/digithings/onboard.yaml --dry-run` (or unit tests) validates manifest once #2030 lands.
+**Acceptance:** `python scripts/docs_onboard/run_onboard.py --manifest docs/projects/digithings/onboard.yaml --dry-run` (or unit tests) validates manifest (onboard on `develop`).
 
 ---
 
-### Stage 3 — Onboard extensions (scripts PR, after #2030)
+### Stage 3 — Onboard extensions (scripts PR)
 
 - [ ] **Static file ingest:** manifest `static_sources` → classify as `docs` / `repo_doc`.
 - [ ] **OpenAPI ingest:** manifest `openapi_sources` → `PageClass.openapi` (new enum value) or tagged `docs` with `kind: openapi|swagger`.
@@ -313,7 +315,7 @@ Update `docs/projects/digithings/GAPLOG.md`; each gap → issue or next stage.
 
 | Risk | Mitigation |
 |---|---|
-| #2030 delayed | Hard gate; dogfood scripts depend on `run_onboard.py` |
+| Pick PRs not on `develop` | Cleared 2026-08-10 (#2028–#2031); scripts live on `develop` |
 | GHCR 404 on `main` | Stage A before Profile A migration |
 | Split brain vault (local root vs Supabase) | API write + sync publish; never prod search on unpublished local root |
 | Dual corpus (`sync_architecture_vault` vs onboard) | Stage 2 documents merge path; eventually single `docs/projects/digithings` manifest |
