@@ -43,6 +43,7 @@ docker compose --profile digichat --profile digivault --profile litellm-cache up
 `POST /api/chat` with `X-Embed-Host: https://digithings.ai`. That proves digichat → digigraph
 → LiteLLM (+ digivault when tools run). Public `digithings.ai/chat` still needs Tunnel + Pages.
 
+
 digichat runtime embed registry (never a Docker build-arg — tokens leak in layers):
 
 ```bash

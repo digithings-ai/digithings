@@ -122,3 +122,4 @@ Same pattern as DataTap today: client-hosted digichat Node + their backend (Foun
 - Client (or digithings helping them) runs **their** digichat + digigraph + digivault
 - Ingest into **their** vault: crawl → PDFs → page-level notes (text + images / OCR / base64 as needed)
 - Same digichat release; different env, secrets, and corpus
+
