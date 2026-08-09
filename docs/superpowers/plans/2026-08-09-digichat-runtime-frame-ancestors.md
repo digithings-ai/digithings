@@ -641,7 +641,7 @@ Integration assumptions and non-conflicts only — **do not implement** those pi
 
 | Seam | Assumption / must not conflict |
 |---|---|
-| Product model | Corpus lands in **client digivault**; digichat remains the same release. CSP parents are orthogonal to vault content. |
+| Product model | Onboarded docs land in **client digivault** (and/or digisearch); digichat remains the same release. CSP parents are orthogonal to vault content. |
 | Embed parents | Doc-chat demos still need the parent marketing host in runtime CSP (this pick) **and** vault notes (Pick 3). Neither replaces the other. |
 | Config | Ingest pipelines must not require digichat rebuilds; they also must not put secrets into `DIGICHAT_EMBED_HOSTS`. |
 | Scope boundary | Do not add crawl/OCR UI or digichat upload routes in this plan (AGENTS.md Phase 2 / sketch Follow-ups). |
