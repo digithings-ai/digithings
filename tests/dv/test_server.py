@@ -261,8 +261,6 @@ def test_orchestrator_invoke_search_notes(monkeypatch: pytest.MonkeyPatch) -> No
     ]
 
 
-
-
 def test_orchestrator_invoke_search_notes_local_root(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
