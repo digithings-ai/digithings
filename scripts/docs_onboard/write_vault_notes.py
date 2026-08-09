@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""Leaf: write classified docs/PDF content into a digivault vault."""
+"""Leaf: write classified docs/PDF/openapi/repo_doc content into digivault."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
+import urllib.error
+import urllib.request
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Protocol  # score:allow untyped any — frontmatter / HTTP JSON
 
 from digivault.vault import Vault
 
@@ -15,6 +20,22 @@ from scripts.docs_onboard.html_to_markdown import html_to_markdown
 from scripts.docs_onboard.models import ClassifiedPage, OnboardManifest, PageClass, load_manifest
 from scripts.docs_onboard.naming import slug_for_url
 from scripts.docs_onboard.workspace import Workspace
+
+_VAULT_PAGE_CLASSES = frozenset(
+    {PageClass.docs, PageClass.pdf, PageClass.openapi, PageClass.repo_doc}
+)
+
+
+class NoteWriter(Protocol):
+    def write_note(
+        self,
+        name: str,
+        *,
+        frontmatter: dict[str, Any] | None = None,
+        body: str = "",
+        subdir: str = "",
+        overwrite: bool = False,
+    ) -> Any: ...
 
 
 def _pdf_text(path: Path) -> str:
@@ -41,38 +62,104 @@ def _note_body_for(classified: ClassifiedPage, workspace: Workspace) -> tuple[st
             return title, ""
         return title, html_to_markdown(html_path.read_text(encoding="utf-8", errors="replace"))
     if classified.page_class == PageClass.pdf:
-        # Prefer downloaded asset from source_map
         for entry in workspace.iter_source_map():
             if entry.source_url in (page.url, page.final_url) and entry.local_path:
                 asset = workspace.root / entry.local_path
                 if asset.is_file():
                     return title, _pdf_text(asset)
         return title, ""
+    if classified.page_class in (PageClass.openapi, PageClass.repo_doc):
+        if not page.local_path:
+            return title, ""
+        local = workspace.root / page.local_path
+        if not local.is_file():
+            return title, ""
+        text = local.read_text(encoding="utf-8", errors="replace")
+        if local.suffix.lower() in (".html", ".htm"):
+            return title, html_to_markdown(text)
+        return title, text if text.endswith("\n") else text + "\n"
     return title, ""
+
+
+class DigivaultApiWriter:
+    """HTTP client that upserts notes via digivault ``POST /v1/notes``."""
+
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        bearer_token: str = "",
+        post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.bearer_token = bearer_token.strip()
+        self._post_json = post_json or _post_json
+
+    def write_note(
+        self,
+        name: str,
+        *,
+        frontmatter: dict[str, Any] | None = None,
+        body: str = "",
+        subdir: str = "",
+        overwrite: bool = False,
+    ) -> dict[str, Any]:
+        fm = dict(frontmatter or {})
+        payload: dict[str, Any] = {
+            "name": name,
+            "body": body,
+            "subdir": subdir,
+            "overwrite": overwrite,
+            "frontmatter": fm,
+        }
+        if "title" in fm:
+            payload["title"] = fm.get("title")
+        if "tags" in fm:
+            payload["tags"] = fm.get("tags")
+        headers: dict[str, str] = {}
+        if self.bearer_token:
+            headers["Authorization"] = f"Bearer {self.bearer_token}"
+        return self._post_json(f"{self.base_url}/v1/notes", payload, headers)
+
+
+def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={**headers, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            body = resp.read().decode()
+            return json.loads(body) if body else {}
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()[:2000]
+        raise RuntimeError(f"HTTP {e.code} {url}: {detail}") from e
 
 
 def write_vault_notes(
     manifest: OnboardManifest,
     workspace: Workspace,
-    vault: Vault,
+    vault: NoteWriter,
 ) -> int:
-    """Upsert digivault notes for classified docs + PDF pages. Returns count written."""
+    """Upsert digivault notes for classified keep pages. Returns count written."""
     written = 0
     ingested_at = datetime.now(timezone.utc).isoformat()
     for classified in workspace.iter_classified():
-        if classified.page_class not in (PageClass.docs, PageClass.pdf):
+        if classified.page_class not in _VAULT_PAGE_CLASSES:
             continue
         try:
             title, body = _note_body_for(classified, workspace)
         except Exception:
-            # PDF parser / HTML read failures skip this page; do not abort the sink.
             continue
         if not body.strip():
             continue
         url = classified.page.final_url or classified.page.url
         slug = slug_for_url(url)
         tags = ["onboard", classified.page_class.value, f"client:{manifest.client}"]
-        frontmatter = {
+        frontmatter: dict[str, Any] = {
             "title": title,
             "tags": tags,
             "source_url": url,
@@ -80,6 +167,10 @@ def write_vault_notes(
             "ingested_at": ingested_at,
             "client": manifest.client,
             "page_class": classified.page_class.value,
+            "type": (
+                "api_reference" if classified.page_class == PageClass.openapi else "reference"
+            ),
+            "status": "published",
         }
         vault.write_note(
             slug,
@@ -102,15 +193,34 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Vault root (default: DIGIVAULT_ROOT)",
     )
+    ap.add_argument(
+        "--digivault-url",
+        default=os.environ.get("DIGIVAULT_URL", "").strip() or None,
+        help="digivault HTTP base (POST /v1/notes); alternative to --vault-root",
+    )
+    ap.add_argument(
+        "--bearer-token",
+        default=os.environ.get("DIGIVAULT_BEARER_TOKEN", "").strip(),
+        help="Optional Bearer token for digivault writes",
+    )
     args = ap.parse_args(argv)
-    root = args.vault_root or Path((os.environ.get("DIGIVAULT_ROOT") or "").strip())
-    if not root or not str(root):
-        raise SystemExit("Pass --vault-root or set DIGIVAULT_ROOT")
-    root.mkdir(parents=True, exist_ok=True)
     manifest = load_manifest(args.manifest)
     ws = Workspace.create(args.workdir)
-    n = write_vault_notes(manifest, ws, Vault(root))
-    print(f"write_vault_notes: wrote {n} notes → {root}")
+
+    writer: NoteWriter
+    if args.digivault_url:
+        writer = DigivaultApiWriter(args.digivault_url, bearer_token=args.bearer_token)
+        target = args.digivault_url
+    else:
+        root = args.vault_root or Path((os.environ.get("DIGIVAULT_ROOT") or "").strip())
+        if not root or not str(root):
+            raise SystemExit("Pass --vault-root / DIGIVAULT_ROOT or --digivault-url")
+        root.mkdir(parents=True, exist_ok=True)
+        writer = Vault(root)
+        target = str(root)
+
+    n = write_vault_notes(manifest, ws, writer)
+    print(f"write_vault_notes: wrote {n} notes → {target}")
     return 0
 
 

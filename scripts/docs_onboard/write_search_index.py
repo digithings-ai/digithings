@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Leaf: POST workdir HTML/PDF files to digisearch ``/ingest``."""
+"""Leaf: POST workdir HTML/PDF/markdown files to digisearch ``/ingest``."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ from scripts.docs_onboard.models import OnboardManifest, PageClass, load_manifes
 from scripts.docs_onboard.workspace import Workspace
 
 PostIngest = Callable[[dict[str, Any]], dict[str, Any]]
+
+_SEARCH_PAGE_CLASSES = frozenset({PageClass.docs, PageClass.openapi, PageClass.repo_doc})
 
 
 def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
@@ -48,6 +50,21 @@ def _oauth_token(digikey_url: str, api_key: str) -> str:
     return str(token)
 
 
+def _doc_type_for(classified_path: Path, page_class: PageClass, content_type: str) -> str:
+    suffix = classified_path.suffix.lower()
+    if suffix in (".md", ".markdown") or page_class in (PageClass.openapi, PageClass.repo_doc):
+        if suffix in (".md", ".markdown") or "markdown" in content_type:
+            return "markdown"
+        if suffix == ".html":
+            return "html"
+        return "plaintext"
+    if suffix in (".html", ".htm") or page_class == PageClass.docs:
+        return "html"
+    if suffix == ".pdf":
+        return "pdf"
+    return "plaintext"
+
+
 def write_search_index(
     manifest: OnboardManifest,
     workspace: Workspace,
@@ -58,7 +75,7 @@ def write_search_index(
     source_prefix: str | None = None,
     post_ingest: PostIngest | None = None,
 ) -> int:
-    """Ingest workdir docs HTML + PDF assets into digisearch. Returns docs posted."""
+    """Ingest workdir docs into digisearch. Returns docs posted."""
     if post_ingest is None:
         key = api_key.strip()
         if not key:
@@ -71,29 +88,29 @@ def write_search_index(
             return _post_json(f"{base}/ingest", payload, auth)
 
     posted = 0
-    # HTML docs from classified pages
     for classified in workspace.iter_classified():
-        if classified.page_class != PageClass.docs:
+        if classified.page_class not in _SEARCH_PAGE_CLASSES:
             continue
-        html_rel = classified.page.html_path
-        if not html_rel:
+        # Prefer local_path (static/repo/openapi); fall back to html_path (crawl)
+        rel = classified.page.local_path or classified.page.html_path
+        if not rel:
             continue
-        local = workspace.root / html_rel
+        local = workspace.root / rel
         if not local.is_file():
             continue
         if source_prefix:
-            source = f"{source_prefix.rstrip('/')}/{html_rel}"
+            source = f"{source_prefix.rstrip('/')}/{rel}"
         else:
             source = str(local.resolve())
         url = classified.page.final_url or classified.page.url
         payload = {
             "source": source,
             "index_name": manifest.digisearch_index,
-            "doc_type": "html",
+            "doc_type": _doc_type_for(local, classified.page_class, classified.page.content_type),
             "metadata": {
                 "source_url": url,
                 "client": manifest.client,
-                "page_class": PageClass.docs.value,
+                "page_class": classified.page_class.value,
             },
         }
         post_ingest(payload)

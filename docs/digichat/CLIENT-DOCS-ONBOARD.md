@@ -20,9 +20,23 @@ not a Digi peer module and not a digichat fork.
 Pipeline order:
 
 ```text
-scrape_site → classify_pages → fetch_docs → [write_vault_notes?] → [write_search_index?]
+scrape_site → classify_pages → fetch_docs
+  → [ingest_static / ingest_openapi / ingest_repo?]
+  → [write_vault_notes?] → [write_search_index?]
+  → [sync_onboard_vault.py → Supabase?]
 ```
 
+Website crawl remains the primary discovery path. Manifest extensions:
+
+| Field | Purpose |
+|---|---|
+| `static_sources` | YAML globs → `PageClass.repo_doc` |
+| `openapi_sources` | OpenAPI/Swagger JSON → `PageClass.openapi` |
+| `repo_source` | Local path or GitHub `{owner}/{repo}` + globs → `repo_doc` |
+| `sinks: [vault, search]` | Dual-sink (dogfood digithings) |
+| `vault_url` / `--digivault-url` | Upsert via digivault `POST /v1/notes?overwrite` |
+
+Dogfood client #0: [`docs/projects/digithings/`](../projects/digithings/).
 ## Prerequisites
 
 - Python 3.12+ and a repo venv (`source .venv/bin/activate`).
@@ -46,6 +60,18 @@ OCR for scanned PDFs is owned by **digisearch** (`DIGISEARCH_OCR_ENABLED=true` a
 
 Example public dogfood manifest:
 [`docs/projects/example-docs-client/onboard.yaml`](../projects/example-docs-client/onboard.yaml).
+Client #0 (digithings.ai):
+[`docs/projects/digithings/onboard.yaml`](../projects/digithings/onboard.yaml).
+
+Dry-run (no crawl network when `--dry-run`; validates static/openapi/repo):
+
+```bash
+python scripts/docs_onboard/run_onboard.py \
+  --manifest docs/projects/digithings/onboard.yaml \
+  --workdir /tmp/digithings-onboard \
+  --dry-run
+```
+
 Replace `seed_url` / hosts with a real allowlisted docs host for live smoke.
 
 ```bash
@@ -62,6 +88,11 @@ python scripts/docs_onboard/run_onboard.py \
   --api-key "${DIGISEARCH_SEED_API_KEY}"
 ```
 
+Production digithings path prefers `--digivault-url` (filesystem vault on the
+operator digivault) then `scripts/sync_onboard_vault.py` to publish to the
+existing Supabase `architecture_notes` table (service role; `--dry-run` first).
+Do **not** point public digivault search at an unpublished local `DIGIVAULT_ROOT`
+only — that splits the brain from Supabase FTS.
 - Exit `0` on success; exit `2` if any sink reported errors (JSON `OnboardResult`
   still prints to stdout).
 - Leaf scripts (`scrape_site.py`, `classify_pages.py`, …) are runnable alone with
@@ -122,7 +153,8 @@ pytest tests/dv/test_local_search.py tests/scripts/docs_onboard -m unit -v
 ## Related
 
 - Ops index: [`docs/ops/CLIENT_PIPELINES.md`](../ops/CLIENT_PIPELINES.md)
-- Plan: [`docs/superpowers/plans/2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md)
+- Plan: [`docs/superpowers/plans/2026-08-10-digithings-dogfood-cutover.md`](../superpowers/plans/2026-08-10-digithings-dogfood-cutover.md)
+- Client #0: [`docs/projects/digithings/`](../projects/digithings/)
 - Fit (picks 1–3): [`docs/architecture/digichat-self-host-picks-fit.md`](../architecture/digichat-self-host-picks-fit.md)
 - Install: [`docs/digichat/INSTALL.md`](INSTALL.md)
 - Release overlays: [`infra/digichat-release/README.md`](../../infra/digichat-release/README.md)
