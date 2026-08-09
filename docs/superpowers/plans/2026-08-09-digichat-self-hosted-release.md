@@ -566,7 +566,7 @@ EOF
 - Consumes: Truth from `infra/digichat-digithings/README.md` + ADR-0018 (iframe → digichat Node via Tunnel; digigraph path).
 - Produces: DEPLOYMENT.md that no longer claims Pages Function + native digichat-ui OpenRouter loop for `/chat`.
 
-- [ ] **Step 1: Locate stale claims**
+- [x] **Step 1: Locate stale claims**
 
 Run:
 
@@ -574,7 +574,7 @@ Run:
 rg -n "Pages Function|useStackChat|functions/api/chat|native @digithings/digichat-ui|OpenRouter" docs/DEPLOYMENT.md
 ```
 
-- [ ] **Step 2: Replace public routing /chat sections**
+- [x] **Step 2: Replace public routing /chat sections**
 
 Replace the Phase 3 “native digichat-ui + Pages Function” bullets with:
 
@@ -595,7 +595,7 @@ One public domain serves marketing + chat shell:
 
 Update “digithings.ai/chat — digichat marketing pane” to describe iframe + Tunnel + digigraph (retire Function/OpenRouter/Supabase copy). Update smoke: remove `POST https://digithings.ai/api/chat` Pages Function check; keep `GET /chat` shell + point operators to Tunnel origin `/api/health` and vault-grounded browser smoke from infra README.
 
-- [ ] **Step 3: Verify no stale Function claims remain**
+- [x] **Step 3: Verify no stale Function claims remain**
 
 Run:
 
@@ -606,7 +606,7 @@ rg -n "digigraph|Tunnel|INSTALL.md|digichat-digithings" docs/DEPLOYMENT.md
 
 Expected: no live Function chat path as current truth; digigraph/Tunnel/install links present.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/DEPLOYMENT.md
