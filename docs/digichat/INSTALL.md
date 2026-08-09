@@ -55,20 +55,35 @@ Browser → digichat → digigraph → digillm/LiteLLM
                            └─ digivault_hub → digivault
 ```
 
-v1 honesty: digichat Node always pulls GHCR. digikey / digigraph / digivault still
-**build from the monorepo** until those services have GHCR tags. Clone this repo to
-run Profile A.
+Pull **all** Profile A services from GHCR (digichat + digikey + digigraph + digivault).
+LiteLLM uses the public berriai image. Pin stack and digichat tags separately:
+
+| Variable | Example | Services |
+|---|---|---|
+| `DIGICHAT_VERSION` | `0.9.3` | digichat → `…/digichat:v0.9.3` |
+| `DIGI_IMAGE_TAG` | `sha-<12>` or `v0.1.0` | digikey, digigraph, digivault |
 
 ```bash
 cp infra/digichat-release/.env.profile-a.example \
    infra/digichat-release/.env.profile-a
-# edit AUTH_SECRET, DIGIKEY_BFF_TOKEN, DIGICHAT_EMBED_TENANTS, provider keys
+# edit AUTH_SECRET, DIGIKEY_BFF_TOKEN, DIGICHAT_EMBED_TENANTS, DIGI_IMAGE_TAG, provider keys
 
+make digichat-profile-a-up
+# or:
 docker compose -f infra/digichat-release/compose.profile-a.yml \
-  --env-file infra/digichat-release/.env.profile-a up -d --build
+  --env-file infra/digichat-release/.env.profile-a up -d
 ```
 
 Does **not** start digiquant / digisearch / digismith / heartbeat / observability.
+
+Config for LiteLLM / digigraph is vendored under
+[`infra/digichat-release/config/`](../../infra/digichat-release/config/) (no monorepo
+`config/` clone required). Stack GHCR packages appear after
+`publish-service-images.yml` runs on `main` (promote #2023, then first publish).
+
+Full monorepo stack (all Python services) alternative:
+[`docs/templates/self-host/README.md`](../templates/self-host/README.md)
+(`make up-ghcr` + `--profile digivault --profile digichat`).
 
 digithings’ own Tunnel operator path (not the client default):
 [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
@@ -132,6 +147,8 @@ Customer embeds always need a matching `token`. First-party digithings hosts
 
 | Variable | Purpose |
 |---|---|
+| `DIGICHAT_VERSION` | digichat GHCR tag (`v${DIGICHAT_VERSION}`) |
+| `DIGI_IMAGE_TAG` | digikey / digigraph / digivault GHCR tag (`sha-…` or `v0.1.0`) |
 | `DIGIGRAPH_INTERNAL_URL` | digigraph base |
 | `DIGIKEY_URL` + `DIGIKEY_BFF_TOKEN` | Preferred upstream auth |
 | On digigraph: `DIGIVAULT_URL`, LiteLLM / digillm provider keys | Vault tool + LLM path |

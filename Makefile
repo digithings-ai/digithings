@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability atlas-validate supabase-migrations-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability atlas-validate supabase-migrations-check
 
 build:
 	docker compose build
@@ -78,10 +78,11 @@ down-observability:
 
 # ---------------------------------------------------------------------------
 # digichat targets
-#   make up-digichat / down-digichat     — local build from monorepo (dev/ops)
-#   make digichat-release-up VERSION=…  — pull pinned GHCR (no monorepo build)
+#   make up-digichat / down-digichat          — local build from monorepo (dev/ops)
+#   make digichat-release-up VERSION=…       — pull pinned digichat GHCR (full stack overlay)
 #   make digichat-release-down VERSION=…
-#   make digichat-dev / digichat-health  — host Next.js + /api/health smoke
+#   make digichat-profile-a-up / down        — Profile A pull (digichat + digikey + digigraph + digivault)
+#   make digichat-dev / digichat-health       — host Next.js + /api/health smoke
 #   make up-digichat-db / down-digichat-db
 # Client install: docs/digichat/INSTALL.md | overlays: infra/digichat-release/
 # ---------------------------------------------------------------------------
@@ -109,6 +110,16 @@ digichat-release-down:
 	  -f docker-compose.yml \
 	  -f infra/digichat-release/compose.digichat-release.yml \
 	  --profile digichat down
+
+# Profile A — digichat + digikey + digigraph + LiteLLM + digivault (all digithings images from GHCR).
+# Requires infra/digichat-release/.env.profile-a (copy from .env.profile-a.example). No --build.
+PROFILE_A_COMPOSE := -f infra/digichat-release/compose.profile-a.yml --env-file infra/digichat-release/.env.profile-a
+digichat-profile-a-up:
+	@test -f infra/digichat-release/.env.profile-a || (echo "Copy infra/digichat-release/.env.profile-a.example → .env.profile-a and fill secrets"; exit 1)
+	docker compose $(PROFILE_A_COMPOSE) up -d
+digichat-profile-a-down:
+	@test -f infra/digichat-release/.env.profile-a || (echo "Copy infra/digichat-release/.env.profile-a.example → .env.profile-a first"; exit 1)
+	docker compose $(PROFILE_A_COMPOSE) down
 
 # digichat Next.js dev server (http://127.0.0.1:3000, hot reload). Backend: `make up`, `make stack-local`, or ./scripts/run_local.sh
 digichat-dev:
