@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any  # score:allow untyped any — captured POST /ingest payloads
 
+import pytest
+
 from scripts.docs_onboard.models import (
     ClassifiedPage,
     DiscoveredPage,
