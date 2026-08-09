@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { DtNav } from "@/components/DtNav";
 import { ChatEmbedShell } from "@/components/ChatEmbedShell";
+import { resolveDigichatEmbedOrigin } from "@/lib/security-headers.mjs";
 
 export const metadata: Metadata = {
   title: "digichat — the digithings assistant",
@@ -9,7 +10,8 @@ export const metadata: Metadata = {
     "and digivault, running on digillm. No sign-up.",
 };
 
-const EMBED_ORIGIN = process.env.NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN?.trim() ?? "";
+/** Same resolver as CSP `frame-src` (see lib/security-headers.mjs + prebuild). */
+const EMBED_ORIGIN = resolveDigichatEmbedOrigin() ?? "";
 
 /**
  * /chat — DtNav + iframe to digichat /embed (digigraph backend).

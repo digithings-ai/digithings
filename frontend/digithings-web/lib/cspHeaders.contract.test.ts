@@ -1,12 +1,51 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_DIGICHAT_EMBED_ORIGIN,
+  digithingsCsp,
+  frameSrcForCsp,
+  renderCloudflareHeaders,
+  resolveDigichatEmbedOrigin,
+} from "./security-headers.mjs";
 
-describe("_headers CSP", () => {
-  it("allows digichat.digithings.ai iframe for /chat digigraph cutover", () => {
-    const text = readFileSync(resolve(__dirname, "../public/_headers"), "utf8");
-    expect(text).toMatch(/frame-src https:\/\/digichat\.digithings\.ai/);
+const headersPath = resolve(__dirname, "../public/_headers");
+
+describe("digithings-web security-headers", () => {
+  it("resolves embed origin from NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN", () => {
+    expect(
+      resolveDigichatEmbedOrigin({
+        NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: "https://tunnel.example/embed",
+      }),
+    ).toBe("https://tunnel.example");
+    expect(resolveDigichatEmbedOrigin({})).toBeNull();
+    expect(
+      resolveDigichatEmbedOrigin({
+        NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: "not a url",
+      }),
+    ).toBeNull();
+  });
+
+  it("uses env origin for CSP frame-src, else production default", () => {
+    expect(
+      frameSrcForCsp({
+        NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: "https://staging-chat.example",
+      }),
+    ).toBe("https://staging-chat.example");
+    expect(frameSrcForCsp({})).toBe(DEFAULT_DIGICHAT_EMBED_ORIGIN);
+    expect(digithingsCsp("https://staging-chat.example")).toContain(
+      "frame-src https://staging-chat.example",
+    );
+  });
+
+  it("keeps committed _headers aligned with default CSP", () => {
+    const text = readFileSync(headersPath, "utf8");
+    const defaultCsp = digithingsCsp(DEFAULT_DIGICHAT_EMBED_ORIGIN);
+    expect(text).toContain(defaultCsp);
     expect(text).not.toMatch(/frame-src 'none'/);
     expect(text).toMatch(/frame-ancestors 'none'/);
+    expect(renderCloudflareHeaders(DEFAULT_DIGICHAT_EMBED_ORIGIN)).toContain(
+      defaultCsp,
+    );
   });
 });

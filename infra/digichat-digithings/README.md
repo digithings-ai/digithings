@@ -52,7 +52,8 @@ Build digichat image with `DIGICHAT_EMBED_HOSTS` present so CSP `frame-ancestors
 2. Create a tunnel; route public hostname e.g. `digichat.digithings.ai` → `http://127.0.0.1:3005`.
 3. Pages (digithings-web) build env:
    - `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digichat.digithings.ai`
-4. digithings-web `_headers` `frame-src` must allow that origin (see `public/_headers`).
+4. digithings-web `npm prebuild` writes `public/_headers` `frame-src` from that
+   same env (see `lib/security-headers.mjs`) — no manual CSP edit per host.
 
 ## digithings.ai `/chat`
 
