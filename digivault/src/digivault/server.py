@@ -169,6 +169,14 @@ class CreateNoteRequest(BaseModel):
     tags: list[str] | None = Field(default=None)
     body: str = Field(default="")
     subdir: str = Field(default="", description="Optional subfolder under the vault root")
+    overwrite: bool = Field(
+        default=False,
+        description="When true, upsert via Vault.write_note(overwrite=True) for idempotent ingest",
+    )
+    frontmatter: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional extra frontmatter keys merged with title/tags",
+    )
 
 
 class SetFrontmatterRequest(BaseModel):
@@ -246,13 +254,19 @@ def get_note(name: str) -> Note:
 
 @app.post("/v1/notes", response_model=Note, status_code=201)
 def create_note(req: CreateNoteRequest) -> Note:
-    fm: dict[str, Any] = {}
+    fm: dict[str, Any] = dict(req.frontmatter or {})
     if req.title:
         fm["title"] = req.title
     if req.tags:
         fm["tags"] = req.tags
     try:
-        return _open_vault().create_note(req.name, frontmatter=fm, body=req.body, subdir=req.subdir)
+        return _open_vault().write_note(
+            req.name,
+            frontmatter=fm,
+            body=req.body,
+            subdir=req.subdir,
+            overwrite=req.overwrite,
+        )
     except VaultError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

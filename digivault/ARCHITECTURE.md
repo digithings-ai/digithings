@@ -72,6 +72,10 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 - **Vault root:** `DIGIVAULT_ROOT` (required for any note route; routes return
   503 when unset). The vault is re-read from disk per request — small docs vault,
   correctness over caching.
+- **Note upsert:** `POST /v1/notes` accepts `overwrite: true` (and optional
+  `frontmatter`) so docs_onboard can idempotently upsert via
+  `Vault.write_note(..., overwrite=True)`. Default `overwrite: false` preserves
+  create-only behavior.
 - **Hub:** digigraph discovers tools via `POST /v1/orchestrator_tools` and
   executes via `POST /v1/orchestrator_invoke`.
 - **Rate limiting:** per-IP sliding window (in-process `deque` + lock), mirrors

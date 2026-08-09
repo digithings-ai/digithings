@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Plan only — do **not** implement feature code from this document until the human approves the next slice. Use superpowers:subagent-driven-development or superpowers:executing-plans task-by-task. **All implementation work stays on `develop`** until the human owns Stage A (GHCR publish on `main`).
 >
-> **Status:** Draft 2026-08-10 — dogfood digithings.ai as self-host client #0. Locked decisions recorded 2026-08-10.
+> **Status:** In progress on `develop` (tracking [#2036](https://github.com/digithings-ai/digithings/issues/2036)) — Stages 1–4 + 3b + develop-safe 5/6/7/8 scaffolding landed; Stage A / live Stage 5 GHCR + live Stage 7 apply remain human/ops.
 > **Parent program:** [`2026-08-09-digichat-self-host-picks-metaplan.md`](./2026-08-09-digichat-self-host-picks-metaplan.md)
 > **Fit contracts:** [`digichat-self-host-picks-fit.md`](../../architecture/digichat-self-host-picks-fit.md)
 
@@ -235,7 +235,7 @@ Each stage = one PR (or ops-only step) with acceptance criteria. **Compare-and-g
 
 - [x] `develop` contains #2028, #2029, #2030, #2031 (merged 2026-08-10).
 - [ ] Stage A GHCR pulls verified; pins recorded. *(human-owned — deferred; does not block plan merge)*
-- [ ] Gap list doc started: `docs/projects/digithings/GAPLOG.md` (questions, missing citations, UX deltas).
+- [x] Gap list doc started: `docs/projects/digithings/GAPLOG.md` (questions, missing citations, UX deltas).
 
 **Acceptance:** Checklist signed in PR or issue comment; implementation on `develop` may start without Stage A for non-GHCR stages.
 
@@ -243,11 +243,11 @@ Each stage = one PR (or ops-only step) with acceptance criteria. **Compare-and-g
 
 ### Stage 1 — Auth slice (small digichat PR)
 
-- [ ] Implement **Option A** default: `DIGICHAT_REQUIRE_ROOT_AUTH=0` → `/` does not redirect to broken `/login` on operator config.
-- [ ] Document in `infra/digichat-digithings/README.md` + INSTALL pointer.
-- [ ] Operator `.env` for digithings: auth off, embed ungated.
+- [x] Implement **Option A** default: `DIGICHAT_REQUIRE_ROOT_AUTH=0` → `/` does not redirect to broken `/login` on operator config.
+- [x] Document in `infra/digichat-digithings/README.md` + INSTALL pointer.
+- [x] Operator `.env` for digithings: auth off, embed ungated.
 
-**Acceptance:** Tunnel smoke `curl -I` on `/` and `/embed` — no `/login` redirect on dogfood config; `digithings.ai/chat` works unchanged.
+**Acceptance:** Tunnel smoke `curl -I` on `/` and `/embed` — no `/login` redirect on dogfood config; `digithings.ai/chat` works unchanged. *(operator verify after deploy)*
 
 **Gap check:** Any bookmarked `/login` URLs? Terminal styling on embed only — OK.
 
@@ -255,10 +255,10 @@ Each stage = one PR (or ops-only step) with acceptance criteria. **Compare-and-g
 
 ### Stage 2 — Client #0 project config (docs-only PR)
 
-- [ ] Add `docs/projects/digithings/` tree (README, `onboard.yaml`, `sources/*`, `indexes/docs.yaml`).
-- [ ] Manifest reflects locked decisions: dual-sink, both website hosts, no digiquant `/chat`.
-- [ ] Cross-link from `docs/digichat/CLIENT-DOCS-ONBOARD.md` and `infra/digichat-digithings/README.md`.
-- [ ] Deprecation note: `digithings-guide` + legacy sync scripts remain for parallel comparison until cutover; single manifest wins later.
+- [x] Add `docs/projects/digithings/` tree (README, `onboard.yaml`, `sources/*`, `indexes/docs.yaml`).
+- [x] Manifest reflects locked decisions: dual-sink, both website hosts, no digiquant `/chat`.
+- [x] Cross-link from `docs/digichat/CLIENT-DOCS-ONBOARD.md` and `infra/digichat-digithings/README.md`.
+- [x] Deprecation note: `digithings-guide` + legacy sync scripts remain for parallel comparison until cutover; single manifest wins later.
 
 **Acceptance:** `python scripts/docs_onboard/run_onboard.py --manifest docs/projects/digithings/onboard.yaml --dry-run` (or unit tests) validates manifest (onboard on `develop`).
 
@@ -266,10 +266,10 @@ Each stage = one PR (or ops-only step) with acceptance criteria. **Compare-and-g
 
 ### Stage 3 — Onboard extensions (scripts PR)
 
-- [ ] **Static file ingest:** manifest `static_sources` → classify as `docs` / `repo_doc`.
-- [ ] **OpenAPI ingest:** manifest `openapi_sources` → `PageClass.openapi` (new enum value) or tagged `docs` with `kind: openapi|swagger`.
-- [ ] **digivault API sink:** `--digivault-url` + auth if needed; idempotent upsert consistent with `Vault.write_note(overwrite=True)`.
-- [ ] **digisearch sink:** honor `sinks: [vault, search]`; write to `digisearch_index` from manifest.
+- [x] **Static file ingest:** manifest `static_sources` → classify as `docs` / `repo_doc`.
+- [x] **OpenAPI ingest:** manifest `openapi_sources` → `PageClass.openapi` (new enum value) or tagged `docs` with `kind: openapi|swagger`.
+- [x] **digivault API sink:** `--digivault-url` + auth if needed; idempotent upsert consistent with `Vault.write_note(overwrite=True)`.
+- [x] **digisearch sink:** honor `sinks: [vault, search]`; write to `digisearch_index` from manifest.
 
 **Acceptance:** Unit tests in `tests/scripts/docs_onboard/`; dry-run produces classified list including `docs/openapi/digigraph.json` and dual-sink routing.
 
@@ -279,26 +279,26 @@ Each stage = one PR (or ops-only step) with acceptance criteria. **Compare-and-g
 
 **New — required for dogfood.** Legacy pipeline indexed in-repo architecture docs; onboard must do the same.
 
-- [ ] Add manifest field `repo_source` (or equivalent): GitHub `{owner}/{repo}` + ref **or** local path (dogfood: this monorepo).
-- [ ] Fetch or scan repo for documentation patterns: `ARCHITECTURE.md`, `AGENTS.md`, `docs/**`, ADRs, component READMEs (reuse/superset `repo-docs.yaml` globs).
-- [ ] Classify as `repo_doc`; ingest into **both** vault and digisearch sinks.
-- [ ] Document generalization: any self-host client with a GitHub repo can enable the same source type.
+- [x] Add manifest field `repo_source` (or equivalent): GitHub `{owner}/{repo}` + ref **or** local path (dogfood: this monorepo).
+- [x] Fetch or scan repo for documentation patterns: `ARCHITECTURE.md`, `AGENTS.md`, `docs/**`, ADRs, component READMEs (reuse/superset `repo-docs.yaml` globs).
+- [x] Classify as `repo_doc`; ingest into **both** vault and digisearch sinks.
+- [x] Document generalization: any self-host client with a GitHub repo can enable the same source type.
 
 **Acceptance:** Dry-run lists `digigraph/ARCHITECTURE.md` (or similar) from repo source; integration test ingests one file to vault + digisearch stubs.
 
-**Gap check:** Private repo auth (PAT) for non-digithings clients — document in runbook; dogfood uses public monorepo or mounted path.
+**Gap check:** Private repo auth (PAT) for non-digithings clients — document in runbook; dogfood uses public monorepo or mounted path. (`GITHUB_TOKEN` for github kind.)
 
 ---
 
 ### Stage 4 — Supabase publish glue (scripts PR)
 
-- [ ] Publish step from onboard vault dir (or API-exported tree) → **existing Supabase notes table** using service role.
-- [ ] Schema evolution if needed (new columns / `note_type` for OpenAPI); migration keeps legacy rows for comparison.
-- [ ] Wire operator runbook: onboard → sync → smoke query.
-- [ ] Do **not** log secrets; dry-run mode without DB.
-- [ ] Document legacy parallel run: `sync_architecture_vault.py` optional during transition; retirement criteria in README.
+- [x] Publish step from onboard vault dir (or API-exported tree) → **existing Supabase notes table** using service role.
+- [x] Schema evolution if needed (new columns / `note_type` for OpenAPI); migration keeps legacy rows for comparison. *(maps `page_class=openapi` → `note_type=api_reference`; no table migration required for MVP)*
+- [x] Wire operator runbook: onboard → sync → smoke query.
+- [x] Do **not** log secrets; dry-run mode without DB.
+- [x] Document legacy parallel run: `sync_architecture_vault.py` optional during transition; retirement criteria in README.
 
-**Acceptance:** Staging Supabase row appears for a test note; production FTS returns it after sync.
+**Acceptance:** Staging Supabase row appears for a test note; production FTS returns it after sync. *(operator apply with `CORE_SUPABASE_*` — dry-run covered in CI)*
 
 **Gap check:** Table schema vs OpenAPI body size; wikilink / summary fields.
 
@@ -306,12 +306,12 @@ Each stage = one PR (or ops-only step) with acceptance criteria. **Compare-and-g
 
 ### Stage 5 — Operator stack parity (infra PR) — **blocked on Stage A (human)**
 
-- [ ] Migrate `infra/digichat-digithings` operator host from monorepo `docker compose build` to **Profile A GHCR pulls** (`make digichat-profile-a-up` or documented equivalent) with vendored `infra/digichat-release/config/`.
-- [ ] Pin `DIGICHAT_VERSION` + `DIGI_IMAGE_TAG` in operator env doc.
-- [ ] Runtime embed hosts: **digithings.ai only** (per locked decision).
-- [ ] digisearch in operator stack if not already present for dual-sink smoke.
+- [ ] Migrate `infra/digichat-digithings` operator host from monorepo `docker compose build` to **Profile A GHCR pulls** (`make digichat-profile-a-up` or documented equivalent) with vendored `infra/digichat-release/config/`. *(docs prepared; execution blocked on Stage A)*
+- [x] Pin `DIGICHAT_VERSION` + `DIGI_IMAGE_TAG` in operator env doc. *(placeholders in `.env.profile-a.example` + digithings README; live pin after Stage A)*
+- [x] Runtime embed hosts: **digithings.ai only** (per locked decision).
+- [x] digisearch in operator stack if not already present for dual-sink smoke. *(documented as beside-Profile-A; not baked into stock Profile A compose)*
 
-**Acceptance:** `docs/digichat/RELEASE-SMOKE.md` operator subset passes on GHCR pins; digigraph health + chat POST succeed; digisearch index query returns onboarded repo doc.
+**Acceptance:** `docs/digichat/RELEASE-SMOKE.md` operator subset passes on GHCR pins; digigraph health + chat POST succeed; digisearch index query returns onboarded repo doc. *(blocked on Stage A images)*
 
 **Gap check:** LiteLLM config diff vs old monorepo mounts; Redis URL footgun from README.
 
@@ -321,9 +321,9 @@ Each stage = one PR (or ops-only step) with acceptance criteria. **Compare-and-g
 
 **Removed:** digiquant.io `/chat` Pages shell (locked: no digiquant-hosted chat).
 
-- [ ] Verify digithings-web `frame-src` / prebuild headers include digichat embed origin.
-- [ ] Confirm CSP: parent Pages `frame-src` ↔ digichat `frame-ancestors` for **digithings.ai** (Pick 1).
-- [ ] Document: digiquant.io remains crawl-only; future iframe parent is a separate human request.
+- [x] Verify digithings-web `frame-src` / prebuild headers include digichat embed origin. *(existing `lib/security-headers.mjs` + contract tests; documented)*
+- [x] Confirm CSP: parent Pages `frame-src` ↔ digichat `frame-ancestors` for **digithings.ai** (Pick 1). *(documented in infra README; live console verify on deploy)*
+- [x] Document: digiquant.io remains crawl-only; future iframe parent is a separate human request.
 
 **Acceptance:** `digithings.ai/chat` iframe loads; no CSP console errors. No `/chat` route added to digiquant-web.
 
@@ -331,12 +331,12 @@ Each stage = one PR (or ops-only step) with acceptance criteria. **Compare-and-g
 
 ### Stage 7 — First full onboard (ops, incremental)
 
-- [ ] Dry-run crawl against **digithings.ai + digiquant.io** allowlisted hosts (low `max_pages` first).
-- [ ] Run repo doc ingest (Stage 3b) for monorepo documentation.
-- [ ] Apply vault API writes + Supabase sync + digisearch index.
+- [x] Dry-run crawl against **digithings.ai + digiquant.io** allowlisted hosts (low `max_pages` first). *(scaffolding: `--dry-run --skip-crawl` + manifest hosts; live crawl needs network/operator)*
+- [x] Run repo doc ingest (Stage 3b) for monorepo documentation. *(unit/dry-run covered)*
+- [ ] Apply vault API writes + Supabase sync + digisearch index. *(needs operator secrets + running stack)*
 - [ ] Re-run `make openapi-export` if specs drift; onboard picks up JSON files.
 
-**Acceptance:** `OnboardResult` exit 0; sync exit 0; chat cites onboarded OpenAPI, repo `ARCHITECTURE.md`, or crawled digiquant doc.
+**Acceptance:** `OnboardResult` exit 0; sync exit 0; chat cites onboarded OpenAPI, repo `ARCHITECTURE.md`, or crawled digiquant doc. *(apply blocked on secrets)*
 
 ---
 
@@ -355,6 +355,8 @@ Fixed questionnaire after each deploy:
 | Legacy retirement | Gap list tracks when to drop `sync_architecture_vault.py` and `reindex_digithings_guide.py` |
 
 Update `docs/projects/digithings/GAPLOG.md`; each gap → issue or next stage.
+
+**Scaffolding:** `GAPLOG.md` template + `scripts/dogfood_compare_harness.py --dry-run` shipped. Live ≥9/10 scoring awaits first apply + chat probes.
 
 **Ship criterion:** ≥9/10 canonical questions grounded with correct citations; no auth regression; GHCR pins only (post Stage A); human sign-off on gap list; legacy scripts retired or explicitly scheduled.
 

@@ -121,6 +121,7 @@ Product sketch: [`digichat-self-hosted-release.md`](../architecture/digichat-sel
 | `DIGICHAT_DATABASE_URL` | Postgres (Compose wires digichat-db) |
 | `DIGICHAT_AUTO_MIGRATE=1` | Apply Drizzle migrations on start |
 | `DIGICHAT_EMBED_ENABLED` | Enable `/embed` as needed |
+| `DIGICHAT_REQUIRE_ROOT_AUTH` | Default **unset/`0`** (Option A): `/` redirects to `/embed` — no Auth.js login wall. Set `1` only if the client wants a root session gate. Dogfood digithings.ai stays OFF. |
 | `DIGICHAT_EMBED_HOSTS` | **Runtime** comma-separated parent hostnames for CSP `frame-ancestors` (no secrets). Optional if hosts are already `DIGICHAT_EMBED_TENANTS` keys. |
 | `DIGICHAT_EMBED_TENANTS` | **Runtime** JSON registry (hostname → branding, gate, token, `backend`). **Never** a Docker build-arg — tokens leak in layers. |
 

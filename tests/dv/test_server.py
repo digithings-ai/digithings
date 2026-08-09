@@ -106,6 +106,30 @@ def test_list_and_create_handlers(vault_dir: Path) -> None:
     assert "c" in backlinks.backlinks
 
 
+def test_create_note_overwrite_upsert(vault_dir: Path) -> None:
+    server.create_note(
+        server.CreateNoteRequest(
+            name="c",
+            title="C1",
+            body="v1\n",
+            frontmatter={"source_url": "repo://t/a.md"},
+        )
+    )
+    again = server.create_note(
+        server.CreateNoteRequest(
+            name="c",
+            title="C2",
+            body="v2\n",
+            overwrite=True,
+            frontmatter={"source_url": "repo://t/a.md", "page_class": "repo_doc"},
+        )
+    )
+    assert again.name == "c"
+    raw = (vault_dir / "c.md").read_text(encoding="utf-8")
+    assert "v2" in raw
+    assert "page_class" in raw
+
+
 def test_lint_handler(vault_dir: Path) -> None:
     report = server.lint()
     assert report.ok is True
