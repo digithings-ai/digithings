@@ -57,7 +57,7 @@
 - Consumes: Existing workflows `release-please-digichat.yml` (tag `digichat-vX.Y.Z` on develop) and `publish-digichat-image.yml` (GHCR on main). Current app version `0.9.3` in `frontend/digichat/package.json`.
 - Produces: Documented release identity + operator smoke steps (no workflow changes in this task).
 
-- [ ] **Step 1: Confirm current release artifacts exist**
+- [x] **Step 1: Confirm current release artifacts exist**
 
 Run:
 
@@ -71,7 +71,7 @@ head -20 frontend/digichat/CHANGELOG.md
 
 Expected: version like `0.9.3`, `private` = `true`, both workflows present, CHANGELOG has `[0.9.3]` section.
 
-- [ ] **Step 2: Write RELEASE-SMOKE.md**
+- [x] **Step 2: Write RELEASE-SMOKE.md**
 
 Create `docs/digichat/RELEASE-SMOKE.md` with this content (adjust version placeholder to current package.json):
 
@@ -106,7 +106,7 @@ Prefer the version pin. Do not use `:latest` in production.
 - Product model: [digichat-self-hosted-release.md](../architecture/digichat-self-hosted-release.md)
 ```
 
-- [ ] **Step 3: Link from OPERATIONS.md**
+- [x] **Step 3: Link from OPERATIONS.md**
 
 At the top of `frontend/digichat/OPERATIONS.md` (after the title / intro), add:
 
@@ -118,7 +118,7 @@ At the top of `frontend/digichat/OPERATIONS.md` (after the title / intro), add:
 - Client / operator install: [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) (added in later task)
 ```
 
-- [ ] **Step 4: Verify docs render / links**
+- [x] **Step 4: Verify docs render / links**
 
 Run:
 
@@ -130,7 +130,7 @@ rg -n "Release artifacts" frontend/digichat/OPERATIONS.md
 
 Expected: files exist; GHCR pin mentioned; OPERATIONS subsection present.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/digichat/RELEASE-SMOKE.md frontend/digichat/OPERATIONS.md

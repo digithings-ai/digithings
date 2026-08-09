@@ -4,6 +4,12 @@ Operator-focused runbook: local dev setup, environment variables, Docker Compose
 
 digichat is the **production** web client for tenants that run digigraph. The browser talks only to the **digichat BFF** (Next.js Route Handlers). The BFF calls digigraph's OpenAI-compatible API using **`DIGIGRAPH_UPSTREAM_API_KEY`** (legacy shared secret) **or** a short-lived **digikey JWT** when **`DIGIKEY_URL`** and **`DIGIKEY_BFF_TOKEN`** are set (`POST /v1/oauth/token` with `grant_type=bff_session`). Machine clients may present **`dgk_live_…`** keys issued by digikey directly for the same exchange path. **Local full stack** (digikey, all services, seeding, env matrix): **[../docs/LOCAL_STACK.md](../docs/LOCAL_STACK.md)**.
 
+## Release artifacts
+
+- Install digichat from GHCR (`ghcr.io/digithings-ai/digichat:vX.Y.Z`), not npm.
+- Post-publish smoke: [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md)
+- Client / operator install: [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) (added in later task)
+
 ## Design
 
 digichat follows the **digithings.ai** marketing palette (see `website/style.css`): near-black page background (`#0a0a0a`), elevated panels (`#121212`), borders (`#2a2a2a`), primary text (`#e6e6e6`), secondary/muted (`#a3a3a3`). Typography uses **Inter**. The **starfield** and hero animation from the public site are intentionally **not** used in the app chrome so the chat stays readable and calm. The **browser tab icon** is the same QR mark as the landing site (`website/assets/qrw.svg`), vendored as [`digichat/src/app/icon.svg`](digichat/src/app/icon.svg) with a `#0a0a0a` rounded background; refresh the favicon or duplicate from `qrw.svg` if the brand asset changes.
