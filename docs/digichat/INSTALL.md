@@ -150,14 +150,25 @@ Customer embeds always need a matching `token`. First-party digithings hosts
 | `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` | Iframe origin (e.g. Tunnel hostname) |
 | Embed URL | `/embed?host=<parent-host>&token=…` |
 
-## Embed CSP note
+## Custom embed parent hosts (CSP)
 
-Stock GHCR bakes `frame-ancestors` from `frontend/digichat/embed-hosts.txt` at image
-build time (`DIGICHAT_EMBED_HOSTS`). If your parent site hostname is **not** in that
-list, you need a rebuild with your hosts (or a digithings PR adding the hostname —
-non-secret). Runtime CSP is a follow-up; see the architecture sketch Follow-ups.
+The published GHCR image bakes `frame-ancestors` from
+`frontend/digichat/embed-hosts.txt` at build time. If your parent site hostname
+is not in that list, either:
+
+1. Open a digithings PR to add the hostname to `embed-hosts.txt` (no secrets), or
+2. Rebuild the image yourself:
+
+```bash
+docker build -f frontend/digichat/Dockerfile \
+  --build-arg DIGICHAT_EMBED_HOSTS=your.example.com,www.your.example.com \
+  -t digichat:custom .
+```
 
 Still set `DIGICHAT_EMBED_TENANTS` at **runtime** with tokens — never as a build-arg.
+
+Runtime `frame-ancestors` (stock GHCR for arbitrary parents without rebuild) is a
+follow-up — see the architecture sketch Follow-ups.
 
 ## Smoke
 

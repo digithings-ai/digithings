@@ -631,7 +631,7 @@ EOF
 - Consumes: Build-arg `DIGICHAT_EMBED_HOSTS` in `frontend/digichat/Dockerfile` and publish workflow reading `embed-hosts.txt`. CSP evaluated at `next build` via `next.config.ts` importing `security-headers.ts`.
 - Produces: Documented rebuild path for new parent domains. **Do not** implement runtime `frame-ancestors` in v1 unless a separate issue explicitly expands scope (sketch lists evaluate-runtime as optional).
 
-- [ ] **Step 1: Document rebuild commands in INSTALL.md**
+- [x] **Step 1: Document rebuild commands in INSTALL.md**
 
 Add section:
 
@@ -654,7 +654,7 @@ docker build -f frontend/digichat/Dockerfile \
 Still set `DIGICHAT_EMBED_TENANTS` at **runtime** with tokens — never as a build-arg.
 ```
 
-- [ ] **Step 2: Comment in embed-hosts.txt**
+- [x] **Step 2: Comment in embed-hosts.txt**
 
 Extend the file header:
 
@@ -665,11 +665,11 @@ Extend the file header:
 # DIGICHAT_EMBED_HOSTS=... — see docs/digichat/INSTALL.md § Custom embed parent hosts.
 ```
 
-- [ ] **Step 3: ARCHITECTURE.md one-liner**
+- [x] **Step 3: ARCHITECTURE.md one-liner**
 
 Under `DIGICHAT_EMBED_HOSTS` env row, add: “Stock GHCR image uses `embed-hosts.txt`; other parents need rebuild or a future runtime CSP change.”
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run:
 
@@ -678,7 +678,7 @@ rg -n "Custom embed parent hosts|rebuild" docs/digichat/INSTALL.md
 rg -n "DIGICHAT_EMBED_HOSTS" frontend/digichat/Dockerfile
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/digichat/INSTALL.md frontend/digichat/embed-hosts.txt frontend/digichat/ARCHITECTURE.md
