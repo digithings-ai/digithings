@@ -27,15 +27,22 @@ See [`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/d
 From repo root (adjust `.env`):
 
 ```bash
-# Required for digithings digigraph chat
-export DIGIVAULT_URL=http://digivault:8004   # on digigraph service
-export DIGIGRAPH_INTERNAL_URL=http://digigraph:8000  # on digichat
-# digikey BFF or DIGIGRAPH_UPSTREAM_API_KEY for digichat → digigraph auth
-# LiteLLM / digillm env as in root .env.example
+# Required for digithings digigraph chat (root .env)
+export DIGIVAULT_URL=http://digivault:8004
+# digikey BFF token + LLM keys as in root .env.example
+# Newer LiteLLM images read REDIS_URL; either leave it unset *and* avoid
+# passing an empty string, or enable cache Redis:
+#   REDIS_URL=redis://redis:6379
+#   --profile litellm-cache
 
-docker compose --profile digichat --profile digivault up -d
-# plus digigraph, digikey, litellm as in LOCAL_STACK / DEPLOYMENT.md
+docker compose --profile digichat --profile digivault --profile litellm-cache up -d --build
+# digichat image CSP: pass DIGICHAT_EMBED_HOSTS as a build-arg when building digichat
 ```
+
+**Local smoke (no Tunnel):** open `http://127.0.0.1:3005/embed?host=digithings.ai` or
+`POST /api/chat` with `X-Embed-Host: https://digithings.ai`. That proves digichat → digigraph
+→ LiteLLM (+ digivault when tools run). Public `digithings.ai/chat` still needs Tunnel + Pages.
+
 
 digichat runtime embed registry (never a Docker build-arg — tokens leak in layers):
 

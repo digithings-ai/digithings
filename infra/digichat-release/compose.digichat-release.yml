@@ -1,0 +1,19 @@
+# Pull a published digichat image instead of building from the monorepo.
+# Usage (from repo root, with DIGICHAT_VERSION set):
+#   docker compose -f docker-compose.yml \
+#     -f infra/digichat-release/compose.digichat-release.yml \
+#     --profile digichat up -d
+#
+# Or: make digichat-release-up VERSION=0.9.3
+#
+# Clients without the monorepo should prefer compose.profile-a.yml /
+# compose.profile-b.yml (later tasks) which are self-contained.
+#
+# Requires Docker Compose that supports `build: !reset null` (Compose v2.24+ /
+# Compose specification merge; verified on Compose v5).
+
+services:
+  digichat:
+    image: ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION:?set DIGICHAT_VERSION e.g. 0.9.3}
+    build: !reset null
+    pull_policy: always

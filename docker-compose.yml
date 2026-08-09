@@ -140,13 +140,10 @@ services:
       start_period: 10s
 
   # ─── digiquant: Nautilus + Polars backtest/optimize (MCP tools) ───
-  # For real backtests: build with NAUTILUS=1, e.g. NAUTILUS=1 docker compose build digiquant
   digiquant:
     build:
       context: .
       dockerfile: digiquant/Dockerfile
-      args:
-        NAUTILUS: ${NAUTILUS:-1}
     image: digi-digiquant:latest
     container_name: digi-digiquant
     ports:
@@ -254,11 +251,12 @@ services:
     volumes:
       - ./config:/app/config:ro
     # LiteLLM can start without Ollama; Ollama models fail until ollama is healthy
+    # main-stable image has no curl/wget — probe with the bundled Python.
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "curl -sf http://127.0.0.1:4000/health/liveliness >/dev/null || curl -sf http://127.0.0.1:4000/health",
+          "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=4)\"",
         ]
       interval: 15s
       timeout: 5s
