@@ -15,6 +15,7 @@ pytest.importorskip("digibase")
 from digivault.orchestrator_tools import ORCHESTRATOR_TOOL_NAMES
 from digivault.path_scopes import SCOPE_WRITE
 from digivault.supabase_store import SupabaseStore
+from digivault.vault import Vault
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
@@ -258,6 +259,42 @@ def test_orchestrator_invoke_search_notes(monkeypatch: pytest.MonkeyPatch) -> No
             {"query": "what does digigraph orchestrate", "match_limit": 3},
         )
     ]
+
+
+
+
+def test_orchestrator_invoke_search_notes_local_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When DIGIVAULT_ROOT is set, search the local vault — never call Supabase."""
+    vault_root = tmp_path / "vault"
+    vault_root.mkdir()
+    Vault(vault_root).create_note(
+        "alpha-guide",
+        frontmatter={"title": "Alpha onboarding", "tags": ["docs"]},
+        body="Welcome to Alpha. Reset your password here.",
+    )
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(vault_root))
+
+    def _boom() -> SupabaseStore:
+        raise AssertionError("local-root search must not open Supabase")
+
+    monkeypatch.setattr(server.SupabaseStore, "from_env", _boom)
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={"query": "alpha password", "limit": 5},
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    hits = resp.data["hits"]
+    assert hits
+    assert hits[0]["vault_path"].endswith("alpha-guide.md")
+    assert hits[0]["rank"] > 0
+    assert hits[0]["note_type"] == "local"
 
 
 def test_orchestrator_invoke_search_notes_default_limit(monkeypatch: pytest.MonkeyPatch) -> None:

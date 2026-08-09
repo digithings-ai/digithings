@@ -93,12 +93,13 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
         ),
         _fn(
             TOOL_VAULT_SEARCH_NOTES,
-            "Full-text search over the digithings architecture vault (all module docs — "
-            "digigraph, digiquant, digisearch, digichat, digikey, digismith, digivault, "
-            "digiclaw, digibase, and roadmap modules). Ranked by relevance across title, "
-            "body, and tags. Use for any question about the digithings stack: modules, "
-            "ports, APIs, architecture, build/run. Requires the vault's Supabase-backed "
-            "store to be configured (CORE_SUPABASE_URL / CORE_SUPABASE_ANON_KEY).",
+            "Search vault notes by relevance across title and body. When DIGIVAULT_ROOT "
+            "is set, searches that local filesystem vault (Profile A / client volumes). "
+            "Otherwise uses Supabase FTS when CORE_SUPABASE_URL / CORE_SUPABASE_ANON_KEY "
+            "are configured (digithings architecture vault: digigraph, digiquant, "
+            "digisearch, digichat, digikey, digismith, digivault, digiclaw, digibase, "
+            "and roadmap modules). Use for questions about vault contents, modules, "
+            "ports, APIs, architecture, or client docs ingested into the local vault.",
             {
                 "type": "object",
                 "properties": {

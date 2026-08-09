@@ -31,10 +31,11 @@ extra.
 | `digivault/frontmatter.py` | Round-trip-safe YAML frontmatter `split` / `dump` / `set_keys` (PyYAML). `split(dump(fm, body)) == (fm, body)`. |
 | `digivault/wikilinks.py` | Parse `[[note]]`/`[[note#h\|alias]]`/`![[embed]]`; `rewrite_target` / `map_targets` rewrite links while skipping code spans/blocks. |
 | `digivault/vault.py` | `Vault` — load a directory (or any store via `Vault.from_sources`), build the note index + link graph + backlinks + tag index; maintenance ops (`create_note`, `rename` with inbound-link rewrite, `set_frontmatter`, `reindex`, `lint`). |
+| `digivault/local_search.py` | Filesystem keyword search for `digivault_search_notes` when `DIGIVAULT_ROOT` is set (Profile A / client vaults). Returns `VaultSearchHit` rows; no network. |
 | `digivault/supabase_store.py` | `SupabaseStore` — read a vault out of Supabase (`architecture_notes`/`knowledge_notes`) and reconstruct it via `Vault.from_sources`; FTS `search` via the `search_architecture_notes` RPC. Optional `[supabase]` extra, lazily imported. |
 | `digivault/path_scopes.py` | digikey scope policy: reads need `digivault:read`, writes `digivault:write`. |
-| `digivault/orchestrator_tools.py` | OpenAI-style tool manifest fetched by digigraph via `POST /v1/orchestrator_tools`: tag search, backlinks, lint, create-note, and `digivault_search_notes` (Supabase FTS). |
-| `digivault/server.py` | FastAPI app: `/healthz`, `/v1/status`, note CRUD, lint, backlinks, tags, orchestrator endpoints (`digivault_search_notes` dispatches to `SupabaseStore.search`, independent of the local-filesystem vault). |
+| `digivault/orchestrator_tools.py` | OpenAI-style tool manifest fetched by digigraph via `POST /v1/orchestrator_tools`: tag search, backlinks, lint, create-note, and `digivault_search_notes` (local vault when `DIGIVAULT_ROOT` set; else Supabase FTS). |
+| `digivault/server.py` | FastAPI app: `/healthz`, `/v1/status`, note CRUD, lint, backlinks, tags, orchestrator endpoints (`digivault_search_notes` prefers local filesystem search when `DIGIVAULT_ROOT` is set; otherwise `SupabaseStore.search`). |
 | `digivault/mcp_server.py` | `python -m digivault.mcp_server` — vault tools over MCP (streamable HTTP, default `127.0.0.1:8766`). |
 | `digivault/cli.py` | `digivault init|lint|reindex|new-note`. |
 
@@ -80,12 +81,15 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   disables it (tests); TestClient traffic (`client.host == "testclient"`) is
   exempt so the unit suite doesn't need the env var. Exceeding the limit returns
   429 with `code: rate_limit_exceeded` and a `Retry-After` header.
-- **`digivault_search_notes`** is the one orchestrator tool that bypasses
-  `DIGIVAULT_ROOT` entirely — it queries the Supabase-mirrored vault via
-  `SupabaseStore.search` (the `search_architecture_notes` RPC, anon-key,
-  read-only) and returns 503 only if `CORE_SUPABASE_URL`/`CORE_SUPABASE_ANON_KEY`
-  are unset. `limit` is clamped to `[1, 50]` regardless of caller input. This is
-  the same RPC the digithings.ai chat widget calls directly today
+- **`digivault_search_notes` search precedence:**
+  1. If `DIGIVAULT_ROOT` is set → filesystem keyword search via
+     `local_search.search_local_vault` over that vault (Profile A / client
+     volumes; no Supabase required).
+  2. Else → Supabase FTS via `SupabaseStore.search` (the
+     `search_architecture_notes` RPC, anon-key, read-only); returns 503 only if
+     `CORE_SUPABASE_URL`/`CORE_SUPABASE_ANON_KEY` are unset.
+  `limit` is clamped to `[1, 50]` regardless of caller input. The Supabase path
+  is the same RPC the digithings.ai chat widget calls directly today
   ([ADR-0018](../docs/adr/0018-digichat-path-routing.md), epic #1248) — wiring
   it into digivault's own orchestrator surface lets digigraph reproduce that
   grounding once the widget is cut over to the digichat gateway. Verified live
@@ -117,11 +121,11 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 
 | Var | Purpose |
 |-----|---------|
-| `DIGIVAULT_ROOT` | Path to the managed vault directory (required for note routes). |
+| `DIGIVAULT_ROOT` | Path to the managed vault directory (required for note routes). When set, `digivault_search_notes` searches this local vault first. |
 | `DIGIVAULT_MCP_HOST` | MCP bind host (default `127.0.0.1`). |
 | `DIGIKEY_JWKS_URL` / `DIGIKEY_ISSUER` / `DIGIKEY_AUDIENCE` / `DIGIKEY_PUBLIC_KEY_PEM` | digikey JWT verification (shared convention). |
 | `DIGI_DISABLE_RATE_LIMIT` | `1`/`true`/`yes` disables the per-IP rate limiter (shared convention with digisearch/digigraph; tests only). |
-| `CORE_SUPABASE_URL` (or `SUPABASE_URL`) + `CORE_SUPABASE_ANON_KEY` (or `CORE_SUPABASE_SERVICE_KEY` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`) | Required only for `digivault_search_notes` — `SupabaseStore.from_env` credentials (ADR-0022 naming). Requires the `digivault[supabase]` extra installed. |
+| `CORE_SUPABASE_URL` (or `SUPABASE_URL`) + `CORE_SUPABASE_ANON_KEY` (or `CORE_SUPABASE_SERVICE_KEY` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`) | Required for `digivault_search_notes` only when `DIGIVAULT_ROOT` is unset — `SupabaseStore.from_env` credentials (ADR-0022 naming). Requires the `digivault[supabase]` extra installed. |
 
 ## Testing
 
@@ -130,9 +134,11 @@ Core tests (frontmatter, wikilinks, vault) need only `pydantic` + `pyyaml`.
 Service and CLI tests `pytest.importorskip` their extras so the suite stays green
 without `digivault[service]` installed. CI (`.github/workflows/test-digivault.yml`)
 installs `digibase` + `digikey` + `digivault[service]` and runs the full set.
-`digivault_search_notes` tests fake `SupabaseStore` directly (constructor takes
-any `SupabaseClientProtocol`) — the real `supabase` package (`[supabase]` extra)
-is never required to run the suite, matching `test_supabase_store.py`'s convention.
+`digivault_search_notes` tests cover both paths: local-root searches exercise
+`local_search` against a `tmp_path` vault; Supabase-path tests fake
+`SupabaseStore` directly (constructor takes any `SupabaseClientProtocol`) — the
+real `supabase` package (`[supabase]` extra) is never required to run the suite,
+matching `test_supabase_store.py`'s convention.
 
 ## Monorepo integration
 

@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from digivault import __version__
+from digivault.local_search import search_local_vault
 from digivault.models import LintReport, Note
 from digivault.orchestrator_tools import (
     DEFAULT_SEARCH_NOTES_LIMIT,
@@ -135,7 +136,7 @@ def _open_vault() -> Vault:
 
 
 def _open_supabase_store() -> SupabaseStore:
-    """Build the Supabase-backed store for full-text search (independent of DIGIVAULT_ROOT)."""
+    """Build the Supabase-backed store for FTS when DIGIVAULT_ROOT is unset."""
     try:
         return SupabaseStore.from_env()
     except SupabaseStoreError as exc:
@@ -307,8 +308,8 @@ def orchestrator_invoke(
     args = req.arguments if isinstance(req.arguments, dict) else {}
     _require_tool_scope(request, tool)
 
-    # Supabase-backed full-text search is independent of DIGIVAULT_ROOT (the local
-    # filesystem vault) — it reads the vault mirrored into Postgres instead.
+    # Search precedence: local filesystem vault when DIGIVAULT_ROOT is set
+    # (Profile A / client volumes); otherwise Supabase FTS when credentials exist.
     if tool == TOOL_VAULT_SEARCH_NOTES:
         query = str(args.get("query") or "").strip()
         if not query:
@@ -318,7 +319,12 @@ def orchestrator_invoke(
         except (TypeError, ValueError):
             limit = DEFAULT_SEARCH_NOTES_LIMIT
         limit = max(1, min(limit, _MAX_SEARCH_NOTES_LIMIT))
-        hits = _open_supabase_store().search(query, limit=limit)
+
+        root_env = (os.environ.get("DIGIVAULT_ROOT") or "").strip()
+        if root_env:
+            hits = search_local_vault(_open_vault(), query, limit=limit)
+        else:
+            hits = _open_supabase_store().search(query, limit=limit)
         data = {"hits": [h.model_dump(mode="json") for h in hits]}
         return OrchestratorInvokeResponse(ok=True, tool=tool, data=data)
 
