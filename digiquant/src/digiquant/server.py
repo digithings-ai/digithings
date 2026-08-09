@@ -37,7 +37,11 @@ from digiquant.service import (
 
 app = FastAPI(
     title="digiquant",
-    description="High-perf backtest/optimize/export API for digigraph (MCP in Phase 2)",
+    description=(
+        "NautilusTrader backtest / optimize / export / pipeline API for digithings. "
+        "Also exposes orchestrator tool manifests for digigraph and MCP tools. "
+        "Interactive docs: `/docs` (Swagger) and `/redoc`."
+    ),
     version=__version__,
 )
 install_metrics(app, service="digiquant", version=__version__)

@@ -1,0 +1,66 @@
+# Pull prebuilt digithings images from GHCR instead of building from the monorepo.
+#
+# Usage (from repo root, Compose v2.24+ for `build: !reset null`):
+#   cp .env.example .env   # set provider keys, DIGIKEY_*, AUTH_* as needed
+#   docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml up -d
+#
+# Optional profiles (same as root compose):
+#   --profile digichat
+#   --profile digivault
+#   --profile heartbeat
+#   --profile litellm-cache
+#   --profile observability
+#
+# Pin images for production:
+#   DIGI_IMAGE_TAG=sha-<12-char-sha>   # preferred
+#   DIGI_IMAGE_TAG=v0.1.0              # pyproject version tag
+#   DIGICHAT_IMAGE_TAG=v0.9.3          # digichat uses release-please versions
+#
+# See docs/DEPLOYMENT.md § "Pull from GHCR" and RELEASES.md.
+# Fixes #2018 / Refs #2016
+
+services:
+  digikey:
+    image: ghcr.io/digithings-ai/digikey:${DIGI_IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+  digigraph:
+    image: ghcr.io/digithings-ai/digigraph:${DIGI_IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+  digiquant:
+    image: ghcr.io/digithings-ai/digiquant:${DIGI_IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+  digisearch:
+    image: ghcr.io/digithings-ai/digisearch:${DIGI_IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+  digismith:
+    image: ghcr.io/digithings-ai/digismith:${DIGI_IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+  digivault:
+    image: ghcr.io/digithings-ai/digivault:${DIGI_IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+  digisearch-mcp:
+    image: ghcr.io/digithings-ai/digisearch:${DIGI_IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+  heartbeat:
+    image: ghcr.io/digithings-ai/digiclaw:${DIGI_IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+  digichat:
+    image: ghcr.io/digithings-ai/digichat:${DIGICHAT_IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always

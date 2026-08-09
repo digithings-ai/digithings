@@ -28,6 +28,27 @@ Use **Tailscale** or **Cloudflare Tunnel** for remote access. Never expose ports
 
 **digiquant image:** Always installs `digiquant[nautilus]` (NautilusTrader). Market sample CSVs for backtests are under `digiquant/data/` (compose-mounted); the image does not download upstream Nautilus fixtures at build time.
 
+## Pull from GHCR (no local image build)
+
+Prefer this when you want published images instead of `docker compose build`. Requires Compose **v2.24+**.
+
+```bash
+cp .env.example .env
+# Optional pins (production): DIGI_IMAGE_TAG=sha-<12-char-sha> DIGICHAT_IMAGE_TAG=v0.9.3
+docker compose \
+  -f docker-compose.yml \
+  -f infra/self-host/compose.ghcr.yml \
+  pull
+docker compose \
+  -f docker-compose.yml \
+  -f infra/self-host/compose.ghcr.yml \
+  up -d
+```
+
+Or: `make up-ghcr` / `make up-ghcr-digichat`. Full notes: [templates/self-host/README.md](templates/self-host/README.md). Image publish: [RELEASES.md](../RELEASES.md).
+
+Swagger UI (auth-exempt): `http://127.0.0.1:<port>/docs` on each FastAPI service (8000–8005).
+
 ## With heartbeat (unattended monitoring)
 
 ```bash
