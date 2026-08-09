@@ -1,0 +1,21 @@
+# Online Compliance Center (OCC) — draft docs_onboard manifest.
+# INGEST HOLD: do not run run_onboard.py / search ingest until (1) digithings
+# dogfood sign-off on the pipeline and (2) explicit client crawl approval.
+# See SCOPE.md for reconnaissance, gaps, and dry-run steps.
+client: online-compliance-center
+seed_url: https://help.online-compliance-center.com/
+allowed_hosts:
+  - help.online-compliance-center.com
+max_pages: 80
+max_depth: 4
+sinks: [vault, search]
+digisearch_index: occ_help
+vault_subdir: clients/online-compliance-center
+docs_path_prefixes:
+  - /index.php
+skip_path_prefixes:
+  - /index.php/kontakt
+  - /index.php/administrator
+  - /administrator
+  - /api
+  - /component
