@@ -122,6 +122,9 @@ Same pattern as DataTap today: client-hosted digichat Node + their backend (Foun
 **Later (client documentation chatbot)**
 
 - Client (or digithings helping them) runs **their** digichat + digigraph + digivault
-- Ingest into **their** vault: crawl → PDFs → page-level notes (text + images / OCR / base64 as needed)
-- Same digichat release; different env, secrets, and corpus
+- Ingest into **their** vault via offline `scripts/docs_onboard/` (docs-focused crawl →
+  PDFs → digivault and/or digisearch) — runbook
+  [`CLIENT-DOCS-ONBOARD.md`](../digichat/CLIENT-DOCS-ONBOARD.md); ops index
+  [`CLIENT_PIPELINES.md`](../ops/CLIENT_PIPELINES.md)
+- Same digichat release; different env, secrets, and corpus. Not a digichat fork.
 

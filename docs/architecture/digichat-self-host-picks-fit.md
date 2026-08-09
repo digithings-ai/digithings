@@ -14,7 +14,7 @@
 | **2** | [`2026-08-09-digichat-stack-ghcr.md`](../superpowers/plans/2026-08-09-digichat-stack-ghcr.md) | Finish Profile A so clients **pull** digikey / digigraph / digivault from GHCR (no monorepo `docker compose build`), including glue after [#2023](https://github.com/digithings-ai/digithings/pull/2023). |
 | **3** | [`2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md) | Offline **ops** pipeline (`scripts/docs_onboard/`) — URL → docs-focused crawl → PDFs via digifetch/digisearch → **their** digivault and/or digisearch index so Profile A digichat → digigraph tools ground answers on that client's docs. Not a digicorpus peer module. |
 
-Sketch gaps these close (from [`digichat-self-hosted-release.md`](digichat-self-hosted-release.md) §5 Still open): runtime CSP `frame-ancestors`; GHCR for digikey / digigraph / digivault; corpus / crawl / OCR / vault+search ingest.
+Sketch gaps these close (from [`digichat-self-hosted-release.md`](digichat-self-hosted-release.md) §5 Still open): ~~runtime CSP `frame-ancestors`~~; ~~GHCR for digikey / digigraph / digivault~~; corpus / crawl / OCR / vault+search ingest (Pick 3 MVP).
 
 ---
 
@@ -154,4 +154,6 @@ What #2023 **did** deliver (keep): publish workflow, root GHCR overlay + `make p
 - Pick 1 plan: [`../superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md`](../superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md)
 - Pick 2 plan: [`../superpowers/plans/2026-08-09-digichat-stack-ghcr.md`](../superpowers/plans/2026-08-09-digichat-stack-ghcr.md)
 - Pick 3 plan: [`../superpowers/plans/2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md) (filename historical; content = `scripts/docs_onboard`)
+- Client docs onboard runbook: [`../digichat/CLIENT-DOCS-ONBOARD.md`](../digichat/CLIENT-DOCS-ONBOARD.md)
+- Ops pipelines index: [`../ops/CLIENT_PIPELINES.md`](../ops/CLIENT_PIPELINES.md)
 - Client install: [`../digichat/INSTALL.md`](../digichat/INSTALL.md)

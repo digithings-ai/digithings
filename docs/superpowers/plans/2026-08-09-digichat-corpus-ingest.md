@@ -889,7 +889,7 @@ EOF
 - Consumes: Tasks 1–8 behaviors.
 - Produces: Operator-discoverable docs index + corrected fit synthesis.
 
-- [ ] **Step 1: Write `docs/ops/CLIENT_PIPELINES.md`**
+- [x] **Step 1: Write `docs/ops/CLIENT_PIPELINES.md`**
 
 ```markdown
 # Client ops pipelines
@@ -916,11 +916,11 @@ manifests under `docs/projects/<client>/` (or private `projects/`). These are
 - Fit: [`docs/architecture/digichat-self-host-picks-fit.md`](../architecture/digichat-self-host-picks-fit.md)
 ```
 
-- [ ] **Step 2: Write `docs/digichat/CLIENT-DOCS-ONBOARD.md`**
+- [x] **Step 2: Write `docs/digichat/CLIENT-DOCS-ONBOARD.md`**
 
 Cover: prerequisites; install editable digifetch/digivault/digisearch; example `run_onboard.py`; Profile A volume path; smoke via `digivault_search_notes` / digisearch query; explicit **not** a digichat fork; Pick 1/2 orthogonal; OCR via digisearch env.
 
-- [ ] **Step 3: Rewrite fit doc Pick 3 seams**
+- [x] **Step 3: Rewrite fit doc Pick 3 seams**
 
 Replace digicorpus language in `digichat-self-host-picks-fit.md`:
 
@@ -932,7 +932,7 @@ Replace digicorpus language in `digichat-self-host-picks-fit.md`:
 | §3 volumes row | docs_onboard writes volume / notes API — offline job beside stack |
 | Stage D checklist | digivault local search; scripts/docs_onboard leaves + parent; CLIENT-DOCS-ONBOARD + CLIENT_PIPELINES; Profile A smoke |
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/ops/CLIENT_PIPELINES.md docs/digichat/CLIENT-DOCS-ONBOARD.md \

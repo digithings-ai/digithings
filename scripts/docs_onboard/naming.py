@@ -1,0 +1,34 @@
+"""Stable URL → filesystem slug helpers."""
+
+from __future__ import annotations
+
+import hashlib
+import re
+from urllib.parse import urlparse, urlunparse
+
+_SLUG_SAFE = re.compile(r"[^a-z0-9]+")
+
+
+def normalize_url(url: str) -> str:
+    """Drop fragment and trailing slash (except bare origin) for stable identity."""
+    parsed = urlparse(url.strip())
+    path = parsed.path or "/"
+    if path != "/" and path.endswith("/"):
+        path = path.rstrip("/")
+    return urlunparse((parsed.scheme, parsed.netloc.lower(), path, "", parsed.query, ""))
+
+
+def slug_for_url(url: str, *, max_len: int = 80) -> str:
+    """Deterministic filesystem-safe slug for a URL (no path separators)."""
+    normalized = normalize_url(url)
+    parsed = urlparse(normalized)
+    host = parsed.netloc.replace(".", "-")
+    path = parsed.path.strip("/") or "index"
+    raw = f"{host}-{path}".lower()
+    slug = _SLUG_SAFE.sub("-", raw).strip("-")
+    if not slug:
+        slug = "page"
+    if len(slug) > max_len:
+        digest = hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:10]
+        slug = f"{slug[: max_len - 11]}-{digest}"
+    return slug
