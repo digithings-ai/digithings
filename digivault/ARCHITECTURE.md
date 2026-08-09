@@ -30,7 +30,7 @@ extra.
 | `digivault/models.py` | Pydantic v2 result models: `Note`, `LinkRef`, `ValidationIssue`, `LintReport`, `VaultConfig`. |
 | `digivault/frontmatter.py` | Round-trip-safe YAML frontmatter `split` / `dump` / `set_keys` (PyYAML). `split(dump(fm, body)) == (fm, body)`. |
 | `digivault/wikilinks.py` | Parse `[[note]]`/`[[note#h\|alias]]`/`![[embed]]`; `rewrite_target` / `map_targets` rewrite links while skipping code spans/blocks. |
-| `digivault/vault.py` | `Vault` — load a directory (or any store via `Vault.from_sources`), build the note index + link graph + backlinks + tag index; maintenance ops (`create_note`, `rename` with inbound-link rewrite, `set_frontmatter`, `reindex`, `lint`). |
+| `digivault/vault.py` | `Vault` — load a directory (or any store via `Vault.from_sources`), build the note index + link graph + backlinks + tag index; maintenance ops (`create_note`, `write_note(..., overwrite=True)` for idempotent upserts, `rename` with inbound-link rewrite, `set_frontmatter`, `reindex`, `lint`). |
 | `digivault/local_search.py` | Filesystem keyword search for `digivault_search_notes` when `DIGIVAULT_ROOT` is set (Profile A / client vaults). Returns `VaultSearchHit` rows; no network. |
 | `digivault/supabase_store.py` | `SupabaseStore` — read a vault out of Supabase (`architecture_notes`/`knowledge_notes`) and reconstruct it via `Vault.from_sources`; FTS `search` via the `search_architecture_notes` RPC. Optional `[supabase]` extra, lazily imported. |
 | `digivault/path_scopes.py` | digikey scope policy: reads need `digivault:read`, writes `digivault:write`. |
