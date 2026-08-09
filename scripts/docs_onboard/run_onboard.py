@@ -9,7 +9,7 @@ import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any  # score:allow untyped any — ingest JSON payloads are open dicts
 
 from digivault.vault import Vault
 

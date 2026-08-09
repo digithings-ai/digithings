@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock
+from typing import Any  # score:allow untyped any — monkeypatch / post_ingest test doubles
 
 import pytest
 

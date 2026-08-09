@@ -11,7 +11,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any  # score:allow untyped any — ingest JSON payloads are open dicts
 
 from scripts.docs_onboard.models import OnboardManifest, PageClass, load_manifest
 from scripts.docs_onboard.workspace import Workspace
