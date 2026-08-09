@@ -106,6 +106,7 @@ Product sketch: [`digichat-self-hosted-release.md`](../architecture/digichat-sel
 | `DIGICHAT_DATABASE_URL` | Postgres (Compose wires digichat-db) |
 | `DIGICHAT_AUTO_MIGRATE=1` | Apply Drizzle migrations on start |
 | `DIGICHAT_EMBED_ENABLED` | Enable `/embed` as needed |
+| `DIGICHAT_EMBED_HOSTS` | **Runtime** comma-separated parent hostnames for CSP `frame-ancestors` (no secrets). Optional if hosts are already `DIGICHAT_EMBED_TENANTS` keys. |
 | `DIGICHAT_EMBED_TENANTS` | **Runtime** JSON registry (hostname → branding, gate, token, `backend`). **Never** a Docker build-arg — tokens leak in layers. |
 
 Illustrative registry (Profile A):
@@ -152,23 +153,23 @@ Customer embeds always need a matching `token`. First-party digithings hosts
 
 ## Custom embed parent hosts (CSP)
 
-The published GHCR image bakes `frame-ancestors` from
-`frontend/digichat/embed-hosts.txt` at build time. If your parent site hostname
-is not in that list, either:
+Stock GHCR digichat sets `/embed` `frame-ancestors` at **runtime** from:
 
-1. Open a digithings PR to add the hostname to `embed-hosts.txt` (no secrets), or
-2. Rebuild the image yourself:
+1. `DIGICHAT_EMBED_HOSTS` — comma-separated parent hostnames (no secrets), and/or
+2. Host keys (and aliases) in `DIGICHAT_EMBED_TENANTS` when `DIGICHAT_EMBED_HOSTS` is unset.
+
+Example (Compose / ACA env):
 
 ```bash
-docker build -f frontend/digichat/Dockerfile \
-  --build-arg DIGICHAT_EMBED_HOSTS=your.example.com,www.your.example.com \
-  -t digichat:custom .
+DIGICHAT_EMBED_HOSTS=client.example.com,www.client.example.com
+# still required for tokens / backend — never a build-arg:
+DIGICHAT_EMBED_TENANTS={"client.example.com":{...}}
 ```
 
-Still set `DIGICHAT_EMBED_TENANTS` at **runtime** with tokens — never as a build-arg.
+Security: digichat never emits `frame-ancestors *`. If neither source yields hosts,
+only first-party digithings origins (plus `'self'`) remain allowlisted.
 
-Runtime `frame-ancestors` (stock GHCR for arbitrary parents without rebuild) is a
-follow-up — see the architecture sketch Follow-ups.
+Optional seed list of known hosts: `frontend/digichat/embed-hosts.txt` (not baked into the image).
 
 ## Smoke
 

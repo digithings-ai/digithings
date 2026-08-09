@@ -4,8 +4,12 @@
  * theme, accent, attribution, and CSP frame-ancestors.
  * Spec: docs/superpowers/specs/2026-07-02-digichat-embed-external-backend-design.md
  *
- * NOTE: security-headers.ts imports this at next.config.ts evaluation time,
- * so the env var must be present AT BUILD as well as at runtime.
+ * NOTE: `/embed` CSP `frame-ancestors` is set at request time by `src/proxy.ts`
+ * (`embedFrameAncestorsCsp()` in security-headers.ts), which re-reads
+ * `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` from `process.env` on each
+ * call. `next.config.ts` only bakes fail-closed `frame-ancestors 'none'` — tenant
+ * env need not be present at image build for framing. Registry lookups below are
+ * also runtime (lazy cache on first `getEmbedTenantRegistry()`).
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";

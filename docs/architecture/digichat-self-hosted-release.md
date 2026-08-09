@@ -38,7 +38,7 @@ Bite-sized tasks (release packaging → Profile A/B → install guide → gap fi
 | Artifact | Status | Notes |
 |---|---|---|
 | **Git tag** `digichat-vX.Y.Z` | Exists | [release-please-digichat.yml](../../.github/workflows/release-please-digichat.yml) on `develop`; changelog in `frontend/digichat/CHANGELOG.md`. Current app version: `0.9.3` (`private: true` in package.json). |
-| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | Exists | [publish-digichat-image.yml](../../.github/workflows/publish-digichat-image.yml) on `main` when `frontend/digichat/**` changes; skips if that version tag already published. Build-arg `DIGICHAT_EMBED_HOSTS` from `frontend/digichat/embed-hosts.txt` (CSP `frame-ancestors` only — no secrets). |
+| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | Exists | [publish-digichat-image.yml](../../.github/workflows/publish-digichat-image.yml) on `main` when `frontend/digichat/**` changes; skips if that version tag already published. `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
 | **npm package for digichat Node** | Does **not** exist | App is `private: true`; clients do not `npm install digichat`. |
 | **`@digithings/digichat-ui`** | Workspace / site embed | Shared React UI for marketing shells and digichat itself — **not** the self-host install unit. |
 | **Compose local image** `digi-digichat:latest` | Dev / operator | Root `docker-compose.yml` **builds** from repo context; does not pull GHCR by default. |
@@ -117,7 +117,7 @@ No digigraph, digikey, LiteLLM, or digivault required on the client box. digithi
 
 | Variable | Required | Notes |
 |---|---|---|
-| `DIGICHAT_EMBED_HOSTS` | For embed CSP | Comma-separated parent hostnames. Safe as Docker build-arg. Published GHCR image uses `embed-hosts.txt` (includes digithings + DataTap hosts). Client-specific parents not in that list need a **rebuild** or a client-built image with their hosts — gap today. |
+| `DIGICHAT_EMBED_HOSTS` | For embed CSP | Comma-separated parent hostnames (no secrets). **Runtime** env on the digichat service — stock GHCR admits new parents without rebuild. Optional if hosts already appear as `DIGICHAT_EMBED_TENANTS` keys and `DIGICHAT_EMBED_HOSTS` is unset. Seed list: `frontend/digichat/embed-hosts.txt` (not baked into the image). |
 
 ### Runtime — always (both profiles)
 
@@ -200,7 +200,7 @@ First-party digithings hosts (`digithings.ai` / `www.digithings.ai`) may skip em
 | ~~**No client-facing install guide**~~ | **Addressed:** [`docs/digichat/INSTALL.md`](../digichat/INSTALL.md) — pull GHCR + Profile A/B + env checklist + smoke. Linked from modular-frontend §5 and OPERATIONS.md. |
 | ~~**Compose builds, does not pull**~~ | **Addressed:** [`infra/digichat-release/compose.digichat-release.yml`](../../infra/digichat-release/compose.digichat-release.yml) overlays root Compose to `image: ghcr.io/digithings-ai/digichat:v…`. |
 | ~~**Makefile is local-dev shaped**~~ | **Addressed:** `make digichat-release-up VERSION=…` / `digichat-release-down` (see Makefile digichat help block + [`infra/digichat-release/README.md`](../../infra/digichat-release/README.md) command matrix). |
-| **`DIGICHAT_EMBED_HOSTS` baked into published image** | **Documented rebuild path:** INSTALL.md § Custom embed parent hosts + `embed-hosts.txt` header. **Remaining:** runtime `frame-ancestors` so stock GHCR works for new parents without rebuild (Follow-ups). |
+| ~~**`DIGICHAT_EMBED_HOSTS` baked into published image**~~ | **Addressed:** runtime CSP via `src/proxy.ts` + INSTALL.md § Custom embed parent hosts. Plan: [`docs/superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md`](../superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md). |
 | ~~**Docs drift**~~ | **Addressed:** [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) aligns digithings.ai/chat with digigraph + Tunnel (no live Pages Function chat path). |
 | ~~**No Foundry-only Compose snippet**~~ | **Addressed:** [`compose.profile-b.yml`](../../infra/digichat-release/compose.profile-b.yml) + `.env.profile-b.example` (digithings stays Azure-free). |
 | ~~**Profile A “minimal” not named**~~ | **Addressed:** [`compose.profile-a.yml`](../../infra/digichat-release/compose.profile-a.yml). **Remaining:** digikey / digigraph / digivault still build from monorepo until GHCR exists (Follow-ups). |
@@ -208,7 +208,7 @@ First-party digithings hosts (`digithings.ai` / `www.digithings.ai`) may skip em
 
 ### Still open (Follow-ups — not v1)
 
-- Runtime CSP `frame-ancestors`
+- ~~Runtime CSP `frame-ancestors`~~ (**Addressed** — see plan above)
 - GHCR for digikey / digigraph / digivault (Profile A without monorepo clone)
 - Corpus / crawl / OCR / vault ingest pipelines
 - CI automation of RELEASE-SMOKE
@@ -224,7 +224,7 @@ Short backlog (file as separate `agent-task` issues; no epic required):
 - **Fix DEPLOYMENT.md digithings.ai/chat** — Align with digigraph + Tunnel cutover; retire Pages Function copy.
 - **Compose overlay: pull GHCR** — e.g. `compose.digichat-release.yml` with `image:` pin + env file template (no monorepo build context).
 - **Compose overlay: Profile A minimal** — digichat + db + digikey + digigraph + LiteLLM + digivault only; document optional profiles.
-- **CSP / embed hosts for clients** — Document rebuild-with-`DIGICHAT_EMBED_HOSTS` **or** evaluate runtime frame-ancestors strategy so stock GHCR works for new parent hosts without republishing secrets.
+- ~~**CSP / embed hosts for clients**~~ — **Addressed:** runtime `DIGICHAT_EMBED_HOSTS` / tenant host keys via `src/proxy.ts` (stock GHCR, no rebuild).
 - **Makefile target** — `digichat-release-up VERSION=0.9.3` (or similar) wrapping the release overlay.
 - **Profile B snippet** — Minimal digichat-only deploy example (Compose or ACA stub) + Foundry tenant JSON; point at DataTap as reference, keep digithings Azure-free.
 - **Release smoke checklist** — After each `digichat-v*` publish: GHCR pull, `/api/health`, embed smoke for digigraph tenant fixture (and Foundry if credentials available in CI secrets — optional).
