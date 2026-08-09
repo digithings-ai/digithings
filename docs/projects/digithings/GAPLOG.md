@@ -8,11 +8,11 @@ Plan questionnaire: Stage 8 of
 
 | # | Question | Hit? | Citation | Notes |
 |---|---|---|---|---|
-| 1 | What does digigraph orchestrate? | | | |
-| 2 | How do I install self-hosted digichat (Profile A)? | | | |
-| 3 | Where is digiquant's OpenAPI / run_backtest surface? | | | |
-| 4 | Summarize a recent ADR relevant to digichat embed CSP | | | |
-| 5 | What does digivault search when DIGIVAULT_ROOT is unset? | | | |
+| 1 | What does digigraph orchestrate? | Y (digisearch) | `repo://digithings/ARCHITECTURE.md` | Local `digithings_docs` query 2026-08-10 |
+| 2 | How do I install self-hosted digichat (Profile A)? | | | Not smoke-tested in chat |
+| 3 | Where is digiquant's OpenAPI / run_backtest surface? | | | Not smoke-tested in chat |
+| 4 | Summarize a recent ADR relevant to digichat embed CSP | | | Not smoke-tested in chat |
+| 5 | What does digivault search when DIGIVAULT_ROOT is unset? | Y (digisearch) | `repo://digithings/digivault/ARCHITECTURE.md` | Local digisearch query 2026-08-10 |
 | 6 | digiquant.io marketing: what is the product pitch? | | | |
 | 7 | How does docs_onboard dual-sink work? | | | |
 | 8 | What scopes does digikey issue for digivault writes? | | | |
@@ -23,11 +23,11 @@ Plan questionnaire: Stage 8 of
 
 | Date | Area | Observation | Next action |
 |---|---|---|---|
-| | Auth | | |
-| | Citations | | |
-| | Latency | | |
-| | Dual-sink parity | | |
-| | Legacy retirement | | |
+| 2026-08-10 | Pipeline | Stage 7 onboard on `develop` (`d6b821a2`): dry-run 71 docs (0 crawl); apply 73 vault notes @ `/tmp/digithings-onboard-vault`; digisearch ~68–73 docs → `digithings_docs` (Compose path prefix `/app/digisearch/onboard`; rate limit 30/min) | Set `DIGISEARCH_INDEX=digithings_docs` on digigraph for chat smoke; throttle ingest in runbook |
+| 2026-08-10 | Supabase | `sync_onboard_vault.py --dry-run` parsed 73 notes; **apply skipped** — `CORE_SUPABASE_URL` + `CORE_SUPABASE_SERVICE_KEY` unset in env | Operator apply after secrets set |
+| 2026-08-10 | digichat | Local `:3005` healthy but `.env.local` points at Foundry/DataTap, not digigraph dogfood tenant | Use digithings operator embed config or retarget local tenant |
+| 2026-08-10 | Dual-sink parity | Vault FS + digisearch index populated locally; production digithings.ai still on legacy Supabase corpus until sync | Run sync + redeploy smoke on `/chat` |
+| 2026-08-10 | Legacy retirement | Parallel legacy scripts not retired | Cut over after prod sync verified |
 
 ## Legacy retirement tracker
 
