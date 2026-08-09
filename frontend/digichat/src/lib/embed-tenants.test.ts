@@ -11,8 +11,9 @@ const VALID = JSON.stringify({
     slug: "datatapstream",
     aliases: ["www.datatapstream.com", "dev.datatap.stream"],
     backend: {
-      type: "external-relay",
-      url: "https://datatap-digichat-relay.azurewebsites.net/api/digichat",
+      type: "foundry",
+      projectEndpoint: "https://example.services.ai.azure.com",
+      agentName: "agent",
     },
     gateMode: "ungated",
     theme: "light",
@@ -49,8 +50,9 @@ describe("parseEmbedTenants", () => {
     expect(reg.get("datatapstream.com")?.slug).toBe("datatapstream");
     expect(reg.get("www.datatapstream.com")?.slug).toBe("datatapstream");
     expect(reg.get("dev.datatap.stream")?.backend).toEqual({
-      type: "external-relay",
-      url: "https://datatap-digichat-relay.azurewebsites.net/api/digichat",
+      type: "foundry",
+      projectEndpoint: "https://example.services.ai.azure.com",
+      agentName: "agent",
     });
     expect(reg.get("datatapstream.com")?.theme).toBe("light");
   });
@@ -74,64 +76,19 @@ describe("parseEmbedTenants", () => {
     expect(() => parseEmbedTenants("{nope")).toThrow(/not valid JSON/);
   });
 
-  it("throws on a non-https relay URL", () => {
+  it("rejects removed backend types (external-relay, digivault)", () => {
     expect(() =>
       parseEmbedTenants(
         JSON.stringify({
           "example.com": {
             slug: "example",
-            backend: { type: "external-relay", url: "http://insecure.example.com/x" },
+            backend: { type: "external-relay", url: "https://relay.example.com/x" },
             gateMode: "ungated",
-          },
-        })
-      )
-    ).toThrow(/https/);
-  });
-
-  it("accepts digivault backend with env-name refs", () => {
-    const reg = parseEmbedTenants(
-      JSON.stringify({
-        "docs.example.com": {
-          slug: "docs",
-          token: "tok",
-          gateMode: "ungated",
-          theme: "dark",
-          attribution: true,
-          backend: {
-            type: "digivault",
-            supabaseUrlEnv: "CORE_SUPABASE_URL",
-            supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
-            openRouterKeyEnv: "OPENROUTER_API_KEY",
-          },
-        },
-      })
-    );
-    expect(reg.get("docs.example.com")?.backend).toEqual({
-      type: "digivault",
-      supabaseUrlEnv: "CORE_SUPABASE_URL",
-      supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
-      openRouterKeyEnv: "OPENROUTER_API_KEY",
-    });
-  });
-
-  it("rejects digivault env names that look like URLs or keys", () => {
-    expect(() =>
-      parseEmbedTenants(
-        JSON.stringify({
-          "example.com": {
-            slug: "example",
             token: "tok",
-            gateMode: "ungated",
-            backend: {
-              type: "digivault",
-              supabaseUrlEnv: "https://x.supabase.co",
-              supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
-              openRouterKeyEnv: "OPENROUTER_API_KEY",
-            },
           },
         })
       )
-    ).toThrow(/env/i);
+    ).toThrow(/digigraph.*foundry|foundry.*digigraph/);
     expect(() =>
       parseEmbedTenants(
         JSON.stringify({
@@ -143,12 +100,12 @@ describe("parseEmbedTenants", () => {
               type: "digivault",
               supabaseUrlEnv: "CORE_SUPABASE_URL",
               supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
-              openRouterKeyEnv: "sk-or-v1-abc",
+              openRouterKeyEnv: "OPENROUTER_API_KEY",
             },
           },
         })
       )
-    ).toThrow(/env/i);
+    ).toThrow(/digigraph.*foundry|foundry.*digigraph/);
   });
 
   it("parses a foundry backend", () => {
@@ -185,6 +142,7 @@ describe("parseEmbedTenants", () => {
               agentName: "digichat",
             },
             gateMode: "ungated",
+            token: "tok",
           },
         })
       )
@@ -199,6 +157,7 @@ describe("parseEmbedTenants", () => {
             slug: "example",
             backend: { type: "foundry", projectEndpoint: "https://dg-agentic-ai.ai.azure.com/api/projects/x" },
             gateMode: "ungated",
+            token: "tok",
           },
         })
       )
@@ -214,6 +173,7 @@ describe("parseEmbedTenants", () => {
             backend: { type: "digigraph" },
             gateMode: "turn_limited",
             accent: { color: "red", foreground: "#ffffff" },
+            token: "tok",
           },
         })
       )
@@ -285,7 +245,7 @@ describe("parseEmbedTenants", () => {
     expect(() =>
       parseEmbedTenants(
         JSON.stringify({
-          "example.com": { slug: "example", backend: { type: "digigraph" }, gateMode: "open" },
+          "example.com": { slug: "example", backend: { type: "digigraph" }, gateMode: "open", token: "t" },
         })
       )
     ).toThrow(/gateMode/);
@@ -297,6 +257,7 @@ describe("parseEmbedTenants", () => {
             backend: { type: "digigraph" },
             gateMode: "ungated",
             theme: "midnight",
+            token: "t",
           },
         })
       )
@@ -374,12 +335,7 @@ describe("parseEmbedTenants", () => {
       JSON.stringify({
         "digithings.ai": {
           slug: "digithings",
-          backend: {
-            type: "digivault",
-            supabaseUrlEnv: "A_URL",
-            supabaseAnonKeyEnv: "A_ANON",
-            openRouterKeyEnv: "A_OR",
-          },
+          backend: { type: "digigraph" },
           gateMode: "ungated",
           showByok: true,
           showStatusBar: true,

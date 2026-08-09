@@ -355,7 +355,7 @@ describe("toDigiChatActivity", () => {
 
   // Regression: a `retrieve` span following a `started` span with no
   // intervening execute_tool completion — exactly the shape
-  // foundry-stream.test.ts's own `searchEvents` fixture produces (Foundry
+  // adapters/foundry/stream.test.ts's own `searchEvents` fixture produces (Foundry
   // citations arrive straight off the message, with no file_search_call
   // output_item.done in between) — must resolve the pending placeholder
   // rather than leave it as an orphaned, never-settling tool_call row.

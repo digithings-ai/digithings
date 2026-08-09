@@ -11,10 +11,11 @@ digichat is the user-facing interface to the digithings ecosystem. It is a Next.
 In this order, before writing any code:
 
 1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — full capability matrix, module map, API surface (all route handlers), auth flow, DB schema, streaming behavior
-2. `node_modules/next/dist/docs/` — **required** before writing any Next.js code; this version has breaking changes from prior releases (path inside installed dependencies, not a committed file)
-3. [`../../AGENTS.md`](../../AGENTS.md) — non-negotiable stack-wide rules
-4. `../../ROADMAP.md` — OpenClaw integration and RAG ingestion UI are Phase 2; do not build them now (see `docs/VISION.md` for the current plan)
-5. `../../docs/agent-backlog/` — current task queue lives on GitHub Project #1; see `docs/agents/AGENT_WORKFLOW.md`
+2. [`../../docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md) — modular frontend; digigraph digithings path; Foundry client adapter
+3. `node_modules/next/dist/docs/` — **required** before writing any Next.js code; this version has breaking changes from prior releases (path inside installed dependencies, not a committed file)
+4. [`../../AGENTS.md`](../../AGENTS.md) — non-negotiable stack-wide rules
+5. `../../ROADMAP.md` — OpenClaw integration and RAG ingestion UI are Phase 2; do not build them now (see `docs/VISION.md` for the current plan)
+6. `../../docs/agent-backlog/` — current task queue lives on GitHub Project #1; see `docs/agents/AGENT_WORKFLOW.md`
 
 ---
 

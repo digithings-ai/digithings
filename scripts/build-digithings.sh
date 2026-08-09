@@ -35,6 +35,7 @@ if [ "$(uname -s)" = "Linux" ]; then
 fi
 
 echo "--- building digithings-web (Next.js static export) ---"
+# prebuild rewrites public/_headers frame-src from NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN
 npm --workspace frontend/digithings-web run build
 
 # Assemble dist/ from the static export (includes /design/assets/og.png for the
@@ -43,6 +44,15 @@ rm -rf dist
 mkdir -p dist
 cp -r frontend/digithings-web/out/. dist/
 echo "digithings.ai" > dist/CNAME
+
+# CSP frame-src must match the /chat iframe origin (Bugbot / embed cutover).
+[ -f dist/_headers ] || { echo "ERROR: dist/_headers missing — CSP would not apply" >&2; exit 1; }
+FRAME_SRC="$(node --input-type=module -e '
+  import { frameSrcForCsp } from "./frontend/digithings-web/lib/security-headers.mjs";
+  process.stdout.write(frameSrcForCsp());
+')"
+grep -F "frame-src ${FRAME_SRC}" dist/_headers >/dev/null \
+  || { echo "ERROR: dist/_headers frame-src does not match NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN (${FRAME_SRC})" >&2; exit 1; }
 
 # Deploy build stamp (#1759). Cloudflare Pages serves a frozen deploy with a 200
 # and no `last-modified`, so without a stamp in the export every smoke probe

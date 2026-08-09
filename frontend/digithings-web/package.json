@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
+    "prebuild": "node ./lib/write-csp-headers.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "write-csp-headers": "node ./lib/write-csp-headers.mjs"
   },
   "dependencies": {
     "@digithings/design": "*",

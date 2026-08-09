@@ -14,7 +14,7 @@ import {
   ACTIVITY_PART_TYPE,
   type ActivityDetail,
 } from "@/lib/chat-activity";
-import { mapDigigraphTraceToSpans } from "@/lib/digigraph-activity-map";
+import { mapDigigraphTraceToSpans } from "@/lib/adapters/digithings/activity";
 
 export type DigigraphTracePayload = {
   v?: number;
