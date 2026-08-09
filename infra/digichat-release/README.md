@@ -84,6 +84,19 @@ docker compose -f infra/digichat-release/compose.profile-b.yml \
 
 Host must supply Azure identity for Foundry; do not put a Foundry API key in digichat env.
 
+## Command matrix
+
+| Goal | Command |
+|---|---|
+| Pull GHCR digichat (monorepo overlay) | `make digichat-release-up VERSION=0.9.3` |
+| Tear down GHCR overlay | `make digichat-release-down VERSION=0.9.3` |
+| Profile A (digigraph) | `docker compose -f infra/digichat-release/compose.profile-a.yml --env-file infra/digichat-release/.env.profile-a up -d --build` |
+| Profile B (Foundry) | `docker compose -f infra/digichat-release/compose.profile-b.yml --env-file infra/digichat-release/.env.profile-b up -d` |
+| Local monorepo build | `make up-digichat` |
+| Client install guide | [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) |
+| Post-publish smoke | [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md) |
+| Custom embed CSP hosts | [`INSTALL.md` § Custom embed parent hosts](../../docs/digichat/INSTALL.md#custom-embed-parent-hosts-csp) |
+
 digithings’ own Tunnel host remains the operator path in
 [`infra/digichat-digithings/`](../digichat-digithings/). Clients should prefer these overlays
 and [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md).

@@ -5,7 +5,7 @@
 > §5 (product model) and the digithings operator runbook
 > [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
 
-**Status:** Sketch (2026-08-09) — product model + gaps; implementation tracked below  
+**Status:** Sketch (2026-08-09) — Gaps in §5 updated for Tasks 1–8 of the implementation plan  
 **Related:** [ADR-0018](../adr/0018-digichat-path-routing.md), [`frontend/digichat/ARCHITECTURE.md`](../../frontend/digichat/ARCHITECTURE.md)  
 **Naming:** Digi module names are always lowercase in prose.
 
@@ -197,14 +197,22 @@ First-party digithings hosts (`digithings.ai` / `www.digithings.ai`) may skip em
 
 | Gap | Detail |
 |---|---|
-| **No client-facing install guide** | Modular-frontend §5 states the goal; there is no “pull GHCR + set env + profile A/B” doc. DataTap install lives in client / phase plans, not a first-class digithings install page. |
-| **Compose builds, does not pull** | `docker-compose.yml` builds `digi-digichat:latest` from source. No overlay that `image: ghcr.io/digithings-ai/digichat:v…` for release installs. |
-| **Makefile is local-dev shaped** | `up-digichat` / `digichat-dev` / `stack-local` — no `make digichat-pull VERSION=…` or documented GHCR pin. |
-| **`DIGICHAT_EMBED_HOSTS` baked into published image** | Clients with new parent domains not in `embed-hosts.txt` cannot use the stock GHCR CSP without rebuild or a documented rebuild path. |
-| **Docs drift** | [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) still describes Phase 3 Pages Function + native digichat-ui for `/chat` (OpenRouter / Supabase). Operator truth is digichat → digigraph + Tunnel ([infra README](../../infra/digichat-digithings/README.md), ADR-0018 amended). |
-| **No Foundry-only Compose snippet** | Profile B is “image + env + Azure”; nothing in-repo mirrors DataTap ACA as a minimal compose/k8s example. |
-| **Profile A “minimal” not named** | Full monorepo Compose is the only path; no slim “chat + digikey + digigraph + litellm + digivault” overlay called out for clients. |
-| **npm confusion risk** | `private: true` is correct; docs should say explicitly “install = GHCR image, not npm.” |
+| ~~**No client-facing install guide**~~ | **Addressed:** [`docs/digichat/INSTALL.md`](../digichat/INSTALL.md) — pull GHCR + Profile A/B + env checklist + smoke. Linked from modular-frontend §5 and OPERATIONS.md. |
+| ~~**Compose builds, does not pull**~~ | **Addressed:** [`infra/digichat-release/compose.digichat-release.yml`](../../infra/digichat-release/compose.digichat-release.yml) overlays root Compose to `image: ghcr.io/digithings-ai/digichat:v…`. |
+| ~~**Makefile is local-dev shaped**~~ | **Addressed:** `make digichat-release-up VERSION=…` / `digichat-release-down` (see Makefile digichat help block + [`infra/digichat-release/README.md`](../../infra/digichat-release/README.md) command matrix). |
+| **`DIGICHAT_EMBED_HOSTS` baked into published image** | **Documented rebuild path:** INSTALL.md § Custom embed parent hosts + `embed-hosts.txt` header. **Remaining:** runtime `frame-ancestors` so stock GHCR works for new parents without rebuild (Follow-ups). |
+| ~~**Docs drift**~~ | **Addressed:** [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) aligns digithings.ai/chat with digigraph + Tunnel (no live Pages Function chat path). |
+| ~~**No Foundry-only Compose snippet**~~ | **Addressed:** [`compose.profile-b.yml`](../../infra/digichat-release/compose.profile-b.yml) + `.env.profile-b.example` (digithings stays Azure-free). |
+| ~~**Profile A “minimal” not named**~~ | **Addressed:** [`compose.profile-a.yml`](../../infra/digichat-release/compose.profile-a.yml). **Remaining:** digikey / digigraph / digivault still build from monorepo until GHCR exists (Follow-ups). |
+| ~~**npm confusion risk**~~ | **Addressed:** INSTALL.md + RELEASE-SMOKE state install unit = GHCR image, not npm (`private: true`). |
+
+### Still open (Follow-ups — not v1)
+
+- Runtime CSP `frame-ancestors`
+- GHCR for digikey / digigraph / digivault (Profile A without monorepo clone)
+- Corpus / crawl / OCR / vault ingest pipelines
+- CI automation of RELEASE-SMOKE
+- Helm / ACA stubs beyond Compose Profile B
 
 ---
 

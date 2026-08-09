@@ -702,7 +702,7 @@ EOF
 - Consumes: Tasks 1–7 deliverables.
 - Produces: Single acceptance checklist an implementer can run before opening the PR.
 
-- [ ] **Step 1: Acceptance checklist (run all)**
+- [x] **Step 1: Acceptance checklist (run all)**
 
 ```bash
 # Docs present
@@ -732,11 +732,11 @@ DIGICHAT_VERSION=0.9.3 docker compose \
 rg -n 'INSTALL.md' docs/architecture/digichat-modular-frontend.md
 ```
 
-- [ ] **Step 2: Update sketch §5 Gaps table**
+- [x] **Step 2: Update sketch §5 Gaps table**
 
 For each gap that this plan’s implementation closes, change Detail to “Addressed: see INSTALL.md / infra/digichat-release/ …” or strike through. Leave runtime CSP + stack-service GHCR + ingest as open if not done.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add Makefile infra/digichat-release/README.md docs/architecture/digichat-self-hosted-release.md
