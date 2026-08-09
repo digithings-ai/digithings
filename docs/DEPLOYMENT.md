@@ -26,7 +26,7 @@ Endpoints (all bind to `127.0.0.1`):
 
 Use **Tailscale** or **Cloudflare Tunnel** for remote access. Never expose ports publicly. See [SECURITY.md](../SECURITY.md).
 
-**digiquant build flag:** The default digiquant image includes NautilusTrader. Set `NAUTILUS=0` to exclude it (backtest/optimize/pipeline then return 503).
+**digiquant image:** Always installs `digiquant[nautilus]` (NautilusTrader). Market sample CSVs for backtests are under `digiquant/data/` (compose-mounted); the image does not download upstream Nautilus fixtures at build time.
 
 ## With heartbeat (unattended monitoring)
 
@@ -108,7 +108,7 @@ For a week-long unattended run:
 - **Ports already in use:** check for prior `docker compose up` instances (`docker ps`) or conflicting host services on 8000–8005, 4000, 3005.
 - **`make test-cov` fails to import:** requires editable installs — `pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digismith"`.
 - **digichat shows "auth not configured":** set `AUTH_SECRET`, `AUTH_URL`, `DIGIKEY_BFF_TOKEN` in `.env` and recreate the container.
-- **digigraph returns 503 on `/v1/backtest`:** image was built with `NAUTILUS=0`. Rebuild without the flag or use `/workflow` (research-only).
+- **digigraph returns 503 on `/v1/backtest`:** digiquant not healthy or upstream auth missing — check `docker compose ps digiquant` and digikey JWT/scopes.
 
 ## Public domain routing
 

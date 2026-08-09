@@ -88,3 +88,37 @@ Cutover runbook: [`infra/digichat-digithings/README.md`](../../infra/digichat-di
 ## 4. Foundry
 
 Foundry remains the client Azure adapter. Behavior polish (reasoning summary, activity parity) is tracked separately — not required for digithings digigraph cutover.
+
+---
+
+## 5. End goal — self-hosted digichat, not a shared SaaS chat
+
+**Delivery model:** digithings ships **self-hosted AI infra**. Clients install a digichat **release from GitHub** and run it in **their own** environment (Compose, ACA, k8s, etc.). There is **no** live shared digichat that all clients point at.
+
+Same pattern as DataTap today: client-hosted digichat Node + their backend (Foundry or digigraph stack). digithings.ai/chat is digithings’ **own** instance of that same product — not a multi-tenant host for other companies.
+
+**What stays centralized (in the product/repo)**
+
+1. digichat UI + BFF + **adapter layer** (digigraph | foundry)
+2. digigraph → digillm → LiteLLM (OpenRouter) + digivault as digigraph tools
+3. Release artifacts, Compose/runbooks, tenant **config shape** (`DIGICHAT_EMBED_TENANTS`)
+
+**What is per client (their install)**
+
+1. Where digichat runs (their cloud / on-prem)
+2. Backend choice and secrets (digigraph stack vs Foundry)
+3. Corpus / ingest (e.g. crawl site → PDF/OCR → digivault) — not a digichat fork
+
+**Hard rule:** do not grow a digithings-hosted multi-client digichat. Scale by shipping a clean release + adapters + digigraph/digivault modules clients can configure. Custom work is ingest pipelines and tenant config, not a second chat app.
+
+**Near-term foundation**
+
+1. digithings’ own digichat install: digigraph path proven (local Compose; operator host when digithings needs public `/chat`)
+2. Release packaging / runbooks so a client can `install digichat + stack` without digithings hosting it
+3. Tenant/backend config as the only per-deploy digichat surface
+
+**Later (client documentation chatbot)**
+
+- Client (or digithings helping them) runs **their** digichat + digigraph + digivault
+- Ingest into **their** vault: crawl → PDFs → page-level notes (text + images / OCR / base64 as needed)
+- Same digichat release; different env, secrets, and corpus
