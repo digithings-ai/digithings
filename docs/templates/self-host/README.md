@@ -54,7 +54,7 @@ docker compose \
 | `DIGI_IMAGE_TAG` | `latest` | digikey, digigraph, digiquant, digisearch, digismith, digivault, digiclaw |
 | `DIGICHAT_IMAGE_TAG` | `latest` | digichat only (prefer `vX.Y.Z` from release-please) |
 
-Production: pin `DIGI_IMAGE_TAG=sha-<12-char-git-sha>` so every service matches one monorepo commit. See [RELEASES.md](../../RELEASES.md).
+Production: pin `DIGI_IMAGE_TAG=sha-<12-char-git-sha>` so every service matches one monorepo commit. See [RELEASES.md](../../../RELEASES.md).
 
 ## API docs (Swagger)
 
