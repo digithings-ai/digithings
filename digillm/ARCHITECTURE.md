@@ -59,7 +59,7 @@ failures and optionally reports only the record UUID and exception class, so tel
 the caller's portfolio work. The module starts no threads, opens no connections, and writes no
 files on import. Task #1951 defines the vocabulary; Task #1955 adds the physical-attempt producer.
 Task #1963 adds logical-call lifecycle and parentage. Full run/node/agent/ticker propagation and
-the durable DigiQuant writer remain separate follow-up tasks.
+the durable digiquant writer remain separate follow-up tasks.
 
 ### Logical provider-call instrumentation
 
@@ -67,7 +67,7 @@ the durable DigiQuant writer remain separate follow-up tasks.
 hits, tool-loop turns, grounding, and structured repair. **Reason:** physical attempts prove that
 transport work occurred but cannot explain why it existed, whether a cache answered it, which
 call caused a follow-up, or what consumed the result. **Intent:** connect provider work to generic
-research purpose and artifact disposition without importing DigiGraph, Olympus, ticker, or
+research purpose and artifact disposition without importing digigraph, Olympus, ticker, or
 portfolio semantics into this leaf library. **System contribution:** consumers can reconcile
 logical research operations with physical reliability and cost evidence while preserving the
 existing provider behavior.
@@ -102,8 +102,8 @@ physical attempts and strict contracts remain intact. Task 1.5 owns durable buff
 reconciliation.
 
 `NodeRunRecord.fanout_key` (#1978) is an optional, bounded (1–200) label naming which fan-out item
-one node execution was for. It is **opaque to DigiLLM**: the producer supplies the string and this
-package never interprets it. It is deliberately not called `ticker` — DigiGraph owns that
+one node execution was for. It is **opaque to digillm**: the producer supplies the string and this
+package never interprets it. It is deliberately not called `ticker` — digigraph owns that
 vocabulary, and `extra="forbid"` plus a test pin that boundary. A node with no fan-out cursor has no
 key: absent, never `""` and never fabricated.
 
@@ -143,7 +143,7 @@ attempt record means one observable SDK invocation, not proof of exactly one HTT
 canary test locks the SDK setting in place; changing or disabling it requires a separate measured
 decision. Cache hits produce no physical attempt record.
 
-DigiQuant migration `067_olympus_provider_telemetry.sql` owns the private normalized storage. Event
+digiquant migration `067_olympus_provider_telemetry.sql` owns the private normalized storage. Event
 times remain producer facts; the database adds `recorded_at` as its write clock. That schema is not
 part of `digillm` and does not create a persistence dependency for other consumers.
 
@@ -280,7 +280,7 @@ plain contextvar setters and reads them when building clients.
 | `set_proxy_key(token)` / `reset_proxy_key(tok)` (or `with proxy_key(token):`) | `get_client()` default path | Per-request LiteLLM proxy / bearer key. Priority: proxy override → `LITELLM_PROXY_API_KEY` → `OPENAI_API_KEY`. |
 | `set_byok(api_key, base_url=...)` / `reset_byok(tok)` (or `with byok(api_key, base_url):`) | `get_client()` default path | Bring-your-own-key. Returns an **uncached** client (user creds must not accumulate in process memory) and **bypasses the response cache**. |
 
-Digigraph's middleware will translate (today's code shown for reference):
+digigraph's middleware will translate (today's code shown for reference):
 
 ```python
 # digigraph FastAPI middleware (NOT in digillm):
@@ -296,7 +296,7 @@ finally:
 - **Provider prefix wins over BYOK on routing.** `get_client_for_model` checks
   the prefix first; BYOK/proxy overrides only affect the *default* (non-prefixed)
   client path. This mirrors digigraph's behavior.
-- **BYOK is `(api_key, base_url)` — provider-agnostic.** Digigraph carried
+- **BYOK is `(api_key, base_url)` — provider-agnostic.** digigraph carried
   `(key, provider)` with an unfinished Anthropic-passthrough special-case. That
   provider coupling is intentionally **dropped**: a BYOK caller supplies the
   endpoint directly.

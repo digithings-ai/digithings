@@ -6,18 +6,18 @@ Status: Accepted · Amended 2026-08-05 (evening) · Supersedes the `chat.digithi
 
 ADR-0002 planned digichat as `chat.digithings.ai`. digichat should feel like part of digithings.ai, not a second product site.
 
-Full digichat (Next.js standalone, Auth.js, Postgres, `/embed` for customers) still needs a Node host for **customer embeds** (e.g. DataTap). DigiThings **marketing** chat does not need that stack on the free Cloudflare plan.
+Full digichat (Next.js standalone, Auth.js, Postgres, `/embed` for customers) still needs a Node host for **customer embeds** (e.g. DataTap). digithings **marketing** chat does not need that stack on the free Cloudflare plan.
 
 ## Decision (amended 2026-08-05 evening)
 
 | Path | Owner | Role |
 |---|---|---|
 | `digithings.ai/chat` | Cloudflare Pages (`frontend/digithings-web`) | Native `@digithings/digichat-ui` + digivault Pages Function (`/api/chat`) |
-| digichat `/embed` (customers) | digichat Node (DataTap Azure ACA today; DigiThings Containers **deferred**) | Customer iframe embeds |
+| digichat `/embed` (customers) | digichat Node (DataTap Azure ACA today; digithings Containers **deferred**) | Customer iframe embeds |
 
 - Marketing chat: **no iframe**, **no Workers Paid Containers** required.
 - Shared UI package unifies look/feel; digithings keeps a free Pages digivault Function rather than deploying digichat Node for visitors.
-- DigiThings has **no Azure**. DataTap Azure digichat is client-only.
+- digithings has **no Azure**. DataTap Azure digichat is client-only.
 - Do **not** use `chat.digithings.ai` as the marketing host.
 
 ### Historical notes
@@ -32,7 +32,7 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed` for customers) st
    **The Cloudflare account was not checked** — a `wrangler deploy` is a manual command that
    leaves no repo trace, and the scaffold's own `wrangler.toml` noted routes could be attached
    in the Dashboard, so the repo cannot prove no deploy ever happened. Recover it from git
-   history if DigiThings later adopts Workers Paid and wants one digichat Node serving both
+   history if digithings later adopts Workers Paid and wants one digichat Node serving both
    marketing and embeds.
 
 ## Production configuration
@@ -43,5 +43,5 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed` for customers) st
 ## Consequences
 
 - One domain; marketing chat stays free.
-- Digithings marketing digivault path can diverge from digichat’s TypeScript digivault provider until a shared package is extracted.
+- digithings marketing digivault path can diverge from digichat’s TypeScript digivault provider until a shared package is extracted.
 - Customer digichat embeds remain on digichat Node (unchanged by this ADR).
