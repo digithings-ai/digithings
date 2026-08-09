@@ -381,7 +381,7 @@ EOF
 - Consumes: digichat Foundry adapter (`backend.type: foundry`, `projectEndpoint`, `agentName`); host Azure identity via `DefaultAzureCredential`.
 - Produces: Minimal digichat(+db) compose + env template. digithings remains Azure-free; snippet is for client Azure environments (DataTap-like).
 
-- [ ] **Step 1: Write `.env.profile-b.example`**
+- [x] **Step 1: Write `.env.profile-b.example`**
 
 ```bash
 # Profile B — Foundry-backed digichat (client Azure only; digithings has no Azure)
@@ -400,7 +400,7 @@ DIGICHAT_EMBED_ENABLED=1
 DIGICHAT_EMBED_TENANTS={"client.example.com":{"slug":"client","gateMode":"token","activityDetail":"full","layout":"page","token":"replace-embed-token","backend":{"type":"foundry","projectEndpoint":"https://YOUR_FOUNDRY_PROJECT.services.ai.azure.com/api/projects/YOUR_PROJECT","agentName":"YOUR_AGENT"}}}
 ```
 
-- [ ] **Step 2: Write `compose.profile-b.yml`**
+- [x] **Step 2: Write `compose.profile-b.yml`**
 
 ```yaml
 # Profile B — digichat (+ Postgres) only. Backend = Foundry on the host identity.
@@ -449,7 +449,7 @@ volumes:
 
 Adjust healthcheck / curl availability to match the published image (same as root Compose). Document: host must provide Azure credentials for Foundry calls; no Foundry API key in digichat env.
 
-- [ ] **Step 3: Validate compose config**
+- [x] **Step 3: Validate compose config**
 
 Run:
 
@@ -463,11 +463,11 @@ rg -n "ghcr.io/digithings-ai/digichat|digigraph|digikey|foundry" /tmp/profile-b.
 
 Expected: digichat GHCR only (+ postgres); no digigraph/digikey services.
 
-- [ ] **Step 4: README table update**
+- [x] **Step 4: README table update**
 
 Ensure `infra/digichat-release/README.md` lists Profile B files and states digithings has no Azure / DataTap ACA is client-only.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add infra/digichat-release/compose.profile-b.yml \

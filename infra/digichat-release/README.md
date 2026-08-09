@@ -6,9 +6,9 @@ Install unit: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (not npm, not `:latest`).
 |---|---|
 | `compose.digichat-release.yml` | Override root Compose digichat to **pull** GHCR |
 | `compose.profile-a.yml` | Minimal Profile A (digigraph stack) |
-| `compose.profile-b.yml` | Profile B digichat-only (Foundry) — added in Task 4 |
+| `compose.profile-b.yml` | Profile B digichat(+db) only (Foundry) |
 | `.env.profile-a.example` | Env template for Profile A |
-| `.env.profile-b.example` | Env template for Profile B — added in Task 4 |
+| `.env.profile-b.example` | Env template for Profile B |
 
 ## Image inventory (Profile A)
 
@@ -64,8 +64,28 @@ docker compose -f infra/digichat-release/compose.profile-a.yml \
 
 Does **not** start digiquant / digisearch / digismith / heartbeat / observability.
 
+## Profile B — Foundry (client Azure only)
+
+digithings has **no Azure**. This snippet is for client environments (DataTap-like ACA /
+Compose). Services: digichat (GHCR) + digichat-db only — no digigraph / digikey / LiteLLM.
+
+```text
+Browser → digichat → Foundry (DefaultAzureCredential on the host)
+```
+
+```bash
+cp infra/digichat-release/.env.profile-b.example \
+   infra/digichat-release/.env.profile-b
+# edit AUTH_SECRET, AUTH_URL, DIGICHAT_EMBED_TENANTS (foundry backend)
+
+docker compose -f infra/digichat-release/compose.profile-b.yml \
+  --env-file infra/digichat-release/.env.profile-b up -d
+```
+
+Host must supply Azure identity for Foundry; do not put a Foundry API key in digichat env.
+
 digithings’ own Tunnel host remains the operator path in
-[`infra/digichat-digithings/`](../digichat-digithings/). Clients should prefer this overlay
+[`infra/digichat-digithings/`](../digichat-digithings/). Clients should prefer these overlays
 (and [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md), added in a later task).
 
 See also [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md).
