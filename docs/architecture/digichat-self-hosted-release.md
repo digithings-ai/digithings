@@ -5,9 +5,14 @@
 > §5 (product model) and the digithings operator runbook
 > [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
 
-**Status:** Sketch (2026-08-09) — not an implementation plan  
+**Status:** Sketch (2026-08-09) — product model + gaps; implementation tracked below  
 **Related:** [ADR-0018](../adr/0018-digichat-path-routing.md), [`frontend/digichat/ARCHITECTURE.md`](../../frontend/digichat/ARCHITECTURE.md)  
 **Naming:** Digi module names are always lowercase in prose.
+
+## Implementation plan
+
+Bite-sized tasks (release packaging → Profile A/B → install guide → gap fixes):  
+[`docs/superpowers/plans/2026-08-09-digichat-self-hosted-release.md`](../superpowers/plans/2026-08-09-digichat-self-hosted-release.md)
 
 ---
 
