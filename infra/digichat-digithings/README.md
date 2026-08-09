@@ -42,7 +42,7 @@ export DIGIVAULT_URL=http://digivault:8004
 #   --profile litellm-cache
 
 docker compose --profile digichat --profile digivault --profile litellm-cache up -d --build
-# digichat image CSP: pass DIGICHAT_EMBED_HOSTS as a build-arg when building digichat
+# digichat CSP: set runtime DIGICHAT_EMBED_HOSTS (and DIGICHAT_EMBED_TENANTS) on the digichat service
 ```
 
 **Local smoke (no Tunnel):** open `http://127.0.0.1:3005/embed?host=digithings.ai` or
@@ -57,7 +57,7 @@ export DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai
 export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","attribution":false,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}}}'
 ```
 
-Build digichat image with `DIGICHAT_EMBED_HOSTS` present so CSP `frame-ancestors` includes digithings.ai.
+Set `DIGICHAT_EMBED_HOSTS` (and/or tenant host keys) at **runtime** so CSP `frame-ancestors` includes digithings.ai — no digichat image rebuild.
 
 ## Cloudflare Tunnel
 

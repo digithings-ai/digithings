@@ -10,11 +10,11 @@
 
 | Pick | Plan | Purpose |
 |---|---|---|
-| **1** | Runtime CSP (plan branch `docs/plan-runtime-frame-ancestors`) | Let operators allow any client embed parent on the **stock** digichat GHCR image via **runtime** env (`DIGICHAT_EMBED_HOSTS` / tenant host keys), without rebuilding for CSP. Gap: [`digichat-self-hosted-release.md`](digichat-self-hosted-release.md) §5. |
-| **2** | Stack GHCR (plan branch `docs/plan-stack-ghcr`) | Finish Profile A so clients **pull** digikey / digigraph / digivault from GHCR (no monorepo `docker compose build`), including glue after [#2023](https://github.com/digithings-ai/digithings/pull/2023). Gap: [`digichat-self-hosted-release.md`](digichat-self-hosted-release.md) §5. |
+| **1** | [`2026-08-09-digichat-runtime-frame-ancestors.md`](../superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md) | Let operators allow any client embed parent on the **stock** digichat GHCR image via **runtime** env (`DIGICHAT_EMBED_HOSTS` / tenant host keys), without rebuilding for CSP. |
+| **2** | [`2026-08-09-digichat-stack-ghcr.md`](../superpowers/plans/2026-08-09-digichat-stack-ghcr.md) | Finish Profile A so clients **pull** digikey / digigraph / digivault from GHCR (no monorepo `docker compose build`), including glue after [#2023](https://github.com/digithings-ai/digithings/pull/2023). |
 | **3** | [`2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md) | Offline **ops** pipeline (`scripts/docs_onboard/`) — URL → docs-focused crawl → PDFs via digifetch/digisearch → **their** digivault and/or digisearch index so Profile A digichat → digigraph tools ground answers on that client's docs. Not a digicorpus peer module. |
 
-Sketch gaps these close (from [`digichat-self-hosted-release.md`](digichat-self-hosted-release.md) §5 Still open): runtime CSP `frame-ancestors`; GHCR for digikey / digigraph / digivault; corpus / crawl / OCR / vault+search ingest.
+Sketch gaps these close (from [`digichat-self-hosted-release.md`](digichat-self-hosted-release.md) §5 Still open): ~~runtime CSP `frame-ancestors`~~; ~~GHCR for digikey / digigraph / digivault~~; corpus / crawl / OCR / vault+search ingest (Pick 3 MVP).
 
 ---
 
@@ -148,13 +148,12 @@ What #2023 **did** deliver (keep): publish workflow, root GHCR overlay + `make p
 
 ## See also
 
+- Orchestration meta-plan: [`../superpowers/plans/2026-08-09-digichat-self-host-picks-metaplan.md`](../superpowers/plans/2026-08-09-digichat-self-host-picks-metaplan.md)
 - Self-hosted release sketch (gaps): [`digichat-self-hosted-release.md`](digichat-self-hosted-release.md) §5
 - Product end-state: [`digichat-modular-frontend.md`](digichat-modular-frontend.md) §5
-- Pick 3 plan: [`../superpowers/plans/2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md)
+- Pick 1 plan: [`../superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md`](../superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md)
+- Pick 2 plan: [`../superpowers/plans/2026-08-09-digichat-stack-ghcr.md`](../superpowers/plans/2026-08-09-digichat-stack-ghcr.md)
+- Pick 3 plan: [`../superpowers/plans/2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md) (filename historical; content = `scripts/docs_onboard`)
 - Client docs onboard runbook: [`../digichat/CLIENT-DOCS-ONBOARD.md`](../digichat/CLIENT-DOCS-ONBOARD.md)
 - Ops pipelines index: [`../ops/CLIENT_PIPELINES.md`](../ops/CLIENT_PIPELINES.md)
 - Client install: [`../digichat/INSTALL.md`](../digichat/INSTALL.md)
-
-Pick 1 / Pick 2 implementation plans live on their plan branches
-(`docs/plan-runtime-frame-ancestors`, `docs/plan-stack-ghcr`) until merged;
-this synthesis keeps those picks orthogonal to Pick 3 docs onboard.

@@ -459,19 +459,21 @@ the endpoint after mount: any field drift between the two would repaint, which
 is the flash this whole indirection removes. `token` and `backend` have no
 branch in that projection and so can never reach the browser.
 
-The `/embed` CSP frame-ancestors (`src/lib/security-headers.ts`) is
-different: Next.js evaluates `next.config.ts`'s `headers()` during `next
-build` and bakes the result into the routes manifest, so whatever feeds it
-must be present at **build** time, not just container runtime. `embedFrameAncestors()`
-never reads anything but the registry's hostnames — never the token — so
-it's driven by a separate, non-secret `DIGICHAT_EMBED_HOSTS` env var (plain
-comma-separated hostnames) instead, preferred over deriving hosts from the
-full `DIGICHAT_EMBED_TENANTS` registry when both are set (#1360). This
-matters because a Docker build-arg persists in image layer history and
+The `/embed` CSP frame-ancestors (`src/lib/security-headers.ts` + `src/proxy.ts`)
+is set at **request time**. `next.config.ts` bakes only fail-closed
+`frame-ancestors 'none'` on `/embed` so a missing proxy cannot open framing;
+the Proxy overwrites `Content-Security-Policy` with the runtime allowlist from
+`embedFrameAncestors()` / `embedFrameAncestorsCsp()`. That helper never reads
+anything but hostnames — never the token — so it's driven by a separate,
+non-secret `DIGICHAT_EMBED_HOSTS` env var (plain comma-separated hostnames),
+preferred over deriving hosts from the full `DIGICHAT_EMBED_TENANTS` registry
+when both are set (#1360). Wildcard tokens (`*`, `*.example.com`) are rejected;
+digichat never emits `frame-ancestors *`.
+
+`DIGICHAT_EMBED_TENANTS` itself stays runtime-only (a container env var, never
+a build-arg) because a Docker build-arg persists in image layer history and
 cloud-build logs (e.g. `az acr build`) — passing the full token-bearing
-registry there for a value the build never actually reads would leak every
-tenant's token. `DIGICHAT_EMBED_TENANTS` itself stays runtime-only (a
-container env var, never a build-arg).
+registry there would leak every tenant's token.
 
 `foundry` tenants call Azure AI Foundry directly via
 `src/lib/adapters/foundry/stream.ts` (`@azure/ai-projects` +
@@ -628,10 +630,12 @@ origin that served the page.
 
 - **Authenticated routes** (`/((?!embed$|embed/).*)`): full CSP (`default-src 'self'`, …),
   `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`.
-- **`/embed`**: relaxed `frame-ancestors` for `digithings.ai` and `digiquant.io` only
-  (see `EMBED_FRAME_ANCESTORS`); no global CSP downgrade on the main app shell.
+- **`/embed`**: `next.config` bakes fail-closed `frame-ancestors 'none'`; `src/proxy.ts`
+  overwrites CSP at request time with `embedFrameAncestorsCsp()` (first-party origins
+  + runtime `DIGICHAT_EMBED_HOSTS` and/or `DIGICHAT_EMBED_TENANTS` host keys). Never
+  emits `frame-ancestors *`.
 
-Vitest: `src/lib/security-headers.test.ts`.
+Vitest: `src/lib/security-headers.test.ts`, `src/proxy.test.ts`.
 
 ### Machine API key prefixes (REM-079 glossary)
 
@@ -870,7 +874,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_EMBED_ENABLED` | Enable the unauthenticated `/embed` chat surface (`1` = on) | For public embed |
 | `DIGICHAT_EMBED_TOKEN` | Alternative to `DIGICHAT_EMBED_ENABLED`: gate `/embed` on `X-Embed-Token` instead | Optional |
 | `DIGICHAT_EMBED_TENANTS` | Optional JSON registry of embed tenants (see "Embed tenant registry & external backends"). Unset = no external embed tenants; first-party embeds behave exactly as before. Runtime-only — never pass as a Docker build-arg, it carries every tenant's secret `token` and build-args persist in image layer history / cloud-build logs (#1360). Each entry requires a `token` — the embed snippet passes it back as `?token=` / `X-Embed-Token`; a registered host alone is not sufficient authorization (#1339). | Optional |
-| `DIGICHAT_EMBED_HOSTS` | Plain comma-separated embed-tenant hostnames, no secrets. Feeds the `/embed` CSP frame-ancestors at **build** time (safe to pass as a Docker build-arg); preferred over deriving hosts from `DIGICHAT_EMBED_TENANTS` when both are set (#1360). Stock GHCR image uses `embed-hosts.txt`; other parents need rebuild or a future runtime CSP change. | Optional |
+| `DIGICHAT_EMBED_HOSTS` | Plain comma-separated embed-tenant hostnames, no secrets. Feeds `/embed` CSP `frame-ancestors` at **runtime** via `src/proxy.ts` (preferred over deriving hosts from `DIGICHAT_EMBED_TENANTS` when both are set — #1360). Optional seed list: `embed-hosts.txt` (not baked into the GHCR image). Never emits `frame-ancestors *`; fail-closed to first-party origins when unset/invalid. | Optional |
 | `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms) | Optional |
 | `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |

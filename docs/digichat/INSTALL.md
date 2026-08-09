@@ -55,20 +55,35 @@ Browser → digichat → digigraph → digillm/LiteLLM
                            └─ digivault_hub → digivault
 ```
 
-v1 honesty: digichat Node always pulls GHCR. digikey / digigraph / digivault still
-**build from the monorepo** until those services have GHCR tags. Clone this repo to
-run Profile A.
+Pull **all** Profile A services from GHCR (digichat + digikey + digigraph + digivault).
+LiteLLM uses the public berriai image. Pin stack and digichat tags separately:
+
+| Variable | Example | Services |
+|---|---|---|
+| `DIGICHAT_VERSION` | `0.9.3` | digichat → `…/digichat:v0.9.3` |
+| `DIGI_IMAGE_TAG` | `sha-<12>` or `v0.1.0` | digikey, digigraph, digivault |
 
 ```bash
 cp infra/digichat-release/.env.profile-a.example \
    infra/digichat-release/.env.profile-a
-# edit AUTH_SECRET, DIGIKEY_BFF_TOKEN, DIGICHAT_EMBED_TENANTS, provider keys
+# edit AUTH_SECRET, DIGIKEY_BFF_TOKEN, DIGICHAT_EMBED_TENANTS, DIGI_IMAGE_TAG, provider keys
 
+make digichat-profile-a-up
+# or:
 docker compose -f infra/digichat-release/compose.profile-a.yml \
-  --env-file infra/digichat-release/.env.profile-a up -d --build
+  --env-file infra/digichat-release/.env.profile-a up -d
 ```
 
 Does **not** start digiquant / digisearch / digismith / heartbeat / observability.
+
+Config for LiteLLM / digigraph is vendored under
+[`infra/digichat-release/config/`](../../infra/digichat-release/config/) (no monorepo
+`config/` clone required). Stack GHCR packages appear after
+`publish-service-images.yml` runs on `main` (promote #2023, then first publish).
+
+Full monorepo stack (all Python services) alternative:
+[`docs/templates/self-host/README.md`](../templates/self-host/README.md)
+(`make up-ghcr` + `--profile digivault --profile digichat`).
 
 digithings’ own Tunnel operator path (not the client default):
 [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
@@ -106,6 +121,7 @@ Product sketch: [`digichat-self-hosted-release.md`](../architecture/digichat-sel
 | `DIGICHAT_DATABASE_URL` | Postgres (Compose wires digichat-db) |
 | `DIGICHAT_AUTO_MIGRATE=1` | Apply Drizzle migrations on start |
 | `DIGICHAT_EMBED_ENABLED` | Enable `/embed` as needed |
+| `DIGICHAT_EMBED_HOSTS` | **Runtime** comma-separated parent hostnames for CSP `frame-ancestors` (no secrets). Optional if hosts are already `DIGICHAT_EMBED_TENANTS` keys. |
 | `DIGICHAT_EMBED_TENANTS` | **Runtime** JSON registry (hostname → branding, gate, token, `backend`). **Never** a Docker build-arg — tokens leak in layers. |
 
 Illustrative registry (Profile A):
@@ -132,6 +148,8 @@ Customer embeds always need a matching `token`. First-party digithings hosts
 
 | Variable | Purpose |
 |---|---|
+| `DIGICHAT_VERSION` | digichat GHCR tag (`v${DIGICHAT_VERSION}`) |
+| `DIGI_IMAGE_TAG` | digikey / digigraph / digivault GHCR tag (`sha-…` or `v0.1.0`) |
 | `DIGIGRAPH_INTERNAL_URL` | digigraph base |
 | `DIGIKEY_URL` + `DIGIKEY_BFF_TOKEN` | Preferred upstream auth |
 | On digigraph: `DIGIVAULT_URL`, LiteLLM / digillm provider keys | Vault tool + LLM path |
@@ -152,23 +170,23 @@ Customer embeds always need a matching `token`. First-party digithings hosts
 
 ## Custom embed parent hosts (CSP)
 
-The published GHCR image bakes `frame-ancestors` from
-`frontend/digichat/embed-hosts.txt` at build time. If your parent site hostname
-is not in that list, either:
+Stock GHCR digichat sets `/embed` `frame-ancestors` at **runtime** from:
 
-1. Open a digithings PR to add the hostname to `embed-hosts.txt` (no secrets), or
-2. Rebuild the image yourself:
+1. `DIGICHAT_EMBED_HOSTS` — comma-separated parent hostnames (no secrets), and/or
+2. Host keys (and aliases) in `DIGICHAT_EMBED_TENANTS` when `DIGICHAT_EMBED_HOSTS` is unset.
+
+Example (Compose / ACA env):
 
 ```bash
-docker build -f frontend/digichat/Dockerfile \
-  --build-arg DIGICHAT_EMBED_HOSTS=your.example.com,www.your.example.com \
-  -t digichat:custom .
+DIGICHAT_EMBED_HOSTS=client.example.com,www.client.example.com
+# still required for tokens / backend — never a build-arg:
+DIGICHAT_EMBED_TENANTS={"client.example.com":{...}}
 ```
 
-Still set `DIGICHAT_EMBED_TENANTS` at **runtime** with tokens — never as a build-arg.
+Security: digichat never emits `frame-ancestors *`. If neither source yields hosts,
+only first-party digithings origins (plus `'self'`) remain allowlisted.
 
-Runtime `frame-ancestors` (stock GHCR for arbitrary parents without rebuild) is a
-follow-up — see the architecture sketch Follow-ups.
+Optional seed list of known hosts: `frontend/digichat/embed-hosts.txt` (not baked into the image).
 
 ## Smoke
 

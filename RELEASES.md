@@ -17,6 +17,8 @@ Monorepo components ship as **independent Python packages** (`digibase`, `digigr
 
 Self-host pull path: [`infra/self-host/compose.ghcr.yml`](infra/self-host/compose.ghcr.yml) + [`docs/templates/self-host/README.md`](docs/templates/self-host/README.md). Epic: [#2016](https://github.com/digithings-ai/digithings/issues/2016).
 
+**First stack GHCR publish after #2023:** the publish workflow is `main`-only. After promoting develop (includes #2023) to `main`, run Actions → “Publish: service images” → `workflow_dispatch` with `service=all` once so `ghcr.io/digithings-ai/{digikey,digigraph,digivault}` exist for Profile A / `make up-ghcr`.
+
 ## Tagging convention
 
 - Per-component: `digigraph-v0.1.0`, `digiquant-v0.1.0`, etc.
