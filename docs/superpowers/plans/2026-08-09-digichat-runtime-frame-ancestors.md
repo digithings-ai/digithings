@@ -21,7 +21,7 @@
 - **Fail closed:** if no valid runtime host sources yield customer parents, `/embed` CSP must not allow arbitrary third-party framing (first-party digithings origins may remain; otherwise `'none'` / first-party-only).
 - `DIGICHAT_EMBED_TENANTS` stays **runtime-only** (never a Docker build-arg — tokens leak in layers).
 - `DIGICHAT_EMBED_HOSTS` is non-secret hostnames only; after this plan it is primarily a **runtime** container env (build-arg optional/legacy).
-- Do **not** implement Pick 2 (stack GHCR) or Pick 3 (corpus ingest) here — note seams only (see **Fit with picks 2–3**).
+- Do **not** implement Pick 2 (stack GHCR) or Pick 3 (`scripts/docs_onboard` client docs onboard) here — note seams only (see **Fit with picks 2–3**).
 - Every shipping PR must link a GitHub Issue (`task/<N>-slug` or `Fixes #<N>`).
 - Before editing digichat code: read `frontend/digichat/AGENTS.md` + `ARCHITECTURE.md`; read Next 16 `proxy.md` under `node_modules/next/dist/docs/`.
 
@@ -637,11 +637,19 @@ Integration assumptions and non-conflicts only — **do not implement** those pi
 | Compose overlays | `infra/digichat-release/compose.profile-a.yml` may later swap Python services to GHCR; keep digichat env blocks free for CSP hosts — do not bake hosts into stack images. |
 | Publish workflows | digichat publish drops embed build-arg; new stack publish workflows must not reintroduce digichat CSP build-args “for consistency.” |
 
+<<<<<<< HEAD
 ### Pick 3 — corpus / crawl / OCR → digivault ingest
 
 | Seam | Assumption / must not conflict |
 |---|---|
 | Product model | Corpus lands in **client digivault**; digichat remains the same release. CSP parents are orthogonal to vault content. |
+=======
+### Pick 3 — `scripts/docs_onboard` (crawl / OCR → digivault and/or digisearch)
+
+| Seam | Assumption / must not conflict |
+|---|---|
+| Product model | Onboarded docs land in **client digivault** (and/or digisearch); digichat remains the same release. CSP parents are orthogonal to vault content. |
+>>>>>>> origin/develop
 | Embed parents | Doc-chat demos still need the parent marketing host in runtime CSP (this pick) **and** vault notes (Pick 3). Neither replaces the other. |
 | Config | Ingest pipelines must not require digichat rebuilds; they also must not put secrets into `DIGICHAT_EMBED_HOSTS`. |
 | Scope boundary | Do not add crawl/OCR UI or digichat upload routes in this plan (AGENTS.md Phase 2 / sketch Follow-ups). |
