@@ -89,7 +89,8 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   1. If `DIGIVAULT_ROOT` is set → filesystem keyword search via
      `local_search.search_local_vault` over that vault (Profile A / client
      volumes; no Supabase required). Optional `path_prefix` isolates client
-     subdirs (e.g. `clients/online-compliance-center`).
+     subdirs (e.g. `clients/online-compliance-center`) using path-segment
+     boundaries (so `clients/occ` does not match `clients/occasion/...`).
   2. Else → Supabase FTS via `SupabaseStore.search` (the
      `search_architecture_notes` RPC — always the 3-arg form from migration
      068, with `path_prefix` null when unset; anon-key, read-only); returns

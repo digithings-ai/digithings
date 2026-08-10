@@ -32,9 +32,7 @@ def test_digivault_search_notes_is_registered() -> None:
 
 
 @pytest.mark.unit
-def test_digivault_available_reads_env(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_digivault_available_reads_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from digigraph.orchestration.builtin import _digivault_available
 
     empty_cfg = tmp_path / "no-vault.yaml"
@@ -54,9 +52,7 @@ def test_digivault_available_reads_project_config_when_env_empty(
     from digigraph.orchestration.builtin import _digivault_available
 
     cfg_file = tmp_path / "dogfood.yaml"
-    cfg_file.write_text(
-        "services:\n  digivault_url: http://from-project:8004\n"
-    )
+    cfg_file.write_text("services:\n  digivault_url: http://from-project:8004\n")
     monkeypatch.delenv("DIGIVAULT_URL", raising=False)
     monkeypatch.setenv("DIGI_PROJECT_CONFIG", str(cfg_file))
     assert _digivault_available(_ctx()) is True
@@ -187,3 +183,42 @@ def test_handle_digivault_search_not_ok_response() -> None:
     ):
         out = _handle_digivault_search({"query": "anything"}, _ctx())
     assert json.loads(out)["error"] == "vault unavailable"
+
+
+@pytest.mark.unit
+def test_handle_digivault_search_injects_vault_path_prefix() -> None:
+    """OCC corpus routing: ToolContext.vault_path_prefix becomes path_prefix on invoke."""
+    from digigraph.orchestration.builtin import _handle_digivault_search
+
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": {"hits": []}},
+    ) as mock_invoke:
+        _handle_digivault_search(
+            {"query": "password"},
+            _ctx(vault_path_prefix="clients/online-compliance-center"),
+        )
+
+    assert mock_invoke.call_args.args[2] == {
+        "query": "password",
+        "path_prefix": "clients/online-compliance-center",
+    }
+
+
+@pytest.mark.unit
+def test_handle_digivault_search_does_not_override_explicit_path_prefix() -> None:
+    from digigraph.orchestration.builtin import _handle_digivault_search
+
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": {"hits": []}},
+    ) as mock_invoke:
+        _handle_digivault_search(
+            {"query": "password", "path_prefix": "clients/explicit"},
+            _ctx(vault_path_prefix="clients/online-compliance-center"),
+        )
+
+    assert mock_invoke.call_args.args[2] == {
+        "query": "password",
+        "path_prefix": "clients/explicit",
+    }

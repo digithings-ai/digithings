@@ -17,6 +17,17 @@ def _tokens(text: str) -> list[str]:
     return [t.lower() for t in _TOKEN.findall(text)]
 
 
+def _path_under_prefix(path_for_prefix: str, rel: str, prefix: str) -> bool:
+    """True when *path_for_prefix* or *rel* is *prefix* or a child path under it.
+
+    Requires a path-segment boundary so ``clients/occ`` does not match
+    ``clients/occasion/...`` (corpus isolation for multi-tenant vault roots).
+    """
+    if path_for_prefix == prefix or rel == prefix or rel == f"{prefix}.md":
+        return True
+    return path_for_prefix.startswith(prefix + "/") or rel.startswith(prefix + "/")
+
+
 def search_local_vault(
     vault: Vault,
     query: str,
@@ -34,14 +45,8 @@ def search_local_vault(
         rel = note.rel_path.replace("\\", "/")
         # note.rel_path often includes .md; vault_path in hits historically used rel_path
         path_for_prefix = rel[:-3] if rel.endswith(".md") else rel
-        if prefix:
-            if not (
-                path_for_prefix == prefix
-                or path_for_prefix.startswith(prefix + "/")
-                or rel.startswith(prefix + "/")
-                or rel.startswith(prefix)
-            ):
-                continue
+        if prefix and not _path_under_prefix(path_for_prefix, rel, prefix):
+            continue
         path = Path(vault.root) / note.rel_path
         raw = path.read_text(encoding="utf-8")
         _fm, body = split_frontmatter(raw)
