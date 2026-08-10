@@ -160,6 +160,8 @@ export function useEmbedDigiChat({
   onGated,
 }: UseEmbedDigiChatOptions): DigiChatController & {
   seed: (msgs: readonly DigiChatMessage[]) => void;
+  /** Raw AI SDK error — for structured code detection (quota → BYOK). */
+  rawError: Error | undefined;
 } {
   const transport = useMemo(
     () =>
