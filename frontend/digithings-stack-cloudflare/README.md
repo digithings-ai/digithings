@@ -80,7 +80,7 @@ Boot order (critical for Cloudflare Containers port probes):
 1. Entrypoint copies vault notes, then **starts supervisord immediately** so
    digigraph `:8000` / digikey `:8005` bind (do **not** block on Chroma seed).
 2. Supervisord starts redis → digikey (waits for Redis PONG) → digigraph.
-3. Oneshoot `seed_occ` waits for digigraph `/healthz`, then runs
+3. Oneshot `seed_occ` waits for digigraph `/healthz`, then runs
    `digisearch ingest --index occ_help /seed/occ_help` into Chroma.
 4. digisearch starts only after `.occ_help_seeded` or `.occ_help_seed_skipped`
    so CLI ingest and the HTTP server never share a PersistentClient.
@@ -110,25 +110,26 @@ supervisorctl start digisearch
 
 Do **not** point digichat at `*.trycloudflare.com` tunnels.
 
-1. Confirm workers.dev health (before custom domains):
-   - `https://digithings-stack.chris-stefan.workers.dev/healthz` → digigraph
-   - `https://digithings-stack.chris-stefan.workers.dev/_stack/key/healthz` → digikey
-2. Uncomment `[[routes]]` for `graph.digithings.ai` / `key.digithings.ai` in
-   `wrangler.toml` and redeploy (human gate — public backends).
+1. Confirm workers.dev health (also kept after custom domains — `workers_dev = true`):
+   - `https://digithings-stack.<account>.workers.dev/healthz` → digigraph
+   - `https://digithings-stack.<account>.workers.dev/_stack/key/healthz` → digikey
+2. Custom domains `graph.digithings.ai` / `key.digithings.ai` are already declared
+   as `[[routes]]` in `wrangler.toml` (human gate — public backends). Redeploy if
+   you change routes.
 3. Retarget digichat Worker secrets to `https://graph.digithings.ai` /
    `https://key.digithings.ai` (same `DIGIKEY_BFF_TOKEN` as the stack).
 
-Until step 2–3, leave existing digichat secrets; Mac tunnels may still be required.
+Until step 3, leave existing digichat secrets; Mac tunnels may still be required for local digichat.
 
 ## Smoke (backends only)
 
 ```bash
-# workers.dev (before custom domains)
-curl -sf https://digithings-stack.chris-stefan.workers.dev/_stack/meta
-curl -sf https://digithings-stack.chris-stefan.workers.dev/healthz
-curl -sf https://digithings-stack.chris-stefan.workers.dev/_stack/key/healthz
+# workers.dev
+curl -sf https://digithings-stack.<account>.workers.dev/_stack/meta
+curl -sf https://digithings-stack.<account>.workers.dev/healthz
+curl -sf https://digithings-stack.<account>.workers.dev/_stack/key/healthz
 
-# after custom domains enabled
+# custom domains (declared in wrangler.toml)
 curl -sf https://graph.digithings.ai/healthz
 curl -sf https://key.digithings.ai/healthz
 ```

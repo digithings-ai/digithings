@@ -46,9 +46,14 @@ if [ -n "${DIGIKEY_PRIVATE_KEY_PEM:-}" ] && printf '%s' "$DIGIKEY_PRIVATE_KEY_PE
   fi
 fi
 if [ "$pem_ok" -ne 1 ]; then
-  echo "digithings-stack: WARN DIGIKEY_PRIVATE_KEY_PEM missing/invalid; enabling ephemeral key for this boot"
   unset DIGIKEY_PRIVATE_KEY_PEM
-  export DIGIKEY_ALLOW_EPHEMERAL_KEY=1
+  # Respect DIGIKEY_ALLOW_EPHEMERAL_KEY from wrangler/compose — never force
+  # ephemeral when prod vars set ALLOW=0 (silent RS256 rotation on bad PEM).
+  if [ "${DIGIKEY_ALLOW_EPHEMERAL_KEY:-0}" = "1" ]; then
+    echo "digithings-stack: WARN DIGIKEY_PRIVATE_KEY_PEM missing/invalid; ephemeral key allowed for this boot"
+  else
+    echo "digithings-stack: ERROR DIGIKEY_PRIVATE_KEY_PEM missing/invalid and DIGIKEY_ALLOW_EPHEMERAL_KEY!=1; digikey will fail closed"
+  fi
 fi
 
 # Copy OCC vault seed notes (idempotent — do not overwrite operator edits).

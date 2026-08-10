@@ -110,6 +110,7 @@ jobs:
               - 'frontend/digiweb/design/**'
               - 'frontend/digiweb/reference/**'
               - 'frontend/digichat-cloudflare/**'
+              - 'frontend/digithings-stack-cloudflare/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
