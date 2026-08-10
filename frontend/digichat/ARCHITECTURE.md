@@ -438,9 +438,32 @@ policy (digithings.ai = `free_then_byok` + `showByok: true`; foundry/DataTap =
 On structured `free_quota_exceeded` / clear rate-limit errors, embed tenants with
 `llmAccess: free_then_byok` stop the turn and open the in-chat BYOK sequence
 (even when `gateMode` is `ungated` — see `shouldSuggestByokOnEmbedError`). After
-the visitor saves a key, the failed turn is retried with existing `X-BYOK-*`
-headers. BYOK providers listed in the UI: OpenAI, OpenRouter, Anthropic, Gemini
-(model required for all non-OpenAI providers).
+the visitor activates a validated key, the failed turn is retried with existing
+`X-BYOK-*` headers. BYOK providers listed in the UI: OpenAI, OpenRouter,
+Anthropic, Gemini (model required for all non-OpenAI providers).
+
+### BYOK (bring-your-own-key) — session-only, inline terminal flow
+
+Visitor API keys are **session memory only** (`useBYOKKey` React state). They
+are never written to `localStorage`, `sessionStorage`, cookies, or Postgres.
+Legacy durable keys (`byok_api_key` / `byok_provider` / `byok_model`) are purged
+on hook mount. A page refresh clears BYOK.
+
+UX (`src/components/byok-cli-flow.tsx`) is a stepwise terminal sequence rendered
+**inline in the chat transcript** (DigiChatSession `settingsPanel` slot inside
+`.dc-thread`, and the app shell `ChatPanel` when `/key` opens BYOK mode):
+
+1. Select provider (arrow keys + Enter, or click)
+2. Paste API key
+3. Select model from presets (or custom slug)
+4. `POST /api/byok/test` ping — activation is refused until `ok: true`
+5. On success, key is held in-memory for this tab session and sent as
+   `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` on subsequent `/api/chat`
+   requests only
+
+The BFF forwards BYOK headers to digigraph for the request lifetime and never
+logs or returns the raw key. `byokActivationGate` + Vitest cover the
+session-only / validation-before-activate contract.
 
 **digithings rule:** digithings tenants use `backend.type: digigraph` only.
 digivault and digisearch are digigraph tools (activity mappers under

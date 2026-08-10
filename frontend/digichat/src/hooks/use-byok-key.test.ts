@@ -1,9 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   isOpenRouterKey,
   normalizeOpenRouterModel,
 } from "@/lib/byok-openrouter";
-import { validateBYOKKey, validateBYOKModel } from "@/hooks/use-byok-key";
+import {
+  BYOK_DURABLE_STORAGE_KEYS,
+  byokModelPresets,
+  emptyByokState,
+  moveListIndex,
+  purgeDurableByokKeys,
+  validateBYOKKey,
+  validateBYOKModel,
+} from "@/hooks/use-byok-key";
+import { byokActivationGate } from "@/lib/byok-ping";
 
 describe("validateBYOKKey", () => {
   it("returns null for a valid OpenAI key", () => {
@@ -77,5 +86,99 @@ describe("isOpenRouterKey", () => {
   it("matches sk-or- prefix", () => {
     expect(isOpenRouterKey("sk-or-v1-test")).toBe(true);
     expect(isOpenRouterKey("sk-proj-test")).toBe(false);
+  });
+});
+
+describe("session-only BYOK storage", () => {
+  const memory = new Map<string, string>();
+
+  beforeEach(() => {
+    memory.clear();
+    const store = {
+      getItem: (k: string) => memory.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        memory.set(k, v);
+      },
+      removeItem: (k: string) => {
+        memory.delete(k);
+      },
+      clear: () => memory.clear(),
+      key: () => null,
+      get length() {
+        return memory.size;
+      },
+    };
+    vi.stubGlobal("localStorage", store);
+    vi.stubGlobal("sessionStorage", store);
+    // window needed for purgeDurableByokKeys
+    vi.stubGlobal("window", { localStorage: store, sessionStorage: store });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("purges legacy durable BYOK keys from localStorage and sessionStorage", () => {
+    for (const k of BYOK_DURABLE_STORAGE_KEYS) {
+      memory.set(k, "secret");
+    }
+    purgeDurableByokKeys();
+    for (const k of BYOK_DURABLE_STORAGE_KEYS) {
+      expect(memory.has(k)).toBe(false);
+    }
+  });
+
+  it("emptyByokState starts unset with no key material", () => {
+    const s = emptyByokState();
+    expect(s.isSet).toBe(false);
+    expect(s.key).toBe("");
+  });
+
+  it("documents that durable key names must never be written (regression sentinel)", () => {
+    // If a future change re-introduces localStorage writes, this list is the
+    // contract tests + purge both rely on — keep it exhaustive.
+    expect([...BYOK_DURABLE_STORAGE_KEYS]).toEqual([
+      "byok_api_key",
+      "byok_provider",
+      "byok_model",
+    ]);
+  });
+});
+
+describe("moveListIndex (keyboard selection)", () => {
+  it("moves down and wraps", () => {
+    expect(moveListIndex(0, 4, "down")).toBe(1);
+    expect(moveListIndex(3, 4, "down")).toBe(0);
+  });
+
+  it("moves up and wraps", () => {
+    expect(moveListIndex(0, 4, "up")).toBe(3);
+    expect(moveListIndex(2, 4, "up")).toBe(1);
+  });
+
+  it("handles empty lists safely", () => {
+    expect(moveListIndex(0, 0, "down")).toBe(0);
+  });
+});
+
+describe("byokActivationGate (validation before session activate)", () => {
+  it("refuses when ping has not run", () => {
+    expect(byokActivationGate(null)).toMatch(/Validate/);
+  });
+
+  it("refuses failed pings", () => {
+    expect(byokActivationGate({ ok: false, error: "bad key" })).toBe("bad key");
+  });
+
+  it("allows only successful pings", () => {
+    expect(byokActivationGate({ ok: true, model: "gpt-4o-mini" })).toBeNull();
+  });
+});
+
+describe("byokModelPresets", () => {
+  it("returns non-empty presets for every provider", () => {
+    for (const p of ["openrouter", "openai", "anthropic", "gemini"] as const) {
+      expect(byokModelPresets(p).length).toBeGreaterThan(0);
+    }
   });
 });
