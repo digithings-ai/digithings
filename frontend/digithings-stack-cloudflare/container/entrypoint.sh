@@ -16,8 +16,14 @@ export DIGIKEY_ISSUER="${DIGIKEY_ISSUER:-https://key.digithings.ai}"
 export DIGIKEY_JWKS_URL="${DIGIKEY_JWKS_URL:-http://127.0.0.1:8005/.well-known/jwks.json}"
 export DIGIVAULT_URL="${DIGIVAULT_URL:-http://127.0.0.1:8004}"
 export DIGISEARCH_URL="${DIGISEARCH_URL:-http://127.0.0.1:8002}"
+# Chat-only: never default digiquant URL (would trigger backtest_node / DATA_DIR errors).
+export DIGIQUANT_URL="${DIGIQUANT_URL:-}"
+export DIGISMITH_URL="${DIGISMITH_URL:-}"
 export OPENAI_API_BASE="${OPENAI_API_BASE:-http://127.0.0.1:4000/v1}"
 export DIGI_CONFIG_PATH="${DIGI_CONFIG_PATH:-/app/config}"
+export DIGI_PROJECT_CONFIG="${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}"
+export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"
+export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes}"
 export CHROMA_PATH="$DATA_CHROMA"
 export DIGIVAULT_ROOT="$DATA_VAULT"
 export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}"
@@ -56,17 +62,19 @@ if [ "$pem_ok" -ne 1 ]; then
   fi
 fi
 
-# Copy OCC vault seed notes (idempotent — do not overwrite operator edits).
-if [ -d /seed/vault/clients/online-compliance-center ]; then
-  mkdir -p "$DATA_VAULT/clients/online-compliance-center"
-  for f in /seed/vault/clients/online-compliance-center/*; do
+# Copy vault seed notes (idempotent — do not overwrite operator edits).
+for client_dir in /seed/vault/clients/*; do
+  [ -d "$client_dir" ] || continue
+  client=$(basename "$client_dir")
+  mkdir -p "$DATA_VAULT/clients/$client"
+  for f in "$client_dir"/*; do
     [ -f "$f" ] || continue
     base=$(basename "$f")
-    dest="$DATA_VAULT/clients/online-compliance-center/$base"
+    dest="$DATA_VAULT/clients/$client/$base"
     if [ ! -f "$dest" ]; then
       cp "$f" "$dest"
     fi
   done
-fi
+done
 
 exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/digithings.conf

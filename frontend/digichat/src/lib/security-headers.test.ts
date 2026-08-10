@@ -7,6 +7,7 @@ import {
   DIGICHAT_EMBED_SECURITY_HEADERS,
   embedFrameAncestors,
   embedFrameAncestorsCsp,
+  frameAncestorOriginsForHost,
 } from "./security-headers";
 import { resetEmbedTenantRegistryForTests } from "./embed-tenants";
 
@@ -93,11 +94,57 @@ describe("registry-derived frame-ancestors", () => {
     expect(csp.startsWith("frame-ancestors ")).toBe(true);
   });
 
-  it("includes localhost origins only outside production", () => {
+  it("includes localhost origins only outside production when hosts omit loopback", () => {
     resetEmbedTenantRegistryForTests();
     expect(embedFrameAncestors()).toContain("http://localhost:*"); // NODE_ENV=test
     vi.stubEnv("NODE_ENV", "production");
     expect(embedFrameAncestors()).not.toContain("http://localhost:*");
+  });
+
+  it("DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS enables loopback in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS", "1");
+    vi.stubEnv("DIGICHAT_EMBED_HOSTS", "digithings.ai,occ.digithings.ai");
+    resetEmbedTenantRegistryForTests();
+    const list = embedFrameAncestors();
+    expect(list).toContain("http://localhost:*");
+    expect(list).toContain("http://127.0.0.1:*");
+    expect(list).toContain("https://digithings.ai");
+  });
+});
+
+describe("loopback DIGICHAT_EMBED_HOSTS (prod-like Docker dogfood)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetEmbedTenantRegistryForTests();
+  });
+
+  it("emits http://127.0.0.1:* even when NODE_ENV=production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv(
+      "DIGICHAT_EMBED_HOSTS",
+      "digithings.ai,www.digithings.ai,occ.digithings.ai,127.0.0.1,localhost",
+    );
+    resetEmbedTenantRegistryForTests();
+    const list = embedFrameAncestors();
+    expect(list).toContain("http://127.0.0.1:*");
+    expect(list).toContain("http://localhost:*");
+    expect(list).toContain("https://digithings.ai");
+    expect(list).toContain("https://occ.digithings.ai");
+    // Bare https://127.0.0.1 alone would never match http://127.0.0.1:3010.
+    expect(list).toContain("https://127.0.0.1");
+  });
+
+  it("maps loopback hosts via frameAncestorOriginsForHost", () => {
+    expect(frameAncestorOriginsForHost("127.0.0.1")).toEqual([
+      "http://localhost:*",
+      "http://127.0.0.1:*",
+      "https://127.0.0.1",
+      "https://127.0.0.1:*",
+    ]);
+    expect(frameAncestorOriginsForHost("client.example.com")).toEqual([
+      "https://client.example.com",
+    ]);
   });
 });
 

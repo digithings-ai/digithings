@@ -29,6 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from digigraph import __version__
 from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS, STREAM_SSE_ERRORS
+from digigraph.chat_prompt import messages_to_workflow_prompt
 from digigraph.formatters import get_stream_formatter
 from digigraph.llm_client import completion_text
 from digigraph.model_config import get_model_for_mode
@@ -837,11 +838,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
         content = "No messages provided."
         prompt = ""
     else:
-        user_parts: list[str] = []
-        for m in req.messages:
-            if m.role == "user" and m.content:
-                user_parts.append(m.content)
-        prompt = "\n\n".join(user_parts) if user_parts else req.messages[-1].content or ""
+        prompt = messages_to_workflow_prompt(req.messages)
 
     session_id = _resolve_session_id(req, request)
     subject = auth_subject_from_request(request)

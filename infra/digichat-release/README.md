@@ -114,6 +114,26 @@ Stack-only `docker run` (no digichat UI): see
 | Client install with per-service GHCR pins | multi-image (`compose.profile-a.yml`) |
 | digiquant / full monorepo | root `docker-compose.yml` |
 
+### Chat-only digigraph (no digiquant)
+
+Profile A digigraph is **research_rag only**. The stack image ships
+`config/digiproject.yaml` and sets:
+
+- `DIGI_PROJECT_CONFIG=/app/config/digiproject.yaml`
+- `DIGI_WORKFLOW_PROFILE=research_rag`
+- `DIGI_ALLOWED_TOOLS=digisearch,digivault_search_notes`
+- `DIGIQUANT_URL=` (empty)
+
+digichat probes only digigraph (`DIGICHAT_ENABLED_SERVICES=digigraph`). OCC and
+website chat must never surface `DIGIQUANT_DATA_DIR` errors.
+
+**Local JSON env:** Docker's env-file parser strips unescaped `"` inside
+`DIGICHAT_EMBED_TENANTS` / `DIGI_TENANT_CORPUS_MAP`. Prefer single-quoting those
+values in `.env.profile-a-bundle`, or use
+`compose.profile-a-bundle.override.yml` (YAML-quoted JSON + optional
+`digi-digichat:local`). `make digichat-profile-a-bundle-up` includes the override
+when that file exists.
+
 ## Profile B — Foundry (client Azure only)
 
 digithings has **no Azure**. This snippet is for client environments (DataTap-like ACA /

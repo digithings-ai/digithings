@@ -14,6 +14,47 @@ const FIRST_PARTY_FRAME_ANCESTORS = [
   "https://digiquant.io",
 ] as const;
 
+/** Keep in sync with `DEV_LOOPBACK_EMBED_HOSTS` in embed-first-party.ts. */
+const LOOPBACK_FRAME_ANCESTOR_HOSTS = new Set([
+  "localhost",
+  "127.0.0.1",
+  "[::1]",
+]);
+
+/**
+ * CSP origins for one embed parent hostname.
+ *
+ * Customer hosts → `https://host` only.
+ * Loopback (`localhost` / `127.0.0.1` / `[::1]`) → http (and https) with port
+ * wildcards. Local digithings-web dogfood parents are `http://127.0.0.1:3010`;
+ * mapping loopback to bare `https://127.0.0.1` never matches and blanks the
+ * iframe. Must work in production Docker too (`NODE_ENV=production` GHCR /
+ * compose images) when DIGICHAT_EMBED_HOSTS lists loopback (#2093).
+ *
+ * Kept free of `embed-first-party` imports: next.config loads this module, and
+ * `@/` aliases inside that graph fail to resolve at config-transpile time.
+ */
+export function frameAncestorOriginsForHost(host: string): string[] {
+  if (LOOPBACK_FRAME_ANCESTOR_HOSTS.has(host)) {
+    // Always allow both loopback names — parent may be http://127.0.0.1:PORT
+    // while DIGICHAT_EMBED_HOSTS only listed `localhost` (or vice versa).
+    return [
+      "http://localhost:*",
+      "http://127.0.0.1:*",
+      `https://${host}`,
+      `https://${host}:*`,
+    ];
+  }
+  return [`https://${host}`];
+}
+
+/** Profile A / local prod-sim containers (`NODE_ENV=production`). */
+export function allowLocalEmbedParents(): boolean {
+  if (process.env.NODE_ENV !== "production") return true;
+  const flag = process.env.DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS?.trim().toLowerCase();
+  return flag === "1" || flag === "true" || flag === "yes";
+}
+
 /**
  * Dev tooling (Next.js HMR / React Refresh) evaluates code via eval() and
  * needs 'unsafe-eval' in script-src. Added ONLY outside production so the
@@ -82,12 +123,25 @@ export function embedFrameAncestors(): string[] {
   const hostOrigins = hosts
     .map((h) => normalizeEmbedHost(h))
     .filter((h): h is string => !!h && h !== "*" && !h.includes("*"))
-    .map((h) => `https://${h}`);
-  const dev =
-    process.env.NODE_ENV !== "production"
-      ? ["http://localhost:*", "http://127.0.0.1:*"]
-      : [];
-  return [...FIRST_PARTY_FRAME_ANCESTORS, ...hostOrigins, ...dev];
+    .flatMap((h) => frameAncestorOriginsForHost(h));
+  // When DIGICHAT_EMBED_HOSTS omits loopback: non-production always, or
+  // DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS=1 for production Profile A bundle (#2093).
+  const local = allowLocalEmbedParents()
+    ? ["http://localhost:*", "http://127.0.0.1:*"]
+    : [];
+  // Dedupe while preserving order (first-party + hosts + optional local).
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const origin of [
+    ...FIRST_PARTY_FRAME_ANCESTORS,
+    ...hostOrigins,
+    ...local,
+  ]) {
+    if (seen.has(origin)) continue;
+    seen.add(origin);
+    out.push(origin);
+  }
+  return out;
 }
 
 export function embedFrameAncestorsCsp(): string {

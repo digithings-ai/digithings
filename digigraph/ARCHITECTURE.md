@@ -240,6 +240,9 @@ real node executions rather than compiled graph nodes.
 | `stored_datasets` | `dict[str, dict]` | Ref → profile map (survives across turns via checkpointer) |
 | `stream_callback` | `Callable` | Not serialized; injected per-request for streaming |
 | `workflow_profile` | `str` | Active profile (`full_stack`, `research_rag`, `quant_backtest`, `plan_execute`) |
+| `digisearch_index` | `str \| None` | Per-request digisearch index override (`X-Digi-Corpus-Index` / tenant map). **Must** be declared — LangGraph drops undeclared keys. |
+| `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map) |
+| `research_system_prompt_override` | `str \| None` | Optional research system prompt from tenant corpus map |
 | `supervisor_depth_remaining` | `int` | Depth budget for supervisor loop |
 | `supervisor_route` | `str \| None` | Next route chosen by supervisor |
 
@@ -296,7 +299,7 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 | Field | Type | Notes |
 |-------|------|-------|
 | `model` | `str` | Default `"sitaas-rag"`; not used for routing (LiteLLM handles it) |
-| `messages` | `list[ChatMessage]` | Role + content; content coerced from AI SDK part lists |
+| `messages` | `list[ChatMessage]` | Role + content; content coerced from AI SDK part lists. Flattened into the workflow `prompt` via `chat_prompt.messages_to_workflow_prompt` — **full user+assistant history** (multi-turn), not user-only |
 | `stream` | `bool` | SSE streaming |
 | `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Enabled only by this field or `X-Response-Format: openwebui` — **not** by `model=sitaas-rag`. Opt out via `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
 | `session_id` | `str \| None` | Conversation isolation |
@@ -310,6 +313,7 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 
 ```
 digigraph/src/digigraph/
+├── chat_prompt.py               Flatten OpenAI chat messages → workflow prompt (multi-turn)
 ├── server.py                    FastAPI app, middleware stack, all HTTP routes
 ├── workflow.py                  run_digigraph_workflow (sync + streaming variants)
 ├── models.py                    Pydantic I/O models (WorkflowRequest, WorkflowResult, ChatCompletion*)
@@ -376,6 +380,7 @@ START
                                │
                                ├─ error → END
                                ├─ research_rag profile → END
+                               ├─ DIGIQUANT_URL explicitly empty → END (Profile A / chat-only)
                                ├─ no strategy_name (document mode) → END
                                └─ has strategy_name → validate_strategy
                                                           │
@@ -659,7 +664,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - **Backtest node (direct):** Tries `POST /v1/jobs/backtest` first; falls back to `POST /backtest/start` + SSE progress, then `POST /run_backtest`. Polls `GET /v1/jobs/{id}/status` for async jobs; fetches result via `GET /backtest/{id}/result`.
 - **Optimize node (direct):** `POST /run_optimize`. Timeout: 300s.
 - **Auth:** Bearer via `outbound_service_headers(request_id, bearer)` from `digibase.http`.
-- **Env:** `DIGIQUANT_URL` (default `http://127.0.0.1:8001`). `DIGIQUANT_DATA_DIR` required for backtest and optimize nodes.
+- **Env:** `DIGIQUANT_URL` (default `http://127.0.0.1:8001` when unset). Explicit empty `DIGIQUANT_URL=` disables the backtest route (Profile A / chat-only). `DIGIQUANT_DATA_DIR` required for backtest and optimize nodes when digiquant is enabled.
 
 ### 9.3 digikey
 
@@ -752,7 +757,8 @@ digigraph:
 | `DIGI_CHECKPOINTER` | `sqlite` when project active, else `memory` | Checkpointer backend: `memory` / `sqlite` / `postgres` / `none` |
 | `DIGI_CHECKPOINTER_SQLITE_URI` | `~/.digigraph/checkpoints.sqlite` | SQLite file path |
 | `DIGI_CHECKPOINTER_POSTGRES_URI` | (empty) | Postgres connection string |
-| `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests |
+| `DIGIQUANT_URL` | `http://127.0.0.1:8001` when unset | digiquant base URL. Explicit empty string disables backtest routing (Profile A). |
+| `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests (required only when digiquant is enabled) |
 | `DIGISEARCH_INDEX` | `default` | Default vector index name |
 | `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt}` for multi-tenant corpus isolation (OCC). Headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` win when set. |
 | `DIGI_ENABLE_DEBUG_ENDPOINTS` | `0` | Enable `/test_llm` and `/v1/debug/*` |

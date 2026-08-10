@@ -21,6 +21,17 @@ logger = logging.getLogger(__name__)
 DIGIQUANT_URL = os.environ.get("DIGIQUANT_URL", "http://127.0.0.1:8001")
 DIGIQUANT_DATA_DIR = os.environ.get("DIGIQUANT_DATA_DIR")
 
+
+def _digiquant_url_configured() -> bool:
+    """False only when DIGIQUANT_URL is explicitly blank (Profile A chat-only).
+
+    Unset env keeps the module default ``http://127.0.0.1:8001``.
+    """
+    if "DIGIQUANT_URL" not in os.environ:
+        return True
+    return bool(os.environ.get("DIGIQUANT_URL", "").strip())
+
+
 _DIGIQUANT_CLIENT_ERRORS = (
     httpx.HTTPStatusError,
     httpx.RequestError,
@@ -135,6 +146,11 @@ def backtest_node(state: WorkflowState) -> dict:
         return {
             "backtest_result": None,
             "error": "strategy_name and symbols (non-empty list) required. Research node must provide them.",
+        }
+    if not _digiquant_url_configured():
+        return {
+            "backtest_result": None,
+            "error": "digiquant is not configured for this deployment (DIGIQUANT_URL empty).",
         }
     if not DIGIQUANT_DATA_DIR:
         return {

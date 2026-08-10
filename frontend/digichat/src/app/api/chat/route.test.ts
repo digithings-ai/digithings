@@ -150,6 +150,26 @@ describe("POST /api/chat", () => {
     expect(call?.abortSignal?.aborted).toBe(false);
   });
 
+  it("forwards the full multi-turn messages array to streamText", async () => {
+    const messages = [
+      { id: "1", role: "user", parts: [{ type: "text", text: "first" }] },
+      { id: "2", role: "assistant", parts: [{ type: "text", text: "reply" }] },
+      { id: "3", role: "user", parts: [{ type: "text", text: "second" }] },
+    ];
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      messages?: unknown[];
+    };
+    expect(call?.messages).toHaveLength(3);
+  });
+
   it("returns 429 when rate limited", async () => {
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
     const res = await POST(

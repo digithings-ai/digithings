@@ -50,6 +50,12 @@ class WorkflowState(TypedDict, total=False):
     stream_callback: Callable[[str, Any], None]
     # Workflow profile: full_stack | research_rag | quant_backtest | plan_execute (set at invoke).
     workflow_profile: str
+    # Per-request corpus routing (X-Digi-Corpus-Index / X-Digi-Vault-Prefix / DIGI_TENANT_CORPUS_MAP).
+    # Must be declared here — LangGraph StateGraph(WorkflowState) drops undeclared keys, which
+    # silently ignored OCC occ_help overrides and left digisearch on digiproject default index.
+    digisearch_index: str | None
+    vault_path_prefix: str | None
+    research_system_prompt_override: str | None
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).
     supervisor_depth_remaining: int
     supervisor_route: str | None
