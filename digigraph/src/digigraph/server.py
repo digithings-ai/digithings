@@ -348,7 +348,12 @@ def _resolve_request_id(request: Request) -> str | None:
     return h or None
 
 
-@app.post("/workflow", response_model=WorkflowResult, operation_id="run_digigraph_workflow")
+@app.post(
+    "/workflow",
+    response_model=WorkflowResult,
+    operation_id="run_digigraph_workflow",
+    summary="Run digigraph workflow",
+)
 def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> WorkflowResult:
     """
     digiclaw custom skill: run_digigraph_workflow.

@@ -20,7 +20,7 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digithings.ai"),
-  applicationName: "DigiThings",
+  applicationName: "digithings",
   title: "digithings — AI infrastructure in a glass box",
   description:
     "Open-source, MIT-licensed AI infrastructure: nine modules that plug into the stack you already "
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "DigiThings",
+    title: "digithings",
     statusBarStyle: "black-translucent",
   },
   // Cache-busting paths ensure browsers leave the retired QR mark behind.
