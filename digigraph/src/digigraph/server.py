@@ -744,8 +744,10 @@ def _resolve_suppress_tool_stream(request: Request) -> bool:
 def _resolve_openwebui_format(req: ChatCompletionRequest, request: Request) -> bool:
     """True only when the client explicitly requests Open WebUI format.
 
-    ``model=sitaas-rag`` alone does **not** enable ``<details>`` / ``<thinking>`` chrome
+    ``model=sitaas-rag`` alone does **not** enable ``<details>`` tool chrome
     (that id is the OpenAI-compat discovery name shared by digichat and Open WebUI).
+    ``<thinking>`` chrome is separate: it is suppressed only by
+    ``X-Suppress-Tool-Stream``, not by this flag.
 
     Enable with either:
 
