@@ -31,12 +31,12 @@ Plan questionnaire: Stage 8 of
 | 2026-08-10 | digichat | Local `:3005` healthy but `.env.local` points at Foundry/DataTap, not digigraph dogfood tenant | Use digithings operator embed config or retarget local tenant |
 | 2026-08-10 | Dual-sink parity | Vault FS + digisearch index populated locally; production digithings.ai still on legacy Supabase corpus until sync | Run sync + redeploy smoke on `/chat` |
 | 2026-08-10 | Showcase | Added `SHOWCASE.md` + `digiproject.yaml` / `config/dogfood-digiproject.yaml` for self-aware chat | Re-ingest on operator after merge |
-| 2026-08-10 | Free→BYOK | digichat embed `llmAccess: free_then_byok` + in-chat BYOK on `free_quota_exceeded` (ungated digithings.ai). digigraph typed error + Gemini/Anthropic BYOK spend owned by sibling PR. | Wire dogfood tenant env `llmAccess` + confirm digigraph returns `free_quota_exceeded` |
+| 2026-08-10 | Free→BYOK | digichat embed `llmAccess: free_then_byok` + in-chat BYOK on `free_quota_exceeded` (ungated digithings.ai). digigraph typed error + Gemini/Anthropic BYOK spend landed in #2048. | Wire dogfood tenant env `llmAccess` + confirm digigraph returns `free_quota_exceeded` |
 | 2026-08-10 | LLM mode | `llm_mode` is policy-only (no `model_modes.yaml` `free:` product pin). Dogfood + OCC set `agents.llm.model` explicitly; free without pin errors with set agents.llm / DIGI_LLM_MODEL | Keep operator pin current when OpenRouter retires `:free` slugs |
 | 2026-08-10 | Sources UI | `rag_sources` rows showed UUID `doc_id` paths; tool row labeled `rag_sources` / `digithings_docs` | Fixed activity mapper: `source_url` → readable path, `digisearch`/`digivault` labels (#2045) |
 | 2026-08-10 | Answer prose | Open WebUI `<details>` / `<thinking>` still leaked: digichat uses model `sitaas-rag` which auto-enabled OpenWebUI format with no opt-out; suppress skipped tools but not thinking | digigraph: suppress + `X-Response-Format: plain` opt out; digichat defaults OpenWebUI off and always sends plain on dogfood stream |
 | 2026-08-10 | digivault tool | Skill `digivault` omitted from default `skills.enabled`; `DIGIVAULT_URL` empty hid skill even when project YAML had `digivault_url` | `always_retrieve_tools` prefetch + `skills.enabled: [search, digivault]`; compose override sets `DIGIVAULT_URL`; restart digivault after digikey |
-| 2026-08-10 | digivault auth | Stale JWKS cache after digikey restart → `invalid_token` on orchestrator routes until `docker compose restart digivault` | Documented in `docker-compose.override.yml`; restart digivault with digikey |
+| 2026-08-10 | digivault auth | Stale JWKS cache after digikey restart → `invalid_token` on orchestrator routes until `docker compose restart digivault` | Operator: restart digivault with digikey after JWKS rotation (local override file is gitignored) |
 
 ## Legacy retirement tracker
 
