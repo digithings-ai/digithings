@@ -4,11 +4,11 @@
 -- corpora in the shared architecture_notes table (e.g. clients/digithings vs
 -- clients/online-compliance-center).
 --
--- Signature change (not a compatible CREATE OR REPLACE): Postgres matches
--- functions by full argument list, so adding path_prefix would leave the
--- 049 two-arg overload in place and make two-arg calls ambiguous. Drop the
--- old signature first, then create the three-arg function (path_prefix
--- defaults to null → same unfiltered behaviour as 049).
+-- Signature change: PostgreSQL matches CREATE OR REPLACE FUNCTION by the full
+-- argument list. Adding path_prefix creates a new 3-arg overload alongside the
+-- 2-arg function from migration 049. Because path_prefix has a default, a
+-- two-argument call matches both overloads and fails with "is not unique".
+-- Drop the 2-arg function first, then define the 3-arg replacement.
 
 drop function if exists public.search_architecture_notes(text, int);
 
