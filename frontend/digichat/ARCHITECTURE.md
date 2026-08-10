@@ -510,7 +510,13 @@ anything but hostnames — never the token — so it's driven by a separate,
 non-secret `DIGICHAT_EMBED_HOSTS` env var (plain comma-separated hostnames),
 preferred over deriving hosts from the full `DIGICHAT_EMBED_TENANTS` registry
 when both are set (#1360). Wildcard tokens (`*`, `*.example.com`) are rejected;
-digichat never emits `frame-ancestors *`.
+digichat never emits `frame-ancestors *`. Loopback hostnames listed in
+`DIGICHAT_EMBED_HOSTS` / the registry (`localhost`, `127.0.0.1`, `[::1]`) emit
+`http://host:*` (and https equivalents) even when `NODE_ENV=production`, so a
+prod-like Docker digichat can be framed by local digithings-web at
+`http://127.0.0.1:3010` (#2093). `DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS=1` also
+adds those http wildcards when DIGICHAT_EMBED_HOSTS omits loopback. Non-loopback
+customer hosts stay `https://` only.
 
 `DIGICHAT_EMBED_TENANTS` itself stays runtime-only (a container env var, never
 a build-arg) because a Docker build-arg persists in image layer history and
