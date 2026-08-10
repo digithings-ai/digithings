@@ -4,6 +4,11 @@ import {
   normalizeOpenRouterModel,
   OPENROUTER_API_BASE,
 } from "@/lib/byok-openrouter";
+import {
+  isEmbedChatRequest,
+  resolveEmbedChatTenant,
+} from "@/lib/embed-chat-tenant";
+import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 
 export const maxDuration = 30;
 
@@ -20,15 +25,40 @@ function readProvider(raw: string): BYOKProvider {
   return "openai";
 }
 
+function rateLimitResponse(message: string, retryAfterSec: number): Response {
+  return new Response(JSON.stringify({ ok: false, error: message }), {
+    status: 429,
+    headers: {
+      "content-type": "application/json",
+      "retry-after": String(retryAfterSec),
+    },
+  });
+}
+
 /**
  * POST /api/byok/test — ping a visitor BYOK key against the provider.
  *
  * The raw key is read from `X-BYOK-Key` for this request only. It is never
  * logged, never written to disk/DB, and never echoed in the JSON body.
+ *
+ * Auth mirrors POST /api/chat: DigiChat session/machine key, OR a verified
+ * anonymous embed request (`X-Embed-Host` / embed referer). Embed visitors on
+ * digithings.ai / OCC must validate BYOK before session activation.
  */
 export async function POST(req: Request): Promise<Response> {
   const authResult = await requireDigiChatAuth(req);
-  if (authResult instanceof Response) return authResult;
+  if (authResult instanceof Response) {
+    if (!isEmbedChatRequest(req)) return authResult;
+    const embedCtx = resolveEmbedChatTenant(req);
+    if (embedCtx instanceof Response) return embedCtx;
+    const ipRate = checkEmbedIpRateLimit(req);
+    if (!ipRate.allowed) {
+      return rateLimitResponse(
+        "Too many requests from this address. Try again shortly.",
+        ipRate.retryAfterSec,
+      );
+    }
+  }
 
   const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";
   const provider = readProvider(req.headers.get("x-byok-provider")?.trim() ?? "openai");

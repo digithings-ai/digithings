@@ -5,12 +5,16 @@ import {
   validateBYOKKey,
   validateBYOKModel,
 } from "@/hooks/use-byok-key";
+import { resolveEmbedHost } from "@/lib/embed-gate";
 
 export type ByokPingResult = { ok: boolean; model?: string; error?: string };
 
 /**
  * Client-side ping against `POST /api/byok/test`.
  * Key travels only in the request header for this call — never persisted by the BFF.
+ *
+ * On the anonymous /embed surface, sends `X-Embed-Host` so the BFF can admit the
+ * request the same way POST /api/chat does (no DigiChat session cookie).
  */
 export async function pingByokKey(
   key: string,
@@ -30,6 +34,12 @@ export async function pingByokKey(
   };
   if (byokRequiresModel(provider) || model.trim()) {
     headers["X-BYOK-Model"] = model.trim();
+  }
+  if (typeof window !== "undefined") {
+    const embedHost = resolveEmbedHost();
+    if (embedHost && embedHost !== "unknown") {
+      headers["X-Embed-Host"] = embedHost;
+    }
   }
 
   try {

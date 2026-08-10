@@ -6,14 +6,32 @@ vi.mock("@/lib/request-auth", () => ({
   requireDigiChatAuth: vi.fn(),
 }));
 
+vi.mock("@/lib/embed-chat-tenant", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/embed-chat-tenant")>();
+  return {
+    ...actual,
+    resolveEmbedChatTenant: vi.fn(actual.resolveEmbedChatTenant),
+  };
+});
+
+vi.mock("@/lib/embed-ip-rate-limit", () => ({
+  checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+}));
+
 import { requireDigiChatAuth } from "@/lib/request-auth";
+import { resolveEmbedChatTenant } from "@/lib/embed-chat-tenant";
+import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 
 describe("POST /api/byok/test", () => {
   beforeEach(() => {
     vi.mocked(requireDigiChatAuth).mockResolvedValue(mockAuthCtx);
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({
+      allowed: true,
+      retryAfterSec: 0,
+    });
   });
 
-  it("returns 401 without auth", async () => {
+  it("returns 401 without auth when not an embed request", async () => {
     vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
     const res = await POST(
       new Request("http://localhost/api/byok/test", {
@@ -22,6 +40,40 @@ describe("POST /api/byok/test", () => {
       })
     );
     expect(res.status).toBe(401);
+  });
+
+  it("admits anonymous embed requests with X-Embed-Host (no DigiChat session)", async () => {
+    vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+    vi.mocked(resolveEmbedChatTenant).mockReturnValue({
+      tenantSlug: "digithings",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: null,
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ id: "gpt-4o-mini" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/byok/test", {
+          method: "POST",
+          headers: {
+            "x-byok-key": "sk-test",
+            "x-byok-provider": "openai",
+            "x-embed-host": "https://digithings.ai",
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(resolveEmbedChatTenant).toHaveBeenCalled();
+      expect(checkEmbedIpRateLimit).toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it("returns 400 when BYOK key header missing", async () => {
