@@ -71,7 +71,7 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY
   - model_name: test-tier
     litellm_params:
-      model: openrouter/deepseek/deepseek-chat-v3:free
+      model: openrouter/openai/gpt-oss-20b:free
       api_key: os.environ/OPENROUTER_API_KEY
 
 router_settings:

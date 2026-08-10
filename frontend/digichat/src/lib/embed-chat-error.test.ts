@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatEmbedChatError } from "./embed-chat-error";
+import {
+  formatEmbedChatError,
+  isFreeQuotaOrRateLimitError,
+  parseEmbedChatError,
+  shouldSuggestByokOnEmbedError,
+} from "./embed-chat-error";
+import { LEGACY_EMBED_DISABLED_MESSAGE } from "./embed-legacy-gate";
 
 describe("formatEmbedChatError", () => {
   it("returns null for empty errors", () => {
@@ -11,16 +17,16 @@ describe("formatEmbedChatError", () => {
       new Error(
         JSON.stringify({
           error: "embed_disabled",
-          message: "Embed requires DIGICHAT_EMBED_ENABLED=1.",
+          message: LEGACY_EMBED_DISABLED_MESSAGE,
         }),
       ),
     );
-    expect(msg).toBe("Embed requires DIGICHAT_EMBED_ENABLED=1.");
+    expect(msg).toBe(LEGACY_EMBED_DISABLED_MESSAGE);
   });
 
   it("detects embed_disabled in plain text", () => {
     expect(formatEmbedChatError(new Error('{"error":"embed_disabled"}'))).toContain(
-      "not enabled",
+      "DIGICHAT_EMBED_TENANTS",
     );
   });
 
@@ -34,5 +40,143 @@ describe("formatEmbedChatError", () => {
       ),
     );
     expect(msg).toBe("Complete the free trial form to keep chatting.");
+  });
+
+  it("surfaces free_quota_exceeded with a BYOK-friendly message", () => {
+    const msg = formatEmbedChatError(
+      new Error(
+        JSON.stringify({
+          error: "free_quota_exceeded",
+          message: "OpenRouter free quota exhausted.",
+        }),
+      ),
+    );
+    expect(msg).toBe("OpenRouter free quota exhausted.");
+  });
+
+  it("defaults free_quota_exceeded copy when message is absent", () => {
+    expect(
+      formatEmbedChatError(new Error(JSON.stringify({ error: "free_quota_exceeded" }))),
+    ).toMatch(/Free tier quota/i);
+  });
+
+  it("maps fetch failed to a stack hint instead of raw transport text", () => {
+    const msg = formatEmbedChatError(new Error("fetch failed"));
+    expect(msg).toContain("make digichat-dev");
+    expect(msg).toContain("make stack-local");
+  });
+
+  it("surfaces upstream_auth message from JSON bodies", () => {
+    const msg = formatEmbedChatError(
+      new Error(
+        JSON.stringify({
+          error: "upstream_auth",
+          message: "digikey token exchange failed",
+        }),
+      ),
+    );
+    expect(msg).toBe("digikey token exchange failed");
+  });
+});
+
+describe("parseEmbedChatError / isFreeQuotaOrRateLimitError", () => {
+  it("parses free_quota_exceeded", () => {
+    const p = parseEmbedChatError(
+      new Error(JSON.stringify({ error: "free_quota_exceeded", message: "done" })),
+    );
+    expect(p?.code).toBe("free_quota_exceeded");
+    expect(isFreeQuotaOrRateLimitError(p?.code)).toBe(true);
+  });
+
+  it("treats rate_limit_exceeded as quota-class", () => {
+    expect(isFreeQuotaOrRateLimitError("rate_limit_exceeded")).toBe(true);
+    expect(isFreeQuotaOrRateLimitError("rate_limit")).toBe(true);
+    expect(isFreeQuotaOrRateLimitError("trial_gate")).toBe(false);
+  });
+});
+
+describe("shouldSuggestByokOnEmbedError", () => {
+  it("suggests BYOK for ungated + free_then_byok on free_quota_exceeded", () => {
+    expect(
+      shouldSuggestByokOnEmbedError({
+        llmAccess: "free_then_byok",
+        showByok: true,
+        gateMode: "ungated",
+        errorCode: "free_quota_exceeded",
+      }),
+    ).toBe(true);
+  });
+
+  it("suggests BYOK for free_then_byok on rate_limit_exceeded", () => {
+    expect(
+      shouldSuggestByokOnEmbedError({
+        llmAccess: "free_then_byok",
+        showByok: true,
+        gateMode: "ungated",
+        errorCode: "rate_limit_exceeded",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not suggest for backend_only (foundry / DataTap-style)", () => {
+    expect(
+      shouldSuggestByokOnEmbedError({
+        llmAccess: "backend_only",
+        showByok: false,
+        gateMode: "ungated",
+        errorCode: "free_quota_exceeded",
+      }),
+    ).toBe(false);
+  });
+
+  it("legacy ungated without llmAccess suppresses BYOK hints", () => {
+    expect(
+      shouldSuggestByokOnEmbedError({
+        showByok: true,
+        gateMode: "ungated",
+        errorCode: "free_quota_exceeded",
+      }),
+    ).toBe(false);
+  });
+
+  it("legacy turn_limited + showByok suggests on quota", () => {
+    expect(
+      shouldSuggestByokOnEmbedError({
+        showByok: true,
+        gateMode: "turn_limited",
+        errorCode: "rate_limit_exceeded",
+      }),
+    ).toBe(true);
+  });
+
+  it("never suggests when showByok is false", () => {
+    expect(
+      shouldSuggestByokOnEmbedError({
+        llmAccess: "free_then_byok",
+        showByok: false,
+        gateMode: "ungated",
+        errorCode: "free_quota_exceeded",
+      }),
+    ).toBe(false);
+  });
+
+  it("never suggests BYOK for network or upstream failures", () => {
+    expect(
+      shouldSuggestByokOnEmbedError({
+        llmAccess: "free_then_byok",
+        showByok: true,
+        gateMode: "ungated",
+        errorMessage: "Could not reach digichat.",
+      }),
+    ).toBe(false);
+    expect(
+      shouldSuggestByokOnEmbedError({
+        llmAccess: "free_then_byok",
+        showByok: true,
+        gateMode: "turn_limited",
+        errorCode: "upstream_auth",
+        errorMessage: "digikey token exchange failed",
+      }),
+    ).toBe(false);
   });
 });

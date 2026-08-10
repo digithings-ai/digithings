@@ -102,13 +102,15 @@ def test_graph_invoke_returns_state_with_expected_keys() -> None:
 
 @pytest.mark.unit
 def test_graph_research_returns_error_when_llm_raises() -> None:
-    """When LLM raises, research node returns error; no heuristic fallback."""
+    """When LLM raises, research node returns sanitized error; no heuristic fallback."""
     with patch("digigraph.graph.research.completion_text", side_effect=Exception("unavailable")):
         g = build_workflow_graph()
         out = g.invoke({"prompt": "stat arb tech"}, config={"configurable": {"thread_id": "test"}})
     assert out.get("strategy_name") is None
     assert out.get("research_note") == "error"
-    assert "unavailable" in str(out.get("error", ""))
+    # Raw exception text is not streamed to clients (may include Compose DNS names).
+    assert out.get("error") == "Research failed. Please try again shortly."
+    assert "unavailable" not in str(out.get("error", ""))
 
 
 @pytest.mark.unit

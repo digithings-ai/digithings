@@ -1,13 +1,23 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability atlas-validate supabase-migrations-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability atlas-validate supabase-migrations-check
 
 build:
 	docker compose build
 
 up:
 	docker compose up -d
+
+# Pull prebuilt GHCR images (no local Dockerfile build). See infra/self-host/ and docs/DEPLOYMENT.md.
+.PHONY: up-ghcr up-ghcr-digichat pull-ghcr
+GHCR_COMPOSE := -f docker-compose.yml -f infra/self-host/compose.ghcr.yml
+pull-ghcr:
+	docker compose $(GHCR_COMPOSE) pull
+up-ghcr:
+	docker compose $(GHCR_COMPOSE) up -d
+up-ghcr-digichat:
+	docker compose $(GHCR_COMPOSE) --profile digichat up -d
 
 down:
 	docker compose down
@@ -66,6 +76,18 @@ up-observability:
 down-observability:
 	docker compose --profile observability down
 
+# ---------------------------------------------------------------------------
+# digichat targets
+#   make up-digichat / down-digichat          — local build from monorepo (dev/ops)
+#   make digichat-release-up VERSION=…       — pull pinned digichat GHCR (full stack overlay)
+#   make digichat-release-down VERSION=…
+#   make digichat-profile-a-up / down        — Profile A pull (digichat + digikey + digigraph + digivault)
+#   make digichat-profile-a-bundle-up / down — Profile A one stack image (CF parity) + digichat
+#   make digichat-dev / digichat-health       — host Next.js + /api/health smoke
+#   make up-digichat-db / down-digichat-db
+# Client install: docs/digichat/INSTALL.md | overlays: infra/digichat-release/
+# ---------------------------------------------------------------------------
+
 # Stack + digichat UI (Next.js on host port DIGICHAT_PUBLISH_PORT, default 3005). Does not include `heartbeat` profile.
 # Tip: set DIGICHAT_DEV_AUTH=1 in .env for password login without OIDC; set AUTH_URL to the URL you use in the browser.
 up-digichat:
@@ -73,6 +95,44 @@ up-digichat:
 
 down-digichat:
 	docker compose --profile digichat down
+
+# Pull published digichat from GHCR (requires VERSION=0.9.3). Does not build from the monorepo.
+# Example: make digichat-release-up VERSION=0.9.3
+digichat-release-up:
+	@test -n "$(VERSION)" || (echo "Usage: make digichat-release-up VERSION=0.9.3"; exit 1)
+	DIGICHAT_VERSION=$(VERSION) docker compose \
+	  -f docker-compose.yml \
+	  -f infra/digichat-release/compose.digichat-release.yml \
+	  --profile digichat up -d
+
+digichat-release-down:
+	@test -n "$(VERSION)" || (echo "Usage: make digichat-release-down VERSION=0.9.3"; exit 1)
+	DIGICHAT_VERSION=$(VERSION) docker compose \
+	  -f docker-compose.yml \
+	  -f infra/digichat-release/compose.digichat-release.yml \
+	  --profile digichat down
+
+# Profile A — digichat + digikey + digigraph + LiteLLM + digivault (all digithings images from GHCR).
+# Requires infra/digichat-release/.env.profile-a (copy from .env.profile-a.example). No --build.
+PROFILE_A_COMPOSE := -f infra/digichat-release/compose.profile-a.yml --env-file infra/digichat-release/.env.profile-a
+digichat-profile-a-up:
+	@test -f infra/digichat-release/.env.profile-a || (echo "Copy infra/digichat-release/.env.profile-a.example → .env.profile-a and fill secrets"; exit 1)
+	docker compose $(PROFILE_A_COMPOSE) up -d
+digichat-profile-a-down:
+	@test -f infra/digichat-release/.env.profile-a || (echo "Copy infra/digichat-release/.env.profile-a.example → .env.profile-a first"; exit 1)
+	docker compose $(PROFILE_A_COMPOSE) down
+
+# Profile A bundle — one supervisord image (same as CF Containers) + digichat + Postgres.
+# Prefer for website digichat local work; stop monorepo `make up` containers first (port clash).
+PROFILE_A_BUNDLE_COMPOSE := -f infra/digichat-release/compose.profile-a-bundle.yml \
+	$(if $(wildcard infra/digichat-release/compose.profile-a-bundle.override.yml),-f infra/digichat-release/compose.profile-a-bundle.override.yml,) \
+	--env-file infra/digichat-release/.env.profile-a-bundle
+digichat-profile-a-bundle-up:
+	@test -f infra/digichat-release/.env.profile-a-bundle || (echo "Copy infra/digichat-release/.env.profile-a-bundle.example → .env.profile-a-bundle and fill secrets"; exit 1)
+	docker compose $(PROFILE_A_BUNDLE_COMPOSE) up -d --build
+digichat-profile-a-bundle-down:
+	@test -f infra/digichat-release/.env.profile-a-bundle || (echo "Copy infra/digichat-release/.env.profile-a-bundle.example → .env.profile-a-bundle first"; exit 1)
+	docker compose $(PROFILE_A_BUNDLE_COMPOSE) down
 
 # digichat Next.js dev server (http://127.0.0.1:3000, hot reload). Backend: `make up`, `make stack-local`, or ./scripts/run_local.sh
 digichat-dev:
@@ -115,11 +175,18 @@ seed-digisearch-edgar-dev-host:
 # Export then seed (requires stack up + DIGISEARCH_SEED_API_KEY; uses Docker ingest paths).
 edgar-digisearch-dev: export-edgar-digisearch-dev seed-digisearch-edgar-dev
 
-# Regenerate OpenAPI JSON for digigraph (requires editable digigraph + digibase).
-.PHONY: openapi-digigraph
-openapi-digigraph:
+# Export OpenAPI JSON for all FastAPI services → docs/openapi/<svc>.json
+# --check: fail if committed specs drift from app.openapi()
+.PHONY: openapi-export openapi-check openapi-digigraph
+openapi-export:
 	@mkdir -p docs/openapi
-	@python -c 'import json; from digigraph.server import app; open("docs/openapi/digigraph.json","w").write(json.dumps(app.openapi(), indent=2))'
+	@python scripts/export_openapi.py
+
+openapi-check:
+	@python scripts/export_openapi.py --check
+
+# Back-compat alias
+openapi-digigraph: openapi-export
 
 # Regenerate the digivault API-reference notes (docs/vision/api/) from the authored
 # /docs content (frontend/digithings-web/lib/apiDocs.ts + sharedDocs.ts). Commit the

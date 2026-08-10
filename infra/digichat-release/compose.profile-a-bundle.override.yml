@@ -1,0 +1,12 @@
+# Local override — JSON env via YAML so Docker env-file quote-stripping cannot mangle it.
+# Used with: docker compose -f compose.profile-a-bundle.yml -f compose.profile-a-bundle.override.yml ...
+services:
+  digithings-stack:
+    environment:
+      DIGI_TENANT_CORPUS_MAP: '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}'
+  digichat:
+    image: digi-digichat:local
+    pull_policy: never
+    environment:
+      DIGICHAT_EMBED_TENANTS: '{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai","127.0.0.1","localhost"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","attribution":false,"token":"local-dev-unused-first-party","backend":{"type":"digigraph","digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"}},"occ.digithings.ai":{"slug":"occ","gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","title":"OCC help assistant","welcome":"Ask about Online Compliance Center policies, procedures, and help articles.","attribution":false,"token":"local-dev-unused-first-party","backend":{"type":"digigraph","digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}}'
+      DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS: "1"

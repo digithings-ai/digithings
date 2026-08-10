@@ -110,9 +110,9 @@ We have one flat graph. LangGraph supports subgraphs: a node can be another comp
 
 ### 3.7 Store (cross-thread memory)
 
-LangGraph’s **Store** (e.g. `InMemoryStore`, `PostgresStore`) is for data that spans threads (e.g. user preferences, global caches). We don’t use it; Digistore and run storage are session-scoped and keyed by session_id.
+LangGraph’s **Store** (e.g. `InMemoryStore`, `PostgresStore`) is for data that spans threads (e.g. user preferences, global caches). We don’t use it; digistore and run storage are session-scoped and keyed by session_id.
 
-**Recommendation:** Use the Store only if we need cross-session or cross-thread data (e.g. shared user profile, rate-limit state). For per-session datasets, Digistore + checkpointed `stored_datasets` is the right split.
+**Recommendation:** Use the Store only if we need cross-session or cross-thread data (e.g. shared user profile, rate-limit state). For per-session datasets, digistore + checkpointed `stored_datasets` is the right split.
 
 ### 3.8 Production checkpointers (implemented)
 

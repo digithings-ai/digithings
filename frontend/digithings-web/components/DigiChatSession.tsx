@@ -69,7 +69,6 @@ export function DigiChatSession() {
       suggestions={SUGGESTIONS}
       placeholder="ask digichat"
       showByok
-      showStatusBar
       layout="page"
       chat={chat}
       showIntro={showIntro}

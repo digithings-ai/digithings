@@ -31,6 +31,7 @@ pytestmark = pytest.mark.unit
 @pytest.fixture(autouse=True)
 def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear module-global caches and provider env vars before each test."""
+    previous_usage_observer = client_mod._usage_observer
     digillm.clear_caches()
     digillm.set_usage_observer(None)
     for var in (
@@ -51,7 +52,7 @@ def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
     ):
         monkeypatch.delenv(var, raising=False)
     yield
-    digillm.set_usage_observer(None)
+    digillm.set_usage_observer(previous_usage_observer)
     digillm.clear_caches()
 
 
@@ -134,6 +135,25 @@ def test_get_client_for_model_openrouter_byok_uses_user_key() -> None:
 def test_get_client_for_model_missing_key_raises() -> None:
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         digillm.get_client_for_model("gemini/gemini-2.5-flash")
+
+
+def test_get_client_for_model_anthropic_byok_uses_user_key() -> None:
+    made: list[dict[str, Any]] = []
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.append(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        with digillm.byok("sk-ant-user", "https://api.anthropic.com/v1/"):
+            digillm.get_client_for_model("anthropic/claude-sonnet-4-6")
+    assert made[0]["api_key"] == "sk-ant-user"
+    assert made[0]["base_url"].rstrip("/") == "https://api.anthropic.com/v1"
+
+
+def test_anthropic_is_registered_provider() -> None:
+    assert digillm.is_registered_provider("anthropic")
+    assert digillm.get_provider_api_key_env("anthropic") == "ANTHROPIC_API_KEY"
 
 
 def test_default_client_uses_openai_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -928,6 +948,13 @@ def test_create_with_retry_propagates_non_transient() -> None:
     fake_client.chat.completions.create.side_effect = ValueError("bad request")
     with pytest.raises(ValueError, match="bad request"):
         client_mod._create_with_retry(fake_client, model="m", messages=[])
+
+
+def test_sdk_hidden_retries_remain_enabled_and_opaque() -> None:
+    """Attempt telemetry observes SDK create calls, not the SDK's internal HTTP retries."""
+    made = _capture_client_kwargs(digillm.get_client)
+    assert len(made) == 1
+    assert "max_retries" not in made[0]
 
 
 @pytest.mark.parametrize(

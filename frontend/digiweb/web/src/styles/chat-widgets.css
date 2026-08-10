@@ -15,8 +15,8 @@
    package sources on its own.
 
    Utilities in the components carry layout/spacing/color/type. This file
-   holds only what must stay CSS: caret/dot art, the aria-expanded rotate
-   combinators, color-mix rails and hover states, and the pulse/reveal
+   holds only what must stay CSS: thinking caret/dot art, the aria-expanded
+   rotate combinators, color-mix rails and hover states, and the pulse/reveal
    keyframes (all off under reduced motion).
    ========================================================================== */
 
@@ -24,24 +24,13 @@
 
 .tc {
   border-left: 2px solid color-mix(in srgb, var(--accent) 40%, var(--term-hair));
+  /* Space between the chain rail and the tool name — lives here (not a
+     Tailwind pl-*) so it still applies when the utility isn't regenerated. */
+  padding-left: 0.75rem;
 }
 
 .tc--err {
   border-left-color: color-mix(in srgb, var(--down) 55%, var(--term-hair));
-}
-
-.tc-caret {
-  flex-shrink: 0;
-  width: 0;
-  height: 0;
-  border-left: 4px solid var(--term-mute);
-  border-top: 3px solid transparent;
-  border-bottom: 3px solid transparent;
-  transition: transform 0.18s var(--ease);
-}
-
-.tc-head[aria-expanded="true"] .tc-caret {
-  transform: rotate(90deg);
 }
 
 /* a live (running) call breathes its status mark */
@@ -159,7 +148,6 @@
 /* ── reduced motion ─────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
-  .tc-caret,
   .think-caret {
     transition: none;
   }

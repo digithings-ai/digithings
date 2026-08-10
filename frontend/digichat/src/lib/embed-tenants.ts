@@ -4,18 +4,46 @@
  * theme, accent, attribution, and CSP frame-ancestors.
  * Spec: docs/superpowers/specs/2026-07-02-digichat-embed-external-backend-design.md
  *
- * NOTE: security-headers.ts imports this at next.config.ts evaluation time,
- * so the env var must be present AT BUILD as well as at runtime.
+ * NOTE: `/embed` CSP `frame-ancestors` is set at request time by `src/proxy.ts`
+ * (`embedFrameAncestorsCsp()` in security-headers.ts), which re-reads
+ * `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` from `process.env` on each
+ * call. `next.config.ts` only bakes fail-closed `frame-ancestors 'none'` — tenant
+ * env need not be present at image build for framing. Registry lookups below are
+ * also runtime (lazy cache on first `getEmbedTenantRegistry()`).
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
-import type { DigivaultBackendConfig } from "@/lib/digivault-env";
 
+/**
+ * digichat Node backends: digigraph (digithings stack) or foundry (client Azure).
+ * Optional digigraph corpus fields isolate multi-tenant embeds on one digigraph
+ * (e.g. occ.digithings.ai → occ_help + clients/online-compliance-center).
+ */
 export type EmbedBackendConfig =
-  | { type: "digigraph" }
-  | { type: "external-relay"; url: string }
-  | { type: "foundry"; projectEndpoint: string; agentName: string }
-  | DigivaultBackendConfig;
+  | {
+      type: "digigraph";
+      /** digisearch index_name forwarded as X-Digi-Corpus-Index */
+      digisearchIndex?: string;
+      /** digivault path prefix forwarded as X-Digi-Vault-Prefix */
+      vaultPathPrefix?: string;
+    }
+  | { type: "foundry"; projectEndpoint: string; agentName: string };
+
+/**
+ * How this tenant expects visitors to pay for LLM spend.
+ * - `free_then_byok` — operator free tier until quota → in-chat BYOK (digithings.ai)
+ * - `byok_only` — require a user key before send
+ * - `backend_only` — no digichat BYOK; foundry/DataTap-style backends own spend
+ * - `operator` — operator/backend keys only (no visitor BYOK handoff)
+ */
+export type EmbedLlmAccess = "free_then_byok" | "byok_only" | "backend_only" | "operator";
+
+const LLM_ACCESS: readonly EmbedLlmAccess[] = [
+  "free_then_byok",
+  "byok_only",
+  "backend_only",
+  "operator",
+];
 
 export type EmbedTenantConfig = {
   slug: string;
@@ -50,10 +78,13 @@ export type EmbedTenantConfig = {
   activityDetail: ActivityDetail;
   /** When true, embed shows BYOK/settings. Independent of gateMode. */
   showByok?: boolean;
-  /** When true, embed shows digichat-ui status bar. Independent of gateMode. */
-  showStatusBar?: boolean;
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
+  /**
+   * LLM spend policy for this embed. Independent of gateMode — digithings.ai
+   * is `ungated` + `free_then_byok` so free-quota errors still open BYOK.
+   */
+  llmAccess?: EmbedLlmAccess;
   /**
    * Per-tenant secret. Knowing a tenant's host string is public (it's the
    * tenant's own domain) so registry membership alone must never grant
@@ -75,14 +106,6 @@ export type EmbedTenantConfig = {
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
-export const EMBED_ENV_NAME = /^[A-Z][A-Z0-9_]{0,127}$/;
-
-function requireEnvName(ctx: string, field: string, value: unknown): string {
-  if (typeof value !== "string" || !EMBED_ENV_NAME.test(value)) {
-    throw new Error(`${ctx}: digivault "${field}" must be an env var name (A-Z[A-Z0-9_]*)`);
-  }
-  return value;
-}
 
 export function normalizeEmbedHost(input: string | null | undefined): string | null {
   if (!input) return null;
@@ -115,21 +138,25 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   const backend = v.backend as Record<string, unknown> | undefined;
   let backendCfg: EmbedBackendConfig;
   if (backend?.type === "digigraph") {
-    backendCfg = { type: "digigraph" };
-  } else if (backend?.type === "external-relay") {
-    if (typeof backend.url !== "string") {
-      throw new Error(`${ctx}: external-relay backend requires a "url"`);
+    let digisearchIndex: string | undefined;
+    let vaultPathPrefix: string | undefined;
+    if (backend.digisearchIndex !== undefined) {
+      if (typeof backend.digisearchIndex !== "string" || !backend.digisearchIndex.trim()) {
+        throw new Error(`${ctx}: digigraph backend.digisearchIndex must be a non-empty string`);
+      }
+      digisearchIndex = backend.digisearchIndex.trim();
     }
-    let parsed: URL;
-    try {
-      parsed = new URL(backend.url);
-    } catch {
-      throw new Error(`${ctx}: backend.url is not a valid URL`);
+    if (backend.vaultPathPrefix !== undefined) {
+      if (typeof backend.vaultPathPrefix !== "string" || !backend.vaultPathPrefix.trim()) {
+        throw new Error(`${ctx}: digigraph backend.vaultPathPrefix must be a non-empty string`);
+      }
+      vaultPathPrefix = backend.vaultPathPrefix.trim().replace(/^\/+|\/+$/g, "");
     }
-    if (parsed.protocol !== "https:") {
-      throw new Error(`${ctx}: backend.url must be https`);
-    }
-    backendCfg = { type: "external-relay", url: backend.url };
+    backendCfg = {
+      type: "digigraph",
+      ...(digisearchIndex ? { digisearchIndex } : {}),
+      ...(vaultPathPrefix ? { vaultPathPrefix } : {}),
+    };
   } else if (backend?.type === "foundry") {
     if (typeof backend.projectEndpoint !== "string" || !backend.projectEndpoint.trim()) {
       throw new Error(`${ctx}: foundry backend requires a "projectEndpoint"`);
@@ -147,20 +174,8 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       throw new Error(`${ctx}: foundry backend requires an "agentName"`);
     }
     backendCfg = { type: "foundry", projectEndpoint: backend.projectEndpoint, agentName: backend.agentName };
-  } else if (backend?.type === "digivault") {
-    for (const banned of ["supabaseUrl", "supabaseAnonKey", "openRouterKey", "url"]) {
-      if (banned in backend) {
-        throw new Error(`${ctx}: digivault must not include raw "${banned}" — use *Env name refs`);
-      }
-    }
-    backendCfg = {
-      type: "digivault",
-      supabaseUrlEnv: requireEnvName(ctx, "supabaseUrlEnv", backend.supabaseUrlEnv),
-      supabaseAnonKeyEnv: requireEnvName(ctx, "supabaseAnonKeyEnv", backend.supabaseAnonKeyEnv),
-      openRouterKeyEnv: requireEnvName(ctx, "openRouterKeyEnv", backend.openRouterKeyEnv),
-    };
   } else {
-    throw new Error(`${ctx}: backend.type must be "digigraph", "external-relay", "foundry", or "digivault"`);
+    throw new Error(`${ctx}: backend.type must be "digigraph" or "foundry"`);
   }
 
   if (v.gateMode !== "turn_limited" && v.gateMode !== "ungated" && v.gateMode !== "trial_form") {
@@ -235,11 +250,15 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showByok !== undefined && typeof v.showByok !== "boolean") {
     throw new Error(`${ctx}: showByok must be a boolean`);
   }
-  if (v.showStatusBar !== undefined && typeof v.showStatusBar !== "boolean") {
-    throw new Error(`${ctx}: showStatusBar must be a boolean`);
-  }
   if (v.layout !== undefined && v.layout !== "page" && v.layout !== "embed") {
     throw new Error(`${ctx}: layout must be "page" or "embed"`);
+  }
+  if (v.llmAccess !== undefined) {
+    if (typeof v.llmAccess !== "string" || !LLM_ACCESS.includes(v.llmAccess as EmbedLlmAccess)) {
+      throw new Error(
+        `${ctx}: llmAccess must be "free_then_byok", "byok_only", "backend_only", or "operator"`,
+      );
+    }
   }
 
   return {
@@ -258,8 +277,10 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     lockedContact: typeof v.lockedContact === "string" ? v.lockedContact : undefined,
     activityDetail: (v.activityDetail as ActivityDetail | undefined) ?? "labels",
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
-    showStatusBar: typeof v.showStatusBar === "boolean" ? v.showStatusBar : undefined,
     layout: v.layout === "page" || v.layout === "embed" ? v.layout : undefined,
+    llmAccess: LLM_ACCESS.includes(v.llmAccess as EmbedLlmAccess)
+      ? (v.llmAccess as EmbedLlmAccess)
+      : undefined,
     gate,
   };
 }

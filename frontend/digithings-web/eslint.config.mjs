@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Prebuild copies (gitignored) — never lint vendored swagger-ui / synced specs.
+    "public/swagger-ui/**",
+    "public/openapi/**",
   ]),
 ]);
 

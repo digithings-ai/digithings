@@ -1,6 +1,7 @@
-# Plain hostnames for DIGICHAT_EMBED_HOSTS (build-time CSP frame-ancestors).
-# No secrets — safe as a Docker build-arg. One hostname per line; # comments ignored.
-# Also listed in ARCHITECTURE.md §10.
+# Seed list of known parent hostnames for operators (digithings + DataTap, etc.).
+# Not baked into the GHCR image. Copy into runtime DIGICHAT_EMBED_HOSTS or rely on
+# DIGICHAT_EMBED_TENANTS host keys — see docs/digichat/INSTALL.md § Custom embed parent hosts.
+# One hostname per line; # comments ignored. No secrets.
 digithings.ai
 www.digithings.ai
 datatapstream.com

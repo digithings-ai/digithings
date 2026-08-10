@@ -2,7 +2,7 @@
 title: "digisearch — API reference"
 type: reference
 status: generated
-created: 2026-06-29
+created: 2026-08-10
 tags:
   - api
   - core
@@ -107,7 +107,7 @@ auth: digisearch:query · rate: 10/min/IP · requires the digisearch[agent] extr
 - `digisearch_research_turn` — Composite research turn with citations (needs digisearch[agent]).
 
 ## Stack
-Chroma, OpenAI, BeautifulSoup, pdfplumber, LangGraph, FastAPI
+Chroma, Azure AI Search, OpenAI, BeautifulSoup, pdfplumber, LangGraph, FastAPI
 
 ## Related
 digigraph, digistore, digibase
