@@ -107,14 +107,15 @@ both pre-paint (`dt-theme` localStorage key, shared with the marketing sites) an
 `[data-theme]` flip onto the `.dark`/`.light` classes for the Tailwind `dark:`
 variant. The old `@digithings/digichat-ui` `tokens-shadcn-bridge.css` (shadcn vars →
 token names, the reverse direction) is no longer imported; `/embed` sets
-`[data-theme]` on the root from the tenant `theme` (its own iframe document) and
+`[data-theme]` on the root from the effective theme (URL `?theme=`, parent
+`digichat:theme` postMessage, or tenant `theme` — its own iframe document) and
 per-tenant accent hexes still override at the wrapper. Because the shared
 `ThemeProvider` (in `providers.tsx`, which wraps `/embed` too via the root layout)
 keeps a `prefers-color-scheme` listener that rewrites `[data-theme]` to the OS scheme
 whenever there is no `dt-theme` key — always true for an anonymous embed visitor —
-`/embed` re-asserts the tenant theme with a `MutationObserver` on `html[data-theme]`
+`/embed` re-asserts the effective theme with a `MutationObserver` on `html[data-theme]`
 (guarded write, so the observer never loops), so a mid-session OS light↔dark flip
-can't silently override a tenant's forced theme (#1434).
+can't silently override a parent- or tenant-forced theme (#1434).
 
 **Shared controls layer** (`src/components/ui/*` — #1419): ten of the fifteen
 shadcn-derived wrappers are now thin re-exports of the `@digithings/web`
@@ -525,6 +526,17 @@ parent browsing-context origin** (`location.ancestorOrigins[0]` or
 `event.origin` against the digichat embed origin (`ChatEmbedShell`). Validators
 and caps live in `src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` /
 `datatap:unlocked` channel is unchanged.
+
+**postMessage theme.** digithings.ai `/chat` and `/chat/occ` (`ChatEmbedShell`)
+read the parent site's canon `html[data-theme]` (shared `ThemeProvider` /
+`dt-theme` localStorage), pin first paint with `?theme=light|dark` on the iframe
+URL, then post `{ type: "digichat:theme", theme, ts }` on `digichat:ready` and
+whenever the parent theme toggles — no iframe reload. The embed accepts theme
+messages from the same first-party allowlist as seed (`parseThemeMessage` in
+`src/lib/embed-theme-messages.ts`) and applies them via the existing
+`[data-theme]` + `.dark`/`.light` path (MutationObserver still defends against
+OS/`ThemeProvider` overrides). Priority: parent postMessage > URL `?theme=` >
+tenant registry theme.
 
 **`X-Embed-Host` alone is not sufficient authorization (#1339).** A tenant's
 host string is its own public domain, so `resolveEmbedTenantByHost` never

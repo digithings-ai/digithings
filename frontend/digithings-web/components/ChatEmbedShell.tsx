@@ -5,6 +5,8 @@ import { readAndClearHandoff } from "@/lib/chatHandoff";
 
 const READY = "digichat:ready";
 const SEED = "digichat:seed";
+/** Keep in sync with digichat `THEME_MESSAGE_TYPE` (`embed-theme-messages.ts`). */
+export const THEME = "digichat:theme";
 
 /** Match digichat READY_TIMEOUT_MS — CF Container cold start can exceed 15s. */
 export const EMBED_READY_TIMEOUT_MS = 30_000;
@@ -15,6 +17,22 @@ export const DEFAULT_CHAT_EMBED_HOST = "digithings.ai";
 /** Virtual first-party host for digithings.ai/chat/occ (client #1). */
 export const OCC_CHAT_EMBED_HOST = "occ.digithings.ai";
 
+export type EmbedShellTheme = "light" | "dark";
+
+/** Read parent digithings.ai `[data-theme]` (ThemeProvider / themeInitScript). */
+export function readParentDocumentTheme(
+  el: { getAttribute(name: string): string | null } = document.documentElement,
+): EmbedShellTheme {
+  return el.getAttribute("data-theme") === "light" ? "light" : "dark";
+}
+
+export function buildEmbedThemeMessage(
+  theme: EmbedShellTheme,
+  ts = Date.now(),
+): { type: typeof THEME; theme: EmbedShellTheme; ts: number } {
+  return { type: THEME, theme, ts };
+}
+
 function parseOrigin(raw: string): string {
   try {
     return new URL(raw).origin;
@@ -23,11 +41,12 @@ function parseOrigin(raw: string): string {
   }
 }
 
-function embedSrc(origin: string, embedHost: string): string {
+function embedSrc(origin: string, embedHost: string, theme: EmbedShellTheme): string {
   const base = origin.replace(/\/$/, "");
   const url = new URL(`${base}/embed`);
   url.searchParams.set("host", embedHost);
   url.searchParams.set("layout", "page");
+  url.searchParams.set("theme", theme);
   return url.toString();
 }
 
@@ -40,6 +59,10 @@ export type ChatEmbedShellProps = {
 /**
  * digithings.ai chat shell — iframes digichat /embed (digigraph backend).
  * Requires NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN (digichat Container / Worker origin).
+ *
+ * Theme: reads parent `html[data-theme]` (shared `dt-theme` / ThemeProvider),
+ * pins first paint via `?theme=`, then posts `digichat:theme` on ready and on
+ * live toggles so the iframe stays in sync without reload.
  */
 export function ChatEmbedShell({
   embedOrigin,
@@ -47,29 +70,57 @@ export function ChatEmbedShell({
 }: ChatEmbedShellProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const iframeLoadedRef = useRef(false);
+  const embedReadyRef = useRef(false);
+  const themeRef = useRef<EmbedShellTheme>("dark");
   const [readyError, setReadyError] = useState<string | null>(null);
+  // Defer iframe src until after mount so we can read the real parent theme
+  // (themeInitScript already flipped data-theme) and avoid a wrong-mode flash.
+  const [src, setSrc] = useState("");
   const targetOrigin = useMemo(() => parseOrigin(embedOrigin), [embedOrigin]);
   const configError = targetOrigin
     ? null
     : "Invalid NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN";
-  const src = useMemo(
-    () => (targetOrigin ? embedSrc(embedOrigin, embedHost) : ""),
-    [embedOrigin, targetOrigin, embedHost],
-  );
+
+  useEffect(() => {
+    if (!targetOrigin) return;
+    const theme = readParentDocumentTheme();
+    themeRef.current = theme;
+    setSrc(embedSrc(embedOrigin, embedHost, theme));
+
+    const onThemeAttr = () => {
+      const next = readParentDocumentTheme();
+      if (next === themeRef.current) return;
+      themeRef.current = next;
+      if (!embedReadyRef.current) return;
+      const win = iframeRef.current?.contentWindow;
+      if (!win) return;
+      win.postMessage(buildEmbedThemeMessage(next), targetOrigin);
+    };
+    const observer = new MutationObserver(onThemeAttr);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => observer.disconnect();
+  }, [embedOrigin, embedHost, targetOrigin]);
 
   useEffect(() => {
     if (!targetOrigin) return;
 
     let ready = false;
     iframeLoadedRef.current = false;
+    embedReadyRef.current = false;
     function onMessage(ev: MessageEvent) {
       if (ev.origin !== targetOrigin) return;
       const data = ev.data as { type?: string } | null;
       if (!data || data.type !== READY) return;
       ready = true;
+      embedReadyRef.current = true;
       setReadyError(null);
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
+      // Always sync theme on ready (covers cold load + late handshake).
+      win.postMessage(buildEmbedThemeMessage(themeRef.current), targetOrigin);
       const handoff = readAndClearHandoff();
       if (!handoff || (!handoff.messages.length && !handoff.pending)) return;
       win.postMessage(
@@ -132,23 +183,25 @@ export function ChatEmbedShell({
           {readyError}
         </p>
       ) : null}
-      <iframe
-        ref={iframeRef}
-        title="digichat"
-        src={src}
-        style={{
-          flex: 1,
-          width: "100%",
-          border: 0,
-          minHeight: 0,
-          height: "100%",
-        }}
-        allow="clipboard-write"
-        onLoad={() => {
-          iframeLoadedRef.current = true;
-          setReadyError(null);
-        }}
-      />
+      {src ? (
+        <iframe
+          ref={iframeRef}
+          title="digichat"
+          src={src}
+          style={{
+            flex: 1,
+            width: "100%",
+            border: 0,
+            minHeight: 0,
+            height: "100%",
+          }}
+          allow="clipboard-write"
+          onLoad={() => {
+            iframeLoadedRef.current = true;
+            setReadyError(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
