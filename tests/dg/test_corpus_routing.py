@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digigraph.corpus_routing import (
     TenantCorpusOverride,
     load_tenant_corpus_map,
