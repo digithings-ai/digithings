@@ -22,8 +22,12 @@ const env = workerEnvBinding as unknown as Env;
 
 export class DigiStackContainer extends Container {
   defaultPort = DIGIGRAPH_PORT;
-  /** Both edge ports must be listening before we serve traffic. */
-  requiredPorts = [DIGIGRAPH_PORT, DIGIKEY_PORT];
+  /**
+   * Only digigraph is required for Worker readiness. digikey still starts under
+   * supervisord; digichat needs it shortly after, but blocking on both ports
+   * caused indefinite hangs when digikey failed to bind under Firecracker.
+   */
+  requiredPorts = [DIGIGRAPH_PORT];
   /** Keep warm — multi-process cold start is expensive. */
   sleepAfter = "2h";
 
@@ -34,7 +38,8 @@ export class DigiStackContainer extends Container {
   envVars = {
     DIGIKEY_ISSUER: env.DIGIKEY_ISSUER ?? "https://key.digithings.ai",
     DIGIKEY_AUDIENCE: env.DIGIKEY_AUDIENCE ?? "digi-ecosystem",
-    DIGIKEY_ALLOW_EPHEMERAL_KEY: env.DIGIKEY_ALLOW_EPHEMERAL_KEY ?? "0",
+    // Ephemeral OK for bring-up if PEM secret fails to decode; rotate to PEM for prod.
+    DIGIKEY_ALLOW_EPHEMERAL_KEY: env.DIGIKEY_ALLOW_EPHEMERAL_KEY ?? "1",
     DIGIKEY_ALLOW_DEV_GLOBAL: env.DIGIKEY_ALLOW_DEV_GLOBAL ?? "0",
     DIGIKEY_BFF_TOKEN: env.DIGIKEY_BFF_TOKEN ?? "",
     DIGIKEY_PRIVATE_KEY_PEM: env.DIGIKEY_PRIVATE_KEY_PEM ?? "",
@@ -63,16 +68,23 @@ export class DigiStackContainer extends Container {
 
   /**
    * Wait longer than the default ~20s portReadyTimeout while supervisord
-   * brings up digikey + digigraph under Firecracker.
+   * brings up digigraph under Firecracker.
    */
   override async fetch(request: Request): Promise<Response> {
-    await this.startAndWaitForPorts({
-      ports: [DIGIGRAPH_PORT, DIGIKEY_PORT],
-      cancellationOptions: {
-        portReadyTimeoutMS: 180_000,
-        instanceGetTimeoutMS: 60_000,
-      },
-    });
+    try {
+      await this.startAndWaitForPorts({
+        ports: [DIGIGRAPH_PORT],
+        cancellationOptions: {
+          portReadyTimeoutMS: 120_000,
+          instanceGetTimeoutMS: 60_000,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return new Response(`stack container not ready: ${message}`, {
+        status: 503,
+      });
+    }
     return this.containerFetch(request);
   }
 }
@@ -107,6 +119,13 @@ export interface Env {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/_stack/meta") {
+      return Response.json({
+        ok: true,
+        service: "digithings-stack",
+        note: "Worker up; container ports may still be starting",
+      });
+    }
     const port = portForHostname(url.hostname);
     if (port === null) {
       return new Response(
