@@ -154,11 +154,9 @@ class SupabaseStore:
                 {"query": query, "match_limit": min(20, max(limit * 5, limit))},
             ).execute()
         hits = [VaultSearchHit.model_validate(row) for row in _rows(response)]
-        return [
-            h
-            for h in hits
-            if h.vault_path == prefix or h.vault_path.startswith(prefix + "/")
-        ][:limit]
+        return [h for h in hits if h.vault_path == prefix or h.vault_path.startswith(prefix + "/")][
+            :limit
+        ]
 
 
 def _first_env(*names: str) -> str:

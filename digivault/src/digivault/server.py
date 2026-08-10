@@ -340,13 +340,9 @@ def orchestrator_invoke(
 
         root_env = (os.environ.get("DIGIVAULT_ROOT") or "").strip()
         if root_env:
-            hits = search_local_vault(
-                _open_vault(), query, limit=limit, path_prefix=path_prefix
-            )
+            hits = search_local_vault(_open_vault(), query, limit=limit, path_prefix=path_prefix)
         else:
-            hits = _open_supabase_store().search(
-                query, limit=limit, path_prefix=path_prefix
-            )
+            hits = _open_supabase_store().search(query, limit=limit, path_prefix=path_prefix)
         data = {"hits": [h.model_dump(mode="json") for h in hits]}
         return OrchestratorInvokeResponse(ok=True, tool=tool, data=data)
 

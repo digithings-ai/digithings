@@ -29,9 +29,7 @@ class TenantCorpusOverride(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    digisearch_index: str | None = Field(
-        default=None, description="digisearch index_name override"
-    )
+    digisearch_index: str | None = Field(default=None, description="digisearch index_name override")
     vault_path_prefix: str | None = Field(
         default=None, description="digivault vault_path prefix (no leading/trailing slash)"
     )

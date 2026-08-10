@@ -360,9 +360,7 @@ def _run_document_rag_path(
         request_id=None if _ctx_rid is None else (str(_ctx_rid).strip() or None),
         workflow_id=None if _ctx_wid is None else (str(_ctx_wid).strip() or None),
         vault_path_prefix=(
-            str(state["vault_path_prefix"]).strip()
-            if state.get("vault_path_prefix")
-            else None
+            str(state["vault_path_prefix"]).strip() if state.get("vault_path_prefix") else None
         )
         or None,
     )
