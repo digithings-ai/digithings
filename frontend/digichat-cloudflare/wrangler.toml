@@ -1,32 +1,36 @@
-# digithings digichat on Cloudflare Containers.
-# Deploy from this directory; image builds via Dockerfile at monorepo root path.
+# digithings digichat on Cloudflare Containers (Workers Paid).
+# One Container serves digithings + OCC (and future) tenants via DIGICHAT_EMBED_TENANTS.
+# Deploy from this directory; image builds from monorepo-root Dockerfile.
 name = "digithings-digichat"
 main = "src/index.ts"
-compatibility_date = "2025-08-01"
+compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Zone routes (uncomment + set zone_id after first deploy, or attach in Dashboard):
-# [[routes]]
-# pattern = "digithings.ai/embed*"
-# zone_name = "digithings.ai"
-# [[routes]]
-# pattern = "digithings.ai/api/chat*"
-# zone_name = "digithings.ai"
-# [[routes]]
-# pattern = "digithings.ai/api/embed*"
-# zone_name = "digithings.ai"
-# [[routes]]
-# pattern = "digithings.ai/api/byok*"
-# zone_name = "digithings.ai"
-# [[routes]]
-# pattern = "digithings.ai/_dtchat*"
-# zone_name = "digithings.ai"
+# Zone routes — same hostname as Pages: Worker owns digichat paths; Pages owns /chat shells.
+[[routes]]
+pattern = "digithings.ai/embed*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/chat*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/embed*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/byok*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/health"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/_dtchat*"
+zone_name = "digithings.ai"
 
 [[containers]]
 class_name = "DigiChatContainer"
 # Build context is monorepo root (two levels up from this package).
 image = "../../Dockerfile.digichat-cloudflare"
-max_instances = 3
+max_instances = 5
 
 [[durable_objects.bindings]]
 name = "DIGICHAT"
@@ -36,10 +40,25 @@ class_name = "DigiChatContainer"
 tag = "v1"
 new_sqlite_classes = ["DigiChatContainer"]
 
-# Secrets (wrangler secret put): AUTH_SECRET, DIGITHINGS_SUPABASE_URL,
-# DIGITHINGS_SUPABASE_ANON_KEY, DIGITHINGS_OPENROUTER_API_KEY, DIGICHAT_EMBED_TENANTS
-# Optional: DIGICHAT_EMBED_ENABLED=1 as plain var below.
+# Secrets (wrangler secret put):
+#   AUTH_SECRET
+#   DIGICHAT_EMBED_TENANTS   # digithings + occ JSON — see README
+#   DIGIGRAPH_INTERNAL_URL   # reachable digigraph base URL
+#   DIGIKEY_URL
+#   DIGIKEY_BFF_TOKEN
+# Optional: DIGICHAT_DATABASE_URL if you enable Auth.js / conversations DB
+#
+# digigraph + LiteLLM + digikey + digivault + digisearch are NOT inside this
+# Container — deploy frontend/digithings-stack-cloudflare and point secrets at:
+#   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
+#   DIGIKEY_URL=https://key.digithings.ai
+# Never use Mac Compose / *.trycloudflare.com quick tunnels in production.
 
 [vars]
 DIGICHAT_EMBED_ENABLED = "1"
-DIGICHAT_ENABLED_SERVICES = ""
+DIGICHAT_REQUIRE_ROOT_AUTH = "0"
+DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai"
+# Profile A: digisearch/digivault are loopback inside digithings-stack; digichat
+# only talks to digigraph (+ digikey for bff_session). Do not probe digisearch
+# / digiquant / digismith from /api/health (defaults would be unreachable).
+DIGICHAT_ENABLED_SERVICES = "digigraph"

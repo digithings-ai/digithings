@@ -25,27 +25,6 @@ jobs:
       - name: Install (root workspaces)
         run: npm install --no-audit --no-fund --include=optional
 
-      # Only the Tailwind oxide binding — the install above resolves every other native
-      # from package-lock.json, which locks @rolldown/binding-linux-x64-gnu 1.2.2 (an
-      # optionalDependency of the locked rolldown 1.2.2, which is what vitest needs) and
-      # both lightningcss Linux x64 builds the tree needs — 1.33.0 hoisted to the root
-      # for vite's lightningcss, and 1.32.0 nested under the root lightningcss 1.32.0.
-      # @tailwindcss/oxide is the one genuinely macOS-only tree: oxide-darwin-arm64 4.2.2
-      # is its sole platform entry.
-      #
-      # The npm/cli#4828 cache worry this step used to cite does not reach those locked
-      # entries: setup-node caches the machine's global npm cache rather than
-      # node_modules (per its advanced-usage docs), so the install always runs and always
-      # resolves against the lock — and `--include=optional` above is already explicit.
-      #
-      # The old rolldown 1.0.0-rc.16 pin installed a stale duplicate of a binding the lock
-      # has moved off, and the lightningcss 1.32.0 pin overwrote the hoisted 1.33.0,
-      # leaving vite's lightningcss 1.33.0 resolving to a 1.32.0 binary.
-      - name: Install the Linux Tailwind binding
-        run: |
-          npm install @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
-            --no-save --no-audit --no-fund
-
       - name: Lint
         run: npm run lint --workspace olympus
 

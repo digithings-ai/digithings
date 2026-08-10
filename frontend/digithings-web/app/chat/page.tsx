@@ -1,24 +1,36 @@
 import type { Metadata } from "next";
 import { DtNav } from "@/components/DtNav";
-import { DigiChatSession } from "@/components/DigiChatSession";
+import { ChatEmbedShell } from "@/components/ChatEmbedShell";
+import { embedOriginForChat } from "@/lib/security-headers.mjs";
 
 export const metadata: Metadata = {
   title: "digichat — the digithings assistant",
   description:
-    "Ask digichat anything about the digithings architecture — grounded in the digivault docs, " +
-    "running on a free model pool. No sign-up.",
+    "Ask digichat anything about the digithings architecture — grounded via digigraph " +
+    "and digivault, running on digillm. No sign-up.",
 };
 
+/** Same origin as CSP frame-src (default https://digithings.ai for Containers). */
+const EMBED_ORIGIN = embedOriginForChat();
+
 /**
- * /chat — full-screen digichat via shared digichat-ui + Pages Function digivault
- * backend (free Cloudflare plan; no Containers / iframe).
+ * /chat — DtNav + iframe to digichat /embed (digigraph backend).
+ * Same Container as /chat/occ; tenant via host=digithings.ai.
  */
 export default function ChatPage() {
   return (
     <>
       <DtNav />
-      <main className="dc-page">
-        <DigiChatSession />
+      <main
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100dvh",
+          paddingTop: "var(--dq-nav-h)",
+          boxSizing: "border-box",
+        }}
+      >
+        <ChatEmbedShell embedOrigin={EMBED_ORIGIN} />
       </main>
     </>
   );

@@ -2,7 +2,7 @@
 title: "digiquant — API reference"
 type: reference
 status: generated
-created: 2026-06-29
+created: 2026-08-10
 tags:
   - api
   - core
@@ -11,14 +11,14 @@ relevance:
 ---
 # digiquant — API reference
 
-> Strategy research that ends in an order, not a markdown file.
+> Strategy research that ends in a reproducible backtest, not a markdown file.
 
 **Role:** Quant engine · NautilusTrader · **Tier:** core
 
 ## Overview
-Atlas runs scheduled research, Hermes turns it into signals, Kairos executes on a NautilusTrader core, with Optuna driving optimization.
+Atlas runs scheduled research and Hermes turns it into signals; backtests run on a real NautilusTrader engine with Optuna driving the parameter search.
 
-Every step writes an immutable audit trail; live trading stays loopback-only until a human flips the gate.
+Every run writes an append-only audit trail and a tearsheet. No broker adapter ships wired — the IB, Alpaca, and QuantConnect adapters are declared stubs, so reaching a live venue is your own deliberate integration.
 
 ## Authentication
 Backtest/optimize/pipeline routes accept a digikey JWT (optional in passthrough mode). Async jobs stream progress over SSE.

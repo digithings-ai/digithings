@@ -34,6 +34,29 @@ pytestmark = pytest.mark.unit
 RUN_DATE = date(2026, 6, 12)
 
 
+def _usage_events(count: int) -> dict[str, list[dict[str, object]]]:
+    return {
+        "events": [
+            {
+                "sequence": sequence,
+                "kind": "tool_call",
+                "name": f"tool-{sequence}",
+                "status": "ok",
+                "duration_ms": sequence,
+                "retry_count": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "cached_tokens": 0,
+                "cost_usd": 0.0,
+                "sources": 0,
+                "input_summary": "Arguments: none",
+                "output_summary": "Returned no value",
+            }
+            for sequence in range(1, count + 1)
+        ]
+    }
+
+
 def _today(slug: str) -> SegmentSlot:
     return SegmentSlot(payload=SegmentPayload(segment=slug, body={}, as_of=RUN_DATE))
 
@@ -458,6 +481,26 @@ def test_write_row_upserts_with_usage_and_counts() -> None:
             "completion_tokens": 800,
             "total_tokens": 4200,
             "models": ["x-ai/grok-4"],
+            "events": [
+                {
+                    "sequence": 1,
+                    "kind": "model_call",
+                    "phase": "macro",
+                    "operation": "MacroReport",
+                    "document_key": "macro",
+                    "name": "x-ai/grok-4",
+                    "status": "ok",
+                    "duration_ms": 250,
+                    "retry_count": 0,
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "cached_tokens": 40,
+                    "cost_usd": 0.002,
+                    "sources": 0,
+                    "input_summary": "Structured model request",
+                    "output_summary": "20 completion tokens",
+                }
+            ],
         },
     )
     assert summary is not None
@@ -478,6 +521,13 @@ def test_write_row_upserts_with_usage_and_counts() -> None:
     assert row["started_at"] == "2026-06-12T10:00:00+00:00"
     assert row["finished_at"] == "2026-06-12T10:02:03.456000+00:00"
     assert row["duration_s"] == pytest.approx(123.456)
+    events = client.store["olympus_run_events"]
+    assert len(events) == 1
+    assert events[0]["run_id"] == "baseline-2026-06-12-local"
+    assert events[0]["attempt"] == 1
+    assert events[0]["run_date"] == "2026-06-12"
+    assert events[0]["phase"] == "macro"
+    assert events[0]["_on_conflict"] == "run_id,attempt,sequence"
 
 
 def test_write_row_is_fail_soft() -> None:
@@ -493,6 +543,76 @@ def test_write_row_is_fail_soft() -> None:
         run_date=RUN_DATE,
     )
     assert out is None  # swallowed, run continues
+
+
+def test_write_row_removes_stale_higher_event_sequences() -> None:
+    client = FakeSupabaseClient()
+    state = _state(phase1={"macro": _today("macro")})
+    diagnostics.write_row(
+        client,
+        state=state,
+        run_id="repeated-run",
+        run_type="baseline",
+        run_date=RUN_DATE,
+        usage_snapshot=_usage_events(5),
+    )
+    diagnostics.write_row(
+        client,
+        state=state,
+        run_id="repeated-run",
+        run_type="baseline",
+        run_date=RUN_DATE,
+        usage_snapshot=_usage_events(3),
+    )
+
+    events = client.store["olympus_run_events"]
+    assert {row["sequence"] for row in events} == {1, 2, 3}
+
+
+def test_write_row_clears_prior_events_when_trace_becomes_empty() -> None:
+    client = FakeSupabaseClient()
+    state = _state(phase1={"macro": _today("macro")})
+    diagnostics.write_row(
+        client,
+        state=state,
+        run_id="empty-rewrite",
+        run_type="baseline",
+        run_date=RUN_DATE,
+        usage_snapshot=_usage_events(2),
+    )
+    diagnostics.write_row(
+        client,
+        state=state,
+        run_id="empty-rewrite",
+        run_type="baseline",
+        run_date=RUN_DATE,
+        usage_snapshot={"events": []},
+    )
+
+    assert client.store["olympus_run_events"] == []
+
+
+def test_write_row_without_event_capture_preserves_prior_trace() -> None:
+    client = FakeSupabaseClient()
+    state = _state(phase1={"macro": _today("macro")})
+    diagnostics.write_row(
+        client,
+        state=state,
+        run_id="capture-absent",
+        run_type="baseline",
+        run_date=RUN_DATE,
+        usage_snapshot=_usage_events(2),
+    )
+    diagnostics.write_row(
+        client,
+        state=state,
+        run_id="capture-absent",
+        run_type="baseline",
+        run_date=RUN_DATE,
+        usage_snapshot={"llm_calls": 2},
+    )
+
+    assert {row["sequence"] for row in client.store["olympus_run_events"]} == {1, 2}
 
 
 # --------------------------------------------------------------------------- cancelled status (#814)

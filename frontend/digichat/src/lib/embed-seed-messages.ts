@@ -2,7 +2,8 @@ import { isFirstPartyEmbedHost } from "@/lib/embed-first-party";
 
 export const READY_MESSAGE = { type: "digichat:ready" } as const;
 export const SEED_MESSAGE_TYPE = "digichat:seed" as const;
-export const READY_TIMEOUT_MS = 8000;
+/** Parent shell waits this long for digichat:ready (CF Container cold start). */
+export const READY_TIMEOUT_MS = 30_000;
 export const MAX_SEED_MESSAGES = 40;
 export const MAX_SEED_CONTENT_CHARS = 8000;
 export const MAX_SEED_PENDING_CHARS = 4000;
@@ -19,6 +20,39 @@ export type SeedMessage = {
 
 export function isAllowedSeedParentOrigin(origin: string): boolean {
   return isFirstPartyEmbedHost(origin);
+}
+
+function tryParseOrigin(raw: string): string {
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Target origin for `{ type: "digichat:ready" }` postMessage.
+ *
+ * Must be the **actual parent page** origin (`ancestorOrigins[0]` / `document.referrer`),
+ * not the virtual embed `?host=` tenant key. Virtual hosts such as `occ.digithings.ai`
+ * identify the corpus/tenant registry entry but are not browsing contexts — posting
+ * ready there is dropped by the browser while digithings.ai never hears the handshake.
+ */
+export function resolveReadyTargetOrigin(opts: {
+  ancestorOrigins?: ArrayLike<string> | null | undefined;
+  referrer?: string | null | undefined;
+}): string | null {
+  const ancestors = opts.ancestorOrigins;
+  if (ancestors && ancestors.length > 0) {
+    const fromAncestor = tryParseOrigin(String(ancestors[0]));
+    if (fromAncestor) return fromAncestor;
+  }
+  const ref = (opts.referrer ?? "").trim();
+  if (ref) {
+    const fromReferrer = tryParseOrigin(ref);
+    if (fromReferrer) return fromReferrer;
+  }
+  return null;
 }
 
 export function parseSeedMessage(

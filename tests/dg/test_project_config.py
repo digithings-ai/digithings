@@ -82,6 +82,35 @@ def test_digi_project_config_allowed_tools() -> None:
     assert cfg.get_allowed_tools() == ["digisearch", "todo"]
 
 
+@pytest.mark.unit
+def test_digi_project_config_always_retrieve_tools() -> None:
+    cfg = DigiProjectConfig(
+        {"agents": {"always_retrieve_tools": ["digisearch", "digivault_search_notes"]}}
+    )
+    assert cfg.get_always_retrieve_tools() == ["digisearch", "digivault_search_notes"]
+
+
+@pytest.mark.unit
+def test_digi_project_config_research_brief_default_and_yaml() -> None:
+    assert DigiProjectConfig({}).get_research_brief() is True
+    assert DigiProjectConfig({"agents": {"research_brief": False}}).get_research_brief() is False
+    assert DigiProjectConfig({"agents": {"research_brief": True}}).get_research_brief() is True
+    assert DigiProjectConfig({"agents": {"research_brief": "false"}}).get_research_brief() is False
+    assert DigiProjectConfig({"agents": {"research_brief": "0"}}).get_research_brief() is False
+
+
+@pytest.mark.unit
+def test_digi_project_config_research_brief_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = DigiProjectConfig({"agents": {"research_brief": True}})
+    monkeypatch.setenv("DIGI_RESEARCH_BRIEF", "0")
+    assert cfg.get_research_brief() is False
+    monkeypatch.setenv("DIGI_RESEARCH_BRIEF", "1")
+    cfg_off = DigiProjectConfig({"agents": {"research_brief": False}})
+    assert cfg_off.get_research_brief() is True
+    monkeypatch.delenv("DIGI_RESEARCH_BRIEF", raising=False)
+    assert DigiProjectConfig({"agents": {"research_brief": False}}).get_research_brief() is False
+
+
 def test_get_digivault_url_defaults_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DIGIVAULT_URL", raising=False)
     assert DigiProjectConfig({}).get_digivault_url() == "http://digivault:8004"
@@ -96,7 +125,9 @@ def test_get_digivault_url_defaults_and_override(monkeypatch: pytest.MonkeyPatch
 def test_digi_project_config_indexes_dir_discovery(tmp_path: Path) -> None:
     """When indexes_dir is set, indexes are discovered from that directory."""
     (tmp_path / "indexes").mkdir()
-    (tmp_path / "indexes" / "unified-content-index.yaml").write_text("index_name: unified-content-index\n")
+    (tmp_path / "indexes" / "unified-content-index.yaml").write_text(
+        "index_name: unified-content-index\n"
+    )
     (tmp_path / "config.yaml").write_text("""
 project:
   name: sitas
@@ -115,7 +146,9 @@ mcp:
 
 
 @pytest.mark.unit
-def test_resolve_config_path_prefers_digiproject_yaml_over_config_yaml(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_resolve_config_path_prefers_digiproject_yaml_over_config_yaml(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """When config.yaml is given but digiproject.yaml sibling exists, prefer digiproject.yaml and warn."""
     (tmp_path / "config.yaml").write_text("project:\n  name: old\n")
     (tmp_path / "digiproject.yaml").write_text("project:\n  name: new\n")
@@ -128,7 +161,9 @@ def test_resolve_config_path_prefers_digiproject_yaml_over_config_yaml(tmp_path:
 
 
 @pytest.mark.unit
-def test_resolve_config_path_warns_on_config_yaml_when_no_digiproject(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_resolve_config_path_warns_on_config_yaml_when_no_digiproject(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """When config.yaml is given and no digiproject.yaml exists, use config.yaml with deprecation warning."""
     (tmp_path / "config.yaml").write_text("project:\n  name: legacy\n")
     with caplog.at_level(logging.WARNING, logger="digigraph.project_config"):
@@ -139,7 +174,9 @@ def test_resolve_config_path_warns_on_config_yaml_when_no_digiproject(tmp_path: 
 
 
 @pytest.mark.unit
-def test_resolve_config_path_default_prefers_digiproject_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_config_path_default_prefers_digiproject_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Default search (no explicit path) prefers digiproject.yaml in cwd over config/digi_project.yaml."""
     monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
     monkeypatch.chdir(tmp_path)
@@ -152,7 +189,9 @@ def test_resolve_config_path_default_prefers_digiproject_yaml(tmp_path: Path, mo
 
 
 @pytest.mark.unit
-def test_load_project_config_legacy_config_yaml(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_load_project_config_legacy_config_yaml(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """load_project_config honours config.yaml with deprecation warning when no digiproject.yaml."""
     cfg_file = tmp_path / "config.yaml"
     cfg_file.write_text("project:\n  name: sitaas-legacy\n")
@@ -205,9 +244,7 @@ def test_digi_project_config_load_re_reads_on_mtime_change(
     monkeypatch.setattr(project_config_module, "_config_cache", {})
 
     cfg_file = tmp_path / "digiproject.yaml"
-    cfg_file.write_text(
-        "project:\n  name: before-reload\nagents:\n  llm_mode: test\n"
-    )
+    cfg_file.write_text("project:\n  name: before-reload\nagents:\n  llm_mode: test\n")
     # Establish initial mtime explicitly at t=1000 so we can reliably bump it.
     initial_ts = 1_000_000_000.0
     os.utime(cfg_file, (initial_ts, initial_ts))
@@ -218,9 +255,7 @@ def test_digi_project_config_load_re_reads_on_mtime_change(
     assert cfg_before.project.get("name") == "before-reload"
 
     # Mutate file and bump mtime by 1 second — simulates an in-place edit on disk.
-    cfg_file.write_text(
-        "project:\n  name: after-reload\nagents:\n  llm_mode: best\n"
-    )
+    cfg_file.write_text("project:\n  name: after-reload\nagents:\n  llm_mode: best\n")
     bumped_ts = initial_ts + 1.0
     os.utime(cfg_file, (bumped_ts, bumped_ts))
 

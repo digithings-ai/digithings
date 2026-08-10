@@ -10,8 +10,13 @@
 # Claude Code runtime state (scheduler lock, transient)
 .claude/scheduled_tasks.lock
 
-# Stray npm installs at repo root — always use workspace-scoped installs under frontend/
-/node_modules/
+# npm output at any depth. Deliberately NOT anchored: `npm ci` at the repo root
+# materializes nested node_modules in any workspace whose dep version cannot be hoisted
+# — package-lock.json carries such `frontend/*/node_modules/...` entries today — and an
+# anchored rule leaves those untracked. Coverage otherwise falls to each workspace
+# shipping its own .gitignore; frontend/digiweb/design ships none, so this rule is its
+# only cover.
+node_modules/
 
 # Cloudflare Pages Functions for digithings.ai are authored under
 # frontend/digithings-web/functions/ and mirrored to a repo-root functions/ by
@@ -24,6 +29,8 @@
 venv/
 .env
 projects/*/.env
+config/dogfood-digiproject.local.yaml
+docker-compose.override.yml
 
 # Confidential: project configs and deployments (never share)
 # Anchored to repo root so docs/projects/ (public dogfooding projects) is not captured.
@@ -53,6 +60,11 @@ digiquant/results/
 
 # Olympus static portfolio fallback — stop tracking after REM-037 (JAN-007)
 frontend/olympus/public/dashboard-data.json
+
+# digithings-web OpenAPI explorer assets (copied at prebuild / predev from
+# docs/openapi/ + swagger-ui-dist — never commit the vendored copies).
+frontend/digithings-web/public/openapi/
+frontend/digithings-web/public/swagger-ui/
 
 
 # Secrets and credentials
@@ -125,4 +137,3 @@ canvases/
 docs/projects/sitaas/
 # (Top-level /projects/ is anchored earlier in this file — do not add an
 # unanchored `projects/` rule here, it would also capture docs/projects/.)
-frontend/digichat-ui/node_modules/

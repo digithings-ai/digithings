@@ -19,27 +19,31 @@ EVIDENCE_TIER_WORKING_PAPER = "working_paper"
 EVIDENCE_TIER_INDUSTRY = "industry"
 EVIDENCE_TIER_WEB = "web"
 
-EVIDENCE_TIER_VALUES: frozenset[str] = frozenset({
-    EVIDENCE_TIER_PEER_REVIEWED,
-    EVIDENCE_TIER_WORKING_PAPER,
-    EVIDENCE_TIER_INDUSTRY,
-    EVIDENCE_TIER_WEB,
-})
+EVIDENCE_TIER_VALUES: frozenset[str] = frozenset(
+    {
+        EVIDENCE_TIER_PEER_REVIEWED,
+        EVIDENCE_TIER_WORKING_PAPER,
+        EVIDENCE_TIER_INDUSTRY,
+        EVIDENCE_TIER_WEB,
+    }
+)
 
 # Keys callers SHOULD use (document and chunk metadata).
-NORMATIVE_METADATA_KEYS: frozenset[str] = frozenset({
-    "evidence_tier",
-    "peer_reviewed",
-    "publication_year",
-    "venue",
-    "title",
-    "doi_or_arxiv",
-    "asset_class_tags",
-    "methodology_tags",
-    "language",
-    "license_notes",
-    "source_url",
-})
+NORMATIVE_METADATA_KEYS: frozenset[str] = frozenset(
+    {
+        "evidence_tier",
+        "peer_reviewed",
+        "publication_year",
+        "venue",
+        "title",
+        "doi_or_arxiv",
+        "asset_class_tags",
+        "methodology_tags",
+        "language",
+        "license_notes",
+        "source_url",
+    }
+)
 
 
 def _serialize_value_for_chroma(key: str, value: Any) -> str | int | float | bool | None:
@@ -57,7 +61,9 @@ def _serialize_value_for_chroma(key: str, value: Any) -> str | int | float | boo
     return str(value)
 
 
-def normalize_metadata_for_chroma(metadata: dict[str, Any] | None) -> dict[str, str | int | float | bool]:
+def normalize_metadata_for_chroma(
+    metadata: dict[str, Any] | None,
+) -> dict[str, str | int | float | bool]:
     """Return a copy of metadata safe for Chroma ``add`` / ``upsert`` metadatas."""
     if not metadata:
         return {}
@@ -72,9 +78,49 @@ def normalize_metadata_for_chroma(metadata: dict[str, Any] | None) -> dict[str, 
     return out
 
 
+def _title_from_source(source: str) -> str | None:
+    """Best-effort title from a filesystem path or URL basename."""
+    from pathlib import Path
+
+    raw = (source or "").strip()
+    if not raw or raw.startswith("<"):
+        return None
+    name = Path(raw.replace("\\", "/")).name
+    if not name:
+        return None
+    stem = Path(name).stem if "." in name else name
+    cleaned = stem.replace("_", " ").replace("-", " ").strip()
+    return cleaned or None
+
+
+def provenance_metadata_from_document(doc: Document) -> dict[str, Any]:
+    """Build path/title provenance from ``Document.source`` for citation UIs.
+
+    Parsers store the filesystem path on ``Document.source`` but historically left
+    ``metadata`` empty, so Chroma hits only carried ``chunk_index`` / ``doc_id`` and
+    digichat Sources fell back to opaque UUIDs or identical first-heading snippets.
+    """
+    out: dict[str, Any] = {}
+    src = (doc.source or "").strip()
+    if src and not src.startswith("<"):
+        out.setdefault("source", src)
+        out.setdefault("path", src)
+        out.setdefault("source_url", src)
+    title = (doc.metadata or {}).get("title")
+    if not title:
+        derived = _title_from_source(src)
+        if derived:
+            out["title"] = derived
+    return out
+
+
 def merge_document_metadata_into_chunks(doc: Document, chunks: list[Chunk]) -> None:
-    """Merge document metadata into each chunk (chunk keys win on conflict)."""
-    base_doc = dict(doc.metadata or {})
+    """Merge document metadata into each chunk (chunk keys win on conflict).
+
+    Always folds ``Document.source`` into chunk metadata as ``source`` / ``path`` /
+    ``source_url`` when missing so retrieval citations stay human-readable.
+    """
+    base_doc = {**provenance_metadata_from_document(doc), **dict(doc.metadata or {})}
     for c in chunks:
         merged_raw = {**base_doc, **(c.metadata or {})}
         c.metadata = normalize_metadata_for_chroma(merged_raw)

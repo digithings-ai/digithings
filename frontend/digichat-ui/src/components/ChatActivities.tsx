@@ -6,9 +6,15 @@
  * `@digithings/web`.
  *
  * Before #1418's gap 6 closed, this was a flat bordered `.dc-activities` box of
- * bespoke `.dc-act-*` paragraphs: the embed showed no tool-call chain, no
- * reasoning disclosure and no sources, while the canon shipped primitives for
- * all three. Now every row is a shared primitive:
+ * bespoke `.dc-act-*` paragraphs. It DID render all three kinds — a tool chain
+ * (`.dc-act-tool`), a reasoning disclosure (`<details class="dc-act-reasoning">`)
+ * and sources (`.dc-act-hits`, with title/tier/year/path/snippet) — and it
+ * rendered them identically on both surfaces, because both take the same session
+ * component. An earlier version of this docblock said the embed "showed no
+ * tool-call chain, no reasoning disclosure and no sources" while digithings.ai
+ * used canon primitives; neither half was true. What changed here is the *skin*,
+ * not the presence of the information: every row is now a shared primitive
+ * instead of a bespoke paragraph.
  *
  *   | activity      | primitive                          |
  *   |---------------|------------------------------------|
@@ -37,27 +43,52 @@ import {
   ChatToolCall,
   ChatWidgetFrame,
 } from "@digithings/web";
-import { toCanonRows, type CanonActivityRow } from "../activity-view";
+import { distinctHitPath, toCanonRows, type CanonActivityRow } from "../activity-view";
 import type { DigiChatActivity, VaultHitSummary } from "../types";
 
 /**
  * Retrieved documents, as the fold-out body of a `tool_result` row — the
- * citation list that the embed previously dropped on the floor entirely.
+ * chunks Foundry (or digivault) already attached to that search. Each snippet
+ * is a nested `<details>`, closed by default.
  */
+function HitHead({ hit, path }: { hit: VaultHitSummary; path: string | null }) {
+  return (
+    <>
+      <span className="dc-act-hit-title">{hit.title}</span>
+      {hit.tier ? <span className="dc-act-hit-tier">{hit.tier}</span> : null}
+      {typeof hit.year === "number" ? (
+        <span className="dc-act-hit-year">{hit.year}</span>
+      ) : null}
+      {path ? <span className="dc-act-hit-path">{path}</span> : null}
+    </>
+  );
+}
+
 function SourceList({ sources }: { sources: VaultHitSummary[] }) {
   return (
     <ul className="dc-act-hits">
-      {sources.map((hit) => (
-        <li key={hit.path}>
-          <span className="dc-act-hit-title">{hit.title}</span>
-          {hit.tier ? <span className="dc-act-hit-tier">{hit.tier}</span> : null}
-          {typeof hit.year === "number" ? (
-            <span className="dc-act-hit-year">{hit.year}</span>
-          ) : null}
-          <span className="dc-act-hit-path">{hit.path}</span>
-          {hit.snippet ? <p className="dc-act-hit-snippet">{hit.snippet}</p> : null}
-        </li>
-      ))}
+      {/* path is not unique — two chunks of one vault document share it. */}
+      {sources.map((hit, i) => {
+        const path = distinctHitPath(hit.title, hit.path);
+        const key = `${hit.path}-${i}`;
+        if (!hit.snippet) {
+          return (
+            <li key={key}>
+              <HitHead hit={hit} path={path} />
+            </li>
+          );
+        }
+        return (
+          <li key={key}>
+            <details className="dc-act-hit">
+              <summary className="dc-act-hit-summary">
+                <HitHead hit={hit} path={path} />
+              </summary>
+              <p className="dc-act-hit-snippet">{hit.snippet}</p>
+            </details>
+          </li>
+        );
+      })}
     </ul>
   );
 }

@@ -1,5 +1,5 @@
 import "./terminal.css";
-import { ChatMessage, ChatTranscript, TerminalWordmark } from "@digithings/web";
+import { ChatMessage, ChatTranscript, TerminalStepCaret, TerminalWordmark } from "@digithings/web";
 import { ChatResponseLoader } from "@/components/terminal/chat-response-loader";
 import { CodeReviewReference } from "@/components/code-review-reference";
 import { CodeSampleReference } from "@/components/code-sample-reference";
@@ -43,6 +43,40 @@ export default function TerminalPage() {
         </p>
         <div className="tl-stage">
           <ContainerBootLoader title={<TerminalWordmark suffix="chat" />} />
+        </div>
+      </section>
+
+      <section className="section-block accent-digichat" id="module-loader">
+        <p className="kicker">{"// module loader"}</p>
+        <h2 className="title">One module waits; the family performs.</h2>
+        <p className="section-copy">
+          The default loader for any single module surface — a customer&apos;s embedded chat
+          widget, a dashboard&apos;s cold boot — is the module&apos;s own lowercase name: it types
+          in once, holds, and the block cursor keeps blinking beside it. No note, no erase, no
+          cycling back to itself: a one-tenant wait is not a tour of the platform, so it does not
+          perform one. This is <code>ContainerBootLoader</code> with a single, non-looping step —{" "}
+          <code>{'steps={["digichat"]}'}</code> — same primitive as the boot loader above, just
+          held on one word. Reduced motion renders the word whole from the first frame, caret
+          still.
+        </p>
+        <div className="tl-stage">
+          <ContainerBootLoader steps={["digichat"]} note={null} />
+        </div>
+        <p className="section-copy mt-[1.2rem]">
+          The cycling <code>digi</code>-prefixed lockup is the exception, not the default: reserve
+          it for a surface whose actual job is showing off the whole module family — the
+          digithings.ai hero, an ecosystem splash — never a single product&apos;s own loading
+          state. <code>digi</code> stays fixed; <code>TerminalStepCaret</code> types and erases
+          each module suffix in turn at the house cadence.
+        </p>
+        <div className="tl-stage">
+          <span className="font-mono text-[1.25rem] font-normal tracking-normal text-ink">
+            digi
+            <TerminalStepCaret
+              steps={["chat", "graph", "quant", "search", "key", "vault"]}
+              waitingLabel="Loading the module family…"
+            />
+          </span>
         </div>
       </section>
 

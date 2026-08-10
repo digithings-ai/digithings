@@ -28,23 +28,6 @@ jobs:
       - name: Install (root workspaces)
         run: npm ci --no-audit --no-fund
 
-      # Only the Tailwind oxide binding — `npm ci` above covers every other native.
-      # package-lock.json is macOS-generated, but that does not mean its Linux optional
-      # natives are missing: it locks @rolldown/binding-linux-x64-gnu 1.2.2 (an
-      # optionalDependency of the locked rolldown 1.2.2) and both lightningcss Linux x64
-      # builds the tree needs — 1.33.0 hoisted to the root for vite's lightningcss, and
-      # 1.32.0 nested under the root lightningcss 1.32.0. @tailwindcss/oxide is the one
-      # genuinely macOS-only tree: oxide-darwin-arm64 4.2.2 is its sole platform entry.
-      #
-      # This step used to re-install rolldown at 1.0.0-rc.16 and lightningcss at 1.32.0.
-      # Both were redundant, and the lightningcss pin was actively wrong: installing it
-      # at the root overwrote the hoisted 1.33.0 binding, leaving vite's lightningcss
-      # 1.33.0 resolving to a 1.32.0 binary.
-      - name: Install the Linux Tailwind binding
-        run: |
-          npm install @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
-            --no-save --no-audit --no-fund
-
       - name: Lint
         run: npm run lint --workspace digichat
 

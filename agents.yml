@@ -24,6 +24,7 @@ rules:
   - "NautilusTrader for all backtest/optimize"
   - "Score ≥8 Security, ≥8 Quality, ≥7 Optimization, ≥9 Accuracy before PR"
   - "Never touch live-trading paths without explicit human approval"
+  - "Digi product/module names are always lowercase in prose and docs (digithings, digichat, digivault, digigraph, …) — never DigiThings, DigiChat, Digichat, DigiVault. Code identifiers (DigiChatSession, DigiAuthMiddleware) keep language casing."
 
 scoring_thresholds:
   security: 8

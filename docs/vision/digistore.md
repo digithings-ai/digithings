@@ -34,7 +34,7 @@ relevance:
 
 **Relationship to OpenBB:** OpenBB is the data retrieval layer (fetches live data from ~100 sources). digistore persists, caches, and serves what OpenBB retrieves. digistore does not replace OpenBB — it wraps it.
 
-**Current state:** Exists as a thin session/dataset cache inside digigraph (Digistore). Expanded scope defined but not yet implemented as a standalone module.
+**Current state:** Exists as a thin session/dataset cache inside digigraph (digistore). Expanded scope defined but not yet implemented as a standalone module.
 
 **12-month roadmap:**
 - Standalone digistore module with clean backend registry

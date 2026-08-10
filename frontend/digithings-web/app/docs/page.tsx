@@ -5,14 +5,14 @@ import { DtNav } from "@/components/DtNav";
 import { DocsLayout } from "@/components/docs/DocsLayout";
 
 export const metadata: Metadata = {
-  title: "docs — the digithings API reference",
+  title: "docs — digithings product guides & API reference",
   description:
-    "API reference for the digithings stack: per-module usage, local deploy, and endpoints. " +
-    "Copy any page as Markdown for AI agents. Self-hosted, open core.",
+    "Self-host, digichat install, architecture overview, and per-module API reference for the " +
+    "digithings stack. Copy any page as Markdown for AI agents. OpenAPI explorer at /docs/api.",
 };
 
-// /docs — full API reference with a tier-grouped sidebar, a doc page per module,
-// and copy-as-Markdown. Generated from the shared module data so it never drifts.
+// /docs — product guides + API reference with a tier-grouped sidebar, a doc page
+// per module, and copy-as-Markdown. Generated from sharedDocs + module data.
 // Server component; statically exported like the rest of the site.
 export default function DocsPage() {
   return (

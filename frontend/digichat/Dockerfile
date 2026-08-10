@@ -16,33 +16,15 @@ RUN npm ci --workspace frontend/digichat --include-workspace-root
 FROM node:22-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
-# next.config.ts imports security-headers.ts, which reads DIGICHAT_EMBED_HOSTS
-# once at import time to compute the embed CSP frame-ancestors list — Next.js
-# evaluates this during `next build` and bakes it into the routes manifest, so
-# it must be passed as a build arg, not just a runtime container env var.
-# Deliberately DIGICHAT_EMBED_HOSTS (plain hostnames), not DIGICHAT_EMBED_TENANTS
-# (which also carries each tenant's secret token) — build-args persist in image
-# layer history and cloud-build logs (az acr build etc.), and the CSP computation
-# never reads the token anyway. DIGICHAT_EMBED_TENANTS stays runtime-only.
-ARG DIGICHAT_EMBED_HOSTS=""
-ENV DIGICHAT_EMBED_HOSTS=$DIGICHAT_EMBED_HOSTS
+# /embed frame-ancestors are set at request time by src/proxy.ts from runtime
+# DIGICHAT_EMBED_HOSTS and/or DIGICHAT_EMBED_TENANTS host keys.
+# Do NOT pass DIGICHAT_EMBED_TENANTS as a build-arg (tokens in layer history).
+# DIGICHAT_EMBED_HOSTS build-arg is unused for CSP after runtime proxy; omit it.
 COPY --from=deps /app ./
 COPY frontend/digiweb/design ./frontend/digiweb/design
 COPY frontend/digiweb/web ./frontend/digiweb/web
 COPY frontend/digichat-ui ./frontend/digichat-ui
 COPY frontend/digichat ./frontend/digichat
-# Tailwind's oxide is the one native tree the root lock cannot supply here:
-# @tailwindcss/oxide-darwin-arm64 4.2.2 is its sole platform entry, so no Linux
-# oxide binary arrives from `npm ci` and @tailwindcss/postcss would fail the
-# build. Everything else is locked and installs itself — @rolldown/binding-linux-x64-musl
-# at 1.2.2 and both lightningcss musl builds (1.33.0 hoisted, 1.32.0 nested) —
-# so pinning those re-fetched a stale rolldown rc and dropped a 1.32.0
-# lightningcss binary over the hoisted 1.33.0 one (#1940 removed the same two
-# from CI). Same reasoning as .github/workflows/test-digichat.yml, which keeps
-# the -gnu binding for its non-Alpine runner; this image is musl/Alpine.
-RUN npm install \
-      @tailwindcss/oxide-linux-x64-musl@4.2.2 \
-      --no-save --no-audit --no-fund
 RUN npm run build --workspace frontend/digichat
 
 FROM node:22-alpine AS runner

@@ -35,6 +35,27 @@ import type { ChatToolCallStatus } from "@digithings/web";
 import type { DigiChatActivity, VaultHitSummary } from "./types";
 
 /**
+ * Ephemeral Foundry ack labels — never chain rows. The session uses a bare
+ * flash caret for progress; these would duplicate it and linger after settle.
+ */
+export const WORKING_LABEL = "Working…";
+
+/** Activities that belong in the tool/trace chain (excludes ephemeral Working…). */
+export function chainActivities(
+  activities: readonly DigiChatActivity[],
+): DigiChatActivity[] {
+  return activities.filter(
+    (a) => !(a.kind === "trace" && a.label === WORKING_LABEL),
+  );
+}
+
+/** Path only when it adds information — Foundry search hits set both to the
+ *  same chunk id (`page__docs___chunk0`), which was rendering twice. */
+export function distinctHitPath(title: string, path: string): string | null {
+  return path && path !== title ? path : null;
+}
+
+/**
  * One rendered row of the agent chain. Each variant names the shared primitive
  * it becomes, and carries only what that primitive's props need.
  */
@@ -50,13 +71,9 @@ export type CanonActivityRow =
       status: ChatToolCallStatus;
       /** Right-aligned head meta — an outcome count, not a timing (see above). */
       meta?: string;
-      /** Retrieved documents, rendered as the fold-out body. */
+      /** Retrieved documents, rendered as the fold-out body of this tool row. */
       sources?: VaultHitSummary[];
-      /**
-       * Start expanded. `ChatToolCall` renders its body ONLY while open, so a
-       * folded row's content is absent from the server markup entirely — see
-       * `toCanonRows` for why citations, and only citations, opt in.
-       */
+      /** Start expanded when a body is attached. */
       defaultOpen?: boolean;
     }
   | {
@@ -89,15 +106,39 @@ export function outcomeMeta(count: number): string {
 /**
  * Projects the wire activities onto canon rows, in order.
  *
- * Index-keyed: the activity list is rebuilt from scratch on every render of a
- * streaming turn (see `toDigiChatActivity`), and rows are append-mostly — so
- * position is the stable identity here, and two rows that stringify the same
- * (a repeated trace label, two identical reasoning blobs) still get distinct
- * React keys.
+ * Keyed by IDENTITY, not position. Position is not stable: `toDigiChatActivity`
+ * appends the reasoning row last, after every tool row, so its index climbs each
+ * time a tool arrives; it also rewrites a row in place from `tool_call` to
+ * `tool_result` (kind is part of any composite key), and its final filter drops
+ * orphaned placeholders, shifting everything after them. Since `ChatThinking`
+ * and `ChatToolCall` are uncontrolled, a changed key is an unmount — so an
+ * index key collapsed a disclosure the reader had opened, mid-stream, and
+ * removed its text from the DOM.
+ *
+ * Reasoning is a singleton per turn, so it keys as itself. Tool rows key on
+ * name+query, which is the identity the producer already groups by internally.
+ * A trailing index still disambiguates genuine duplicates.
  */
+/**
+ * A key that survives the row moving. `reasoning` is one per turn so it needs no
+ * suffix; tool rows carry name+query (the producer's own grouping key) and a
+ * trailing index only to separate true duplicates.
+ */
+function identityKey(activity: DigiChatActivity, i: number): string {
+  switch (activity.kind) {
+    case "reasoning":
+      return "reasoning";
+    case "tool_call":
+    case "tool_result":
+      return `tool:${activity.name}|${"query" in activity ? (activity.query ?? "") : ""}`;
+    default:
+      return `${activity.kind}-${i}`;
+  }
+}
+
 export function toCanonRows(activities: readonly DigiChatActivity[]): CanonActivityRow[] {
   return activities.map((activity, i): CanonActivityRow => {
-    const key = `${activity.kind}-${i}`;
+    const key = identityKey(activity, i);
     switch (activity.kind) {
       case "tool_call":
         // Still in flight: no body, so the head renders as a plain row with a
@@ -118,19 +159,10 @@ export function toCanonRows(activities: readonly DigiChatActivity[]): CanonActiv
           ...(activity.query ? { args: activity.query } : {}),
           status: "ok",
           meta: outcomeMeta(activity.count),
-          // A zero-hit result gets no body at all — an expandable block that
-          // folds open onto nothing is worse than a plain settled row.
-          //
-          // Retrieved documents, by contrast, start EXPANDED. The canon folds
-          // tool output by default because it is usually noise, but citations
-          // are the opposite: "I cite real docs rather than guess" is the whole
-          // claim this product makes, and the sources are what lets a reader
-          // check it. Folding them would also put them behind a click —
-          // `ChatToolCall` renders no body at all while closed, so they would
-          // be missing from the server markup, invisible without client JS and
-          // invisible to a crawler. The genuinely noisy rows (reasoning chains,
-          // bare trace steps) stay folded.
-          ...(activity.hits.length ? { sources: activity.hits, defaultOpen: true } : {}),
+          // Retrieved documents fold under this tool row — that is how they
+          // arrived (Foundry retrieve / azure_ai_search_call_output). No
+          // separate Sources panel; the chain is the transcript of the stream.
+          ...(activity.hits.length ? { sources: activity.hits } : {}),
         };
 
       case "trace":
@@ -165,4 +197,76 @@ export function toCanonRows(activities: readonly DigiChatActivity[]): CanonActiv
       }
     }
   });
+}
+
+/**
+ * The step to show in the waiting caret: what the agent is doing *right now*,
+ * or nothing.
+ *
+ * The caret used to cycle a hard-coded script — "thinking", "routing through
+ * digigraph", "gathering context", "composing the answer" — on a ~10s loop
+ * regardless of what was happening. It read as a placeholder because it was
+ * one: none of those words were tied to any real step, and two of them named
+ * a backend this transcript may not even be talking to.
+ *
+ * So the label comes from the stream or there is no label. `undefined` means
+ * the caller shows a bare blinking cursor — an honest "something is happening"
+ * beats a confident sentence about the wrong thing.
+ *
+ * Scans from the end because the newest unfinished step is the current one.
+ * A tool row is "unfinished" until a tool_result for the same name arrives;
+ * matching on name alone (not name+query) is deliberate, since a call's query
+ * is often still empty while it is in flight — that is exactly the case this
+ * has to cover.
+ */
+export function liveActivityLabel(activities: DigiChatActivity[]): string | undefined {
+  const settledTools = new Set<string>();
+  for (let i = activities.length - 1; i >= 0; i -= 1) {
+    const activity = activities[i];
+    switch (activity.kind) {
+      case "tool_result":
+        settledTools.add(activity.name);
+        break;
+      case "tool_call": {
+        if (settledTools.has(activity.name)) break;
+        const query = activity.query?.trim();
+        return query ? `Searching for "${query}"` : "Searching…";
+      }
+      case "trace":
+        if (!activity.done) return activity.label;
+        break;
+      default:
+        break;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Deduped hit list across settled searches on a turn. Kept for callers that
+ * want a flat view; the session renders hits on each tool row instead.
+ */
+export function citationHits(activities: readonly DigiChatActivity[]): VaultHitSummary[] {
+  const out: VaultHitSummary[] = [];
+  const seen = new Set<string>();
+  for (const activity of activities) {
+    if (activity.kind !== "tool_result") continue;
+    for (const hit of activity.hits) {
+      if (seen.has(hit.path)) continue;
+      seen.add(hit.path);
+      out.push(hit);
+    }
+  }
+  return out;
+}
+
+/** Foundry inline markers — `【9:0†source】` — stream as raw answer text.
+ *  Strip so the prose stays human-readable; the chunks already sit on the
+ *  search tool row that produced them. */
+export function stripFoundryCitationMarkers(text: string): string {
+  return text
+    .replace(/\u3010[\d:]+\u2020source\u3011/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/ {2,}/g, " ")
+    .trimEnd();
 }

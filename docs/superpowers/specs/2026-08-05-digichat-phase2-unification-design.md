@@ -8,7 +8,7 @@
 
 Phase 1 shipped a shared `ActivitySpan` vocabulary and made Foundry emit rich `tool_result` rows on the public embed. Two gaps remain before Phase 3 can point `digithings.ai/chat` at the digichat container:
 
-1. **Digivault lives only in Cloudflare.** `frontend/digithings-web/functions/api/chat.ts` (~983 lines) runs the digivault RAG + OpenRouter free-pool agentic loop and streams NDJSON. The digichat container has no equivalent provider, so digithings cannot cut over to one runtime.
+1. **digivault lives only in Cloudflare.** `frontend/digithings-web/functions/api/chat.ts` (~983 lines) runs the digivault RAG + OpenRouter free-pool agentic loop and streams NDJSON. The digichat container has no equivalent provider, so digithings cannot cut over to one runtime.
 2. **Authenticated digichat still dual-emits.** `stream-digigraph-trace.ts` writes gated `data-digichatActivity` plus ungated legacy `data-digigraphTrace` on the auth path because `chat-panel.tsx` still renders `RagSourcesTrace` / `ResearchBriefTrace` off the legacy part. The flat Phase 1 `chat` span cannot carry evidence tier, year, snippet, or a research brief.
 
 Until both land, Phase 3 would either regress digithings chat or re-split auth vs embed UI again.
@@ -28,7 +28,7 @@ Inherited from Phase 1 (`docs/superpowers/specs/2026-08-01-digichat-activity-pro
 | Phase | Scope | Ships |
 |---|---|---|
 | 1 (done) | Activity contract + Foundry enrichment | digichat release — DataTap chain gets rich |
-| 2 (this spec) | Digivault provider in container + digigraph rich mapping; dual-emit deleted | one digichat PR; CF Function still live |
+| 2 (this spec) | digivault provider in container + digigraph rich mapping; dual-emit deleted | one digichat PR; CF Function still live |
 | 3 | `digithings.ai/chat` → iframe; retire CF Function + `useStackChat` | one runtime |
 
 Also inherited:
@@ -45,7 +45,7 @@ Recorded from the Phase 2 brainstorm (2026-08-05):
 1. Extend `ActivityDocument` / digichat-ui `VaultHitSummary` with optional `tier?`, `year?`, `snippet?` (length-capped in sanitize).
 2. `@digithings/digichat-ui` **is** in Phase 2 scope (richer hits + brief rendering) so embed and auth share one renderer.
 3. New allowlisted `brief?: { themes: { label; summary }[]; questions?: string[] }` on `ActivitySpan` for digigraph `graph_update` / research brief.
-4. Digivault secrets: **per-tenant env var NAME refs** on `EmbedBackendConfig` — not raw secrets in tenant JSON; not a single hardwired global digithings key pair; shared UI never sees keys.
+4. digivault secrets: **per-tenant env var NAME refs** on `EmbedBackendConfig` — not raw secrets in tenant JSON; not a single hardwired global digithings key pair; shared UI never sees keys.
 5. Full BYOK parity with the CF Function (OpenRouter / OpenAI / Anthropic / Gemini + free pool + `quota_exhausted`).
 6. **One PR** for full Phase 2 (2a + 2b together).
 7. Parity via **recorded fixture replay** (CF NDJSON + vault RPC → golden `ActivitySpan` / text), not live A/B as the gate.
@@ -87,7 +87,7 @@ Validation rules:
 
 ### Stream contract
 
-- Digivault loop runs in **Node route handlers** (same peer pattern as Foundry).
+- digivault loop runs in **Node route handlers** (same peer pattern as Foundry).
 - Browser receives the **AI SDK UI message stream**, not NDJSON. Mapping from CF NDJSON event kinds to spans is internal to the provider.
 - Every provider emits **only** `data-digichatActivity`. Delete dual-emit, the `data-digigraphTrace` writer, `emitLegacyTracePart`, and chat-panel’s `DigigraphTraceBlock` / `RagSourcesTrace` / `ResearchBriefTrace` / `isDigigraphTracePart`.
 - Cloudflare Function stays until Phase 3.
@@ -172,7 +172,7 @@ Supabase / digivault RPC `VaultHit.body_markdown` is **server-side only** — in
 | `frontend/digichat-ui` | Richer hits + brief activity rendering. |
 | Rate limit helper | New small module or extension of existing digichat limiters — **60/min/IP** on digivault path. Implementation plan decides store (in-memory first if single-replica; Redis/Azure if multi-replica). |
 
-### Digivault event → span mapping
+### digivault event → span mapping
 
 | CF NDJSON kind | ActivitySpan / stream |
 |---|---|
@@ -207,10 +207,10 @@ Inherit Phase 1 disclosure rules; apply them to digivault:
 
 ## Testing
 
-- **Digigraph mapper fixtures:** `rag_sources`, `graph_update`, generic types → expected spans; assert **no** `data-digigraphTrace` on auth or embed paths.
+- **digigraph mapper fixtures:** `rag_sources`, `graph_update`, generic types → expected spans; assert **no** `data-digigraphTrace` on auth or embed paths.
 - **Allowlist guards:** feed spans with undeclared keys / oversized snippet / brief; assert only declared capped fields survive.
 - **activityDetail:** `off` emits nothing; `labels` emits neither documents nor brief; `full` emits both after sanitize; `documentsWithheld` honesty preserved.
-- **Digivault unit tests:** env-name resolve (success + fail-closed), tool-round loop, reasoning-only span rule, BYOK routing, rate-limit 429, document projection never includes `body_markdown`.
+- **digivault unit tests:** env-name resolve (success + fail-closed), tool-round loop, reasoning-only span rule, BYOK routing, rate-limit 429, document projection never includes `body_markdown`.
 - **Parity (gate):** recorded CF NDJSON + vault RPC fixtures replayed through the digivault adapter → golden `ActivitySpan` sequences and assistant text equivalence. Behavior parity, not byte-identical AI SDK vs NDJSON streams.
 - **digichat-ui:** richer hit fields + brief render smoke/unit coverage.
 - **Regression:** existing Foundry / relay / chat-activity suites stay green with thin `{ title, path }` documents still valid.

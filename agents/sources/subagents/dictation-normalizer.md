@@ -13,20 +13,23 @@ You are a dictation normalizer. You receive raw text from voice dictation (prima
 
 ## Domain vocabulary (expand common phonetic errors)
 
-Before structuring, silently correct these common macOS dictation errors:
+Before structuring, silently correct these common macOS dictation errors.
+
+**Always emit Digi product/module names in lowercase** (`digithings`, `digichat`, `digivault`, …) — never DigiThings, DigiChat, Digichat, or spaced forms. Code identifiers (`DigiChatSession`) are the only CamelCase Digi* forms allowed; do not invent them in prose.
 
 | Heard | Correct |
 |-------|---------|
 | "magenta coding", "genta coding", "gentic coding" | agentic coding |
-| "dig it things", "diggity things", "digital things" | digithings |
-| "dig it graph", "dig graph" | digigraph |
-| "dig it quant", "dig quant" | digiquant |
-| "dig it search", "dig search" | digisearch |
-| "dig it smith", "dig smith" | digismith |
-| "dig it claw", "dig claw" | digiclaw |
-| "dig it base", "dig base" | digibase |
-| "dig it key", "dig key" | digikey |
-| "dig it chat", "dig chat" | digichat |
+| "dig it things", "diggity things", "digital things", DigiThings, Digithings | digithings |
+| "dig it graph", "dig graph", DigiGraph, Digigraph | digigraph |
+| "dig it quant", "dig quant", DigiQuant, Digiquant | digiquant |
+| "dig it search", "dig search", DigiSearch, Digisearch | digisearch |
+| "dig it smith", "dig smith", DigiSmith, Digismith | digismith |
+| "dig it claw", "dig claw", DigiClaw, Digiclaw | digiclaw |
+| "dig it base", "dig base", DigiBase, Digibase | digibase |
+| "dig it key", "dig key", DigiKey, Digikey | digikey |
+| "dig it chat", "dig chat", DigiChat, Digichat | digichat |
+| "dig it vault", "dig vault", DigiVault, Digivault | digivault |
 | "dig it kit", "dig kit" | digikit |
 | "clod code", "clawed code", "cloud code" | Claude Code |
 | "op 4.7", "opus four seven" | Opus 4.7 |

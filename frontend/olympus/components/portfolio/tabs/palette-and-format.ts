@@ -130,15 +130,21 @@ const CATEGORY_LABELS: Record<string, string> = {
   fixed_income_intermediate: 'Intermediate Duration',
   fixed_income_long: 'Long Duration',
   fixed_income_tips: 'TIPS',
+  sector_consumer_disc: 'Consumer discretionary',
+  sector_energy: 'Energy',
+  sector_financials: 'Financials',
+  sector_healthcare: 'Healthcare',
   crypto: 'Crypto',
   international: 'International',
   cash: 'Cash',
+  unknown: 'Uncategorized',
   uncategorized: 'Uncategorized',
 };
 
 export function formatAllocationCategory(cat: string | null | undefined): string {
   if (!cat) return 'Uncategorized';
-  return CATEGORY_LABELS[cat] || cat.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const key = cat.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return CATEGORY_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export const PM_DOC_ORDER = [

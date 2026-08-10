@@ -1,0 +1,14 @@
+# Profile A digigraph mode defaults (test / medium / best).
+# Mounted at DIGI_CONFIG_PATH=/app/config. Override via DIGI_LLM_MODE in .env.
+#
+# Provider routing (from model string prefix):
+#   openrouter/…  → OPENROUTER_API_KEY
+#   groq/…        → GROQ_API_KEY
+#   openai/…      → OPENAI_API_KEY (via LiteLLM when OPENAI_API_BASE points at proxy)
+
+defaults:
+  test: openrouter/deepseek/deepseek-chat
+  medium: openrouter/deepseek/deepseek-v4-flash
+  best: openrouter/google/gemini-2.5-flash
+
+phase_models: {}

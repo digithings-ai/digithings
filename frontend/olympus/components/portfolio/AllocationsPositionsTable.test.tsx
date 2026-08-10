@@ -81,9 +81,10 @@ describe('AllocationsPositionsTable', () => {
 
   it('shows the category directly in each position row', () => {
     const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
-      reconciliation: recon([pos({ ticker: 'NVDA', sector_bucket: 'Technology' })]),
+      reconciliation: recon([pos({ ticker: 'XLY', category: 'sector-consumer-disc' })]),
     }));
-    expect(html).toContain('Equity');
+    expect(html).toContain('Consumer discretionary');
+    expect(html).not.toContain('Sector-Consumer-Disc');
   });
 
   it('identifies each ticker with its canonical official name', () => {

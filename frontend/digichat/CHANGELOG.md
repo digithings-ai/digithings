@@ -1,5 +1,75 @@
 # Changelog
 
+## [1.0.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.9.3...digichat-v1.0.0) (2026-08-10)
+
+
+### Features
+
+* **digichat:** digigraph-centric adapters and digithings.ai cutover ([#2013](https://github.com/digithings-ai/digithings/issues/2013)) ([573b815](https://github.com/digithings-ai/digithings/commit/573b8157dd6a7d1c9ef516ba929266b9816b12d6))
+* **digichat:** digithings dogfood completion ([6bd3a9d](https://github.com/digithings-ai/digithings/commit/6bd3a9ddae9c5076259f79cf9dd35d087a208ba3))
+* **digichat:** Profile A/B overlays + self-hosted install/deploy docs (Tasks 3–8) ([#2022](https://github.com/digithings-ai/digithings/issues/2022)) ([1993606](https://github.com/digithings-ai/digithings/commit/199360647b0436c0f7debc759983d8a2ec47a563))
+* **digichat:** runtime CSP frame-ancestors for stock GHCR ([#2031](https://github.com/digithings-ai/digithings/issues/2031)) ([2c30ee4](https://github.com/digithings-ai/digithings/commit/2c30ee40c30fe95edb23f4d4985d7d19e8329d44))
+* **digichat:** simplify embed gate for dogfood slice 1 ([4d05075](https://github.com/digithings-ai/digithings/commit/4d0507548145e13025a66c5d2b0baf737a700430)), closes [#2045](https://github.com/digithings-ai/digithings/issues/2045)
+* **digithings:** dogfood cutover — client [#0](https://github.com/digithings-ai/digithings/issues/0) onboard + auth Option A ([#2037](https://github.com/digithings-ai/digithings/issues/2037)) ([df14c20](https://github.com/digithings-ai/digithings/commit/df14c20e256396e1d069f4197ae75ba8660dc95d))
+* free-tier digithings LLM + BYOK (digigraph + digichat) ([#2048](https://github.com/digithings-ai/digithings/issues/2048)) ([0f0498e](https://github.com/digithings-ai/digithings/commit/0f0498ea8d14f460078812d816d24083e202d709))
+* **occ:** client [#1](https://github.com/digithings-ai/digithings/issues/1) chat at digithings.ai/chat/occ ([209a870](https://github.com/digithings-ai/digithings/commit/209a870ac762777592af4463bb017f14db5fc9b7))
+* **occ:** client [#1](https://github.com/digithings-ai/digithings/issues/1) chat demo with corpus routing ([4f7f5c3](https://github.com/digithings-ai/digithings/commit/4f7f5c3726e12ff8687e44d4663c1edf81169385))
+
+
+### Bug Fixes
+
+* **digichat,digigraph:** prefer-const and ruff format for dogfood CI ([db4b325](https://github.com/digithings-ai/digithings/commit/db4b3253b6fb76db0e83ed75563b1cab3b34fa88))
+* **digichat:** embed dogfood contrast and ungated error UX ([6fee5e3](https://github.com/digithings-ai/digithings/commit/6fee5e3b5b77a9167404120cfc17ae7b7fd12b23))
+* **digichat:** hide bare graph_update from activity chain ([e419830](https://github.com/digithings-ai/digithings/commit/e4198303d0eb3b5f98ca9b213f183d530c0f0dad))
+* **digichat:** opt out of OpenWebUI chrome for dogfood stream ([ea725b2](https://github.com/digithings-ai/digithings/commit/ea725b21761e1f6f99d8b7a954587af2326f0d5e))
+* **digichat:** readable Sources rows for dogfood RAG traces ([899b802](https://github.com/digithings-ai/digithings/commit/899b80202555aa4b0cfee3b150eaea48365d7502)), closes [#2045](https://github.com/digithings-ai/digithings/issues/2045)
+* **digichat:** remove unused status bar chrome ([7959f4d](https://github.com/digithings-ai/digithings/commit/7959f4d7222ff5e3a774ebec874672ea83daa680))
+* **digichat:** restore wordmark header without status bar ([2f4fec8](https://github.com/digithings-ai/digithings/commit/2f4fec8c23658562eedb4fd24d5e9feacb70ed7f))
+* **digiquant:** Nautilus image + digichat self-hosted docs follow-up ([#2015](https://github.com/digithings-ai/digithings/issues/2015)) ([bb14aec](https://github.com/digithings-ai/digithings/commit/bb14aec6bce34673879cc91f74858775235a81a7))
+* **dogfood:** clean answer prose and force dual-sink retrieval ([c1aa684](https://github.com/digithings-ai/digithings/commit/c1aa6840efcdf4d6488dd05144a1eccb921033a1))
+
+## [0.9.3](https://github.com/digithings-ai/digithings/compare/digichat-v0.9.2...digichat-v0.9.3) (2026-08-08)
+
+
+### Bug Fixes
+
+* **digichat:** flush FoundryToolLeakFilter's held buffer at stream end ([#2000](https://github.com/digithings-ai/digithings/issues/2000)) ([605d9bd](https://github.com/digithings-ai/digithings/commit/605d9bdde2f855b89e143caaa71c075165a054b8))
+* **digichat:** resolve embed tenant theme server-side to kill the load flash ([#2002](https://github.com/digithings-ai/digithings/issues/2002)) ([5284970](https://github.com/digithings-ai/digithings/commit/52849702cc309036581cfeef580cefd59ca3ea22))
+
+## [0.9.2](https://github.com/digithings-ai/digithings/compare/digichat-v0.9.1...digichat-v0.9.2) (2026-08-08)
+
+
+### Bug Fixes
+
+* **chat:** mermaid diagrams with punctuation in node labels now render instead of falling back to source ([#1996](https://github.com/digithings-ai/digithings/issues/1996))
+
+## [0.9.1](https://github.com/digithings-ai/digithings/compare/digichat-v0.9.0...digichat-v0.9.1) (2026-08-07)
+
+
+### Features
+
+* **digichat:** map Foundry azure_ai_search activity into the shared digichat chain
+
+
+### Bug Fixes
+
+* **digichat:** progressive tool stream + bare wait caret; fourth-turn trial form polish ([#1983](https://github.com/digithings-ai/digithings/issues/1983))
+
+## [0.9.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.8.0...digichat-v0.9.0) (2026-08-07)
+
+
+### Features
+
+* **chat:** ship the house type-out as digichat's waiting state ([c98ceab](https://github.com/digithings-ai/digithings/commit/c98ceab87ea8b6aa5f73550e567de40632908444))
+* **chat:** ship the house type-out as digichat's waiting state ([3656503](https://github.com/digithings-ai/digithings/commit/365650323cd92014990d60ac832fc9df8e9b67fa))
+* **digichat:** unify the chat UI — canon transcript, mermaid/LaTeX, centred embed ([ead37ba](https://github.com/digithings-ai/digithings/commit/ead37baec4a0063f7c8a77eb8add362bbc73c73e))
+
+
+### Bug Fixes
+
+* **chat:** repair what the in-session review of [#1971](https://github.com/digithings-ai/digithings/issues/1971) found ([ab54c67](https://github.com/digithings-ai/digithings/commit/ab54c679d9b4a05e2a11a95b04563eeaecd38d4c))
+* **design-system:** scope KaTeX to math-rendering apps, and correct what [#1941](https://github.com/digithings-ai/digithings/issues/1941) and [#1940](https://github.com/digithings-ai/digithings/issues/1940) claimed ([#1948](https://github.com/digithings-ai/digithings/issues/1948)) ([286fc87](https://github.com/digithings-ai/digithings/commit/286fc875489e4c62a283b08d956fb6ffd4d793dd))
+
 ## [0.8.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.7.0...digichat-v0.8.0) (2026-08-06)
 
 
@@ -31,7 +101,7 @@
 * **digichat:** parse independent embed UI flags from tenant config ([984c0d6](https://github.com/digithings-ai/digithings/commit/984c0d6c3167161a2adc0f211370b951b825dd87))
 * **digichat:** Phase 2 unification — digivault port + digigraph rich mapping ([#1859](https://github.com/digithings-ai/digithings/issues/1859)) ([8f56e17](https://github.com/digithings-ai/digithings/commit/8f56e1783c62d93131472707daef6c61b918412f))
 * **digichat:** project embed UI flags through tenant-config API ([e4373f0](https://github.com/digithings-ai/digithings/commit/e4373f031d058f26467fa82970e1c8de871fc199))
-* **digichat:** scaffold DigiThings DigiChat on Cloudflare Containers ([032493e](https://github.com/digithings-ai/digithings/commit/032493e33b6a22525769319d51724683626b3085))
+* **digichat:** scaffold digithings digichat on Cloudflare Containers ([032493e](https://github.com/digithings-ai/digithings/commit/032493e33b6a22525769319d51724683626b3085))
 * **digichat:** shared activity protocol (unification phase 1) ([#1817](https://github.com/digithings-ai/digithings/issues/1817)) ([32f8e92](https://github.com/digithings-ai/digithings/commit/32f8e92626c2ffe905cd5a8bfd8d0806c9ceebbd))
 * **digichat:** wire ready/seed protocol into embed session ([2a6c075](https://github.com/digithings-ai/digithings/commit/2a6c0752bcc1a50cf25c7954051e68e63d02cd4e))
 * **website:** Phase 3 Pages-native digichat-ui (no Containers) ([eefac60](https://github.com/digithings-ai/digithings/commit/eefac60179db807088335cca1f6177a5183dbb70))

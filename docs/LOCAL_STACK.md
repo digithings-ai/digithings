@@ -41,6 +41,7 @@ flowchart TB
 | Path | Command | digikey | Best for |
 |------|---------|---------|----------|
 | **A — Compose core** | `make up` | Container `:8005` | JWT parity with production-style compose; digisearch uses Chroma volume `digisearch_chroma`. |
+| **A′ — Profile A bundle** | `make digichat-profile-a-bundle-up` | Inside one stack image `:8005` | Website digichat / CF parity — one supervisord container instead of N services. See [`frontend/digithings-stack-cloudflare/README.md`](../frontend/digithings-stack-cloudflare/README.md). |
 | **B — Host Python** | `make stack-local` | Process `:8005` ([scripts/run_stack_local.sh](../scripts/run_stack_local.sh)) | Fast backend iteration without Docker; same ports as Compose (4000, 8000–8005). |
 | **C — digichat in Docker** | `docker compose --profile digichat up -d` | `DIGIKEY_URL=http://digikey:8005` | Postgres + UI container; no local Node. |
 

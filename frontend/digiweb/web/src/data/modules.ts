@@ -303,8 +303,8 @@ export const modules: ModuleNode[] = [
     role: "Markdown vault · wikilinks · backlinks",
     tagline: "A folder of markdown notes, served over HTTP — frontmatter, wikilinks and backlinks.",
     summary: [
-      "An Obsidian-style vault service: it manages a folder of markdown notes with YAML frontmatter, [[wikilinks]], tags and a folder taxonomy, and answers over HTTP rather than asking callers to walk the filesystem.",
-      "Routes cover listing, reading and creating notes, renaming with backlink repair, backlink and tag lookups, and a lint report. Two more — orchestrator_tools and orchestrator_invoke — expose the vault to DigiGraph as callable tools. Runs behind the `digivault` compose profile, so it is opt-in rather than up by default.",
+      "An Obsidian-style vault service: it manages a folder of markdown notes with YAML frontmatter, wikilinks, tags and a folder taxonomy, and answers over HTTP rather than asking callers to walk the filesystem.",
+      "Routes cover listing, reading and creating notes, renaming with backlink repair, backlink and tag lookups, and a lint report. Two more — orchestrator_tools and orchestrator_invoke — expose the vault to digigraph as callable tools. Runs behind the `digivault` compose profile, so it is opt-in rather than up by default.",
     ],
     stack: [
       { name: "FastAPI", icon: "fastapi" },

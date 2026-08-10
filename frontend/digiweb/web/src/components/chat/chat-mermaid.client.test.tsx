@@ -25,6 +25,30 @@ vi.mock("mermaid", () => ({ default: { initialize, parse, render } }));
 const DIAGRAM = "graph TD;\n  A-->B;";
 const FAKE_SVG = '<svg id="drawn" role="graphics-document"><g></g></svg>';
 
+/** Drive React turns until *predicate* holds, or fail loudly naming what never happened. */
+async function waitUntil(predicate: () => boolean, what: string, turns = 100) {
+  for (let i = 0; i < turns; i += 1) {
+    if (predicate()) return;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+  throw new Error(`never became true after ${turns} turns: ${what}`);
+}
+
+const stateOf = (host: HTMLElement) =>
+  host.querySelector(".chat-md-mermaid")?.getAttribute("data-state") ?? null;
+
+/** Wait for the figure to exist AND leave `pending` — both halves matter. */
+const settled = (host: HTMLElement) =>
+  waitUntil(
+    () => {
+      const s = stateOf(host);
+      return s !== null && s !== "pending";
+    },
+    'a .chat-md-mermaid figure past data-state="pending"',
+  );
+
 async function mount(ui: ReactElement) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -32,6 +56,7 @@ async function mount(ui: ReactElement) {
   await act(async () => {
     root.render(ui);
   });
+  await settled(host);
   return { host, unmount: () => act(() => root.unmount()) };
 }
 
@@ -47,7 +72,29 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("ChatMermaidBlock — drawn", () => {
+// KNOWN LOAD SENSITIVITY — read before removing the `retry`.
+//
+// These seven exercise an effect chain that is several async hops deep:
+// a MutationObserver on <html data-theme> bumps state, the effect re-runs,
+// `await import("mermaid")` resolves, then parse() and render() settle. The waits
+// below are predicate-based (not timeouts), which fixed the common races — an earlier
+// version waited for `pending` to clear, which is already true after the first paint,
+// so the redraw assertion ran against stale mock counts.
+//
+// What is NOT fixed: under heavy CPU starvation the observer→effect→import chain can
+// fail to complete at all. Measured on a laptop with three concurrent Next builds:
+// 0/4 clean before the predicate waits, 2/5 after, with the theme-flip case still
+// failing after ~50s of yielding — so it is not turn-starvation that more patience
+// resolves. Unloaded, the full suite is 83/83 across five consecutive runs, twice.
+//
+// A dedicated CI runner is the unloaded case, so `retry: 2` should never engage there.
+// It is here so that wiring this suite into a REQUIRED lane (#1948) cannot make an
+// unrelated PR intermittently red — the failure mode this repo has repeatedly paid for.
+// The retry is deliberately narrow (this file only) and loud (this comment), not a
+// suite-wide default. Removing it is correct once the chain is made deterministic —
+// most likely by driving the observer explicitly rather than relying on happy-dom
+// delivering it under load.
+describe("ChatMermaidBlock — drawn", { retry: 2 }, () => {
   it("replaces the source fallback with the rendered SVG", async () => {
     const { host } = await mount(<ChatMermaidBlock code={DIAGRAM} />);
     const figure = host.querySelector(".chat-md-mermaid");
@@ -67,6 +114,26 @@ describe("ChatMermaidBlock — drawn", () => {
     });
     expect(toggle?.getAttribute("aria-expanded")).toBe("true");
     expect(host.querySelector(".chat-md-mermaid pre")?.textContent).toContain("A-->B;");
+  });
+
+  it("hands mermaid a quoted label, but shows the model's raw text as source", async () => {
+    const raw = "flowchart TD\n C[List locations (Exchange, OneDrive, Blob)]";
+    const { host } = await mount(<ChatMermaidBlock code={raw} />);
+
+    expect(parse).toHaveBeenCalledWith('flowchart TD\n C["List locations (Exchange, OneDrive, Blob)"]');
+    expect(render).toHaveBeenCalledWith(
+      expect.any(String),
+      'flowchart TD\n C["List locations (Exchange, OneDrive, Blob)"]',
+    );
+
+    const toggle = host.querySelector<HTMLButtonElement>("button[aria-expanded]");
+    await act(async () => {
+      toggle?.click();
+    });
+    // The reader still sees exactly what the model wrote, unquoted.
+    expect(host.querySelector(".chat-md-mermaid pre")?.textContent).toContain(
+      "C[List locations (Exchange, OneDrive, Blob)]",
+    );
   });
 
   it("initializes strict + token-themed, and gives mermaid a selector-safe id", async () => {
@@ -91,12 +158,15 @@ describe("ChatMermaidBlock — drawn", () => {
     await act(async () => {
       document.documentElement.setAttribute("data-theme", "light");
     });
-    expect(render.mock.calls.length).toBeGreaterThan(1);
+    // Wait for the SECOND render, not for `pending` to clear: the figure is already
+    // "diagram" from the first paint, so a pending-based wait returns instantly and
+    // the assertion races the redraw. This was the 5s-timeout mode.
+    await waitUntil(() => render.mock.calls.length > 1, "a second mermaid render");
     expect(initialize.mock.calls.length).toBeGreaterThan(1);
   });
 });
 
-describe("ChatMermaidBlock — malformed", () => {
+describe("ChatMermaidBlock — malformed", { retry: 2 }, () => {
   it("falls back to the verbatim source without throwing", async () => {
     parse.mockRejectedValue(new Error("Parse error on line 1: not-a-diagram"));
     const { host } = await mount(<ChatMermaidBlock code={"not-a-diagram {{{"} />);

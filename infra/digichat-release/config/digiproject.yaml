@@ -1,0 +1,59 @@
+# Profile A digiproject — website digichat / OCC (chat-only).
+# Mounted at /app/config/digiproject.yaml in the digithings-stack image.
+#
+# Intentional omissions:
+#   - digiquant / backtest / optimize (no DIGIQUANT_DATA_DIR, no :8001)
+#   - digismith HTTP (tracing library only)
+#
+# Multi-tenant corpus routing (digithings vs OCC) uses digichat headers
+# (X-Digi-Corpus-Index / X-Digi-Vault-Prefix) and DIGI_TENANT_CORPUS_MAP —
+# not separate digigraph processes.
+# Spec: docs/spec/project-spec-v1alpha1.md
+
+project:
+  name: digithings-profile-a
+  description: "Profile A chat-only digigraph (digisearch + digivault; no digiquant)"
+  version: "0.1.0"
+
+graph:
+  workflow_profile: research_rag
+
+skills:
+  enabled:
+    - search
+    - digivault
+
+agents:
+  enabled:
+    - research
+  llm_mode: test
+  # Skip ResearchBrief post-pass so SSE ends when answer text completes.
+  research_brief: false
+  allowed_tools:
+    - digisearch
+    - digivault_search_notes
+  always_retrieve_tools:
+    - digisearch
+    - digivault_search_notes
+  research_system_prompt: |
+    You are a documentation and help assistant powered by digigraph.
+
+    Ground every answer in retrieved context from digisearch and/or
+    digivault_search_notes. Always cite source paths or help article URLs from
+    metadata. Use lowercase digi product names in prose (digichat, digigraph,
+    digivault, digisearch, digikey, digithings).
+
+    Do not invent features, pricing, or capabilities not present in the retrieved
+    sources. Do not propose trading strategies, backtests, or digiquant workflows —
+    this deployment has no digiquant. If the corpus has no grounded answer, say so
+    clearly.
+
+indexes:
+  - name: digithings_docs
+    backend: chroma
+
+services:
+  digisearch_url: ${DIGISEARCH_URL:-http://127.0.0.1:8002}
+  digivault_url: ${DIGIVAULT_URL:-http://127.0.0.1:8004}
+  # Explicitly empty — Profile A does not run digiquant.
+  digiquant_url: ""

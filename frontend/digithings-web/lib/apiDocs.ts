@@ -598,14 +598,54 @@ for hit in r.json()["results"]:
           },
         ],
       },
+      {
+        method: "GET",
+        path: "/api/conversations",
+        summary: "List persisted conversations (Docker BFF).",
+        auth: "session",
+      },
+      {
+        method: "POST",
+        path: "/api/conversations",
+        summary: "Create a conversation (Docker BFF).",
+        auth: "session",
+      },
+      {
+        method: "GET",
+        path: "/api/conversations/{id}",
+        summary: "Fetch one conversation (Docker BFF).",
+        auth: "session",
+      },
+      {
+        method: "DELETE",
+        path: "/api/conversations/{id}",
+        summary: "Delete a conversation (Docker BFF).",
+        auth: "session",
+      },
+      {
+        method: "GET",
+        path: "/api/ecosystem/config",
+        summary: "Ecosystem config for the chat shell.",
+        auth: "none / session",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/chat",
+        summary: "OpenAI-compatible chat proxy through the BFF.",
+        auth: "session",
+      },
+    ],
+    notes: [
+      "Committed OpenAPI: docs/openapi/digichat.json (authored; path existence checked in tests/contracts).",
+      "Self-host: make up-ghcr-digichat pulls ghcr.io/digithings-ai/digichat (see infra/self-host/compose.ghcr.yml).",
     ],
   },
 
   // ─────────────────────────────────────────────────────────────────────────
   digiclaw: {
-    authNote: "CLI-only — no HTTP service. A heartbeat runner pings service health and appends an immutable audit log.",
+    authNote: "CLI-only — no HTTP service / OpenAPI. Heartbeat runner pings service health and appends an immutable audit log. Container image: ghcr.io/digithings-ai/digiclaw (Compose profile heartbeat).",
     run: {
-      cli: "python -m digiclaw            # one cycle\ndocker compose --profile heartbeat up -d heartbeat",
+      cli: "python -m digiclaw            # one cycle\ndocker compose --profile heartbeat up -d heartbeat\n# GHCR: docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml --profile heartbeat up -d",
     },
     env: [
       { name: "DIGIGRAPH_URL", description: "digigraph base URL for health checks." },
@@ -646,7 +686,7 @@ for hit in r.json()["results"]:
   // ─────────────────────────────────────────────────────────────────────────
   digivault: {
     authNote:
-      "DigiAuthMiddleware with a per-path scope map: digivault:read for reads and for both orchestrator routes, digivault:write for mutations. /v1/orchestrator_invoke is gated at read because most of its tools are reads — the one mutating tool re-checks digivault:write in the handler, so a read-only caller cannot reach it through the shared endpoint.",
+      "`DigiAuthMiddleware` with a per-path scope map: digivault:read for reads and for both orchestrator routes, digivault:write for mutations. /v1/orchestrator_invoke is gated at read because most of its tools are reads — the one mutating tool re-checks digivault:write in the handler, so a read-only caller cannot reach it through the shared endpoint.",
     run: {
       cli: "docker compose --profile digivault up -d digivault   # opt-in profile, not up by default\ndigivault lint --root ./docs/vision",
     },
@@ -661,7 +701,7 @@ for hit in r.json()["results"]:
       { signature: "GET /v1/notes/{name}", description: "Read one note — body plus parsed YAML frontmatter." },
       { signature: "POST /v1/notes", description: "Create a note. Requires digivault:write." },
       { signature: "PATCH /v1/notes/{name}/frontmatter", description: "Update frontmatter in place." },
-      { signature: "POST /v1/notes/{name}/rename", description: "Rename a note and repair the [[wikilinks]] pointing at it." },
+      { signature: "POST /v1/notes/{name}/rename", description: "Rename a note and repair the wikilinks pointing at it." },
       { signature: "GET /v1/notes/{name}/backlinks", description: "Every note linking to this one." },
       { signature: "GET /v1/tags/{tag}", description: "Notes carrying a tag." },
       { signature: "GET /v1/lint", description: "Vault health: broken wikilinks, missing frontmatter, taxonomy drift." },
@@ -669,7 +709,7 @@ for hit in r.json()["results"]:
       { signature: "POST /v1/orchestrator_invoke", description: "Invoke one of those tools by name." },
     ],
     notes: [
-      "The vault is a folder of markdown files — YAML frontmatter, [[wikilinks]], tags, folder taxonomy. There is no database; the filesystem is the store.",
+      "The vault is a folder of markdown files — YAML frontmatter, wikilinks, tags, folder taxonomy. There is no database; the filesystem is the store.",
       "Its first consumer is this repository's own docs/vision/, which scripts/gen-api-vault.ts generates from the same module registry this page is built from.",
     ],
   },

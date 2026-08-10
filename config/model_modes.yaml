@@ -1,5 +1,11 @@
 # Legacy digigraph mode defaults (test / medium / best) + optional per-phase overrides.
 #
+# ``llm_mode`` is an access/cost *policy*, not a product catalog:
+#   free   → resolved model must be free-tier capable (:free / ollama); pin via
+#            agents.llm or DIGI_LLM_PROVIDER/DIGI_LLM_MODEL — do NOT add a free:
+#            slug here (OpenRouter free roster rotates).
+#   test / medium / best → tier semantics; defaults below are local-dev fallbacks.
+#
 # Atlas/Hermes phase routing is centralized in config/olympus_models.yaml
 # (capability tier × OLYMPUS_MODEL_TIER). Entries here override that policy when
 # you need to pin a model for a single phase — frontier models (openai/*, anthropic/*,
