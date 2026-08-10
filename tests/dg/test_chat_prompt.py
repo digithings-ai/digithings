@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digigraph.chat_prompt import messages_to_workflow_prompt
 from digigraph.models import ChatMessage
 
