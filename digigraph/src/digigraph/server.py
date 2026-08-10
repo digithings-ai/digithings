@@ -265,9 +265,14 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
         updates["research_system_prompt_override"] = corpus.research_system_prompt
     # Per-request response language (X-Digi-Language) — a per-request signal, not a
     # tenant-derived value, so it's read directly rather than via resolve_corpus_override.
+    # Never interpolated into a prompt (resolve_language_directive only ever emits
+    # mapped display names for curated 2-char codes), but capped defensively before
+    # it reaches WorkflowRequest/checkpointed state — an arbitrarily long header value
+    # has no business sitting in checkpoint storage. Curated codes are 2 characters,
+    # so 16 is generous headroom, not a functional constraint.
     lang = http_request.headers.get("x-digi-language")
     if lang and lang.strip():
-        updates["response_language"] = lang.strip().lower()
+        updates["response_language"] = lang.strip().lower()[:16]
     return updates
 
 

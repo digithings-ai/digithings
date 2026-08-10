@@ -108,12 +108,34 @@ def test_digi_fields_from_request_omits_language_when_header_absent() -> None:
     assert "response_language" not in updates
 
 
+def test_digi_fields_from_request_caps_an_overlong_language_header() -> None:
+    """Defense-in-depth: an arbitrarily long X-Digi-Language header must not
+
+    sit in WorkflowRequest/checkpointed state verbatim (see #2103 final
+    review, Minor finding A). It's never interpolated into a prompt
+    (resolve_language_directive only ever emits mapped display names), but a
+    length cap keeps an oversized value out of checkpoint storage. Curated
+    codes are 2 characters, so the cap is generous headroom, not a functional
+    constraint.
+    """
+    request = SimpleNamespace(state=SimpleNamespace(), headers={"x-digi-language": "x" * 5000})
+    updates = _digi_fields_from_request(request)
+    assert len(updates["response_language"]) <= 16
+
+
 def test_language_lists_stay_in_sync_with_frontend() -> None:
     """Cross-check digigraph.languages.LANGUAGE_NAMES against the TS curated
 
     list so a language added to one side without the other is caught here,
     rather than silently returning None from resolve_language_directive (see
     #2103 final review, Fix 3).
+
+    Only a MISSING frontend file skips — that's a legitimate "the file moved"
+    case. Once the file exists, failing to locate/parse the LANGUAGES array
+    literal is a hard FAILURE, not a skip (see #2103 final review, Minor
+    finding B): that outcome means the sync check itself has silently stopped
+    working (e.g. the regex drifted from the source's actual shape), which
+    must never read as green in CI.
     """
     frontend_path = (
         Path(__file__).resolve().parents[2]
@@ -133,14 +155,23 @@ def test_language_lists_stay_in_sync_with_frontend() -> None:
         re.DOTALL,
     )
     if not match:
-        pytest.skip("could not locate LANGUAGES array literal in frontend languages.ts")
+        pytest.fail(
+            f"could not locate LANGUAGES array literal in {frontend_path} — "
+            "the sync check regex no longer matches the frontend source (file "
+            "exists, so this is not a legitimate skip)"
+        )
 
     pairs = re.findall(
         r'\{\s*code:\s*"([^"]+)",\s*label:\s*"([^"]+)"\s*\}',
         match.group(1),
     )
     if not pairs:
-        pytest.skip("LANGUAGES array literal matched but no {code, label} pairs were parsed")
+        pytest.fail(
+            f"LANGUAGES array literal matched in {frontend_path} but no "
+            "{code, label} pairs were parsed — the sync check regex no longer "
+            "matches the frontend source (file exists, so this is not a "
+            "legitimate skip)"
+        )
 
     frontend_languages = {code: label for code, label in pairs}
     assert frontend_languages == LANGUAGE_NAMES
