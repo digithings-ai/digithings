@@ -29,9 +29,13 @@ themselves should use [`infra/digichat-release/`](../digichat-release/) and
 
 - digithings has **no Azure**.
 - DataTap digichat ACA is **client-only**.
-- Workers Free: no Cloudflare Containers for digichat Node — run digichat + stack on
-  operator infra (Docker Compose) and expose digichat via **Cloudflare Tunnel**.
 - Chat UI is **digithings.ai only** — do **not** add a digiquant.io `/chat` page.
+- **Preferred digichat host (Workers Paid):** Cloudflare Containers — see
+  [`frontend/digichat-cloudflare/README.md`](../../frontend/digichat-cloudflare/README.md).
+  One Container serves digithings + OCC (and future) tenants; website paths differ,
+  digichat process does not.
+- **Fallback (no Paid):** operator Compose + Cloudflare Tunnel
+  (`digichat.digithings.ai`) as below.
 
 ## Auth (Option A)
 
@@ -101,20 +105,31 @@ export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":[
 
 Set `DIGICHAT_EMBED_HOSTS` (and/or tenant host keys) at **runtime** so CSP `frame-ancestors` includes digithings.ai — no digichat image rebuild. **Do not** add digiquant.io to embed hosts for chat (crawl-only). OCC uses virtual host `occ.digithings.ai` (no DNS) for `/chat/occ` — see [`docs/projects/online-compliance-center/README.md`](../../docs/projects/online-compliance-center/README.md).
 
-## Cloudflare Tunnel
+## Cloudflare Containers (preferred)
+
+See [`frontend/digichat-cloudflare/README.md`](../../frontend/digichat-cloudflare/README.md).
+
+1. Upgrade digithings Cloudflare account to **Workers Paid**.
+2. Deploy Worker + digichat Container; enable zone routes for `/embed*`, digichat
+   APIs, `/_dtchat*`.
+3. Keep digigraph / digikey / LiteLLM / digivault on Profile A (or Compose);
+   set Container secrets `DIGIGRAPH_INTERNAL_URL`, `DIGIKEY_*`.
+4. Pages: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai` (same host).
+
+## Cloudflare Tunnel (fallback without Paid)
 
 1. Install `cloudflared` on the host that runs digichat (port 3005).
 2. Create a tunnel; route public hostname e.g. `digichat.digithings.ai` → `http://127.0.0.1:3005`.
-3. Pages (digithings-web) build env:
-   - `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digichat.digithings.ai`
+3. Pages: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digichat.digithings.ai`.
 4. digithings-web `npm prebuild` writes `public/_headers` `frame-src` from that
-   same env (see `lib/security-headers.mjs`) — no manual CSP edit per host.
+   same env (see `lib/security-headers.mjs`).
 
-## digithings.ai `/chat`
+## digithings.ai `/chat` and `/chat/occ`
 
-Static Pages shell (`DtNav` + iframe) loads
-`${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}/embed?host=digithings.ai` (first-party hosts
-skip embed token). The Pages Function OpenRouter digivault loop is **retired**.
+Static Pages shells (`DtNav` + iframe) load
+`${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}/embed?host=digithings.ai` or
+`…?host=occ.digithings.ai` — **one** digichat Node/Container, two tenants.
+The Pages Function OpenRouter digivault loop is **retired**.
 
 ## CSP verification (Stage 6)
 
@@ -155,5 +170,6 @@ The `research_system_prompt` steers “how is this chat built?” answers to
 
 ## Historical note
 
-The `frontend/digichat-cloudflare/` Workers Paid Containers scaffold was removed
-2026-08-06. Recover from git history only if digithings adopts Workers Paid later.
+Containers scaffold lives at `frontend/digichat-cloudflare/` again (#2073).
+Earlier deletion (#1949) assumed Workers Free forever; Paid unlocks same-hostname
+digichat without a separate Tunnel hostname.
