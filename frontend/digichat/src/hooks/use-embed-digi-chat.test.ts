@@ -1,9 +1,13 @@
-import { describe, it, expect, beforeEach } from "vitest";
+// @vitest-environment happy-dom
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import type { UIMessage } from "ai";
 import {
   isEmbedTrialUnlockedAtSend,
   chatAccessTokenAtSend,
   uiMessageToDigiChat,
+  useEmbedDigiChat,
 } from "./use-embed-digi-chat";
 import { ACTIVITY_PART_TYPE } from "@/lib/chat-activity";
 import {
@@ -11,6 +15,128 @@ import {
   writeTrialUnlocked,
   writeChatAccessToken,
 } from "@/lib/embed-gate";
+
+// prepareSendMessagesRequest is a closure built inside useMemo(() => new
+// DefaultChatTransport({...})) in use-embed-digi-chat.ts — there is no
+// existing harness in this file for asserting on its output (the other
+// describe blocks below only exercise plain exported functions). Capture the
+// real config DefaultChatTransport is constructed with so the assertions
+// below run against the actual closure, not a reimplementation of it.
+//
+// This intentionally does NOT use @testing-library/react's renderHook: in
+// this npm workspace, @testing-library/react is hoisted to the repo-root
+// node_modules and resolves "react"/"react-dom" from there, while this hook
+// file (frontend/digichat/src/hooks/) resolves "react" from digichat's own
+// local node_modules — a different react version. Rendering with one copy
+// while the hook calls useMemo/useCallback from the other trips React's
+// "Invalid hook call" (mismatched dispatcher). Importing react/react-dom
+// directly from this test file resolves the same local copy the hook under
+// test uses, so a minimal hand-rolled render harness sidesteps the conflict
+// without touching workspace-wide dependency/config files.
+type PrepareSendMessagesRequestResult = { headers: Record<string, string>; body: unknown };
+type PrepareSendMessagesRequestFn = (args: {
+  messages: UIMessage[];
+  body?: unknown;
+}) => PrepareSendMessagesRequestResult | Promise<PrepareSendMessagesRequestResult>;
+
+let capturedTransportConfig: { prepareSendMessagesRequest: PrepareSendMessagesRequestFn } | undefined;
+
+// Reading through a function (rather than the module-level binding directly)
+// stops TS's control-flow analysis from carrying the "just reset to undefined"
+// narrowing across the renderHookLocally(...) call below, where the mock
+// above actually reassigns it — without this indirection tsc narrows the
+// post-guard type to `never` even though the mock provably ran.
+function readCapturedTransportConfig() {
+  return capturedTransportConfig;
+}
+
+// useChat itself is hoisted to the repo root the same way @testing-library/react
+// is (see above) — its internal useState/useRef calls would run against root's
+// react copy even once the transport-construction useMemo above is fixed. This
+// test only needs the transport config useChat is called with, so stub it out
+// entirely rather than executing its real (foreign-copy) hook internals.
+vi.mock("@ai-sdk/react", () => ({
+  useChat: vi.fn(() => ({
+    messages: [],
+    sendMessage: vi.fn(),
+    status: "ready",
+    error: undefined,
+    regenerate: vi.fn(),
+    setMessages: vi.fn(),
+    stop: vi.fn(),
+  })),
+}));
+
+vi.mock("ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ai")>();
+  return {
+    ...actual,
+    // `new DefaultChatTransport(...)` requires the mock to be constructible —
+    // an arrow-function mockImplementation would fail with "is not a
+    // constructor", so this uses `function` deliberately.
+    DefaultChatTransport: vi.fn().mockImplementation(function (config: unknown) {
+      capturedTransportConfig = config as {
+        prepareSendMessagesRequest: PrepareSendMessagesRequestFn;
+      };
+      return new actual.DefaultChatTransport(
+        config as ConstructorParameters<typeof actual.DefaultChatTransport>[0],
+      );
+    }),
+  };
+});
+
+// React 19's act() refuses to run unless this flag is set — @testing-library/react
+// normally sets it for you; the hand-rolled harness above must do it itself.
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+/** Minimal local stand-in for @testing-library/react's renderHook — see comment above. */
+function renderHookLocally(callback: () => void): { unmount: () => void } {
+  function TestComponent() {
+    callback();
+    return null;
+  }
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  act(() => {
+    root.render(createElement(TestComponent));
+  });
+  return {
+    unmount: () => {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    },
+  };
+}
+
+type EmbedDigiChatOptions = Parameters<typeof useEmbedDigiChat>[0];
+
+function baseEmbedOptions(overrides: Partial<EmbedDigiChatOptions> = {}): EmbedDigiChatOptions {
+  return {
+    accent: "#4f46e5",
+    embedHost: "https://example.com",
+    ...overrides,
+  };
+}
+
+async function callPrepareSendMessagesRequest(
+  overrides: Partial<EmbedDigiChatOptions> = {},
+): Promise<{ headers: Headers; body: unknown }> {
+  capturedTransportConfig = undefined;
+  const { unmount } = renderHookLocally(() => useEmbedDigiChat(baseEmbedOptions(overrides)));
+  const config = readCapturedTransportConfig();
+  if (!config) {
+    throw new Error("DefaultChatTransport was never constructed by useEmbedDigiChat");
+  }
+  const result = await config.prepareSendMessagesRequest({
+    messages: [],
+    body: undefined,
+  });
+  unmount();
+  return { headers: new Headers(result.headers), body: result.body };
+}
 
 function tracePart(label: string, status: string, id: string) {
   return {
@@ -260,5 +386,24 @@ describe("chatAccessTokenAtSend", () => {
 
   it("is null when the host has no token", () => {
     expect(chatAccessTokenAtSend("https://datatap.stream")).toBeNull();
+  });
+});
+
+describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Language", () => {
+  it("sets X-Digi-Language when responseLanguage is a non-English curated code", async () => {
+    const { headers } = await callPrepareSendMessagesRequest({
+      responseLanguage: "de",
+    });
+    expect(headers.get("X-Digi-Language")).toBe("de");
+  });
+
+  it("omits X-Digi-Language when responseLanguage is English or unset", async () => {
+    const { headers: withEnglish } = await callPrepareSendMessagesRequest({
+      responseLanguage: "en",
+    });
+    expect(withEnglish.has("X-Digi-Language")).toBe(false);
+
+    const { headers: withUnset } = await callPrepareSendMessagesRequest({});
+    expect(withUnset.has("X-Digi-Language")).toBe(false);
   });
 });

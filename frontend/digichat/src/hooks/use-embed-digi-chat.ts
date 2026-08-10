@@ -146,6 +146,7 @@ type UseEmbedDigiChatOptions = {
   byokModel?: string;
   trialUnlocked?: boolean;
   onGated?: () => void;
+  responseLanguage?: string;
 };
 
 export function useEmbedDigiChat({
@@ -158,6 +159,7 @@ export function useEmbedDigiChat({
   byokModel,
   trialUnlocked,
   onGated,
+  responseLanguage,
 }: UseEmbedDigiChatOptions): DigiChatController & {
   seed: (msgs: readonly DigiChatMessage[]) => void;
   /** Raw AI SDK error — for structured code detection (quota → BYOK). */
@@ -185,6 +187,9 @@ export function useEmbedDigiChat({
             if (byokRequiresModel(provider) && byokModel?.trim()) {
               headers["X-BYOK-Model"] = byokModel.trim();
             }
+          }
+          if (responseLanguage && responseLanguage !== "en") {
+            headers["X-Digi-Language"] = responseLanguage;
           }
           // Send-time unlock check — transport is frozen on first render (#1339),
           // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
@@ -214,7 +219,7 @@ export function useEmbedDigiChat({
       }),
     // trialUnlocked stays in the deps for the rare case useChat starts honoring
     // transport identity; the send-time read is what actually unlocks today.
-    [accent, token, host, embedHost, byokKey, byokProvider, byokModel, trialUnlocked],
+    [accent, token, host, embedHost, byokKey, byokProvider, byokModel, trialUnlocked, responseLanguage],
   );
 
   const { messages, sendMessage, status, error, regenerate, setMessages, stop } = useChat<UIMessage>({
