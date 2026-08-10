@@ -116,4 +116,9 @@ select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 [tool.pytest.ini_options]
 # Monorepo tests live at repo root tests/dq/; from digiquant/: `pytest` picks these up; or `make test-unit` from repo root.
 testpaths = ["../tests/dq"]
-pythonpath = ["src"]
+# ".." puts the repo root on sys.path so absolute `from tests.dq.<x> import <y>`
+# imports (used by tests that share fixtures/helpers across tests/dq/ subpackages)
+# resolve when running `pytest` from within digiquant/. The root pytest.ini already
+# has "." for the same reason when invoked from repo root; this mirrors it for the
+# component-local entrypoint.
+pythonpath = ["src", ".."]

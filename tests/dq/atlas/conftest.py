@@ -31,7 +31,7 @@ def _digigraph_importable() -> bool:
 
 
 if not _digigraph_importable():
-    collect_ignore_glob = ["test_*.py", "phases/test_*.py"]
+    collect_ignore_glob = ["test_*.py", "phases/test_*.py", "data/test_*.py"]
 
 
 @pytest.fixture
