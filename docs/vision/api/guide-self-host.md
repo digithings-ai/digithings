@@ -11,9 +11,9 @@ tags:
 
 > Pull GHCR images and run digithings without a local compose build — tags, profiles, loopback defaults.
 
-Prefer published images when you do not want to `docker compose build`. Requires Compose **v2.24+** and a clone of the repo for compose files, `config/`, and `.env` (build context is not required).
+Prefer published images when you do not want to `docker compose build`. Requires Compose **v2.24+** and a clone of the repo for compose files, `config/`, and `.env` (build context is not required). Stack images (`digikey`, `digigraph`, …) publish via `publish-service-images.yml` on `main` after promote — until those packages exist on GHCR, use `docker compose build` / `make up` instead.
 
-### Quick start
+### Quick start (once GHCR stack images exist)
 
 ```bash
 cp .env.example .env
@@ -29,7 +29,7 @@ docker compose \
   up -d
 ```
 
-Or: `make up-ghcr` / `make up-ghcr-digichat`.
+Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat itself is already on GHCR (`ghcr.io/digithings-ai/digichat`).
 
 ### Profiles
 

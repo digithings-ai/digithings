@@ -22,7 +22,7 @@ digigraph is the horizontal orchestrator. digisearch and digiquant each own vert
 - `digivault` `:8004` — vault (opt-in compose profile)
 - `digikey` `:8005` — API keys + JWT exchange + JWKS
 - `digichat` `:3005` — Next.js BFF + chat UI (profile `digichat`)
-- LiteLLM `:4000` — provider proxy; Ollama optional on the host
+- LiteLLM `:4000` — provider proxy; Ollama in Compose on host `:11435` (models optional)
 
 ### Chat path (simplified)
 

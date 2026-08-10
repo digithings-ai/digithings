@@ -85,9 +85,9 @@ export const guides: Guide[] = [
       {
         kind: "p",
         text:
-          "Prefer published images when you do not want to `docker compose build`. Requires Compose **v2.24+** and a clone of the repo for compose files, `config/`, and `.env` (build context is not required).",
+          "Prefer published images when you do not want to `docker compose build`. Requires Compose **v2.24+** and a clone of the repo for compose files, `config/`, and `.env` (build context is not required). Stack images (`digikey`, `digigraph`, …) publish via `publish-service-images.yml` on `main` after promote — until those packages exist on GHCR, use `docker compose build` / `make up` instead.",
       },
-      { kind: "h", text: "Quick start" },
+      { kind: "h", text: "Quick start (once GHCR stack images exist)" },
       {
         kind: "code",
         lang: "bash",
@@ -96,7 +96,7 @@ export const guides: Guide[] = [
       },
       {
         kind: "p",
-        text: "Or: `make up-ghcr` / `make up-ghcr-digichat`.",
+        text: "Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat itself is already on GHCR (`ghcr.io/digithings-ai/digichat`).",
       },
       { kind: "h", text: "Profiles" },
       {
@@ -137,15 +137,15 @@ export const guides: Guide[] = [
       {
         kind: "code",
         lang: "bash",
-        code: "docker pull ghcr.io/digithings-ai/digichat:v1.0.0",
+        code: "docker pull ghcr.io/digithings-ai/digichat:v0.9.3",
       },
       {
         kind: "list",
         items: [
           "Git tag: `digichat-vX.Y.Z`",
-          "GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z`",
+          "GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (currently published through `v0.9.3`)",
           "Changelog: `frontend/digichat/CHANGELOG.md`",
-          "Existing clients may stay on `v0.9.3` until they choose to upgrade.",
+          "Pin a published tag — do not assume a version exists on GHCR until the digichat release workflow has published it from `main`.",
         ],
       },
       { kind: "h", text: "Profiles" },
@@ -190,7 +190,7 @@ export const guides: Guide[] = [
           "`digivault` `:8004` — vault (opt-in compose profile)",
           "`digikey` `:8005` — API keys + JWT exchange + JWKS",
           "`digichat` `:3005` — Next.js BFF + chat UI (profile `digichat`)",
-          "LiteLLM `:4000` — provider proxy; Ollama optional on the host",
+          "LiteLLM `:4000` — provider proxy; Ollama in Compose on host `:11435` (models optional)",
         ],
       },
       { kind: "h", text: "Chat path (simplified)" },

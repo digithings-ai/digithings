@@ -21,7 +21,7 @@ export default function OpenApiIndexPage() {
           <div className="docs-content flex min-w-0 flex-col gap-[clamp(1.4rem,3vw,2.2rem)]">
             <header className="docs-hero">
               <p className="m-0 font-mono text-[0.68rem] uppercase tracking-[0.14em] text-accent">
-                // openapi
+                {"// openapi"}
               </p>
               <h1 className="mb-[0.7rem] mt-[0.5rem] font-display text-[clamp(1.9rem,4vw,2.7rem)] font-normal tracking-[-0.02em] text-ink">
                 OpenAPI explorer.

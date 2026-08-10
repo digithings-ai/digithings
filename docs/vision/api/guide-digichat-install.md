@@ -16,13 +16,13 @@ digithings ships **self-hosted** AI infra. Clients install digichat **releases f
 ### Install unit
 
 ```bash
-docker pull ghcr.io/digithings-ai/digichat:v1.0.0
+docker pull ghcr.io/digithings-ai/digichat:v0.9.3
 ```
 
 - Git tag: `digichat-vX.Y.Z`
-- GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z`
+- GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (currently published through `v0.9.3`)
 - Changelog: `frontend/digichat/CHANGELOG.md`
-- Existing clients may stay on `v0.9.3` until they choose to upgrade.
+- Pin a published tag — do not assume a version exists on GHCR until the digichat release workflow has published it from `main`.
 
 ### Profiles
 
