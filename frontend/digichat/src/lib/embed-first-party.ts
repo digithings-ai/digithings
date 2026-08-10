@@ -1,9 +1,11 @@
 import { normalizeEmbedHost, resolveEmbedTenantByHost } from "@/lib/embed-tenants";
 
-/** Prod marketing hosts only — no *.pages.dev in Phase 3. */
+/** Prod marketing / virtual first-party hosts only — no *.pages.dev in Phase 3. */
 export const FIRST_PARTY_EMBED_HOSTS: ReadonlySet<string> = new Set([
   "digithings.ai",
   "www.digithings.ai",
+  /** Virtual host for digithings.ai/chat/occ (no DNS; iframe ?host= only). */
+  "occ.digithings.ai",
 ]);
 
 /** Loopback hosts eligible for dev-only tokenless embed when registered. */

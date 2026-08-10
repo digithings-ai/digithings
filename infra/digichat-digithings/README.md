@@ -65,8 +65,9 @@ docker compose --profile digichat --profile digivault --profile litellm-cache up
 ```
 
 **Local smoke (no Tunnel):** open `http://127.0.0.1:3005/embed?host=digithings.ai` or
+`http://127.0.0.1:3005/embed?host=occ.digithings.ai` (OCC tenant) or
 `POST /api/chat` with `X-Embed-Host: https://digithings.ai`. That proves digichat → digigraph
-→ LiteLLM (+ digivault when tools run). Public `digithings.ai/chat` still needs Tunnel + Pages.
+→ LiteLLM (+ digivault when tools run). Public `digithings.ai/chat` / `/chat/occ` still need Tunnel + Pages.
 
 ### Profile A GHCR pulls — blocked on Stage A (human)
 
@@ -94,11 +95,11 @@ digichat runtime embed registry (never a Docker build-arg — tokens leak in lay
 
 ```bash
 export DIGICHAT_REQUIRE_ROOT_AUTH=0
-export DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai
-export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","attribution":false,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}}}'
+export DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai,occ.digithings.ai
+export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","attribution":false,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}},"occ.digithings.ai":{"slug":"occ","gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","title":"OCC help assistant","welcome":"Ask about Online Compliance Center policies, procedures, and help articles.","attribution":false,"token":"<unused-for-first-party>","backend":{"type":"digigraph","digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}}'
 ```
 
-Set `DIGICHAT_EMBED_HOSTS` (and/or tenant host keys) at **runtime** so CSP `frame-ancestors` includes digithings.ai — no digichat image rebuild. **Do not** add digiquant.io to embed hosts for chat (crawl-only).
+Set `DIGICHAT_EMBED_HOSTS` (and/or tenant host keys) at **runtime** so CSP `frame-ancestors` includes digithings.ai — no digichat image rebuild. **Do not** add digiquant.io to embed hosts for chat (crawl-only). OCC uses virtual host `occ.digithings.ai` (no DNS) for `/chat/occ` — see [`docs/projects/online-compliance-center/README.md`](../../docs/projects/online-compliance-center/README.md).
 
 ## Cloudflare Tunnel
 

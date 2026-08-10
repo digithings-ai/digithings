@@ -117,6 +117,18 @@ class WorkflowRequest(BaseModel):
         None,
         description="JWT subject for checkpoint thread scoping (set from request auth).",
     )
+    digisearch_index: str | None = Field(
+        None,
+        description="Per-request digisearch index override (X-Digi-Corpus-Index / tenant map).",
+    )
+    vault_path_prefix: str | None = Field(
+        None,
+        description="Per-request digivault path prefix (X-Digi-Vault-Prefix / tenant map).",
+    )
+    research_system_prompt_override: str | None = Field(
+        None,
+        description="Optional research system prompt from DIGI_TENANT_CORPUS_MAP.",
+    )
     evidence_tier_preference: list[str] | None = Field(
         None,
         description="Preferred evidence_tier values (peer_reviewed, working_paper, …) added as a filter.",

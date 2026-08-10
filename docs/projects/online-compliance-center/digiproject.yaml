@@ -1,0 +1,46 @@
+# digiproject.yaml — Online Compliance Center (client #1)
+# Spec: docs/spec/project-spec-v1alpha1.md
+# Use for OCC-only digigraph stacks, or keep digithings digiproject and rely on
+# DIGI_TENANT_CORPUS_MAP / X-Digi-Corpus-* headers when sharing one digigraph.
+
+project:
+  name: online-compliance-center
+  description: "digithings.ai/chat/occ — OCC help corpus (digichat + digigraph + digivault + digisearch)"
+  version: "0.1.0"
+
+graph:
+  workflow_profile: research_rag
+
+agents:
+  enabled:
+    - research
+  llm_mode: free
+  llm:
+    provider: openrouter
+    model: openai/gpt-oss-20b:free
+    api_key_env: OPENROUTER_API_KEY
+  allowed_tools:
+    - digisearch
+    - digivault_search_notes
+  research_system_prompt: |
+    You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.
+
+    Ground every answer in retrieved corpus from digisearch index `occ_help`
+    and/or digivault_search_notes under `clients/online-compliance-center/`.
+    Always cite help article URLs or PDF source paths from metadata.
+
+    Answer questions about OCC policies, procedures, FAQ topics, and public help
+    PDFs. Do not invent product features, pricing, or portal capabilities not
+    present in the retrieved sources. E-learning / YouTube videos are out of
+    scope for this corpus — say so if asked.
+
+    Do not cite digithings or digiquant internal architecture docs. If the
+    corpus has no grounded answer, say so clearly.
+
+indexes:
+  - name: occ_help
+    backend: chroma
+
+services:
+  digisearch_url: ${DIGISEARCH_URL:-http://digisearch:8002}
+  digivault_url: ${DIGIVAULT_URL:-http://digivault:8004}

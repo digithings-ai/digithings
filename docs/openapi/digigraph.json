@@ -248,6 +248,18 @@
             "description": "Tenant slug for audit (optional).",
             "title": "Digi Trace Tenant"
           },
+          "digisearch_index": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-request digisearch index override (X-Digi-Corpus-Index / tenant map).",
+            "title": "Digisearch Index"
+          },
           "evidence_tier_preference": {
             "anyOf": [
               {
@@ -295,6 +307,18 @@
             ],
             "description": "Optional structured digisearch filters merged into every digisearch tool call.",
             "title": "Research Filters"
+          },
+          "research_system_prompt_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional research system prompt from DIGI_TENANT_CORPUS_MAP.",
+            "title": "Research System Prompt Override"
           },
           "session_id": {
             "anyOf": [
@@ -345,6 +369,18 @@
             ],
             "description": "Optional digiclone profile dict (maps into optimization constraints in graph).",
             "title": "Trading Profile"
+          },
+          "vault_path_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-request digivault path prefix (X-Digi-Vault-Prefix / tenant map).",
+            "title": "Vault Path Prefix"
           }
         },
         "required": [

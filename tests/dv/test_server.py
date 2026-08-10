@@ -319,6 +319,49 @@ def test_orchestrator_invoke_search_notes_local_root(
     assert hits[0]["note_type"] == "local"
 
 
+def test_orchestrator_invoke_search_notes_path_prefix_local(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """path_prefix keeps OCC / digithings corpora isolated under one vault root."""
+    vault_root = tmp_path / "vault"
+    vault_root.mkdir()
+    Vault(vault_root).create_note(
+        "faq-password",
+        subdir="clients/online-compliance-center",
+        frontmatter={"title": "OCC password FAQ"},
+        body="OCC help: reset your portal password.",
+    )
+    Vault(vault_root).create_note(
+        "architecture",
+        subdir="clients/digithings",
+        frontmatter={"title": "digithings architecture"},
+        body="digigraph LangGraph orchestration hub password notes.",
+    )
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(vault_root))
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={
+                "query": "password",
+                "limit": 10,
+                "path_prefix": "clients/online-compliance-center",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    hits = resp.data["hits"]
+    assert hits
+    assert all("online-compliance-center" in h["vault_path"] for h in hits)
+    assert not any(
+        h["vault_path"].startswith("clients/digithings")
+        or "/clients/digithings/" in f"/{h['vault_path']}"
+        for h in hits
+    )
+
+
 def test_orchestrator_invoke_search_notes_default_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
     fake_client = _FakeSearchClient(rpc_data=[])

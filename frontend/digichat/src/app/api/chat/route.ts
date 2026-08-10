@@ -242,6 +242,14 @@ export async function POST(req: Request) {
     "X-Digi-Caller": "digichat",
     Authorization: `Bearer ${upstreamBearer}`,
   };
+  if (embedConfig?.backend.type === "digigraph") {
+    if (embedConfig.backend.digisearchIndex) {
+      upstreamHeaders["X-Digi-Corpus-Index"] = embedConfig.backend.digisearchIndex;
+    }
+    if (embedConfig.backend.vaultPathPrefix) {
+      upstreamHeaders["X-Digi-Vault-Prefix"] = embedConfig.backend.vaultPathPrefix;
+    }
+  }
   if (litellmProxyApiKey) {
     upstreamHeaders["X-LiteLLM-Proxy-Key"] = litellmProxyApiKey;
   }
