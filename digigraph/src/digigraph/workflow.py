@@ -72,6 +72,8 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
         initial["vault_path_prefix"] = req.vault_path_prefix
     if req.research_system_prompt_override:
         initial["research_system_prompt_override"] = req.research_system_prompt_override
+    if req.response_language:
+        initial["response_language"] = req.response_language
     return initial
 
 
