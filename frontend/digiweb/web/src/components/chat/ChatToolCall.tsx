@@ -1,7 +1,7 @@
 "use client";
 /**
  * ChatToolCall — the collapsible tool-call block promoted from the chatbot
- * reference family (#1418): one mono line — caret · tool(args) · status mark ·
+ * reference family (#1418): one mono line — tool(args) · status mark ·
  * timing — that folds its output away, the Claude Code / opencode chain
  * pattern. The tool name takes the surface accent; ok/error wear the
  * money-adjacent up/down reads; a running call breathes its mark. Sits on the
@@ -11,12 +11,12 @@
  * `{ text, tone }` for up/down reads) and/or arbitrary `children` rendered
  * after them — enough surface for digichat-ui's ChatActivities to rebuild its
  * tool_call / tool_result / trace kinds on this primitive. A call with no
- * body renders its head as a plain row (no button, caret hidden). Caret art,
- * the aria-expanded rotate, color-mix rails, and the running pulse live in
- * styles/chat-widgets.css (import it once app-wide; see the wiring note
- * there).
+ * body renders its head as a plain row (no button). The left rail, color-mix
+ * borders, and the running pulse live in styles/chat-widgets.css (import it
+ * once app-wide; see the wiring note there). Click the head to expand —
+ * no caret glyph; `aria-expanded` carries the disclosure state.
  */
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export type ChatToolCallStatus = "running" | "ok" | "error";
 
@@ -56,20 +56,27 @@ function HeadContent({
   args,
   status,
   duration,
-  expandable,
 }: {
   name: string;
   args?: string;
   status: ChatToolCallStatus;
   duration?: string;
-  expandable: boolean;
 }) {
   const mark = MARKS[status];
   return (
     <>
-      <span className={`tc-caret${expandable ? "" : " invisible"}`} aria-hidden="true" />
-      <span className="text-accent">{name}</span>
-      {args ? <span className="min-w-0 truncate text-term-mute">({args})</span> : null}
+      {/* `shrink-0 whitespace-nowrap`: the name is the one thing on this line
+          that must never break. Without them a flex row under width pressure
+          (a narrow embed, a long args string) shrinks every item somewhat
+          evenly, and a shrunk name span with the default `white-space: normal`
+          wraps mid-word — "file_search" split "file_ / searc / h" across three
+          lines, observed live. `args` carries `min-w-0 flex-1 truncate` so it
+          is the one thing that absorbs the missing space, ellipsised, never
+          the name. */}
+      <span className="shrink-0 whitespace-nowrap text-accent">{name}</span>
+      {args ? (
+        <span className="min-w-0 flex-1 truncate text-term-mute">({args})</span>
+      ) : null}
       <span className={`ml-auto shrink-0 ${mark.cls}`}>{mark.glyph}</span>
       {duration ? (
         <span className="min-w-[3rem] shrink-0 text-right text-[0.7rem] text-term-mute">
@@ -93,18 +100,31 @@ export function ChatToolCall({
   className,
 }: ChatToolCallProps) {
   const [ownOpen, setOwnOpen] = useState(defaultOpen);
+  // Tracks a real user toggle. Streaming rows keep a stable React key across
+  // tool_call → tool_result (see digichat-ui activity-view identityKey), so
+  // `defaultOpen` can flip true on settle without a remount — and useState
+  // only reads its initial argument. Adopt the new default until the reader
+  // has touched the control; after that, their choice wins.
+  const touched = useRef(false);
   const isOpen = open !== undefined ? open : ownOpen;
   const hasBody = Boolean(lines?.length) || (children !== undefined && children !== null);
 
+  useEffect(() => {
+    if (open !== undefined) return;
+    if (touched.current) return;
+    if (defaultOpen) setOwnOpen(true);
+  }, [defaultOpen, open]);
+
   const toggle = () => {
     const next = !isOpen;
+    touched.current = true;
     if (open === undefined) setOwnOpen(next);
     onOpenChange?.(next);
   };
 
   return (
     <div
-      className={`tc pl-[0.7rem]${status === "error" ? " tc--err" : ""}${
+      className={`tc${status === "error" ? " tc--err" : ""}${
         className ? ` ${className}` : ""
       }`}
     >
@@ -115,17 +135,11 @@ export function ChatToolCall({
           aria-expanded={isOpen}
           onClick={toggle}
         >
-          <HeadContent name={name} args={args} status={status} duration={duration} expandable />
+          <HeadContent name={name} args={args} status={status} duration={duration} />
         </button>
       ) : (
         <div className={HEAD_CLS}>
-          <HeadContent
-            name={name}
-            args={args}
-            status={status}
-            duration={duration}
-            expandable={false}
-          />
+          <HeadContent name={name} args={args} status={status} duration={duration} />
         </div>
       )}
       {hasBody && isOpen ? (

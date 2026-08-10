@@ -31,6 +31,7 @@ import PipelineCanvas, {
   focusRectForTarget,
   mobileWalkthroughScrollTarget,
   movePipelineWalkthrough,
+  walkthroughNavigationTarget,
 } from './PipelineCanvas';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import type { PipelineStageId } from '@/lib/pipeline-topology';
@@ -40,6 +41,7 @@ const emptyDay: PipelineDayData = {
   fanoutCounts: {},
   fanoutKeys: {},
   presentKeys: new Set(),
+  artifacts: [],
 };
 
 describe('PipelineCanvas', () => {
@@ -93,6 +95,7 @@ describe('PipelineCanvas', () => {
       fanoutCounts: { 'alt-data': 1 },
       fanoutKeys: { 'alt-data': ['alt-onchain-positioning'] },
       presentKeys: new Set(['alt-onchain-positioning']),
+      artifacts: [],
     };
     const nodes = buildPipelineWalkthrough(day);
 
@@ -134,11 +137,32 @@ describe('PipelineCanvas', () => {
     expect(movePipelineWalkthrough(22, 1, 23)).toBe(22);
   });
 
+  it('opens the selected walkthrough stop during desktop arrow traversal', () => {
+    const nodes = buildPipelineWalkthrough(emptyDay);
+
+    expect(walkthroughNavigationTarget(nodes, 0, 1, 'desktop')).toEqual({
+      index: 1,
+      node: nodes[1],
+      openDetail: true,
+    });
+  });
+
+  it('only highlights the selected walkthrough stop during mobile arrow traversal', () => {
+    const nodes = buildPipelineWalkthrough(emptyDay);
+
+    expect(walkthroughNavigationTarget(nodes, 0, 1, 'mobile')).toEqual({
+      index: 1,
+      node: nodes[1],
+      openDetail: false,
+    });
+  });
+
   it('synchronizes a selected node or artifact with the walkthrough', () => {
     const day: PipelineDayData = {
       fanoutCounts: { 'alt-data': 1 },
       fanoutKeys: { 'alt-data': ['alt-onchain-positioning'] },
       presentKeys: new Set(['alt-onchain-positioning']),
+      artifacts: [],
     };
     const nodes = buildPipelineWalkthrough(day);
 

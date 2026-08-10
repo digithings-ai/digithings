@@ -1,5 +1,6 @@
 # Daily agent PR finalizer — backstop for cursor/* PRs that missed the Cursor Automation
-# merge path. copilot/* PRs are handled by the gh-aw copilot-pr-lifecycle.lock.yml.
+# merge path. The gh-aw copilot-pr-lifecycle workflow that used to own copilot/* PRs
+# was deleted 2026-08-05 with the subscription; this finalizer is now the only one.
 name: "Agent: PR finalizer"
 
 on:
@@ -42,8 +43,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # Pass --cursor-only so finalize_agent_prs.py skips copilot/* branches
-          # (those are now owned by the gh-aw lifecycle workflow).
+          # Copilot automation is retired; this backstop only owns cursor/* PRs.
           python3 scripts/finalize_agent_prs.py --repo "$REPO" --cursor-only --json > /tmp/pr-actions.json
           {
             echo "actions<<EOF"
@@ -106,10 +106,6 @@ jobs:
               if state == "skip":
                   continue
 
-              if state == "waiting" and reason == "request Copilot review":
-                  print(f"PR #{pr}: request Copilot review")
-                  run(["gh", "pr", "edit", str(pr), "--repo", repo, "--add-reviewer", "Copilot"])
-                  continue
 
               if state == "needs_human":
                   print(f"PR #{pr}: needs human — {reason}")

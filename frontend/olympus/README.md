@@ -19,11 +19,25 @@ finance-tearsheet grammars directly in `app/globals.css`:
 ```
 
 The performance tear sheet (`/portfolio/performance`) renders persisted NAV and
-return metrics, base-zero portfolio and position paths, and open/closed position
-outcomes. The separate attribution workspace (`/portfolio/attribution`) owns the
-latest rolling position decomposition and the resolved-decision calibration
-scorecard. Olympus keeps its finance-tearsheet variants and shell print rules
-app-side at the bottom of `globals.css`.
+return metrics, a base-zero portfolio path, current-book contribution, and
+open/closed position outcomes. Its command band uses the same compact as-of stamp
+as Holdings. Closed rows derive realized return from the persisted entry and exit
+marks; `position_events.cumulative_return_since_event_pct` is post-event drift and
+must not be presented as trade return. The separate attribution workspace
+(`/portfolio/attribution`) defaults to a compact Decision effectiveness monitor,
+with Book attribution and Audit as sibling views. Headline metrics use direction-
+adjusted alpha over independently scored decisions: bearish calls negate stored raw
+alpha, watch calls remain audit-only, and overlapping same-ticker, same-stance
+updates count once from their initiating call. Calibration remains "insufficient
+evidence" until at least two buckets each have 10 independent decisions. Audit
+preserves every raw row and raw alpha while rendering 25 rows per page. CASH remains outside holding
+counts and position charts, but its allocation effect is included in headline active return
+so the decomposition reconciles to portfolio return minus benchmark return.
+Performance fetches the populated approved benchmark universe from `price_history`,
+aligns each series to the NAV dates, defaults to SPY, and recomputes benchmark and
+active return when the comparison changes.
+Olympus keeps its finance-tearsheet variants and shell print rules app-side at the
+bottom of `globals.css`.
 
 The root layout scopes the page to the digiquant accent and blueprint
 background:
@@ -94,16 +108,52 @@ The Portfolio routes follow digiweb's canonical `PortfolioWorkspaceReference`:
 one flat command band establishes book or dossier state, then hairline-divided
 ledgers carry positions, activity, research, and decision history. Holdings owns
 an exposure command band plus switchable position/activity ledgers; Theses uses
-a conviction-ranked research spine; thesis and ticker detail routes use editorial
-main/context compositions rather than nested card stacks.
+a conviction-ranked research spine. The ticker dossier follows one lifecycle:
+current Pipeline view, current or historical portfolio position, material allocation
+actions, measured performance and attribution, then analysis history. It shows only
+the current stance and concise thesis summary; exact-date links open the Selection
+stage in Pipeline, which remains the owner of generated analysis and deliberation.
+Position history excludes routine HOLD observations and initially shows six material
+actions. Latest ticker attribution is explicitly a stored book window, not since-entry
+performance. Thesis detail routes retain the editorial main/context composition.
+
+Attribution follows the dashboard-workspace variant: one command band carries the
+decision verdict, sample-size context, selected analysis period, as-of stamp, and the
+Decision effectiveness / Book attribution / Audit switch. The default view keeps
+four headline metrics, one decision-edge plot, stance/conviction diagnostics, and a
+five-item review queue in the primary scan path. Analysis defaults to all available
+history; 1W, 1M, 3M, YTD, and 1Y period controls rescope every decision metric,
+diagnostic, review item, Audit row, and trend point. The trend is cumulative across
+every independently scored decision in the selected time period; it has no separate
+call-count window. The visible consistency ratio is explicitly named for what it is
+(mean decision edge divided by its variability), rather than presented as an
+annualized information ratio. Book attribution remains the latest stored snapshot and
+says so explicitly because its persisted rows are not a historical return series.
+
+Across the four Portfolio views, command bands and ledgers carry the context without
+introductory feature prose. Holdings and Performance normalize stored allocation keys
+into reader-facing categories. Theses opens as a collapsed conviction-ranked register,
+leaving generated research detail behind an intentional disclosure. Performance states
+the exact inception-to-metrics period for its NAV, portfolio, benchmark, and active
+returns; its contribution chart identifies the selected benchmark without visible
+interaction instructions.
+
+Every book surface derives invested exposure and displayed weights from the same
+effective `positions` snapshot. An independently latest `portfolio_metrics` row
+must not rescale those positions: the tables already store percent-of-NAV weights,
+and an explicit CASH row is presentation-excluded by `reconcileBook`. This contract
+applies equally to the Brief book strip, its Holdings doorway, and Portfolio
+Holdings.
 
 `/portfolio/performance` applies the same flat grammar to the shared
-finance-tearsheet primitives. Its command band, asymmetric NAV workspace, bounded
-decision ledger, attribution section, and PDF action remain presentation over the
-existing `nav_history` + `decision_log` contract. Portfolio presentation changes
-must not introduce a second query path or replace that persisted truth model.
-Embedded attribution uses flat divided sections, and narrow finance chart panes
-reduce date axes to endpoint labels while preserving the complete print view.
+finance-tearsheet primitives. Its command band, contribution chart, position
+ledgers, and PDF action remain presentation over `nav_history`, `positions`,
+`portfolio_metrics`, `position_attribution`, `position_events`, and
+`price_history`. Contribution bars contain only tickers in the latest positive-weight
+book; the exact NAV return and selected benchmark remain separate line layers.
+Portfolio presentation changes must not introduce a second query path or replace
+that persisted truth model. Narrow finance chart panes reduce date axes to endpoint
+labels while preserving the complete print view.
 
 ## Supabase / RLS
 
@@ -132,6 +182,8 @@ which `scripts/build-digiquant.sh` copies to the **dist root** — Cloudflare Pa
 ignores `_headers` files below the output root, so a copy under `dist/olympus/`
 would never apply in production (#674).
 The dashboard CSP is scoped to `/olympus*`; landing pages keep Google Fonts working.
+Its `connect-src` permits Supabase reads over HTTPS and Realtime subscriptions over
+secure WebSockets (`wss://*.supabase.co`).
 Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
 
 **Deploy freshness (#1759):** `scripts/write-build-info.sh` writes
@@ -191,26 +243,30 @@ on the Olympus 404. Every in-app link, the command palette, and the legacy
 ## Brief workspace
 
 `app/page.tsx` is the daily decision workspace. It owns benchmark alignment,
-NAV-window calculations, book freshness, and rebalance rationale joins, then
-passes those truth contracts into the presentational modules under
-`components/today/`:
+percentage-return calculations, book freshness, rebalance rationale joins, and a
+brief-only read of the anon-safe `atlas_run_health` view. It passes those truth
+contracts into `components/today/daily-brief-workspace.tsx`, which follows one
+fixed daily-reader sequence:
 
-- **Command band** (`move-hero.tsx`) — regime and run provenance, digest
-  headline, rebalance status, and compact NAV context. `--up` / `--down` are
-  reserved for signed returns; regime chrome uses accent, warning, or neutral.
-- **Watch ledger** (`what-to-watch.tsx`) — ranked actionables and tail risks,
-  with a date-keyed deep link to the Pipeline digest.
-- **Book ledger** (`book-strip.tsx`) — reconciled invested/cash state and held
-  positions ordered by absolute daily move. Its as-of badge uses the latest
-  NAV date rather than borrowing the research digest date.
-- **Destination ledger** (`today-summaries.tsx`) — divided Read, Holdings, and
-  Theses columns with no independent card surfaces.
+1. **Situation** — market regime, digest headline, confidence, and research date.
+2. **Decision and system state** — the latest allocation decision and rationale
+   beside completed, degraded, failed, loading, or unavailable pipeline health.
+3. **Scoreboard** — percentage measures only: daily and since-inception returns,
+  aligned benchmark excess, max drawdown, volatility, and invested allocation.
+4. **Risk and debate** — ranked actionable signals, the leading tail-risk trigger,
+   the prevailing thesis, and digest context.
+5. **Book monitor** — the latest persisted position event plus one holdings ledger
+   ordered by absolute daily move. Holdings are not repeated elsewhere on the page.
+6. **Drill-ins** — direct links to Digest, Pipeline, Performance, Holdings, and Theses.
 
-The four modules are enclosed by one page-level hairline frame, adapting the
-digiweb `DashboardWorkspaceReference` command-band and ledger composition.
-Loading uses `PageSkeleton`; failures use the shared `EmptyState`; missing book
-or research values render local quiet copy; stale research and book dates use
-the shared `AsOfBadge` treatment.
+The workspace adapts the digiweb `DashboardWorkspaceReference`: one command band,
+compact metrics, flat hairline ledgers, and no nested or decorative cards. The
+headline appears once. Loading uses `PageSkeleton`; failures use the shared
+`EmptyState`; missing book, research, or run-health values render explicit local
+empty states. Research and book dates remain independent and use `AsOfBadge`, so
+a fresh digest cannot make stale performance or allocation look current. `--up` and
+`--down` remain reserved for signed returns; regime and pipeline state use accent,
+warning, or neutral tokens.
 
 ## Pipeline and Why workspaces
 
@@ -221,8 +277,19 @@ reasoning workflow without replacing their domain interactions:
   counts, run date, and temporal pager. The existing custom topology remains
   the interaction engine: desktop pan/zoom and fit controls, expandable
   stages, mobile stage walkthrough, URL document selection, and the artifact
-  dossier keep their original contracts. Graph nodes and camera overlays use
-  explicit hairline surfaces rather than page-level card primitives.
+  dossier keep their original contracts. Desktop arrows move and open the selected
+  step; mobile arrows move the highlight only, leaving document opening to an explicit
+  tap. Graph nodes and camera overlays use explicit hairline surfaces rather than
+  page-level card primitives.
+- Pipeline has three separate inspection surfaces: the topology explains process and
+  run status, All artifacts lists every persisted `document_key`, and Call trace lists
+  ordered model/search/tool operations from `olympus_run_event_trace`. The trace pages
+  100 rows at a time, groups by run attempt and phase, and opens retries/errors by default.
+  Historical runs without ingestion-time events say "Call details were not recorded for
+  this run"; they are never reconstructed from aggregate diagnostics.
+- Graph status is explicit: not run, state-only operation, persisted artifact, expected
+  artifact missing, and parallel dispatch. Snapshot presence establishes that a run was
+  recorded even when it published no documents.
 - **Why** owns one reasoning command band above the shared responsive tab bar.
   `?why=read` presents the latest synthesis as a divided reading workspace;
   `?why=deliberations` presents rebalance actions, risk and ticker debates,
@@ -276,8 +343,10 @@ renders from the payloads:
   and the portfolio-level `risk-debate` (#698). Segment-specific metric fields
   render generically so new segments display without frontend changes.
 - `lib/render-document-from-payload.ts` — routes payloads by shape first, then
-  by the legacy `doc_type` / `document_key` conventions; unknown object
-  payloads fall back to a JSON code block instead of "_No content available._".
+  by the legacy `doc_type` / `document_key` conventions. Unknown object payloads return
+  no markdown so `PayloadKeyValueView` renders labelled nested fields; it never emits a raw
+  JSON block. Large collections reveal 20 items initially and deep branches require explicit
+  disclosure, while all values remain inspectable.
 - `lib/queries.ts` — the Overview strategy panel falls back to the snapshot
   jsonb (`market_regime_snapshot`, `bias`, `headline`, `actionable_summary`,
   `risk_radar`, narrative summaries) when the legacy columns are null.

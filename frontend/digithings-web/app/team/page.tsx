@@ -143,7 +143,7 @@ export default function TeamPage() {
               </Link>
               <a
                 className="btn btn-ghost"
-                href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20inquiry`}
+                href={`mailto:${DT_CONTACT_EMAIL}?subject=digithings%20inquiry`}
               >
                 Contact digithings
               </a>

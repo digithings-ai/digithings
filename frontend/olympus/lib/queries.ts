@@ -472,9 +472,8 @@ function parseAnalystEvidence(raw: unknown): AnalystEvidence | null {
 
 /**
  * The full per-ticker analyst dossier (#1562 PR2): latest `analyst/{TICKER}`
- * document, the `analyst_coverage` pointer row, and every `decision_log` row for
- * the ticker (newest first — includes pending rows so the Conviction History
- * timeline can render them as "open", never as 0-alpha resolved calls).
+ * document, the `analyst_coverage` pointer row, every `decision_log` row, and
+ * the latest stored attribution window for the ticker.
  *
  * Held-position data is deliberately NOT fetched here — `TickerDossierView`
  * reads it from the already-loaded `useDashboard()` positions (avoids
@@ -485,10 +484,17 @@ function parseAnalystEvidence(raw: unknown): AnalystEvidence | null {
  */
 export async function fetchTickerDossier(ticker: string): Promise<TickerDossier> {
   const t = String(ticker).toUpperCase().trim();
-  const empty: TickerDossier = { ticker: t, analyst: null, analystDate: null, coverage: null, decisions: [] };
+  const empty: TickerDossier = {
+    ticker: t,
+    analyst: null,
+    analystDate: null,
+    coverage: null,
+    decisions: [],
+    latestAttribution: null,
+  };
   if (!t || !isSupabaseConfigured() || !supabase) return empty;
 
-  const [docRes, decRes, covRes] = await Promise.all([
+  const [docRes, decRes, covRes, attributionRes] = await Promise.all([
     supabase
       .from('documents')
       .select('date, payload')
@@ -502,11 +508,20 @@ export async function fetchTickerDossier(ticker: string): Promise<TickerDossier>
       .ilike('ticker', t)
       .order('last_updated', { ascending: false })
       .limit(1),
+    supabase
+      .from('position_attribution')
+      .select('*')
+      .ilike('ticker', t)
+      .order('date', { ascending: false })
+      .limit(1),
   ]);
 
   if (docRes.error) console.warn('fetchTickerDossier documents query:', docRes.error);
   if (decRes.error) console.warn('fetchTickerDossier decision_log query:', decRes.error);
   if (covRes.error) console.warn('fetchTickerDossier analyst_coverage query:', covRes.error);
+  if (attributionRes.error) {
+    console.warn('fetchTickerDossier position_attribution query:', attributionRes.error);
+  }
 
   const docRow = (docRes.data?.[0] ?? null) as Pick<TableRow<'documents'>, 'date' | 'payload'> | null;
   const analyst = docRow ? parseAnalystPayload(docRow.payload) : null;
@@ -526,8 +541,11 @@ export async function fetchTickerDossier(ticker: string): Promise<TickerDossier>
     : null;
 
   const decisions = (decRes.data ?? []) as TableRow<'decision_log'>[];
+  const latestAttribution = (attributionRes.data?.[0] ?? null) as
+    | TableRow<'position_attribution'>
+    | null;
 
-  return { ticker: t, analyst, analystDate, coverage, decisions };
+  return { ticker: t, analyst, analystDate, coverage, decisions, latestAttribution };
 }
 
 /**
@@ -1781,7 +1799,7 @@ export async function getLibraryDocumentById(id: string): Promise<LibraryDocumen
   }
 
   const view = resolveLibraryDocumentView(doc.document_key, doc.payload);
-  const markdown = md || '_No content available._';
+  const markdown = md || (payload ? '' : '_No content available._');
 
   return {
     id: doc.id,

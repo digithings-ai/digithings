@@ -57,6 +57,8 @@ export { ChatTranscript, type ChatTranscriptProps } from "./components/chat/Chat
 export { ChatMessage, type ChatMessageProps, type ChatRole, type ChatTone } from "./components/chat/ChatMessage";
 export { ChatStreamCursor, type ChatStreamCursorProps } from "./components/chat/ChatStreamCursor";
 export { ChatMarkdown, type ChatMarkdownProps } from "./components/chat/ChatMarkdown";
+export { ChatMarkdownSource, type ChatMarkdownSourceProps } from "./components/chat/ChatMarkdownSource";
+export { ChatMermaidBlock, type ChatMermaidBlockProps } from "./components/chat/ChatMermaidBlock";
 export { ChatCodeBlock, ChatCopyButton, type ChatCodeBlockProps, type ChatCopyButtonProps } from "./components/chat/ChatCodeBlock";
 export { ChatToolCall, type ChatToolCallProps, type ChatToolCallStatus, type ChatToolCallLine } from "./components/chat/ChatToolCall";
 export { ChatThinking, type ChatThinkingProps } from "./components/chat/ChatThinking";
@@ -68,6 +70,21 @@ export {
   type ChatWidgetButtonProps,
   type ChatWidgetButtonTone,
 } from "./components/chat/ChatWidgetFrame";
+
+// terminal loaders — the house type-out applied to waiting. Styles:
+// @digithings/web/styles/terminal-loaders.css (needs chat-core.css first).
+export { TerminalStepCaret, type TerminalStepCaretProps } from "./components/terminal/TerminalStepCaret";
+export {
+  ContainerBootLoader,
+  CONTAINER_BOOT_STEPS,
+  type ContainerBootLoaderProps,
+} from "./components/terminal/ContainerBootLoader";
+export {
+  ChatResponseLoader,
+  CHAT_RESPONSE_STEPS,
+  CHAT_RESPONSE_HOLD_MS,
+  type ChatResponseLoaderProps,
+} from "./components/terminal/ChatResponseLoader";
 
 // controls layer (#1419)
 export { Button, type ButtonProps, type ButtonDress, type ButtonReferenceVariant, type ButtonChatVariant, type ButtonChatSize } from "./components/controls/Button";

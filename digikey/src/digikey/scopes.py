@@ -40,4 +40,5 @@ DEFAULT_BFF_SESSION_SCOPES: list[str] = [
     "digiquant:optimize",
     "digisearch:query",
     "digisearch:ingest",
+    "digivault:read",
 ]

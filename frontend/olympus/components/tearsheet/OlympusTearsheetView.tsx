@@ -16,6 +16,7 @@ import type { OlympusTearsheet, PerformanceHoldingRow } from './types';
 import {
   PortfolioContributionChart,
 } from './PortfolioPerformanceCharts';
+import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
 
 const PERFORMANCE_TABS = [
   { id: 'current', label: 'Open positions' },
@@ -62,7 +63,9 @@ function HoldingsPerformanceTable({
           {rows.map((row) => (
             <tr key={row.ticker} className="hover:bg-ink/[0.02]">
               <td className="px-5 py-2.5 font-semibold text-ink">{row.ticker}</td>
-              <td className="px-3 py-2.5 text-ink-soft">{row.category ?? '—'}</td>
+              <td className="px-3 py-2.5 text-ink-soft">
+                {formatAllocationCategory(row.category)}
+              </td>
               <td className="px-3 py-2.5 text-right text-ink">
                 {row.weightPct != null ? `${row.weightPct.toFixed(1)}%` : '—'}
               </td>
@@ -142,7 +145,7 @@ function HoldingsPanel({
 }
 
 /**
- * Compact realized read under the live band: the headline above marks the
+ * Compact realized read under the return band: the headline above marks the
  * whole book (unrealized included, per NAV); this strip is the recorded-exits
  * record only, deliberately smaller so the two are never confused.
  */
@@ -174,26 +177,26 @@ function RealizedSummary({ rows }: { rows: PerformanceHoldingRow[] }) {
 export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
   const [activeTab, setActiveTab] = useState(0);
   const [printing, setPrinting] = useState(false);
-  const hasReturns =
-    data.netReturnPct != null ||
-    data.benchmarkReturnPct != null ||
-    data.relativeReturnPct != null;
-  const sourceLabel = {
-    persisted: 'persisted metrics',
-    derived: 'live history fallback',
-    mixed: 'persisted + live fallback',
-    unavailable: 'returns unavailable',
-  }[data.returnsSource];
+  const [benchmarkTicker, setBenchmarkTicker] = useState(
+    data.benchmarkComparisons.find((comparison) => comparison.ticker === 'SPY')?.ticker ??
+      data.benchmarkTicker
+  );
+  const benchmark =
+    data.benchmarkComparisons.find((comparison) => comparison.ticker === benchmarkTicker) ?? null;
+  const benchmarkReturnPct = benchmark?.returnPct ?? data.benchmarkReturnPct;
+  const relativeReturnPct =
+    data.netReturnPct != null && benchmarkReturnPct != null
+      ? data.netReturnPct - benchmarkReturnPct
+      : data.relativeReturnPct;
+  const performancePeriod =
+    data.inceptionDate && data.metricsAsOf
+      ? `${data.inceptionDate}–${data.metricsAsOf}`
+      : null;
 
   return (
     <div className="ts-print-root space-y-0">
       <header className="flex items-center justify-between gap-4 border-b border-hair pb-3">
-        <div>
-          <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
-            portfolio performance
-          </p>
-          <h1 className="mt-1 font-display text-2xl font-normal text-ink">Performance</h1>
-        </div>
+        <h1 className="font-display text-2xl font-normal text-ink">Performance</h1>
         <IconButton
           aria-label="Download performance tear sheet as PDF"
           title="Download PDF"
@@ -210,28 +213,28 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
         aria-label="Portfolio returns"
         className="grid grid-cols-1 border-x border-b border-hair bg-surface/80 md:grid-cols-[minmax(0,1fr)_auto]"
       >
-        <dl className="m-0 grid grid-cols-1 sm:grid-cols-3">
-          <Metric label="NAV" value={data.currentNav} format="number" />
-          <Metric label="Portfolio return · live" value={data.netReturnPct} />
-          <Metric label="Active return · live" value={data.relativeReturnPct} />
+        <dl className="m-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric label="NAV index" value={data.currentNav} format="number" />
+          <Metric label="Portfolio return" value={data.netReturnPct} />
+          <Metric label="Benchmark return" value={benchmarkReturnPct} />
+          <Metric label="Active return" value={relativeReturnPct} />
         </dl>
-        <div className="flex min-w-[11rem] flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute md:items-end md:border-l md:border-t-0">
-          <span>{hasReturns ? 'as of' : 'status'}</span>
+        <div data-region="stamp" className="flex min-w-[11rem] flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute md:items-end md:border-l md:border-t-0">
+          <span>{performancePeriod ? 'period' : data.metricsAsOf ? 'as of' : 'status'}</span>
           <strong className="font-medium text-accent">
-            {data.metricsAsOf ?? 'awaiting persisted metrics'}
+            {performancePeriod ?? data.metricsAsOf ?? 'awaiting persisted metrics'}
           </strong>
-          <span>{sourceLabel}</span>
-          {hasReturns ? <span>marks the open book · incl. unrealized</span> : null}
-          {data.inceptionDate ? <span>since {data.inceptionDate}</span> : null}
-          {data.benchmarkReturnPct != null ? (
-            <span>vs {data.benchmarkTicker} {data.benchmarkReturnPct >= 0 ? '+' : ''}{data.benchmarkReturnPct.toFixed(2)}%</span>
-          ) : null}
         </div>
       </section>
 
       <RealizedSummary rows={data.historicalHoldings} />
 
-      <PortfolioContributionChart points={data.contributionSeries} />
+      <PortfolioContributionChart
+        points={data.contributionSeries}
+        benchmark={benchmark}
+        comparisons={data.benchmarkComparisons}
+        onBenchmarkChange={setBenchmarkTicker}
+      />
 
       <div className="border-x border-b border-hair bg-surface px-4 pt-2">
         <TabStrip

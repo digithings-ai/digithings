@@ -129,7 +129,38 @@ def test_search_calls_rpc_and_returns_models() -> None:
     assert results[0].vault_path == "digikey"  # a VaultSearchHit model, not a raw dict
     assert results[0].tags == ("support", "auth")  # list coerced to tuple
     assert client.rpc_calls == [
-        ("search_architecture_notes", {"query": "authentication jwt", "match_limit": 3})
+        (
+            "search_architecture_notes",
+            {"query": "authentication jwt", "match_limit": 3, "path_prefix": None},
+        )
+    ]
+
+
+def test_search_passes_path_prefix_to_rpc() -> None:
+    hit_in = {
+        "vault_path": "clients/occ/faq",
+        "title": "faq",
+        "note_type": "note",
+        "summary": "occ faq",
+        "body_markdown": "password reset",
+        "tags": [],
+        "wikilinks": [],
+        "rank": 0.5,
+    }
+    hit_out = {
+        **hit_in,
+        "vault_path": "clients/other/faq",
+        "title": "other",
+    }
+    client = _FakeClient([], rpc_data=[hit_in, hit_out])
+    results = SupabaseStore(client).search("password", limit=5, path_prefix="clients/occ")
+
+    assert [h.vault_path for h in results] == ["clients/occ/faq"]
+    assert client.rpc_calls == [
+        (
+            "search_architecture_notes",
+            {"query": "password", "match_limit": 5, "path_prefix": "clients/occ"},
+        )
     ]
 
 

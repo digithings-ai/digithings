@@ -1,10 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { UIMessage } from "ai";
-import { isEmbedTrialUnlockedAtSend, uiMessageToDigiChat } from "./use-embed-digi-chat";
+import {
+  isEmbedTrialUnlockedAtSend,
+  chatAccessTokenAtSend,
+  uiMessageToDigiChat,
+} from "./use-embed-digi-chat";
 import { ACTIVITY_PART_TYPE } from "@/lib/chat-activity";
 import {
   resetLiveTrialUnlockedForTests,
   writeTrialUnlocked,
+  writeChatAccessToken,
 } from "@/lib/embed-gate";
 
 function tracePart(label: string, status: string, id: string) {
@@ -225,5 +230,35 @@ describe("uiMessageToDigiChat activity parts", () => {
       ],
     } as unknown as UIMessage;
     expect(uiMessageToDigiChat(msg).activities).toBeUndefined();
+  });
+});
+
+// Same freeze reason as the unlock flag (#1339, PR #1882): the transport is frozen on first
+// render, so the token must be read when the request is built, not closed over.
+describe("chatAccessTokenAtSend", () => {
+  beforeEach(() => {
+    const store = new Map<string, string>();
+    // @ts-expect-error — minimal localStorage for the helper under test
+    globalThis.localStorage = {
+      getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+      clear: () => {
+        store.clear();
+      },
+    };
+  });
+
+  it("reads the token at send time", () => {
+    writeChatAccessToken("https://datatap.stream", "id.secret");
+    expect(chatAccessTokenAtSend("https://datatap.stream")).toBe("id.secret");
+  });
+
+  it("is null when the host has no token", () => {
+    expect(chatAccessTokenAtSend("https://datatap.stream")).toBeNull();
   });
 });

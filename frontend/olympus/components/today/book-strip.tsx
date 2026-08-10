@@ -9,7 +9,7 @@ import { AsOfBadge } from '@/components/shared/as-of-badge';
 
 /**
  * "The book today" — a compact holdings strip on the F3 reconciled weight basis
- * (Invested / Cash header, normalized per-row weights summing to 100%). Each held
+ * (Invested / Cash header, per-row weights expressed as % of NAV). Each held
  * row shows ticker · normalized weight · conviction pips (F6) · day move; rows are
  * sorted by |day move| so the day's biggest mover leads. CASH lives in the header,
  * never as a metric-less row. Links to the full Holdings surface (/portfolio).
@@ -17,12 +17,11 @@ import { AsOfBadge } from '@/components/shared/as-of-badge';
 
 export interface BookStripProps {
   positions: Position[];
-  investedPct: number | null;
   asOfDate: string | null;
 }
 
-export function BookStrip({ positions, investedPct, asOfDate }: BookStripProps) {
-  const { rows, investedPct: invested, cashPct } = reconcileBook(positions, { investedPct });
+export function BookStrip({ positions, asOfDate }: BookStripProps) {
+  const { rows, investedPct: invested, cashPct } = reconcileBook(positions);
   const held = rows
     .filter((r) => r.ticker.toUpperCase() !== 'CASH')
     .sort((a, b) => Math.abs(b.day_change_pct ?? 0) - Math.abs(a.day_change_pct ?? 0));

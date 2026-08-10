@@ -29,7 +29,7 @@ export function MetricsOdometer({
     { value: String(subsystemCount), label: "subsystems" },
     { value: "7", label: "pipeline stages" },
     { value: String(trades), label: "backtested trades" },
-    { value: "0", label: "ungated live orders" },
+    { value: "0", label: "live orders" },
   ];
 
   return <OdometerStrip stats={stats} className={className} />;

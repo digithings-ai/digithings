@@ -7,9 +7,10 @@ import {
   type TerminalManifestRow,
 } from "@digithings/web";
 import { writeHandoff } from "@/lib/chatHandoff";
+import { moduleActivity } from "@/lib/repoActivity";
 
 /**
- * Terminal-manifest display of the ten digithings modules — a `// modules`
+ * Terminal-manifest display of the eleven digithings modules — a `// modules`
  * process list rendered by the shared <TerminalManifest> primitive
  * (@digithings/web, promoted from this component in #1415). Each row: a
  * status dot (online vs roadmap), the lowercase two-tone name (`digi` ink +
@@ -23,9 +24,26 @@ import { writeHandoff } from "@/lib/chatHandoff";
  * graphOrder. Selection is controlled here so the "ask digichat" footer knows
  * which module to hand off.
  */
+/**
+ * A selected row's typed output: the module's prose, its stack, and — for modules
+ * that actually exist on disk — its current size and when it last changed.
+ *
+ * The activity line is omitted, not zeroed, for the two roadmap modules
+ * (digistore, digilink): they have no directory, so "0 files · 0 lines" would read
+ * as shipped-but-empty rather than not-yet-written. Their rows already carry the
+ * `roadmap` status dot, which is the honest signal.
+ */
 function buildOutput(m: ModuleNode): string {
   const stack = m.stack.map((s) => s.name).join("  ·  ");
-  return [m.tagline, "", ...m.summary, "", "stack   " + stack].join("\n");
+  const activity = moduleActivity(m.id);
+  return [
+    m.tagline,
+    "",
+    ...m.summary,
+    "",
+    "stack   " + stack,
+    ...(activity ? ["repo    " + activity] : []),
+  ].join("\n");
 }
 
 /** Hand off to the full /chat page — about the selected module, or a general

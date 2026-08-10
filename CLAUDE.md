@@ -16,6 +16,34 @@ digithings — open-core agentic stack (quant finance, RAG, chat). Services: **d
 - Every change traces to a GitHub Issue: `task/<N>-slug` branch or `Fixes #N` in the PR body
 - Never touch live-trading paths without explicit human approval
 - `projects/` is confidential — never push to public remotes
+- **Digi names are always lowercase** — see [Naming](#naming--digi-modules) below
+
+## Naming — Digi modules
+
+Every Digi product, module, package, and service name is **always lowercase** in prose, docs, agent instructions, commit messages, and PR text — including at the start of a sentence and in headings.
+
+| Correct | Incorrect (do not use) |
+|---------|------------------------|
+| digithings | DigiThings, Digithings, Digi Things |
+| digichat | DigiChat, Digichat |
+| digivault | DigiVault, Digivault |
+| digigraph | DigiGraph, Digigraph |
+| digiquant | DigiQuant, Digiquant |
+| digisearch | DigiSearch, Digisearch |
+| digikey | DigiKey, Digikey |
+| digismith | DigiSmith, Digismith |
+| digiclaw | DigiClaw, Digiclaw |
+| digibase | DigiBase, Digibase |
+| digiskills | DigiSkills, Digiskills |
+| digiweb | DigiWeb, Digiweb |
+| digillm | DigiLLM, Digillm |
+| digifetch | DigiFetch, Digifetch |
+
+Same rule for any future Digi* module (digiball, digicraft, …): `digi` + lowercase rest, no spaces, no CamelCase in prose.
+
+**Exception — code identifiers only.** Language-idiomatic symbols keep their language’s casing: TypeScript/React `DigiChatSession`, `requireDigiChatAuth()`, Python `DigiAuthMiddleware`, HTTP header literals like `X-Digichat-Session`. Do not “fix” those to lowercase; do not invent CamelCase product names in docs to match them.
+
+Wrong vocabulary causes routing mistakes (wrong component folder, wrong AGENTS.md, wrong package name). When in doubt, match the directory / PyPI / npm name.
 
 ## Before modifying a component
 
@@ -51,6 +79,69 @@ app builds, the digithings deploy build-check. (See #1310.)
 - Score below threshold after two fix attempts
 - New external service dependency or network exposure change
 - Novel architecture decision not covered by any existing `ARCHITECTURE.md`
+
+## Review coverage (the gate before production)
+
+PR review runs on **Cursor Bugbot, invoked by hand** — comment `bugbot run` (or
+`cursor review`) once a diff is final, and again only if scope changes mid-PR.
+Never at PR open, and never per push: Bugbot went usage-based in June 2026 at
+roughly $1.00–$1.50 a run, so a review on every push is a real monthly cost. The
+Copilot request job was removed from `ci.yml` when that subscription lapsed
+(#1894) — it had been reporting success while attaching no reviewer.
+
+Reviewing the *promotion* is the wrong moment: a promotion diff is an accumulation
+of already-merged work (PR #1877 was 52 files, 12k lines), so it is the priciest
+review Cursor will quote and the least actionable, since a finding needs a fresh
+task PR plus another promotion. So `ci-review-coverage.yml` asserts the cheaper
+invariant on every PR into `main` — **each commit in the range was reviewed at its
+own task PR** — via `scripts/check_review_coverage.py`. Merge commits and bot-authored
+commits are exempt by nature; every other commit clears it five ways, strongest
+first:
+
+| hatch | claim | self-grantable? |
+|-------|-------|-----------------|
+| `Cursor Bugbot` concluded **success** | a machine reviewed it | **no** |
+| an **APPROVED** review | someone else read it | no |
+| label **`reviewed:agent`** + a findings comment | an in-session review ran | yes, but it costs a real review — the label without the comment is refused |
+| label **`reviewed:owner`** | "I read this myself" | yes — so the verdict names who applied it and when |
+| label **`risk:low`** | "this did not warrant a review" | yes |
+
+**When Bugbot is unavailable, review in-session — do not skip.** Bugbot reports
+`neutral` on a usage-limit skip, and that is not a review. Run `/review <N>`
+instead: it fans out over independent lenses in **fresh-context subagents** (the
+session that wrote the code must not review its own work), verifies each finding
+with a command, puts it through a refuter, then posts the surviving findings as a PR
+comment opening with `<!-- in-session-review -->` and applies `reviewed:agent`.
+
+Every line here is written by a coding agent, so an agent reviewing it is not weaker
+in kind than Bugbot — which is also an agent. What matters is that the reviewer did
+not write the code and that its output is on the record.
+`scripts/check_review_coverage.py` therefore looks for the comment, not just the
+label, and **refuses `reviewed:agent` when the findings are missing**. Fix what the
+review finds on the same branch before merge; that is the whole reason review
+belongs at the task PR and not at the promotion.
+
+`reviewed:owner` exists because the gate's own first run had no honest hatch: a
+solo maintainer cannot self-approve, Bugbot was out of quota, and the only
+remaining option was to label a blocking CI change `risk:low`. **Never use
+`risk:low` to mean `reviewed:owner`** — "I read it" and "it needed no reading" are
+different claims, and collapsing them destroys the only signal worth having. With
+one account holding write access, the three label hatches are accountability records
+rather than enforcement — though `reviewed:agent` at least cannot be claimed without
+posting a review. A completed Bugbot run is the only hatch nobody can grant
+themselves.
+
+Note what is deliberately *not* done: `Cursor Bugbot` is **not** a required status
+check on `main`. It reports `neutral` on a usage-limit skip and a required check
+must report success, so on 2026-08-05 that would have made all ten promotions
+unmergeable — including the one carrying a fix for false copy already live. Never
+let a metered third-party service hold a veto over deploys; this gate reads only
+the repo's own history, labels and reviews, and a label always clears it.
+
+Do not gate on Cursor's Low/Medium/High risk label. It measures code blast radius:
+PR #1891 was rated **Low** at 2 files and +14/−8, and it shipped two false public
+claims to production. Gate on paths (`digikey/`, brokers, migrations, workflows)
+and on whether behaviour or a public factual claim changed.
 
 ## Dependency version bounds
 
@@ -134,4 +225,4 @@ So `feat/<slug>` and `fix/<slug>` are the only name-rule-valid patterns that sti
 
 Skills, subagents, and slash commands under `.claude/` are generated from `agents/sources/` by `make agents-init`. Never hand-edit `.claude/agents/`, `.claude/skills/`, or `.claude/commands/` — edit the sources and run `make agents-init`. CI enforces idempotence.
 
-Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.
+Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, `/review <pr-number>`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.

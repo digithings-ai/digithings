@@ -2,7 +2,7 @@
 title: "digismith — API reference"
 type: reference
 status: generated
-created: 2026-06-29
+created: 2026-08-10
 tags:
   - api
   - support
@@ -11,14 +11,14 @@ relevance:
 ---
 # digismith — API reference
 
-> Correlation IDs across every span; PII redacted before logs hit disk.
+> Correlation IDs across every hop — and prompts logged by length, never by text.
 
-**Role:** Observability · spans · PII redaction · **Tier:** support
+**Role:** Observability · spans · correlation IDs · **Tier:** support
 
 ## Overview
 Structured logging, Prometheus metrics, and OpenTelemetry spans thread through every request so a multi-hop run is traceable end to end.
 
-PII is redacted before anything is written, with optional LangSmith trace export.
+Audit events record a prompt's length and its IDs, never the prompt itself — tail events.jsonl and check. Optional LangSmith export runs a regex PII redactor on the way out.
 
 ## Authentication
 Status and metrics are public diagnostics. Tracing is a library wrapper, not an HTTP surface.

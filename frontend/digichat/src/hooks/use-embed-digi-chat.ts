@@ -5,8 +5,9 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
+import { byokRequiresModel, type BYOKProvider } from "@/hooks/use-byok-key";
 import { p } from "@/lib/base-path";
-import { readTrialUnlocked, resolveEmbedHost } from "@/lib/embed-gate";
+import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
 import {
   ACTIVITY_PART_TYPE,
   sanitizeActivitySpan,
@@ -37,6 +38,15 @@ export function isEmbedTrialUnlockedAtSend(
   propFallback?: boolean,
 ): boolean {
   return !!propFallback || readTrialUnlocked(resolvedHost);
+}
+
+/**
+ * The chat-access token for this host, read at send time. Same freeze reason as
+ * isEmbedTrialUnlockedAtSend (#1339): a token closed over by DefaultChatTransport would be null
+ * forever, because it is written after the transport is created.
+ */
+export function chatAccessTokenAtSend(resolvedHost: string): string | null {
+  return readChatAccessToken(resolvedHost);
 }
 
 const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
@@ -96,7 +106,10 @@ function legacyTraceActivities(message: UIMessage): DigiChatActivity[] {
   }));
 }
 
-export function uiMessageToDigiChat(message: UIMessage): DigiChatMessage {
+export function uiMessageToDigiChat(
+  message: UIMessage,
+  opts: { settle?: boolean } = {},
+): DigiChatMessage {
   const text = message.parts
     .filter((part): part is { type: "text"; text: string } => part.type === "text")
     .map((part) => part.text)
@@ -113,7 +126,7 @@ export function uiMessageToDigiChat(message: UIMessage): DigiChatMessage {
   // both shapes, and rendering both would double every step.
   const hasActivityParts = message.parts.some((part) => part.type === ACTIVITY_PART_TYPE);
   const activities = hasActivityParts
-    ? toDigiChatActivity(spans)
+    ? toDigiChatActivity(spans, opts)
     : legacyTraceActivities(message);
 
   return {
@@ -147,6 +160,8 @@ export function useEmbedDigiChat({
   onGated,
 }: UseEmbedDigiChatOptions): DigiChatController & {
   seed: (msgs: readonly DigiChatMessage[]) => void;
+  /** Raw AI SDK error — for structured code detection (quota → BYOK). */
+  rawError: Error | undefined;
 } {
   const transport = useMemo(
     () =>
@@ -165,8 +180,9 @@ export function useEmbedDigiChat({
           if (effectiveToken) headers["X-Embed-Token"] = effectiveToken;
           if (byokKey) {
             headers["X-BYOK-Key"] = byokKey;
-            headers["X-BYOK-Provider"] = byokProvider ?? "openrouter";
-            if (byokProvider === "openrouter" && byokModel?.trim()) {
+            const provider = (byokProvider ?? "openrouter") as BYOKProvider;
+            headers["X-BYOK-Provider"] = provider;
+            if (byokRequiresModel(provider) && byokModel?.trim()) {
               headers["X-BYOK-Model"] = byokModel.trim();
             }
           }
@@ -174,6 +190,10 @@ export function useEmbedDigiChat({
           // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
           if (isEmbedTrialUnlockedAtSend(resolvedHost, trialUnlocked)) {
             headers["X-Embed-Trial-Unlock"] = "1";
+          }
+          const chatToken = chatAccessTokenAtSend(resolvedHost);
+          if (chatToken) {
+            headers["X-Embed-Chat-Token"] = chatToken;
           }
           try {
             const conversationId = window.sessionStorage.getItem(
@@ -197,7 +217,7 @@ export function useEmbedDigiChat({
     [accent, token, host, embedHost, byokKey, byokProvider, byokModel, trialUnlocked],
   );
 
-  const { messages, sendMessage, status, error, regenerate, setMessages } = useChat<UIMessage>({
+  const { messages, sendMessage, status, error, regenerate, setMessages, stop } = useChat<UIMessage>({
     transport,
   });
 
@@ -243,7 +263,16 @@ export function useEmbedDigiChat({
     [busy, sendMessage],
   );
 
-  const digiMessages = useMemo(() => messages.map(uiMessageToDigiChat), [messages]);
+  // Mid-stream: keep completed searches as running tool_call rows until
+  // retrieve arrives (or the turn settles). Settling early flashes "no hits".
+  const digiMessages = useMemo(
+    () =>
+      messages.map((m, i) => {
+        const streamingTurn = busy && i === messages.length - 1 && m.role === "assistant";
+        return uiMessageToDigiChat(m, { settle: !streamingTurn });
+      }),
+    [messages, busy],
+  );
 
   const seed = useCallback(
     (msgs: readonly DigiChatMessage[]) => {
@@ -262,8 +291,15 @@ export function useEmbedDigiChat({
     messages: digiMessages,
     busy,
     error: chatError,
+    /** Raw AI SDK error — for structured code detection (quota → BYOK). */
+    rawError: error,
     send,
-    onRetry: () => regenerate(),
+    stop: () => {
+      void stop();
+    },
+    onRetry: () => {
+      void regenerate();
+    },
     seed,
   };
 }

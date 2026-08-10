@@ -4,9 +4,11 @@ This repository enforces a specific branch taxonomy **client-side only**, via
 `scripts/hooks/pre-push.sh` (installed by `make hooks-install`). Pushes of
 branches whose names don't match the taxonomy are rejected before they leave
 your machine — but a clone that never ran `make hooks-install` has no name
-enforcement at all. There is no branch-naming ruleset on `origin`: its three
-rulesets are `module-branch-protection` (on `module/**`) and two Copilot-review
-rulesets (on the default branch, which is `develop`).
+enforcement at all. There is no branch-naming ruleset on `origin`: its two
+rulesets are `module-branch-protection` (on `module/**`) and `Copilot review for
+default branch` (on the default branch, which is `develop`). That second one
+outlived the Copilot subscription retired in #1904 — the ruleset object is still
+configured, but nothing behind it reviews any more.
 
 ## Three-tier branching model
 

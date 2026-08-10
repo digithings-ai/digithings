@@ -58,7 +58,9 @@ describe('PipelineNodeDetail', () => {
     expect(html).toContain('fixed inset-0');
     expect(html).toContain('h-dvh');
     expect(html).toContain('md:relative');
+    expect(html).toContain('md:w-[min(58vw,680px)]');
     expect(html).not.toContain('h-[46%]');
+    expect(html).not.toContain('md:w-[372px]');
   });
 
   it('renders pipeline guidance when a selected step has no run document', () => {

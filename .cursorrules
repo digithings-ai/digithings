@@ -14,6 +14,7 @@
 #   - NautilusTrader for all backtest/optimize
 #   - Score ≥8 Security, ≥8 Quality, ≥7 Optimization, ≥9 Accuracy before PR
 #   - Never touch live-trading paths without explicit human approval
+#   - Digi product/module names always lowercase (digithings, digichat, …) — never DigiThings/DigiChat
 #
 # Before editing any component:
 #   1. Read {component}/AGENTS.md  (pre-flight checklist + rules)

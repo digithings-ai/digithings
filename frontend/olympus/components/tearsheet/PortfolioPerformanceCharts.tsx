@@ -4,10 +4,21 @@ import {
   ContributionReturnChart,
   type ContributionReturnPoint,
 } from '@digithings/web';
+import type { BenchmarkComparison } from './types';
 
 import { CATEGORICAL_SERIES } from '@/lib/chart-colors';
 
-export function PortfolioContributionChart({ points }: { points: ContributionReturnPoint[] }) {
+export function PortfolioContributionChart({
+  points,
+  benchmark,
+  comparisons,
+  onBenchmarkChange,
+}: {
+  points: ContributionReturnPoint[];
+  benchmark: BenchmarkComparison | null;
+  comparisons: BenchmarkComparison[];
+  onBenchmarkChange: (ticker: string) => void;
+}) {
   const tickers = [...new Set(points.flatMap((point) => Object.keys(point.contributions)))];
   const colors = Object.fromEntries(
     tickers.map((ticker, index) => [ticker, CATEGORICAL_SERIES[index % CATEGORICAL_SERIES.length]])
@@ -25,7 +36,7 @@ export function PortfolioContributionChart({ points }: { points: ContributionRet
             cumulative contribution · percentage points
           </p>
           <h2 id="portfolio-contribution-title" className="font-display text-xl text-ink">
-            Portfolio attribution
+            Return contribution
           </h2>
         </div>
         {/* No per-asset legend — it cannot scale with a long history. Per-asset
@@ -35,7 +46,31 @@ export function PortfolioContributionChart({ points }: { points: ContributionRet
             <span className="h-0 w-5 border-t-2 border-accent" aria-hidden />
             Portfolio return
           </span>
-          <span>hover for per-position contributions</span>
+          {comparisons.length ? (
+            <label className="inline-flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-0 w-5 border-t border-dashed border-ink-soft" aria-hidden />
+                Benchmark
+              </span>
+              <select
+                aria-label="Comparison benchmark"
+                value={benchmark?.ticker ?? ''}
+                onChange={(event) => onBenchmarkChange(event.target.value)}
+                className="h-8 border border-hair bg-surface px-2 font-mono text-[0.68rem] text-ink outline-none focus:border-accent"
+              >
+                {comparisons.map((comparison) => (
+                  <option key={comparison.ticker} value={comparison.ticker}>
+                    {comparison.ticker}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : benchmark ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-0 w-5 border-t border-dashed border-ink-soft" aria-hidden />
+              {benchmark.ticker}
+            </span>
+          ) : null}
         </div>
       </div>
       {points.length < 2 ? (
@@ -43,7 +78,12 @@ export function PortfolioContributionChart({ points }: { points: ContributionRet
           A second NAV and position snapshot is needed to draw contribution history.
         </div>
       ) : (
-        <ContributionReturnChart points={points} colors={colors} height={340} />
+        <ContributionReturnChart
+          points={points}
+          colors={colors}
+          height={340}
+          benchmark={benchmark ? { label: benchmark.ticker, values: benchmark.series.map((point) => point.returnPct) } : undefined}
+        />
       )}
     </section>
   );

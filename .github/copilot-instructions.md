@@ -24,6 +24,7 @@
 - NautilusTrader for all backtest/optimize
 - Score ≥8 Security, ≥8 Quality, ≥7 Optimization, ≥9 Accuracy before PR
 - Never touch live-trading paths without explicit human approval
+- Digi product/module names are always lowercase in prose and docs (digithings, digichat, digivault, digigraph, …) — never DigiThings, DigiChat, Digichat, DigiVault. Code identifiers (DigiChatSession, DigiAuthMiddleware) keep language casing.
 
 - **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Enforced by `.github/workflows/pr-linkage.yml`.
 
@@ -102,6 +103,7 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 - `/opsx-propose` — see `.claude/commands/opsx-propose.md`
 - `/opsx-apply` — see `.claude/commands/opsx-apply.md`
 - `/opsx-archive` — see `.claude/commands/opsx-archive.md`
+- `/review` — see `.claude/commands/review.md`
 
 
 ---

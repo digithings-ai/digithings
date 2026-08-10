@@ -8,8 +8,8 @@ import { DtNav } from "@/components/DtNav";
 export const metadata: Metadata = {
   title: "security — controls, and the limits we publish",
   description:
-    "How DigiThings handles identity, correlation, audit and secrets: RS256 JWTs and scoped API " +
-    "keys in DigiKey, a request id on every hop, a redacted JSONL audit trail, gitleaks and " +
+    "How digithings handles identity, correlation, audit and secrets: RS256 JWTs and scoped API " +
+    "keys in digikey, a request id on every hop, a redacted JSONL audit trail, gitleaks and " +
     "pip-audit in CI — plus the boundaries we have not closed yet.",
 };
 
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
 // pipeline section is where a reader forms the belief that dependency auditing
 // is a merge gate, and a correction four sections later does not reach them.
 
-// The identity layer — DigiKey (digikey/src, 18 modules).
+// The identity layer — digikey (digikey/src, 18 modules).
 const IDENTITY: { term: string; body: string }[] = [
   {
     term: "RS256, with a kid",
@@ -132,23 +132,24 @@ const PIPELINE: { term: string; body: string }[] = [
   {
     term: "gitleaks",
     body:
-      "Scans the diff on every code pull request and the commit range on every push to develop and " +
-      "main; any finding fails the job. The scanner is the OSS CLI at a pinned version, verified " +
+      "Scans the diff on every code pull request, and the full history on every push to develop and " +
+      "main — the push job is literally named \"Scan (full history)\" and passes no --log-opts, so it " +
+      "is a wider scan than the pull-request one, not a narrower. Any finding fails the job. The scanner is the OSS CLI at a pinned version, verified " +
       "against a recorded SHA-256 of the release tarball before it runs. Allowlist entries in " +
       ".gitleaks.toml require a written justification. Markdown-only pull requests skip this scan.",
   },
   {
     term: "pip-audit",
     body:
-      "Seven Python components — DigiBase, DigiGraph, DigiQuant, DigiSearch, DigiSmith, DigiKey and " +
-      "DigiClaw — have their locked dependency closure exported and audited against the OSV " +
+      "Seven Python components — digibase, digigraph, digiquant, digisearch, digismith, digikey and " +
+      "digiclaw — have their locked dependency closure exported and audited against the OSV " +
       "database weekly, and whenever a change to a dependency manifest lands. HIGH and " +
       "CRITICAL findings block the merge; MEDIUM and LOW are warn-only annotations. Accepting a " +
       "CVE requires an entry with a rationale and a re-evaluation trigger. Three boundaries on " +
-      "that. The workspace has eleven members, so DigiFetch, DigiLLM, DigiSkills and DigiVault are " +
+      "that. The workspace has eleven members, so digifetch, digillm, digiskills and digivault are " +
       "outside the matrix and their dependencies are not audited. A pull request that adds Python " +
       "code without touching a manifest does not trigger the audit at all. And the scope is Python " +
-      "only — there is no Node or JavaScript dependency audit in CI, so the frontend and DigiChat " +
+      "only — there is no Node or JavaScript dependency audit in CI, so the frontend and digichat " +
       "dependency trees are unaudited.",
   },
   {
@@ -195,7 +196,7 @@ const LIMITS: { term: string; body: string }[] = [
   {
     term: "Key-scope isolation, not storage isolation",
     body:
-      "On a shared deployment, tenant separation is enforced at the DigiKey key-scope layer. " +
+      "On a shared deployment, tenant separation is enforced at the digikey key-scope layer. " +
       "Storage-layer isolation and per-tenant resource quotas are not implemented; multi-tenant " +
       "operation is a roadmap item, not a shipped guarantee.",
   },
@@ -230,7 +231,7 @@ const LIMITS: { term: string; body: string }[] = [
   {
     term: "Dependency auditing stops at Python",
     body:
-      "There is no Node or JavaScript dependency audit anywhere in CI, so the frontend and DigiChat " +
+      "There is no Node or JavaScript dependency audit anywhere in CI, so the frontend and digichat " +
       "dependency trees are not scanned for CVEs at all — it is written down as a follow-up, not " +
       "shipped. On the Python side, MEDIUM and LOW findings are warn-only, and a pull request that " +
       "adds code without touching a dependency manifest does not trigger the audit.",
@@ -289,7 +290,7 @@ export default function SecurityPage() {
               <span className="kicker">{"// identity"}</span>
               <h2>One service owns auth.</h2>
               <p>
-                DigiKey issues and verifies everything. It is eighteen Python modules, not a
+                digikey issues and verifies everything. It is eighteen Python modules, not a
                 framework plugin, and there is no static shared-secret fallback left in the stack.
               </p>
             </Reveal>
@@ -373,7 +374,7 @@ export default function SecurityPage() {
               <h2>Reporting a vulnerability.</h2>
               <p>
                 Please do not open a public issue. Email the address published in{" "}
-                <Mono>SECURITY.md</Mono> with <Mono>[DigiThings Security]</Mono> in the subject, and
+                <Mono>SECURITY.md</Mono> with <Mono>[digithings Security]</Mono> in the subject, and
                 include reproduction steps, the affected components, and any impact you know of.
               </p>
             </Reveal>

@@ -15,7 +15,7 @@ import { DtNav } from "@/components/DtNav";
 export const metadata: Metadata = {
   title: "quality — the gates a change has to clear",
   description:
-    "How change lands in DigiThings: per-component test lanes, a four-dimension scoring gate " +
+    "How change lands in digithings: per-component test lanes, a four-dimension scoring gate " +
     "(Security 8, Quality 8, Optimization 7, Accuracy 9), a frontend canon guard, and an honest " +
     "account of what the gate is and is not.",
 };
@@ -63,7 +63,9 @@ const COUNTED_AT = "5 August 2026";
 //
 // find tests -name 'test_*.py' | wc -l                                  → 321
 // find frontend -path '*/node_modules' -prune -o \( -name '*.test.ts*'
-//   -o -name '*.spec.ts*' -o -name '*.test.js' -o -name '*.test.mjs' \)  → 180
+//   -o -name '*.spec.ts*' -o -name '*.test.js' -o -name '*.test.mjs' \) -print  → 180
+//   ^ the -print is load-bearing: without it find's implicit print also emits the
+//     pruned node_modules directories, and the command returns 186 instead.
 // ls .github/workflows/ | grep -c '\.yml$'                              → 63
 // ls .github/workflows/ | grep -c '^test-'                              → 17
 const METRICS: OdometerStat[] = [
@@ -122,7 +124,7 @@ const LANES: { term: string; body: string }[] = [
     term: "Per-component test lanes",
     body:
       "Seventeen test workflows, most of them one per component, fired by a path filter so a change " +
-      "to DigiKey does not wait on the quant suite. Four of the seventeen are cross-cutting instead: " +
+      "to digikey does not wait on the quant suite. Four of the seventeen are cross-cutting instead: " +
       "end-to-end, the scoring job, the isolated Nautilus run, and the Atlas graph spec. Adding a " +
       "component means wiring its lane; the filter is explicit rather than inferred.",
   },
@@ -137,7 +139,7 @@ const LANES: { term: string; body: string }[] = [
   {
     term: "Type checking",
     body:
-      "A dedicated mypy workflow over the shared Python libraries — DigiBase and DigiKey — on every " +
+      "A dedicated mypy workflow over the shared Python libraries — digibase and digikey — on every " +
       "pull request that touches them. The frontend apps have no type-check lane of their own: they " +
       "are type-checked by the production build, which CI runs as a deploy check on any pull request " +
       "touching an app or the shared design packages, and which fails on a type error. Strict typing " +

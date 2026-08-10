@@ -530,4 +530,6 @@ export interface TickerDossier {
   coverage: TickerCoverage | null;
   /** All `decision_log` rows for this ticker, newest `run_date` first. */
   decisions: TableRow<'decision_log'>[];
+  /** Latest stored book-attribution window for this ticker. */
+  latestAttribution: TableRow<'position_attribution'> | null;
 }

@@ -62,9 +62,9 @@ const HEADS: [tag: string, h: string, p: string][] = [
     "Thesis review to committed run — multi-agent deliberation, PM direction and risk sizing, with the dissent on record.",
   ],
   [
-    "03 — Kairos · execution",
-    "Works the order, after your gate.",
-    "Passive inside the spread, escalating only when the book thins — every child order logged to its parent thesis.",
+    "03 — Kairos · execution (planned)",
+    "The stage after the backtest. Not built.",
+    "Kairos names the execution stage, not a package: there is no digiquant.olympus.kairos, and every broker adapter under digiquant/src/digiquant/brokers/ is a stub that raises NotImplementedError.",
   ],
 ];
 
@@ -232,9 +232,9 @@ export function OlympusScene() {
           <div className="dqp-scene-head">
             <div className="dqp-olympus">
               <OlympusMark size={22} />
-              <span>Olympus · research → portfolio → execution</span>
+              <span>Olympus · research → portfolio</span>
             </div>
-            <div className="dqp-scene-title">A hedge fund in a box.</div>
+            <div className="dqp-scene-title">The research desk in a box.</div>
           </div>
 
           {/* Graphite-style progress rail (#1215): scroll-synced .dqp-fill + engine

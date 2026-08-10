@@ -89,12 +89,15 @@ jobs:
               - '.github/workflows/test-digifetch.yml'
             digichat:
               - 'frontend/digichat/**'
+              - 'frontend/digichat-ui/**'
+              - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-digichat.yml'
             olympus:
               - 'frontend/olympus/**'
+              - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
@@ -102,8 +105,12 @@ jobs:
             web:
               - 'frontend/digithings-web/**'
               - 'frontend/digiquant-web/**'
+              - 'frontend/digichat-ui/**'
               - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
+              - 'frontend/digiweb/reference/**'
+              - 'frontend/digichat-cloudflare/**'
+              - 'frontend/digithings-stack-cloudflare/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
@@ -166,9 +173,16 @@ jobs:
               - 'agents/**'
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
+              - '.release-please-manifest.json'
+              - 'release-please-config.json'
+              - 'frontend/digichat/package.json'
+              - 'package-lock.json'
+              - '.github/workflows/release-please-digichat.yml'
               - '.github/workflows/pipeline-digiquant-prices.yml'
               - '.github/workflows/db-migrate.yml'
               - '.github/workflows/pipeline-olympus.yml'
+              - '.github/workflows/deploy-digithings-cloudflare.yml'
+              - '.github/workflows/deploy-digiquant-cloudflare.yml'
             workflows:
               - '.github/workflows/**'
               - '.github/actionlint.yaml'
@@ -186,9 +200,17 @@ jobs:
   # ── Frontend canon guard (#1404, #1434) — UNCONDITIONAL ─────────────────────
   # No `needs`/`if` gate on purpose: check_frontend_canon.py does
   # `git ls-files frontend` and scans ALL frontend files regardless of the
-  # diff, so path-gating it (as the per-app test jobs still do) let a PR
-  # touching only frontend/digichat-ui/** or frontend/digiweb/reference/**
-  # skip the guard entirely — even though digichat-ui is a census app.
+  # diff, so its verdict is a property of the whole tree while a path filter is a
+  # property of the diff. Gate it on any filter (as the per-app test jobs still are)
+  # and a PR whose diff falls outside that filter skips a check whose scope was never
+  # the diff in the first place. The mismatch is structural, so closing glob gaps does
+  # not fix it: frontend/digichat-ui/** and frontend/digiweb/reference/** were both in
+  # no lane when this job was written and both are covered now (digichat + web, and
+  # web since #1981) — the argument is unchanged. Keep the census case in view when
+  # judging that: digichat-ui IS a census app (CENSUS_APPS in check_frontend_canon.py),
+  # so the family-census check applies to it and only this job is guaranteed to run it,
+  # whereas digiweb — reference included — is exempt from that census by design, being
+  # where new families are born. The two were never symmetric examples.
   # Stdlib-only; no npm/pip install needed.
   frontend-canon:
     name: Frontend canon guard
@@ -476,40 +498,14 @@ jobs:
           fi
           echo "no SC2129 entry in .github/actionlint.yaml — rule is enforced."
 
-  # ── Request Copilot PR review (Tier 1 primary reviewer) — REM-098 ───────────
-  # Single PR review path: this job only (no copilot-pr-review.yml). Issue dispatch
-  # uses copilot-issue-dispatch.lock.yml (gh-aw) + copilot-quota-gate.yml — see EXECUTION_TIERS.md.
-  # Claude /code-review is opt-in via agent-claude-review.yml (ENABLE_CLAUDE_PR_REVIEW).
-  request-copilot-review:
-    name: Request Copilot review
-    if: |
-      github.event_name == 'pull_request' &&
-      (github.event.action == 'opened' || github.event.action == 'ready_for_review' || github.event.action == 'reopened') &&
-      github.event.pull_request.draft == false &&
-      github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: copilot-pr-review-${{ github.event.pull_request.number }}
-      cancel-in-progress: false
-    permissions:
-      pull-requests: write
-    steps:
-      - name: Request Copilot code review (idempotent)
-        env:
-          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          REQUESTED=$(gh pr view "$PR_NUMBER" --repo "$REPO" \
-            --json reviewRequests \
-            --jq '[.reviewRequests[].login | ascii_downcase] | any(. == "copilot" or . == "copilot-swe-agent")')
-          if [ "$REQUESTED" = "true" ]; then
-            echo "Copilot review already requested — skipping (REM-098)"
-            exit 0
-          fi
-          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-reviewer "Copilot" || \
-            echo "::warning::Could not request Copilot review — ensure Copilot coding agent is enabled (Settings → Copilot → Coding agent)."
+  # Copilot PR review retired (2026-08-05). The account is unsubscribed, so the
+  # job attached no reviewer — it ran `gh pr edit --add-reviewer Copilot`, hit the
+  # `|| echo ::warning::` fallback and reported success on every pull request
+  # while doing nothing. Reviews now run through Cursor Bugbot, invoked
+  # deliberately with a `bugbot run` comment once a diff is final rather than
+  # automatically on open: Bugbot moved to usage-based billing in June 2026 at
+  # roughly $1.00-$1.50 a run, so a review on every push is a real cost.
+  # Claude /code-review remains opt-in via agent-claude-review.yml.
 
   # ── Docker Compose validation ────────────────────────────────────────────────
   compose-validate:
@@ -526,4 +522,6 @@ jobs:
         run: cp .env.example .env
 
       - name: Validate Docker Compose
-        run: docker compose config -q
+        run: |
+          docker compose config -q
+          docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml config -q

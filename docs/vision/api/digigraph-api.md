@@ -2,7 +2,7 @@
 title: "digigraph — API reference"
 type: reference
 status: generated
-created: 2026-06-29
+created: 2026-08-10
 tags:
   - api
   - core
@@ -11,12 +11,12 @@ relevance:
 ---
 # digigraph — API reference
 
-> One supervisor decides which specialist runs. Every time.
+> A declarative graph decides what runs next — profile in, path out.
 
-**Role:** Orchestration · LangGraph supervisor · **Tier:** core
+**Role:** Orchestration · LangGraph state machine · **Tier:** core
 
 ## Overview
-A LangGraph supervisor inspects each request and routes it to the right sub-graph — quant, retrieval, or chat — through a declarative tool registry.
+A LangGraph state machine routes each request to the right sub-graph — quant research, retrieval, or chat — through conditional edges keyed on the request profile and the run's state. DIGI_SUPERVISOR=1 adds an entry node that stamps the run and enforces a recursion budget; it does not pick the branch, and unset, requests enter the research graph directly.
 
 Speaks the OpenAI API so existing clients work unchanged; LiteLLM handles routing, caching, and checkpointed state across hops.
 

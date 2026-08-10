@@ -23,7 +23,6 @@ You write GitHub Issue bodies for the digithings agent backlog. The issue templa
 3. **Classify the execution tier** using the decision tree in `docs/agents/EXECUTION_TIERS.md`:
    - `exec:claude` — risk:high, human-gated, auth/crypto, live-trading, cross-module, architectural, or iterative.
    - `exec:cursor` — scoped to one paragraph + clear acceptance, single component, no mid-task dialogue.
-   - `exec:copilot` — triggered housekeeping only (dep bumps, lint, stale sweep, CVE auto-PRs).
    When in doubt, escalate to the higher tier — a lower-tier agent must never pick up higher-tier work.
 4. Draft acceptance criteria in Given/When/Then format with a test command for each criterion.
 5. Identify docs that must be updated: the component's `ARCHITECTURE.md` almost always; `AGENTS.md` if the contract changes; `SECURITY.md` if security surface changes.
@@ -44,7 +43,7 @@ Emit a single markdown block ready for `gh issue create --body-file`:
 low | med | high
 
 ## Execution tier
-copilot | cursor | claude — <one-line justification tied to the decision tree>
+cursor | claude — <one-line justification tied to the decision tree>
 
 ## Acceptance criteria
 1. **Given** … **when** … **then** …

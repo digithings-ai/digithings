@@ -252,7 +252,12 @@ python digiquant/scripts/sync_strategy_calibrations.py --verify
 python digiquant/scripts/verify_strategy_calibrations_rls.py
 ```
 
-The separate `pipeline-digiquant-prices.yml` job feeds **Supabase price_history** for Atlas/Olympus — it does **not** regenerate these public tearsheets.
+The separate `pipeline-digiquant-prices.yml` job feeds **Supabase price_history**
+for Atlas/Olympus and owns `position_events` writes at the market open; it does
+**not** regenerate these public tearsheets. Two UTC crons cover New York daylight
+and standard time. `market_open_gate.py` selects the season-correct cron and keeps
+it valid after the open even when GitHub delivers it late, while rejecting the
+wrong-season duplicate and pre-open execution.
 
 Each `index.json` entry carries a `kind` slug (`long_short`, `long_only`, …) from `settings.json` for library filters as the catalog grows.
 
@@ -555,8 +560,6 @@ digiquant:
   build:
     context: .
     dockerfile: digiquant/Dockerfile
-    args:
-      NAUTILUS: ${NAUTILUS:-1}
   image: digi-digiquant:latest
   container_name: digi-digiquant
   ports:
@@ -569,8 +572,8 @@ digiquant:
     digikey:
       condition: service_healthy
   healthcheck:
-    test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/health"]
-    interval: 30s
+    test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/healthz"]
+    interval: 15s
     timeout: 5s
     retries: 3
     start_period: 10s
@@ -578,7 +581,7 @@ digiquant:
 
 The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies from writing to the data directory. The results volume (`/app/results`) is writable, which is where exports and tearsheets land. The audit log is mounted into the digigraph and digiclaw containers at `./digiquant/results/audit`.
 
-`NAUTILUS=1` (default) enables the NautilusTrader dependency installation in the Dockerfile. Set `NAUTILUS=0` for a lighter image that returns `None` from `run_nautilus_backtest()`.
+The image always installs `digiquant[nautilus]` (NautilusTrader + Polars pipeline). It does **not** download upstream Nautilus test CSVs at build time — market samples for backtests are under `digiquant/data/` (compose-mounted). Optional Nautilus package fixtures for local unit tests: `python digiquant/scripts/fetch_nautilus_test_data.py`.
 
 ### Environment Variables
 
@@ -1061,12 +1064,64 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
 
 #### Run robustness + telemetry (Pillar 1B)
 
+- `digillm.telemetry` defines the provider-agnostic `NodeRunRecord`, `ProviderCallRecord`,
+  `ProviderAttemptRecord`, and `ArtifactRef` vocabulary. Migration
+  `067_olympus_provider_telemetry.sql` owns the corresponding private normalized ledger in the
+  `core` Supabase project. The records distinguish graph work, logical calls/cache outcomes, and
+  physical attempts without storing prompts, responses, search text, secrets, or raw exceptions.
+  Producer event times and database `recorded_at` remain distinct; unavailable token usage or cost
+  stays NULL. #1955 produces physical attempts at the transport boundary and #1963 the generic
+  logical-call lineage; #1978 supplies the node identity that lineage hangs from, so logical calls
+  are produced in process — not merely producible — for every call originating inside a
+  `build_pipeline` node.
+- `digiquant.olympus.atlas.provider_telemetry` — the durable writer for that ledger (#1979).
+  `flush_run_telemetry` drains the `digigraph.usage` buffers and appends them in foreign-key
+  order: node runs, then logical calls with parents ahead of children, then physical attempts.
+  Called from `hermes/chain.py`'s `finally`, ahead of both `write_row` and `_usage.reset()` —
+  `reset()` clears the buffers a later flush would read, and going first is what makes the
+  detailed and aggregate writes independent in both directions without altering the aggregate
+  path.
+  - **Quarantine, not insertion.** A record whose foreign-key referent is absent from the same
+    flush is counted and reported as incomplete coverage, never submitted. This is a reachable
+    path, not a theoretical guard, and it has two sources. The beliefs-distillation fold runs
+    outside any graph node, so its provider calls are orphaned when it runs — which is *not*
+    every run: `should_distill_beliefs` gates it on `refresh_scope == "beliefs"` or an unfolded
+    backlog above `OLYMPUS_BELIEFS_BACKLOG` (default 20). And a run with no `DiagnosticsDeps` has
+    no run identifier at all, so no node runs and no logical calls are produced *at the source*.
+    A flush can therefore carry attributed and orphaned records together, which is why
+    eligibility is decided per record rather than per flush.
+  - **Reconciliation direction is the signal.** `usage.record` gates only on capture being
+    active, while a `ProviderCallRecord` also needs an open node scope, so the aggregate counts
+    calls the detailed side structurally cannot see. Detail *below* the aggregate is therefore
+    explainable; detail *above* it is not, and only double-counting could produce it. An unknown
+    key never suppresses a mismatch reported on a different key — those are orthogonal facts.
+  - **Validation is the gate.** The ledger revokes `UPDATE`/`DELETE`/`TRUNCATE` from every role
+    and rejects them by trigger besides, so a bad row is permanent. Every record is re-validated
+    through its Pydantic model immediately before insert; a failure is counted and dropped. A
+    tier that fails cascades to its dependents as quarantine, and a batch that lands partially
+    is reported as permanently inconsistent, because no correction is possible.
+  - **Reconciliation reports three states, not two.** `reconciled`, `mismatched` (known and
+    wrong), and `unavailable` (unknown). Missing provider usage or cost yields `unavailable` and
+    a quantified shortfall — never a fabricated zero, and never an exact-billing claim.
+  - **Failure is fail-soft throughout.** A flush failure cannot change the run's return value,
+    its exit code, the portfolio commit, or the `atlas_run_diagnostics` row. No reader is cut
+    over to these tables; the aggregate remains the active read path (plan Invariant 14).
 - `digiquant.olympus.atlas.diagnostics` — writes one `atlas_run_diagnostics` row per run
   **attempt** (`write_row`, keyed on `(run_id, attempt)`, fail-soft): fresh/carried/failed
   segment counts from
   state + the `digigraph.usage` LLM snapshot (calls/tokens/sources). `summarize_run` derives
   a `status` (`ok`/`degraded`/`failed`); a carry with reason `NODE_FAILED_REASON` counts as a
   failure, a deliberate carry does not.
+- The same writer bulk-upserts ordered `usage_snapshot.events` into
+  `olympus_run_events` on `(run_id, attempt, sequence)`. Rewrites reconcile stale higher
+  sequences; a snapshot with no `events` key preserves the prior trace, while an explicitly
+  empty list clears it. Malformed events are skipped and every cleanup/upsert remains fail-soft.
+- Migration `066_olympus_run_events.sql` keeps the base table private (RLS, no policies,
+  public-role grants revoked). The definer-rights `olympus_run_event_trace` view exposes only
+  fixed operation metadata, timing/status/retries, source counts, and bounded shape summaries.
+  Token/cost fields remain operator-only. Prompts, tool values/results, document bodies,
+  credentials, PII-heavy values, model output, and reasoning are not columns. **Migration 066
+  is human-gated and must not be applied to the live Supabase project without review.**
 - `chain.run_atlas_then_hermes` wraps each sub-graph (`_safe_invoke_graph`) and each terminal
   phase (`_run_terminal_phase`) so a late crash is recorded as a `PhaseError` and the run still
   reaches publish + materialize + the diagnostics write with last-good state. LLM usage is
@@ -1192,6 +1247,16 @@ do; 041/018 did not) and never use `REVOKE ALL` in the default-privileges statem
 would strip `SELECT` and `safeSelect` renders a PostgREST 42501 as an empty panel, not an
 error. See [`supabase/SCHEMA.md`](supabase/SCHEMA.md) "Grants" for the residuals and for why
 the statement must not carry a `FOR ROLE` clause.
+
+**Private provider telemetry (#1951).** Migration
+[`supabase/migrations/067_olympus_provider_telemetry.sql`](supabase/migrations/067_olympus_provider_telemetry.sql)
+adds `olympus_node_runs`, `olympus_provider_calls`, and `olympus_provider_attempts`. All three are
+service-role-only, RLS-enabled with no policies, and append-only: `service_role` receives only
+`SELECT`/`INSERT`, while database triggers reject `UPDATE` and `DELETE`. The schema stores generic
+artifact references but no provider payload. It is prospective only; no historical attempts or
+costs are inferred from `atlas_run_diagnostics` aggregates. Task #1963 does not write these tables:
+it establishes in-process logical purpose, parentage, cache status, exact observable attempt count,
+and artifact disposition; Task 1.5 owns durable persistence and reconciliation.
 
 **Live price fan-out + public portfolio surface (#1461/#1462).** Migration
 [`supabase/migrations/050_public_portfolio_views.sql`](supabase/migrations/050_public_portfolio_views.sql)
@@ -1374,6 +1439,11 @@ either (a) call `ingest_atlas_document` directly at the end of
 
 `digiquant/src/digiquant/olympus/atlas/diagnostics.py` derives **two** verdicts from a
 finished run's state, and they are deliberately not the same signal:
+
+Call-level transparency is a separate relation from this aggregate health row. Migration 066
+adds the ordered `olympus_run_events` base table and curated `olympus_run_event_trace` view;
+historical diagnostics rows are not backfilled because aggregate counters cannot reconstruct
+individual calls, ordering, retries, or timing without fabrication.
 
 | Field | Question | Consumers |
 |---|---|---|

@@ -20,24 +20,20 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `test-atlas-graph.yml` | Test: Atlas graph | workflow_call | Unit tests + lint for Atlas + Hermes trees; installs the full workspace from `uv.lock` (`uv sync --frozen`) | Working | `digiquant/src/digiquant/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, `pipeline-olympus.yml` |
 | `project-stub-fields.yml` | Project: stub fields TSV | issues labeled | Appends inferred row to `scripts/project_fields.tsv` when `agent-task` or `phase-N` label applied | Working | none |
 | `agent-docs-automerge.yml` | Agent: doc auto-merge | PR events | Enable squash auto-merge for PRs with `automerge-docs` label after doc-only path verification | Working | none |
-| `agent-ci-failure-triage.yml` | Agent: CI failure triage | workflow_run (completed) | Create `copilot` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
+| `agent-ci-failure-triage.yml` | Agent: CI failure triage | workflow_run (completed) | Create `exec:cursor` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
 | `ci.yml` | CI | push (main/develop), PR | Orchestrator: per-component tests + score + e2e-contract + nautilus-smoke + atlas-graph + pip-audit + ruff/scripts/baseline/provider_review + compose-validate + `actionlint` (repo-wide workflow lint) + `frontend-canon` (unconditional canon guard, #1434) | Working | none |
 | `test-e2e.yml` | Test: e2e stack | workflow_call, workflow_dispatch, push (develop) | PR gate: `e2e-contract` via `ci.yml`; compose `pytest -m e2e` on develop push/dispatch only (`continue-on-error`) | Working | `tests/test_e2e*.py`, compose |
 | `test-nautilus.yml` | Test: Nautilus smoke | workflow_call | Linux `digiquant[nautilus]` smoke subset | Working | `digiquant/**`, `tests/dq/**` |
 | `test-olympus.yml` | Test: olympus | workflow_call | Olympus lint + vitest + build | Working | `frontend/olympus/**`, design |
-| `test-web.yml` | Test: web apps | workflow_call | Lint `digithings-web` + `digiquant-web` (root workspaces) + frontend canon guard (`check_frontend_canon.py`) | Working | `frontend/{digithings-web,digiquant-web,digiweb/web,digiweb/design}/**`, `package.json`/lock |
+| `test-web.yml` | Test: web apps | workflow_call | Lint `digithings-web` + `digiquant-web` + `design-reference` (root workspaces); typecheck `design-reference` (`tsc --noEmit`); vitest for `digithings-web`, `@digithings/web`, `@digithings/digichat-ui`; frontend canon guard (`check_frontend_canon.py`) | Working | `frontend/{digithings-web,digiquant-web,digichat-ui,digiweb/web,digiweb/design,digiweb/reference}/**`, `package.json`/lock |
 | `test-score.yml` | Test: score PR diff | workflow_call | `make score` on PR diff (4 dimensions) | Working | none |
 | `agent-claude-dispatch.yml` | Agent: Claude dispatch | issues labeled | Acknowledge `exec:claude` label; post local-dispatch instructions (cloud dispatch disabled by policy) | Working | none |
 | `agent-claude-review.yml` | Agent: Claude review | PR (opened/sync/ready/reopened) | Auto PR review via Claude `/code-review`; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | paths-ignore: `**.md`, `docs/**`, issue templates |
 | `agent-claude.yml` | Agent: Claude Code | issue_comment, PR review comment, issues | Respond to `@claude` mentions from repo members | Working | none |
 | `pipeline-continuous-improvement.yml` | Pipeline: continuous improvement | schedule (Sun 22:00), dispatch | Weekly Claude-synthesized digest of activity patterns; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
-| `copilot-quota-gate.yml` | Copilot: quota gate | issues assigned | Intercept `@Copilot` assignment when `quota:copilot-exhausted` is set; escalate or park | Working | none |
-| `copilot-issue-dispatch.lock.yml` | Copilot: issue dispatch | issues labeled/opened | Assign `@Copilot` via `assign-to-agent` safe output when quota allows | Working | none |
-| `copilot-pr-lifecycle.lock.yml` | Copilot: PR lifecycle | schedule (10 min), dispatch | End-to-end `copilot/*` loop: issue link, mark-ready, CI, review, fix rounds, automerge | Working | none |
-| `copilot-pr-mark-ready.yml` | Copilot: PR mark ready | workflow_dispatch (dispatched by lifecycle) | Marks a draft `copilot/*` PR ready for review | Working | none |
 | `test-digibase.yml` | Test: digibase | workflow_call | digibase unit tests | Working | `digibase/**`, `tests/db/**` |
 | `test-digichat.yml` | Test: digichat | workflow_call | digichat (Next.js) lint + tests | Working | `frontend/digichat/**`, `frontend/digiweb/design/**`, `package.json` |
-| `release-please-digichat.yml` | Release please: digichat | push (`module/digichat`) | Track digichat version + changelog from Conventional Commits on `module/digichat` (decoupled from image publish, #1343) | Working | `frontend/digichat/**`, release-please config/manifest |
+| `release-please-digichat.yml` | Release please: digichat | push (`develop`) | Track digichat version + changelog from Conventional Commits on `develop` (decoupled from image publish, #1343). Retargeted off `module/digichat` in #1948 — that branch had not moved since `digichat-v0.6.0`, so two releases were hand-cut and left untagged. | Working | `frontend/digichat/**`, release-please config/manifest |
 | `publish-digichat-image.yml` | Publish: digichat image | push (`main`), dispatch | Build + push digichat image to GHCR once a version reaches `main`; skips if that version tag already exists (#1343) | Working | `frontend/digichat/**` |
 | `test-digiclaw.yml` | Test: digiclaw | workflow_call | digiclaw unit tests | Working | `digiclaw/**`, `tests/dc/**` |
 | `test-digigraph.yml` | Test: digigraph | workflow_call | digigraph unit tests | Working | `digigraph/**`, `tests/dg/**` |
@@ -68,11 +64,10 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `db-migrate.yml` | db-migrate | push (`main`), dispatch | Apply pending Olympus Supabase migrations to prod; forward-only, the `olympus_schema_migrations` ledger is the SOLE skip gate (the `BASELINE_THROUGH` baseline branch was deleted in #1814 — it silently recorded a new low-numbered file as applied without running its DDL); one transaction per file on the unwrapped path; `production` env (human gate) (#1016) | Working | `digiquant/supabase/migrations/**` |
 | `deploy-digithings-cloudflare.yml` | Deploy: digithings.ai build check | PR (digithings.ai assets), dispatch | Gate/validate `scripts/build-digithings.sh`; primary deploy is Cloudflare Pages watching `main` | Working | digithings.ai assets |
 | `deploy-digiquant-cloudflare.yml` | Deploy: digiquant.io build check | PR (digiquant.io assets), dispatch | Gate/validate `scripts/build-digiquant.sh` (ADR-0012); primary deploy is Cloudflare Pages watching `main` | Working | digiquant.io assets |
-| `agent-pr-autolabel.yml` | Agent: PR autolabel | workflow_run (CI, Copilot targeted CI) | Add `automerge-agent` to low-risk agent-branch PRs once CI is green | Working | none |
-| `agent-pr-automerge.yml` | Agent: PR auto-merge | pull_request, workflow_run (CI, Copilot targeted CI) | Enable squash auto-merge for PRs labeled `automerge-agent` | Working | none |
-| `agent-pr-finalizer.yml` | Agent: PR finalizer | schedule (daily 07:00), dispatch | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path (copilot/* handled by gh-aw lifecycle) | Working | none |
+| `agent-pr-autolabel.yml` | Agent: PR autolabel | workflow_run (CI) | Add `automerge-agent` to low-risk agent-branch PRs once CI is green | Working | none |
+| `agent-pr-automerge.yml` | Agent: PR auto-merge | pull_request, workflow_run (CI) | Enable squash auto-merge for PRs labeled `automerge-agent` | Working | none |
+| `agent-pr-finalizer.yml` | Agent: PR finalizer | schedule (daily 07:00), dispatch | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path | Working | none |
 | `agent-dispatch-replay.yml` | Agent: dispatch replay | dispatch only | Re-fire `exec:*` dispatch for issues labeled at creation time (GitHub skips `issues:labeled` for `gh issue create` labels) | Working (on-demand) | none |
-| `copilot-pr-targeted-ci.yml` | Copilot: targeted CI | dispatch only (by lifecycle) | Trusted-actor CI for `copilot/*` PRs; bypasses the bot `pull_request` action_required gate | Working | none |
 
 ---
 
@@ -80,9 +75,9 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 
 | Secret / Variable | Used by | Required or optional |
 |-------------------|---------|---------------------|
-| `DIGITHINGS_PROJECT_TOKEN` | project-status-automation, enforce-project-assignment, ci-failure-triage, route-issues-to-projects, scheduled-maintenance, agent-quota-reset, copilot-quota-gate, continuous-improvement, auto-stub-project-fields, agent-pr-finalizer | Required for project-board mutations; workflows degrade gracefully when absent |
 | `CLAUDE_CODE_OAUTH_TOKEN` | agent-claude.yml, agent-claude-review.yml, agent-claude-dispatch.yml, pipeline-continuous-improvement.yml, pipeline-provider-review.yml | Optional — features disabled when absent |
 | `CURSOR_API_KEY` | agent-pr-finalizer.yml | Optional — Cursor fix dispatch skipped when absent |
+| `DIGITHINGS_PROJECT_TOKEN` | project routing/status workflows, CI failure triage, PR finalizer, scheduled maintenance | Required for cross-project updates; guarded features skip when absent |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | atlas-baseline, atlas-delta, atlas-monthly, digiquant-prices | Required for production runs |
 | `GEMINI_API_KEY` | atlas-baseline, atlas-delta, atlas-monthly | Required for Atlas/Hermes LLM calls |
 | `OLLAMA_API_KEY` | atlas-baseline, atlas-delta, atlas-monthly | Required for reasoning tier (phases 7, 7D) |
@@ -263,7 +258,6 @@ Current watched workflows in `agent-ci-failure-triage.yml`:
 | `project-enforce-assignment.yml` | Was producing a YAML parse error (heredoc content with `⚠️` at column 0 inside `run: |`). Fixed in #292 using `printf` + `--body-file`. | Resolved. |
 | `security-gitleaks.yml` | Runs full history scan on every push to `develop` — this can fail if any historical commit contains a pattern matching the ruleset. False positives should be added to `.gitleaks.toml` allowlist. | Operational — not a workflow defect. |
 | `DIGITHINGS_PROJECT_TOKEN` | Several workflows degrade gracefully when this token is absent, but project-board mutations (routing, status automation, enforce-project-assignment) will not work. | Ensure the token is configured as an org secret with `project` + `repo` scopes. Token rotation is a manual operation. |
-| `copilot-pr-review.yml` | Removed (REM-098). **PR review:** `ci.yml` → `request-copilot-review` only (idempotent `gh pr edit --add-reviewer Copilot`). **Issue dispatch:** `copilot-issue-dispatch.lock.yml` (gh-aw) + `copilot-quota-gate.yml`. **Cursor dispatch:** Cursor Automation (cloud). **Secondary review:** `agent-claude-review.yml` when `ENABLE_CLAUDE_PR_REVIEW=true`. | Do not add a second Copilot PR-review workflow. |
 
 ---
 

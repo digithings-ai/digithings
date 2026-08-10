@@ -49,7 +49,7 @@ class _FakeQuery:
     table_name: str
     store: dict[str, list[dict[str, Any]]]
     canned: list[dict[str, Any]] = field(default_factory=list)
-    _upsert_row: dict[str, Any] | None = None
+    _upsert_row: dict[str, Any] | list[dict[str, Any]] | None = None
     _update_row: dict[str, Any] | None = None
     _delete: bool = False
     _filters: list[tuple[str, str, Any]] = field(default_factory=list)
@@ -94,9 +94,15 @@ class _FakeQuery:
         self._limit = n
         return self
 
-    def upsert(self, row: dict[str, Any], on_conflict: str | None = None) -> "_FakeQuery":
-        self._upsert_row = dict(row)
-        self._upsert_row["_on_conflict"] = on_conflict
+    def upsert(
+        self,
+        row: dict[str, Any] | list[dict[str, Any]],
+        on_conflict: str | None = None,
+    ) -> "_FakeQuery":
+        if isinstance(row, list):
+            self._upsert_row = [{**item, "_on_conflict": on_conflict} for item in row]
+        else:
+            self._upsert_row = {**row, "_on_conflict": on_conflict}
         return self
 
     def update(self, payload: dict[str, Any]) -> "_FakeQuery":
@@ -123,10 +129,9 @@ class _FakeQuery:
 
     def execute(self) -> _FakeResponse:
         if self._upsert_row is not None:
-            self.store.setdefault(self.table_name, []).append(self._upsert_row)
-            return _FakeResponse(
-                data=[{**self._upsert_row, "id": f"row-{len(self.store[self.table_name])}"}]
-            )
+            rows = self._upsert_row if isinstance(self._upsert_row, list) else [self._upsert_row]
+            self.store.setdefault(self.table_name, []).extend(rows)
+            return _FakeResponse(data=[dict(row) for row in rows])
         if self._delete is True:
             rows = self.store.get(self.table_name, [])
             removed = [r for r in rows if self._matches(r)]

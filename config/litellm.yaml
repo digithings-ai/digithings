@@ -18,6 +18,15 @@ model_list:
       model: openai/gpt-4o-mini
       api_key: os.environ/OPENAI_API_KEY
 
+  # ── OpenRouter :free examples (dogfood / optional — not required for all installs) ──
+  # llm_mode: free is policy only; pin digiproject agents.llm (or DIGI_LLM_*) to a
+  # concrete :free id. Roster may rotate — do not put product pins in model_modes.yaml.
+  # Verified live 2026-08-10 (deepseek/deepseek-chat-v3:free 404'd); tools+answer OK.
+  - model_name: openrouter/openai/gpt-oss-20b:free
+    litellm_params:
+      model: openrouter/openai/gpt-oss-20b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+
   # ─── Ollama Cloud (free tier; OLLAMA_API_KEY at ollama.com/settings/keys) ───
   # Updated 2026-04-24. Model catalog: https://ollama.com/search?c=cloud
 

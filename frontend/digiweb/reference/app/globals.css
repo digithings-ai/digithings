@@ -43,6 +43,8 @@
 @source "../../web/src/components/effects-chrome";
 @source "../../web/src/components/command-palette";
 @source "../../web/src/components/symbols";
+/* The terminal loaders' specimen markup now lives in the package too. */
+@source "../../web/src/components/terminal";
 
 /* Shared base for every design-reference page. Family-specific styles live
    next to their page (app/<family>/<family>.css) — keep this file small. */

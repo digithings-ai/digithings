@@ -15,6 +15,24 @@ export interface LaidOutNode {
   documentKey?: string;
   /** Backend runs this step in-state only — it never publishes a document (see SubStep.stateOnly). */
   stateOnly?: boolean;
+  runStatus?: PipelineNodeRunStatus;
+}
+
+export type PipelineNodeRunStatus =
+  | 'stage-overview'
+  | 'not-run'
+  | 'state-only'
+  | 'persisted-artifact'
+  | 'expected-artifact-missing'
+  | 'parallel-dispatch';
+
+export function pipelineNodeRunStatusLabel(status: PipelineNodeRunStatus): string {
+  if (status === 'stage-overview') return 'Stage overview';
+  if (status === 'not-run') return 'Not run';
+  if (status === 'state-only') return 'State-only operation';
+  if (status === 'persisted-artifact') return 'Persisted artifact';
+  if (status === 'expected-artifact-missing') return 'Expected artifact missing';
+  return 'Parallel dispatch';
 }
 
 export interface Connector { fromId: string; toId: string; active?: boolean; }
@@ -82,6 +100,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
   const connectors: Connector[] = [];
   let cursorX = 0;
   let maxY = NODE_H;
+  const runRecorded = day.runRecorded ?? day.presentKeys.size > 0;
 
   for (const stage of PIPELINE_TOPOLOGY) {
     const stageExpanded = expansion.expandedStages.has(stage.id);
@@ -97,6 +116,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
         y: BASE_Y,
         width: NODE_W,
         height: NODE_H,
+        runStatus: runRecorded ? 'stage-overview' : 'not-run',
       });
       if (nodes.length > 1) {
         connectors.push({ fromId: nodes[nodes.length - 2].id, toId: stageNodeId });
@@ -117,6 +137,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
         y: BASE_Y,
         width: NODE_W,
         height: NODE_H,
+        runStatus: runRecorded ? 'stage-overview' : 'not-run',
       });
       if (nodes.length > 1) {
         const prevStageNode = nodes.find(
@@ -138,6 +159,20 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
         // but publishes nothing (thesis framing, screener, consolidate, preflight).
         const leafKey =
           sub.fanout || sub.stateOnly ? undefined : resolveLeafDocumentKey(sub.id, day);
+        const fanoutKeys = sub.fanout ? day.fanoutKeys[sub.fanout.id] ?? [] : [];
+        const runStatus: PipelineNodeRunStatus = !runRecorded
+          ? 'not-run'
+          : sub.stateOnly
+            ? 'state-only'
+            : sub.fanout
+              ? fanoutKeys.length > 0 || sub.fanout.defaultCount === 0
+                ? 'parallel-dispatch'
+                : 'expected-artifact-missing'
+              : leafKey
+                ? 'persisted-artifact'
+                : sub.conditionalArtifact
+                  ? 'not-run'
+                  : 'expected-artifact-missing';
 
         nodes.push({
           id: subId,
@@ -150,6 +185,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
           height: NODE_H,
           documentKey: leafKey,
           stateOnly: sub.stateOnly,
+          runStatus,
         });
         // Sequential connectors inside an expanded stage are "active" (the
         // expanded stage's own internal flow), so they read in cyan on top.
@@ -174,6 +210,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
                 width: NODE_W,
                 height: NODE_H,
                 documentKey,
+                runStatus: 'persisted-artifact',
               });
               // Fan-out branch connectors flow out of an expanded fan-out.
               connectors.push({ fromId: subId, toId: branchId, active: true });
@@ -195,6 +232,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
                 y: branchY,
                 width: NODE_W,
                 height: NODE_H,
+                runStatus: runRecorded ? 'expected-artifact-missing' : 'not-run',
               });
               connectors.push({ fromId: subId, toId: branchId, active: true });
               if (branchY + NODE_H > maxY) maxY = branchY + NODE_H;

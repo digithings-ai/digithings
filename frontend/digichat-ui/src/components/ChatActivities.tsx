@@ -1,105 +1,174 @@
 "use client";
 
-import type { DigiChatActivity } from "../types";
+/**
+ * ChatActivities — the agent chain of one assistant turn, rendered in the
+ * digichat terminal grammar (canon §16) on the shared chat family from
+ * `@digithings/web`.
+ *
+ * Before #1418's gap 6 closed, this was a flat bordered `.dc-activities` box of
+ * bespoke `.dc-act-*` paragraphs. It DID render all three kinds — a tool chain
+ * (`.dc-act-tool`), a reasoning disclosure (`<details class="dc-act-reasoning">`)
+ * and sources (`.dc-act-hits`, with title/tier/year/path/snippet) — and it
+ * rendered them identically on both surfaces, because both take the same session
+ * component. An earlier version of this docblock said the embed "showed no
+ * tool-call chain, no reasoning disclosure and no sources" while digithings.ai
+ * used canon primitives; neither half was true. What changed here is the *skin*,
+ * not the presence of the information: every row is now a shared primitive
+ * instead of a bespoke paragraph.
+ *
+ *   | activity      | primitive                          |
+ *   |---------------|------------------------------------|
+ *   | `tool_call`   | <ChatToolCall status="running">    |
+ *   | `tool_result` | <ChatToolCall status="ok"> + hits  |
+ *   | `trace`       | <ChatToolCall> (bodyless step row) |
+ *   | `reasoning`   | <ChatThinking> disclosure          |
+ *   | `brief`       | <ChatWidgetFrame variant="card">   |
+ *   | `status`      | <ChatMessage role="system">        |
+ *
+ * The wire-model → props mapping lives in `../activity-view` (pure, tested);
+ * this file only renders. Both surfaces get it at once — digichat `/embed` and
+ * digithings-web `/chat` render the same session component.
+ *
+ * Styling split, and why it is this way round: the primitives carry their own
+ * token utilities, which each consumer's Tailwind build already generates via
+ * its `@source ".../digiweb/web/src/components/chat"`. Markup authored *here*
+ * gets none of that — no consumer `@source`s this package — so anything this
+ * file adds around a primitive wears a `.dc-*` class backed by `session.css`,
+ * where the tokens resolve in plain CSS. Utilities in this file would silently
+ * fail to generate in both apps.
+ */
+import {
+  ChatMessage,
+  ChatThinking,
+  ChatToolCall,
+  ChatWidgetFrame,
+} from "@digithings/web";
+import { distinctHitPath, toCanonRows, type CanonActivityRow } from "../activity-view";
+import type { DigiChatActivity, VaultHitSummary } from "../types";
 
-function ActivityRow({ activity }: { activity: DigiChatActivity }) {
-  switch (activity.kind) {
-    case "status":
-      return <p className="dc-act-status">{activity.message}</p>;
-    case "tool_call":
+/**
+ * Retrieved documents, as the fold-out body of a `tool_result` row — the
+ * chunks Foundry (or digivault) already attached to that search. Each snippet
+ * is a nested `<details>`, closed by default.
+ */
+function HitHead({ hit, path }: { hit: VaultHitSummary; path: string | null }) {
+  return (
+    <>
+      <span className="dc-act-hit-title">{hit.title}</span>
+      {hit.tier ? <span className="dc-act-hit-tier">{hit.tier}</span> : null}
+      {typeof hit.year === "number" ? (
+        <span className="dc-act-hit-year">{hit.year}</span>
+      ) : null}
+      {path ? <span className="dc-act-hit-path">{path}</span> : null}
+    </>
+  );
+}
+
+function SourceList({ sources }: { sources: VaultHitSummary[] }) {
+  return (
+    <ul className="dc-act-hits">
+      {/* path is not unique — two chunks of one vault document share it. */}
+      {sources.map((hit, i) => {
+        const path = distinctHitPath(hit.title, hit.path);
+        const key = `${hit.path}-${i}`;
+        if (!hit.snippet) {
+          return (
+            <li key={key}>
+              <HitHead hit={hit} path={path} />
+            </li>
+          );
+        }
+        return (
+          <li key={key}>
+            <details className="dc-act-hit">
+              <summary className="dc-act-hit-summary">
+                <HitHead hit={hit} path={path} />
+              </summary>
+              <p className="dc-act-hit-snippet">{hit.snippet}</p>
+            </details>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function ActivityRow({ row }: { row: CanonActivityRow }) {
+  switch (row.kind) {
+    case "tool":
       return (
-        <p className="dc-act-tool">
-          <span className="dc-act-label">tool</span>{" "}
-          <code className="dc-act-code">{activity.name}</code>
-          <span className="dc-act-query"> — {activity.query}</span>
-        </p>
+        <ChatToolCall
+          name={row.name}
+          args={row.args}
+          status={row.status}
+          // Outcome count, not a timing — the protocol carries no durations.
+          // See ../activity-view for why this slot is spent this way.
+          duration={row.meta}
+          defaultOpen={row.defaultOpen}
+        >
+          {row.sources ? <SourceList sources={row.sources} /> : null}
+        </ChatToolCall>
       );
-    case "tool_result":
+
+    case "thinking":
       return (
-        <div className="dc-act-result">
-          <p className="dc-act-tool">
-            <span className="dc-act-label">vault</span>{" "}
-            {activity.count > 0
-              ? `${activity.count} note${activity.count === 1 ? "" : "s"} for “${activity.query}”`
-              : `no hits for “${activity.query}”`}
-          </p>
-          {activity.hits.length > 0 ? (
-            <ul className="dc-act-hits">
-              {activity.hits.map((h) => (
-                <li key={h.path}>
-                  <span className="dc-act-hit-title">{h.title}</span>
-                  {h.tier ? <span className="dc-act-hit-tier">{h.tier}</span> : null}
-                  {typeof h.year === "number" ? (
-                    <span className="dc-act-hit-year">{h.year}</span>
-                  ) : null}
-                  <span className="dc-act-hit-path">{h.path}</span>
-                  {h.snippet ? <p className="dc-act-hit-snippet">{h.snippet}</p> : null}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
+        <ChatThinking label={row.label} count={null}>
+          <pre className="dc-act-reasoning-text">{row.text}</pre>
+        </ChatThinking>
       );
+
     case "brief":
       return (
-        <details className="dc-act-brief">
-          <summary>research brief</summary>
-          {activity.themes.length > 0 ? (
+        <ChatWidgetFrame eyebrow="research brief" className="dc-act-brief">
+          <div className="dc-act-brief-body">
             <ul className="dc-act-brief-themes">
-              {activity.themes.map((t, i) => (
-                <li key={`${t.label}-${i}`}>
-                  <span className="dc-act-brief-label">{t.label}</span>
-                  {t.summary ? ` — ${t.summary}` : ""}
+              {row.themes.map((theme, i) => (
+                <li key={`${theme.label}-${i}`}>
+                  <span className="dc-act-brief-label">{theme.label}</span>
+                  {theme.summary ? ` — ${theme.summary}` : ""}
                 </li>
               ))}
             </ul>
-          ) : null}
-          {activity.questions?.length ? (
-            <div className="dc-act-brief-questions">
-              <p className="dc-act-brief-q-heading">Next questions</p>
-              <ol>
-                {activity.questions.map((q, i) => (
-                  <li key={i}>{q}</li>
-                ))}
-              </ol>
-            </div>
-          ) : null}
-        </details>
+            {row.questions?.length ? (
+              <div className="dc-act-brief-questions">
+                <p className="dc-act-brief-q-heading">Next questions</p>
+                <ol>
+                  {row.questions.map((question, i) => (
+                    <li key={`${question}-${i}`}>{question}</li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+          </div>
+        </ChatWidgetFrame>
       );
-    case "reasoning":
-      return <ReasoningBlock text={activity.text} />;
-    case "trace": {
+
+    case "aside":
       return (
-        <p className={`dc-act-line${activity.done ? " is-done" : ""}`}>
-          {activity.done ? <span className="dc-act-check">✓</span> : "…"} {activity.label}
-        </p>
+        <ChatMessage role="system" tone="mute" className="dc-act-status">
+          {row.message}
+        </ChatMessage>
       );
-    }
+
     default: {
-      const _exhaustive: never = activity;
+      const _exhaustive: never = row;
       void _exhaustive;
       return null;
     }
   }
 }
 
-function ReasoningBlock({ text }: { text: string }) {
-  if (!text.trim()) return null;
-  return (
-    <details className="dc-act-reasoning">
-      <summary>reasoning</summary>
-      <pre>{text}</pre>
-    </details>
-  );
-}
-
 export function ChatActivities({ activities }: { activities?: DigiChatActivity[] }) {
   if (!activities?.length) return null;
+  const rows = toCanonRows(activities);
   const hasTraces = activities.some((a) => a.kind === "trace");
   return (
-    <div className={`dc-activities${hasTraces ? " dc-activities-traces" : ""}`} aria-label="Agent steps">
-      {activities.map((a, i) => (
-        <ActivityRow key={`${a.kind}-${i}`} activity={a} />
+    <div
+      className={`dc-activities${hasTraces ? " dc-activities-traces" : ""}`}
+      aria-label="Agent steps"
+    >
+      {rows.map((row) => (
+        <ActivityRow key={row.key} row={row} />
       ))}
     </div>
   );

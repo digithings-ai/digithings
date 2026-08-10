@@ -123,7 +123,7 @@ export default function ServicesPage() {
             <div className="flex flex-wrap gap-[0.8rem]">
               <a
                 className="btn btn-primary"
-                href={`mailto:${DT_CONTACT_EMAIL}?subject=DigiThings%20services%20inquiry`}
+                href={`mailto:${DT_CONTACT_EMAIL}?subject=digithings%20services%20inquiry`}
               >
                 Email about a project <span aria-hidden="true">→</span>
               </a>

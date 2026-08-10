@@ -15,6 +15,7 @@ describe("olympus security-headers", () => {
   it("denies framing and allows Supabase connect", () => {
     expect(OLYMPUS_CSP).toContain("frame-ancestors 'none'");
     expect(OLYMPUS_CSP).toContain("https://*.supabase.co");
+    expect(OLYMPUS_CSP).toContain("wss://*.supabase.co");
   });
 
   it("exports standard hardening headers", () => {

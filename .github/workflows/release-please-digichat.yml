@@ -1,14 +1,34 @@
-# Tracks digichat's version and changelog from Conventional Commits on
-# module/digichat (not main: some develop -> main promotions land as a single
-# squashed "chore: promote develop to main (...)" commit, which would look like
-# a no-op to a Conventional Commits parser and swallow the real feat/fix signal
-# that module/digichat still has, see #1343).
+# Tracks digichat's version and changelog from Conventional Commits on `develop`.
+#
+# NOT main, for the original #1343 reason: some develop -> main promotions land as a
+# single squashed "chore: promote develop to main (...)" commit, which reads as a
+# no-op to a Conventional Commits parser and would swallow the real feat/fix signal.
+#
+# NOT module/digichat any more, which is what this watched until #1948. That branch
+# stopped moving the day digichat-v0.6.0 was cut — it still points at exactly that
+# release commit, 44 commits behind develop — while the work kept merging straight to
+# develop. So the tool was watching a branch nothing landed on, and two releases got
+# hand-written to imitate its output instead: 0.7.0 (d9b4f6fe) and 0.8.0 (df3999dc),
+# both titled `chore(module/digichat): release …` on a branch they never touched,
+# neither tagged, and 0.7.0 shipped to production untagged. Their CHANGELOG entries
+# linked `compare/digichat-v0.7.0...digichat-v0.8.0` against two tags that did not
+# exist. #1948 created those two tags at the commits that declared them and pointed
+# this workflow at develop, so the next release continues from a real 0.8.0.
+#
+# develop is the right target rather than a workaround: task PRs squash-merge into it
+# with genuine Conventional Commit subjects (`feat(digichat): …`), which is exactly the
+# signal release-please needs, and unlike main nothing squashes them again on the way in.
+# Develop does also carry merge commits with non-conventional subjects (roughly 1 in 6 —
+# `Merge pull request #1941 …` among them); those are simply ignored by the parser while
+# the conventional commits they carry are still walked, so they cost nothing here. On
+# main the problem is the opposite and fatal: the promotion squash REPLACES those
+# subjects with one non-conventional line.
 name: "Release please: digichat"
 
 on:
   push:
     branches:
-      - module/digichat
+      - develop
     paths:
       - "frontend/digichat/**"
       - "release-please-config.json"
@@ -28,6 +48,6 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         with:
-          target-branch: module/digichat
+          target-branch: develop
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json

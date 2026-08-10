@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import pytest
 from digigraph.graph import research_agent
 from pydantic import BaseModel
+
+from digigraph import usage
 
 PROSE_THEN_JSON = 'Sure! Here is the brief:\n{"regime":"risk_on","note":"n"}'
 
@@ -70,6 +73,40 @@ def test_no_tools_keeps_structured_call():
         )
     assert result.regime == "neutral"
     assert cc.called  # falls back to the structured-output path when no tools
+
+
+@pytest.mark.unit
+def test_parallel_tool_keeps_phase_context() -> None:
+    def fake_run_tools(
+        model,
+        messages,
+        tools,
+        execute_tool,
+        **kwargs,
+    ):
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(execute_tool, "get_macro_series", {"series_ids": ["DFF"]}).result()
+        return json.dumps({"regime": "risk_on", "note": "grounded"})
+
+    usage.start()
+    try:
+        with patch.object(research_agent, "run_tools", side_effect=fake_run_tools):
+            research_agent.run_research_agent(
+                skill_text="s",
+                phase_inputs={},
+                shared_context={},
+                output_model=_Out,
+                model="xai/grok-4.3",
+                phase_slug="phase-2-rates",
+                tools=[{"type": "function", "function": {"name": "get_macro_series"}}],
+                execute_tool=lambda name, arguments: "{}",
+            )
+        event = usage.events_snapshot()[0]
+    finally:
+        usage.reset()
+
+    assert event["phase"] == "phase-2-rates"
+    assert event["operation"] == "_Out"
 
 
 class TestEnforcedToolFreeRetry:

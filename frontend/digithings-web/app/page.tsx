@@ -1,13 +1,11 @@
 import {
   Colophon,
   Footer,
-  Marquee,
   NumberedStages,
   OdometerStrip,
   Reveal,
   StackRow,
   WordReveal,
-  type MarqueeItem,
   type NumberedStage,
   type OdometerStat,
   type StackItem,
@@ -16,38 +14,37 @@ import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "./_nav";
 import { DtNav } from "@/components/DtNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ModuleManifest } from "@/components/landing/ModuleManifest";
+import { RepoActivity } from "@/components/landing/RepoActivity";
+import { RepoStrip } from "@/components/landing/RepoStrip";
 
 // v8 landing for the digithings platform — 100% reference-sourced + expressive
 // (#1450). A mouse-following mesh-gradient hero (HeroMesh + reveal-field
 // HeroGraph) opens, then every visual block is a promoted @digithings/web
-// primitive or token-backed utility: a drifting Marquee stack strip, a
-// digit-roll OdometerStrip metrics band, the shared TerminalManifest, the
-// NumberedStages principles spine, and the one big WordReveal claim. The mesh /
-// graph / counters / reveal are client islands; the page stays a server
-// component and exports statically. Every motion moment honors
+// primitive or token-backed utility: the RepoStrip activity band, a digit-roll
+// OdometerStrip metrics band, the shared TerminalManifest, the NumberedStages
+// principles spine, the RepoActivity section, and the one big WordReveal claim.
+// The mesh / graph / counters / reveal are client islands; the page stays a
+// server component and exports statically. Every motion moment honors
 // prefers-reduced-motion and reads with no JS (html.no-js fallbacks).
-
-// The stack we build on — the core seven, drifting in the marquee right below
-// the hero. Each carries its Simple Icons glyph where one exists
-// (@digithings/web logos registry); NautilusTrader and LiteLLM have no mark
-// and read text-only.
-const STACK: MarqueeItem[] = [
-  { name: "LangGraph", icon: "langgraph" },
-  { name: "NautilusTrader" },
-  { name: "Polars", icon: "polars" },
-  { name: "Pydantic", icon: "pydantic" },
-  { name: "LiteLLM" },
-  { name: "MCP", icon: "modelcontextprotocol" },
-  { name: "Docker", icon: "docker" },
-];
+//
+// The slot under the hero used to hold a drifting <Marquee> of the seven core
+// dependencies. It was removed, not restyled: it named the same libraries the
+// #integrations section names deliberately and in full, so it added no
+// information and paid for that with perpetual motion under the hero. <RepoStrip>
+// takes the slot and spends it on live repository activity instead. The Marquee
+// primitive itself stays in @digithings/web — the design reference still
+// specimens it.
 
 // Every figure here is countable in the repo — no projections, no asterisks
 // (#1846). Each one is checked against the code, and the band must not
-// contradict the manifest right below it, which self-discloses "8 online · 2 on
-// the roadmap":
-//   8  — non-roadmap modules in the shared `modules` registry (2 are roadmap:
-//        digistore, digilink). This deliberately does NOT say "10", which is
-//        what used to sit 14 lines under "no asterisks".
+// contradict the manifest right below it, which self-discloses "9 online · 2 on
+// the roadmap" (computed from the registry, so it tracks automatically):
+//   9  — non-roadmap modules in the shared `modules` registry (2 are roadmap:
+//        digistore, digilink). digivault was missing from the registry until it was
+//        added here — it ships
+//        a FastAPI service on 8004 behind its own compose profile and had been
+//        missing. This deliberately does NOT say "11", which is what used to sit
+//        14 lines under "no asterisks".
 //   16 — services under `services:` in the single 460-line docker-compose.yml.
 //   2  — live vector backends behind one client: Chroma and Azure AI Search
 //        (digisearch/src/digisearch/server.py fails startup unless one is
@@ -59,15 +56,16 @@ const STACK: MarqueeItem[] = [
 // that rolls to its value on arrival; reduced motion and no-JS ship the
 // settled final figures.
 const METRICS: OdometerStat[] = [
-  { value: "8", label: "modules shipping" },
+  { value: "9", label: "modules shipping" },
   { value: "16", label: "compose services" },
   { value: "2", label: "vector backends" },
   { value: "0", label: "keys stored" },
 ];
 
-// The packages the stack is actually assembled from, shown deliberately rather
-// than only drifting past in the marquee (#1846) — compatibility is the
-// differentiator, so the dependency list IS the pitch. Rendered by the shared
+// The packages the stack is actually assembled from, named deliberately and in
+// full (#1846) — compatibility is the differentiator, so the dependency list IS
+// the pitch. This section is also why the marquee above it was removable: it named
+// a subset of these on a loop and added nothing. Rendered by the shared
 // StackRow/StackLogo primitives (@digithings/web): a slug present in the logos
 // registry gets its real vendor mark, anything else degrades to a monogram
 // chip. NautilusTrader, LiteLLM, Chroma and Azure AI Search publish no
@@ -168,15 +166,7 @@ export default function Home() {
           </div>
         </HeroMesh>
 
-        <section className="border-y border-hair" aria-label="Built on">
-          <Marquee
-            items={STACK}
-            tone="mute"
-            speed={42}
-            aria-label="Built on LangGraph, NautilusTrader, Polars, Pydantic, LiteLLM, MCP, and Docker"
-            className="py-[0.95rem]"
-          />
-        </section>
+        <RepoStrip />
 
         <section className="section" id="metrics">
           <div className="wrap">
@@ -184,7 +174,7 @@ export default function Home() {
               <span className="kicker">{"// by the numbers"}</span>
               <h2>The platform, in four numbers.</h2>
               <p>
-                No asterisks — every figure is countable in the repo. Eight modules ship today and
+                No asterisks — every figure is countable in the repo. Nine modules ship today and
                 two are still on the roadmap; the manifest below names which.
               </p>
             </Reveal>
@@ -200,9 +190,9 @@ export default function Home() {
               <span className="kicker">{"// the architecture"}</span>
               {/* nowrap from md up so the claim holds one line; it still wraps on
                   phones, where forcing one line would shrink it to nothing. */}
-              <h2 className="md:whitespace-nowrap">Ten modules. One toolkit.</h2>
+              <h2 className="md:whitespace-nowrap">Eleven modules. One toolkit.</h2>
               <p>
-                The eight that ship run standalone or compose with the rest — retrieval, quant
+                The nine that ship run standalone or compose with the rest — retrieval, quant
                 research and chat, plus the auth, tracing and audit any deployment needs. Two more
                 are on the roadmap; the manifest below marks which.
               </p>
@@ -234,6 +224,13 @@ export default function Home() {
             ))}
           </div>
         </section>
+
+        {/* "built on what you already run" (open dependencies) → "maintained in
+            the open" (the repo itself). Placed here rather than under the hero so
+            its figures never sit adjacent to the #metrics odometer, where two
+            number-bearing blocks would read as one restated twice. Plain
+            .section: section-alt stays the single accent before the claim. */}
+        <RepoActivity />
 
         <section className="section section-alt" id="principles">
           <div className="wrap">

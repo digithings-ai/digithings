@@ -39,8 +39,8 @@ describe('ThesisStorySpine — research library', () => {
       })
     );
 
-    expect(html).toContain('Research views');
-    expect(html).toContain('As of 2026-07-17');
+    expect(html).toContain('Market theses');
+    expect(html).toContain('1 thesis · as of 2026-07-17');
     expect(html).toContain('High conviction');
   });
 
@@ -61,8 +61,8 @@ describe('ThesisStorySpine — research library', () => {
   });
 });
 
-describe('ThesisStorySpine — one-open disclosure default', () => {
-  it('opens only the first/highest-conviction thesis by default, not all', () => {
+describe('ThesisStorySpine — disclosure default', () => {
+  it('opens as a ranked register without expanding generated research prose', () => {
     const stories = [
       story({
         thesis: thesis({
@@ -84,14 +84,12 @@ describe('ThesisStorySpine — one-open disclosure default', () => {
       })
     );
 
-    // Count how many <details> elements have the "open" attribute
-    // The first story should be open, the rest closed
     const detailsMatches = html.match(/<details[^>]*>/g) || [];
     const openMatches = detailsMatches.filter((tag) => tag.includes('open'));
 
-    expect(openMatches.length).toBe(1); // Only one thesis should be open
-    expect(html).toContain('High conviction'); // First thesis is rendered
-    // Now using hairline borders instead of glass-card
+    expect(openMatches).toHaveLength(0);
+    expect(html).toContain('3 theses · as of 2026-07-17');
+    expect(html).toContain('High conviction');
     expect(html).toMatch(/border-y border-hair/);
     expect(html).not.toContain('text-up');
     expect(html).not.toContain('text-down');

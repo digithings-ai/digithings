@@ -221,6 +221,26 @@ describe("toDigiChatActivity", () => {
     ]);
   });
 
+  it("keeps a completed search as a running tool_call until the turn settles", () => {
+    expect(
+      toDigiChatActivity([started("file_search"), finished("file_search", "auth")], {
+        settle: false,
+      }),
+    ).toEqual([{ kind: "tool_call", name: "file_search", query: "auth" }]);
+  });
+
+  it("still settles a failed search mid-stream", () => {
+    expect(
+      toDigiChatActivity(
+        [
+          started("file_search"),
+          { ...finished("file_search", "auth"), status: "failed" },
+        ],
+        { settle: false },
+      ),
+    ).toEqual([{ kind: "status", message: 'Search for "auth" failed.' }]);
+  });
+
   it("keeps two different queries as separate rows", () => {
     const rows = toDigiChatActivity([
       finished("file_search", "auth"),
@@ -335,7 +355,7 @@ describe("toDigiChatActivity", () => {
 
   // Regression: a `retrieve` span following a `started` span with no
   // intervening execute_tool completion — exactly the shape
-  // foundry-stream.test.ts's own `searchEvents` fixture produces (Foundry
+  // adapters/foundry/stream.test.ts's own `searchEvents` fixture produces (Foundry
   // citations arrive straight off the message, with no file_search_call
   // output_item.done in between) — must resolve the pending placeholder
   // rather than leave it as an orphaned, never-settling tool_call row.

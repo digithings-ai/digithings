@@ -12,15 +12,8 @@ import {
   DigigraphUpstreamAuthError,
   resolveDigigraphUpstreamAuth,
 } from "@/lib/digigraph-upstream";
-import { createDigigraphTraceStreamResponse } from "@/lib/stream-digigraph-trace";
-import { createExternalRelayStreamResponse } from "@/lib/external-relay-stream";
-import { createFoundryStreamResponse } from "@/lib/foundry-stream";
-import { createDigivaultStreamResponse } from "@/lib/digivault-stream";
-import { resolveDigivaultEnv, DigivaultEnvError } from "@/lib/digivault-env";
-import {
-  checkDigivaultIpRateLimit,
-  DIGIVAULT_RATE_LIMIT_MESSAGE,
-} from "@/lib/digivault-ip-rate-limit";
+import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
+import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
@@ -33,6 +26,7 @@ import {
   isOverEmbedTrialLimit,
   unlockEmbedTrial,
 } from "@/lib/embed-turn-quota";
+import { consumeChatAccess } from "@/lib/embed-gate-provider";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import {
   embedConfigOf,
@@ -129,46 +123,57 @@ export async function POST(req: Request) {
   // trial form) rather than the BYOK/contact card. Enforced per client IP in
   // memory — best-effort anti-abuse per the design spec. Fail open on any internal
   // error so an infra hiccup never blocks a legitimate visitor.
+  // When the tenant configures gate.consumeUrl and the client presents a chat
+  // token, server-side quota supersedes the unlock header and the IP quota.
+  let quotaSatisfied = false;
   if (embedConfig?.gateMode === "trial_form") {
-    try {
-      const ip = clientIpForRateLimit(req);
-      // "unknown" is what clientIpForRateLimit returns when the ingress fails
-      // to set cf-connecting-ip/x-forwarded-for — it is not an identity (see
-      // that module's own doc comment). Treating it as one would collapse
-      // every visitor behind a broken/missing IP header into a single shared
-      // quota bucket, permanently gating everyone after the first 3 turns
-      // total. Skip the quota entirely in that case and fail open, consistent
-      // with this module's "best-effort, not an authorization boundary"
-      // philosophy (embed-turn-quota.ts).
-      if (ip !== "unknown") {
-        if (req.headers.get("x-embed-trial-unlock") === "1") {
-          unlockEmbedTrial(ip);
-        }
-        if (isOverEmbedTrialLimit(ip)) {
-          return new Response(
-            JSON.stringify({
-              error: "trial_gate",
-              message: "Complete the free trial form to keep chatting.",
-            }),
-            { status: 402, headers: { "content-type": "application/json" } },
-          );
-        }
-        recordEmbedTrialTurn(ip);
+    const chatToken = req.headers.get("x-embed-chat-token");
+    if (embedConfig.gate && chatToken) {
+      // Server-side quota supersedes the client-asserted unlock header for this request, and
+      // replaces the IP quota entirely — a token-bearing visitor must not be gated twice.
+      const verdict = await consumeChatAccess(embedConfig.gate.consumeUrl, chatToken);
+      if (verdict === "deny") {
+        return new Response(
+          JSON.stringify({
+            error: "trial_gate",
+            message: "Complete the free trial form to keep chatting.",
+          }),
+          { status: 402, headers: { "content-type": "application/json" } },
+        );
       }
-    } catch (e) {
-      console.warn("[trial-gate] quota error, failing open:", e);
+      quotaSatisfied = true;
     }
-  }
 
-  if (embedConfig?.backend.type === "external-relay") {
-    return await createExternalRelayStreamResponse({
-      relayUrl: embedConfig.backend.url,
-      messages,
-      conversationId: req.headers.get("x-external-conversation"),
-      responseHeaders,
-      activityDetail: embedConfig.activityDetail,
-      signal: req.signal,
-    });
+    if (!quotaSatisfied) {
+      try {
+        const ip = clientIpForRateLimit(req);
+        // "unknown" is what clientIpForRateLimit returns when the ingress fails
+        // to set cf-connecting-ip/x-forwarded-for — it is not an identity (see
+        // that module's own doc comment). Treating it as one would collapse
+        // every visitor behind a broken/missing IP header into a single shared
+        // quota bucket, permanently gating everyone after the first 3 turns
+        // total. Skip the quota entirely in that case and fail open, consistent
+        // with this module's "best-effort, not an authorization boundary"
+        // philosophy (embed-turn-quota.ts).
+        if (ip !== "unknown") {
+          if (req.headers.get("x-embed-trial-unlock") === "1") {
+            unlockEmbedTrial(ip);
+          }
+          if (isOverEmbedTrialLimit(ip)) {
+            return new Response(
+              JSON.stringify({
+                error: "trial_gate",
+                message: "Complete the free trial form to keep chatting.",
+              }),
+              { status: 402, headers: { "content-type": "application/json" } },
+            );
+          }
+          recordEmbedTrialTurn(ip);
+        }
+      } catch (e) {
+        console.warn("[trial-gate] quota error, failing open:", e);
+      }
+    }
   }
 
   if (embedConfig?.backend.type === "foundry") {
@@ -183,37 +188,6 @@ export async function POST(req: Request) {
     });
   }
 
-  if (embedConfig?.backend.type === "digivault") {
-    const ip = clientIpForRateLimit(req);
-    const rl = checkDigivaultIpRateLimit(ip);
-    if (!rl.allowed) {
-      return rateLimitResponse(DIGIVAULT_RATE_LIMIT_MESSAGE, rl.retryAfterSec);
-    }
-    let digivaultEnv;
-    try {
-      digivaultEnv = resolveDigivaultEnv(embedConfig.backend);
-    } catch (e) {
-      if (e instanceof DigivaultEnvError) {
-        console.error("[digivault] env resolution failed");
-        return new Response(JSON.stringify({ error: "chat_not_configured" }), {
-          status: 503,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      throw e;
-    }
-    return createDigivaultStreamResponse({
-      messages,
-      env: digivaultEnv,
-      responseHeaders,
-      activityDetail: embedConfig.activityDetail,
-      byokKey: byokKey || undefined,
-      byokProvider: byokProvider || undefined,
-      byokModel: byokModel || undefined,
-      signal: req.signal,
-    });
-  }
-
   const coreMessages = await convertToModelMessages(
     messages.map((m) => {
       const { id: _omit, ...rest } = m;
@@ -222,12 +196,16 @@ export async function POST(req: Request) {
     }) as Omit<UIMessage, "id">[]
   );
 
-  // OpenRouter BYOK requires a model slug before forwarding to digigraph.
-  if (byokKey && byokProvider === "openrouter" && !byokModel) {
+  // Non-OpenAI BYOK requires a model slug before forwarding to digigraph.
+  const byokNeedsModel =
+    byokProvider === "openrouter" ||
+    byokProvider === "anthropic" ||
+    byokProvider === "gemini";
+  if (byokKey && byokNeedsModel && !byokModel) {
     return new Response(
       JSON.stringify({
         error: "byok_model_required",
-        message: "OpenRouter BYOK requires X-BYOK-Model (e.g. openai/gpt-4o-mini).",
+        message: `${byokProvider} BYOK requires X-BYOK-Model (e.g. openai/gpt-4o-mini, claude-…, gemini/…).`,
       }),
       { status: 400, headers: { "content-type": "application/json" } }
     );
@@ -264,6 +242,14 @@ export async function POST(req: Request) {
     "X-Digi-Caller": "digichat",
     Authorization: `Bearer ${upstreamBearer}`,
   };
+  if (embedConfig?.backend.type === "digigraph") {
+    if (embedConfig.backend.digisearchIndex) {
+      upstreamHeaders["X-Digi-Corpus-Index"] = embedConfig.backend.digisearchIndex;
+    }
+    if (embedConfig.backend.vaultPathPrefix) {
+      upstreamHeaders["X-Digi-Vault-Prefix"] = embedConfig.backend.vaultPathPrefix;
+    }
+  }
   if (litellmProxyApiKey) {
     upstreamHeaders["X-LiteLLM-Proxy-Key"] = litellmProxyApiKey;
   }
@@ -274,7 +260,7 @@ export async function POST(req: Request) {
     if (byokProvider) {
       upstreamHeaders["X-BYOK-Provider"] = byokProvider;
     }
-    if (byokProvider === "openrouter" && byokModel) {
+    if (byokNeedsModel && byokModel) {
       upstreamHeaders["X-BYOK-Model"] = byokModel;
     }
   }
