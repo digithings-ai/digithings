@@ -124,6 +124,10 @@ class WorkflowResult(BaseModel):
 
     success: bool = Field(..., description="Whether the workflow completed successfully")
     message: str = Field("", description="Human-readable summary")
+    error_code: str | None = Field(
+        default=None,
+        description="Stable machine code for digichat (e.g. free_quota_exceeded); None on success",
+    )
     backtest_result: dict | None = Field(
         None, description="digiquant BacktestResult when workflow ran a backtest"
     )

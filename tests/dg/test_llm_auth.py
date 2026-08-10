@@ -160,19 +160,37 @@ class TestByokHeader:
         assert get_byok_model_override() is None
         assert digillm_get_byok() is None
 
-    def test_anthropic_byok_does_not_feed_digillm(self) -> None:
-        """Anthropic BYOK is stored on digigraph's contextvar but NOT wired into the client.
-
-        This is the state the middleware now refuses to reach: because the key is not
-        routed, the run would answer on the OPERATOR's credentials while the user
-        believes theirs is active. `byok_header_context` returns 400 before
-        `push_byok_header` is ever called, so this test exercises a path that is no
-        longer reachable over HTTP — kept because it pins WHY the guard exists (#1873).
-        """
-        tok = push_byok_header(_byok_request(key="sk-ant-xyz", provider="anthropic"))
+    def test_anthropic_byok_feeds_digillm(self) -> None:
+        """Anthropic BYOK → digillm BYOK override (Anthropic OpenAI-compat endpoint)."""
+        tok = push_byok_header(
+            _byok_request(
+                key="sk-ant-xyz",
+                provider="anthropic",
+                model="claude-sonnet-4-6",
+            )
+        )
         try:
             assert get_byok_override() == ("sk-ant-xyz", "anthropic")
-            assert digillm_get_byok() is None
+            assert get_byok_model_override() == "claude-sonnet-4-6"
+            byok = digillm_get_byok()
+            assert byok is not None
+            key, base_url = byok
+            assert key == "sk-ant-xyz"
+            assert base_url.rstrip("/") == "https://api.anthropic.com/v1"
+        finally:
+            pop_byok(tok)
+
+    def test_gemini_byok_feeds_digillm(self) -> None:
+        tok = push_byok_header(
+            _byok_request(key="gem-key", provider="gemini", model="gemini/gemini-2.5-flash")
+        )
+        try:
+            assert get_byok_override() == ("gem-key", "gemini")
+            assert get_byok_model_override() == "gemini-2.5-flash"
+            byok = digillm_get_byok()
+            assert byok is not None
+            assert byok[0] == "gem-key"
+            assert "generativelanguage.googleapis.com" in byok[1]
         finally:
             pop_byok(tok)
 
@@ -187,12 +205,12 @@ class TestByokProviderGuard:
     which providers a key is actually spent on, and server.py refuses the rest.
     """
 
-    @pytest.mark.parametrize("provider", ["openai", "openrouter"])
+    @pytest.mark.parametrize("provider", ["openai", "openrouter", "gemini", "anthropic"])
     def test_routed_providers_are_supported(self, provider: str) -> None:
         assert byok_provider_supported(provider)
         assert provider in BYOK_ROUTABLE_PROVIDERS
 
-    @pytest.mark.parametrize("provider", ["anthropic", "gemini", "xai", "", "nonsense"])
+    @pytest.mark.parametrize("provider", ["xai", "", "nonsense"])
     def test_unrouted_providers_are_refused(self, provider: str) -> None:
         """Each of these would otherwise have been billed to the operator."""
         assert not byok_provider_supported(provider)
@@ -201,7 +219,8 @@ class TestByokProviderGuard:
         """server.py lowercases and strips before asking, so the guard must agree."""
         assert byok_provider_supported("OpenAI")
         assert byok_provider_supported("  openrouter  ")
-        assert not byok_provider_supported(" Anthropic ")
+        assert byok_provider_supported(" Anthropic ")
+        assert byok_provider_supported("Gemini")
 
     def test_every_routable_provider_has_a_base_url(self) -> None:
         """A provider in the tuple with no URL would pass the guard and route nowhere."""
@@ -227,7 +246,7 @@ class TestByokGuardOverHttp:
 
         return TestClient(app)
 
-    @pytest.mark.parametrize("provider", ["anthropic", "gemini"])
+    @pytest.mark.parametrize("provider", ["xai", "nonsense"])
     def test_an_unroutable_key_is_refused_not_silently_swallowed(self, provider: str) -> None:
         res = self._client().get(
             "/healthz", headers={"x-byok-key": "sk-secret", "x-byok-provider": provider}
@@ -240,11 +259,28 @@ class TestByokGuardOverHttp:
         # And it must never echo the key back.
         assert "sk-secret" not in res.text
 
-    @pytest.mark.parametrize("provider", ["openai", "openrouter"])
-    def test_a_routable_key_passes_through(self, provider: str) -> None:
+    @pytest.mark.parametrize("provider", ["gemini", "anthropic", "openrouter"])
+    def test_model_required_for_non_openai(self, provider: str) -> None:
         res = self._client().get(
             "/healthz", headers={"x-byok-key": "sk-ok", "x-byok-provider": provider}
         )
+        assert res.status_code == 400, res.text
+        assert "byok_model_required" in str(res.json())
+
+    @pytest.mark.parametrize(
+        "provider,model",
+        [
+            ("openai", ""),
+            ("openrouter", "openai/gpt-4o-mini"),
+            ("gemini", "gemini-2.5-flash"),
+            ("anthropic", "claude-sonnet-4-6"),
+        ],
+    )
+    def test_a_routable_key_passes_through(self, provider: str, model: str) -> None:
+        headers = {"x-byok-key": "sk-ok", "x-byok-provider": provider}
+        if model:
+            headers["x-byok-model"] = model
+        res = self._client().get("/healthz", headers=headers)
         assert res.status_code == 200, res.text
 
     def test_no_byok_header_is_untouched(self) -> None:

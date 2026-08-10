@@ -197,17 +197,38 @@ def _is_likely_network_failure(exc: Exception) -> bool:
     return False
 
 
-def _user_facing_llm_error(exc: Exception) -> str:
+def _user_facing_llm_error(exc: Exception) -> tuple[str, str | None]:
+    """Return ``(message, error_code)`` for an LLM failure.
+
+    ``error_code`` is a stable digichat contract value (e.g. ``free_quota_exceeded``)
+    or ``None`` when the failure is unclassified.
+    """
+    from digigraph.llm_errors import (
+        FREE_QUOTA_EXCEEDED,
+        RATE_LIMIT,
+        classify_llm_error,
+        free_quota_message,
+        rate_limit_message,
+    )
+
+    code = classify_llm_error(exc)
+    if code == FREE_QUOTA_EXCEEDED:
+        return free_quota_message(), FREE_QUOTA_EXCEEDED
+    if code == RATE_LIMIT:
+        return rate_limit_message(), RATE_LIMIT
+
     msg = str(exc).lower()
     if "context window exceeds limit" in msg or "context_length_exceeded" in msg:
         return (
             "The conversation or context is too long for this model. "
-            "Try: start a new chat, use a model with a larger context (e.g. set DIGI_LLM_MODE=medium), or shorten your question."
+            "Try: start a new chat, use a model with a larger context (e.g. set DIGI_LLM_MODE=medium), or shorten your question.",
+            None,
         )
-    if "rate limit" in msg or "rate_limit" in msg:
-        return "Rate limit reached. Please wait a moment and try again."
     if "invalid api key" in msg or "authentication" in msg or "401" in msg:
-        return "API authentication failed. Check your model provider settings (e.g. OLLAMA_API_KEY, OPENAI_API_KEY)."
+        return (
+            "API authentication failed. Check your model provider settings (e.g. OLLAMA_API_KEY, OPENAI_API_KEY).",
+            None,
+        )
     if _is_likely_network_failure(exc):
         base = (os.environ.get("OPENAI_API_BASE") or "").strip() or "(unset — OpenAI default URL)"
         vert = _vertical_url_host_hints()
@@ -218,12 +239,13 @@ def _user_facing_llm_error(exc: Exception) -> str:
             "Document/RAG also needs digisearch orchestrator at DIGISEARCH_URL (host: http://127.0.0.1:8002). "
             + (vert + " " if vert else "")
             + "If you use `make stack-local`, host.docker.internal in OPENAI_API_BASE is rewritten to 127.0.0.1. "
-            "See docs/LOCAL_STACK.md."
+            "See docs/LOCAL_STACK.md.",
+            None,
         )
     tail = _vertical_url_host_hints()
     if tail:
-        return f"RAG workflow failed: {exc!s} {tail}"
-    return f"RAG workflow failed: {exc!s}"
+        return f"RAG workflow failed: {exc!s} {tail}", None
+    return f"RAG workflow failed: {exc!s}", None
 
 
 def _plan_result_preview(result: str | dict) -> str:
@@ -498,14 +520,17 @@ def _run_quant_or_augmented_path(
             out["strategy_params"] = sp
         return out
     except Exception as e:
-        err_msg = _user_facing_llm_error(e)
-        return {
+        err_msg, err_code = _user_facing_llm_error(e)
+        out: dict = {
             "strategy_name": None,
             "symbols": None,
             "research_note": "error",
             "research_response": None,
             "error": err_msg,
         }
+        if err_code:
+            out["error_code"] = err_code
+        return out
 
 
 def research_node(state: WorkflowState, config: dict | None = None) -> dict:
@@ -534,14 +559,17 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
                 prompt=str(prompt),
             )
         except Exception as e:
-            err_msg = _user_facing_llm_error(e)
-            return {
+            err_msg, err_code = _user_facing_llm_error(e)
+            out: dict = {
                 "strategy_name": None,
                 "symbols": None,
                 "research_note": "error",
                 "research_response": None,
                 "error": err_msg,
             }
+            if err_code:
+                out["error_code"] = err_code
+            return out
 
     _req_rid = state.get("request_id")
     _norm_rid = None if _req_rid is None else (str(_req_rid).strip() or None)

@@ -78,7 +78,8 @@ _BALANCED_FLAGSHIP_MARKERS = frozenset(
 _NATIVE_SEARCH_ONLY_PREFIXES = frozenset({"perplexity/"})
 
 
-# test = minimal tokens (free tier); medium = balanced; best = largest.
+# test = minimal tokens; free = operator free-tier (e.g. OpenRouter :free);
+# medium = balanced; best = largest.
 # When DIGI_PROJECT_CONFIG is set, agents.llm_mode overrides DIGI_LLM_MODE.
 def _get_llm_mode() -> str:
     """Resolve current LLM mode per request. Always reads env/config fresh to avoid global state."""
@@ -93,6 +94,95 @@ def _get_llm_mode() -> str:
         except (ImportError, OSError, AttributeError, TypeError, ValueError) as e:
             logger.warning("Failed to load LLM mode from project config: %s", e)
     return os.environ.get("DIGI_LLM_MODE", "test").lower().strip()
+
+
+def get_llm_mode() -> str:
+    """Public alias for the active ``agents.llm_mode`` / ``DIGI_LLM_MODE`` value."""
+    return _get_llm_mode()
+
+
+_DEFAULT_FREE_MODEL = "openrouter/deepseek/deepseek-chat-v3:free"
+
+
+def _explicit_llm_from_env() -> tuple[str | None, str | None]:
+    """Return ``(provider, model)`` from ``DIGI_LLM_PROVIDER`` / ``DIGI_LLM_MODEL`` (either may be None)."""
+    provider = (os.environ.get("DIGI_LLM_PROVIDER") or "").strip().lower() or None
+    model = (os.environ.get("DIGI_LLM_MODEL") or "").strip() or None
+    return provider, model
+
+
+def _explicit_llm_config() -> tuple[str | None, str | None, str | None]:
+    """Resolve explicit LLM pin from digiproject ``agents.llm`` (wins) or env.
+
+    Returns ``(provider, model, api_key_env)``. YAML wins when set; env fills gaps.
+    """
+    provider: str | None = None
+    model: str | None = None
+    api_key_env: str | None = None
+    if os.environ.get("DIGI_PROJECT_CONFIG"):
+        try:
+            from digigraph.project_config import DigiProjectConfig
+
+            llm = DigiProjectConfig.load().get_llm()
+            if llm is not None:
+                provider = llm.provider.strip().lower()
+                model = llm.model.strip()
+                api_key_env = llm.resolved_api_key_env()
+        except (ImportError, OSError, AttributeError, TypeError, ValueError) as e:
+            logger.warning("Failed to load agents.llm from project config: %s", e)
+    env_provider, env_model = _explicit_llm_from_env()
+    if provider is None and env_provider:
+        provider = env_provider
+    if model is None and env_model:
+        model = env_model
+    if provider and model and api_key_env is None:
+        from digigraph.project_config import _DEFAULT_LLM_KEY_ENV
+
+        api_key_env = _DEFAULT_LLM_KEY_ENV.get(provider, "OPENAI_API_KEY")
+    return provider, model, api_key_env
+
+
+def is_free_tier_model(model: str) -> bool:
+    """True when *model* is acceptable under ``llm_mode: free``.
+
+    Allows OpenRouter ``:free`` slugs and local Ollama ids (no operator spend).
+    """
+    raw = model.strip()
+    if not raw:
+        return False
+    lower = raw.lower()
+    if lower.startswith("ollama/") or lower.startswith("ollama-cloud/"):
+        return True
+    slug = _openrouter_slug(lower)
+    return ":free" in slug
+
+
+def _compose_provider_model(provider: str, model: str) -> str:
+    """Return digillm-routable ``provider/model`` unless *model* already has that prefix."""
+    p = provider.strip().lower()
+    m = model.strip()
+    if p in ("ollama", "litellm", "openai"):
+        # openai / litellm often use bare ids; ollama uses ollama/…
+        if p == "ollama" and not m.startswith("ollama/") and not m.startswith("ollama-cloud/"):
+            return f"ollama/{m}"
+        return m
+    if m.startswith(f"{p}/"):
+        return m
+    return f"{p}/{m}"
+
+
+def _refuse_paid_in_free_mode(resolved: str, mode: str) -> str:
+    """In ``free`` mode, replace non-free models with the free default (never silently upgrade to paid)."""
+    if mode != "free":
+        return resolved
+    if is_free_tier_model(resolved):
+        return resolved
+    logger.warning(
+        "llm_mode=free refused paid/non-free model %r; using %r",
+        resolved,
+        _DEFAULT_FREE_MODEL,
+    )
+    return _DEFAULT_FREE_MODEL
 
 
 class ModelModesConfig(BaseModel):
@@ -502,52 +592,114 @@ def apply_olympus_openrouter_env(*, force: bool = False) -> str:
 
 
 def _apply_byok_model_override(resolved: str) -> str:
-    """When OpenRouter BYOK + X-BYOK-Model is active, use the user's model for LLM calls."""
+    """When BYOK + X-BYOK-Model is active for a non-OpenAI provider, use the user's model."""
     byok = get_byok_override()
     if not byok:
         return resolved
     _key, provider = byok
-    if provider != "openrouter":
-        return resolved
     user_model = get_byok_model_override()
     if not user_model:
         return resolved
-    return f"openrouter/{user_model}"
+    if provider == "openai":
+        return user_model or resolved
+    if provider == "openrouter":
+        slug = (
+            user_model[len("openrouter/") :] if user_model.startswith("openrouter/") else user_model
+        )
+        return f"openrouter/{slug}"
+    if provider == "gemini":
+        slug = user_model[len("gemini/") :] if user_model.startswith("gemini/") else user_model
+        return f"gemini/{slug}"
+    if provider == "anthropic":
+        slug = (
+            user_model[len("anthropic/") :] if user_model.startswith("anthropic/") else user_model
+        )
+        return f"anthropic/{slug}"
+    return resolved
+
+
+def effective_llm_settings() -> dict[str, object]:
+    """Return effective LLM settings for CLI / diagnostics (never includes secret values).
+
+    Keys: ``provider``, ``model``, ``llm_mode``, ``api_key_env``, ``api_key_present``,
+    ``source`` (``agents.llm`` | ``env`` | ``model_modes`` | ``default``).
+    """
+    mode = _get_llm_mode()
+    provider, model, api_key_env = _explicit_llm_config()
+    source = "default"
+    if provider and model:
+        source = "agents.llm" if os.environ.get("DIGI_PROJECT_CONFIG") else "env"
+        # Prefer more precise source when YAML provided the pin.
+        if os.environ.get("DIGI_PROJECT_CONFIG"):
+            try:
+                from digigraph.project_config import DigiProjectConfig
+
+                if DigiProjectConfig.load().get_llm() is not None:
+                    source = "agents.llm"
+                elif _explicit_llm_from_env() != (None, None):
+                    source = "env"
+            except (ImportError, OSError, AttributeError, TypeError, ValueError):
+                source = "env"
+        resolved = _compose_provider_model(provider, model)
+    else:
+        data = _load_model_modes()
+        if data.default_model:
+            resolved = str(data.default_model)
+            source = "model_modes.default_model"
+        else:
+            resolved = data.defaults.get(mode) or data.defaults.get("test") or "gpt-4o-mini"
+            source = "model_modes" if data.defaults else "default"
+        if "/" in resolved:
+            provider = resolved.split("/", 1)[0]
+        else:
+            provider = "openai"
+        model = resolved
+        if api_key_env is None:
+            from digigraph.project_config import _DEFAULT_LLM_KEY_ENV
+
+            api_key_env = _DEFAULT_LLM_KEY_ENV.get(provider or "", "OPENAI_API_KEY")
+    resolved = _refuse_paid_in_free_mode(resolved, mode)
+    key_env = api_key_env or "OPENAI_API_KEY"
+    return {
+        "provider": provider,
+        "model": resolved,
+        "llm_mode": mode,
+        "api_key_env": key_env,
+        "api_key_present": bool(os.environ.get(key_env, "").strip()),
+        "source": source,
+    }
 
 
 def get_model_for_mode() -> str:
     """Return the fallback model for phases without a phase_models entry.
 
     Resolution order:
-    1. ``default_model`` in model_modes.yaml — optional explicit fallback.
-    2. ``defaults[DIGI_LLM_MODE]`` — legacy mode-keyed fallback.
-    3. ``"gpt-4o-mini"`` — hard last resort.
+    1. Explicit ``agents.llm`` / ``DIGI_LLM_PROVIDER``+``DIGI_LLM_MODEL`` — operator pin.
+    2. ``default_model`` in model_modes.yaml — optional explicit fallback.
+    3. ``defaults[llm_mode]`` — mode-keyed fallback (includes ``free``).
+    4. ``"gpt-4o-mini"`` — hard last resort.
 
-    Defense-in-depth (Olympus / OpenRouter-only deploy): the legacy defaults are
-    dev-oriented (``ollama/*``, bare ``gpt-4o-mini``). digillm routes any model whose
-    prefix is not a registered provider to the default OpenAI client, so a dev fallback
-    leaking into the pipeline 401s ("Incorrect API key provided: not-set"). When
-    ``OPENROUTER_API_KEY`` is set and the resolved fallback is not OpenRouter-routable,
-    use the active tier's reasoning model instead, so an unmapped phase slug still routes
-    through OpenRouter rather than an unauthenticated provider.
+    OpenRouter paid/Olympus auto-override is **not** applied here. Olympus/Atlas
+    phases use :func:`get_model_for_phase`. Having ``OPENROUTER_API_KEY`` set alone
+    must not swap a free/local digithings install onto paid Olympus models.
+    ``llm_mode: free`` refuses non-``:free`` (non-Ollama) model ids.
     """
-    data = _load_model_modes()
-    if data.default_model:
-        resolved = str(data.default_model)
+    mode = _get_llm_mode()
+    provider, model, _api_key_env = _explicit_llm_config()
+    if provider and model:
+        resolved = _compose_provider_model(provider, model)
     else:
-        mode = _get_llm_mode()
-        resolved = data.defaults.get(mode) or data.defaults.get("test") or "gpt-4o-mini"
-
-    if os.environ.get("OPENROUTER_API_KEY", "").strip() and not resolved.startswith("openrouter/"):
-        tier_fallback = _model_for_olympus_capability("reasoning", get_olympus_tier(), "fallback")
-        if tier_fallback:
-            logger.warning(
-                "get_model_for_mode: fallback %r is not OpenRouter-routable in an OpenRouter "
-                "deploy; using tier reasoning model %r instead",
-                resolved,
-                tier_fallback,
+        data = _load_model_modes()
+        if data.default_model:
+            resolved = str(data.default_model)
+        else:
+            resolved = (
+                data.defaults.get(mode)
+                or (data.defaults.get("free") if mode == "free" else None)
+                or data.defaults.get("test")
+                or (_DEFAULT_FREE_MODEL if mode == "free" else "gpt-4o-mini")
             )
-            return _apply_byok_model_override(tier_fallback)
+    resolved = _refuse_paid_in_free_mode(resolved, mode)
     return _apply_byok_model_override(resolved)
 
 
