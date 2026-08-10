@@ -113,7 +113,10 @@ export function ChatEmbedShell({
     if (!targetOrigin) return;
     const theme = readParentDocumentTheme();
     themeRef.current = theme;
-    setSrc(embedSrc(embedOrigin, embedHost, theme));
+    // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
+    queueMicrotask(() => {
+      setSrc(embedSrc(embedOrigin, embedHost, theme));
+    });
 
     const onThemeAttr = () => {
       const next = readParentDocumentTheme();
@@ -138,7 +141,10 @@ export function ChatEmbedShell({
     let ready = false;
     iframeLoadedRef.current = false;
     embedReadyRef.current = false;
-    setShellLoadError(null);
+    // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
+    queueMicrotask(() => {
+      setShellLoadError(null);
+    });
 
     function onMessage(ev: MessageEvent) {
       if (ev.origin !== targetOrigin) return;

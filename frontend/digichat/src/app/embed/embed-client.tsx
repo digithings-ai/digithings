@@ -460,7 +460,10 @@ function EmbedChat({
       referrer: document.referrer,
     });
     if (!target) {
-      setHandshakeError(formatParentErrorLine("ready_target_missing"));
+      // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
+      queueMicrotask(() => {
+        setHandshakeError(formatParentErrorLine("ready_target_missing"));
+      });
       return;
     }
     window.parent.postMessage(READY_MESSAGE, target);
