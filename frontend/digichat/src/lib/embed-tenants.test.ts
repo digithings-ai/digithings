@@ -473,6 +473,51 @@ describe("parseEmbedTenants", () => {
     expect(t.layout).toBeUndefined();
   });
 
+  it("accepts showLanguageSelector: false", () => {
+    const registry = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          showLanguageSelector: false,
+        },
+      }),
+    );
+    expect(registry.get("example.com")?.showLanguageSelector).toBe(false);
+  });
+
+  it("rejects a non-boolean showLanguageSelector", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            token: "t",
+            showLanguageSelector: "yes",
+          },
+        }),
+      ),
+    ).toThrow(/showLanguageSelector must be a boolean/);
+  });
+
+  it("leaves showLanguageSelector undefined when unset", () => {
+    const registry = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+        },
+      }),
+    );
+    expect(registry.get("example.com")?.showLanguageSelector).toBeUndefined();
+  });
+
   it("accepts a gate block with an https consumeUrl", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({

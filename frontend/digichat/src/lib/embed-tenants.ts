@@ -78,6 +78,12 @@ export type EmbedTenantConfig = {
   activityDetail: ActivityDetail;
   /** When true, embed shows BYOK/settings. Independent of gateMode. */
   showByok?: boolean;
+  /**
+   * When true (or unset — see toEmbedClientConfig), the embed shows a
+   * language dropdown in the header. Independent of gateMode/showByok.
+   * Only an explicit `false` here turns it off for this tenant.
+   */
+  showLanguageSelector?: boolean;
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
   /**
@@ -250,6 +256,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showByok !== undefined && typeof v.showByok !== "boolean") {
     throw new Error(`${ctx}: showByok must be a boolean`);
   }
+  if (v.showLanguageSelector !== undefined && typeof v.showLanguageSelector !== "boolean") {
+    throw new Error(`${ctx}: showLanguageSelector must be a boolean`);
+  }
   if (v.layout !== undefined && v.layout !== "page" && v.layout !== "embed") {
     throw new Error(`${ctx}: layout must be "page" or "embed"`);
   }
@@ -277,6 +286,8 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     lockedContact: typeof v.lockedContact === "string" ? v.lockedContact : undefined,
     activityDetail: (v.activityDetail as ActivityDetail | undefined) ?? "labels",
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
+    showLanguageSelector:
+      typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
     layout: v.layout === "page" || v.layout === "embed" ? v.layout : undefined,
     llmAccess: LLM_ACCESS.includes(v.llmAccess as EmbedLlmAccess)
       ? (v.llmAccess as EmbedLlmAccess)
