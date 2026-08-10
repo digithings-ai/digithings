@@ -1,91 +1,91 @@
 {
-  "generatedAt": "2026-08-06T12:52:46Z",
+  "generatedAt": "2026-08-10T07:59:45Z",
   "windowDays": 30,
-  "commits": 770,
+  "commits": 616,
   "features": [
     {
-      "scope": null,
-      "summary": "digivault joins the module registry, and BYOK stops billing the operator",
-      "pr": 1934,
-      "date": "2026-08-06T11:13:25Z"
+      "scope": "website",
+      "summary": "public product docs + OpenAPI explorer on digithings.ai",
+      "pr": 2059,
+      "date": "2026-08-10T03:18:36Z"
     },
     {
-      "scope": "ci",
-      "summary": "review in-session when Bugbot cannot, and make the claim cost something",
-      "pr": 1906,
-      "date": "2026-08-05T22:19:51Z"
+      "scope": "occ",
+      "summary": "client #1 chat demo with corpus routing",
+      "pr": 2051,
+      "date": "2026-08-10T02:29:35Z"
     },
     {
       "scope": "digichat",
-      "summary": "enforce chat quota server-side when a tenant configures a gate",
-      "pr": 1911,
-      "date": "2026-08-05T22:14:27Z"
+      "summary": "simplify embed gate for dogfood slice 1",
+      "pr": 2046,
+      "date": "2026-08-10T02:18:57Z"
     },
     {
-      "scope": "brand",
-      "summary": "generate both Open Graph cards, and give digiquant.io one at all",
-      "pr": 1900,
-      "date": "2026-08-05T21:06:43Z"
+      "scope": null,
+      "summary": "free-tier digithings LLM + BYOK (digigraph + digichat)",
+      "pr": 2048,
+      "date": "2026-08-10T02:15:55Z"
     },
     {
-      "scope": "brand",
-      "summary": "one folder to take a logo from, and a script that derives it",
-      "pr": 1898,
-      "date": "2026-08-05T19:36:05Z"
+      "scope": "digithings",
+      "summary": "dogfood cutover \u2014 client #0 onboard + auth Option A",
+      "pr": 2037,
+      "date": "2026-08-09T23:37:08Z"
     },
     {
-      "scope": "ci",
-      "summary": "give the review gate an honest hatch for a solo maintainer",
-      "pr": 1897,
-      "date": "2026-08-05T17:58:25Z"
+      "scope": null,
+      "summary": "digivault local search + docs_onboard pipeline (Pick 3 Tasks 1\u20138)",
+      "pr": 2030,
+      "date": "2026-08-09T23:13:59Z"
     }
   ],
-  "pullsMerged": 337,
-  "issuesClosed": 151,
-  "issuesOpen": 198,
+  "pullsMerged": 353,
+  "issuesClosed": 380,
+  "issuesOpen": 1,
   "branch": "main",
   "latestRelease": {
-    "tag": "digichat-v0.6.0",
-    "name": "digichat: v0.6.0",
-    "publishedAt": "2026-08-05T15:54:31Z",
-    "url": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v0.6.0"
+    "tag": "digichat-v0.9.3",
+    "name": "digichat: v0.9.3",
+    "publishedAt": "2026-08-08T10:59:00Z",
+    "url": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v0.9.3"
   },
   "modules": {
     "digigraph": {
       "path": "digigraph",
-      "lastCommit": "2026-08-06T11:13:25Z",
-      "files": 133,
-      "lines": 14639
+      "lastCommit": "2026-08-10T03:57:46Z",
+      "files": 135,
+      "lines": 16377
     },
     "digiquant": {
       "path": "digiquant",
-      "lastCommit": "2026-08-06T02:20:28Z",
-      "files": 487,
-      "lines": 78171
+      "lastCommit": "2026-08-10T03:55:21Z",
+      "files": 491,
+      "lines": 79426
     },
     "digisearch": {
       "path": "digisearch",
-      "lastCommit": "2026-08-05T11:47:33Z",
+      "lastCommit": "2026-08-09T21:50:34Z",
       "files": 83,
-      "lines": 7629
+      "lines": 7633
     },
     "digichat": {
       "path": "frontend/digichat",
-      "lastCommit": "2026-08-05T23:51:16Z",
-      "files": 188,
-      "lines": 20584
+      "lastCommit": "2026-08-10T03:52:29Z",
+      "files": 191,
+      "lines": 21658
     },
     "digikey": {
       "path": "digikey",
-      "lastCommit": "2026-08-05T11:47:33Z",
+      "lastCommit": "2026-08-10T00:32:59Z",
       "files": 24,
-      "lines": 2333
+      "lines": 2355
     },
     "digismith": {
       "path": "digismith",
-      "lastCommit": "2026-08-05T11:47:33Z",
+      "lastCommit": "2026-08-09T21:50:34Z",
       "files": 10,
-      "lines": 923
+      "lines": 931
     },
     "digiclaw": {
       "path": "digiclaw",
@@ -95,15 +95,15 @@
     },
     "digibase": {
       "path": "digibase",
-      "lastCommit": "2026-08-05T11:47:33Z",
+      "lastCommit": "2026-08-09T13:44:34Z",
       "files": 16,
       "lines": 1845
     },
     "digivault": {
       "path": "digivault",
-      "lastCommit": "2026-08-05T11:47:33Z",
-      "files": 15,
-      "lines": 1745
+      "lastCommit": "2026-08-10T03:52:09Z",
+      "files": 16,
+      "lines": 1909
     }
   }
 }
