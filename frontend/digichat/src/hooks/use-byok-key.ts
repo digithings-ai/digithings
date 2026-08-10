@@ -12,6 +12,13 @@ export const BYOK_PROVIDER_LIST: readonly BYOKProvider[] = [
   "gemini",
 ];
 
+/** Legacy durable keys — purged on load; never written again. */
+export const BYOK_DURABLE_STORAGE_KEYS = [
+  "byok_api_key",
+  "byok_provider",
+  "byok_model",
+] as const;
+
 /** Non-OpenAI BYOK requires an explicit model slug (digigraph spend path). */
 export function byokRequiresModel(provider: BYOKProvider): boolean {
   return provider !== "openai";
@@ -26,7 +33,38 @@ export function byokModelPlaceholder(provider: BYOKProvider): string {
     case "gemini":
       return "gemini/gemini-2.0-flash";
     case "openai":
-      return "";
+      return "gpt-4o-mini";
+    default: {
+      const _exhaustive: never = provider;
+      return _exhaustive;
+    }
+  }
+}
+
+/** Preset model slugs shown in the terminal model picker. */
+export function byokModelPresets(provider: BYOKProvider): readonly string[] {
+  switch (provider) {
+    case "openrouter":
+      return [
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o",
+        "anthropic/claude-sonnet-4",
+        "google/gemini-2.0-flash",
+      ];
+    case "openai":
+      return ["gpt-4o-mini", "gpt-4o", "o4-mini"];
+    case "anthropic":
+      return [
+        "claude-sonnet-4-20250514",
+        "claude-haiku-4-20250514",
+        "claude-opus-4-20250514",
+      ];
+    case "gemini":
+      return [
+        "gemini/gemini-2.0-flash",
+        "gemini/gemini-2.5-flash",
+        "gemini/gemini-2.5-pro",
+      ];
     default: {
       const _exhaustive: never = provider;
       return _exhaustive;
@@ -41,49 +79,58 @@ export type BYOKKeyState = {
   isSet: boolean;
 };
 
-const STORAGE_KEY = "byok_api_key";
-const STORAGE_PROVIDER_KEY = "byok_provider";
-const STORAGE_MODEL_KEY = "byok_model";
-
-function readProvider(raw: string | null): BYOKProvider {
-  if (raw === "anthropic") return "anthropic";
-  if (raw === "openrouter") return "openrouter";
-  if (raw === "gemini") return "gemini";
-  return "openai";
+export function emptyByokState(
+  provider: BYOKProvider = "openrouter",
+): BYOKKeyState {
+  return { key: "", provider, model: "", isSet: false };
 }
 
-function readFromStorage(): BYOKKeyState {
+/**
+ * Remove any leftover durable BYOK material from prior builds.
+ * Keys must never live in localStorage / sessionStorage.
+ */
+export function purgeDurableByokKeys(): void {
+  if (typeof window === "undefined") return;
   try {
-    const key = localStorage.getItem(STORAGE_KEY) ?? "";
-    const provider = readProvider(localStorage.getItem(STORAGE_PROVIDER_KEY));
-    const model = localStorage.getItem(STORAGE_MODEL_KEY) ?? "";
-    return { key, provider, model, isSet: key.length > 0 };
+    for (const k of BYOK_DURABLE_STORAGE_KEYS) {
+      window.localStorage.removeItem(k);
+      window.sessionStorage.removeItem(k);
+    }
   } catch {
-    return { key: "", provider: "openai", model: "", isSet: false };
+    // private mode / SSR
   }
 }
 
+/** Arrow-key highlight movement for terminal option lists (wraps). */
+export function moveListIndex(
+  index: number,
+  length: number,
+  direction: "up" | "down",
+): number {
+  if (length <= 0) return 0;
+  if (direction === "down") return (index + 1) % length;
+  return (index - 1 + length) % length;
+}
+
+/**
+ * Session-only BYOK key holder.
+ *
+ * Keys live in React state for this tab session. Refresh / new tab → gone.
+ * Never writes localStorage, sessionStorage, cookies, or the server.
+ */
 export function useBYOKKey() {
-  const [state, setState] = useState<BYOKKeyState>(readFromStorage);
+  const [state, setState] = useState<BYOKKeyState>(() => {
+    purgeDurableByokKeys();
+    return emptyByokState();
+  });
 
   const setKey = useCallback((key: string, provider: BYOKProvider, model = "") => {
-    try {
-      if (key) {
-        localStorage.setItem(STORAGE_KEY, key);
-        localStorage.setItem(STORAGE_PROVIDER_KEY, provider);
-        localStorage.setItem(STORAGE_MODEL_KEY, model);
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(STORAGE_PROVIDER_KEY);
-        localStorage.removeItem(STORAGE_MODEL_KEY);
-      }
-    } catch {
-      // localStorage not available (SSR guard, private mode)
-    }
+    // Defense in depth: never leave durable leftovers if an older build wrote them.
+    purgeDurableByokKeys();
     setState({ key, provider, model, isSet: key.length > 0 });
   }, []);
 
-  const clearKey = useCallback(() => setKey("", "openai", ""), [setKey]);
+  const clearKey = useCallback(() => setKey("", "openrouter", ""), [setKey]);
 
   return { ...state, setKey, clearKey };
 }

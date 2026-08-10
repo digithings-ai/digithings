@@ -73,4 +73,35 @@ describe("POST /api/byok/test", () => {
     const body = await res.json();
     expect(body.error).toContain("Model is required");
   });
+
+  it("returns 400 for invalid Gemini key prefix", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/byok/test", {
+        method: "POST",
+        headers: {
+          "x-byok-key": "not-gemini",
+          "x-byok-provider": "gemini",
+          "x-byok-model": "gemini/gemini-2.0-flash",
+        },
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("AI");
+  });
+
+  it("returns 400 when Gemini model header missing", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/byok/test", {
+        method: "POST",
+        headers: {
+          "x-byok-key": "AIza-test",
+          "x-byok-provider": "gemini",
+        },
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("Model is required");
+  });
 });

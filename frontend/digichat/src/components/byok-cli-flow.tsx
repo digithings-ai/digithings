@@ -1,21 +1,31 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { p } from "@/lib/base-path";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import {
   type BYOKProvider,
-  useBYOKKey,
-  validateBYOKKey,
-  validateBYOKModel,
-  byokRequiresModel,
-  byokModelPlaceholder,
   BYOK_PROVIDER_LIST,
+  byokModelPresets,
+  byokRequiresModel,
+  moveListIndex,
+  validateBYOKKey,
 } from "@/hooks/use-byok-key";
+import {
+  byokActivationGate,
+  pingByokKey,
+  type ByokPingResult,
+} from "@/lib/byok-ping";
 import { cn } from "@/lib/utils";
 
-type TestResult = { ok: boolean; model?: string; error?: string } | null;
+type Step = "provider" | "key" | "model" | "validating" | "done";
+
+const CUSTOM_MODEL = "__custom__";
 
 function TermLine({
   marker,
@@ -36,261 +46,439 @@ function TermLine({
   );
 }
 
-export function ByokCliFlow({ onClose }: { onClose: () => void }) {
-  const {
-    key: storedKey,
-    provider: storedProvider,
-    model: storedModel,
-    isSet,
-    setKey,
-    clearKey,
-  } = useBYOKKey();
-  const [inputProvider, setInputProvider] = useState<BYOKProvider>(storedProvider);
-  const [inputKey, setInputKey] = useState(storedKey);
-  const [inputModel, setInputModel] = useState(storedModel);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<TestResult>(null);
-  const [testing, setTesting] = useState(false);
+function maskKey(key: string): string {
+  const t = key.trim();
+  if (t.length <= 8) return "••••";
+  return `${t.slice(0, 6)}…${t.slice(-4)}`;
+}
 
-  const handleTest = useCallback(async () => {
-    const err = validateBYOKKey(inputKey, inputProvider) ?? validateBYOKModel(inputModel, inputProvider);
-    if (err) {
-      setValidationError(err);
-      return;
-    }
-    setTesting(true);
-    setTestResult(null);
-    try {
-      const headers: Record<string, string> = {
-        "content-type": "application/json",
-        "X-BYOK-Key": inputKey,
-        "X-BYOK-Provider": inputProvider,
-      };
-      if (byokRequiresModel(inputProvider)) {
-        headers["X-BYOK-Model"] = inputModel.trim();
+function TermOptionList({
+  options,
+  labels,
+  highlighted,
+  onHighlight,
+  onSelect,
+  listLabel,
+}: {
+  options: readonly string[];
+  labels?: readonly string[];
+  highlighted: number;
+  onHighlight: (i: number) => void;
+  onSelect: (value: string) => void;
+  listLabel: string;
+}) {
+  const listRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${highlighted}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [highlighted]);
+
+  const onKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLUListElement>) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        onHighlight(moveListIndex(highlighted, options.length, "down"));
+        return;
       }
-      const resp = await fetch(p("/api/byok/test"), {
-        method: "POST",
-        credentials: "include",
-        headers,
-        body: JSON.stringify({}),
-      });
-      const data = (await resp.json()) as TestResult;
-      setTestResult(data);
-    } catch {
-      setTestResult({ ok: false, error: "Network error — could not reach server." });
-    } finally {
-      setTesting(false);
-    }
-  }, [inputKey, inputProvider, inputModel]);
-
-  const handleSave = useCallback(() => {
-    const err = validateBYOKKey(inputKey, inputProvider) ?? validateBYOKModel(inputModel, inputProvider);
-    if (err) {
-      setValidationError(err);
-      return;
-    }
-    setKey(inputKey, inputProvider, inputModel.trim());
-    onClose();
-  }, [inputKey, inputProvider, inputModel, setKey, onClose]);
-
-  const handleClear = useCallback(() => {
-    clearKey();
-    setInputKey("");
-    setInputModel("");
-    setTestResult(null);
-    setValidationError(null);
-    onClose();
-  }, [clearKey, onClose]);
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        onHighlight(moveListIndex(highlighted, options.length, "up"));
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const value = options[highlighted];
+        if (value !== undefined) onSelect(value);
+      }
+    },
+    [highlighted, onHighlight, onSelect, options],
+  );
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border/40 dc-term-pane">
-        <TermLine marker="▸">
-          <span style={{ color: "var(--text-secondary)" }}>
-            <code className="font-mono">byok configure</code> — your key stays in the browser
-            only. Sent per-request to the BFF; never logged or persisted server-side.
+    <ul
+      ref={listRef}
+      role="listbox"
+      aria-label={listLabel}
+      tabIndex={0}
+      className="dc-byok-option-list"
+      onKeyDown={onKeyDown}
+    >
+      {options.map((opt, i) => {
+        const active = i === highlighted;
+        return (
+          <li key={opt || "(default)"} role="option" aria-selected={active} data-idx={i}>
+            <button
+              type="button"
+              className={cn("dc-byok-option", active && "dc-byok-option-active")}
+              onMouseEnter={() => onHighlight(i)}
+              onClick={() => onSelect(opt)}
+            >
+              <span className="dc-byok-option-cursor" aria-hidden>
+                {active ? "❯" : " "}
+              </span>
+              <span className="font-mono">{labels?.[i] ?? opt}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export type ByokCliFlowProps = {
+  onClose: () => void;
+  /** Called only after a successful provider ping. Parent holds session memory. */
+  onActivate: (key: string, provider: BYOKProvider, model: string) => void;
+  onClear?: () => void;
+  /** When BYOK is already active this session. */
+  active?: { provider: BYOKProvider; model: string } | null;
+  title?: string;
+  className?: string;
+};
+
+export function ByokCliFlow({
+  onClose,
+  onActivate,
+  onClear,
+  active = null,
+  title,
+  className,
+}: ByokCliFlowProps) {
+  const [step, setStep] = useState<Step>(active ? "done" : "provider");
+  const [provider, setProvider] = useState<BYOKProvider>(
+    active?.provider ?? "openrouter",
+  );
+  const [providerHi, setProviderHi] = useState(() =>
+    Math.max(0, BYOK_PROVIDER_LIST.indexOf(active?.provider ?? "openrouter")),
+  );
+  const [inputKey, setInputKey] = useState("");
+  const [model, setModel] = useState(active?.model ?? "");
+  const [modelHi, setModelHi] = useState(0);
+  const [customModel, setCustomModel] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [ping, setPing] = useState<ByokPingResult | null>(null);
+  const keyInputRef = useRef<HTMLInputElement>(null);
+  const customModelRef = useRef<HTMLInputElement>(null);
+  const formId = useId();
+
+  const modelOptions = (() => {
+    const presets = [...byokModelPresets(provider)];
+    if (!byokRequiresModel(provider)) {
+      return ["", ...presets, CUSTOM_MODEL];
+    }
+    return [...presets, CUSTOM_MODEL];
+  })();
+
+  const modelLabels = modelOptions.map((m) => {
+    if (m === "") return "(provider default)";
+    if (m === CUSTOM_MODEL) return "custom…";
+    return m;
+  });
+
+  useEffect(() => {
+    if (step === "key") keyInputRef.current?.focus();
+    if (step === "model" && customModel) customModelRef.current?.focus();
+  }, [step, customModel]);
+
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (step === "key") {
+        setStep("provider");
+        return;
+      }
+      if (step === "model" && customModel) {
+        setCustomModel(false);
+        return;
+      }
+      if (step === "model") {
+        setStep("key");
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [step, customModel, onClose]);
+
+  const selectProvider = useCallback((p: string) => {
+    const next = p as BYOKProvider;
+    setProvider(next);
+    setModel("");
+    setCustomModel(false);
+    setModelHi(0);
+    setError(null);
+    setPing(null);
+    setStep("key");
+  }, []);
+
+  const submitKey = useCallback(() => {
+    const err = validateBYOKKey(inputKey, provider);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setError(null);
+    setStep("model");
+  }, [inputKey, provider]);
+
+  const runValidateAndActivate = useCallback(
+    async (chosenModel: string) => {
+      const gateFormat = validateBYOKKey(inputKey, provider);
+      if (gateFormat) {
+        setError(gateFormat);
+        setStep("key");
+        return;
+      }
+      setError(null);
+      setPing(null);
+      setStep("validating");
+      const result = await pingByokKey(inputKey, provider, chosenModel);
+      setPing(result);
+      const refuse = byokActivationGate(result);
+      if (refuse) {
+        setError(refuse);
+        setStep("model");
+        return;
+      }
+      onActivate(inputKey.trim(), provider, chosenModel.trim());
+      setStep("done");
+    },
+    [inputKey, provider, onActivate],
+  );
+
+  const selectModel = useCallback(
+    (value: string) => {
+      if (value === CUSTOM_MODEL) {
+        setCustomModel(true);
+        setModel("");
+        return;
+      }
+      setCustomModel(false);
+      setModel(value);
+      void runValidateAndActivate(value);
+    },
+    [runValidateAndActivate],
+  );
+
+  const submitCustomModel = useCallback(() => {
+    if (byokRequiresModel(provider) && !model.trim()) {
+      setError(`Model is required for ${provider}.`);
+      return;
+    }
+    void runValidateAndActivate(model.trim());
+  }, [model, provider, runValidateAndActivate]);
+
+  const handleClear = useCallback(() => {
+    onClear?.();
+    setInputKey("");
+    setModel("");
+    setPing(null);
+    setError(null);
+    setCustomModel(false);
+    setStep("provider");
+  }, [onClear]);
+
+  const restart = useCallback(() => {
+    setInputKey("");
+    setModel("");
+    setPing(null);
+    setError(null);
+    setCustomModel(false);
+    setStep("provider");
+  }, []);
+
+  const configuring =
+    step === "provider" || step === "key" || step === "model" || step === "validating";
+
+  return (
+    <div
+      className={cn("dc-byok-flow", className)}
+      role="region"
+      aria-label={title ?? "Bring your own API key"}
+    >
+      <TermLine marker="▸">
+        <span style={{ color: "var(--text-secondary)" }}>
+          <code className="font-mono">{title ?? "byok configure"}</code>
+          {" — "}
+          key stays in session memory only. Refresh clears it. Sent per-request
+          as X-BYOK; never logged or stored server-side.
+        </span>
+      </TermLine>
+
+      {(active || step === "done") && !configuring ? (
+        <TermLine marker="·">
+          <span
+            className="font-mono text-[12px]"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            active: {active?.provider ?? provider}
+            {(active?.model ?? model) ? ` · ${active?.model ?? model}` : ""} ·
+            session only
           </span>
         </TermLine>
+      ) : null}
 
-        {isSet ? (
-          <TermLine marker="·">
-            <span style={{ color: "var(--text-secondary)", fontFamily: "var(--font-family-mono)", fontSize: 12 }}>
-              active: {storedProvider}
-              {storedProvider === "openrouter" && storedModel ? ` · ${storedModel}` : ""} · key configured
-            </span>
-          </TermLine>
-        ) : null}
+      {configuring ? (
+        <>
+          {step !== "provider" ? (
+            <TermLine marker="·">
+              <span className="font-mono text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                provider: {provider}
+              </span>
+            </TermLine>
+          ) : null}
 
-        <TermLine marker=">">
-          <div className="space-y-3">
-            <div>
-              <p
-                className="mb-2 text-[11px] uppercase tracking-wide"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                provider
-              </p>
-              <div className="flex gap-2">
-                {BYOK_PROVIDER_LIST.map((prov) => (
-                  <button
-                    key={prov}
-                    type="button"
-                    className={cn(
-                      "dc-term-chip cursor-pointer",
-                      inputProvider === prov && "ring-1 ring-[var(--accent)]",
-                    )}
-                    onClick={() => {
-                      setInputProvider(prov);
-                      setInputModel("");
-                      setValidationError(null);
-                      setTestResult(null);
-                    }}
-                  >
-                    {prov}
-                  </button>
-                ))}
-              </div>
-            </div>
+          {step === "provider" ? (
+            <TermLine marker=">">
+              <p className="dc-byok-prompt">Select provider (↑↓ + Enter, or click)</p>
+              <TermOptionList
+                options={BYOK_PROVIDER_LIST}
+                highlighted={providerHi}
+                onHighlight={setProviderHi}
+                onSelect={selectProvider}
+                listLabel="BYOK providers"
+              />
+            </TermLine>
+          ) : null}
 
-            <div>
-              <label
-                htmlFor="byok-cli-key"
-                className="mb-2 block text-[11px] uppercase tracking-wide"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                api key
+          {step === "key" ? (
+            <TermLine marker=">">
+              <label htmlFor={`${formId}-key`} className="dc-byok-prompt">
+                Paste API key, then Enter
               </label>
               <input
-                id="byok-cli-key"
+                ref={keyInputRef}
+                id={`${formId}-key`}
                 type="password"
                 value={inputKey}
                 onChange={(e) => {
                   setInputKey(e.target.value);
-                  setValidationError(null);
-                  setTestResult(null);
+                  setError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    submitKey();
+                  }
                 }}
                 placeholder={
-                  inputProvider === "openai"
+                  provider === "openai"
                     ? "sk-…"
-                    : inputProvider === "anthropic"
+                    : provider === "anthropic"
                       ? "sk-ant-…"
-                      : inputProvider === "gemini"
+                      : provider === "gemini"
                         ? "AIza…"
                         : "sk-or-v1-…"
                 }
                 autoComplete="off"
                 spellCheck={false}
-                className="w-full max-w-md rounded-md border border-border/50 bg-term-bg px-3 py-2 font-mono text-sm outline-none focus:border-accent"
-                aria-invalid={!!validationError}
-                aria-describedby={validationError ? "byok-cli-error" : undefined}
+                className="dc-byok-input"
+                aria-invalid={!!error}
               />
-              {validationError ? (
-                <p id="byok-cli-error" className="mt-1.5 text-[11px] text-destructive">
-                  {validationError}
-                </p>
-              ) : (
-                <p className="mt-1.5 text-[11px]" style={{ color: "var(--text-secondary)" }}>
-                  {inputProvider === "openai"
-                    ? "OpenAI keys start with sk-"
-                    : inputProvider === "anthropic"
-                      ? "Anthropic keys start with sk-ant-"
-                      : inputProvider === "gemini"
-                        ? "Gemini keys start with AI"
-                        : "OpenRouter keys start with sk-or-"}
-                </p>
-              )}
-            </div>
+            </TermLine>
+          ) : null}
 
-            {byokRequiresModel(inputProvider) ? (
-              <div>
-                <label
-                  htmlFor="byok-cli-model"
-                  className="mb-2 block text-[11px] uppercase tracking-wide"
-                  style={{ color: "var(--text-secondary)" }}
-                >
-                  model
-                </label>
+          {(step === "model" || step === "validating") && inputKey ? (
+            <TermLine marker="·">
+              <span className="font-mono text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                key: {maskKey(inputKey)}
+              </span>
+            </TermLine>
+          ) : null}
+
+          {step === "model" ? (
+            <TermLine marker=">">
+              <p className="dc-byok-prompt">
+                {customModel
+                  ? "Enter model slug, then Enter"
+                  : "Select model (↑↓ + Enter, or click)"}
+              </p>
+              {customModel ? (
                 <input
-                  id="byok-cli-model"
+                  ref={customModelRef}
                   type="text"
-                  value={inputModel}
+                  value={model}
                   onChange={(e) => {
-                    setInputModel(e.target.value);
-                    setValidationError(null);
-                    setTestResult(null);
+                    setModel(e.target.value);
+                    setError(null);
                   }}
-                  placeholder={byokModelPlaceholder(inputProvider)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      submitCustomModel();
+                    }
+                  }}
+                  placeholder={byokModelPresets(provider)[0]}
                   autoComplete="off"
                   spellCheck={false}
-                  className="w-full max-w-md rounded-md border border-border/50 bg-term-bg px-3 py-2 font-mono text-sm outline-none focus:border-accent"
+                  className="dc-byok-input"
                 />
-                <p className="mt-1.5 text-[11px]" style={{ color: "var(--text-secondary)" }}>
-                  Model slug required for {inputProvider} BYOK
-                </p>
-              </div>
-            ) : null}
+              ) : (
+                <TermOptionList
+                  options={modelOptions}
+                  labels={modelLabels}
+                  highlighted={modelHi}
+                  onHighlight={setModelHi}
+                  onSelect={selectModel}
+                  listLabel="BYOK models"
+                />
+              )}
+            </TermLine>
+          ) : null}
 
-            {testResult !== null ? (
-              <p
-                className="text-[12px] font-mono"
-                style={{
-                  // error rides the four-state --down (canon §16) — a livery is
-                  // an identity, never a semantic
-                  color: testResult.ok ? "var(--accent)" : "var(--down, #e0654b)",
-                }}
-              >
-                {testResult.ok
-                  ? `ok — connected${testResult.model ? ` (${testResult.model})` : ""}`
-                  : `error: ${testResult.error ?? "unknown"}`}
-              </p>
-            ) : null}
-          </div>
+          {step === "validating" ? (
+            <TermLine marker="·">
+              <span className="font-mono text-[12px]" style={{ color: "var(--accent)" }}>
+                ping {provider}
+                {model ? ` · ${model}` : ""}…
+              </span>
+            </TermLine>
+          ) : null}
+        </>
+      ) : null}
+
+      {step === "done" && ping?.ok ? (
+        <TermLine marker="✓">
+          <span className="font-mono text-[12px]" style={{ color: "var(--accent)" }}>
+            ok — BYOK active for this session
+            {ping.model ? ` (${ping.model})` : ""}
+          </span>
         </TermLine>
-      </div>
+      ) : null}
 
-      <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-border/40 pt-3">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="font-mono text-xs"
-          disabled={testing || !inputKey}
-          onClick={() => void handleTest()}
-        >
-          {testing ? <Loader2 className="mr-1.5 size-3 animate-spin" /> : null}
-          test
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="font-mono text-xs"
-          disabled={!inputKey}
-          onClick={handleSave}
-        >
-          save
-        </Button>
-        {isSet ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="font-mono text-xs text-destructive hover:text-destructive"
-            onClick={handleClear}
-          >
-            remove
-          </Button>
-        ) : null}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="ml-auto font-mono text-xs text-muted-foreground"
-          onClick={onClose}
-        >
-          close · esc
-        </Button>
-      </div>
+      {error ? (
+        <TermLine marker="✗">
+          <span className="font-mono text-[12px]" style={{ color: "var(--down, #e0654b)" }}>
+            {error}
+          </span>
+        </TermLine>
+      ) : null}
+
+      <TermLine marker="·">
+        <div className="dc-byok-actions">
+          {step === "done" || (active && !configuring) ? (
+            <>
+              <button type="button" className="dc-byok-action" onClick={restart}>
+                reconfigure
+              </button>
+              {onClear ? (
+                <button
+                  type="button"
+                  className="dc-byok-action dc-byok-action-danger"
+                  onClick={handleClear}
+                >
+                  remove
+                </button>
+              ) : null}
+            </>
+          ) : null}
+          <button type="button" className="dc-byok-action" onClick={onClose}>
+            {step === "done" || active ? "close" : "cancel"} · esc
+          </button>
+        </div>
+      </TermLine>
     </div>
   );
 }

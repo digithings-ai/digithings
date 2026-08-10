@@ -14,17 +14,11 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { DigiChatSession } from "@digithings/digichat-ui";
-import { Key, ExternalLink, Eye, EyeOff } from "lucide-react";
+import { Key, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ByokCliFlow } from "@/components/byok-cli-flow";
 import {
   useBYOKKey,
-  validateBYOKKey,
-  validateBYOKModel,
-  byokRequiresModel,
-  byokModelPlaceholder,
-  BYOK_PROVIDER_LIST,
   type BYOKProvider,
 } from "@/hooks/use-byok-key";
 import { readEmbedConversationId, useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
@@ -205,6 +199,7 @@ function EmbedChat({
     model: byokModel,
     isSet: byokIsSet,
     setKey: setByokKey,
+    clearKey: clearByokKey,
   } = useBYOKKey();
   const ungated = tenantCfg.gateMode === "ungated";
   const isTrialForm = tenantCfg.gateMode === "trial_form";
@@ -651,13 +646,19 @@ function EmbedChat({
       footerSlot={footerSlot}
       settingsPanel={
         showByok && settingsOpen ? (
-          <EmbedByokPanel
-            onSave={onByokSaved}
+          <ByokCliFlow
             onClose={() => setSettingsOpen(false)}
+            onActivate={onByokSaved}
+            onClear={clearByokKey}
+            active={
+              byokIsSet
+                ? { provider: byokProvider, model: byokModel }
+                : null
+            }
             title={
               quotaPrompt
-                ? "Free tier exhausted — continue with your own key"
-                : "Bring your own API key"
+                ? "byok — free tier exhausted"
+                : "byok configure"
             }
           />
         ) : undefined
@@ -676,146 +677,6 @@ function EmbedChat({
       showIntro={!gate.locked && !trialLocked && !hideIntroForSeed}
       ariaLabel={headerTitle ?? "digichat embed"}
     />
-  );
-}
-
-function providerLabel(p: BYOKProvider): string {
-  switch (p) {
-    case "openai":
-      return "OpenAI";
-    case "anthropic":
-      return "Anthropic";
-    case "gemini":
-      return "Gemini";
-    case "openrouter":
-      return "OpenRouter";
-    default: {
-      const _exhaustive: never = p;
-      return _exhaustive;
-    }
-  }
-}
-
-function EmbedByokPanel({
-  onSave,
-  onClose,
-  title,
-}: {
-  onSave: (key: string, provider: BYOKProvider, model: string) => void;
-  onClose: () => void;
-  title: string;
-}) {
-  const [inputKey, setInputKey] = useState("");
-  const [provider, setProvider] = useState<BYOKProvider>("openrouter");
-  const [inputModel, setInputModel] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSave = useCallback(() => {
-    const err = validateBYOKKey(inputKey, provider) ?? validateBYOKModel(inputModel, provider);
-    if (err) {
-      setError(err);
-      return;
-    }
-    onSave(inputKey, provider, inputModel.trim());
-    setInputKey("");
-    setInputModel("");
-  }, [inputKey, inputModel, provider, onSave]);
-
-  return (
-    <div className="border-t border-border bg-muted/40 p-4">
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <p className="text-sm font-medium">{title}</p>
-        <Button type="button" size="sm" variant="ghost" onClick={onClose} aria-label="Close">
-          Close
-        </Button>
-      </div>
-      <p className="mb-3 text-xs text-muted-foreground">
-        OpenAI, OpenRouter, Anthropic, or Gemini — your key stays in this browser and is sent as
-        X-BYOK headers per request.
-      </p>
-      <div className="space-y-3">
-        <div className="flex flex-wrap gap-2">
-          {BYOK_PROVIDER_LIST.map((p) => (
-            <Button
-              key={p}
-              type="button"
-              size="sm"
-              variant={provider === p ? "default" : "outline"}
-              className="flex-1 capitalize"
-              onClick={() => {
-                setProvider(p);
-                setError(null);
-              }}
-            >
-              {providerLabel(p)}
-            </Button>
-          ))}
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="embed-byok-key" className="text-xs">
-            API key
-          </Label>
-          <div className="relative flex items-center">
-            <Input
-              id="embed-byok-key"
-              type={showKey ? "text" : "password"}
-              value={inputKey}
-              onChange={(e) => {
-                setInputKey(e.target.value);
-                setError(null);
-              }}
-              placeholder={
-                provider === "openai"
-                  ? "sk-…"
-                  : provider === "anthropic"
-                    ? "sk-ant-…"
-                    : provider === "gemini"
-                      ? "AIza…"
-                      : "sk-or-v1-…"
-              }
-              autoComplete="off"
-              spellCheck={false}
-              className="pr-9 font-mono text-sm"
-              aria-invalid={!!error}
-            />
-            <button
-              type="button"
-              className="absolute right-2.5 text-muted-foreground hover:text-foreground"
-              onClick={() => setShowKey((v) => !v)}
-              aria-label={showKey ? "Hide key" : "Show key"}
-              tabIndex={-1}
-            >
-              {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
-          </div>
-          {error && <p className="text-[11px] text-destructive">{error}</p>}
-        </div>
-        {byokRequiresModel(provider) ? (
-          <div className="space-y-1.5">
-            <Label htmlFor="embed-byok-model" className="text-xs">
-              Model
-            </Label>
-            <Input
-              id="embed-byok-model"
-              type="text"
-              value={inputModel}
-              onChange={(e) => {
-                setInputModel(e.target.value);
-                setError(null);
-              }}
-              placeholder={byokModelPlaceholder(provider)}
-              autoComplete="off"
-              spellCheck={false}
-              className="font-mono text-sm"
-            />
-          </div>
-        ) : null}
-        <Button type="button" size="sm" onClick={handleSave} disabled={!inputKey}>
-          Save key
-        </Button>
-      </div>
-    </div>
   );
 }
 
@@ -858,13 +719,13 @@ function PaywallCard({
 
   if (showBYOK) {
     return (
-      <EmbedByokPanel
-        onSave={(key, provider, model) => {
+      <ByokCliFlow
+        onActivate={(key, provider, model) => {
           onSave(key, provider, model);
           setShowBYOK(false);
         }}
         onClose={() => setShowBYOK(false)}
-        title={`You've used your ${EMBED_FREE_TURN_LIMIT} free questions`}
+        title={`byok — ${EMBED_FREE_TURN_LIMIT} free questions used`}
       />
     );
   }
@@ -875,8 +736,8 @@ function PaywallCard({
         You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions.
       </p>
       <p className="mb-3 text-xs text-muted-foreground">
-        Bring your own OpenRouter, OpenAI, Anthropic, or Gemini key for unlimited chat — your key is
-        stored only in your browser. Or open the full digichat app.
+        Bring your own OpenRouter, OpenAI, Anthropic, or Gemini key for unlimited chat — the key
+        stays in session memory only (refresh clears it). Or open the full digichat app.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -904,16 +765,6 @@ function PaywallCard({
   );
 }
 
-/**
- * The notice shown in place of the composer once the free turns are spent.
- *
- * Dismissing the parent's overlay used to be a dead end: the notice said to
- * complete the form, Retry only regenerated the failed turn, and nothing on
- * screen could bring the form back — reload + a fresh question was the only
- * route. Anything that tells a reader to do something has to be the thing that
- * lets them do it: "the trial form" is a control, and Retry reopens the same
- * overlay (via onOpen → gated postMessage with a bumped nonce).
- */
 function TrialGatePlaceholder({ onOpen }: { onOpen: () => void }) {
   return (
     <div className="border-t border-border bg-muted/40 p-4">
