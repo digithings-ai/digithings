@@ -649,9 +649,12 @@ def _stream_completions_progressive(
             data = ev[1] if len(ev) > 1 else None
 
             if event_type == "done":
-                thinking_block = flush_reasoning_as_thinking()
-                if thinking_block:
-                    yield f"data: {_sse_chunk(cid, created, model, thinking_block, None)}\n\n"
+                if not suppress_tool_stream:
+                    thinking_block = flush_reasoning_as_thinking()
+                    if thinking_block:
+                        yield f"data: {_sse_chunk(cid, created, model, thinking_block, None)}\n\n"
+                else:
+                    reasoning_buffer.clear()
                 break
             if event_type == "tool_call":
                 pending_tool_calls.append(data or {})
@@ -663,6 +666,10 @@ def _stream_completions_progressive(
                 elif pending_tool_calls:
                     pending_tool_calls.pop(0)
             elif event_type == "reasoning":
+                # digichat (and other non–Open WebUI clients) get activity via
+                # digigraph_trace; never inject Open WebUI <thinking> chrome.
+                if suppress_tool_stream:
+                    continue
                 if isinstance(data, str):
                     raw = data
                 elif isinstance(data, dict):
@@ -684,9 +691,10 @@ def _stream_completions_progressive(
                         f"data: {_sse_chunk(cid, created, model, '', None, digigraph_error=data)}\n\n"
                     )
             elif event_type == "content":
-                thinking_block = flush_reasoning_as_thinking()
-                if thinking_block:
-                    yield f"data: {_sse_chunk(cid, created, model, thinking_block, None)}\n\n"
+                if not suppress_tool_stream:
+                    thinking_block = flush_reasoning_as_thinking()
+                    if thinking_block:
+                        yield f"data: {_sse_chunk(cid, created, model, thinking_block, None)}\n\n"
                 raw = (
                     data
                     if isinstance(data, str)
@@ -715,13 +723,26 @@ def _resolve_suppress_tool_stream(request: Request) -> bool:
 
 
 def _resolve_openwebui_format(req: ChatCompletionRequest, request: Request) -> bool:
-    """True when client requests Open WebUI format: header X-Response-Format: openwebui, or openwebui_format=true, or model=sitaas-rag."""
+    """True when client requests Open WebUI format.
+
+    digichat dogfood uses model id ``sitaas-rag`` (OpenAI-compat discovery name) but must
+    never receive ``<details>`` / ``<thinking>`` chrome. Opt-outs win over the legacy
+    ``sitaas-rag`` default:
+
+    - ``X-Suppress-Tool-Stream: 1`` (digichat trace stream)
+    - ``X-Response-Format: plain|neutral|none|digichat``
+    """
+    if _resolve_suppress_tool_stream(request):
+        return False
+    header = (request.headers.get("X-Response-Format") or "").strip().lower()
+    if header in ("plain", "neutral", "none", "digichat"):
+        return False
+    if header == "openwebui":
+        return True
     if getattr(req, "openwebui_format", False):
         return True
-    if (getattr(req, "model", "") or "").strip().lower() == "sitaas-rag":
-        return True
-    header = (request.headers.get("X-Response-Format") or "").strip().lower()
-    return header == "openwebui"
+    # Legacy Open WebUI clients pick model=sitaas-rag and expect <details> tool blocks.
+    return (getattr(req, "model", "") or "").strip().lower() == "sitaas-rag"
 
 
 def _resolve_allowed_tools_chat(req: ChatCompletionRequest, request: Request) -> list[str] | None:
@@ -783,7 +804,10 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
     OpenAI-compatible chat completions. Runs RAG workflow (LLM + search) and returns
     the response as a chat message. Use as a model in Open WebUI.
     When stream=true: progressive SSE with tool-call blocks then final answer.
-    To get Open WebUI–style tool blocks (<details>, markdown tables), send header X-Response-Format: openwebui (or openwebui_format=true, or model=sitaas-rag).
+    To get Open WebUI–style tool blocks (<details>, markdown tables), send header
+    X-Response-Format: openwebui (or openwebui_format=true, or model=sitaas-rag without an
+    opt-out). digichat sends X-Suppress-Tool-Stream / X-Response-Format: plain so answer
+    prose stays free of Open WebUI chrome; activity still arrives via digigraph_trace.
     """
     if not req.messages:
         content = "No messages provided."
@@ -800,8 +824,8 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
     if subject:
         session_id = workflow_thread_id(subject, session_id)
     allowed_tools = _resolve_allowed_tools_chat(req, request)
-    openwebui_format = _resolve_openwebui_format(req, request)
     suppress_tool_stream = _resolve_suppress_tool_stream(request)
+    openwebui_format = _resolve_openwebui_format(req, request)
     request_id = _resolve_request_id(request)
 
     summary = _chat_request_summary(req, request, prompt, session_id)

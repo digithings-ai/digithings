@@ -320,3 +320,27 @@ it("strips Open WebUI tool dumps from streamed answer text", async () => {
   expect(body).toContain("Clean answer.");
   expect(body).not.toContain("<details>");
 });
+
+it("opts digigraph out of Open WebUI format on the dogfood stream path", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("data: [DONE]\n\n", {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    })
+  );
+
+  await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+
+  expect(fetchSpy).toHaveBeenCalled();
+  const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+  const headers = new Headers(init.headers);
+  expect(headers.get("X-Suppress-Tool-Stream")).toBe("1");
+  expect(headers.get("X-Response-Format")).toBe("plain");
+});
