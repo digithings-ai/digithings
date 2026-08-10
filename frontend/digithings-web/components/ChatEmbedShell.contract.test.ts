@@ -62,4 +62,17 @@ describe("ChatEmbedShell contracts", () => {
     expect(readParentDocumentTheme({ getAttribute: () => "dark" })).toBe("dark");
     expect(readParentDocumentTheme({ getAttribute: () => null })).toBe("dark");
   });
+
+  it("keeps ContainerBootLoader + transparent iframe until digichat:ready", async () => {
+    // Source contract: avoid a white flash on the dark digithings theme (#2093).
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+    expect(src).toContain("ContainerBootLoader");
+    expect(src).toContain('digichat:ready');
+    expect(src).toContain("opacity: embedReady ? 1 : 0");
+    expect(src).toContain('backgroundColor: "transparent"');
+    expect(src).toContain("var(--bg)");
+  });
 });

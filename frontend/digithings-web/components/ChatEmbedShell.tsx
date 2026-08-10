@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ContainerBootLoader } from "@digithings/web";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
 
 const READY = "digichat:ready";
@@ -87,6 +88,10 @@ export type ChatEmbedShellProps = {
  * pins first paint via `?theme=`, then posts `digichat:theme` on ready and on
  * live toggles so the iframe stays in sync without reload.
  *
+ * Boot: shows `@digithings/web` ContainerBootLoader on a theme-matched surface
+ * until `digichat:ready`. The iframe stays transparent / opacity-0 underneath
+ * so a white default document never flashes on the dark digithings theme.
+ *
  * Ready failures: posts `digichat:parent-error` into the iframe for in-chat
  * terminal lines (no page banner). If the iframe never loads, shows the same
  * `error: …` line in the iframe slot.
@@ -101,9 +106,11 @@ export function ChatEmbedShell({
   const themeRef = useRef<EmbedShellTheme>("dark");
   /** Only when iframe never loads — cannot deliver parent-error postMessage. */
   const [shellLoadError, setShellLoadError] = useState<string | null>(null);
+  const [embedReady, setEmbedReady] = useState(false);
   // Defer iframe src until after mount so we can read the real parent theme
   // (themeInitScript already flipped data-theme) and avoid a wrong-mode flash.
   const [src, setSrc] = useState("");
+  const [shellTheme, setShellTheme] = useState<EmbedShellTheme>("dark");
   const targetOrigin = useMemo(() => parseOrigin(embedOrigin), [embedOrigin]);
   const configError = targetOrigin
     ? null
@@ -115,6 +122,7 @@ export function ChatEmbedShell({
     themeRef.current = theme;
     // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
     queueMicrotask(() => {
+      setShellTheme(theme);
       setSrc(embedSrc(embedOrigin, embedHost, theme));
     });
 
@@ -122,6 +130,7 @@ export function ChatEmbedShell({
       const next = readParentDocumentTheme();
       if (next === themeRef.current) return;
       themeRef.current = next;
+      setShellTheme(next);
       if (!embedReadyRef.current) return;
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
@@ -144,6 +153,7 @@ export function ChatEmbedShell({
     // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
     queueMicrotask(() => {
       setShellLoadError(null);
+      setEmbedReady(false);
     });
 
     function onMessage(ev: MessageEvent) {
@@ -152,6 +162,7 @@ export function ChatEmbedShell({
       if (!data || data.type !== READY) return;
       ready = true;
       embedReadyRef.current = true;
+      setEmbedReady(true);
       setShellLoadError(null);
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
@@ -177,6 +188,8 @@ export function ChatEmbedShell({
       if (iframeLoadedRef.current && win) {
         // Iframe painted but never said ready — surface inside digichat transcript.
         win.postMessage(buildEmbedParentErrorMessage("ready_timeout"), targetOrigin);
+        // Reveal the iframe so the in-chat error line is visible.
+        setEmbedReady(true);
         return;
       }
       // No browsing context to post into — terminal line in the iframe slot.
@@ -196,15 +209,23 @@ export function ChatEmbedShell({
     );
   }
 
+  const showBoot = !shellLoadError && !embedReady;
+
   return (
     <div
       className="dc-page"
+      data-theme={shellTheme}
       style={{
         display: "flex",
         flexDirection: "column",
         flex: 1,
         height: "100%",
         minHeight: 0,
+        position: "relative",
+        // Match digithings theme so the slot never flashes browser-default white
+        // while the iframe boots (or while ContainerBootLoader is up).
+        background: "var(--bg)",
+        colorScheme: shellTheme,
       }}
     >
       {shellLoadError ? (
@@ -222,7 +243,28 @@ export function ChatEmbedShell({
           <span aria-hidden="true">! </span>
           {shellLoadError}
         </p>
-      ) : src ? (
+      ) : null}
+
+      {showBoot ? (
+        <div
+          aria-busy="true"
+          aria-live="polite"
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 1,
+            background: "var(--bg)",
+          }}
+        >
+          <ContainerBootLoader
+            title="digichat"
+            note="waking the embed · first paint after digichat:ready"
+            fullscreen={false}
+          />
+        </div>
+      ) : null}
+
+      {src && !shellLoadError ? (
         <iframe
           ref={iframeRef}
           title="digichat"
@@ -233,6 +275,12 @@ export function ChatEmbedShell({
             border: 0,
             minHeight: 0,
             height: "100%",
+            // Transparent until ready — default iframe white never paints over --bg.
+            backgroundColor: "transparent",
+            colorScheme: shellTheme,
+            opacity: embedReady ? 1 : 0,
+            position: "relative",
+            zIndex: 0,
           }}
           allow="clipboard-write"
           onLoad={() => {
