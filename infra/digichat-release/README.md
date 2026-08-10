@@ -32,12 +32,12 @@ Optional: LiteLLM cache Redis via `--profile litellm-cache` and `REDIS_URL=redis
 
 ## Pull pinned digichat (monorepo operators)
 
-From the repo root, with a published version (e.g. `0.9.3`):
+From the repo root, with a published version (e.g. `1.0.0`):
 
 ```bash
-make digichat-release-up VERSION=0.9.3
+make digichat-release-up VERSION=1.0.0
 # or:
-DIGICHAT_VERSION=0.9.3 docker compose \
+DIGICHAT_VERSION=1.0.0 docker compose \
   -f docker-compose.yml \
   -f infra/digichat-release/compose.digichat-release.yml \
   --profile digichat up -d
@@ -45,7 +45,10 @@ DIGICHAT_VERSION=0.9.3 docker compose \
 
 The overlay sets `image: ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}` and clears the monorepo `build:` via Compose merge `build: !reset null` (Compose v2.24+ / v5).
 
-Tear down: `make digichat-release-down VERSION=0.9.3`.
+Tear down: `make digichat-release-down VERSION=1.0.0`.
+
+Existing clients (including DataTap) may keep `DIGICHAT_VERSION=0.9.3` —
+`ghcr.io/digithings-ai/digichat:v0.9.3` stays on GHCR.
 
 ## Profile A — digigraph stack
 
@@ -99,8 +102,8 @@ Host must supply Azure identity for Foundry; do not put a Foundry API key in dig
 
 | Goal | Command |
 |---|---|
-| Pull GHCR digichat (monorepo overlay) | `make digichat-release-up VERSION=0.9.3` |
-| Tear down GHCR overlay | `make digichat-release-down VERSION=0.9.3` |
+| Pull GHCR digichat (monorepo overlay) | `make digichat-release-up VERSION=1.0.0` |
+| Tear down GHCR overlay | `make digichat-release-down VERSION=1.0.0` |
 | Profile A (digigraph, pull) | `make digichat-profile-a-up` |
 | Full stack GHCR (monorepo overlay) | `make up-ghcr` (+ `--profile digichat --profile digivault`) |
 | Profile B (Foundry) | `docker compose -f infra/digichat-release/compose.profile-b.yml --env-file infra/digichat-release/.env.profile-b up -d` |

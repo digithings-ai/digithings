@@ -14,7 +14,8 @@
 # Pin images for production:
 #   DIGI_IMAGE_TAG=sha-<12-char-sha>   # preferred
 #   DIGI_IMAGE_TAG=v0.1.0              # pyproject version tag
-#   DIGICHAT_IMAGE_TAG=v0.9.3          # digichat uses release-please versions
+#   DIGICHAT_IMAGE_TAG=v1.0.0          # digichat release-please / hand-cut versions
+#   # DataTap / existing clients may keep v0.9.3 — that GHCR tag remains published.
 #
 # See docs/DEPLOYMENT.md § "Pull from GHCR" and RELEASES.md.
 # Fixes #2018 / Refs #2016

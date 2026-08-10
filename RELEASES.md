@@ -26,23 +26,21 @@ Self-host pull path: [`infra/self-host/compose.ghcr.yml`](infra/self-host/compos
 
 Either works; pick one and stay consistent within a release cycle.
 
-### digichat: patch-granular pre-1.0 versions
+### digichat: versioning (1.0.0 public cut)
 
-digichat is released by release-please (`release-please-config.json`), which
-by default bumps the **minor** on every `feat` — so a component still under
-1.0 marched 0.5.0 → 0.6.0 → 0.7.0 → 0.8.0 → 0.9.0, skipping every patch number
-and burning a minor on single features.
+**Public line is `1.0.0`.** release-please had proposed `0.9.4` (#2014); that PR
+was closed and the version was forced to **1.0.0** (`package.json` +
+`.release-please-manifest.json` + `CHANGELOG.md`) so the next develop→main
+promote publishes `ghcr.io/digithings-ai/digichat:v1.0.0`.
 
-Two flags make every release a `+1` on the patch instead, for as long as
-digichat is pre-1.0:
+**Do not delete `ghcr.io/digithings-ai/digichat:v0.9.3`.** DataTap and other
+existing clients remain pinned there until they upgrade.
 
-- `bump-patch-for-minor-pre-major: true` — a `feat` bumps patch, not minor.
-- `bump-minor-pre-major: true` — a breaking change bumps minor, not straight
-  to 1.0.0.
-
-So 0.9.2 → 0.9.3 → 0.9.4 …, regardless of whether the release carries fixes
-or features. Neither flag rewrites history: 0.5.0–0.9.2 are already tagged and
-published, and stay as they are.
+Historically, while digichat was pre-1.0, release-please used
+`bump-patch-for-minor-pre-major` + `bump-minor-pre-major` so every release was
+a patch bump (0.9.2 → 0.9.3 → …) instead of burning minors on each `feat`. Those
+flags remain in `release-please-config.json`; after 1.0.0, conventional
+`feat`/`fix`/`BREAKING` semver applies normally for subsequent cuts.
 
 **Tag every release.** 0.9.1 and 0.9.2 were bumped inside ordinary PRs
 (`6f7d5a30`, `8c166c50`) and never tagged, so release-please lost its baseline
