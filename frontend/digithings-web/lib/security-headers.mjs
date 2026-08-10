@@ -31,6 +31,16 @@ export function frameSrcForCsp(env = process.env) {
 }
 
 /**
+ * Origin for `/chat` and `/chat/occ` iframes — same as CSP `frame-src`.
+ * Always returns a concrete origin so Pages never ships a "not configured"
+ * shell when only the Tunnel/host is missing (#2068).
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ */
+export function embedOriginForChat(env = process.env) {
+  return frameSrcForCsp(env);
+}
+
+/**
  * @param {string} [frameSrc]
  */
 export function digithingsCsp(frameSrc = frameSrcForCsp()) {

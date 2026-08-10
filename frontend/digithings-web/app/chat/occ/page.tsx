@@ -4,7 +4,7 @@ import {
   ChatEmbedShell,
   OCC_CHAT_EMBED_HOST,
 } from "@/components/ChatEmbedShell";
-import { resolveDigichatEmbedOrigin } from "@/lib/security-headers.mjs";
+import { embedOriginForChat } from "@/lib/security-headers.mjs";
 
 export const metadata: Metadata = {
   title: "OCC help assistant — digichat",
@@ -13,8 +13,8 @@ export const metadata: Metadata = {
     "grounded on the OCC help corpus via digigraph. No sign-up.",
 };
 
-/** Same resolver as CSP `frame-src` (see lib/security-headers.mjs + prebuild). */
-const EMBED_ORIGIN = resolveDigichatEmbedOrigin() ?? "";
+/** Same origin as CSP `frame-src` (env or https://digichat.digithings.ai). */
+const EMBED_ORIGIN = embedOriginForChat();
 
 /**
  * /chat/occ — DtNav + iframe to digichat /embed with virtual host occ.digithings.ai.
@@ -26,19 +26,10 @@ export default function OccChatPage() {
     <>
       <DtNav />
       <main>
-        {EMBED_ORIGIN ? (
-          <ChatEmbedShell
-            embedOrigin={EMBED_ORIGIN}
-            embedHost={OCC_CHAT_EMBED_HOST}
-          />
-        ) : (
-          <p className="dc-page" style={{ padding: "2rem", maxWidth: "36rem" }}>
-            digichat is not configured for this build. Set{" "}
-            <code>NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN</code> to the digichat Node
-            URL (digigraph stack). See{" "}
-            <code>infra/digichat-digithings/README.md</code>.
-          </p>
-        )}
+        <ChatEmbedShell
+          embedOrigin={EMBED_ORIGIN}
+          embedHost={OCC_CHAT_EMBED_HOST}
+        />
       </main>
     </>
   );
