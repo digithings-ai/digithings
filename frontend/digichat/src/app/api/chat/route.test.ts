@@ -163,7 +163,7 @@ describe("POST /api/chat", () => {
   });
 
   it("returns 429 when the anonymous embed IP limiter blocks", async () => {
-    process.env.DIGICHAT_EMBED_ENABLED = "1";
+    process.env.DIGICHAT_LEGACY_EMBED_ENABLED = "1";
     vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
     vi.mocked(checkBffRateLimit).mockClear();
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 45 });

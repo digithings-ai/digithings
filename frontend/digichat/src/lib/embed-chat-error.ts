@@ -1,3 +1,5 @@
+import { LEGACY_EMBED_DISABLED_MESSAGE } from "@/lib/embed-legacy-gate";
+
 /**
  * Map `/api/chat` failures to embed-friendly copy (REM-010) and BYOK suggestion policy.
  */
@@ -116,7 +118,7 @@ export function formatEmbedChatError(error: Error | undefined): string | null {
     return message ?? "Rate limited. Try again shortly, or continue with your own API key.";
   }
   if (raw.includes("embed_disabled") || code === "embed_disabled") {
-    return "Embed chat is not enabled on this host. Set DIGICHAT_EMBED_ENABLED=1 or configure X-Embed-Token.";
+    return LEGACY_EMBED_DISABLED_MESSAGE;
   }
   if (raw.includes("unauthorized") || code === "unauthorized") {
     return "Sign in on digithings.ai/chat or add your own API key below.";

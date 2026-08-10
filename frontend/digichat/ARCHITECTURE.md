@@ -195,7 +195,7 @@ probe).
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
 - **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). IP is read from `cf-connecting-ip`, falling back to the first `X-Forwarded-For` hop — both are spoofable by the client unless a proxy in front strips/overwrites them (true of Cloudflare in the ADR-0018 production deployment, not guaranteed elsewhere). digigraph closed the equivalent gap with a `DIGI_TRUSTED_PROXIES` allowlist (`digigraph/ARCHITECTURE.md` §12.8, REM-027); digichat has no equivalent yet — acceptable for now since this is a rate-limiting decision, not an authorization one, but tracked as a follow-up.
 - **Per-tenant trial gate:** a `trial_form` tenant may set `gate.consumeUrl` to an operator-controlled HTTPS endpoint. When `X-Embed-Chat-Token` is present, the BFF sends `{ "token": "..." }` to that endpoint before applying the fallback per-IP turn quota. A 2xx response consumes the turn, any 4xx response denies it, and 5xx, timeout, or transport failures allow it so a quota-provider outage does not disable chat. The token is never logged or forwarded to a chat backend.
-- **Anonymous `/embed` requests** (`resolveEmbedChatTenant` in `embed-chat-tenant.ts`) resolve to `{ tenantSlug: "embed", ownerUserSub: "embed:anonymous" }` when `DIGICHAT_EMBED_ENABLED=1` or a valid `X-Embed-Token` is presented; otherwise 503. This path never touches `conversations-repo` — no server-side persistence call exists in this route for any caller (persistence, when it happens, is client-initiated via the separate `/api/conversations` endpoints below, which require a real session).
+- **Anonymous `/embed` requests** (`resolveEmbedChatTenant` in `embed-chat-tenant.ts`) resolve to `{ tenantSlug: "embed", ownerUserSub: "embed:anonymous" }` when `DIGICHAT_LEGACY_EMBED_ENABLED=1` (or deprecated `DIGICHAT_EMBED_ENABLED=1`) or a valid legacy `X-Embed-Token` matches `DIGICHAT_EMBED_TOKEN`; registered tenants resolve via `DIGICHAT_EMBED_TENANTS` (token or first-party bypass). Otherwise 503. This path never touches `conversations-repo` — no server-side persistence call exists in this route for any caller (persistence, when it happens, is client-initiated via the separate `/api/conversations` endpoints below, which require a real session).
 
 ### Conversations
 
@@ -507,8 +507,9 @@ ADR: [`docs/adr/0018-digichat-path-routing.md`](../../docs/adr/0018-digichat-pat
 **First-party digithings hosts.** Prod hostnames `digithings.ai` and
 `www.digithings.ai` (`src/lib/embed-first-party.ts`) may use digichat `/embed`
 without presenting `X-Embed-Token` when registered in `DIGICHAT_EMBED_TENANTS`.
-Customer embeds (e.g. DataTap) still require a matching token. Preview
-`*.pages.dev` hosts are **not** allowlisted.
+In `NODE_ENV=development` only, registered `localhost` / `127.0.0.1` / `[::1]`
+hosts get the same bypass for local dogfood. Customer embeds (e.g. DataTap) still
+require a matching token. Preview `*.pages.dev` hosts are **not** allowlisted.
 
 **postMessage seed.** Embed emits `{ type: "digichat:ready" }` to the parent
 origin; digithings.ai posts `{ type: "digichat:seed", messages, pending, ts }`
@@ -524,7 +525,7 @@ grants embed access by itself — `resolveVerifiedEmbedTenant`
 `token` **unless** the host is on the first-party allowlist (above). Both `/api/chat` and `GET /api/embed/tenant-config` resolve
 through this verified path; without a matching token a non-first-party request is treated
 exactly like an unregistered host (generic gated defaults, or the legacy
-`DIGICHAT_EMBED_ENABLED`/`DIGICHAT_EMBED_TOKEN` path), never the specific
+`DIGICHAT_LEGACY_EMBED_ENABLED`/`DIGICHAT_EMBED_TOKEN` path), never the specific
 tenant's config or relay. The token is not secret from that tenant's own
 site visitors — it's provisioned out-of-band and baked into the tenant's
 embed snippet as a query param (`<iframe src=".../embed?token=...">`),
@@ -887,8 +888,8 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_MODEL` | digigraph model name (default: `sitaas-rag`) | Optional |
 | `DIGICHAT_OPENWEBUI_FORMAT` | Enable OpenWebUI format flag (default: `1`) | Optional |
 | `DIGICHAT_ENDPOINT_HOST_ALLOWLIST` | Comma-separated hosts for SSRF guard | Security hardening |
-| `DIGICHAT_EMBED_ENABLED` | Enable the unauthenticated `/embed` chat surface (`1` = on) | For public embed |
-| `DIGICHAT_EMBED_TOKEN` | Alternative to `DIGICHAT_EMBED_ENABLED`: gate `/embed` on `X-Embed-Token` instead | Optional |
+| `DIGICHAT_LEGACY_EMBED_ENABLED` | Enable legacy generic embed for **unregistered** hosts (`1` = on). Does not default on when `DIGICHAT_EMBED_TENANTS` is set. Deprecated alias: `DIGICHAT_EMBED_ENABLED` | Optional |
+| `DIGICHAT_EMBED_TOKEN` | Alternative to legacy flag: gate unregistered `/embed` on `X-Embed-Token` | Optional |
 | `DIGICHAT_EMBED_TENANTS` | Optional JSON registry of embed tenants (see "Embed tenant registry & external backends"). Unset = no external embed tenants; first-party embeds behave exactly as before. Runtime-only — never pass as a Docker build-arg, it carries every tenant's secret `token` and build-args persist in image layer history / cloud-build logs (#1360). Each entry requires a `token` — the embed snippet passes it back as `?token=` / `X-Embed-Token`; a registered host alone is not sufficient authorization (#1339). | Optional |
 | `DIGICHAT_EMBED_HOSTS` | Plain comma-separated embed-tenant hostnames, no secrets. Feeds `/embed` CSP `frame-ancestors` at **runtime** via `src/proxy.ts` (preferred over deriving hosts from `DIGICHAT_EMBED_TENANTS` when both are set — #1360). Optional seed list: `embed-hosts.txt` (not baked into the GHCR image). Never emits `frame-ancestors *`; fail-closed to first-party origins when unset/invalid. | Optional |
 | `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms) | Optional |

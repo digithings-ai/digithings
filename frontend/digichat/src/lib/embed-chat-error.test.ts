@@ -5,6 +5,8 @@ import {
   parseEmbedChatError,
   shouldSuggestByokOnEmbedError,
 } from "./embed-chat-error";
+import { LEGACY_EMBED_DISABLED_MESSAGE } from "./embed-legacy-gate";
+
 
 describe("formatEmbedChatError", () => {
   it("returns null for empty errors", () => {
@@ -16,16 +18,16 @@ describe("formatEmbedChatError", () => {
       new Error(
         JSON.stringify({
           error: "embed_disabled",
-          message: "Embed requires DIGICHAT_EMBED_ENABLED=1.",
+          message: LEGACY_EMBED_DISABLED_MESSAGE,
         }),
       ),
     );
-    expect(msg).toBe("Embed requires DIGICHAT_EMBED_ENABLED=1.");
+    expect(msg).toBe(LEGACY_EMBED_DISABLED_MESSAGE);
   });
 
   it("detects embed_disabled in plain text", () => {
     expect(formatEmbedChatError(new Error('{"error":"embed_disabled"}'))).toContain(
-      "not enabled",
+      "DIGICHAT_EMBED_TENANTS",
     );
   });
 
