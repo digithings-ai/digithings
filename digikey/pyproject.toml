@@ -47,5 +47,10 @@ exclude = ["*.md"]
 select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 
 [tool.pytest.ini_options]
+# Monorepo tests live at repo root tests/dk/; from digikey/: `pytest` picks these up; or `make test-unit` from repo root.
 testpaths = ["../tests/dk"]
-pythonpath = ["src"]
+# ".." (repo root) so shared `tests.*` helpers (e.g. tests/conftest.py) resolve to the
+# workspace copy, not a stale global `tests` package; "../digibase/src" because digikey
+# imports digibase directly and pytest run with no path args from inside digikey/ never
+# walks up to the repo-root pytest.ini's full pythonpath. See digigraph/pyproject.toml.
+pythonpath = ["..", "src", "../digibase/src"]
