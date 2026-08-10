@@ -35,6 +35,10 @@ if [ "$(uname -s)" = "Linux" ]; then
 fi
 
 echo "--- building digithings-web (Next.js static export) ---"
+# Bake digichat iframe origin for /chat (matches CSP default when unset).
+# Override in Cloudflare Pages for staging tunnels; production default is the Tunnel host.
+export NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN="${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN:-https://digichat.digithings.ai}"
+echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
 # prebuild rewrites public/_headers frame-src from NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN
 npm --workspace frontend/digithings-web run build
 

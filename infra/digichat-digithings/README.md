@@ -105,10 +105,13 @@ Set `DIGICHAT_EMBED_HOSTS` (and/or tenant host keys) at **runtime** so CSP `fram
 
 1. Install `cloudflared` on the host that runs digichat (port 3005).
 2. Create a tunnel; route public hostname e.g. `digichat.digithings.ai` → `http://127.0.0.1:3005`.
-3. Pages (digithings-web) build env:
-   - `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digichat.digithings.ai`
+3. Pages (digithings-web): production builds default
+   `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` to `https://digichat.digithings.ai`
+   (`scripts/build-digithings.sh`). Set the var only to override (staging tunnel).
 4. digithings-web `npm prebuild` writes `public/_headers` `frame-src` from that
-   same env (see `lib/security-headers.mjs`) — no manual CSP edit per host.
+   same origin (see `lib/security-headers.mjs` / `embedOriginForChat`) — no
+   manual CSP edit per host. `/chat` always iframes; it does not show a
+   "not configured" page when the env is unset.
 
 ## digithings.ai `/chat`
 

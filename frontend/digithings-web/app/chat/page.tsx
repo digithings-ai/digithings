@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { DtNav } from "@/components/DtNav";
 import { ChatEmbedShell } from "@/components/ChatEmbedShell";
-import { resolveDigichatEmbedOrigin } from "@/lib/security-headers.mjs";
+import { embedOriginForChat } from "@/lib/security-headers.mjs";
 
 export const metadata: Metadata = {
   title: "digichat — the digithings assistant",
@@ -10,29 +10,21 @@ export const metadata: Metadata = {
     "and digivault, running on digillm. No sign-up.",
 };
 
-/** Same resolver as CSP `frame-src` (see lib/security-headers.mjs + prebuild). */
-const EMBED_ORIGIN = resolveDigichatEmbedOrigin() ?? "";
+/** Same origin as CSP `frame-src` (env or https://digichat.digithings.ai). */
+const EMBED_ORIGIN = embedOriginForChat();
 
 /**
  * /chat — DtNav + iframe to digichat /embed (digigraph backend).
- * Set NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN to the digichat Node public URL
- * (Cloudflare Tunnel). See infra/digichat-digithings/README.md.
+ * Origin defaults to digichat.digithings.ai; override with
+ * NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN for staging tunnels.
+ * See infra/digichat-digithings/README.md.
  */
 export default function ChatPage() {
   return (
     <>
       <DtNav />
       <main>
-        {EMBED_ORIGIN ? (
-          <ChatEmbedShell embedOrigin={EMBED_ORIGIN} />
-        ) : (
-          <p className="dc-page" style={{ padding: "2rem", maxWidth: "36rem" }}>
-            digichat is not configured for this build. Set{" "}
-            <code>NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN</code> to the digichat Node
-            URL (digigraph stack). See{" "}
-            <code>infra/digichat-digithings/README.md</code>.
-          </p>
-        )}
+        <ChatEmbedShell embedOrigin={EMBED_ORIGIN} />
       </main>
     </>
   );
