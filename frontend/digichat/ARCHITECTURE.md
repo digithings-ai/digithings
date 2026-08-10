@@ -189,7 +189,7 @@ probe).
 
 **`POST /api/chat`** (also aliased at `POST /api/v1/chat`):
 - Auth: Auth.js session cookie or `Authorization: Bearer <machine-key>`.
-- Request body: `{ messages: UIMessage[] }` (AI SDK UI message format).
+- Request body: `{ messages: UIMessage[] }` (AI SDK UI message format). **Full conversation history** — every prior user+assistant turn — must be posted on each request; the BFF forwards the entire array to digigraph (trace stream and `streamText` paths). Foundry backends intentionally send only the latest user text because Azure holds server-side conversation state.
 - Notable request headers: `X-Digichat-Session` / `X-Session-Id` (stable UUID for upstream tracing), `X-Request-ID` (propagated to digigraph), `X-Digichat-Trace: 0` (opt out of trace stream), `X-Embed-Chat-Token` (optional per-tenant trial-gate token).
 - Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus optional `data-digichatActivity` parts.
 - The route resolves upstream auth, builds a `createdigigraphClient`, then either (a) calls `createdigigraphTraceStreamResponse` for the trace path or (b) calls `streamText` with `smoothStream` for the legacy path.

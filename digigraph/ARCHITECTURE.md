@@ -299,7 +299,7 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 | Field | Type | Notes |
 |-------|------|-------|
 | `model` | `str` | Default `"sitaas-rag"`; not used for routing (LiteLLM handles it) |
-| `messages` | `list[ChatMessage]` | Role + content; content coerced from AI SDK part lists |
+| `messages` | `list[ChatMessage]` | Role + content; content coerced from AI SDK part lists. Flattened into the workflow `prompt` via `chat_prompt.messages_to_workflow_prompt` — **full user+assistant history** (multi-turn), not user-only |
 | `stream` | `bool` | SSE streaming |
 | `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Enabled only by this field or `X-Response-Format: openwebui` — **not** by `model=sitaas-rag`. Opt out via `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
 | `session_id` | `str \| None` | Conversation isolation |
@@ -313,6 +313,7 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 
 ```
 digigraph/src/digigraph/
+├── chat_prompt.py               Flatten OpenAI chat messages → workflow prompt (multi-turn)
 ├── server.py                    FastAPI app, middleware stack, all HTTP routes
 ├── workflow.py                  run_digigraph_workflow (sync + streaming variants)
 ├── models.py                    Pydantic I/O models (WorkflowRequest, WorkflowResult, ChatCompletion*)
