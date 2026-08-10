@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from digigraph.graph.research import research_node
 from digigraph.graph.state import WorkflowState
 from digigraph.languages import LANGUAGE_NAMES, resolve_language_directive
 from digigraph.models import WorkflowRequest
+from digigraph.server import _digi_fields_from_request
 from digigraph.workflow import _initial_graph_state
 
 pytestmark = pytest.mark.unit
@@ -54,9 +57,53 @@ def test_initial_graph_state_carries_response_language() -> None:
     assert state["response_language"] == "de"
 
 
-def test_initial_graph_state_omits_response_language_when_unset() -> None:
+def test_initial_graph_state_sets_response_language_to_none_when_unset() -> None:
+    """response_language is a user-toggleable per-turn preference, not a static
+
+    tenant-derived value like digisearch_index/vault_path_prefix/
+    research_system_prompt_override — it must be written unconditionally (even
+    as an explicit None) so a later turn with no language header actually
+    clears a prior non-English value from checkpointed state instead of
+    leaving it sticky (see #2103 final review, Fix 2).
+    """
     state = _initial_graph_state(WorkflowRequest(prompt="hi"), "wf-lang-2")
-    assert "response_language" not in state
+    assert "response_language" in state
+    assert state["response_language"] is None
+
+
+def test_initial_graph_state_clears_response_language_on_next_turn() -> None:
+    """Two sequential per-turn calls: 'de' then unset must produce an explicit
+
+    None key on the second call, not merely an absent key — that's what lets
+    LangGraph's per-key last-write-wins checkpoint merge actually clear a
+    previously-persisted non-English value.
+    """
+    first = _initial_graph_state(
+        WorkflowRequest(prompt="hallo", response_language="de"), "wf-lang-3"
+    )
+    assert first["response_language"] == "de"
+
+    second = _initial_graph_state(WorkflowRequest(prompt="hi"), "wf-lang-3")
+    assert "response_language" in second
+    assert second["response_language"] is None
+
+
+def test_digi_fields_from_request_reads_language_header() -> None:
+    """The single header->WorkflowRequest bridge must populate response_language
+
+    from X-Digi-Language (see #2103 final review, Fix 1) — without this, the
+    header is read nowhere in production and the whole directive path is
+    unreachable.
+    """
+    request = SimpleNamespace(state=SimpleNamespace(), headers={"x-digi-language": "de"})
+    updates = _digi_fields_from_request(request)
+    assert updates["response_language"] == "de"
+
+
+def test_digi_fields_from_request_omits_language_when_header_absent() -> None:
+    request = SimpleNamespace(state=SimpleNamespace(), headers={})
+    updates = _digi_fields_from_request(request)
+    assert "response_language" not in updates
 
 
 def test_langgraph_preserves_response_language_through_invoke() -> None:

@@ -263,6 +263,11 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
         updates["vault_path_prefix"] = corpus.vault_path_prefix
     if corpus.research_system_prompt:
         updates["research_system_prompt_override"] = corpus.research_system_prompt
+    # Per-request response language (X-Digi-Language) — a per-request signal, not a
+    # tenant-derived value, so it's read directly rather than via resolve_corpus_override.
+    lang = http_request.headers.get("x-digi-language")
+    if lang and lang.strip():
+        updates["response_language"] = lang.strip().lower()
     return updates
 
 
