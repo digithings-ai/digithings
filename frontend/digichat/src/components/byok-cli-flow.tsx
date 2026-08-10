@@ -70,6 +70,10 @@ function TermOptionList({
   const listRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
+    listRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${highlighted}"]`);
     el?.scrollIntoView({ block: "nearest" });
   }, [highlighted]);
@@ -161,6 +165,8 @@ export function ByokCliFlow({
   const keyInputRef = useRef<HTMLInputElement>(null);
   const customModelRef = useRef<HTMLInputElement>(null);
   const formId = useId();
+  /** Drop in-flight ping activation if the flow unmounts (Escape / cancel). */
+  const aliveRef = useRef(true);
 
   const modelOptions = (() => {
     const presets = [...byokModelPresets(provider)];
@@ -175,6 +181,13 @@ export function ByokCliFlow({
     if (m === CUSTOM_MODEL) return "custom…";
     return m;
   });
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (step === "key") keyInputRef.current?.focus();
@@ -235,6 +248,7 @@ export function ByokCliFlow({
       setPing(null);
       setStep("validating");
       const result = await pingByokKey(inputKey, provider, chosenModel);
+      if (!aliveRef.current) return;
       setPing(result);
       const refuse = byokActivationGate(result);
       if (refuse) {

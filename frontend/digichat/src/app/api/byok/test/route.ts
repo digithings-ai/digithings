@@ -202,8 +202,12 @@ async function testOpenRouterKey(key: string, model: string): Promise<TestResult
 
 async function testGeminiKey(key: string): Promise<TestResult> {
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`;
-    const resp = await fetchWithTimeout(url, { method: "GET" });
+    // Prefer header auth — query-string `?key=` can land in egress/proxy/URL logs.
+    // https://ai.google.dev/api (x-goog-api-key)
+    const resp = await fetchWithTimeout(
+      "https://generativelanguage.googleapis.com/v1beta/models",
+      { method: "GET", headers: { "x-goog-api-key": key } },
+    );
     if (!resp.ok) {
       const body = (await resp.json().catch(() => ({}))) as {
         error?: { message?: string };
