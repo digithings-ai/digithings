@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -104,6 +106,44 @@ def test_digi_fields_from_request_omits_language_when_header_absent() -> None:
     request = SimpleNamespace(state=SimpleNamespace(), headers={})
     updates = _digi_fields_from_request(request)
     assert "response_language" not in updates
+
+
+def test_language_lists_stay_in_sync_with_frontend() -> None:
+    """Cross-check digigraph.languages.LANGUAGE_NAMES against the TS curated
+
+    list so a language added to one side without the other is caught here,
+    rather than silently returning None from resolve_language_directive (see
+    #2103 final review, Fix 3).
+    """
+    frontend_path = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "digichat"
+        / "src"
+        / "lib"
+        / "languages.ts"
+    )
+    if not frontend_path.exists():
+        pytest.skip(f"frontend languages.ts not found at {frontend_path} — skipping sync check")
+
+    source = frontend_path.read_text(encoding="utf-8")
+    match = re.search(
+        r"LANGUAGES:\s*\{\s*code:\s*string;\s*label:\s*string\s*\}\[\]\s*=\s*\[(.*?)\];",
+        source,
+        re.DOTALL,
+    )
+    if not match:
+        pytest.skip("could not locate LANGUAGES array literal in frontend languages.ts")
+
+    pairs = re.findall(
+        r'\{\s*code:\s*"([^"]+)",\s*label:\s*"([^"]+)"\s*\}',
+        match.group(1),
+    )
+    if not pairs:
+        pytest.skip("LANGUAGES array literal matched but no {code, label} pairs were parsed")
+
+    frontend_languages = {code: label for code, label in pairs}
+    assert frontend_languages == LANGUAGE_NAMES
 
 
 def test_langgraph_preserves_response_language_through_invoke() -> None:
