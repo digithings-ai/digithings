@@ -124,7 +124,9 @@ digichat-profile-a-down:
 
 # Profile A bundle — one supervisord image (same as CF Containers) + digichat + Postgres.
 # Prefer for website digichat local work; stop monorepo `make up` containers first (port clash).
-PROFILE_A_BUNDLE_COMPOSE := -f infra/digichat-release/compose.profile-a-bundle.yml --env-file infra/digichat-release/.env.profile-a-bundle
+PROFILE_A_BUNDLE_COMPOSE := -f infra/digichat-release/compose.profile-a-bundle.yml \
+	$(if $(wildcard infra/digichat-release/compose.profile-a-bundle.override.yml),-f infra/digichat-release/compose.profile-a-bundle.override.yml,) \
+	--env-file infra/digichat-release/.env.profile-a-bundle
 digichat-profile-a-bundle-up:
 	@test -f infra/digichat-release/.env.profile-a-bundle || (echo "Copy infra/digichat-release/.env.profile-a-bundle.example → .env.profile-a-bundle and fill secrets"; exit 1)
 	docker compose $(PROFILE_A_BUNDLE_COMPOSE) up -d --build
