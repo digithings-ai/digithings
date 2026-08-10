@@ -114,9 +114,27 @@ help.online-compliance-center.com remains **HOLD** until approval
 
 Use this for local iteration. **Not** a production dependency.
 
-### Monorepo build
+### Prefer: Profile A bundle (one stack container)
 
-From repo root (adjust `.env`):
+Same image as production CF backends. Replaces digikey + digigraph + digisearch +
+digivault + LiteLLM + Redis as separate containers:
+
+```bash
+# Stop the heavy monorepo stack if it is already up (port clash on 8000/8005/3005)
+docker compose --profile digichat --profile digivault --profile litellm-cache down
+
+cp infra/digichat-release/.env.profile-a-bundle.example \
+   infra/digichat-release/.env.profile-a-bundle
+# AUTH_SECRET, DIGIKEY_BFF_TOKEN, DIGICHAT_VERSION, GROQ_API_KEY, …
+make digichat-profile-a-bundle-up
+```
+
+Details: [`frontend/digithings-stack-cloudflare/README.md`](../../frontend/digithings-stack-cloudflare/README.md)
+(local `docker run` / compose). digiquant, digismith HTTP, and Ollama stay off.
+
+### Monorepo build (full N-container stack)
+
+Only when you need digiquant / observability / per-service rebuilds:
 
 ```bash
 export DIGIVAULT_URL=http://digivault:8004

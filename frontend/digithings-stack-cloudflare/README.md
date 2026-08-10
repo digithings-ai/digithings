@@ -93,7 +93,68 @@ curl -sf https://digithings.ai/api/health   # digraph should be ok; expect 200 o
 
 Do **not** treat `/chat` UI E2E as done here — leave for a smoke agent.
 
-## Local Worker
+## Local — same image as Cloudflare (slim Mac Docker)
+
+**Recommendation:** for website digichat (Profile A), run **one** stack container
+instead of N monorepo services. Keep digichat (+ Postgres) separate — Node vs
+Python, different secrets and scale. Do **not** put digiquant / digismith HTTP /
+Ollama in this path unless you need them.
+
+### Stop excess monorepo containers first
+
+Published host ports clash (`8000` / `8005` / `3005` / `5433`):
+
+```bash
+# Full digi compose project (names like digi-digigraph, digi-litellm, …)
+docker compose --profile digichat --profile digivault --profile litellm-cache down
+# or surgically:
+docker stop digi-digigraph digi-digikey digi-digisearch digi-digivault \
+  digi-litellm digi-digismith digi-digiquant digi-ollama \
+  digi-litellm-redis digi-digikey-blocklist-redis digi-digichat digi-digichat-db
+```
+
+Leave Supabase / other projects alone if you still need them.
+
+### Stack-only (`docker run`)
+
+From **repo root**:
+
+```bash
+docker build -f Dockerfile.digithings-stack-cloudflare -t digithings-stack:local .
+
+docker run --rm -d --name digithings-stack \
+  -p 127.0.0.1:8000:8000 -p 127.0.0.1:8005:8005 \
+  -e DIGIKEY_BFF_TOKEN=dev-bff \
+  -e DIGIKEY_ALLOW_EPHEMERAL_KEY=1 \
+  -e GROQ_API_KEY \
+  digithings-stack:local
+
+curl -sf http://127.0.0.1:8000/healthz
+curl -sf http://127.0.0.1:8005/healthz
+```
+
+Point host digichat / `digichat-dev` at `http://127.0.0.1:8000` and
+`http://127.0.0.1:8005`.
+
+### Stack + digichat (one Compose project, 3 containers)
+
+Same Dockerfile as CF, plus digichat GHCR + Postgres:
+
+```bash
+cp infra/digichat-release/.env.profile-a-bundle.example \
+   infra/digichat-release/.env.profile-a-bundle
+# edit AUTH_SECRET, DIGIKEY_BFF_TOKEN, DIGICHAT_VERSION, provider keys
+make digichat-profile-a-bundle-up
+# tear down: make digichat-profile-a-bundle-down
+```
+
+| Path | Containers | When |
+|---|---|---|
+| This bundle | 1 stack + digichat + Postgres | Website digichat local / CF parity |
+| `compose.profile-a.yml` | ~7 (per-service GHCR) | Client install mirroring separate images |
+| Root `docker-compose.yml` | Many + profiles | Full monorepo / digiquant / observability |
+
+### Local Worker
 
 ```bash
 npm run dev    # wrangler dev — needs Docker for Container

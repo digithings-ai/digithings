@@ -1,0 +1,127 @@
+# Profile A — single stack image + digichat (website-chat local / CF parity)
+#
+# Same multi-process image as Cloudflare Containers
+# (Dockerfile.digithings-stack-cloudflare + supervisord):
+#   digikey :8005, digigraph :8000 (published)
+#   digisearch :8002, digivault :8004, LiteLLM :4000, Redis :6379 (loopback)
+#
+# digichat stays a separate Node container (different runtime, secrets, scale).
+# digismith HTTP and digiquant are intentionally omitted (library-only / not needed).
+#
+# From repo root (stop the heavy monorepo stack first — see README):
+#
+#   cp infra/digichat-release/.env.profile-a-bundle.example \
+#      infra/digichat-release/.env.profile-a-bundle
+#   # edit secrets + provider keys
+#   make digichat-profile-a-bundle-up
+#
+# Stack-only (no digichat UI) — see frontend/digithings-stack-cloudflare/README.md
+# (`docker build` / `docker run`).
+
+name: digichat-profile-a-bundle
+
+services:
+  digithings-stack:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.digithings-stack-cloudflare
+    image: digithings-stack:local
+    ports:
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8005:8005"
+    env_file:
+      - path: .env.profile-a-bundle
+        required: false
+    environment:
+      DIGIKEY_ISSUER: ${DIGIKEY_ISSUER:-http://127.0.0.1:8005}
+      DIGIKEY_JWKS_URL: http://127.0.0.1:8005/.well-known/jwks.json
+      DIGIKEY_AUDIENCE: ${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      DIGIKEY_BFF_TOKEN: ${DIGIKEY_BFF_TOKEN:?set DIGIKEY_BFF_TOKEN}
+      DIGIKEY_ADMIN_TOKEN: ${DIGIKEY_ADMIN_TOKEN:-}
+      DIGIKEY_ALLOW_EPHEMERAL_KEY: ${DIGIKEY_ALLOW_EPHEMERAL_KEY:-1}
+      DIGIKEY_ALLOW_DEV_GLOBAL: ${DIGIKEY_ALLOW_DEV_GLOBAL:-0}
+      DIGIKEY_PRIVATE_KEY_PEM: ${DIGIKEY_PRIVATE_KEY_PEM:-}
+      DIGIKEY_DATABASE_URL: ${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}
+      DIGIVAULT_URL: http://127.0.0.1:8004
+      DIGISEARCH_URL: http://127.0.0.1:8002
+      DIGIQUANT_URL: ""
+      DIGISMITH_URL: ""
+      OPENAI_API_BASE: http://127.0.0.1:4000/v1
+      DIGI_CONFIG_PATH: /app/config
+      DIGI_LLM_MODE: ${DIGI_LLM_MODE:-test}
+      DIGI_TENANT_CORPUS_MAP: ${DIGI_TENANT_CORPUS_MAP:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LITELLM_PROXY_API_KEY: ${LITELLM_PROXY_API_KEY:-}
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - digithings_stack_data:/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://127.0.0.1:8000/healthz && curl -sf http://127.0.0.1:8005/healthz",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+
+  digichat-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: digichat
+      POSTGRES_PASSWORD: ${DIGICHAT_POSTGRES_PASSWORD:-digichat}
+      POSTGRES_DB: digichat
+    volumes:
+      - digichat_pg:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U digichat -d digichat"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  digichat:
+    image: ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION:?set DIGICHAT_VERSION e.g. 1.0.0}
+    pull_policy: always
+    ports:
+      - "${DIGICHAT_PUBLISH_HOST:-127.0.0.1}:${DIGICHAT_PUBLISH_PORT:-3005}:3000"
+    env_file:
+      - path: .env.profile-a-bundle
+        required: false
+    environment:
+      NODE_ENV: production
+      AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
+      AUTH_URL: ${AUTH_URL:-http://127.0.0.1:3005}
+      DIGICHAT_DATABASE_URL: postgresql://digichat:${DIGICHAT_POSTGRES_PASSWORD:-digichat}@digichat-db:5432/digichat
+      DIGICHAT_AUTO_MIGRATE: ${DIGICHAT_AUTO_MIGRATE:-1}
+      DIGICHAT_EMBED_ENABLED: ${DIGICHAT_EMBED_ENABLED:-1}
+      DIGICHAT_REQUIRE_ROOT_AUTH: ${DIGICHAT_REQUIRE_ROOT_AUTH:-0}
+      DIGICHAT_EMBED_TENANTS: ${DIGICHAT_EMBED_TENANTS:-}
+      DIGICHAT_EMBED_HOSTS: ${DIGICHAT_EMBED_HOSTS:-}
+      # Health probes only digigraph (RAG goes digigraph → loopback digisearch).
+      DIGICHAT_ENABLED_SERVICES: ${DIGICHAT_ENABLED_SERVICES:-digigraph}
+      DIGIGRAPH_INTERNAL_URL: ${DIGIGRAPH_INTERNAL_URL:-http://digithings-stack:8000}
+      DIGIKEY_URL: ${DIGIKEY_URL:-http://digithings-stack:8005}
+      DIGIKEY_BFF_TOKEN: ${DIGIKEY_BFF_TOKEN:?set DIGIKEY_BFF_TOKEN}
+      DIGIGRAPH_UPSTREAM_API_KEY: ${DIGIGRAPH_UPSTREAM_API_KEY:-}
+    depends_on:
+      digichat-db:
+        condition: service_healthy
+      digithings-stack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3000/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+volumes:
+  digithings_stack_data:
+  digichat_pg:

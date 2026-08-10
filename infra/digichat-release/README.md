@@ -5,9 +5,11 @@ Install unit: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (not npm, not `:latest`).
 | File | Purpose |
 |---|---|
 | `compose.digichat-release.yml` | Override root Compose digichat to **pull** GHCR |
-| `compose.profile-a.yml` | Minimal Profile A (digigraph stack) — **pull** GHCR |
+| `compose.profile-a.yml` | Minimal Profile A (digigraph stack) — **pull** GHCR (N images) |
+| `compose.profile-a-bundle.yml` | Profile A **one stack image** (CF supervisord parity) + digichat |
 | `compose.profile-b.yml` | Profile B digichat(+db) only (Foundry) |
-| `.env.profile-a.example` | Env template for Profile A |
+| `.env.profile-a.example` | Env template for Profile A (multi-image) |
+| `.env.profile-a-bundle.example` | Env template for Profile A bundle |
 | `.env.profile-b.example` | Env template for Profile B |
 | `config/` | Vendored LiteLLM + digigraph config mount for Profile A |
 
@@ -78,6 +80,40 @@ Does **not** start digiquant / digisearch / digismith / heartbeat / observabilit
 Full monorepo stack (all Python services) alternative: [`docs/templates/self-host/README.md`](../../docs/templates/self-host/README.md)
 (`make up-ghcr` + `--profile digichat --profile digivault`).
 
+## Profile A bundle — one stack image (Cloudflare parity)
+
+Preferred **local** path for website digichat while CF backends use the same
+Dockerfile (`Dockerfile.digithings-stack-cloudflare` + supervisord): digikey +
+digigraph + digisearch + digivault + LiteLLM + Redis in **one** container.
+digichat (+ Postgres) stay separate.
+
+```text
+Browser → digichat → digithings-stack:8000 (digigraph)
+                  → digithings-stack:8005 (digikey)
+                       └─ loopback digisearch / digivault / LiteLLM
+```
+
+```bash
+# Stop monorepo N-container stack first if ports 8000/8005/3005 are taken
+docker compose --profile digichat --profile digivault down   # from repo root
+
+cp infra/digichat-release/.env.profile-a-bundle.example \
+   infra/digichat-release/.env.profile-a-bundle
+# edit AUTH_SECRET, DIGIKEY_BFF_TOKEN, DIGICHAT_VERSION, GROQ_API_KEY, …
+
+make digichat-profile-a-bundle-up
+# tear down: make digichat-profile-a-bundle-down
+```
+
+Stack-only `docker run` (no digichat UI): see
+[`frontend/digithings-stack-cloudflare/README.md`](../../frontend/digithings-stack-cloudflare/README.md).
+
+| Goal | Prefer |
+|---|---|
+| Website digichat local / CF parity | **bundle** (`compose.profile-a-bundle.yml`) |
+| Client install with per-service GHCR pins | multi-image (`compose.profile-a.yml`) |
+| digiquant / full monorepo | root `docker-compose.yml` |
+
 ## Profile B — Foundry (client Azure only)
 
 digithings has **no Azure**. This snippet is for client environments (DataTap-like ACA /
@@ -105,6 +141,7 @@ Host must supply Azure identity for Foundry; do not put a Foundry API key in dig
 | Pull GHCR digichat (monorepo overlay) | `make digichat-release-up VERSION=1.0.0` |
 | Tear down GHCR overlay | `make digichat-release-down VERSION=1.0.0` |
 | Profile A (digigraph, pull) | `make digichat-profile-a-up` |
+| Profile A bundle (1 stack image + digichat) | `make digichat-profile-a-bundle-up` |
 | Full stack GHCR (monorepo overlay) | `make up-ghcr` (+ `--profile digichat --profile digivault`) |
 | Profile B (Foundry) | `docker compose -f infra/digichat-release/compose.profile-b.yml --env-file infra/digichat-release/.env.profile-b up -d` |
 | Local monorepo build | `make up-digichat` |
