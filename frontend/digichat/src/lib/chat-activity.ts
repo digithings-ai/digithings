@@ -340,7 +340,24 @@ export function toDigiChatActivity(
         : { kind: "tool_result", name, query, hits, count: hits.length };
       const idx = toolRows.get(key);
       if (idx !== undefined) {
-        rows[idx] = result;
+        const existing = rows[idx];
+        if (
+          existing.kind === "tool_result" &&
+          result.kind === "tool_result" &&
+          !span.documentsWithheld
+        ) {
+          const mergedHits = [...existing.hits];
+          const seenPaths = new Set(mergedHits.map((h) => h.path));
+          for (const hit of result.hits) {
+            if (!seenPaths.has(hit.path)) {
+              mergedHits.push(hit);
+              seenPaths.add(hit.path);
+            }
+          }
+          rows[idx] = { ...result, hits: mergedHits, count: mergedHits.length };
+        } else {
+          rows[idx] = result;
+        }
       } else {
         // No existing row for this (tool, query) — but a still-open "started"
         // placeholder for this tool name (an execute_tool span that never got

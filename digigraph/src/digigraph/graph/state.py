@@ -42,6 +42,8 @@ class WorkflowState(TypedDict, total=False):
     # Opaque URI from digiquant/export (Phase 2 artifact contract); workflow stores refs not blobs.
     quant_artifact_uri: str | None
     error: str | None
+    # Stable digichat contract code (e.g. free_quota_exceeded); set with error.
+    error_code: str | None
     # Session datasets: ref -> { ref, profile }. No reducer; last writer wins per key.
     stored_datasets: dict[str, dict[str, Any]]
     # Streaming only: callback(event_type, data). Not serialized; request-scoped.

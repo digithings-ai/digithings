@@ -29,7 +29,21 @@ from digikey.settings import KEY_PREFIX_LEN, admin_token, allow_dev_global_keys,
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="digikey", version=__version__)
+app = FastAPI(
+    title="digikey",
+    version=__version__,
+    description=(
+        "JWT + scoped API-key auth plane for digithings. "
+        "Issues short-lived RS256 JWTs, publishes JWKS, and administers opaque API keys. "
+        "Interactive docs: `/docs` (Swagger) and `/redoc`."
+    ),
+    openapi_tags=[
+        {"name": "health", "description": "Liveness probes (auth-exempt)."},
+        {"name": "jwks", "description": "Public signing keys for JWT verification."},
+        {"name": "oauth", "description": "Token exchange (API key → JWT)."},
+        {"name": "admin", "description": "Key issue/revoke (requires DIGIKEY_ADMIN_TOKEN)."},
+    ],
+)
 register_rate_limit_handler(app)
 install_metrics(app, service="digikey", version=__version__)
 install_cors(app, service="digikey")
@@ -75,13 +89,13 @@ def _startup() -> None:
             )
 
 
-@app.get("/health")
+@app.get("/health", tags=["health"], summary="Legacy health check")
 def health() -> dict[str, str]:
     """Legacy health check (kept for back-compat)."""
     return {"status": "ok", "service": "digikey"}
 
 
-@app.get("/healthz")
+@app.get("/healthz", tags=["health"], summary="Liveness probe")
 def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
@@ -92,8 +106,9 @@ def healthz() -> dict[str, bool]:
     return {"ok": True}
 
 
-@app.get("/.well-known/jwks.json")
+@app.get("/.well-known/jwks.json", tags=["jwks"], summary="JWKS public keys")
 def jwks() -> dict[str, Any]:
+    """Return the RS256 public JWK set used to verify digikey-issued JWTs."""
     return public_jwks(_private_key, _kid)
 
 
@@ -127,6 +142,8 @@ class AdminIssueResponse(BaseModel):
     "/v1/admin/keys",
     response_model=AdminIssueResponse,
     dependencies=[Depends(rate_limit_dependency)],
+    tags=["admin"],
+    summary="Issue API key",
 )
 def admin_issue_key(body: AdminIssueBody, request: Request) -> AdminIssueResponse:
     _require_admin(request)
@@ -187,6 +204,8 @@ def _jwt_ttl() -> int:
     response_model=TokenResponse,
     response_model_exclude_none=True,
     dependencies=[Depends(rate_limit_dependency)],
+    tags=["oauth"],
+    summary="Exchange API key or BFF session for JWT",
 )
 def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
     ttl = _jwt_ttl()
@@ -286,6 +305,8 @@ class RevokeResponse(BaseModel):
     "/v1/admin/keys/{key_id}/revoke",
     response_model=RevokeResponse,
     dependencies=[Depends(rate_limit_dependency)],
+    tags=["admin"],
+    summary="Revoke API key",
 )
 def admin_revoke_key(key_id: str, request: Request) -> RevokeResponse:
     """Revoke a key and blocklist all live JWTs issued from it (ADR-0007)."""

@@ -49,7 +49,14 @@ describe("validateBYOKModel", () => {
     expect(validateBYOKModel("openai/gpt-4o-mini", "openrouter")).toBeNull();
   });
 
-  it("does not require model for other providers", () => {
+  it("requires model for Anthropic and Gemini", () => {
+    expect(validateBYOKModel("", "anthropic")).not.toBeNull();
+    expect(validateBYOKModel("claude-sonnet-4-20250514", "anthropic")).toBeNull();
+    expect(validateBYOKModel("", "gemini")).not.toBeNull();
+    expect(validateBYOKModel("gemini/gemini-2.0-flash", "gemini")).toBeNull();
+  });
+
+  it("does not require model for OpenAI", () => {
     expect(validateBYOKModel("", "openai")).toBeNull();
   });
 });

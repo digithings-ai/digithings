@@ -2,6 +2,12 @@
 
 A digithings Project that indexes the digithings ecosystem's own documentation — ARCHITECTURE files, ADRs, VISION, ROADMAP, and each component's AGENTS / README / DIGI\*.md — so the future "Chat with digithings" surface can retrieve from them. This is dogfooding: digisearch indexing digithings.
 
+> **Deprecation path (dogfood cutover):** Prefer
+> [`docs/projects/digithings/`](../digithings/) + `scripts/docs_onboard` dual-sink
+> (`onboard.yaml` + `indexes/docs.yaml`). Keep this guide + `reindex_digithings_guide.py`
+> only for **parallel comparison** until digisearch dual-sink is verified on
+> digithings.ai/chat; then retire (see GAPLOG).
+
 ## Layout
 
 | File | Purpose |
@@ -19,6 +25,7 @@ Conventional digithings Projects live under `projects/<name>/` which is gitignor
 
 ## Related
 
+- Client #0 onboard: [`docs/projects/digithings/`](../digithings/)
 - Spec: [`docs/spec/project-spec-v1alpha1.md`](../../spec/project-spec-v1alpha1.md)
 - Schema: `digigraph/src/digigraph/schemas/digiproject.v1alpha1.json` (landed via PR #84)
 - Template: [`docs/templates/project/`](../../templates/project/)

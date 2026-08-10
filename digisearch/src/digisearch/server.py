@@ -48,7 +48,11 @@ def _resolve_fetch_all_max(requested: int | None) -> int:
 
 app = FastAPI(
     title="digisearch",
-    description="RAG, document search for Digi ecosystem. MCP tools for digigraph/digiflow.",
+    description=(
+        "RAG and document search for digithings: ingest, query, indexes, and research turns. "
+        "MCP tools and orchestrator manifests for digigraph. "
+        "Interactive docs: `/docs` (Swagger) and `/redoc`."
+    ),
     version=__version__,
 )
 install_metrics(app, service="digisearch", version=__version__)

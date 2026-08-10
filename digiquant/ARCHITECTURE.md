@@ -560,8 +560,6 @@ digiquant:
   build:
     context: .
     dockerfile: digiquant/Dockerfile
-    args:
-      NAUTILUS: ${NAUTILUS:-1}
   image: digi-digiquant:latest
   container_name: digi-digiquant
   ports:
@@ -574,8 +572,8 @@ digiquant:
     digikey:
       condition: service_healthy
   healthcheck:
-    test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/health"]
-    interval: 30s
+    test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/healthz"]
+    interval: 15s
     timeout: 5s
     retries: 3
     start_period: 10s
@@ -583,7 +581,7 @@ digiquant:
 
 The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies from writing to the data directory. The results volume (`/app/results`) is writable, which is where exports and tearsheets land. The audit log is mounted into the digigraph and digiclaw containers at `./digiquant/results/audit`.
 
-`NAUTILUS=1` (default) enables the NautilusTrader dependency installation in the Dockerfile. Set `NAUTILUS=0` for a lighter image that returns `None` from `run_nautilus_backtest()`.
+The image always installs `digiquant[nautilus]` (NautilusTrader + Polars pipeline). It does **not** download upstream Nautilus test CSVs at build time — market samples for backtests are under `digiquant/data/` (compose-mounted). Optional Nautilus package fixtures for local unit tests: `python digiquant/scripts/fetch_nautilus_test_data.py`.
 
 ### Environment Variables
 

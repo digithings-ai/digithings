@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 import { mockAuthCtx, unauthorizedResponse } from "@/test/route-auth-mock";
-import { resetEmbedTenantRegistryForTests } from "@/lib/embed-tenants";
 
 vi.mock("@/lib/request-auth", () => ({
   requireDigiChatAuth: vi.fn(),
@@ -20,26 +19,9 @@ vi.mock("@/lib/embed-ip-rate-limit", () => ({
   clientIpForRateLimit: vi.fn(() => "127.0.0.1"),
 }));
 
-vi.mock("@/lib/foundry-stream", () => ({
+vi.mock("@/lib/adapters/foundry/stream", () => ({
   createFoundryStreamResponse: vi.fn(async () => new Response("foundry", { status: 200 })),
 }));
-
-vi.mock("@/lib/digivault-stream", () => ({
-  createDigivaultStreamResponse: vi.fn(async () => new Response("digivault", { status: 200 })),
-}));
-
-vi.mock("@/lib/digivault-ip-rate-limit", () => ({
-  checkDigivaultIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
-  DIGIVAULT_RATE_LIMIT_MESSAGE: "rate limit exceeded — slow down a moment",
-}));
-
-vi.mock("@/lib/digivault-env", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/digivault-env")>("@/lib/digivault-env");
-  return {
-    ...actual,
-    resolveDigivaultEnv: vi.fn(actual.resolveDigivaultEnv),
-  };
-});
 
 vi.mock("@/lib/digigraph-upstream", () => ({
   resolveDigigraphUpstreamAuth: vi.fn(),
@@ -83,10 +65,7 @@ import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
-import { createFoundryStreamResponse } from "@/lib/foundry-stream";
-import { createDigivaultStreamResponse } from "@/lib/digivault-stream";
-import { checkDigivaultIpRateLimit } from "@/lib/digivault-ip-rate-limit";
-import { resolveDigivaultEnv, DigivaultEnvError } from "@/lib/digivault-env";
+import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { streamText } from "ai";
@@ -104,11 +83,8 @@ describe("POST /api/chat", () => {
     });
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
-    vi.mocked(checkDigivaultIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     resetEmbedTrialQuotaForTests();
     vi.mocked(createFoundryStreamResponse).mockClear();
-    vi.mocked(createDigivaultStreamResponse).mockClear();
-    vi.mocked(resolveDigivaultEnv).mockReset();
   });
 
   afterEach(() => {
@@ -187,7 +163,7 @@ describe("POST /api/chat", () => {
   });
 
   it("returns 429 when the anonymous embed IP limiter blocks", async () => {
-    process.env.DIGICHAT_EMBED_ENABLED = "1";
+    process.env.DIGICHAT_LEGACY_EMBED_ENABLED = "1";
     vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
     vi.mocked(checkBffRateLimit).mockClear();
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 45 });
@@ -246,6 +222,47 @@ describe("POST /api/chat", () => {
     expect(call?.headers?.["X-BYOK-Key"]).toBe("sk-or-v1-test");
     expect(call?.headers?.["X-BYOK-Provider"]).toBe("openrouter");
     expect(call?.headers?.["X-BYOK-Model"]).toBe("openai/gpt-4o-mini");
+  });
+
+  it("forwards OCC corpus headers from digigraph embed backend config", async () => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "occ",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "occ",
+        gateMode: "ungated",
+        theme: "dark",
+        attribution: false,
+        token: "tok",
+        backend: {
+          type: "digigraph",
+          digisearchIndex: "occ_help",
+          vaultPathPrefix: "clients/online-compliance-center",
+        },
+        activityDetail: "full",
+      },
+    });
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://occ.digithings.ai",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "policy?" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Tenant"]).toBe("occ");
+    expect(call?.headers?.["X-Digi-Corpus-Index"]).toBe("occ_help");
+    expect(call?.headers?.["X-Digi-Vault-Prefix"]).toBe(
+      "clients/online-compliance-center"
+    );
   });
 
   it("returns 400 when OpenRouter BYOK missing model", async () => {
@@ -348,191 +365,5 @@ describe("POST /api/chat", () => {
         spy.mockReturnValue("127.0.0.1");
       }
     });
-  });
-});
-
-const RELAY_REGISTRY = JSON.stringify({
-  "datatapstream.com": {
-    slug: "datatapstream",
-    backend: { type: "external-relay", url: "https://relay.example.com/api/digichat" },
-    gateMode: "ungated",
-    token: "datatapstream-secret",
-  },
-});
-
-function relaySse(frames: string[]): Response {
-  const encoder = new TextEncoder();
-  return new Response(
-    new ReadableStream({
-      start(c) {
-        for (const f of frames) c.enqueue(encoder.encode(f));
-        c.close();
-      },
-    }),
-    { status: 200 }
-  );
-}
-
-describe("external-relay embed tenants", () => {
-  beforeEach(() => {
-    process.env = { ...process.env, DIGICHAT_TRACE_UI: "0" };
-    vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
-    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
-    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-    resetEmbedTenantRegistryForTests();
-  });
-
-  it("streams from the configured relay without touching digigraph auth", async () => {
-    vi.stubEnv("DIGICHAT_EMBED_TENANTS", RELAY_REGISTRY);
-    resetEmbedTenantRegistryForTests();
-    const fetchMock = vi.fn().mockResolvedValue(
-      relaySse([
-        'event: conversation\ndata: {"type":"conversation","conversationId":"c1"}\n\n',
-        'event: text-delta\ndata: {"type":"text-delta","delta":"Hi"}\n\n',
-        'event: done\ndata: {"type":"done"}\n\n',
-      ])
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const res = await POST(
-      new Request("http://127.0.0.1/api/chat", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-embed-host": "https://datatapstream.com",
-          "x-embed-token": "datatapstream-secret",
-          "x-external-conversation": "c-prev",
-        },
-        body: JSON.stringify({
-          messages: [{ id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] }],
-        }),
-      })
-    );
-
-    expect(res.status).toBe(200);
-    const text = await new Response(res.body).text();
-    expect(text).toContain('"delta":"Hi"');
-    // The relay was called with the echoed conversation id and the latest message:
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://relay.example.com/api/digichat",
-      expect.objectContaining({
-        body: JSON.stringify({ conversationId: "c-prev", message: "hello" }),
-      })
-    );
-    // No DIGIGRAPH_* / DIGIKEY_* env was set in this test — reaching a 200
-    // proves resolveDigigraphUpstreamAuth was never invoked on this path.
-  });
-
-  it("still enforces the per-IP embed limiter for an external-relay tenant", async () => {
-    vi.stubEnv("DIGICHAT_EMBED_TENANTS", RELAY_REGISTRY);
-    resetEmbedTenantRegistryForTests();
-    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 45 });
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    const res = await POST(
-      new Request("http://127.0.0.1/api/chat", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-embed-host": "https://datatapstream.com",
-          "x-embed-token": "datatapstream-secret",
-        },
-        body: JSON.stringify({
-          messages: [{ id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] }],
-        }),
-      })
-    );
-
-    expect(res.status).toBe(429);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-});
-
-describe("POST /api/chat digivault backend", () => {
-  const digivaultCtx = {
-    tenantSlug: "docs",
-    ownerUserSub: "embed:anonymous",
-    embedConfig: {
-      slug: "docs",
-      gateMode: "ungated",
-      theme: "dark",
-      attribution: true,
-      token: "tok",
-      backend: {
-        type: "digivault",
-        supabaseUrlEnv: "CORE_SUPABASE_URL",
-        supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
-        openRouterKeyEnv: "OPENROUTER_API_KEY",
-      },
-      activityDetail: "full",
-    },
-  };
-
-  function digivaultReq(): Request {
-    return new Request("http://localhost/api/chat", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-embed-host": "https://docs.example.com" },
-      body: JSON.stringify({
-        messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "ports?" }] }],
-      }),
-    });
-  }
-
-  beforeEach(() => {
-    process.env = { ...process.env, DIGICHAT_TRACE_UI: "0" };
-    vi.mocked(requireDigiChatAuth).mockResolvedValue(mockAuthCtx);
-    vi.mocked(resolveChatTenantContext).mockResolvedValue(digivaultCtx as never);
-    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
-    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
-    vi.mocked(checkDigivaultIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
-    vi.mocked(resolveDigivaultEnv).mockReturnValue({
-      supabaseUrl: "https://example.supabase.co",
-      supabaseAnonKey: "anon",
-      openRouterKey: "sk-or-pool",
-    });
-    vi.mocked(createDigivaultStreamResponse).mockClear();
-  });
-
-  it("routes digivault backend to createDigivaultStreamResponse", async () => {
-    const res = await POST(digivaultReq());
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe("digivault");
-    expect(createDigivaultStreamResponse).toHaveBeenCalledTimes(1);
-    expect(createDigivaultStreamResponse).toHaveBeenCalledWith(
-      expect.objectContaining({
-        activityDetail: "full",
-        env: {
-          supabaseUrl: "https://example.supabase.co",
-          supabaseAnonKey: "anon",
-          openRouterKey: "sk-or-pool",
-        },
-      }),
-    );
-  });
-
-  it("returns 429 with digivault rate-limit wording", async () => {
-    vi.mocked(checkDigivaultIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 12 });
-    const res = await POST(digivaultReq());
-    expect(res.status).toBe(429);
-    const body = await res.json();
-    expect(body.message).toBe("rate limit exceeded — slow down a moment");
-    expect(res.headers.get("retry-after")).toBe("12");
-    expect(createDigivaultStreamResponse).not.toHaveBeenCalled();
-  });
-
-  it("returns 503 when digivault env names are unresolved", async () => {
-    vi.mocked(resolveDigivaultEnv).mockImplementation(() => {
-      throw new DigivaultEnvError("digivault backend is not configured");
-    });
-    const res = await POST(digivaultReq());
-    expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: "chat_not_configured" });
-    expect(createDigivaultStreamResponse).not.toHaveBeenCalled();
   });
 });

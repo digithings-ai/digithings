@@ -109,7 +109,7 @@ When `stream: true` in `POST /v1/chat/completions`:
 3. Event types produced by the workflow thread:
    - `tool_call` / `tool_result` — formatted with the stream formatter (neutral or Open WebUI `<details>` style)
    - `content` — LLM token deltas, HTML-escaped
-   - `reasoning` — accumulated into a `<thinking>` block before the first `content` chunk
+   - `reasoning` — accumulated into a `<thinking>` block before the first `content` chunk (skipped when `X-Suppress-Tool-Stream` is set)
    - `trace` — `TraceEventV1` dicts embedded in `delta.digigraph_trace` for digichat
    - `done` — terminates the generator loop
 4. If the client disconnects mid-stream, the generator raises an exception; the background thread continues running until it completes naturally. There is no cancellation token or thread interrupt mechanism — see Section 6 (Security Analysis).
@@ -298,7 +298,7 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 | `model` | `str` | Default `"sitaas-rag"`; not used for routing (LiteLLM handles it) |
 | `messages` | `list[ChatMessage]` | Role + content; content coerced from AI SDK part lists |
 | `stream` | `bool` | SSE streaming |
-| `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks |
+| `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Also implied by `model=sitaas-rag` unless `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
 | `session_id` | `str \| None` | Conversation isolation |
 | `allowed_tools` | `list[str] \| None` | Tool allowlist for this request |
 
@@ -372,7 +372,7 @@ START
   └─[default]─────────────► research subgraph
                                 │
                                 ├─ research_inner (research_node)
-                                └─ research_brief_builder
+                                └─ research_brief_builder (skipped when `agents.research_brief: false` / `DIGI_RESEARCH_BRIEF=0`)
                                │
                                ├─ error → END
                                ├─ research_rag profile → END
@@ -386,6 +386,10 @@ START
                                                                ├─ no result → END
                                                                └─ optimize enabled → optimize → END
 ```
+
+When `agents.always_retrieve_tools` is set, `research_node` (document RAG path) invokes those tools **before** the LLM turn, injects `[tool_name results]…` blocks into the user message, and **strips** those tool names from `tools_for_llm` so the model cannot re-call the same retrieval tools. If no tools remain, `run_tools` runs a single streamed completion (no tool rounds).
+
+`agents.research_brief` (default `true`; env `DIGI_RESEARCH_BRIEF=0/1` overrides) controls whether `build_research_subgraph()` wires `research_brief_builder` after `research_inner`. When false, the subgraph ends when the answer stream completes — dogfood chat uses this to avoid a post-answer `completion_text` latency tax.
 
 The graph is compiled once per `build_workflow_graph()` call. In practice, `workflow.py` calls `build_workflow_graph()` on **every** request — there is no module-level compiled graph cache. This means the StateGraph is recompiled on each call; the checkpointer instance is shared (process-wide singleton).
 
@@ -606,7 +610,13 @@ This provides meaningful speedup for repeated identical prompts (e.g. heartbeat 
 
 `get_model_for_mode()` (now in `model_config.py`) resolves the model via `_load_model_modes()`, which is **mtime-cached per process**: `config/model_modes.yaml` is opened and parsed by PyYAML only when its mtime changes, so steady-state calls cost a single `path.stat()` plus the env reads (`DIGI_CONFIG_PATH`, `DIGI_MODEL_MODES_FILE`). The mode itself is re-read from env/config on every LLM call to pick up runtime changes.
 
-Three modes: `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`.
+Four modes — **`llm_mode` is access/cost policy, not a product catalog**: `free` (resolved model must be free-tier: OpenRouter `:free` or local Ollama), `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`. **Actual model id** comes from (in order) `agents.llm` → `DIGI_LLM_PROVIDER`/`DIGI_LLM_MODEL` → LiteLLM alias / deploy config — **not** a shared `model_modes.yaml` `free:` pin (OpenRouter free roster rotates). `llm_mode: free` without an explicit pin raises a clear error (`set agents.llm or DIGI_LLM_MODEL`); non-`:free` (non-Ollama) pins are refused. Having `OPENROUTER_API_KEY` set alone does **not** auto-swap digigraph chat onto paid Olympus models — Olympus/Atlas use `get_model_for_phase()`.
+
+**BYOK spend path** (`llm_auth.py`): user keys via `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` are spent only for routable providers — OpenAI, OpenRouter, Gemini, Anthropic. Anthropic uses Anthropic's OpenAI-compatible endpoint (`https://api.anthropic.com/v1/`) with the **user's** key (never operator fallthrough). Non-OpenAI BYOK requires `X-BYOK-Model`.
+
+**Free-quota errors:** provider 429 / RPD under `llm_mode: free` maps to stable code `free_quota_exceeded` (HTTP 429 + SSE `delta.digigraph_error`) for digichat BYOK handoff. Generic rate limits outside free mode use `rate_limit`.
+
+CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effective provider/model/key-env present (never secrets).
 
 ### 8.3 digistore for LLM Context Reduction
 
@@ -744,11 +754,13 @@ digigraph:
 | `DIGI_CHECKPOINTER_POSTGRES_URI` | (empty) | Postgres connection string |
 | `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests |
 | `DIGISEARCH_INDEX` | `default` | Default vector index name |
+| `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt}` for multi-tenant corpus isolation (OCC). Headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` win when set. |
 | `DIGI_ENABLE_DEBUG_ENDPOINTS` | `0` | Enable `/test_llm` and `/v1/debug/*` |
 | `DIGI_ENABLE_THREAD_API` | `0` | Enable `/threads/*` and `/files/*` |
 | `DIGI_SUPERVISOR` | (empty) | Enable supervisor node: `1` / `true` |
 | `DIGI_HUB_MODE` | `legacy` | Hub mode: `legacy` (default) or `federated` |
 | `DIGI_WORKFLOW_PROFILE` | `full_stack` | Workflow profile when not set in project config |
+| `DIGI_RESEARCH_BRIEF` | (unset → YAML / default on) | Override `agents.research_brief`: `0`/`false` skips ResearchBrief post-pass |
 | `DIGI_ALLOWED_TOOLS` | (empty) | Comma-separated allowlist (env fallback) |
 | `DIGI_ALLOW_CODE_EXEC` | (empty) | Enable `data_engineer_agent` code execution: `1` / `true` |
 | `DIGI_RUN_DATA_DIR` | (empty) | Session dataset storage; enables `sitaas_rag` skill |

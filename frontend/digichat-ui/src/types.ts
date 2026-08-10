@@ -44,8 +44,8 @@ export type DigiChatSessionConfig = {
   suggestions?: string[];
   placeholder: string;
   showByok: boolean;
-  /** Collapsible status bar with wordmark + model (digithings-web /chat). */
-  showStatusBar?: boolean;
+  /** Inline "Add your API key" on error rows; default on for gated embeds. */
+  showByokOnError?: boolean;
   branding?: DigiChatBranding;
   ariaLabel?: string;
   className?: string;

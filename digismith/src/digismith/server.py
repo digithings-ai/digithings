@@ -19,8 +19,16 @@ from digismith.config import (
 
 app = FastAPI(
     title="digismith",
-    description="LangSmith-aligned observability control plane (digithings)",
+    description=(
+        "LangSmith-aligned observability control plane for digithings. "
+        "HTTP surface is intentionally thin (health + secret-free status). "
+        "Interactive docs: `/docs` (Swagger) and `/redoc`."
+    ),
     version=__version__,
+    openapi_tags=[
+        {"name": "health", "description": "Liveness probes."},
+        {"name": "status", "description": "Non-sensitive tracing configuration status."},
+    ],
 )
 install_metrics(app, service="digismith", version=__version__)
 install_cors(app, service="digismith")
@@ -28,13 +36,13 @@ install_request_id_middleware(app)
 install_request_id_logging()
 
 
-@app.get("/health")
+@app.get("/health", tags=["health"], summary="Legacy health check")
 def health() -> dict[str, str]:
     """Legacy health check (kept for back-compat)."""
     return {"status": "ok"}
 
 
-@app.get("/healthz")
+@app.get("/healthz", tags=["health"], summary="Liveness probe")
 def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, secret-free.
 
@@ -44,7 +52,7 @@ def healthz() -> dict[str, bool]:
     return {"ok": True}
 
 
-@app.get("/v1/status", response_model=SmithStatus)
+@app.get("/v1/status", response_model=SmithStatus, tags=["status"], summary="Tracing status")
 def status(request: Request) -> SmithStatus:
     return SmithStatus(
         version=__version__,

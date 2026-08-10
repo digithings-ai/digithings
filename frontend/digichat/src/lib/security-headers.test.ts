@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DIGICHAT_APP_CSP,
   DIGICHAT_APP_SECURITY_HEADERS,
+  DIGICHAT_EMBED_BAKED_SECURITY_HEADERS,
+  DIGICHAT_EMBED_FAIL_CLOSED_CSP,
   DIGICHAT_EMBED_SECURITY_HEADERS,
   embedFrameAncestors,
   embedFrameAncestorsCsp,
@@ -28,14 +30,21 @@ describe("security-headers", () => {
     expect(csp).not.toContain("'none'");
   });
 
-  it("exports app and embed header sets", () => {
+  it("exports app and fail-closed baked embed header sets", () => {
     expect(DIGICHAT_APP_SECURITY_HEADERS.some((h) => h.key === "X-Frame-Options")).toBe(
       true,
     );
     expect(
+      DIGICHAT_EMBED_BAKED_SECURITY_HEADERS.find((h) => h.key === "Content-Security-Policy")
+        ?.value,
+    ).toBe(DIGICHAT_EMBED_FAIL_CLOSED_CSP);
+    expect(
       DIGICHAT_EMBED_SECURITY_HEADERS.find((h) => h.key === "Content-Security-Policy")
         ?.value,
-    ).toBe(embedFrameAncestorsCsp());
+    ).toBe(DIGICHAT_EMBED_FAIL_CLOSED_CSP);
+    // Runtime helper still builds the allowlist (used by proxy).
+    expect(embedFrameAncestorsCsp()).not.toBe(DIGICHAT_EMBED_FAIL_CLOSED_CSP);
+    expect(embedFrameAncestorsCsp()).toContain("https://digithings.ai");
   });
 });
 
@@ -67,7 +76,11 @@ describe("registry-derived frame-ancestors", () => {
         "datatapstream.com": {
           slug: "datatapstream",
           aliases: ["dev.datatap.stream"],
-          backend: { type: "external-relay", url: "https://relay.example.com/api/x" },
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://example.services.ai.azure.com",
+            agentName: "agent",
+          },
           gateMode: "ungated",
           token: "datatapstream-secret",
         },
@@ -88,7 +101,7 @@ describe("registry-derived frame-ancestors", () => {
   });
 });
 
-describe("DIGICHAT_EMBED_HOSTS (build-time CSP without the secret registry)", () => {
+describe("DIGICHAT_EMBED_HOSTS (runtime CSP without the secret registry)", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     resetEmbedTenantRegistryForTests();
@@ -109,7 +122,11 @@ describe("DIGICHAT_EMBED_HOSTS (build-time CSP without the secret registry)", ()
       JSON.stringify({
         "registry-var.example.com": {
           slug: "registryvar",
-          backend: { type: "external-relay", url: "https://relay.example.com/api/x" },
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://example.services.ai.azure.com",
+            agentName: "agent",
+          },
           gateMode: "ungated",
           token: "secret",
         },
@@ -127,7 +144,11 @@ describe("DIGICHAT_EMBED_HOSTS (build-time CSP without the secret registry)", ()
       JSON.stringify({
         "registry-var.example.com": {
           slug: "registryvar",
-          backend: { type: "external-relay", url: "https://relay.example.com/api/x" },
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://example.services.ai.azure.com",
+            agentName: "agent",
+          },
           gateMode: "ungated",
           token: "secret",
         },
@@ -136,5 +157,39 @@ describe("DIGICHAT_EMBED_HOSTS (build-time CSP without the secret registry)", ()
     resetEmbedTenantRegistryForTests();
     const list = embedFrameAncestors();
     expect(list).toContain("https://registry-var.example.com");
+  });
+});
+
+describe("runtime embed host parsing (fail closed)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetEmbedTenantRegistryForTests();
+  });
+
+  it("rejects * and wildcard host tokens from DIGICHAT_EMBED_HOSTS", () => {
+    vi.stubEnv("DIGICHAT_EMBED_HOSTS", "*, *.example.com, client.example.com");
+    resetEmbedTenantRegistryForTests();
+    const list = embedFrameAncestors();
+    expect(list.join(" ")).not.toMatch(/(^|\s)\*(?:\s|$)/);
+    expect(list).not.toContain("https://*");
+    expect(list).not.toContain("https://*.example.com");
+    expect(list).toContain("https://client.example.com");
+  });
+
+  it("with no hosts and empty registry, stays first-party only (no open *)", () => {
+    vi.stubEnv("DIGICHAT_EMBED_HOSTS", "");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetEmbedTenantRegistryForTests();
+    vi.stubEnv("NODE_ENV", "production");
+    const list = embedFrameAncestors();
+    expect(list).toContain("https://digithings.ai");
+    expect(list).not.toContain("https://random-client.example");
+    expect(embedFrameAncestorsCsp()).not.toContain("frame-ancestors *");
+  });
+
+  it("uses runtime DIGICHAT_EMBED_HOSTS when set", () => {
+    vi.stubEnv("DIGICHAT_EMBED_HOSTS", "new-client.example.com");
+    resetEmbedTenantRegistryForTests();
+    expect(embedFrameAncestors()).toContain("https://new-client.example.com");
   });
 });

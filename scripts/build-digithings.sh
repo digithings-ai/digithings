@@ -35,6 +35,7 @@ if [ "$(uname -s)" = "Linux" ]; then
 fi
 
 echo "--- building digithings-web (Next.js static export) ---"
+# prebuild rewrites public/_headers frame-src from NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN
 npm --workspace frontend/digithings-web run build
 
 # Assemble dist/ from the static export (includes /design/assets/og.png for the
@@ -43,6 +44,15 @@ rm -rf dist
 mkdir -p dist
 cp -r frontend/digithings-web/out/. dist/
 echo "digithings.ai" > dist/CNAME
+
+# CSP frame-src must match the /chat iframe origin (Bugbot / embed cutover).
+[ -f dist/_headers ] || { echo "ERROR: dist/_headers missing — CSP would not apply" >&2; exit 1; }
+FRAME_SRC="$(node --input-type=module -e '
+  import { frameSrcForCsp } from "./frontend/digithings-web/lib/security-headers.mjs";
+  process.stdout.write(frameSrcForCsp());
+')"
+grep -F "frame-src ${FRAME_SRC}" dist/_headers >/dev/null \
+  || { echo "ERROR: dist/_headers frame-src does not match NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN (${FRAME_SRC})" >&2; exit 1; }
 
 # Deploy build stamp (#1759). Cloudflare Pages serves a frozen deploy with a 200
 # and no `last-modified`, so without a stamp in the export every smoke probe
@@ -59,6 +69,12 @@ bash scripts/write-build-info.sh dist/build-info.json digithings.ai
 [ -f dist/index.html ] || { echo "ERROR: dist/index.html missing — build did not export" >&2; exit 1; }
 grep -q 'aria-label="digithings module manifest"' dist/index.html || { echo "ERROR: module manifest missing from home page" >&2; exit 1; }
 [ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
+
+# Public OpenAPI explorer (#2058): committed specs + Swagger UI assets must ship.
+[ -f dist/docs/api/index.html ] || { echo "ERROR: dist/docs/api/index.html missing — OpenAPI index not exported" >&2; exit 1; }
+[ -f dist/openapi/digigraph.json ] || { echo "ERROR: dist/openapi/digigraph.json missing — OpenAPI sync did not run" >&2; exit 1; }
+[ -f dist/swagger-ui/swagger-ui-bundle.js ] || { echo "ERROR: dist/swagger-ui/swagger-ui-bundle.js missing — swagger-ui-dist not vendored" >&2; exit 1; }
+
 
 # Cloudflare Pages Functions live at the PROJECT ROOT (this script's CWD = repo root),
 # NOT inside the static output dir. Mirror from frontend/digithings-web/functions/

@@ -119,8 +119,15 @@ def _digisearch_available(_context: ToolContext) -> bool:
 
 
 def _digivault_available(_context: ToolContext) -> bool:
-    url = os.environ.get("DIGIVAULT_URL", "")
-    return bool(url and url.strip())
+    url = os.environ.get("DIGIVAULT_URL", "").strip()
+    if url:
+        return True
+    try:
+        cfg_url = DigiProjectConfig.load().get_digivault_url()
+        return bool(str(cfg_url).strip())
+    except Exception as exc:
+        logger.debug("digivault availability check via project config failed: %s", exc)
+        return False
 
 
 def _digi_bearer_from_context(context: ToolContext) -> str | None:
@@ -216,11 +223,14 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
     q = args.get("query", "")
     if not q or not str(q).strip():
         return "No search query provided."
+    args_eff = dict(args)
+    if "path_prefix" not in args_eff and context.vault_path_prefix:
+        args_eff["path_prefix"] = context.vault_path_prefix
     try:
         inv = invoke_digivault_tool(
             _digivault_service_base(),
             "digivault_search_notes",
-            args,
+            args_eff,
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )

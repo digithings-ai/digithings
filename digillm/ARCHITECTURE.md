@@ -232,7 +232,7 @@ string to `chat_completion` and skip this entirely.
   `OPENAI_API_BASE` / `OPENAI_API_KEY` path (LiteLLM proxy, Ollama, OpenRouter,
   or OpenAI direct).
 
-Built-in registry: `xai`, `gemini`, `groq`, `openrouter`. Extend at runtime via
+Built-in registry: `xai`, `gemini`, `groq`, `openrouter`, `anthropic`. Extend at runtime via
 `register_provider(prefix, base_url, api_key_env)` — no code change needed.
 
 A missing required provider key raises `RuntimeError` (no silent fallback), so

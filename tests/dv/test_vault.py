@@ -50,6 +50,13 @@ def test_create_duplicate_rejected(tmp_path: Path) -> None:
         vault.create_note("a")
 
 
+def test_write_note_overwrite(tmp_path: Path) -> None:
+    vault = _vault_with_notes(tmp_path)
+    vault.write_note("a", frontmatter={"title": "A2"}, body="replaced\n", overwrite=True)
+    assert "replaced" in vault.read_text("a")
+    assert vault.get_note("a") is not None
+
+
 def test_create_rejects_path_escape(tmp_path: Path) -> None:
     vault = _vault_with_notes(tmp_path)
     with pytest.raises(VaultError):

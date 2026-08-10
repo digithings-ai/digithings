@@ -11,8 +11,9 @@ const VALID = JSON.stringify({
     slug: "datatapstream",
     aliases: ["www.datatapstream.com", "dev.datatap.stream"],
     backend: {
-      type: "external-relay",
-      url: "https://datatap-digichat-relay.azurewebsites.net/api/digichat",
+      type: "foundry",
+      projectEndpoint: "https://example.services.ai.azure.com",
+      agentName: "agent",
     },
     gateMode: "ungated",
     theme: "light",
@@ -49,8 +50,9 @@ describe("parseEmbedTenants", () => {
     expect(reg.get("datatapstream.com")?.slug).toBe("datatapstream");
     expect(reg.get("www.datatapstream.com")?.slug).toBe("datatapstream");
     expect(reg.get("dev.datatap.stream")?.backend).toEqual({
-      type: "external-relay",
-      url: "https://datatap-digichat-relay.azurewebsites.net/api/digichat",
+      type: "foundry",
+      projectEndpoint: "https://example.services.ai.azure.com",
+      agentName: "agent",
     });
     expect(reg.get("datatapstream.com")?.theme).toBe("light");
   });
@@ -70,68 +72,60 @@ describe("parseEmbedTenants", () => {
     expect(reg.get("example.com")?.attribution).toBe(false);
   });
 
+  it("parses digigraph corpus routing fields for OCC-style tenants", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: {
+            type: "digigraph",
+            digisearchIndex: "occ_help",
+            vaultPathPrefix: "/clients/online-compliance-center/",
+          },
+          gateMode: "ungated",
+          token: "occ-tok",
+        },
+      })
+    );
+    expect(reg.get("occ.digithings.ai")?.backend).toEqual({
+      type: "digigraph",
+      digisearchIndex: "occ_help",
+      vaultPathPrefix: "clients/online-compliance-center",
+    });
+  });
+
+  it("rejects empty digigraph digisearchIndex", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "occ.digithings.ai": {
+            slug: "occ",
+            backend: { type: "digigraph", digisearchIndex: "  " },
+            gateMode: "ungated",
+            token: "tok",
+          },
+        })
+      )
+    ).toThrow(/digisearchIndex/);
+  });
+
   it("throws on malformed JSON", () => {
     expect(() => parseEmbedTenants("{nope")).toThrow(/not valid JSON/);
   });
 
-  it("throws on a non-https relay URL", () => {
+  it("rejects removed backend types (external-relay, digivault)", () => {
     expect(() =>
       parseEmbedTenants(
         JSON.stringify({
           "example.com": {
             slug: "example",
-            backend: { type: "external-relay", url: "http://insecure.example.com/x" },
+            backend: { type: "external-relay", url: "https://relay.example.com/x" },
             gateMode: "ungated",
-          },
-        })
-      )
-    ).toThrow(/https/);
-  });
-
-  it("accepts digivault backend with env-name refs", () => {
-    const reg = parseEmbedTenants(
-      JSON.stringify({
-        "docs.example.com": {
-          slug: "docs",
-          token: "tok",
-          gateMode: "ungated",
-          theme: "dark",
-          attribution: true,
-          backend: {
-            type: "digivault",
-            supabaseUrlEnv: "CORE_SUPABASE_URL",
-            supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
-            openRouterKeyEnv: "OPENROUTER_API_KEY",
-          },
-        },
-      })
-    );
-    expect(reg.get("docs.example.com")?.backend).toEqual({
-      type: "digivault",
-      supabaseUrlEnv: "CORE_SUPABASE_URL",
-      supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
-      openRouterKeyEnv: "OPENROUTER_API_KEY",
-    });
-  });
-
-  it("rejects digivault env names that look like URLs or keys", () => {
-    expect(() =>
-      parseEmbedTenants(
-        JSON.stringify({
-          "example.com": {
-            slug: "example",
             token: "tok",
-            gateMode: "ungated",
-            backend: {
-              type: "digivault",
-              supabaseUrlEnv: "https://x.supabase.co",
-              supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
-              openRouterKeyEnv: "OPENROUTER_API_KEY",
-            },
           },
         })
       )
-    ).toThrow(/env/i);
+    ).toThrow(/digigraph.*foundry|foundry.*digigraph/);
     expect(() =>
       parseEmbedTenants(
         JSON.stringify({
@@ -143,12 +137,12 @@ describe("parseEmbedTenants", () => {
               type: "digivault",
               supabaseUrlEnv: "CORE_SUPABASE_URL",
               supabaseAnonKeyEnv: "CORE_SUPABASE_ANON_KEY",
-              openRouterKeyEnv: "sk-or-v1-abc",
+              openRouterKeyEnv: "OPENROUTER_API_KEY",
             },
           },
         })
       )
-    ).toThrow(/env/i);
+    ).toThrow(/digigraph.*foundry|foundry.*digigraph/);
   });
 
   it("parses a foundry backend", () => {
@@ -185,6 +179,7 @@ describe("parseEmbedTenants", () => {
               agentName: "digichat",
             },
             gateMode: "ungated",
+            token: "tok",
           },
         })
       )
@@ -199,6 +194,7 @@ describe("parseEmbedTenants", () => {
             slug: "example",
             backend: { type: "foundry", projectEndpoint: "https://dg-agentic-ai.ai.azure.com/api/projects/x" },
             gateMode: "ungated",
+            token: "tok",
           },
         })
       )
@@ -214,6 +210,7 @@ describe("parseEmbedTenants", () => {
             backend: { type: "digigraph" },
             gateMode: "turn_limited",
             accent: { color: "red", foreground: "#ffffff" },
+            token: "tok",
           },
         })
       )
@@ -285,7 +282,7 @@ describe("parseEmbedTenants", () => {
     expect(() =>
       parseEmbedTenants(
         JSON.stringify({
-          "example.com": { slug: "example", backend: { type: "digigraph" }, gateMode: "open" },
+          "example.com": { slug: "example", backend: { type: "digigraph" }, gateMode: "open", token: "t" },
         })
       )
     ).toThrow(/gateMode/);
@@ -297,6 +294,7 @@ describe("parseEmbedTenants", () => {
             backend: { type: "digigraph" },
             gateMode: "ungated",
             theme: "midnight",
+            token: "t",
           },
         })
       )
@@ -369,20 +367,14 @@ describe("parseEmbedTenants", () => {
     });
   });
 
-  it("parses showByok, showStatusBar, layout independent of gateMode", () => {
+  it("parses showByok, layout independent of gateMode", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({
         "digithings.ai": {
           slug: "digithings",
-          backend: {
-            type: "digivault",
-            supabaseUrlEnv: "A_URL",
-            supabaseAnonKeyEnv: "A_ANON",
-            openRouterKeyEnv: "A_OR",
-          },
+          backend: { type: "digigraph" },
           gateMode: "ungated",
           showByok: true,
-          showStatusBar: true,
           layout: "page",
           activityDetail: "full",
           token: "t",
@@ -392,8 +384,61 @@ describe("parseEmbedTenants", () => {
     const t = reg.get("digithings.ai")!;
     expect(t.gateMode).toBe("ungated");
     expect(t.showByok).toBe(true);
-    expect(t.showStatusBar).toBe(true);
     expect(t.layout).toBe("page");
+  });
+
+  it("parses llmAccess free_then_byok for digithings-style tenants", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "digithings.ai": {
+          slug: "digithings",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          showByok: true,
+          llmAccess: "free_then_byok",
+          token: "t",
+        },
+      }),
+    );
+    expect(reg.get("digithings.ai")!.llmAccess).toBe("free_then_byok");
+  });
+
+  it("parses llmAccess backend_only for foundry / DataTap-style tenants", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "datatapstream.com": {
+          slug: "datatap",
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://example.services.ai.azure.com",
+            agentName: "agent",
+          },
+          gateMode: "trial_form",
+          showByok: false,
+          llmAccess: "backend_only",
+          token: "t",
+        },
+      }),
+    );
+    const t = reg.get("datatapstream.com")!;
+    expect(t.llmAccess).toBe("backend_only");
+    expect(t.showByok).toBe(false);
+  });
+
+  it("rejects invalid llmAccess", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "ex",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            llmAccess: "paid_only",
+            token: "t",
+          },
+        }),
+      ),
+    ).toThrow(/llmAccess must be/);
   });
 
   it("rejects invalid layout", () => {
@@ -425,7 +470,6 @@ describe("parseEmbedTenants", () => {
     );
     const t = reg.get("example.com")!;
     expect(t.showByok).toBeUndefined();
-    expect(t.showStatusBar).toBeUndefined();
     expect(t.layout).toBeUndefined();
   });
 

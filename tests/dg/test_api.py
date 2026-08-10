@@ -192,3 +192,56 @@ class TestOpenAICompatible:
         assert "Snippet from index" in body
         assert "Final" in body and "here" in body
         assert "data: [DONE]" in body
+
+    def test_chat_completions_stream_suppress_omits_openwebui_chrome(self, client: TestClient) -> None:
+        """X-Suppress-Tool-Stream drops <details> and <thinking> even when model=sitaas-rag."""
+
+        def fake_streaming(req, queue, cancel_event=None):
+            queue.put(("tool_call", {"name": "digisearch", "arguments": {"query": "test q"}}))
+            queue.put(("tool_result", {"content": "Snippet from index."}))
+            queue.put(("reasoning", "internal chain of thought"))
+            queue.put(("content", "Final answer here."))
+            queue.put(("done", None))
+
+        with patch("digigraph.server.run_digigraph_workflow_streaming", side_effect=fake_streaming):
+            r = client.post(
+                "/v1/chat/completions",
+                headers={"X-Suppress-Tool-Stream": "1"},
+                json={
+                    "model": "sitaas-rag",
+                    "messages": [{"role": "user", "content": "search"}],
+                    "stream": True,
+                },
+            )
+        assert r.status_code == 200
+        body = r.text
+        assert "<details>" not in body
+        assert "<thinking>" not in body
+        assert "Tool call" not in body
+        assert "internal chain of thought" not in body
+        assert "Final" in body and "here" in body
+
+    def test_chat_completions_stream_plain_format_opts_out_of_sitaas_rag(self, client: TestClient) -> None:
+        """X-Response-Format: plain disables Open WebUI formatter despite model=sitaas-rag."""
+
+        def fake_streaming(req, queue, cancel_event=None):
+            queue.put(("tool_call", {"name": "digisearch", "arguments": {"query": "q"}}))
+            queue.put(("tool_result", {"content": "hit"}))
+            queue.put(("content", "Answer."))
+            queue.put(("done", None))
+
+        with patch("digigraph.server.run_digigraph_workflow_streaming", side_effect=fake_streaming):
+            r = client.post(
+                "/v1/chat/completions",
+                headers={"X-Response-Format": "plain"},
+                json={
+                    "model": "sitaas-rag",
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "stream": True,
+                },
+            )
+        assert r.status_code == 200
+        body = r.text
+        assert "<details>" not in body
+        assert "Tool:" in body or "digisearch" in body  # neutral formatter
+        assert "Answer" in body

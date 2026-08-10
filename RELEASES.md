@@ -4,16 +4,20 @@ Monorepo components ship as **independent Python packages** (`digibase`, `digigr
 
 ## Release process
 
-There is no automated release pipeline yet. To ship a release:
+1. Confirm CI is green on `develop`, then promote to `main`.
+2. **Docker images (automated on `main`):**
+   - Python HTTP services → [`.github/workflows/publish-service-images.yml`](.github/workflows/publish-service-images.yml)  
+     Images: `ghcr.io/digithings-ai/{digikey,digigraph,digiquant,digisearch,digismith,digivault,digiclaw}`  
+     Tags: `:sha-<12-char-sha>`, `:latest`, and `:v<pyproject-version>`.  
+     Manual: Actions → “Publish: service images” → `workflow_dispatch` (all or one service).
+   - digichat → [`.github/workflows/publish-digichat-image.yml`](.github/workflows/publish-digichat-image.yml)  
+     Tags: `:v<package.json version>` and `:latest` (skips if that version tag already exists).
+3. Optional git tags: `git tag <component>-vX.Y.Z` (or repo-wide `vX.Y.Z`) and push — useful for changelogs; image publish does not require them for the Python services.
+4. Append a changelog entry under "Unreleased" below, then move it under a new dated heading.
 
-1. Confirm CI is green on `develop`.
-2. Pick a version per the tagging convention below.
-3. Tag: `git tag <component>-vX.Y.Z` (or a single repo-wide `vX.Y.Z`).
-4. Push the tag: `git push origin <tag>`.
-5. Build and publish Docker images (one per service) pinned to the same git SHA.
-6. Append a changelog entry under "Unreleased" below, then move it under a new dated heading.
+Self-host pull path: [`infra/self-host/compose.ghcr.yml`](infra/self-host/compose.ghcr.yml) + [`docs/templates/self-host/README.md`](docs/templates/self-host/README.md). Epic: [#2016](https://github.com/digithings-ai/digithings/issues/2016).
 
-Formal automation (release workflow, PyPI publish, Docker image publish) is tracked under the hardening epic ([#2](https://github.com/digithings-ai/digithings/issues/2)).
+**First stack GHCR publish after #2023:** the publish workflow is `main`-only. After promoting develop (includes #2023) to `main`, run Actions → “Publish: service images” → `workflow_dispatch` with `service=all` once so `ghcr.io/digithings-ai/{digikey,digigraph,digivault}` exist for Profile A / `make up-ghcr`.
 
 ## Tagging convention
 
@@ -22,23 +26,21 @@ Formal automation (release workflow, PyPI publish, Docker image publish) is trac
 
 Either works; pick one and stay consistent within a release cycle.
 
-### digichat: patch-granular pre-1.0 versions
+### digichat: versioning (1.0.0 public cut)
 
-digichat is released by release-please (`release-please-config.json`), which
-by default bumps the **minor** on every `feat` — so a component still under
-1.0 marched 0.5.0 → 0.6.0 → 0.7.0 → 0.8.0 → 0.9.0, skipping every patch number
-and burning a minor on single features.
+**Public line is `1.0.0`.** release-please had proposed `0.9.4` (#2014); that PR
+was closed and the version was forced to **1.0.0** (`package.json` +
+`.release-please-manifest.json` + `CHANGELOG.md`) so the next develop→main
+promote publishes `ghcr.io/digithings-ai/digichat:v1.0.0`.
 
-Two flags make every release a `+1` on the patch instead, for as long as
-digichat is pre-1.0:
+**Do not delete `ghcr.io/digithings-ai/digichat:v0.9.3`.** DataTap and other
+existing clients remain pinned there until they upgrade.
 
-- `bump-patch-for-minor-pre-major: true` — a `feat` bumps patch, not minor.
-- `bump-minor-pre-major: true` — a breaking change bumps minor, not straight
-  to 1.0.0.
-
-So 0.9.2 → 0.9.3 → 0.9.4 …, regardless of whether the release carries fixes
-or features. Neither flag rewrites history: 0.5.0–0.9.2 are already tagged and
-published, and stay as they are.
+Historically, while digichat was pre-1.0, release-please used
+`bump-patch-for-minor-pre-major` + `bump-minor-pre-major` so every release was
+a patch bump (0.9.2 → 0.9.3 → …) instead of burning minors on each `feat`. Those
+flags remain in `release-please-config.json`; after 1.0.0, conventional
+`feat`/`fix`/`BREAKING` semver applies normally for subsequent cuts.
 
 **Tag every release.** 0.9.1 and 0.9.2 were bumped inside ordinary PRs
 (`6f7d5a30`, `8c166c50`) and never tagged, so release-please lost its baseline

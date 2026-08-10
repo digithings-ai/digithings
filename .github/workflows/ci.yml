@@ -520,4 +520,6 @@ jobs:
         run: cp .env.example .env
 
       - name: Validate Docker Compose
-        run: docker compose config -q
+        run: |
+          docker compose config -q
+          docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml config -q

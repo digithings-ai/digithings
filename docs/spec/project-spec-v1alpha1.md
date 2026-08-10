@@ -39,9 +39,18 @@ project:
 agents:
   enabled:                # List of agent IDs to activate (default: ["research"])
     - research            # Only "research" is supported in Phase 1
-  llm_mode: string        # "test" | "medium" | "best" (default: env DIGI_LLM_MODE or "test")
+  llm_mode: string        # "free" | "test" | "medium" | "best" (default: env DIGI_LLM_MODE or "test")
+                          # policy only: free = must resolve to OpenRouter :free / ollama; refuse paid IDs
+                          # free does NOT pick a model from model_modes.yaml — set agents.llm (or DIGI_LLM_*)
+  llm:                    # required when llm_mode is free; optional pin for other modes (wins over defaults)
+    provider: string      # openrouter | openai | ollama | gemini | anthropic | litellm
+    model: string         # provider-native id, e.g. openai/gpt-oss-20b:free (operator-chosen; roster rotates)
+    api_key_env: string   # optional; default from provider registry (never put secrets in YAML)
   planning_mode: bool     # Enable plan-then-execute flow (default: false)
   workflow_profile: string # Workflow graph profile name (default: "default")
+  research_brief: bool    # Run ResearchBrief post-pass after answer (default: true; env DIGI_RESEARCH_BRIEF)
+  always_retrieve_tools:  # Prefetch these tools before the LLM turn; inject results; strip from tools_for_llm
+    - digisearch
   allowed_tools:          # Restrict tool names available to the research node (default: all)
     - digisearch
     - visualization_agent
@@ -100,9 +109,24 @@ services:
       "additionalProperties": false,
       "properties": {
         "enabled":               { "type": "array",  "items": { "type": "string" } },
-        "llm_mode":              { "type": "string",  "enum": ["test", "medium", "best"] },
+        "llm_mode":              { "type": "string",  "enum": ["free", "test", "medium", "best"] },
+        "llm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "model"],
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": ["openrouter", "openai", "ollama", "gemini", "anthropic", "litellm"]
+            },
+            "model": { "type": "string", "minLength": 1 },
+            "api_key_env": { "type": "string", "minLength": 1 }
+          }
+        },
         "planning_mode":         { "type": "boolean" },
         "workflow_profile":      { "type": "string" },
+        "research_brief":        { "type": "boolean" },
+        "always_retrieve_tools": { "type": "array",  "items": { "type": "string" } },
         "allowed_tools":         { "type": "array",  "items": { "type": "string" } },
         "research_system_prompt":{ "type": "string" }
       }
@@ -137,7 +161,8 @@ services:
 
 | Field | Env override | Notes |
 |---|---|---|
-| `agents.llm_mode` | `DIGI_LLM_MODE` | Project YAML wins if set |
+| `agents.llm_mode` | `DIGI_LLM_MODE` | Project YAML wins if set (`free` \| `test` \| `medium` \| `best`). Policy only — not a model slug. |
+| `agents.llm.provider` / `agents.llm.model` | `DIGI_LLM_PROVIDER` / `DIGI_LLM_MODEL` | YAML wins when set; env fills gaps. **Required for `llm_mode: free`.** API keys stay in env only. |
 | `run_data_dir` | `DIGI_RUN_DATA_DIR` | Env wins if set; YAML is fallback |
 | `services.digisearch_url` | `DIGISEARCH_URL` | Env wins |
 | `services.litellm_url` | `OPENAI_API_BASE` | Env wins |

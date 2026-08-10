@@ -41,6 +41,10 @@
   font-size: 0.8rem;
   color: color-mix(in srgb, var(--down) 80%, var(--ink));
 }
+.dtc-error .dc-inline-link {
+  color: var(--accent-digichat, var(--accent));
+  font-weight: 500;
+}
 @media (prefers-reduced-motion: reduce) {
   .dtc-chip {
     transition: none;
@@ -56,5 +60,5 @@
   color: var(--ink);
 }
 .dc-wordmark .dc-wm-s {
-  color: var(--accent);
+  color: var(--accent-digichat, var(--accent));
 }

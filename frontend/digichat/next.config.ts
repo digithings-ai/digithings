@@ -2,7 +2,7 @@ import path from "node:path";
 import type { NextConfig } from "next";
 import {
   DIGICHAT_APP_SECURITY_HEADERS,
-  DIGICHAT_EMBED_SECURITY_HEADERS,
+  DIGICHAT_EMBED_BAKED_SECURITY_HEADERS,
 } from "./src/lib/security-headers";
 
 const nextConfig: NextConfig = {
@@ -26,12 +26,13 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Fail-closed bake — src/proxy.ts overwrites with runtime allowlist.
         source: "/embed/:path*",
-        headers: [...DIGICHAT_EMBED_SECURITY_HEADERS],
+        headers: [...DIGICHAT_EMBED_BAKED_SECURITY_HEADERS],
       },
       {
         source: "/embed",
-        headers: [...DIGICHAT_EMBED_SECURITY_HEADERS],
+        headers: [...DIGICHAT_EMBED_BAKED_SECURITY_HEADERS],
       },
       {
         // All non-embed routes — global CSP + hardening (REM-077).

@@ -29,6 +29,8 @@ node_modules/
 venv/
 .env
 projects/*/.env
+config/dogfood-digiproject.local.yaml
+docker-compose.override.yml
 
 # Confidential: project configs and deployments (never share)
 # Anchored to repo root so docs/projects/ (public dogfooding projects) is not captured.
@@ -58,6 +60,11 @@ digiquant/results/
 
 # Olympus static portfolio fallback — stop tracking after REM-037 (JAN-007)
 frontend/olympus/public/dashboard-data.json
+
+# digithings-web OpenAPI explorer assets (copied at prebuild / predev from
+# docs/openapi/ + swagger-ui-dist — never commit the vendored copies).
+frontend/digithings-web/public/openapi/
+frontend/digithings-web/public/swagger-ui/
 
 
 # Secrets and credentials

@@ -137,6 +137,25 @@ def test_get_client_for_model_missing_key_raises() -> None:
         digillm.get_client_for_model("gemini/gemini-2.5-flash")
 
 
+def test_get_client_for_model_anthropic_byok_uses_user_key() -> None:
+    made: list[dict[str, Any]] = []
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.append(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        with digillm.byok("sk-ant-user", "https://api.anthropic.com/v1/"):
+            digillm.get_client_for_model("anthropic/claude-sonnet-4-6")
+    assert made[0]["api_key"] == "sk-ant-user"
+    assert made[0]["base_url"].rstrip("/") == "https://api.anthropic.com/v1"
+
+
+def test_anthropic_is_registered_provider() -> None:
+    assert digillm.is_registered_provider("anthropic")
+    assert digillm.get_provider_api_key_env("anthropic") == "ANTHROPIC_API_KEY"
+
+
 def test_default_client_uses_openai_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-default")
     monkeypatch.setenv("OPENAI_API_BASE", "http://localhost:4000/")

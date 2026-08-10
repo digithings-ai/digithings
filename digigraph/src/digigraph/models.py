@@ -52,7 +52,11 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = Field(False, description="If true, return SSE stream")
     openwebui_format: bool = Field(
         False,
-        description='If true, format tool blocks for Open WebUI (<details type="tool_calls">, summary + Input/Output). Optional; also enabled when model is sitaas-rag.',
+        description=(
+            "If true, format tool blocks for Open WebUI (<details>, summary + tables). "
+            "Also enabled when model is sitaas-rag unless the client opts out via "
+            "X-Suppress-Tool-Stream or X-Response-Format: plain|neutral|none|digichat."
+        ),
     )
     session_id: str | None = Field(
         None,
@@ -113,6 +117,19 @@ class WorkflowRequest(BaseModel):
         None,
         description="JWT subject for checkpoint thread scoping (set from request auth).",
     )
+    digisearch_index: str | None = Field(
+        None,
+        title="digisearch index",
+        description="Per-request digisearch index override (X-Digi-Corpus-Index / tenant map).",
+    )
+    vault_path_prefix: str | None = Field(
+        None,
+        description="Per-request digivault path prefix (X-Digi-Vault-Prefix / tenant map).",
+    )
+    research_system_prompt_override: str | None = Field(
+        None,
+        description="Optional research system prompt from DIGI_TENANT_CORPUS_MAP.",
+    )
     evidence_tier_preference: list[str] | None = Field(
         None,
         description="Preferred evidence_tier values (peer_reviewed, working_paper, …) added as a filter.",
@@ -124,6 +141,10 @@ class WorkflowResult(BaseModel):
 
     success: bool = Field(..., description="Whether the workflow completed successfully")
     message: str = Field("", description="Human-readable summary")
+    error_code: str | None = Field(
+        default=None,
+        description="Stable machine code for digichat (e.g. free_quota_exceeded); None on success",
+    )
     backtest_result: dict | None = Field(
         None, description="digiquant BacktestResult when workflow ran a backtest"
     )

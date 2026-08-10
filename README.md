@@ -66,6 +66,15 @@ cp .env.example .env   # edit if needed
 make up
 ```
 
+**Pull published images from GHCR** (no local build; Compose v2.24+):
+
+```bash
+make pull-ghcr && make up-ghcr
+# with digichat: make up-ghcr-digichat
+```
+
+See [`docs/templates/self-host/README.md`](docs/templates/self-host/README.md) and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). FastAPI Swagger: `http://127.0.0.1:<port>/docs`.
+
 **LLM routing:** set `OPENROUTER_API_KEY` in `.env` (sign up at https://openrouter.ai). All Atlas/Hermes phases route through OpenRouter's Auto Router (`openrouter/openrouter/auto`), which selects the best model per request. Model strings must be explicit — the old `digi/fast`/`digi/balanced`/`digi/best` tier aliases have been removed. See `config/model_modes.yaml` and `.env.example`.
 
 **Stack + digichat web UI** (http://127.0.0.1:3005):

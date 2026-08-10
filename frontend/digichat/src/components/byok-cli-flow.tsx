@@ -9,6 +9,9 @@ import {
   useBYOKKey,
   validateBYOKKey,
   validateBYOKModel,
+  byokRequiresModel,
+  byokModelPlaceholder,
+  BYOK_PROVIDER_LIST,
 } from "@/hooks/use-byok-key";
 import { cn } from "@/lib/utils";
 
@@ -63,7 +66,7 @@ export function ByokCliFlow({ onClose }: { onClose: () => void }) {
         "X-BYOK-Key": inputKey,
         "X-BYOK-Provider": inputProvider,
       };
-      if (inputProvider === "openrouter") {
+      if (byokRequiresModel(inputProvider)) {
         headers["X-BYOK-Model"] = inputModel.trim();
       }
       const resp = await fetch(p("/api/byok/test"), {
@@ -129,7 +132,7 @@ export function ByokCliFlow({ onClose }: { onClose: () => void }) {
                 provider
               </p>
               <div className="flex gap-2">
-                {(["openrouter", "openai", "anthropic"] as BYOKProvider[]).map((prov) => (
+                {BYOK_PROVIDER_LIST.map((prov) => (
                   <button
                     key={prov}
                     type="button"
@@ -139,6 +142,7 @@ export function ByokCliFlow({ onClose }: { onClose: () => void }) {
                     )}
                     onClick={() => {
                       setInputProvider(prov);
+                      setInputModel("");
                       setValidationError(null);
                       setTestResult(null);
                     }}
@@ -171,7 +175,9 @@ export function ByokCliFlow({ onClose }: { onClose: () => void }) {
                     ? "sk-…"
                     : inputProvider === "anthropic"
                       ? "sk-ant-…"
-                      : "sk-or-v1-…"
+                      : inputProvider === "gemini"
+                        ? "AIza…"
+                        : "sk-or-v1-…"
                 }
                 autoComplete="off"
                 spellCheck={false}
@@ -189,12 +195,14 @@ export function ByokCliFlow({ onClose }: { onClose: () => void }) {
                     ? "OpenAI keys start with sk-"
                     : inputProvider === "anthropic"
                       ? "Anthropic keys start with sk-ant-"
-                      : "OpenRouter keys start with sk-or-"}
+                      : inputProvider === "gemini"
+                        ? "Gemini keys start with AI"
+                        : "OpenRouter keys start with sk-or-"}
                 </p>
               )}
             </div>
 
-            {inputProvider === "openrouter" ? (
+            {byokRequiresModel(inputProvider) ? (
               <div>
                 <label
                   htmlFor="byok-cli-model"
@@ -212,13 +220,13 @@ export function ByokCliFlow({ onClose }: { onClose: () => void }) {
                     setValidationError(null);
                     setTestResult(null);
                   }}
-                  placeholder="openai/gpt-4o-mini"
+                  placeholder={byokModelPlaceholder(inputProvider)}
                   autoComplete="off"
                   spellCheck={false}
                   className="w-full max-w-md rounded-md border border-border/50 bg-term-bg px-3 py-2 font-mono text-sm outline-none focus:border-accent"
                 />
                 <p className="mt-1.5 text-[11px]" style={{ color: "var(--text-secondary)" }}>
-                  OpenRouter model slug (provider/model), e.g. anthropic/claude-sonnet-4
+                  Model slug required for {inputProvider} BYOK
                 </p>
               </div>
             ) : null}
