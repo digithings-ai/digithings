@@ -40,7 +40,9 @@ export function digithingsCsp(frameSrc = frameSrcForCsp()) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
+    // OpenAPI explorer loads same-origin /openapi/*.json; swagger-ui may use a blob worker.
     "connect-src 'self'",
+    "worker-src 'self' blob:",
     `frame-src ${frameSrc}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",

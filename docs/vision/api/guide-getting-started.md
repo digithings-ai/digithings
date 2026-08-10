@@ -2,7 +2,7 @@
 title: "Getting started — guide"
 type: reference
 status: generated
-created: 2026-06-29
+created: 2026-08-10
 tags:
   - api
   - guide
@@ -11,7 +11,7 @@ tags:
 
 > Run the digithings stack locally — prerequisites, compose, environment, and make targets.
 
-digithings is an open-core agentic stack — orchestration, quant research, retrieval, and chat behind one supervisor. Self-hosted, BYOK, audit-on by default.
+digithings is open-source, MIT-licensed AI infrastructure: modules that plug into the stack you already run rather than replacing it. digigraph orchestrates specialist sub-graphs — quant research, retrieval, vault, and chat. Self-hosted anywhere, BYOK, audit-on by default.
 
 ### Prerequisites
 
@@ -42,5 +42,7 @@ Each backend service exposes a liveness probe at `GET /healthz`. The service URL
 - `make up-digichat` — start the chat BFF + its Postgres.
 - `make stack-local` — run the Python services without Docker.
 - `make test-unit` — unit tests (no stack required).
+
+Interactive OpenAPI for every HTTP surface lives at [OpenAPI explorer](https://digithings.ai/docs/api/) — committed specs under `docs/openapi/`, not live FastAPI `/docs` on localhost.
 
 See also [[digigraph]].

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { Fragment, useState, type ReactNode } from "react";
 import {
   modules,
@@ -70,20 +71,44 @@ function toDocsEndpoint(ep: Endpoint): DocsEndpoint {
   };
 }
 
-// ── inline backtick → <code> for guide text ──────────────────────────────────
+// ── inline `code` + [label](href) for guide text ─────────────────────────────
 function Inline({ text }: { text: string }): ReactNode {
-  const parts = text.split(/(`[^`]+`)/g);
+  const parts = text.split(/(`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
   return (
     <>
-      {parts.map((p, i) =>
-        p.startsWith("`") && p.endsWith("`") ? (
-          <code key={i} className="dc-code-inline">
-            {p.slice(1, -1)}
-          </code>
-        ) : (
-          <Fragment key={i}>{p}</Fragment>
-        ),
-      )}
+      {parts.map((p, i) => {
+        if (p.startsWith("`") && p.endsWith("`")) {
+          return (
+            <code key={i} className="dc-code-inline">
+              {p.slice(1, -1)}
+            </code>
+          );
+        }
+        const link = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(p);
+        if (link) {
+          const [, label, href] = link;
+          if (href.startsWith("/")) {
+            return (
+              <Link key={i} href={href} className="doc-inline-link">
+                {label}
+              </Link>
+            );
+          }
+          return (
+            <a
+              key={i}
+              href={href}
+              className="doc-inline-link"
+              {...(href.startsWith("http")
+                ? { target: "_blank", rel: "noopener noreferrer" }
+                : {})}
+            >
+              {label}
+            </a>
+          );
+        }
+        return <Fragment key={i}>{p}</Fragment>;
+      })}
     </>
   );
 }
@@ -115,7 +140,7 @@ function Blocks({ blocks }: { blocks: Block[] }) {
 }
 
 const PAGE_MD = [
-  "# digithings API reference",
+  "# digithings docs",
   "",
   ...guides.map(guideToMarkdown),
   ...ordered.map(moduleToMarkdown),
@@ -341,13 +366,20 @@ export function DocsLayout() {
       ariaLabel="docs"
       contentsLabel="contents"
       hero={{
-        kicker: "// api docs",
-        title: "digithings API reference.",
+        kicker: "// docs",
+        title: "digithings docs.",
         lede:
-          "Complete, end-to-end reference for the stack — setup, authentication, and every module's " +
-          "endpoints with request/response schemas and runnable examples. Copy any page (or the whole " +
-          "reference) as Markdown to drop into an AI agent.",
-        actions: <CopyMd text={PAGE_MD} label="Copy all as Markdown" />,
+          "Product guides for self-host and digichat, then the per-module API reference — schemas, " +
+          "examples, and copy-as-Markdown for agents. Machine-readable OpenAPI lives in the " +
+          "explorer.",
+        actions: (
+          <div className="flex flex-wrap items-center gap-[0.55rem]">
+            <CopyMd text={PAGE_MD} label="Copy all as Markdown" />
+            <Link className="docs-copy" href="/docs/api/">
+              OpenAPI explorer <span aria-hidden="true">→</span>
+            </Link>
+          </div>
+        ),
       }}
     >
       {guides.map((g) => (
