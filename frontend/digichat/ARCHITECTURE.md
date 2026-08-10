@@ -516,11 +516,15 @@ may use digichat `/embed` without presenting `X-Embed-Token` when registered in
 **not** allowlisted. `/chat/occ` iframes `?host=occ.digithings.ai` (no DNS) for
 OCC corpus isolation.
 
-**postMessage seed.** Embed emits `{ type: "digichat:ready" }` to the parent
-origin; digithings.ai posts `{ type: "digichat:seed", messages, pending, ts }`
-after origin checks (`ChatEmbedShell`). Validators and caps live in
-`src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` / `datatap:unlocked`
-channel is unchanged.
+**postMessage seed.** Embed emits `{ type: "digichat:ready" }` to the **actual
+parent browsing-context origin** (`location.ancestorOrigins[0]` or
+`document.referrer` via `resolveReadyTargetOrigin` in
+`src/lib/embed-seed-messages.ts`) — never the virtual `?host=` tenant key
+(e.g. `occ.digithings.ai`). digithings.ai posts
+`{ type: "digichat:seed", messages, pending, ts }` after checking
+`event.origin` against the digichat embed origin (`ChatEmbedShell`). Validators
+and caps live in `src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` /
+`datatap:unlocked` channel is unchanged.
 
 **`X-Embed-Host` alone is not sufficient authorization (#1339).** A tenant's
 host string is its own public domain, so `resolveEmbedTenantByHost` never

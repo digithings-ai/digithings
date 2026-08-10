@@ -63,6 +63,7 @@ import {
   READY_MESSAGE,
   isAllowedSeedParentOrigin,
   parseSeedMessage,
+  resolveReadyTargetOrigin,
 } from "@/lib/embed-seed-messages";
 
 type Accent = "digithings" | "digiquant" | "digichat";
@@ -390,16 +391,21 @@ function EmbedChat({
   const [seedApplied, setSeedApplied] = useState(false);
   const [hideIntroForSeed, setHideIntroForSeed] = useState(false);
 
+  // Ready handshake targets the *actual* parent browsing context, not virtual
+  // ?host= (e.g. occ.digithings.ai). Parent ChatEmbedShell listens on digithings.ai;
+  // posting ready to the virtual host is dropped and falsely times out.
   useEffect(() => {
-    if (typeof window === "undefined" || !host) return;
-    let parentOrigin: string;
-    try {
-      parentOrigin = host.includes("://") ? new URL(host).origin : `https://${host}`;
-    } catch {
-      return;
-    }
-    window.parent.postMessage(READY_MESSAGE, parentOrigin);
-  }, [host]);
+    if (typeof window === "undefined") return;
+    if (window.parent === window.self) return;
+    const ancestorOrigins =
+      "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
+    const target = resolveReadyTargetOrigin({
+      ancestorOrigins,
+      referrer: document.referrer,
+    });
+    if (!target) return;
+    window.parent.postMessage(READY_MESSAGE, target);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || seedApplied) return;

@@ -6,6 +6,9 @@ import { readAndClearHandoff } from "@/lib/chatHandoff";
 const READY = "digichat:ready";
 const SEED = "digichat:seed";
 
+/** Match digichat READY_TIMEOUT_MS — CF Container cold start can exceed 15s. */
+export const EMBED_READY_TIMEOUT_MS = 30_000;
+
 /** Default embed host for digithings.ai/chat (client #0). */
 export const DEFAULT_CHAT_EMBED_HOST = "digithings.ai";
 
@@ -36,13 +39,14 @@ export type ChatEmbedShellProps = {
 
 /**
  * digithings.ai chat shell — iframes digichat /embed (digigraph backend).
- * Requires NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN (tunnel hostname to digichat Node).
+ * Requires NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN (digichat Container / Worker origin).
  */
 export function ChatEmbedShell({
   embedOrigin,
   embedHost = DEFAULT_CHAT_EMBED_HOST,
 }: ChatEmbedShellProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeLoadedRef = useRef(false);
   const [readyError, setReadyError] = useState<string | null>(null);
   const targetOrigin = useMemo(() => parseOrigin(embedOrigin), [embedOrigin]);
   const configError = targetOrigin
@@ -57,6 +61,7 @@ export function ChatEmbedShell({
     if (!targetOrigin) return;
 
     let ready = false;
+    iframeLoadedRef.current = false;
     function onMessage(ev: MessageEvent) {
       if (ev.origin !== targetOrigin) return;
       const data = ev.data as { type?: string } | null;
@@ -80,12 +85,16 @@ export function ChatEmbedShell({
 
     window.addEventListener("message", onMessage);
     const t = window.setTimeout(() => {
-      if (!ready) {
+      // Chat can work without the ready handshake (composer still loads). Only
+      // surface a banner when the iframe itself never finished loading — a
+      // missing ready after a successful load is usually a cold-start race that
+      // self-heals, and a permanent banner would steal height from the chat.
+      if (!ready && !iframeLoadedRef.current) {
         setReadyError(
-          "digichat embed did not signal ready — check tunnel and DIGICHAT_EMBED_HOSTS",
+          "digichat embed did not load — refresh the page, or try again in a moment if the service is cold-starting.",
         );
       }
-    }, 15_000);
+    }, EMBED_READY_TIMEOUT_MS);
     return () => {
       window.removeEventListener("message", onMessage);
       window.clearTimeout(t);
@@ -106,11 +115,20 @@ export function ChatEmbedShell({
       style={{
         display: "flex",
         flexDirection: "column",
-        minHeight: "calc(100vh - 4rem)",
+        flex: 1,
+        height: "100%",
+        minHeight: 0,
       }}
     >
       {readyError ? (
-        <p style={{ padding: "0.75rem 1rem", opacity: 0.8 }} role="status">
+        <p
+          style={{
+            flexShrink: 0,
+            padding: "0.75rem 1rem",
+            opacity: 0.8,
+          }}
+          role="status"
+        >
           {readyError}
         </p>
       ) : null}
@@ -118,9 +136,18 @@ export function ChatEmbedShell({
         ref={iframeRef}
         title="digichat"
         src={src}
-        style={{ flex: 1, width: "100%", border: 0, minHeight: "70vh" }}
+        style={{
+          flex: 1,
+          width: "100%",
+          border: 0,
+          minHeight: 0,
+          height: "100%",
+        }}
         allow="clipboard-write"
-        onLoad={() => setReadyError(null)}
+        onLoad={() => {
+          iframeLoadedRef.current = true;
+          setReadyError(null);
+        }}
       />
     </div>
   );
