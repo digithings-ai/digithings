@@ -409,7 +409,13 @@ def _run_document_rag_path(
                 continue
             if _allowed_names is not None and tool_name not in _allowed_names:
                 continue
+            # Bound prefetch recall so a tiny seed corpus does not dump the whole
+            # index into every turn (default digisearch top_k=10 / vault limit=7).
             args: dict[str, Any] = {"query": q}
+            if tool_name in ("digisearch", "digisearch_fetch_all"):
+                args["top_k"] = 4
+            elif tool_name == "digivault_search_notes":
+                args["limit"] = 3
             stream_callback("tool_call", {"name": tool_name, "arguments": args})
             result = execute_search(tool_name, args)
             payload = (
