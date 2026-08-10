@@ -247,6 +247,27 @@ function EmbedChat({
   const llmAccess = tenantCfg.llmAccess;
   const uiFlags = resolveEmbedUiFlags(tenantCfg);
   const [language, setLanguage] = useState(() => detectBrowserLanguageCode());
+  // useEmbedDigiChat's transport is frozen on first render (#1339) — a
+  // `language` value passed by plain value would stay stuck at whatever
+  // detectBrowserLanguageCode() returned at mount, so picking a language in
+  // the dropdown would never reach the outgoing header (#2103 final review,
+  // Critical finding). Mutate the ref directly in the render body (the
+  // "useLatest" idiom) rather than in a useEffect — an effect would lag one
+  // render behind and could race a fast pick-then-send. The value is
+  // deliberately NOT persisted anywhere (no localStorage/sessionStorage): the
+  // approved design is session-only, resetting to a fresh browser-locale
+  // auto-detect on every reload.
+  const languageRef = useRef(language);
+  // Deliberate "useLatest" escape hatch: mutating .current here (not in an
+  // effect) is what makes send-time reads see the value from the render that
+  // just committed, with zero lag. useEffectEvent can't replace this — its
+  // returned function may only be called from an Effect/Effect Event in the
+  // SAME component and may not be passed down, but getResponseLanguage is
+  // deliberately passed down into useEmbedDigiChat and invoked later from
+  // prepareSendMessagesRequest.
+  // eslint-disable-next-line react-hooks/refs -- see comment above
+  languageRef.current = language;
+  const getResponseLanguage = useCallback(() => languageRef.current, []);
   // trial_form still hides BYOK until parent unlock — product rule for DataTap only
   // backend_only never shows BYOK even if misconfigured showByok
   const showByok =
@@ -356,7 +377,7 @@ function EmbedChat({
     byokModel,
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
-    responseLanguage: language,
+    getResponseLanguage,
   });
 
   // Free-tier / rate-limit → stop turn + open in-chat BYOK (free_then_byok, even when ungated).

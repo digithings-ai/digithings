@@ -390,20 +390,55 @@ describe("chatAccessTokenAtSend", () => {
 });
 
 describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Language", () => {
-  it("sets X-Digi-Language when responseLanguage is a non-English curated code", async () => {
+  it("sets X-Digi-Language when getResponseLanguage returns a non-English curated code", async () => {
     const { headers } = await callPrepareSendMessagesRequest({
-      responseLanguage: "de",
+      getResponseLanguage: () => "de",
     });
     expect(headers.get("X-Digi-Language")).toBe("de");
   });
 
-  it("omits X-Digi-Language when responseLanguage is English or unset", async () => {
+  it("omits X-Digi-Language when getResponseLanguage returns English, or is unset", async () => {
     const { headers: withEnglish } = await callPrepareSendMessagesRequest({
-      responseLanguage: "en",
+      getResponseLanguage: () => "en",
     });
     expect(withEnglish.has("X-Digi-Language")).toBe(false);
 
     const { headers: withUnset } = await callPrepareSendMessagesRequest({});
     expect(withUnset.has("X-Digi-Language")).toBe(false);
+  });
+
+  // Regression for #2103 final review's Critical finding: prepareSendMessagesRequest
+  // must read the language FRESH at send time, not close over the value that existed
+  // when the transport (and this closure) were first built. useChat never adopts a
+  // rebuilt transport after first render (#1339), so if this closure captured the
+  // language by value, a language picked in the dropdown after mount would never
+  // reach the outgoing header — only the initial detectBrowserLanguageCode() value
+  // ever would. This test captures prepareSendMessagesRequest ONCE, then calls that
+  // SAME closure twice, changing only what the getter returns in between — no
+  // remount, no new transport, no new closure. Against the pre-fix `responseLanguage:
+  // string` param captured by value, the second call would still report the first
+  // call's language; against the fix, it reports whatever the getter returns at call
+  // time.
+  it("reads the language fresh on every call, not the value captured when the transport was built", async () => {
+    let currentLanguage = "en";
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(baseEmbedOptions({ getResponseLanguage: () => currentLanguage })),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) {
+      throw new Error("DefaultChatTransport was never constructed by useEmbedDigiChat");
+    }
+
+    const first = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(first.headers).has("X-Digi-Language")).toBe(false);
+
+    // Simulate picking a new language in the dropdown AFTER mount, with no
+    // remount/unmount in between — exactly the interaction the Critical
+    // finding says was broken.
+    currentLanguage = "de";
+    const second = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(second.headers).get("X-Digi-Language")).toBe("de");
+
+    unmount();
   });
 });
