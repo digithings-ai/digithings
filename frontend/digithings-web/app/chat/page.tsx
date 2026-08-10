@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { DtNav } from "@/components/DtNav";
 import { ChatEmbedShell } from "@/components/ChatEmbedShell";
+import { DigiChatSession } from "@/components/DigiChatSession";
 import { resolveDigichatEmbedOrigin } from "@/lib/security-headers.mjs";
 
 export const metadata: Metadata = {
@@ -14,24 +15,22 @@ export const metadata: Metadata = {
 const EMBED_ORIGIN = resolveDigichatEmbedOrigin() ?? "";
 
 /**
- * /chat — DtNav + iframe to digichat /embed (digigraph backend).
- * Set NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN to the digichat Node public URL
- * (Cloudflare Tunnel). See infra/digichat-digithings/README.md.
+ * /chat — prefer digichat Node iframe when `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` is
+ * set (dogfood cutover: digichat → digigraph). Until Tunnel + Pages env are
+ * live, fall back to DigiChatSession + Pages Function `/api/chat` so the
+ * public site stays usable (#2068).
+ *
+ * See `infra/digichat-digithings/README.md`.
  */
 export default function ChatPage() {
   return (
     <>
       <DtNav />
-      <main>
+      <main className={EMBED_ORIGIN ? undefined : "dc-page"}>
         {EMBED_ORIGIN ? (
           <ChatEmbedShell embedOrigin={EMBED_ORIGIN} />
         ) : (
-          <p className="dc-page" style={{ padding: "2rem", maxWidth: "36rem" }}>
-            digichat is not configured for this build. Set{" "}
-            <code>NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN</code> to the digichat Node
-            URL (digigraph stack). See{" "}
-            <code>infra/digichat-digithings/README.md</code>.
-          </p>
+          <DigiChatSession />
         )}
       </main>
     </>
