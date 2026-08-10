@@ -24,6 +24,7 @@ Plan questionnaire: Stage 8 of
 
 | Date | Area | Observation | Next action |
 |---|---|---|---|
+| 2026-08-10 | CI | Added `docs-onboard-digithings.yml`: push/`workflow_dispatch` on `main` → dry-run + vault→Supabase apply (`CORE_SUPABASE_*`, `production` env). digisearch dual-sink still operator/legacy (no remote FS ingest from Actions) | Confirm first green apply after promote to `main`; wire digisearch when remote ingest exists |
 | 2026-08-10 | Pipeline | Stage 7 onboard on `develop` (`d6b821a2`): dry-run 71 docs (0 crawl); apply 73 vault notes @ `/tmp/digithings-onboard-vault`; digisearch ~68–73 docs → `digithings_docs` (Compose path prefix `/app/digisearch/onboard`; rate limit 30/min) | Set `DIGISEARCH_INDEX=digithings_docs` on digigraph for chat smoke; throttle ingest in runbook |
 | 2026-08-10 | Supabase | `sync_onboard_vault.py --dry-run` parsed 73 notes; **apply skipped** — `CORE_SUPABASE_URL` + `CORE_SUPABASE_SERVICE_KEY` unset in env | Operator apply after secrets set |
 | 2026-08-10 | Supabase titles | Normalized 15 legacy root `architecture_notes` titles (`DigiGraph` → `digigraph`, `DigiThings — Ecosystem Overview` → `digithings — Ecosystem Overview`, …) via core Supabase MCP; slugs unchanged (already lowercase). `clients/digithings/%` onboard rows were already lowercase. |

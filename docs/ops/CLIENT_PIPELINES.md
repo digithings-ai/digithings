@@ -7,6 +7,7 @@ manifests under `docs/projects/<client>/` (or private `projects/`). These are
 | Pipeline | Parent script | Purpose | Sinks |
 |---|---|---|---|
 | **Client docs onboard** | `scripts/docs_onboard/run_onboard.py` | Website URL → docs-focused crawl → PDFs → store | digivault and/or digisearch |
+| **digithings.ai corpus CI** | `.github/workflows/docs-onboard-digithings.yml` | On `main` doc changes: onboard → `sync_onboard_vault.py` | Supabase `architecture_notes` (vault); digisearch operator-side |
 | *(later)* digiquant research ingest | TBD | Separate entry for quant research corpora | digisearch / vault as designed |
 
 ## Module roles
