@@ -72,6 +72,43 @@ describe("parseEmbedTenants", () => {
     expect(reg.get("example.com")?.attribution).toBe(false);
   });
 
+  it("parses digigraph corpus routing fields for OCC-style tenants", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: {
+            type: "digigraph",
+            digisearchIndex: "occ_help",
+            vaultPathPrefix: "/clients/online-compliance-center/",
+          },
+          gateMode: "ungated",
+          token: "occ-tok",
+        },
+      })
+    );
+    expect(reg.get("occ.digithings.ai")?.backend).toEqual({
+      type: "digigraph",
+      digisearchIndex: "occ_help",
+      vaultPathPrefix: "clients/online-compliance-center",
+    });
+  });
+
+  it("rejects empty digigraph digisearchIndex", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "occ.digithings.ai": {
+            slug: "occ",
+            backend: { type: "digigraph", digisearchIndex: "  " },
+            gateMode: "ungated",
+            token: "tok",
+          },
+        })
+      )
+    ).toThrow(/digisearchIndex/);
+  });
+
   it("throws on malformed JSON", () => {
     expect(() => parseEmbedTenants("{nope")).toThrow(/not valid JSON/);
   });

@@ -1,7 +1,12 @@
-# Online Compliance Center (OCC) — draft docs_onboard manifest.
-# INGEST HOLD: do not run run_onboard.py / search ingest until (1) digithings
-# dogfood sign-off on the pipeline and (2) explicit client crawl approval.
-# See SCOPE.md for reconnaissance, gaps, and dry-run steps.
+# Online Compliance Center (OCC) — docs_onboard manifest (client #1).
+#
+# INGEST HOLD: do not run full apply (crawl + vault/search sinks) until explicit
+# sitaas / client crawl approval for help.online-compliance-center.com.
+# --dry-run is always allowed for local/demo validation (see GAPLOG.md).
+# Corpus is one-shot / static for the digithings.ai/chat/occ demo — re-run only
+# when help content changes. Dogfood (#2037) is merged; pipeline is approved.
+#
+# See SCOPE.md, README.md, and docs/superpowers/plans/2026-08-10-occ-client-chat.md.
 client: online-compliance-center
 seed_url: https://help.online-compliance-center.com/
 allowed_hosts:

@@ -174,6 +174,8 @@ pytest tests/dv/test_local_search.py tests/scripts/docs_onboard -m unit -v
 - Ops index: [`docs/ops/CLIENT_PIPELINES.md`](../ops/CLIENT_PIPELINES.md)
 - Plan: [`docs/superpowers/plans/2026-08-10-digithings-dogfood-cutover.md`](../superpowers/plans/2026-08-10-digithings-dogfood-cutover.md)
 - Client #0: [`docs/projects/digithings/`](../projects/digithings/)
+- Client #1 (OCC): [`docs/projects/online-compliance-center/`](../projects/online-compliance-center/)
+- OCC chat: [`docs/superpowers/plans/2026-08-10-occ-client-chat.md`](../superpowers/plans/2026-08-10-occ-client-chat.md)
 - Fit (picks 1–3): [`docs/architecture/digichat-self-host-picks-fit.md`](../architecture/digichat-self-host-picks-fit.md)
 - Install: [`docs/digichat/INSTALL.md`](INSTALL.md)
 - Release overlays: [`infra/digichat-release/README.md`](../../infra/digichat-release/README.md)

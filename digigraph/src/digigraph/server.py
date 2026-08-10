@@ -234,9 +234,12 @@ def healthz() -> dict[str, bool]:
 
 
 def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
+    from digigraph.corpus_routing import resolve_corpus_override
+
     bearer = getattr(http_request.state, "digi_bearer", None)
     auth = getattr(http_request.state, "digi_auth", None)
     updates: dict[str, str | None] = {"digi_bearer": bearer}
+    tenant_from_auth: str | None = None
     if auth is not None:
         if auth.subject:
             updates["digi_subject"] = auth.subject
@@ -244,10 +247,21 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
             updates["digi_trace_key_prefix"] = auth.key_prefix
         if auth.tenant_slug:
             updates["digi_trace_tenant"] = auth.tenant_slug
+            tenant_from_auth = auth.tenant_slug
         if auth.project_id:
             updates["digi_trace_project_id"] = auth.project_id
         if auth.jti:
             updates["digi_trace_jti"] = auth.jti
+    corpus = resolve_corpus_override(
+        headers=http_request.headers,
+        tenant_slug=tenant_from_auth,
+    )
+    if corpus.digisearch_index:
+        updates["digisearch_index"] = corpus.digisearch_index
+    if corpus.vault_path_prefix:
+        updates["vault_path_prefix"] = corpus.vault_path_prefix
+    if corpus.research_system_prompt:
+        updates["research_system_prompt_override"] = corpus.research_system_prompt
     return updates
 
 

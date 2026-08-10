@@ -128,12 +128,35 @@ class SupabaseStore:
         """Materialize a read-only :class:`Vault` from the table."""
         return Vault.from_sources(self.sources(), config=config)
 
-    def search(self, query: str, *, limit: int = 7) -> list[VaultSearchHit]:
-        """Full-text search via the ``search_architecture_notes`` RPC (ranked hits)."""
-        response = self._client.rpc(
-            self._search_rpc, {"query": query, "match_limit": limit}
-        ).execute()
-        return [VaultSearchHit.model_validate(row) for row in _rows(response)]
+    def search(
+        self, query: str, *, limit: int = 7, path_prefix: str | None = None
+    ) -> list[VaultSearchHit]:
+        """Full-text search via the ``search_architecture_notes`` RPC (ranked hits).
+
+        When ``path_prefix`` is set, call the 3-arg RPC when available; otherwise
+        oversample and filter client-side (pre-migration 068).
+        """
+        prefix = (path_prefix or "").strip().strip("/")
+        if not prefix:
+            response = self._client.rpc(
+                self._search_rpc, {"query": query, "match_limit": limit}
+            ).execute()
+            return [VaultSearchHit.model_validate(row) for row in _rows(response)][:limit]
+
+        try:
+            response = self._client.rpc(
+                self._search_rpc,
+                {"query": query, "match_limit": limit, "path_prefix": prefix},
+            ).execute()
+        except Exception:
+            response = self._client.rpc(
+                self._search_rpc,
+                {"query": query, "match_limit": min(20, max(limit * 5, limit))},
+            ).execute()
+        hits = [VaultSearchHit.model_validate(row) for row in _rows(response)]
+        return [h for h in hits if h.vault_path == prefix or h.vault_path.startswith(prefix + "/")][
+            :limit
+        ]
 
 
 def _first_env(*names: str) -> str:

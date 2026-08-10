@@ -422,7 +422,10 @@ anonymous request before any read/write — so no Postgres row can be created fo
 
 `DIGICHAT_EMBED_TENANTS` (JSON, keyed by hostname) declares embed tenants:
 per-host `slug`, `backend` (`digigraph` | `foundry` + https `projectEndpoint` +
-`agentName`), `gateMode` (`turn_limited` | `ungated` | `trial_form`), `theme`
+`agentName`; digigraph may optionally set `digisearchIndex` / `vaultPathPrefix`
+for per-tenant corpus isolation — forwarded as `X-Digi-Corpus-Index` /
+`X-Digi-Vault-Prefix` on `/api/chat`), `gateMode` (`turn_limited` | `ungated` |
+`trial_form`), `theme`
 (`dark` | `light`), optional `accent` hex pair, `activityDetail`
 (`off` | `labels` | `full`), optional UI flags `showByok` / `showStatusBar` /
 `layout` (`page` | `embed`) — independent of `gateMode` (never derive
@@ -504,12 +507,14 @@ must have `DIGIVAULT_URL` set so `digivault_search_notes` registers. Runbook:
 [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
 ADR: [`docs/adr/0018-digichat-path-routing.md`](../../docs/adr/0018-digichat-path-routing.md).
 
-**First-party digithings hosts.** Prod hostnames `digithings.ai` and
-`www.digithings.ai` (`src/lib/embed-first-party.ts`) may use digichat `/embed`
-without presenting `X-Embed-Token` when registered in `DIGICHAT_EMBED_TENANTS`.
-In `NODE_ENV=development` only, registered `localhost` / `127.0.0.1` / `[::1]`
-hosts get the same bypass for local dogfood. Customer embeds (e.g. DataTap) still
-require a matching token. Preview `*.pages.dev` hosts are **not** allowlisted.
+**First-party digithings hosts.** Prod hostnames `digithings.ai`,
+`www.digithings.ai`, and virtual `occ.digithings.ai` (`src/lib/embed-first-party.ts`)
+may use digichat `/embed` without presenting `X-Embed-Token` when registered in
+`DIGICHAT_EMBED_TENANTS`. In `NODE_ENV=development` only, registered `localhost` /
+`127.0.0.1` / `[::1]` hosts get the same bypass for local dogfood. Customer embeds
+(e.g. DataTap) still require a matching token. Preview `*.pages.dev` hosts are
+**not** allowlisted. `/chat/occ` iframes `?host=occ.digithings.ai` (no DNS) for
+OCC corpus isolation.
 
 **postMessage seed.** Embed emits `{ type: "digichat:ready" }` to the parent
 origin; digithings.ai posts `{ type: "digichat:seed", messages, pending, ts }`

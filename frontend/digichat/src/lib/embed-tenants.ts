@@ -14,9 +14,19 @@
 
 import type { ActivityDetail } from "@/lib/chat-activity";
 
-/** digichat Node backends: digigraph (digithings stack) or foundry (client Azure). */
+/**
+ * digichat Node backends: digigraph (digithings stack) or foundry (client Azure).
+ * Optional digigraph corpus fields isolate multi-tenant embeds on one digigraph
+ * (e.g. occ.digithings.ai → occ_help + clients/online-compliance-center).
+ */
 export type EmbedBackendConfig =
-  | { type: "digigraph" }
+  | {
+      type: "digigraph";
+      /** digisearch index_name forwarded as X-Digi-Corpus-Index */
+      digisearchIndex?: string;
+      /** digivault path prefix forwarded as X-Digi-Vault-Prefix */
+      vaultPathPrefix?: string;
+    }
   | { type: "foundry"; projectEndpoint: string; agentName: string };
 
 /**
@@ -128,7 +138,25 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   const backend = v.backend as Record<string, unknown> | undefined;
   let backendCfg: EmbedBackendConfig;
   if (backend?.type === "digigraph") {
-    backendCfg = { type: "digigraph" };
+    let digisearchIndex: string | undefined;
+    let vaultPathPrefix: string | undefined;
+    if (backend.digisearchIndex !== undefined) {
+      if (typeof backend.digisearchIndex !== "string" || !backend.digisearchIndex.trim()) {
+        throw new Error(`${ctx}: digigraph backend.digisearchIndex must be a non-empty string`);
+      }
+      digisearchIndex = backend.digisearchIndex.trim();
+    }
+    if (backend.vaultPathPrefix !== undefined) {
+      if (typeof backend.vaultPathPrefix !== "string" || !backend.vaultPathPrefix.trim()) {
+        throw new Error(`${ctx}: digigraph backend.vaultPathPrefix must be a non-empty string`);
+      }
+      vaultPathPrefix = backend.vaultPathPrefix.trim().replace(/^\/+|\/+$/g, "");
+    }
+    backendCfg = {
+      type: "digigraph",
+      ...(digisearchIndex ? { digisearchIndex } : {}),
+      ...(vaultPathPrefix ? { vaultPathPrefix } : {}),
+    };
   } else if (backend?.type === "foundry") {
     if (typeof backend.projectEndpoint !== "string" || !backend.projectEndpoint.trim()) {
       throw new Error(`${ctx}: foundry backend requires a "projectEndpoint"`);

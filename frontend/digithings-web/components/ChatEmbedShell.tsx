@@ -6,6 +6,12 @@ import { readAndClearHandoff } from "@/lib/chatHandoff";
 const READY = "digichat:ready";
 const SEED = "digichat:seed";
 
+/** Default embed host for digithings.ai/chat (client #0). */
+export const DEFAULT_CHAT_EMBED_HOST = "digithings.ai";
+
+/** Virtual first-party host for digithings.ai/chat/occ (client #1). */
+export const OCC_CHAT_EMBED_HOST = "occ.digithings.ai";
+
 function parseOrigin(raw: string): string {
   try {
     return new URL(raw).origin;
@@ -14,19 +20,28 @@ function parseOrigin(raw: string): string {
   }
 }
 
-function embedSrc(origin: string): string {
+function embedSrc(origin: string, embedHost: string): string {
   const base = origin.replace(/\/$/, "");
   const url = new URL(`${base}/embed`);
-  url.searchParams.set("host", "digithings.ai");
+  url.searchParams.set("host", embedHost);
   url.searchParams.set("layout", "page");
   return url.toString();
 }
 
+export type ChatEmbedShellProps = {
+  embedOrigin: string;
+  /** digichat embed registry host key (default digithings.ai). */
+  embedHost?: string;
+};
+
 /**
- * digithings.ai/chat shell — iframes digichat /embed (digigraph backend).
+ * digithings.ai chat shell — iframes digichat /embed (digigraph backend).
  * Requires NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN (tunnel hostname to digichat Node).
  */
-export function ChatEmbedShell({ embedOrigin }: { embedOrigin: string }) {
+export function ChatEmbedShell({
+  embedOrigin,
+  embedHost = DEFAULT_CHAT_EMBED_HOST,
+}: ChatEmbedShellProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [readyError, setReadyError] = useState<string | null>(null);
   const targetOrigin = useMemo(() => parseOrigin(embedOrigin), [embedOrigin]);
@@ -34,8 +49,8 @@ export function ChatEmbedShell({ embedOrigin }: { embedOrigin: string }) {
     ? null
     : "Invalid NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN";
   const src = useMemo(
-    () => (targetOrigin ? embedSrc(embedOrigin) : ""),
-    [embedOrigin, targetOrigin],
+    () => (targetOrigin ? embedSrc(embedOrigin, embedHost) : ""),
+    [embedOrigin, targetOrigin, embedHost],
   );
 
   useEffect(() => {

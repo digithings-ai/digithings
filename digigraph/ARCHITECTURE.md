@@ -754,6 +754,7 @@ digigraph:
 | `DIGI_CHECKPOINTER_POSTGRES_URI` | (empty) | Postgres connection string |
 | `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests |
 | `DIGISEARCH_INDEX` | `default` | Default vector index name |
+| `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt}` for multi-tenant corpus isolation (OCC). Headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` win when set. |
 | `DIGI_ENABLE_DEBUG_ENDPOINTS` | `0` | Enable `/test_llm` and `/v1/debug/*` |
 | `DIGI_ENABLE_THREAD_API` | `0` | Enable `/threads/*` and `/files/*` |
 | `DIGI_SUPERVISOR` | (empty) | Enable supervisor node: `1` / `true` |

@@ -224,6 +224,47 @@ describe("POST /api/chat", () => {
     expect(call?.headers?.["X-BYOK-Model"]).toBe("openai/gpt-4o-mini");
   });
 
+  it("forwards OCC corpus headers from digigraph embed backend config", async () => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "occ",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "occ",
+        gateMode: "ungated",
+        theme: "dark",
+        attribution: false,
+        token: "tok",
+        backend: {
+          type: "digigraph",
+          digisearchIndex: "occ_help",
+          vaultPathPrefix: "clients/online-compliance-center",
+        },
+        activityDetail: "full",
+      },
+    });
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://occ.digithings.ai",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "policy?" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Tenant"]).toBe("occ");
+    expect(call?.headers?.["X-Digi-Corpus-Index"]).toBe("occ_help");
+    expect(call?.headers?.["X-Digi-Vault-Prefix"]).toBe(
+      "clients/online-compliance-center"
+    );
+  });
+
   it("returns 400 when OpenRouter BYOK missing model", async () => {
     const res = await POST(
       new Request("http://localhost/api/chat", {
