@@ -3,17 +3,18 @@
 digithings marketing chat uses **digichat → digigraph → digillm + digivault hub**.
 digithings has **no Azure**. Do not use DataTap ACA for digithings.
 
-Canonical path:
+Canonical **production** path (no laptop dependency):
 
 ```text
-Browser digithings.ai/chat
-  → iframe digichat /embed (Cloudflare Tunnel → digichat Node)
-       → digigraph (DIGIGRAPH_INTERNAL_URL)
-            → digillm → LiteLLM
-            → digivault_hub → digivault :8004 (DIGIVAULT_URL)
+Browser digithings.ai/chat[/occ]
+  → iframe digichat /embed (Cloudflare Worker → digichat Container)
+       → digigraph https://graph.digithings.ai  (Profile A stack Container)
+       → digikey   https://key.digithings.ai    (same stack Container)
+            digigraph → loopback digisearch / digivault / LiteLLM
 ```
 
-See [`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md).
+See [`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md)
+and ADR-0018.
 
 **Client #0 dogfood:** corpus + cutover plan live under
 [`docs/projects/digithings/`](../../docs/projects/digithings/)
@@ -21,21 +22,23 @@ See [`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/d
 
 ## Client / release installs
 
-digithings’ Tunnel host is **this** operator path. Clients installing digichat
-themselves should use [`infra/digichat-release/`](../digichat-release/) and
-[`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) (Profile A or B).
+digithings’ production host is **Cloudflare Containers**. Clients installing
+digichat themselves should use [`infra/digichat-release/`](../digichat-release/)
+and [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) (Profile A or B).
 
 ## Hard constraints
 
 - digithings has **no Azure**.
 - DataTap digichat ACA is **client-only**.
 - Chat UI is **digithings.ai only** — do **not** add a digiquant.io `/chat` page.
-- **Preferred digichat host (Workers Paid):** Cloudflare Containers — see
+- **Production digichat:** Cloudflare Containers —
   [`frontend/digichat-cloudflare/README.md`](../../frontend/digichat-cloudflare/README.md).
-  One Container serves digithings + OCC (and future) tenants; website paths differ,
-  digichat process does not.
-- **Fallback (no Paid):** operator Compose + Cloudflare Tunnel
-  (`digichat.digithings.ai`) as below.
+  One Container serves digithings + OCC (and future) tenants.
+- **Production backends:** Cloudflare Containers Profile A stack —
+  [`frontend/digithings-stack-cloudflare/README.md`](../../frontend/digithings-stack-cloudflare/README.md)
+  (`graph.digithings.ai` / `key.digithings.ai`). **Do not** point production
+  digichat at Mac Docker or `*.trycloudflare.com` quick tunnels.
+- **Dev-only:** Mac Compose (+ optional quick tunnels) below.
 
 ## Auth (Option A)
 
@@ -48,52 +51,107 @@ DIGICHAT_REQUIRE_ROOT_AUTH=0   # default; `/` → `/embed`
 Public chat is the ungated embed iframe (`gateMode: ungated`). Do not enable
 `DIGICHAT_DEV_AUTH` in production.
 
-## Compose stack (operator host)
+## Production — Cloudflare Containers
 
-### Today — monorepo build (until Stage A)
+### digichat (BFF)
+
+See [`frontend/digichat-cloudflare/README.md`](../../frontend/digichat-cloudflare/README.md).
+
+1. Workers Paid on the digithings Cloudflare account.
+2. Deploy digichat Worker + Container; zone routes for `/embed*`, digichat APIs, `/_dtchat*`.
+3. Secrets: `AUTH_SECRET`, `DIGICHAT_EMBED_TENANTS`, `DIGIGRAPH_INTERNAL_URL`,
+   `DIGIKEY_URL`, `DIGIKEY_BFF_TOKEN` via `wrangler secret put` only.
+
+### Profile A stack (digigraph + digikey + …)
+
+See [`frontend/digithings-stack-cloudflare/README.md`](../../frontend/digithings-stack-cloudflare/README.md).
+
+**Human gate — infra/network:** `graph.digithings.ai` and `key.digithings.ai`
+are public hostnames (JWT/BFF still required). Review before merge/deploy.
+
+```bash
+cd frontend/digithings-stack-cloudflare
+npx wrangler secret put DIGIKEY_PRIVATE_KEY_PEM
+npx wrangler secret put DIGIKEY_BFF_TOKEN
+npx wrangler secret put GROQ_API_KEY
+npx wrangler deploy
+```
+
+Retarget digichat:
+
+```bash
+cd frontend/digichat-cloudflare
+printf '%s' 'https://graph.digithings.ai' | npx wrangler secret put DIGIGRAPH_INTERNAL_URL
+printf '%s' 'https://key.digithings.ai'   | npx wrangler secret put DIGIKEY_URL
+npx wrangler secret put DIGIKEY_BFF_TOKEN   # must match stack
+```
+
+Pages: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai` (same host).
+
+### OCC corpus
+
+Production `DIGICHAT_EMBED_TENANTS` must include OCC:
+
+```json
+"occ.digithings.ai": {
+  "slug": "occ",
+  "backend": {
+    "type": "digigraph",
+    "digisearchIndex": "occ_help",
+    "vaultPathPrefix": "clients/online-compliance-center"
+  }
+}
+```
+
+digichat forwards `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix`; digigraph
+`corpus_routing` applies them to digisearch / digivault tools.
+
+Stack entrypoint seeds a **minimal** `occ_help` FAQ + vault notes. Full crawl of
+help.online-compliance-center.com remains **HOLD** until approval
+([GAPLOG](../../docs/projects/online-compliance-center/GAPLOG.md)).
+
+## Dev-only — Mac Compose (+ optional tunnels)
+
+Use this for local iteration. **Not** a production dependency.
+
+### Monorepo build
 
 From repo root (adjust `.env`):
 
 ```bash
-# Required for digithings digigraph chat (root .env)
 export DIGIVAULT_URL=http://digivault:8004
 # digikey BFF token + LLM keys as in root .env.example
-# Newer LiteLLM images read REDIS_URL; either leave it unset *and* avoid
-# passing an empty string, or enable cache Redis:
-#   REDIS_URL=redis://redis:6379
-#   --profile litellm-cache
 
 docker compose --profile digichat --profile digivault --profile litellm-cache up -d --build
-# digichat CSP: set runtime DIGICHAT_EMBED_HOSTS (and DIGICHAT_EMBED_TENANTS) on the digichat service
-# Auth: DIGICHAT_REQUIRE_ROOT_AUTH=0
 ```
 
 **Local smoke (no Tunnel):** open `http://127.0.0.1:3005/embed?host=digithings.ai` or
-`http://127.0.0.1:3005/embed?host=occ.digithings.ai` (OCC tenant) or
-`POST /api/chat` with `X-Embed-Host: https://digithings.ai`. That proves digichat → digigraph
-→ LiteLLM (+ digivault when tools run). Public `digithings.ai/chat` / `/chat/occ` still need Tunnel + Pages.
+`http://127.0.0.1:3005/embed?host=occ.digithings.ai` or
+`POST /api/chat` with `X-Embed-Host: https://digithings.ai`.
 
-### Profile A GHCR pulls — blocked on Stage A (human)
+### Quick tunnels (dev only — never production)
 
-After develop→main promotion and `Publish: service images` on `main`, migrate this
-host to stock GHCR pins:
+If you temporarily need the Cloudflare digichat Container to reach Mac
+digigraph/digikey during bring-up, `cloudflared tunnel --url http://127.0.0.1:8000`
+style quick tunnels may be used **locally only**. Production digichat secrets
+must point at `graph.digithings.ai` / `key.digithings.ai`, not `*.trycloudflare.com`.
+
+### Profile A GHCR pulls — local / client install
+
+After GHCR packages exist on `main`:
 
 ```bash
 cp infra/digichat-release/.env.profile-a.example infra/digichat-release/.env.profile-a
 # set AUTH_SECRET, DIGIKEY_BFF_TOKEN, DIGI_IMAGE_TAG, DIGICHAT_VERSION,
-# DIGICHAT_REQUIRE_ROOT_AUTH=0, DIGICHAT_EMBED_HOSTS / TENANTS (digithings.ai only)
+# DIGICHAT_REQUIRE_ROOT_AUTH=0, DIGICHAT_EMBED_HOSTS / TENANTS
 make digichat-profile-a-up
 ```
 
-Until GHCR packages exist, pulls 404 — keep monorepo build above. Record the
-`DIGI_IMAGE_TAG` pin in operator notes once Stage A verifies.
+### digisearch (dual-sink) on Compose
 
-### digisearch (dual-sink)
-
-Profile A compose does **not** start digisearch. For dogfood dual-sink smoke, run
-digisearch beside the stack (`make stack-local` digisearch or Compose profile) and
-point onboard `--digisearch-url` / digigraph `DIGISEARCH_URL` at it. See
-[`docs/projects/digithings/README.md`](../../docs/projects/digithings/README.md).
+Profile A compose does **not** start digisearch. For local dual-sink smoke, run
+digisearch beside the stack and point digigraph `DIGISEARCH_URL` at it. Production
+CF stack includes digisearch in-process.
 
 digichat runtime embed registry (never a Docker build-arg — tokens leak in layers):
 
@@ -103,26 +161,8 @@ export DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai,occ.digithings.ai
 export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","attribution":false,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}},"occ.digithings.ai":{"slug":"occ","gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","title":"OCC help assistant","welcome":"Ask about Online Compliance Center policies, procedures, and help articles.","attribution":false,"token":"<unused-for-first-party>","backend":{"type":"digigraph","digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}}'
 ```
 
-Set `DIGICHAT_EMBED_HOSTS` (and/or tenant host keys) at **runtime** so CSP `frame-ancestors` includes digithings.ai — no digichat image rebuild. **Do not** add digiquant.io to embed hosts for chat (crawl-only). OCC uses virtual host `occ.digithings.ai` (no DNS) for `/chat/occ` — see [`docs/projects/online-compliance-center/README.md`](../../docs/projects/online-compliance-center/README.md).
-
-## Cloudflare Containers (preferred)
-
-See [`frontend/digichat-cloudflare/README.md`](../../frontend/digichat-cloudflare/README.md).
-
-1. Upgrade digithings Cloudflare account to **Workers Paid**.
-2. Deploy Worker + digichat Container; enable zone routes for `/embed*`, digichat
-   APIs, `/_dtchat*`.
-3. Keep digigraph / digikey / LiteLLM / digivault on Profile A (or Compose);
-   set Container secrets `DIGIGRAPH_INTERNAL_URL`, `DIGIKEY_*`.
-4. Pages: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai` (same host).
-
-## Cloudflare Tunnel (fallback without Paid)
-
-1. Install `cloudflared` on the host that runs digichat (port 3005).
-2. Create a tunnel; route public hostname e.g. `digichat.digithings.ai` → `http://127.0.0.1:3005`.
-3. Pages: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digichat.digithings.ai`.
-4. digithings-web `npm prebuild` writes `public/_headers` `frame-src` from that
-   same env (see `lib/security-headers.mjs`).
+OCC uses virtual host `occ.digithings.ai` (no DNS) for `/chat/occ` — see
+[`docs/projects/online-compliance-center/README.md`](../../docs/projects/online-compliance-center/README.md).
 
 ## digithings.ai `/chat` and `/chat/occ`
 
@@ -131,22 +171,19 @@ Static Pages shells (`DtNav` + iframe) load
 `…?host=occ.digithings.ai` — **one** digichat Node/Container, two tenants.
 The Pages Function OpenRouter digivault loop is **retired**.
 
-## CSP verification (Stage 6)
+## CSP verification
 
 | Side | Header | digithings.ai |
 |---|---|---|
 | Pages parent | `frame-src` ← `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` | digithings-web prebuild |
-| digichat | `frame-ancestors` ← `DIGICHAT_EMBED_HOSTS` / tenants | digithings.ai, www only |
-
-No digiquant-web `/chat` route. Future iframe parent on digiquant.io is a separate
-human request.
+| digichat | `frame-ancestors` ← `DIGICHAT_EMBED_HOSTS` / tenants | digithings.ai, www, occ.digithings.ai |
 
 ## Smoke
 
-1. Open https://digithings.ai/chat — no `/login` wall
-2. Ask a vault-grounded question (e.g. what digigraph orchestrates)
-3. Expect digichat activity rows from digigraph tools (digivault search) and an
-   answer via digillm — not direct OpenRouter from Pages.
+1. `curl -sf https://graph.digithings.ai/healthz` and `https://key.digithings.ai/healthz`
+2. Open https://digithings.ai/chat — no `/login` wall
+3. Ask a vault-grounded question; expect digigraph tool activity
+4. OCC: https://digithings.ai/chat/occ — activity should show digisearch against `occ_help`
 
 ## Onboard corpus
 
@@ -157,19 +194,11 @@ python scripts/docs_onboard/run_onboard.py \
   --dry-run
 ```
 
-Apply + Supabase publish: see [`docs/projects/digithings/README.md`](../../docs/projects/digithings/README.md).
-
-Set digigraph dogfood project config:
-
-```bash
-export DIGI_PROJECT_CONFIG=config/dogfood-digiproject.yaml
-```
-
-The `research_system_prompt` steers “how is this chat built?” answers to
-`docs/projects/digithings/SHOWCASE.md` (onboarded into vault + `digithings_docs`).
+OCC full apply waits on crawl approval (GAPLOG). CF stack ships a static seed.
 
 ## Historical note
 
-Containers scaffold lives at `frontend/digichat-cloudflare/` again (#2073).
-Earlier deletion (#1949) assumed Workers Free forever; Paid unlocks same-hostname
-digichat without a separate Tunnel hostname.
+Containers scaffold lives at `frontend/digichat-cloudflare/` (#2073).
+Profile A stack Container: `frontend/digithings-stack-cloudflare/` (#2078).
+Earlier digichat-only deletion (#1949) assumed Workers Free forever; Paid unlocks
+same-hostname digichat without a separate Tunnel hostname.

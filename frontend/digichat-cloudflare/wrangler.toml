@@ -48,8 +48,11 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIKEY_BFF_TOKEN
 # Optional: DIGICHAT_DATABASE_URL if you enable Auth.js / conversations DB
 #
-# digigraph + LiteLLM + digikey + digivault are NOT inside this Container —
-# point DIGIGRAPH_INTERNAL_URL at your Profile A / stack-local / Tunnel URL.
+# digigraph + LiteLLM + digikey + digivault + digisearch are NOT inside this
+# Container — deploy frontend/digithings-stack-cloudflare and point secrets at:
+#   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
+#   DIGIKEY_URL=https://key.digithings.ai
+# Never use Mac Compose / *.trycloudflare.com quick tunnels in production.
 
 [vars]
 DIGICHAT_EMBED_ENABLED = "1"

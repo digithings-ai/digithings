@@ -32,11 +32,12 @@ Compare-and-gap after wiring digithings.ai/chat/occ. Digi names lowercase.
 
 ## Prod cutover still needed
 
-- Lift ingest hold after crawl approval; run one-shot onboard + `sync_onboard_vault.py`
-- Operator env: add `occ.digithings.ai` to `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS`
+- Lift ingest hold after crawl approval; run one-shot onboard + `sync_onboard_vault.py` against the **Cloudflare Profile A stack** digisearch/vault (not Mac-only)
+- ~~Operator env: add `occ.digithings.ai` to `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS`~~ — verified on digichat Container (tenant-config returns `slug: occ`)
 - Cloudflare Pages deploy of digithings-web including `/chat/occ`
-- Apply digivault Supabase migration for `path_prefix` on `search_architecture_notes` (or rely on oversample+filter until applied)
+- Apply digivault Supabase migration for `path_prefix` on `search_architecture_notes` (or rely on oversample+filter / local vault seed until applied)
 - Optional: `DIGI_TENANT_CORPUS_MAP` on digigraph for defense in depth
+- Static `occ_help` seed ships in `frontend/digithings-stack-cloudflare/container/seed/` until crawl approval
 
 ## Dry-run log
 

@@ -1,0 +1,68 @@
+# Profile A stack image for digithings Cloudflare Containers.
+# Build context: monorepo root.
+# Runs digikey + digigraph + digisearch + digivault + LiteLLM (+ redis) under supervisord.
+# Edge ports: digigraph :8000, digikey :8005. Other services are loopback-only.
+#
+# HUMAN GATE — infra/network: public graph/key hostnames; secrets via wrangler only.
+
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl \
+      supervisor \
+      redis-server \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN pip install --upgrade pip && pip install uv
+
+# Shared libs
+COPY digibase/pyproject.toml digibase/README.md ./digibase/
+COPY digibase/src ./digibase/src
+RUN uv pip install --system -e "./digibase"
+
+COPY digikey/pyproject.toml digikey/README.md ./digikey/
+COPY digikey/src ./digikey/src
+RUN uv pip install --system -e "./digikey"
+
+COPY digismith/pyproject.toml digismith/ARCHITECTURE.md ./digismith/
+COPY digismith/src ./digismith/src
+RUN uv pip install --system -e "./digismith[langsmith]"
+
+COPY digillm/pyproject.toml digillm/ARCHITECTURE.md ./digillm/
+COPY digillm/src ./digillm/src
+RUN uv pip install --system -e "./digillm"
+
+COPY digigraph/pyproject.toml ./digigraph/
+COPY digigraph/src ./digigraph/src
+RUN uv pip install --system -e "./digigraph"
+
+COPY digisearch/pyproject.toml digisearch/ARCHITECTURE.md ./digisearch/
+COPY digisearch/src ./digisearch/src
+COPY digisearch/seeds ./digisearch/seeds
+RUN uv pip install --system -e "./digisearch[server,ingestion,chroma]"
+
+COPY digivault/pyproject.toml digivault/ARCHITECTURE.md ./digivault/
+COPY digivault/src ./digivault/src
+RUN uv pip install --system -e "./digivault[service]"
+
+# LiteLLM proxy (berriai image not used — keep one process tree)
+RUN uv pip install --system "litellm[proxy]"
+
+# Profile A LiteLLM + digigraph config
+COPY infra/digichat-release/config /app/config
+COPY frontend/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
+     /etc/supervisor/conf.d/digithings.conf
+COPY frontend/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
+COPY frontend/digithings-stack-cloudflare/container/seed /seed
+RUN chmod +x /entrypoint.sh \
+    && mkdir -p /data/chroma /data/vault /data/digikey /var/log/supervisor
+
+EXPOSE 8000 8005
+ENTRYPOINT ["/entrypoint.sh"]

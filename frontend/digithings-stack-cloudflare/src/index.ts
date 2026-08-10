@@ -1,0 +1,105 @@
+/**
+ * digithings Profile A stack — Worker fronting one Cloudflare Container.
+ *
+ * Hostnames:
+ *   graph.digithings.ai → digigraph :8000
+ *   key.digithings.ai   → digikey   :8005
+ *
+ * digisearch / digivault / LiteLLM are loopback-only inside the Container.
+ * digichat Container calls these public URLs via DIGIGRAPH_INTERNAL_URL / DIGIKEY_URL.
+ */
+import { Container, getContainer, switchPort } from "@cloudflare/containers";
+import { env as workerEnvBinding } from "cloudflare:workers";
+import {
+  DIGIGRAPH_PORT,
+  DIGIKEY_PORT,
+  SHARED_STACK_CONTAINER_ID,
+  portForHostname,
+} from "./ports";
+
+/** Wrangler injects vars/secrets; cast until `wrangler types` is generated in CI. */
+const env = workerEnvBinding as unknown as Env;
+
+export class DigiStackContainer extends Container {
+  defaultPort = DIGIGRAPH_PORT;
+  /** Both edge ports must be listening before we serve traffic. */
+  requiredPorts = [DIGIGRAPH_PORT, DIGIKEY_PORT];
+  /** Keep warm — multi-process cold start is expensive. */
+  sleepAfter = "2h";
+
+  /**
+   * Runtime env for supervisord processes. Secrets from `wrangler secret put`;
+   * plain vars from wrangler.toml `[vars]`.
+   */
+  envVars = {
+    DIGIKEY_ISSUER: env.DIGIKEY_ISSUER ?? "https://key.digithings.ai",
+    DIGIKEY_AUDIENCE: env.DIGIKEY_AUDIENCE ?? "digi-ecosystem",
+    DIGIKEY_ALLOW_EPHEMERAL_KEY: env.DIGIKEY_ALLOW_EPHEMERAL_KEY ?? "0",
+    DIGIKEY_ALLOW_DEV_GLOBAL: env.DIGIKEY_ALLOW_DEV_GLOBAL ?? "0",
+    DIGIKEY_BFF_TOKEN: env.DIGIKEY_BFF_TOKEN ?? "",
+    DIGIKEY_PRIVATE_KEY_PEM: env.DIGIKEY_PRIVATE_KEY_PEM ?? "",
+    DIGIKEY_ADMIN_TOKEN: env.DIGIKEY_ADMIN_TOKEN ?? "",
+    DIGIKEY_DATABASE_URL:
+      env.DIGIKEY_DATABASE_URL ?? "sqlite:////data/digikey.db",
+    DIGIKEY_JWKS_URL: "http://127.0.0.1:8005/.well-known/jwks.json",
+    DIGIVAULT_URL: env.DIGIVAULT_URL ?? "http://127.0.0.1:8004",
+    DIGISEARCH_URL: env.DIGISEARCH_URL ?? "http://127.0.0.1:8002",
+    DIGIQUANT_URL: env.DIGIQUANT_URL ?? "",
+    DIGISMITH_URL: env.DIGISMITH_URL ?? "",
+    OPENAI_API_BASE: env.OPENAI_API_BASE ?? "http://127.0.0.1:4000/v1",
+    DIGI_LLM_MODE: env.DIGI_LLM_MODE ?? "test",
+    CHROMA_PATH: env.CHROMA_PATH ?? "/data/chroma",
+    DIGIVAULT_ROOT: env.DIGIVAULT_ROOT ?? "/data/vault",
+    DIGISEARCH_INDEX: env.DIGISEARCH_INDEX ?? "digithings_docs",
+    DIGI_TENANT_CORPUS_MAP:
+      env.DIGI_TENANT_CORPUS_MAP ??
+      '{"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}',
+    GROQ_API_KEY: env.GROQ_API_KEY ?? "",
+    OPENROUTER_API_KEY: env.OPENROUTER_API_KEY ?? "",
+    OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
+    LITELLM_PROXY_API_KEY: env.LITELLM_PROXY_API_KEY ?? "",
+    LITELLM_MASTER_KEY: env.LITELLM_MASTER_KEY ?? "",
+  };
+}
+
+export interface Env {
+  STACK: DurableObjectNamespace<DigiStackContainer>;
+  DIGIKEY_ISSUER?: string;
+  DIGIKEY_AUDIENCE?: string;
+  DIGIKEY_ALLOW_EPHEMERAL_KEY?: string;
+  DIGIKEY_ALLOW_DEV_GLOBAL?: string;
+  DIGIKEY_BFF_TOKEN?: string;
+  DIGIKEY_PRIVATE_KEY_PEM?: string;
+  DIGIKEY_ADMIN_TOKEN?: string;
+  DIGIKEY_DATABASE_URL?: string;
+  DIGIVAULT_URL?: string;
+  DIGISEARCH_URL?: string;
+  DIGIQUANT_URL?: string;
+  DIGISMITH_URL?: string;
+  OPENAI_API_BASE?: string;
+  DIGI_LLM_MODE?: string;
+  CHROMA_PATH?: string;
+  DIGIVAULT_ROOT?: string;
+  DIGISEARCH_INDEX?: string;
+  DIGI_TENANT_CORPUS_MAP?: string;
+  GROQ_API_KEY?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENAI_API_KEY?: string;
+  LITELLM_PROXY_API_KEY?: string;
+  LITELLM_MASTER_KEY?: string;
+}
+
+export default {
+  async fetch(request: Request, workerEnv: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const port = portForHostname(url.hostname);
+    if (port === null) {
+      return new Response(
+        "digithings-stack: unknown host. Use graph.digithings.ai or key.digithings.ai.",
+        { status: 404 },
+      );
+    }
+    const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+    return container.fetch(switchPort(request, port));
+  },
+};

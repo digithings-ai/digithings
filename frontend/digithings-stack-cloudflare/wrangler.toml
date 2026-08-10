@@ -1,0 +1,72 @@
+# digithings Profile A stack on Cloudflare Containers (Workers Paid).
+# One multi-process Container: digikey + digigraph + digisearch + digivault + LiteLLM.
+# Public hostnames (auth still required on APIs):
+#   graph.digithings.ai → digigraph :8000
+#   key.digithings.ai   → digikey   :8005
+# digisearch / digivault / LiteLLM stay loopback-only inside the Container.
+#
+# HUMAN GATE — infra/network: these hostnames expose digigraph + digikey to the
+# public internet (JWT/BFF still required). Secrets via `wrangler secret put` only.
+name = "digithings-stack"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Custom domains — enable after first successful Container application create.
+# Until then, use the workers.dev URL and retarget digichat secrets to it
+# (or add Domains in Dashboard).
+# [[routes]]
+# pattern = "graph.digithings.ai"
+# zone_name = "digithings.ai"
+# custom_domain = true
+#
+# [[routes]]
+# pattern = "key.digithings.ai"
+# zone_name = "digithings.ai"
+# custom_domain = true
+
+[[containers]]
+class_name = "DigiStackContainer"
+# Build context is monorepo root (two levels up from this package).
+image = "../../Dockerfile.digithings-stack-cloudflare"
+max_instances = 2
+# Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
+instance_type = "standard-2"
+
+[[durable_objects.bindings]]
+name = "STACK"
+class_name = "DigiStackContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DigiStackContainer"]
+
+# Secrets (wrangler secret put) — never commit values:
+#   DIGIKEY_BFF_TOKEN
+#   DIGIKEY_PRIVATE_KEY_PEM   # stable RS256; do not use ephemeral in prod
+#   DIGIKEY_ADMIN_TOKEN       # optional; for key issue / ops
+#   GROQ_API_KEY / OPENROUTER_API_KEY / OPENAI_API_KEY  (as needed by LiteLLM)
+#   LITELLM_PROXY_API_KEY     # optional shared proxy key
+#
+# After deploy, retarget digichat Worker secrets:
+#   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
+#   DIGIKEY_URL=https://key.digithings.ai
+#   DIGIKEY_BFF_TOKEN=<same as stack>
+
+[vars]
+DIGIKEY_ISSUER = "https://key.digithings.ai"
+DIGIKEY_AUDIENCE = "digi-ecosystem"
+DIGIKEY_ALLOW_EPHEMERAL_KEY = "0"
+DIGIKEY_ALLOW_DEV_GLOBAL = "0"
+DIGIVAULT_URL = "http://127.0.0.1:8004"
+DIGISEARCH_URL = "http://127.0.0.1:8002"
+DIGIQUANT_URL = ""
+DIGISMITH_URL = ""
+OPENAI_API_BASE = "http://127.0.0.1:4000/v1"
+DIGI_LLM_MODE = "test"
+CHROMA_PATH = "/data/chroma"
+DIGIVAULT_ROOT = "/data/vault"
+DIGIKEY_DATABASE_URL = "sqlite:////data/digikey.db"
+DIGISEARCH_INDEX = "digithings_docs"
+# Defense-in-depth corpus map (headers from digichat still win).
+DIGI_TENANT_CORPUS_MAP = "{\"occ\":{\"digisearchIndex\":\"occ_help\",\"vaultPathPrefix\":\"clients/online-compliance-center\"}}"
