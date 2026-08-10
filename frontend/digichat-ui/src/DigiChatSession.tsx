@@ -17,6 +17,8 @@ export function DigiChatSession({
   suggestions = [],
   placeholder,
   showByok,
+  /** When false, error rows omit the inline BYOK link (ungated dogfood / infra errors). */
+  showByokOnError = true,
   showStatusBar = false,
   branding,
   ariaLabel = "digichat",
@@ -256,7 +258,7 @@ export function DigiChatSession({
         {error ? (
           <p className="dtc-error" role="alert">
             {error}
-            {showByok && !providerIsSet ? (
+            {showByok && !providerIsSet && showByokOnError ? (
               <>
                 {" "}
                 <button type="button" className="dc-inline-link" onClick={handleOpenSettings}>

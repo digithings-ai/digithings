@@ -72,7 +72,7 @@ const ACCENTS: readonly Accent[] = ["digithings", "digiquant", "digichat"];
 const ACCENT_CSS = `
 .accent-digithings { --accent: #7c3aed; --accent-foreground: #f5f3ff; }
 .accent-digiquant  { --accent: #10b981; --accent-foreground: #ecfdf5; }
-.accent-digichat   { --accent: #1f1f1f; --accent-foreground: #e6e6e6; }
+.accent-digichat   { --accent: var(--accent-digichat, #e2708a); --accent-foreground: var(--on-accent, #04201c); }
 `;
 
 const DEFAULT_WELCOME =
@@ -162,9 +162,8 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
     urlColors.accent ?? tenantCfg.accent?.color,
     urlColors.accentForeground ?? tenantCfg.accent?.foreground,
   );
-  // When a brand hex is active, drop the named `.accent-*` class — ACCENT_CSS
-  // paints `.accent-digichat { --accent: #1f1f1f }`, which is exactly the
-  // wrong color observers saw when the inline style failed to attach.
+  // When a brand hex is active, drop the named `.accent-*` class so the inline
+  // style is the sole --accent source (DataTap terracotta regression).
   const brandAccentActive = accentStyle != null;
 
   return (
@@ -617,12 +616,23 @@ function EmbedChat({
     </p>
   ) : null;
 
+  const showByokOnError =
+    !trialLocked &&
+    shouldSuggestByokOnEmbedError({
+      llmAccess,
+      showByok,
+      gateMode: tenantCfg.gateMode,
+      errorCode: parseEmbedChatError(chat.rawError)?.code,
+      errorMessage: chat.error,
+    });
+
   return (
     <DigiChatSession
       welcomeIntro={welcomeIntro}
       suggestions={suggestions}
       placeholder={placeholder}
       showByok={showByok}
+      showByokOnError={showByokOnError}
       showStatusBar={uiFlags.showStatusBar}
       layout={uiFlags.layout}
       chat={{

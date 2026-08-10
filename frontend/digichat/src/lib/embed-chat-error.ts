@@ -1,10 +1,18 @@
-import { LEGACY_EMBED_DISABLED_MESSAGE } from "@/lib/embed-legacy-gate";
-
 /**
  * Map `/api/chat` failures to embed-friendly copy (REM-010) and BYOK suggestion policy.
  */
 
+import { LEGACY_EMBED_DISABLED_MESSAGE } from "@/lib/embed-legacy-gate";
 import type { EmbedLlmAccess } from "@/lib/embed-tenants";
+
+const NETWORK_ERROR_RE =
+  /\b(fetch failed|failed to fetch|networkerror|network error|econnrefused)\b/i;
+
+const UPSTREAM_ERROR_CODES = new Set([
+  "upstream_auth",
+  "upstream_auth_failed",
+  "service_unavailable",
+]);
 
 /** Stable error codes digichat / digigraph may return on the embed chat path. */
 export type EmbedChatErrorCode =
@@ -62,6 +70,20 @@ export function isFreeQuotaOrRateLimitError(code: string | undefined): boolean {
   );
 }
 
+function isInfraEmbedFailure(errorCode?: string, errorMessage?: string | null): boolean {
+  if (errorCode && UPSTREAM_ERROR_CODES.has(errorCode)) return true;
+  if (!errorMessage) return false;
+  const lower = errorMessage.toLowerCase();
+  if (NETWORK_ERROR_RE.test(lower)) return true;
+  if (lower.includes("digigraph") || lower.includes("digikey") || lower.includes("upstream")) {
+    return true;
+  }
+  if (lower.includes("make stack-local") || lower.includes("make digichat-dev")) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Whether embed should open / suggest the in-chat BYOK sequence for this error.
  *
@@ -69,16 +91,20 @@ export function isFreeQuotaOrRateLimitError(code: string | undefined): boolean {
  * look "unlimited" and a key prompt felt wrong). With `llmAccess: free_then_byok`,
  * ungated + free quota exhaustion **does** suggest BYOK so digithings.ai can
  * hand off when OpenRouter `:free` is spent.
+ *
+ * Network / upstream infra failures never suggest BYOK (stack is down, not quota).
  */
 export function shouldSuggestByokOnEmbedError(args: {
   llmAccess?: EmbedLlmAccess;
   showByok?: boolean;
   gateMode?: "turn_limited" | "ungated" | "trial_form";
   errorCode?: string;
+  errorMessage?: string | null;
 }): boolean {
-  const { llmAccess, showByok, gateMode, errorCode } = args;
+  const { llmAccess, showByok, gateMode, errorCode, errorMessage } = args;
   if (showByok === false) return false;
   if (llmAccess === "backend_only") return false;
+  if (isInfraEmbedFailure(errorCode, errorMessage)) return false;
 
   const quota = isFreeQuotaOrRateLimitError(errorCode);
 
@@ -107,7 +133,8 @@ export function formatEmbedChatError(error: Error | undefined): string | null {
       code === "trial_gate" ||
       code === "free_quota_exceeded" ||
       code === "rate_limit" ||
-      code === "rate_limit_exceeded")
+      code === "rate_limit_exceeded" ||
+      (code != null && UPSTREAM_ERROR_CODES.has(code)))
   ) {
     return message;
   }
@@ -117,11 +144,23 @@ export function formatEmbedChatError(error: Error | undefined): string | null {
   if (code === "rate_limit" || code === "rate_limit_exceeded") {
     return message ?? "Rate limited. Try again shortly, or continue with your own API key.";
   }
+  if (NETWORK_ERROR_RE.test(raw)) {
+    return (
+      "Could not reach digichat. Start the dev server (make digichat-dev) and " +
+      "backend stack (make stack-local), then retry."
+    );
+  }
   if (raw.includes("embed_disabled") || code === "embed_disabled") {
     return LEGACY_EMBED_DISABLED_MESSAGE;
   }
   if (raw.includes("unauthorized") || code === "unauthorized") {
     return "Sign in on digithings.ai/chat or add your own API key below.";
+  }
+  if (code && UPSTREAM_ERROR_CODES.has(code)) {
+    return (
+      message ??
+      "digichat could not reach digigraph or digikey. Check make stack-local, then retry."
+    );
   }
   return raw.length > 240 ? `${raw.slice(0, 240)}…` : raw;
 }
