@@ -472,6 +472,13 @@ function EmbedChat({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onMessage = (event: MessageEvent) => {
+      // Late digichat:ready after a ready_timeout still gets theme (and maybe seed)
+      // from ChatEmbedShell — clear the sticky terminal line once the parent is
+      // talking again on the first-party channel.
+      if (parseThemeMessage(event, firstPartyParentOrigins)) {
+        setHandshakeError(null);
+        return;
+      }
       const parentErr = parseParentErrorMessage(event, firstPartyParentOrigins);
       if (!parentErr) return;
       setHandshakeError(formatParentErrorLine(parentErr.code, parentErr.message));
@@ -486,6 +493,7 @@ function EmbedChat({
     const onMessage = (event: MessageEvent) => {
       const parsed = parseSeedMessage(event, firstPartyParentOrigins);
       if (!parsed) return;
+      setHandshakeError(null);
       applyEmbedSeed(
         { messages: parsed.messages, pending: parsed.pending },
         { seed: chat.seed, send: chat.send },
@@ -708,10 +716,15 @@ function EmbedChat({
         openSettings: showByok ? openSettings : undefined,
         send: wrappedSend,
         stop: chat.stop,
-        onRetry:
-          isTrialForm &&
-          !trialLocked &&
-          !!chat.error?.toLowerCase().includes("trial form")
+        onRetry: handshakeError
+          ? // regenerate() cannot repair a parent handshake/load failure; match
+            // the "refresh" copy and give the cold-start retry path teeth.
+            () => {
+              window.location.reload();
+            }
+          : isTrialForm &&
+              !trialLocked &&
+              !!chat.error?.toLowerCase().includes("trial form")
             ? reopenTrialForm
             : chat.onRetry,
       }}
