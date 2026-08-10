@@ -340,9 +340,12 @@ function EmbedChat({
     }
     handledQuotaErrorRef.current = errKey;
     void chat.stop?.();
-    setQuotaPrompt(true);
     pendingByokRetryRef.current = true;
-    setSettingsOpen(true);
+    // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
+    queueMicrotask(() => {
+      setQuotaPrompt(true);
+      setSettingsOpen(true);
+    });
   }, [chat.rawError, byokIsSet, llmAccess, showByok, tenantCfg.gateMode, chat]);
 
   // After BYOK save, transport rebuilds with X-BYOK-* — retry the failed turn

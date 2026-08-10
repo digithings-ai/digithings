@@ -69,11 +69,23 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _cmd_llm_settings(*, config: str | None, as_json: bool) -> int:
     """Print effective LLM settings; never include secret values."""
-    if config:
-        os.environ["DIGI_PROJECT_CONFIG"] = config
     from digigraph.model_config import effective_llm_settings
 
-    settings = effective_llm_settings()
+    # Scoped env override — must not leak DIGI_PROJECT_CONFIG into the process
+    # (pytest unit tests share one interpreter; a sticky env breaks later
+    # get_model_for_mode() assertions).
+    prev = os.environ.get("DIGI_PROJECT_CONFIG")
+    try:
+        if config:
+            os.environ["DIGI_PROJECT_CONFIG"] = config
+        settings = effective_llm_settings()
+    finally:
+        if config:
+            if prev is None:
+                os.environ.pop("DIGI_PROJECT_CONFIG", None)
+            else:
+                os.environ["DIGI_PROJECT_CONFIG"] = prev
+
     # Defense: never leak env values even if a future helper adds them.
     safe = {
         k: v

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -165,6 +166,7 @@ def test_cli_llm_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsy
         "    model: deepseek/deepseek-chat-v3:free\n"
     )
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-x")
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
     from digigraph.cli import main
 
     assert main(["llm-settings", "--config", str(cfg)]) == 0
@@ -173,3 +175,5 @@ def test_cli_llm_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsy
     assert "openrouter/deepseek/deepseek-chat-v3:free" in out
     assert "sk-or-x" not in out
     assert "api_key_present: True" in out
+    # CLI must not leave DIGI_PROJECT_CONFIG sticky for later tests in-process.
+    assert "DIGI_PROJECT_CONFIG" not in os.environ
