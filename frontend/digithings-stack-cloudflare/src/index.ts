@@ -60,6 +60,21 @@ export class DigiStackContainer extends Container {
     LITELLM_PROXY_API_KEY: env.LITELLM_PROXY_API_KEY ?? "",
     LITELLM_MASTER_KEY: env.LITELLM_MASTER_KEY ?? "",
   };
+
+  /**
+   * Wait longer than the default ~20s portReadyTimeout while supervisord
+   * brings up digikey + digigraph under Firecracker.
+   */
+  override async fetch(request: Request): Promise<Response> {
+    await this.startAndWaitForPorts({
+      ports: [DIGIGRAPH_PORT, DIGIKEY_PORT],
+      cancellationOptions: {
+        portReadyTimeoutMS: 180_000,
+        instanceGetTimeoutMS: 60_000,
+      },
+    });
+    return this.containerFetch(request);
+  }
 }
 
 export interface Env {
