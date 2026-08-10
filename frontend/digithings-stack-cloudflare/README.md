@@ -75,13 +75,39 @@ Confirm OCC corpus fields remain in `DIGICHAT_EMBED_TENANTS` (server-only;
 
 ## OCC `occ_help` seed
 
-Container entrypoint copies vault seed notes and, once per volume, runs
-`digisearch ingest --index occ_help /seed/occ_help` (static FAQ stubs).
+Container entrypoint (before supervisord):
+
+1. Copies vault notes into `/data/vault/clients/online-compliance-center/`
+   (does not overwrite operator edits).
+2. Once per volume (`/data/chroma/.occ_help_seeded`), runs
+   `digisearch ingest --index occ_help /seed/occ_help` into **Chroma**
+   (`CHROMA_PATH`). Seed runs *before* digisearch starts to avoid SQLite locks.
 
 **Full crawl** of help.online-compliance-center.com remains **HOLD** until
 explicit approval (`docs/projects/online-compliance-center/GAPLOG.md`). After
-approval, run docs_onboard apply against the production stack (SSH into the
-Container or an ops job that can reach digisearch ingest).
+approval, run docs_onboard apply against the production stack (ops job that can
+reach digisearch ingest with a JWT that has `digisearch:ingest`).
+
+### Manual re-seed (local image / ops)
+
+```bash
+# Inside the stack container (volume wipe or seed failure):
+rm -f /data/chroma/.occ_help_seeded
+CHROMA_PATH=/data/chroma DIGISEARCH_ALLOW_STUB=0 \
+  digisearch ingest --index occ_help /seed/occ_help
+# Prefer stopping digisearch briefly if the marker was already set while the
+# server held the Chroma PersistentClient open.
+```
+
+### digichat secrets (CF) — only when stack is reachable
+
+Do **not** point digichat at `*.trycloudflare.com` tunnels.
+
+Retarget only after `https://graph.digithings.ai/healthz` and
+`https://key.digithings.ai/healthz` return 200 (custom domains enabled in
+`wrangler.toml` / Dashboard). Until then, leave existing digichat secrets and
+treat OCC RAG against the CF bundle as **blocked** on network cutover — local
+Profile A bundle compose still validates corpus headers + seed.
 
 ## Smoke (backends only)
 

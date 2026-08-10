@@ -1,6 +1,7 @@
 #!/bin/sh
-# Profile A stack entrypoint — start supervisord immediately (ports must open).
-# OCC seed runs in background so digigraph/digikey bind without waiting on ingest.
+# Profile A stack entrypoint.
+# Seed OCC Chroma *before* supervisord so digisearch does not share a PersistentClient
+# with a second process (SQLite lock). digigraph/digikey then bind under supervisord.
 set -eu
 
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
@@ -47,30 +48,21 @@ if [ -d /seed/vault/clients/online-compliance-center ]; then
   done
 fi
 
-# Background OCC index seed — full help crawl remains HOLD (GAPLOG).
-seed_occ_help() {
-  if [ -f "$SEED_MARKER" ] || [ ! -d /seed/occ_help ]; then
-    return 0
-  fi
-  # Wait for digisearch HTTP (supervisord starts it) before CLI fallback.
-  i=0
-  while [ "$i" -lt 60 ]; do
-    if curl -sf "http://127.0.0.1:8002/healthz" >/dev/null 2>&1; then
-      break
-    fi
-    i=$((i + 1))
-    sleep 2
-  done
-  echo "digithings-stack: seeding occ_help index from /seed/occ_help"
+# Seed occ_help into Chroma once per volume, before digisearch opens the DB.
+# CLI routes through route_add_chunks → Chroma when CHROMA_PATH is set (not stub).
+# Full help.online-compliance-center.com crawl remains HOLD (GAPLOG).
+# First boot may download Chroma's default embedding model (can take a minute).
+if [ ! -f "$SEED_MARKER" ] && [ -d /seed/occ_help ]; then
+  echo "digithings-stack: seeding occ_help index from /seed/occ_help (pre-supervisord)"
   if CHROMA_PATH="$DATA_CHROMA" DIGISEARCH_ALLOW_STUB=0 \
     digisearch ingest --index occ_help /seed/occ_help; then
     touch "$SEED_MARKER"
     echo "digithings-stack: occ_help seed complete"
   else
-    echo "digithings-stack: WARN occ_help seed failed (continuing; re-run via SSH/ops)"
+    echo "digithings-stack: WARN occ_help seed failed (continuing boot)"
+    echo "digithings-stack: re-seed later: CHROMA_PATH=$DATA_CHROMA digisearch ingest --index occ_help /seed/occ_help"
+    echo "digithings-stack: or after crawl approval: docs_onboard apply (see docs/projects/online-compliance-center/)"
   fi
-}
-
-seed_occ_help &
+fi
 
 exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/digithings.conf

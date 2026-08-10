@@ -106,9 +106,13 @@ Production `DIGICHAT_EMBED_TENANTS` must include OCC:
 digichat forwards `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix`; digigraph
 `corpus_routing` applies them to digisearch / digivault tools.
 
-Stack entrypoint seeds a **minimal** `occ_help` FAQ + vault notes. Full crawl of
-help.online-compliance-center.com remains **HOLD** until approval
+Stack entrypoint seeds a **minimal** `occ_help` FAQ + vault notes into Chroma
+**before** supervisord starts digisearch (avoids multi-process SQLite locks).
+Full crawl of help.online-compliance-center.com remains **HOLD** until approval
 ([GAPLOG](../../docs/projects/online-compliance-center/GAPLOG.md)).
+
+**CF secret retarget:** only after `graph.digithings.ai` / `key.digithings.ai`
+healthz succeed — never Mac `*.trycloudflare.com` tunnels.
 
 ## Dev-only — Mac Compose (+ optional tunnels)
 

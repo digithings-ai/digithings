@@ -49,6 +49,7 @@ services:
       OPENAI_API_BASE: http://127.0.0.1:4000/v1
       DIGI_CONFIG_PATH: /app/config
       DIGI_LLM_MODE: ${DIGI_LLM_MODE:-test}
+      # From .env.profile-a-bundle (see .env.profile-a-bundle.example OCC map).
       DIGI_TENANT_CORPUS_MAP: ${DIGI_TENANT_CORPUS_MAP:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
