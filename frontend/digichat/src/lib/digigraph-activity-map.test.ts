@@ -115,6 +115,39 @@ describe("mapDigigraphTraceToSpans", () => {
     ]);
   });
 
+  it("suppresses bare graph_update LangGraph stream housekeeping", () => {
+    expect(
+      mapDigigraphTraceToSpans(
+        {
+          type: "graph_update",
+          payload: { update: { research: { keys: ["research_response"] } } },
+        },
+        "full"
+      )
+    ).toEqual([]);
+    expect(
+      mapDigigraphTraceToSpans({ type: "graph_update", payload: {} }, "full")
+    ).toEqual([]);
+  });
+
+  it("suppresses internal graph_step and span trace types", () => {
+    expect(
+      mapDigigraphTraceToSpans(
+        {
+          type: "graph_step",
+          payload: { node: "validate_strategy", status: "start" },
+        },
+        "full"
+      )
+    ).toEqual([]);
+    expect(
+      mapDigigraphTraceToSpans(
+        { type: "span", payload: { node: "supervisor", depth_remaining: 7 } },
+        "full"
+      )
+    ).toEqual([]);
+  });
+
   it("emits nothing at off", () => {
     expect(
       mapDigigraphTraceToSpans(
