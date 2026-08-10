@@ -75,7 +75,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 
 - **URL:** https://openrouter.ai
 - **Free tier:** Routes `:free` variants. 20 RPM; 50 RPD with <$10 balance, 1000 RPD after.
-- **Best `:free` models:** `openai/gpt-oss-20b:free` (reliable, near o3-mini on coding), `qwen/qwen3-coder:free` (480B MoE, 1M ctx, strong agentic/tool-calling). **`meta-llama/llama-3.3-70b-instruct:free` is sunsetting 2026-07-19 — do not use.** `deepseek/deepseek-chat-v3:free`, `deepseek/deepseek-r1:free`, `google/gemini-2.0-flash-exp:free`, `qwen/qwen3-235b-a22b:free` status is unconfirmed this cycle (one secondary source suggests they may no longer be free — verify before relying on them). Roster rotates.
+- **Best `:free` models:** `openai/gpt-oss-20b:free` (dogfood pin as of 2026-08-10; tools+answer verified), `google/gemma-4-31b-it:free` / `google/gemma-4-26b-a4b-it:free`. **`deepseek/deepseek-chat-v3:free` is gone (404).** `qwen/qwen3-coder:free` and older Llama/Gemini free slugs rotate off the catalog — verify before relying on them. Roster rotates.
 - **Paid:** Aggregator markup ~0–5% over upstream. BYO-key supported (5% surcharge).
 - **LiteLLM:** `openrouter/openai/gpt-oss-20b:free`. Env: `OPENROUTER_API_KEY`.
 - **Gotcha:** `:free` routes can be slow / queue-prone, and individual models are retired with little notice (see llama-3.3-70b-instruct:free above). Providers may log prompts — check each model card.

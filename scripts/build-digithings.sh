@@ -14,12 +14,8 @@ cd "$(dirname "$0")/.."
 echo "--- installing workspaces ---"
 npm install --prefer-offline --no-audit --no-fund --include=optional
 
-# Two bindings installed by hand, for two different reasons (same guard as
-# build-digiquant.sh).
-#
-# @tailwindcss/oxide is genuinely not in the root lock: oxide-darwin-arm64 4.2.2 is
-# its sole platform entry, so nothing else puts a Linux oxide binary in the tree and
-# @tailwindcss/postcss fails the build without one.
+# One binding installed by hand, and NOT because the lock is missing it (same guard
+# as build-digiquant.sh).
 #
 # @next/swc-linux-x64-gnu IS locked (16.2.4, every platform) and must match the
 # pinned next version exactly. Kept anyway, because here a missing @next/swc is not a
@@ -27,27 +23,22 @@ npm install --prefer-offline --no-audit --no-fund --include=optional
 # registry`, which crashes the yarn-less Cloudflare image. Cheap insurance on a live
 # deploy path; do not remove it to tidy the list.
 #
-# lightningcss-linux-x64-gnu was dropped (#1940 removed it from CI for the same
-# reason). The lock carries it twice — 1.33.0 hoisted to the root for vite's
-# lightningcss 1.33.0, and 1.32.0 nested under the root lightningcss 1.32.0 — so
-# installing 1.32.0 at the root overwrote the hoisted 1.33.0, leaving vite's 1.33.0
-# JS resolving to a 1.32.0 binary. Latent, not active: this script only runs
-# `next build` (Turbopack), never vitest, so nothing here loads vite's lightningcss
-# — unlike the CI lanes #1940 fixed. The Tailwind path is the one that matters here,
-# and it was always served correctly (@tailwindcss/node → lightningcss 1.32.0 →
-# its own nested 1.32.0 binding, which the pin never reached). The old npm/cli#4828
-# rationale never covered any of this: that issue is the npm *cache* dropping
-# optionals, and the install above already passes --include=optional against a lock
-# that carries them.
+# @tailwindcss/oxide-linux-x64-gnu used to be installed here too, because the lock
+# held oxide-darwin-arm64 alone. The lock now carries all eleven installable oxide
+# platform entries with their `libc` fields, so the install above resolves the right
+# one and @tailwindcss/postcss finds its binary.
 if [ "$(uname -s)" = "Linux" ]; then
-  echo "--- installing Linux native bindings (Next SWC + Tailwind/PostCSS) ---"
+  echo "--- installing Linux native binding (Next SWC) ---"
   npm install \
     @next/swc-linux-x64-gnu@16.2.4 \
-    @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
     --no-save --no-audit --no-fund
 fi
 
 echo "--- building digithings-web (Next.js static export) ---"
+# Same-hostname digichat Container by default; override for Tunnel staging.
+export NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN="${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN:-https://digithings.ai}"
+echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
+# prebuild rewrites public/_headers frame-src from NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN
 npm --workspace frontend/digithings-web run build
 
 # Assemble dist/ from the static export (includes /design/assets/og.png for the
@@ -56,6 +47,15 @@ rm -rf dist
 mkdir -p dist
 cp -r frontend/digithings-web/out/. dist/
 echo "digithings.ai" > dist/CNAME
+
+# CSP frame-src must match the /chat iframe origin (Bugbot / embed cutover).
+[ -f dist/_headers ] || { echo "ERROR: dist/_headers missing — CSP would not apply" >&2; exit 1; }
+FRAME_SRC="$(node --input-type=module -e '
+  import { frameSrcForCsp } from "./frontend/digithings-web/lib/security-headers.mjs";
+  process.stdout.write(frameSrcForCsp());
+')"
+grep -F "frame-src ${FRAME_SRC}" dist/_headers >/dev/null \
+  || { echo "ERROR: dist/_headers frame-src does not match NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN (${FRAME_SRC})" >&2; exit 1; }
 
 # Deploy build stamp (#1759). Cloudflare Pages serves a frozen deploy with a 200
 # and no `last-modified`, so without a stamp in the export every smoke probe
@@ -72,6 +72,12 @@ bash scripts/write-build-info.sh dist/build-info.json digithings.ai
 [ -f dist/index.html ] || { echo "ERROR: dist/index.html missing — build did not export" >&2; exit 1; }
 grep -q 'aria-label="digithings module manifest"' dist/index.html || { echo "ERROR: module manifest missing from home page" >&2; exit 1; }
 [ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
+
+# Public OpenAPI explorer (#2058): committed specs + Swagger UI assets must ship.
+[ -f dist/docs/api/index.html ] || { echo "ERROR: dist/docs/api/index.html missing — OpenAPI index not exported" >&2; exit 1; }
+[ -f dist/openapi/digigraph.json ] || { echo "ERROR: dist/openapi/digigraph.json missing — OpenAPI sync did not run" >&2; exit 1; }
+[ -f dist/swagger-ui/swagger-ui-bundle.js ] || { echo "ERROR: dist/swagger-ui/swagger-ui-bundle.js missing — swagger-ui-dist not vendored" >&2; exit 1; }
+
 
 # Cloudflare Pages Functions live at the PROJECT ROOT (this script's CWD = repo root),
 # NOT inside the static output dir. Mirror from frontend/digithings-web/functions/

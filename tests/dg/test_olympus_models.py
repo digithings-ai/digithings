@@ -611,19 +611,21 @@ def test_deliberation_slug_routes_to_research_pool(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.unit
-def test_get_model_for_mode_uses_tier_reasoning_in_openrouter_deploy(
+def test_get_model_for_mode_does_not_auto_override_when_openrouter_key_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Defense-in-depth: with OPENROUTER_API_KEY set, a dev fallback (ollama/*) must be
-    replaced by an OpenRouter-routable tier reasoning model, never leak to the default
-    OpenAI client (which 401s)."""
+    """Having OPENROUTER_API_KEY alone must not swap digigraph chat onto Olympus paid models."""
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+    monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
+    monkeypatch.setenv("DIGI_LLM_MODE", "test")
     monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    monkeypatch.setattr(model_config, "_model_modes_cache", None)
     resolved = get_model_for_mode()
-    assert resolved.startswith("openrouter/"), (
-        f"get_model_for_mode leaked non-OpenRouter fallback {resolved!r} in OpenRouter deploy"
-    )
+    # Dev/local defaults stay local unless agents.llm / DIGI_LLM_* pin OpenRouter.
+    assert not resolved.startswith("openrouter/") or ":free" in resolved
 
 
 @pytest.mark.unit
@@ -632,6 +634,9 @@ def test_get_model_for_mode_keeps_dev_default_without_openrouter_key(
 ) -> None:
     """Outside an OpenRouter deploy the legacy dev fallback is preserved (no behavior change)."""
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+    monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     resolved = get_model_for_mode()
     # model_modes.yaml defaults are dev models (ollama/*); not forced to OpenRouter here.

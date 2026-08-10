@@ -16,6 +16,34 @@ digithings — open-core agentic stack (quant finance, RAG, chat). Services: **d
 - Every change traces to a GitHub Issue: `task/<N>-slug` branch or `Fixes #N` in the PR body
 - Never touch live-trading paths without explicit human approval
 - `projects/` is confidential — never push to public remotes
+- **Digi names are always lowercase** — see [Naming](#naming--digi-modules) below
+
+## Naming — Digi modules
+
+Every Digi product, module, package, and service name is **always lowercase** in prose, docs, agent instructions, commit messages, and PR text — including at the start of a sentence and in headings.
+
+| Correct | Incorrect (do not use) |
+|---------|------------------------|
+| digithings | DigiThings, Digithings, Digi Things |
+| digichat | DigiChat, Digichat |
+| digivault | DigiVault, Digivault |
+| digigraph | DigiGraph, Digigraph |
+| digiquant | DigiQuant, Digiquant |
+| digisearch | DigiSearch, Digisearch |
+| digikey | DigiKey, Digikey |
+| digismith | DigiSmith, Digismith |
+| digiclaw | DigiClaw, Digiclaw |
+| digibase | DigiBase, Digibase |
+| digiskills | DigiSkills, Digiskills |
+| digiweb | DigiWeb, Digiweb |
+| digillm | DigiLLM, Digillm |
+| digifetch | DigiFetch, Digifetch |
+
+Same rule for any future Digi* module (digiball, digicraft, …): `digi` + lowercase rest, no spaces, no CamelCase in prose.
+
+**Exception — code identifiers only.** Language-idiomatic symbols keep their language’s casing: TypeScript/React `DigiChatSession`, `requireDigiChatAuth()`, Python `DigiAuthMiddleware`, HTTP header literals like `X-Digichat-Session`. Do not “fix” those to lowercase; do not invent CamelCase product names in docs to match them.
+
+Wrong vocabulary causes routing mistakes (wrong component folder, wrong AGENTS.md, wrong package name). When in doubt, match the directory / PyPI / npm name.
 
 ## Before modifying a component
 

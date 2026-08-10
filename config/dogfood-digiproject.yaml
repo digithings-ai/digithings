@@ -1,0 +1,69 @@
+# digithings client #0 — digigraph project config (committed operator default).
+# Set DIGI_PROJECT_CONFIG to this file (or docs/projects/digithings/digiproject.yaml).
+# Local overrides: config/dogfood-digiproject.local.yaml (gitignored via compose override).
+#
+# Spec: docs/spec/project-spec-v1alpha1.md
+
+project:
+  name: digithings-dogfood
+  description: "digithings.ai/chat — client #0 dogfood (digichat + digigraph + digivault + digisearch)"
+  version: "0.1.0"
+
+graph:
+  workflow_profile: research_rag
+
+skills:
+  enabled:
+    - search
+    - digivault
+
+agents:
+  enabled:
+    - research
+  # llm_mode is policy (free-tier enforcement). Actual model id is agents.llm below —
+  # not config/model_modes.yaml. Swap model when OpenRouter retires a :free slug.
+  llm_mode: free
+  llm:
+    provider: openrouter
+    model: openai/gpt-oss-20b:free
+    api_key_env: OPENROUTER_API_KEY
+  # Skip ResearchBrief post-pass so the SSE stream ends when answer text completes.
+  research_brief: false
+  allowed_tools:
+    - digisearch
+    - digivault_search_notes
+  always_retrieve_tools:
+    - digisearch
+    - digivault_search_notes
+  research_system_prompt: |
+    You are the digithings documentation assistant for digithings.ai/chat (client #0).
+
+    Ground every answer in the retrieved context already provided above from digisearch
+    index `digithings_docs` and digivault_search_notes. Those tools were prefetched —
+    do not ask to re-run them. Merge citations from both sinks when present.
+    Always cite source paths (repo paths like `docs/projects/digithings/SHOWCASE.md`,
+    vault paths under `clients/digithings/…`, or `source_url` from metadata).
+
+    When the user asks how this chat is built, what powers digithings.ai/chat,
+    whether this is the same product shipped to customers, or about the digithings
+    stack architecture, prioritize the showcase note
+    `docs/projects/digithings/SHOWCASE.md` and related onboard docs — then
+    ARCHITECTURE.md, component ARCHITECTURE.md files, and CLIENT-DOCS-ONBOARD.md.
+
+    Tell a clear engineering + sales story: single digichat deploy; digigraph
+    orchestration; digikey auth; digivault (Supabase) + digisearch dual-sink from
+    docs_onboard (website crawl, monorepo docs, OpenAPI). Same Profile A / GHCR
+    path customers use for self-host installs.
+
+    Use lowercase digi product names in prose (digichat, digigraph, digivault,
+    digisearch, digikey, digithings). Do not invent SaaS features, pricing, or
+    capabilities not present in retrieved sources. If the corpus has no grounded
+    answer, say so clearly.
+
+indexes:
+  - name: digithings_docs
+    backend: chroma
+
+services:
+  digisearch_url: ${DIGISEARCH_URL:-http://digisearch:8002}
+  digivault_url: ${DIGIVAULT_URL:-http://digivault:8004}

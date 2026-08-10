@@ -2,7 +2,7 @@
 title: "digichat — API reference"
 type: reference
 status: generated
-created: 2026-06-29
+created: 2026-08-10
 tags:
   - api
   - core
@@ -73,6 +73,40 @@ curl -X POST $DIGICHAT_URL/api/chat \
   -H "content-type: application/json" \
   -d '{"messages":[{"role":"user","content":"What does digigraph do?"}]}'
 ```
+
+### GET /api/conversations
+List persisted conversations (Docker BFF).
+
+auth: session
+
+### POST /api/conversations
+Create a conversation (Docker BFF).
+
+auth: session
+
+### GET /api/conversations/{id}
+Fetch one conversation (Docker BFF).
+
+auth: session
+
+### DELETE /api/conversations/{id}
+Delete a conversation (Docker BFF).
+
+auth: session
+
+### GET /api/ecosystem/config
+Ecosystem config for the chat shell.
+
+auth: none / session
+
+### POST /api/v1/chat
+OpenAI-compatible chat proxy through the BFF.
+
+auth: session
+
+## Notes
+- Committed OpenAPI: docs/openapi/digichat.json (authored; path existence checked in tests/contracts).
+- Self-host: make up-ghcr-digichat pulls ghcr.io/digithings-ai/digichat (see infra/self-host/compose.ghcr.yml).
 
 ## Stack
 Next.js, React, Vercel AI SDK, NextAuth, Postgres, Drizzle

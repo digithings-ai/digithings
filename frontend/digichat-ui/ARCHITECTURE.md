@@ -18,7 +18,7 @@ BYOK settings UI, and handoff/seed logic.
 
 | File | What it is |
 |---|---|
-| `src/DigiChatSession.tsx` | The session shell: intro typewriter, thread, suggestions, quota/error banners, composer form. Controlled through a `DigiChatController` (`chat` prop). |
+| `src/DigiChatSession.tsx` | The session shell: intro typewriter, thread, suggestions, quota/error banners, composer form. Controlled through a `DigiChatController` (`chat` prop). `settingsPanel` renders **inside** `.dc-thread` (inline BYOK terminal flow). |
 | `src/useStreamingIntro.ts` | Character-streamed intro text hook. |
 | `src/components/MiniMarkdown.tsx` | Thin delegate to `@digithings/web`'s `<ChatMarkdown source>` — that package owns the `.chat-md` grammar, GFM tables, fenced code, mermaid and LaTeX. Carries no node map and no `.dc-md-*` classes of its own. |
 | `src/activity-view.ts` | Pure projection of the `DigiChatActivity` wire vocabulary onto the shared chat family's props. The boundary adapter — no JSX, node-testable. |

@@ -2,6 +2,8 @@
 
 Canonical rules for all agents in this repo are in **[CLAUDE.md](CLAUDE.md)** — read that first.
 
+**Naming:** Digi product/module names are always lowercase (`digithings`, `digichat`, `digivault`, …) — never DigiThings / DigiChat / Digichat. See [CLAUDE.md § Naming](CLAUDE.md#naming--digi-modules).
+
 Claude Code loads `CLAUDE.md` at session start. Cursor agents use `.cursor/rules/digithings.mdc`; Copilot uses `.github/copilot-instructions.md` — both generated from `agents.yml` by `make agents-init`.
 
 ## Cursor Cloud specific instructions
@@ -14,7 +16,7 @@ Claude Code loads `CLAUDE.md` at session start. Cursor agents use `.cursor/rules
 
 ### Dependency install
 
-The VM update script creates `.venv`, runs `scripts/install-workspace.sh --with-dev` (put `.venv/bin` on `PATH` first — the script calls `python`, not `python3`), installs `digiquant[nautilus]`, `litellm[proxy]`, and root `npm ci` plus Linux native bindings for digichat Vitest (see `.github/workflows/test-digichat.yml`).
+The VM update script creates `.venv`, runs `scripts/install-workspace.sh --with-dev` (put `.venv/bin` on `PATH` first — the script calls `python`, not `python3`), installs `digiquant[nautilus]`, `litellm[proxy]`, and root `npm ci` (which now supplies the Linux native bindings digichat Vitest needs — `package-lock.json` carries every installable platform entry, so no hand-install step is required).
 
 Activate before Python commands: `source .venv/bin/activate` or `PATH="$PWD/.venv/bin:$PATH"`.
 

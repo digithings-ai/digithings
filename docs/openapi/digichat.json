@@ -1,0 +1,196 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "digichat",
+    "version": "0.9.3",
+    "description": "digichat Next.js BFF — stable HTTP routes for health, chat, conversations, and Auth.js. This spec is authored (not FastAPI-generated). Path existence is checked in tests/contracts/test_digichat_openapi_paths.py."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:3005",
+      "description": "Local Compose profile digichat (default publish port)"
+    }
+  ],
+  "tags": [
+    { "name": "health", "description": "Liveness" },
+    { "name": "chat", "description": "Chat completions via BFF" },
+    { "name": "conversations", "description": "Persisted conversation CRUD" },
+    { "name": "auth", "description": "Auth.js handlers" },
+    { "name": "ecosystem", "description": "Embed / ecosystem config" }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": ["health"],
+        "summary": "Liveness probe",
+        "operationId": "digichatHealth",
+        "responses": {
+          "200": {
+            "description": "Service is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "ok": { "type": "boolean" } },
+                  "required": ["ok"]
+                },
+                "example": { "ok": true }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat": {
+      "post": {
+        "tags": ["chat"],
+        "summary": "Chat (streaming / agentic)",
+        "operationId": "digichatChat",
+        "description": "BFF chat endpoint. Docker installs authenticate via NextAuth session and exchange a digikey BFF JWT for digigraph. Public Pages Function installs may be auth-free and rate-limited.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["messages"],
+                "properties": {
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": { "type": "string" },
+                        "content": { "type": "string" }
+                      }
+                    }
+                  },
+                  "model": { "type": "string", "description": "Optional model id" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Chat response or SSE stream" },
+          "401": { "description": "Unauthenticated (Docker BFF when auth required)" },
+          "429": { "description": "Rate limited" }
+        }
+      }
+    },
+    "/api/conversations": {
+      "get": {
+        "tags": ["conversations"],
+        "summary": "List conversations",
+        "operationId": "listConversations",
+        "responses": {
+          "200": { "description": "Conversation list" },
+          "401": { "description": "Unauthenticated" }
+        }
+      },
+      "post": {
+        "tags": ["conversations"],
+        "summary": "Create conversation",
+        "operationId": "createConversation",
+        "responses": {
+          "200": { "description": "Created conversation" },
+          "401": { "description": "Unauthenticated" }
+        }
+      }
+    },
+    "/api/conversations/{id}": {
+      "get": {
+        "tags": ["conversations"],
+        "summary": "Get conversation",
+        "operationId": "getConversation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Conversation detail" },
+          "401": { "description": "Unauthenticated" },
+          "404": { "description": "Not found" }
+        }
+      },
+      "delete": {
+        "tags": ["conversations"],
+        "summary": "Delete conversation",
+        "operationId": "deleteConversation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Deleted" },
+          "401": { "description": "Unauthenticated" },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/api/auth/{nextauth}": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Auth.js handler (GET)",
+        "operationId": "authJsGet",
+        "parameters": [
+          {
+            "name": "nextauth",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Auth.js catch-all segment"
+          }
+        ],
+        "responses": {
+          "200": { "description": "Auth.js response" }
+        }
+      },
+      "post": {
+        "tags": ["auth"],
+        "summary": "Auth.js handler (POST)",
+        "operationId": "authJsPost",
+        "parameters": [
+          {
+            "name": "nextauth",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Auth.js response" }
+        }
+      }
+    },
+    "/api/ecosystem/config": {
+      "get": {
+        "tags": ["ecosystem"],
+        "summary": "Ecosystem config for UI",
+        "operationId": "ecosystemConfig",
+        "responses": {
+          "200": { "description": "Public-ish config blob for the chat shell" }
+        }
+      }
+    },
+    "/api/v1/chat": {
+      "post": {
+        "tags": ["chat"],
+        "summary": "OpenAI-compatible chat proxy (v1)",
+        "operationId": "digichatV1Chat",
+        "responses": {
+          "200": { "description": "Upstream chat completion / stream" },
+          "401": { "description": "Unauthenticated" }
+        }
+      }
+    }
+  }
+}

@@ -15,6 +15,7 @@ pytest.importorskip("digibase")
 from digivault.orchestrator_tools import ORCHESTRATOR_TOOL_NAMES
 from digivault.path_scopes import SCOPE_WRITE
 from digivault.supabase_store import SupabaseStore
+from digivault.vault import Vault
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
@@ -103,6 +104,30 @@ def test_list_and_create_handlers(vault_dir: Path) -> None:
 
     backlinks = server.get_backlinks("a")
     assert "c" in backlinks.backlinks
+
+
+def test_create_note_overwrite_upsert(vault_dir: Path) -> None:
+    server.create_note(
+        server.CreateNoteRequest(
+            name="c",
+            title="C1",
+            body="v1\n",
+            frontmatter={"source_url": "repo://t/a.md"},
+        )
+    )
+    again = server.create_note(
+        server.CreateNoteRequest(
+            name="c",
+            title="C2",
+            body="v2\n",
+            overwrite=True,
+            frontmatter={"source_url": "repo://t/a.md", "page_class": "repo_doc"},
+        )
+    )
+    assert again.name == "c"
+    raw = (vault_dir / "c.md").read_text(encoding="utf-8")
+    assert "v2" in raw
+    assert "page_class" in raw
 
 
 def test_lint_handler(vault_dir: Path) -> None:
@@ -255,9 +280,90 @@ def test_orchestrator_invoke_search_notes(monkeypatch: pytest.MonkeyPatch) -> No
     assert fake_client.rpc_calls == [
         (
             "search_architecture_notes",
-            {"query": "what does digigraph orchestrate", "match_limit": 3},
+            {
+                "query": "what does digigraph orchestrate",
+                "match_limit": 3,
+                "path_prefix": None,
+            },
         )
     ]
+
+
+def test_orchestrator_invoke_search_notes_local_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When DIGIVAULT_ROOT is set, search the local vault — never call Supabase."""
+    vault_root = tmp_path / "vault"
+    vault_root.mkdir()
+    Vault(vault_root).create_note(
+        "alpha-guide",
+        frontmatter={"title": "Alpha onboarding", "tags": ["docs"]},
+        body="Welcome to Alpha. Reset your password here.",
+    )
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(vault_root))
+
+    def _boom() -> SupabaseStore:
+        raise AssertionError("local-root search must not open Supabase")
+
+    monkeypatch.setattr(server.SupabaseStore, "from_env", _boom)
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={"query": "alpha password", "limit": 5},
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    hits = resp.data["hits"]
+    assert hits
+    assert hits[0]["vault_path"].endswith("alpha-guide.md")
+    assert hits[0]["rank"] > 0
+    assert hits[0]["note_type"] == "local"
+
+
+def test_orchestrator_invoke_search_notes_path_prefix_local(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """path_prefix keeps OCC / digithings corpora isolated under one vault root."""
+    vault_root = tmp_path / "vault"
+    vault_root.mkdir()
+    Vault(vault_root).create_note(
+        "faq-password",
+        subdir="clients/online-compliance-center",
+        frontmatter={"title": "OCC password FAQ"},
+        body="OCC help: reset your portal password.",
+    )
+    Vault(vault_root).create_note(
+        "architecture",
+        subdir="clients/digithings",
+        frontmatter={"title": "digithings architecture"},
+        body="digigraph LangGraph orchestration hub password notes.",
+    )
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(vault_root))
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={
+                "query": "password",
+                "limit": 10,
+                "path_prefix": "clients/online-compliance-center",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    hits = resp.data["hits"]
+    assert hits
+    assert all("online-compliance-center" in h["vault_path"] for h in hits)
+    assert not any(
+        h["vault_path"].startswith("clients/digithings")
+        or "/clients/digithings/" in f"/{h['vault_path']}"
+        for h in hits
+    )
 
 
 def test_orchestrator_invoke_search_notes_default_limit(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -272,7 +378,7 @@ def test_orchestrator_invoke_search_notes_default_limit(monkeypatch: pytest.Monk
         _fake_request(),
     )
     assert fake_client.rpc_calls == [
-        ("search_architecture_notes", {"query": "auth", "match_limit": 7})
+        ("search_architecture_notes", {"query": "auth", "match_limit": 7, "path_prefix": None})
     ]
 
 
@@ -288,7 +394,7 @@ def test_orchestrator_invoke_search_notes_clamps_limit(monkeypatch: pytest.Monke
         _fake_request(),
     )
     assert fake_client.rpc_calls == [
-        ("search_architecture_notes", {"query": "auth", "match_limit": 50})
+        ("search_architecture_notes", {"query": "auth", "match_limit": 50, "path_prefix": None})
     ]
 
     fake_client_negative = _FakeSearchClient(rpc_data=[])
@@ -302,7 +408,7 @@ def test_orchestrator_invoke_search_notes_clamps_limit(monkeypatch: pytest.Monke
         _fake_request(),
     )
     assert fake_client_negative.rpc_calls == [
-        ("search_architecture_notes", {"query": "auth", "match_limit": 1})
+        ("search_architecture_notes", {"query": "auth", "match_limit": 1, "path_prefix": None})
     ]
 
 

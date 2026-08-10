@@ -108,6 +108,9 @@ jobs:
               - 'frontend/digichat-ui/**'
               - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
+              - 'frontend/digiweb/reference/**'
+              - 'frontend/digichat-cloudflare/**'
+              - 'frontend/digithings-stack-cloudflare/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
@@ -178,6 +181,8 @@ jobs:
               - '.github/workflows/pipeline-digiquant-prices.yml'
               - '.github/workflows/db-migrate.yml'
               - '.github/workflows/pipeline-olympus.yml'
+              - '.github/workflows/deploy-digithings-cloudflare.yml'
+              - '.github/workflows/deploy-digiquant-cloudflare.yml'
             workflows:
               - '.github/workflows/**'
               - '.github/actionlint.yaml'
@@ -195,9 +200,17 @@ jobs:
   # ── Frontend canon guard (#1404, #1434) — UNCONDITIONAL ─────────────────────
   # No `needs`/`if` gate on purpose: check_frontend_canon.py does
   # `git ls-files frontend` and scans ALL frontend files regardless of the
-  # diff, so path-gating it (as the per-app test jobs still do) let a PR
-  # touching only frontend/digichat-ui/** or frontend/digiweb/reference/**
-  # skip the guard entirely — even though digichat-ui is a census app.
+  # diff, so its verdict is a property of the whole tree while a path filter is a
+  # property of the diff. Gate it on any filter (as the per-app test jobs still are)
+  # and a PR whose diff falls outside that filter skips a check whose scope was never
+  # the diff in the first place. The mismatch is structural, so closing glob gaps does
+  # not fix it: frontend/digichat-ui/** and frontend/digiweb/reference/** were both in
+  # no lane when this job was written and both are covered now (digichat + web, and
+  # web since #1981) — the argument is unchanged. Keep the census case in view when
+  # judging that: digichat-ui IS a census app (CENSUS_APPS in check_frontend_canon.py),
+  # so the family-census check applies to it and only this job is guaranteed to run it,
+  # whereas digiweb — reference included — is exempt from that census by design, being
+  # where new families are born. The two were never symmetric examples.
   # Stdlib-only; no npm/pip install needed.
   frontend-canon:
     name: Frontend canon guard
@@ -509,4 +522,6 @@ jobs:
         run: cp .env.example .env
 
       - name: Validate Docker Compose
-        run: docker compose config -q
+        run: |
+          docker compose config -q
+          docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml config -q

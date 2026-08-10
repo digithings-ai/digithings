@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import httpx
@@ -31,10 +32,15 @@ def test_digivault_search_notes_is_registered() -> None:
 
 
 @pytest.mark.unit
-def test_digivault_available_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_digivault_available_reads_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     from digigraph.orchestration.builtin import _digivault_available
 
+    empty_cfg = tmp_path / "no-vault.yaml"
+    empty_cfg.write_text("services:\n  digivault_url: ''\n")
     monkeypatch.delenv("DIGIVAULT_URL", raising=False)
+    monkeypatch.setenv("DIGI_PROJECT_CONFIG", str(empty_cfg))
     assert _digivault_available(_ctx()) is False
 
     monkeypatch.setenv("DIGIVAULT_URL", "http://digivault:8004")
@@ -42,10 +48,30 @@ def test_digivault_available_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_digivault_skill_hidden_when_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_digivault_available_reads_project_config_when_env_empty(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from digigraph.orchestration.builtin import _digivault_available
+
+    cfg_file = tmp_path / "dogfood.yaml"
+    cfg_file.write_text(
+        "services:\n  digivault_url: http://from-project:8004\n"
+    )
+    monkeypatch.delenv("DIGIVAULT_URL", raising=False)
+    monkeypatch.setenv("DIGI_PROJECT_CONFIG", str(cfg_file))
+    assert _digivault_available(_ctx()) is True
+
+
+@pytest.mark.unit
+def test_digivault_skill_hidden_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     from digigraph.orchestration import builtin  # noqa: F401 - ensures skills are registered
 
+    empty_cfg = tmp_path / "no-vault.yaml"
+    empty_cfg.write_text("services:\n  digivault_url: ''\n")
     monkeypatch.delenv("DIGIVAULT_URL", raising=False)
+    monkeypatch.setenv("DIGI_PROJECT_CONFIG", str(empty_cfg))
     names = get_tools(["digivault"], _ctx(), mode=ToolExposureMode.SUMMARY)
     assert names == []
 

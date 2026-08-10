@@ -9,21 +9,49 @@ threads, so all mutation is under a lock.
 
 from __future__ import annotations
 
+import logging
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
+from datetime import datetime, timezone
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous call records
     Iterator,
     Literal,
 )
+from uuid import UUID, uuid4
 
+from digillm import (
+    ArtifactRef,
+    CacheStatus,
+    CallPurpose,
+    NoArtifactReason,
+    NodeRunOutcome,
+    NodeRunRecord,
+    ProviderAttemptOutcome,
+    ProviderAttemptRecord,
+    ProviderCallContextHandle,
+    ProviderCallOutcome,
+    ProviderCallRecord,
+    TelemetryRecord,
+    emit_telemetry,
+)
 from pydantic import BaseModel, ConfigDict, Field
+
+logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
 _ACTIVE = False
+# The durable identifier every record in this run is keyed by. A module global rather than a
+# ContextVar: `start()` and `reset()` are plain functions, so a token minted in one and reset in
+# the other only survives if both run in the same Context — a mismatch would raise out of
+# `reset()`, i.e. telemetry inventing a new exception on the run's exit path. Matches `_ACTIVE`.
+_RUN_ID: str | None = None
 _CALLS: list[dict[str, Any]] = []
 _EVENTS: list["RunCallEvent"] = []
+_PROVIDER_CALLS: list[ProviderCallRecord] = []
+_PROVIDER_ATTEMPTS: list[ProviderAttemptRecord] = []
+_NODE_RUNS: list[NodeRunRecord] = []
 
 _SEARCH_KINDS = {"web_search", "x_search"}
 _PHASE_MAX = 120
@@ -55,6 +83,7 @@ _SENSITIVE_FIELD_PARTS = frozenset(
 class CallContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    node_run_id: UUID | None = None
     phase: str | None = Field(default=None, max_length=_PHASE_MAX)
     operation: str | None = Field(default=None, max_length=_OPERATION_MAX)
     document_key: str | None = Field(default=None, max_length=_DOCUMENT_KEY_MAX)
@@ -87,6 +116,26 @@ _CALL_CONTEXT: ContextVar[CallContext] = ContextVar(
 )
 
 
+class LogicalCallContext(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    purpose: CallPurpose
+    parent_call_id: UUID | None = None
+    artifacts: tuple[ArtifactRef, ...] = ()
+    no_artifact_reason: NoArtifactReason | None = None
+    follow_up_purpose: CallPurpose | None = None
+    follow_up_artifacts: tuple[ArtifactRef, ...] = ()
+    follow_up_no_artifact_reason: NoArtifactReason | None = None
+    defer_finalization: bool = False
+    handle: ProviderCallContextHandle
+
+
+_LOGICAL_CALL_CONTEXT: ContextVar[LogicalCallContext | None] = ContextVar(
+    "digigraph_usage_logical_call_context",
+    default=None,
+)
+
+
 def _bounded(value: str | None, limit: int) -> str | None:
     return value[:limit] if value is not None else None
 
@@ -94,16 +143,25 @@ def _bounded(value: str | None, limit: int) -> str | None:
 @contextmanager
 def call_context(
     *,
+    node_run_id: UUID | None = None,
     phase: str | None = None,
     operation: str | None = None,
     document_key: str | None = None,
 ) -> Iterator[None]:
     """Label calls in the current phase without retaining prompts or outputs."""
+    current = _CALL_CONTEXT.get()
     token = _CALL_CONTEXT.set(
         CallContext(
-            phase=_bounded(phase, _PHASE_MAX),
-            operation=_bounded(operation, _OPERATION_MAX),
-            document_key=_bounded(document_key, _DOCUMENT_KEY_MAX),
+            node_run_id=node_run_id if node_run_id is not None else current.node_run_id,
+            phase=_bounded(phase, _PHASE_MAX) if phase is not None else current.phase,
+            operation=(
+                _bounded(operation, _OPERATION_MAX) if operation is not None else current.operation
+            ),
+            document_key=(
+                _bounded(document_key, _DOCUMENT_KEY_MAX)
+                if document_key is not None
+                else current.document_key
+            ),
         )
     )
     try:
@@ -112,22 +170,84 @@ def call_context(
         _CALL_CONTEXT.reset(token)
 
 
-def start() -> None:
-    """Activate capture and clear any prior calls."""
-    global _ACTIVE
+@contextmanager
+def logical_call_context(
+    *,
+    purpose: CallPurpose,
+    parent_call_id: UUID | None = None,
+    artifacts: tuple[ArtifactRef, ...] = (),
+    no_artifact_reason: NoArtifactReason | None = None,
+    follow_up_purpose: CallPurpose | None = None,
+    follow_up_artifacts: tuple[ArtifactRef, ...] = (),
+    follow_up_no_artifact_reason: NoArtifactReason | None = None,
+    defer_finalization: bool = False,
+) -> Iterator[ProviderCallContextHandle]:
+    """Describe one generic provider invocation without requiring Olympus semantics."""
+    handle = ProviderCallContextHandle()
+    token = _LOGICAL_CALL_CONTEXT.set(
+        LogicalCallContext(
+            purpose=purpose,
+            parent_call_id=parent_call_id,
+            artifacts=artifacts,
+            no_artifact_reason=no_artifact_reason,
+            follow_up_purpose=follow_up_purpose,
+            follow_up_artifacts=follow_up_artifacts,
+            follow_up_no_artifact_reason=follow_up_no_artifact_reason,
+            defer_finalization=defer_finalization,
+            handle=handle,
+        )
+    )
+    try:
+        yield handle
+    finally:
+        _LOGICAL_CALL_CONTEXT.reset(token)
+
+
+def provider_call_metadata() -> tuple[UUID | None, LogicalCallContext | None]:
+    """Return the current real node identity and optional logical-call description."""
+    return _CALL_CONTEXT.get().node_run_id, _LOGICAL_CALL_CONTEXT.get()
+
+
+def start(*, run_id: str | None = None) -> None:
+    """Activate capture and clear any prior calls.
+
+    ``run_id`` is the durable identifier every record in this run is keyed by — the
+    ``GITHUB_RUN_ID`` that ``atlas_run_diagnostics`` already uses, so detailed telemetry and
+    the diagnostics row join on one value. It is stored verbatim and never truncated, because
+    it is a join key. A blank or absent value leaves the run without node identity rather than
+    inventing one: nodes then keep the existing no-identity behaviour of emitting physical
+    attempts and no logical records. Keyword-only with a default, so every existing zero-arg
+    caller is untouched.
+    """
+    global _ACTIVE, _RUN_ID
+    raw = str(run_id) if run_id is not None else ""
     with _LOCK:
         _ACTIVE = True
+        _RUN_ID = raw if raw.strip() else None
         _CALLS.clear()
         _EVENTS.clear()
+        _PROVIDER_CALLS.clear()
+        _PROVIDER_ATTEMPTS.clear()
+        _NODE_RUNS.clear()
 
 
 def reset() -> None:
     """Deactivate capture and clear."""
-    global _ACTIVE
+    global _ACTIVE, _RUN_ID
     with _LOCK:
         _ACTIVE = False
+        _RUN_ID = None
         _CALLS.clear()
         _EVENTS.clear()
+        _PROVIDER_CALLS.clear()
+        _PROVIDER_ATTEMPTS.clear()
+        _NODE_RUNS.clear()
+
+
+def active_run_id() -> str | None:
+    """Run identifier of the live capture, or ``None`` when there is no identity to attribute to."""
+    with _LOCK:
+        return _RUN_ID if _ACTIVE else None
 
 
 def is_active() -> bool:
@@ -206,6 +326,179 @@ def record(
                 output_summary=output_summary,
             )
         )
+
+
+def observe_telemetry(record: TelemetryRecord) -> None:
+    """Collect strict logical/attempt records for the active run without persistence."""
+    if not _ACTIVE:
+        return
+    with _LOCK:
+        if isinstance(record, ProviderCallRecord):
+            _PROVIDER_CALLS.append(record)
+        elif isinstance(record, ProviderAttemptRecord):
+            _PROVIDER_ATTEMPTS.append(record)
+        elif isinstance(record, NodeRunRecord):
+            _NODE_RUNS.append(record)
+
+
+class DetailedUsageObserver:
+    """Adapt the in-process collector to DigiLLM's strict observer protocol."""
+
+    def observe(self, record: TelemetryRecord) -> None:
+        observe_telemetry(record)
+
+
+DETAILED_USAGE_OBSERVER = DetailedUsageObserver()
+
+_FANOUT_KEY_MAX = 200  # keep in step with NodeRunRecord.fanout_key and migration 067's CHECK
+
+
+@contextmanager
+def node_run_scope(node_name: str, *, fanout_key: str | None = None) -> Iterator[UUID | None]:
+    """Scope one graph-node execution.
+
+    Mints the node's identity, labels every provider call it makes, and emits exactly one
+    terminal ``NodeRunRecord``. Yields the ``node_run_id``, or ``None`` when the run has no
+    identifier — a node executed outside an identified run keeps today's no-identity behaviour
+    rather than fabricating a parent that could never be persisted against 067's foreign keys.
+
+    The ``ContextVar`` work is delegated to :func:`call_context`, whose set and reset are
+    lexically paired in one frame, so a token can never be reset from a different Context.
+    ``phase`` is deliberately not set: populating it would change the ``events`` JSON the
+    diagnostics writer already stores.
+    """
+    run_id = active_run_id()
+    name = _bounded(node_name, _NAME_MAX) or ""
+    if run_id is None or not name:
+        yield None
+        return
+    node_run_id = uuid4()
+    bounded_key = _bounded(fanout_key, _FANOUT_KEY_MAX) if fanout_key is not None else None
+    key = (bounded_key.strip() or None) if bounded_key is not None else None
+    started_at = datetime.now(tz=timezone.utc)
+    outcome = NodeRunOutcome.SUCCEEDED
+    try:
+        with call_context(node_run_id=node_run_id):
+            yield node_run_id
+    except BaseException:
+        # Deliberately broader than digillm's `except Exception`: losing the record on the exact
+        # path where a run dies is the worst place to lose it, and an incomplete run must be a
+        # counted signal. A LangGraph control-flow exception would be recorded FAILED; no
+        # build_pipeline node uses interrupt() today, so that path is dead rather than wrong.
+        outcome = NodeRunOutcome.FAILED
+        raise
+    finally:
+        _emit_node_run(
+            node_run_id=node_run_id,
+            run_id=run_id,
+            node_name=name,
+            fanout_key=key,
+            outcome=outcome,
+            started_at=started_at,
+        )
+
+
+def _emit_node_run(
+    *,
+    node_run_id: UUID,
+    run_id: str,
+    node_name: str,
+    fanout_key: str | None,
+    outcome: NodeRunOutcome,
+    started_at: datetime,
+) -> None:
+    """Deliver one terminal node record; telemetry failure never reaches the caller."""
+    try:
+        finished_at = datetime.now(tz=timezone.utc)
+        record = NodeRunRecord(
+            node_run_id=node_run_id,
+            run_id=run_id,
+            node_name=node_name,
+            fanout_key=fanout_key,
+            outcome=outcome,
+            started_at=started_at,
+            # A backwards clock step would fail the `finished_at < started_at` validator and
+            # drop the record. Clamping preserves the identity reconciliation needs; duration
+            # is not an identity claim.
+            finished_at=max(finished_at, started_at),
+        )
+        emit_telemetry(DETAILED_USAGE_OBSERVER, record)
+    except Exception as telemetry_error:
+        # Construction and delivery share one guard: a ValidationError raised from the caller's
+        # `finally` would otherwise replace the node's real exception.
+        logger.debug("node-run telemetry failed: %s", type(telemetry_error).__name__)
+
+
+def _nullable_sum(values: list[int | float | None]) -> int | float | None:
+    if not values or any(value is None for value in values):
+        return None
+    return sum(value for value in values if value is not None)
+
+
+def detailed_usage_projection() -> dict[str, int | float | None]:
+    """Project aggregate-compatible successes without fabricating provider evidence."""
+    with _LOCK:
+        calls = list(_PROVIDER_CALLS)
+        attempts = list(_PROVIDER_ATTEMPTS)
+    successful_calls = [call for call in calls if call.outcome is ProviderCallOutcome.SUCCEEDED]
+    aggregate_calls = [
+        call for call in successful_calls if call.cache_status is not CacheStatus.HIT
+    ]
+    attempts_by_call: dict[UUID, ProviderAttemptRecord] = {}
+    for attempt in attempts:
+        if attempt.outcome is ProviderAttemptOutcome.SUCCEEDED:
+            attempts_by_call[attempt.call_id] = attempt
+    successful_attempts = [
+        attempts_by_call[call.call_id]
+        for call in aggregate_calls
+        if call.call_id in attempts_by_call
+    ]
+    search_purposes = {CallPurpose.WEB_GROUNDING, CallPurpose.X_GROUNDING}
+    llm_call_ids = {call.call_id for call in aggregate_calls if call.purpose not in search_purposes}
+    llm_attempts = [attempt for attempt in successful_attempts if attempt.call_id in llm_call_ids]
+    prompt_tokens = (
+        _nullable_sum([attempt.prompt_tokens for attempt in llm_attempts]) if llm_call_ids else 0
+    )
+    completion_tokens = (
+        _nullable_sum([attempt.completion_tokens for attempt in llm_attempts])
+        if llm_call_ids
+        else 0
+    )
+    cost_usd = _nullable_sum(
+        [
+            float(attempt.cost_usd) if attempt.cost_usd is not None else None
+            for attempt in successful_attempts
+        ]
+    )
+    return {
+        "llm_calls": sum(call.purpose not in search_purposes for call in aggregate_calls),
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cost_usd": round(float(cost_usd), 6) if cost_usd is not None else None,
+        "search_calls": sum(call.purpose in search_purposes for call in aggregate_calls),
+    }
+
+
+def node_runs_snapshot() -> list[NodeRunRecord]:
+    """Return this run's node execution records in completion order."""
+    with _LOCK:
+        return list(_NODE_RUNS)
+
+
+def provider_calls_snapshot() -> list[ProviderCallRecord]:
+    """Return this run's logical provider-call records.
+
+    Typed records rather than dicts: reconciliation joins on ``UUID`` identity, and the Task 1.5
+    writer wants rows it can persist without re-parsing.
+    """
+    with _LOCK:
+        return list(_PROVIDER_CALLS)
+
+
+def provider_attempts_snapshot() -> list[ProviderAttemptRecord]:
+    """Return this run's physical provider-attempt records."""
+    with _LOCK:
+        return list(_PROVIDER_ATTEMPTS)
 
 
 def _is_sensitive_field(name: str) -> bool:

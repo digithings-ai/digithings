@@ -89,7 +89,7 @@ cannot silently knock the cursor off its cell.
 
 What this replaced is worth recording, because it is how brand art goes stale
 quietly. The old digithings card, last touched in #731, had drifted four ways at
-once: the wordmark read **"DigiThings"** capitalised, the tagline was the
+once: the wordmark read **"digithings"** capitalised, the tagline was the
 superseded **"An open-core agentic stack"**, the frame was **blue** against a
 monochrome identity, and it carried **no mark at all**. digiquant.io had no
 `images` key in its `openGraph` block, so its links unfurled with no card image.

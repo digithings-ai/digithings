@@ -2,7 +2,7 @@
 title: "digibase — API reference"
 type: reference
 status: generated
-created: 2026-06-29
+created: 2026-08-10
 tags:
   - api
   - support
@@ -16,9 +16,9 @@ relevance:
 **Role:** Shared HTTP + audit library · **Tier:** support
 
 ## Overview
-Not a service but a deliberately minimal library: auth middleware, error handlers, request-ID logging, and a Prometheus metrics endpoint.
+Not a service but a deliberately minimal library: request-ID middleware and logging, CORS and error handlers, an audit redaction helper, and a Prometheus metrics endpoint.
 
-Imported by every other module so they all behave consistently, with optional OpenTelemetry setup.
+Imported by every other module so they all behave consistently, with optional OpenTelemetry setup. Auth middleware is digikey's job, not digibase's.
 
 ## Authentication
 Shared Python library imported by every service — not a network surface.

@@ -6,11 +6,12 @@ Protocol for agents working in the digithings monorepo.
 
 ## 1. Before writing code
 
-1. Read `{component}/AGENTS.md` — pre-flight checklist and anti-patterns.
-2. Read `{component}/ARCHITECTURE.md` — module map, API, data models, extension guide.
-3. Use Glob/Grep to verify files exist. Read the existing implementation before proposing changes.
-4. For changes > 3 files: write a 3–10 bullet plan and confirm it matches `ARCHITECTURE.md`. Update ARCHITECTURE.md first if there's a mismatch.
-5. If the approach requires a novel pattern not in any existing doc, escalate before proceeding.
+1. **Naming:** Digi product/module names are always lowercase (`digithings`, `digichat`, …). See [CLAUDE.md § Naming](../../CLAUDE.md#naming--digi-modules).
+2. Read `{component}/AGENTS.md` — pre-flight checklist and anti-patterns.
+3. Read `{component}/ARCHITECTURE.md` — module map, API, data models, extension guide.
+4. Use Glob/Grep to verify files exist. Read the existing implementation before proposing changes.
+5. For changes > 3 files: write a 3–10 bullet plan and confirm it matches `ARCHITECTURE.md`. Update ARCHITECTURE.md first if there's a mismatch.
+6. If the approach requires a novel pattern not in any existing doc, escalate before proceeding.
 
 ---
 

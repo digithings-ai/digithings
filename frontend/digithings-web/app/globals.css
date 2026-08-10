@@ -27,6 +27,12 @@
    reference deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
+/* The .tl-* frame for <TerminalStepCaret>, which <DigiChatSession> shows while
+   an answer is still on its way. This app is the second consumer of that
+   session component (digichat is the first), so it needs the sheet too — the
+   chat page renders the caret whether or not this line is here, just unstyled.
+   AFTER chat-core.css: the caret inside it is <ChatStreamCursor>. */
+@import "@digithings/web/styles/terminal-loaders.css";
 @import "@digithings/digichat-ui/styles/cursor.css";
 @import "@digithings/digichat-ui/styles/session.css";
 
@@ -40,6 +46,8 @@
 @source "../../digiweb/web/src/components/data-layout";
 @source "../../digiweb/web/src/components/typography";
 @source "../../digiweb/web/src/components/symbols";
+/* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
+@source "../../digiweb/web/src/components/terminal";
 
 /* Point the token font families at the self-hosted next/font variables. */
 :root[data-theme] {
@@ -244,6 +252,44 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .doc-guide-title { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(1.4rem, 2.6vw, 1.9rem); letter-spacing: -0.01em; color: var(--ink); }
 .doc-guide-h { margin: 0.6rem 0 0; font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
 .doc-guide-list { margin: 0.2rem 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.6; }
+.doc-inline-link { color: var(--accent); text-decoration: none; text-underline-offset: 2px; }
+.doc-inline-link:hover { text-decoration: underline; }
+
+/* Wide shell for OpenAPI explorer (Swagger needs horizontal room). */
+.docs-shell--wide { max-width: 1180px; }
+
+/* ---- Swagger UI (vendored CSS) — re-tint toward site tokens; hide try-it chrome ---- */
+.docs-swagger .swagger-ui { font-family: var(--font-sans); color: var(--ink); }
+.docs-swagger .swagger-ui .info .title,
+.docs-swagger .swagger-ui .opblock-tag,
+.docs-swagger .swagger-ui .opblock .opblock-summary-path,
+.docs-swagger .swagger-ui .opblock .opblock-summary-description,
+.docs-swagger .swagger-ui .tab li,
+.docs-swagger .swagger-ui table thead tr td,
+.docs-swagger .swagger-ui table thead tr th,
+.docs-swagger .swagger-ui .parameter__name,
+.docs-swagger .swagger-ui .response-col_status,
+.docs-swagger .swagger-ui .response-col_description,
+.docs-swagger .swagger-ui .model-title,
+.docs-swagger .swagger-ui .prop-type,
+.docs-swagger .swagger-ui label,
+.docs-swagger .swagger-ui .scheme-container { color: var(--ink); }
+.docs-swagger .swagger-ui .info .base-url,
+.docs-swagger .swagger-ui .parameter__type,
+.docs-swagger .swagger-ui .prop-format,
+.docs-swagger .swagger-ui .model .property.primitive { color: var(--ink-soft); }
+.docs-swagger .swagger-ui .scheme-container,
+.docs-swagger .swagger-ui .opblock,
+.docs-swagger .swagger-ui section.models,
+.docs-swagger .swagger-ui .model-box { background: var(--surface); border-color: var(--hair); box-shadow: none; }
+.docs-swagger .swagger-ui .opblock .opblock-section-header { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.docs-swagger .swagger-ui .btn,
+.docs-swagger .swagger-ui select { border-radius: 7px; }
+.docs-swagger .swagger-ui .topbar,
+.docs-swagger .swagger-ui .auth-wrapper,
+.docs-swagger .swagger-ui .try-out,
+.docs-swagger .swagger-ui .execute-wrapper,
+.docs-swagger .swagger-ui .btn.execute { display: none !important; }
 
 /* ---- public interface / mcp lists ---- */
 .doc-iface { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }

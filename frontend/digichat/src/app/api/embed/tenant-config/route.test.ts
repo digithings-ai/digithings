@@ -11,7 +11,11 @@ afterEach(() => {
 const REGISTRY = JSON.stringify({
   "datatapstream.com": {
     slug: "datatapstream",
-    backend: { type: "external-relay", url: "https://relay.example.com/api/digichat" },
+    backend: {
+      type: "foundry",
+      projectEndpoint: "https://example.services.ai.azure.com",
+      agentName: "agent",
+    },
     gateMode: "ungated",
     theme: "light",
     accent: { color: "#b5562b", foreground: "#fff7f2" },
@@ -43,10 +47,9 @@ describe("GET /api/embed/tenant-config", () => {
       attribution: true,
       suggestions: [...DATATAPSTREAM_SUGGESTION_POOL],
       showByok: false,
-      showStatusBar: false,
       layout: "embed",
     });
-    expect(JSON.stringify(body)).not.toContain("relay.example.com");
+    expect(JSON.stringify(body)).not.toContain("example.services.ai.azure.com");
   });
 
   it("returns legacy defaults for a registered host when the token is missing (#1339)", async () => {
@@ -65,7 +68,6 @@ describe("GET /api/embed/tenant-config", () => {
       accent: null,
       attribution: false,
       showByok: false,
-      showStatusBar: false,
       layout: "embed",
     });
   });
@@ -79,7 +81,6 @@ describe("GET /api/embed/tenant-config", () => {
       accent: null,
       attribution: false,
       showByok: false,
-      showStatusBar: false,
       layout: "embed",
     });
   });
@@ -88,12 +89,7 @@ describe("GET /api/embed/tenant-config", () => {
     "digithings.ai": {
       slug: "digithings",
       aliases: ["www.digithings.ai"],
-      backend: {
-        type: "digivault",
-        supabaseUrlEnv: "DIGITHINGS_SUPABASE_URL",
-        supabaseAnonKeyEnv: "DIGITHINGS_SUPABASE_ANON_KEY",
-        openRouterKeyEnv: "DIGITHINGS_OPENROUTER_API_KEY",
-      },
+      backend: { type: "digigraph" },
       gateMode: "ungated",
       activityDetail: "full",
       token: "digithings-schema-token",
@@ -114,22 +110,17 @@ describe("GET /api/embed/tenant-config", () => {
     expect(body.gateMode).toBe("ungated");
   });
 
-  it("projects showByok, showStatusBar, layout to the client body", async () => {
+  it("projects showByok, layout to the client body", async () => {
     vi.stubEnv(
       "DIGICHAT_EMBED_TENANTS",
       JSON.stringify({
         "digithings.ai": {
           slug: "digithings",
-          backend: {
-            type: "digivault",
-            supabaseUrlEnv: "A_URL",
-            supabaseAnonKeyEnv: "A_ANON",
-            openRouterKeyEnv: "A_OR",
-          },
+          backend: { type: "digigraph" },
           gateMode: "ungated",
           showByok: true,
-          showStatusBar: true,
           layout: "page",
+          llmAccess: "free_then_byok",
           activityDetail: "full",
           token: "t",
         },
@@ -143,7 +134,7 @@ describe("GET /api/embed/tenant-config", () => {
     );
     const body = await res.json();
     expect(body.showByok).toBe(true);
-    expect(body.showStatusBar).toBe(true);
     expect(body.layout).toBe("page");
+    expect(body.llmAccess).toBe("free_then_byok");
   });
 });

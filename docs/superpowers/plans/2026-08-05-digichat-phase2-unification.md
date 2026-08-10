@@ -4,7 +4,7 @@
 
 **Goal:** Ship full Phase 2 in one digichat PR — digivault provider port (2a) + digigraph rich `rag_sources`/`graph_update` mapping with dual-emit retirement (2b) — so auth and embed share one `data-digichatActivity` activity chain before Phase 3 cutover.
 
-**Architecture:** Extend the Phase 1 allowlist (`ActivityDocument` + `ActivitySpan.brief`) and digichat-ui (`VaultHitSummary` + `brief` activity kind). Digigraph maps typed traces through that allowlist and stops writing `data-digigraphTrace`. A new `digivault-stream.ts` peer to `foundry-stream.ts` ports the Cloudflare agentic loop into Node route handlers (AI SDK UI stream, not NDJSON). Secrets stay as per-tenant env **name** refs. IP rate limit is 60/min via the existing in-memory `checkBffRateLimit` store (single-replica Node/Azure topology). Cloudflare Function stays until Phase 3; accent bug is out of scope.
+**Architecture:** Extend the Phase 1 allowlist (`ActivityDocument` + `ActivitySpan.brief`) and digichat-ui (`VaultHitSummary` + `brief` activity kind). digigraph maps typed traces through that allowlist and stops writing `data-digigraphTrace`. A new `digivault-stream.ts` peer to `foundry-stream.ts` ports the Cloudflare agentic loop into Node route handlers (AI SDK UI stream, not NDJSON). Secrets stay as per-tenant env **name** refs. IP rate limit is 60/min via the existing in-memory `checkBffRateLimit` store (single-replica Node/Azure topology). Cloudflare Function stays until Phase 3; accent bug is out of scope.
 
 **Tech Stack:** TypeScript, Next.js 16, Vercel AI SDK (`ai`), Vitest, `@digithings/digichat-ui`, Supabase REST RPC `search_architecture_notes`, OpenRouter free pool + BYOK (OpenRouter / OpenAI / Anthropic / Gemini).
 
@@ -18,9 +18,9 @@
 - `reasoningDelta`, `documents`, and `brief` must not share one span — emit separate spans (projector early-returns on `reasoningDelta`).
 - `activityDetail`: `off` → no parts; `labels` → strip **documents and brief** (and reasoning, Phase 1); set `documentsWithheld` when documents were present; brief-only spans become label/`trace` rows with no themes/questions (**no** `briefWithheld` flag — omit brief, keep label).
 - Snippet budget: `MAX_SNIPPET_CHARS = 280` (named constant, ≤ `MAX_DOC_FIELD_CHARS` 300).
-- Digivault secrets: only env **names** in tenant JSON (`supabaseUrlEnv`, `supabaseAnonKeyEnv`, `openRouterKeyEnv`); resolve `process.env[name]` at request time; missing → fail closed 5xx + server log; never echo values or missing contents to the browser.
+- digivault secrets: only env **names** in tenant JSON (`supabaseUrlEnv`, `supabaseAnonKeyEnv`, `openRouterKeyEnv`); resolve `process.env[name]` at request time; missing → fail closed 5xx + server log; never echo values or missing contents to the browser.
 - Env-name pattern: `/^[A-Z][A-Z0-9_]{0,127}$/` — rejects URLs and key-shaped strings.
-- Digivault IP rate limit: **60 req / 60 s / IP**, wording `"rate limit exceeded — slow down a moment"`, store = existing in-memory `checkBffRateLimit` / `BoundedTTLMap` (not Workers KV).
+- digivault IP rate limit: **60 req / 60 s / IP**, wording `"rate limit exceeded — slow down a moment"`, store = existing in-memory `checkBffRateLimit` / `BoundedTTLMap` (not Workers KV).
 - Browser protocol remains the **AI SDK UI message stream** — NDJSON mapping is internal.
 - digichat-ui brief kind name: **`"brief"`**.
 - Run digichat tests from `frontend/digichat` with `npx vitest run <path>`. Run digichat-ui tests from `frontend/digichat-ui` with `npx vitest run <path>`.
@@ -755,7 +755,7 @@ EOF
 
 ---
 
-### Task 4: Digigraph mapper — `rag_sources` / `graph_update`
+### Task 4: digigraph mapper — `rag_sources` / `graph_update`
 
 **Files:**
 - Create: `frontend/digichat/src/lib/digigraph-activity-map.ts`
@@ -1566,7 +1566,7 @@ EOF
 
 ---
 
-### Task 9: Digivault IP rate limit (60/min)
+### Task 9: digivault IP rate limit (60/min)
 
 **Files:**
 - Create: `frontend/digichat/src/lib/digivault-ip-rate-limit.ts`
@@ -1761,7 +1761,7 @@ EOF
 
 ---
 
-### Task 11: Digivault BYOK + free pool
+### Task 11: digivault BYOK + free pool
 
 **Files:**
 - Create: `frontend/digichat/src/lib/digivault-byok.ts`
@@ -1804,7 +1804,7 @@ Note: only touch `embed/page.tsx` for the BYOK provider list (`gemini`) — **do
 
 ---
 
-### Task 12: Digivault stream — agentic loop → AI SDK UI message stream
+### Task 12: digivault stream — agentic loop → AI SDK UI message stream
 
 **Files:**
 - Create: `frontend/digichat/src/lib/digivault-stream.ts`
@@ -2014,9 +2014,9 @@ EOF
 | ActivitySpan.brief allowlist | Task 2 |
 | digichat-ui richer VaultHitSummary + brief rendering | Task 1 (`kind: "brief"`) |
 | Projector maps brief + rich hits | Task 3 |
-| Digigraph rag_sources / graph_update mapper | Task 4–5 |
+| digigraph rag_sources / graph_update mapper | Task 4–5 |
 | Delete dual-emit / DigigraphTraceBlock / legacy writer | Task 6–7 |
-| Digivault provider peer to foundry | Task 10–13 |
+| digivault provider peer to foundry | Task 10–13 |
 | Per-tenant env-name refs; fail closed | Task 8 |
 | Full BYOK + free pool + quota_exhausted + Gemini | Task 11–12 |
 | IP rate limit 60/min, Node store | Task 9 (`checkBffRateLimit`) |

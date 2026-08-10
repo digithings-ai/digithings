@@ -1,25 +1,25 @@
-# DigiChat Phase 3 Unification Implementation Plan
+# digichat Phase 3 Unification Implementation Plan
 
 > **AMENDED 2026-08-05 evening:** Phase 3 no longer targets iframe → Cloudflare Containers.
-> DigiThings marketing chat is **native digichat-ui + digivault Pages Function** (Workers Free).
+> digithings marketing chat is **native digichat-ui + digivault Pages Function** (Workers Free).
 > Canonical spec: `docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md`.
 > Tasks below that describe `ChatEmbedShell` / Containers / deleting `useStackChat` are
-> **superseded** — restore/keep the native stack instead. Digichat `/embed` work for
+> **superseded** — restore/keep the native stack instead. digichat `/embed` work for
 > DataTap remains valid and unrelated to digithings marketing `/chat`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal (amended):** Ship digithings.ai `/chat` as native `@digithings/digichat-ui` + Pages Function digivault (`useStackChat` / `chatStream` / `functions/api/chat.ts`), with BYOK + handoff, on the free Cloudflare plan. No Containers merge gate.
 
-**Architecture (amended):** `DtNav` + `DigiChatSession` on Pages; `POST /api/chat` Pages Function; same-origin `chatHandoff`. DigiThings has **no Azure**. Containers scaffold is deferred. *(Superseded 2026-08-06 — the scaffold was deleted; see ADR-0018 historical note 4.)*
+**Architecture (amended):** `DtNav` + `DigiChatSession` on Pages; `POST /api/chat` Pages Function; same-origin `chatHandoff`. digithings has **no Azure**. Containers scaffold is deferred. *(Superseded 2026-08-06 — the scaffold was deleted; see ADR-0018 historical note 4.)*
 
 **Tech Stack:** TypeScript, digithings-web static export + Pages Functions, Vitest, `@digithings/digichat-ui`.
 
 ## Global Constraints
 
 - Spec: `docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md` (evening amendment).
-- DigiThings marketing chat: **Pages Function**, not Containers. CSP: `frame-src 'none'`.
-- DigiThings has **no Azure**. Do **not** use DataTap ACA or `chat.digithings.ai` for marketing.
+- digithings marketing chat: **Pages Function**, not Containers. CSP: `frame-src 'none'`.
+- digithings has **no Azure**. Do **not** use DataTap ACA or `chat.digithings.ai` for marketing.
 - UI: `showByok: true`, `showStatusBar: true`, `layout: "page"` on digithings-web DigiChatSession.
 - Run digithings-web tests: `cd frontend/digithings-web && npx vitest run`.
 - Presentation-only digithings-web CSS/shell changes are exempt from `make score` Python rubrics.
@@ -39,7 +39,7 @@
 | `frontend/digichat/src/lib/embed-seed-messages.ts` | ready/seed validators + caps |
 | `frontend/digichat/src/hooks/use-embed-digi-chat.ts` | Expose `seed(messages)` |
 | `frontend/digichat/src/lib/security-headers.ts` | Add `www.digithings.ai` to first-party ancestors |
-| `frontend/digichat/ARCHITECTURE.md` + `.env.example` | Digithings tenant + first-party + seed protocol |
+| `frontend/digichat/ARCHITECTURE.md` + `.env.example` | digithings tenant + first-party + seed protocol |
 | `frontend/digithings-web/lib/chatHandoff.ts` | Keep write/read; own `ChatMessage` type |
 | `frontend/digithings-web/lib/digichatEmbed.ts` | iframe URL + origin helpers |
 | `frontend/digithings-web/lib/digichatSeedBridge.ts` | Parent ready listener + seed post |
@@ -896,7 +896,7 @@ EOF
 
 ---
 
-### Task 7: Digithings digivault tenant docs + GHCR install shape
+### Task 7: digithings digivault tenant docs + GHCR install shape
 
 **Files:**
 - Modify: `frontend/digichat/ARCHITECTURE.md` (embed tenants + Phase 3 section)
@@ -912,7 +912,7 @@ EOF
 Create `docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md` with:
 
 ```markdown
-# DigiChat Phase 3 — digithings ops checklist
+# digichat Phase 3 — digithings ops checklist
 
 ## Hostname
 - Public digichat origin: `https://chat.digithings.ai`
@@ -920,7 +920,7 @@ Create `docs/superpowers/rollout/2026-08-05-digichat-phase3-ops-checklist.md` wi
 - digithings.ai `/chat` stays on Cloudflare Pages (shell + iframe)
 
 ## Image
-- Pull same DigiChat GHCR release DataTap uses: `ghcr.io/digithings-ai/digichat:<tag>`
+- Pull same digichat GHCR release DataTap uses: `ghcr.io/digithings-ai/digichat:<tag>`
 - If this install pulls via ACR: after each digichat release run manual `az acr import` (not automated in Phase 3)
 
 ## Runtime env (names must match tenant JSON)
@@ -1076,7 +1076,7 @@ export type ChatMessage = {
 `.env.example`:
 
 ```
-# Digichat iframe origin (no trailing slash). Prod: https://chat.digithings.ai
+# digichat iframe origin (no trailing slash). Prod: https://chat.digithings.ai
 NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://chat.digithings.ai
 ```
 
@@ -1375,7 +1375,7 @@ EOF
 
 ---
 
-### Task 11: Digichat `www` frame-ancestors + delete native digithings chat stack
+### Task 11: digichat `www` frame-ancestors + delete native digithings chat stack
 
 **Files:**
 - Modify: `frontend/digichat/src/lib/security-headers.ts`
@@ -1477,7 +1477,7 @@ EOF
 **Files:**
 - Modify: `frontend/digichat/ARCHITECTURE.md` (confirm Phase 3 section complete)
 - Modify: `frontend/digithings-web` README or comment on chat page if one exists
-- Touch: `docs/DEPLOYMENT.md` only if it still claims ADR-0018 path-routing *is* DigiChat — add a short note that Phase 3 keeps `/chat` as Pages shell + iframe to `chat.digithings.ai` (do not rewrite the whole ADR in this PR; one clarifying paragraph is enough)
+- Touch: `docs/DEPLOYMENT.md` only if it still claims ADR-0018 path-routing *is* digichat — add a short note that Phase 3 keeps `/chat` as Pages shell + iframe to `chat.digithings.ai` (do not rewrite the whole ADR in this PR; one clarifying paragraph is enough)
 
 **Interfaces:** none new
 

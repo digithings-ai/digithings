@@ -701,7 +701,7 @@ Per-endpoint limits:
 | 1.5 Stub silent fix | digisearch | Reliability | XS | 1 |
 | 1.6 CORS default | All | Security | XS | 1 |
 | 1.7 Data dir traversal | digiquant | Security | XS | 1 |
-| 1.8 exec() sandbox/gate | DigiGraph | Security | M | 1 |
+| 1.8 exec() sandbox/gate | digigraph | Security | M | 1 |
 | 2.2 OpenAI client pool | digigraph | Performance | XS | 2 |
 | 2.5 Backend registry | digisearch | Architecture | S | 2 |
 | 2.6 YAML spec cache | digiquant | Performance | XS | 2 |

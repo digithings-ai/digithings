@@ -3,35 +3,15 @@
 import { useEffect, useState } from "react";
 import { p } from "@/lib/base-path";
 import { resolveEmbedHost } from "@/lib/embed-gate";
+import {
+  DEFAULT_EMBED_TENANT_CONFIG,
+  type EmbedTenantClientConfig,
+} from "@/lib/embed-client-config";
 
-export type EmbedTenantClientConfig = {
-  slug: string;
-  gateMode: "turn_limited" | "ungated" | "trial_form";
-  theme: "dark" | "light";
-  accent: { color: string; foreground: string } | null;
-  attribution: boolean;
-  title?: string;
-  welcome?: string;
-  suggestions?: string[];
-  placeholder?: string;
-  lockedContact?: string;
-  showByok?: boolean;
-  showStatusBar?: boolean;
-  layout?: "page" | "embed";
-};
-
-/** Legacy defaults — deliberately the *gated* configuration, so a slow or
- * failed config fetch can only be more restrictive than intended, never less. */
-export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
-  slug: "embed",
-  gateMode: "turn_limited",
-  theme: "dark",
-  accent: null,
-  attribution: false,
-  showByok: false,
-  showStatusBar: false,
-  layout: "embed",
-};
+export {
+  DEFAULT_EMBED_TENANT_CONFIG,
+  type EmbedTenantClientConfig,
+} from "@/lib/embed-client-config";
 
 /**
  * @param token - Per-tenant secret from the embed snippet's own `?token=`
@@ -40,12 +20,20 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
  * generic gated defaults instead of this tenant's config (#1339).
  * @param explicitHost - see resolveEmbedHost(); the embedding page's own
  * origin, passed via the iframe src's `?host=` param (#1372).
+ * @param initial - the SAME config already resolved server-side and rendered
+ * into the first paint (see resolveEmbedClientConfigFromParams). Seeding state
+ * with it is what removes the dark→tenant-theme flash: without it this hook
+ * starts at the gated dark defaults and only reaches the tenant's theme once
+ * the fetch below resolves, so every embed painted dark for one round-trip
+ * regardless of the tenant's actual theme. The fetch still runs — it is the
+ * live source of truth, and re-asserting it costs nothing when it agrees.
  */
 export function useEmbedTenantConfig(
   token?: string | null,
   explicitHost?: string | null,
+  initial: EmbedTenantClientConfig = DEFAULT_EMBED_TENANT_CONFIG,
 ): EmbedTenantClientConfig {
-  const [config, setConfig] = useState<EmbedTenantClientConfig>(DEFAULT_EMBED_TENANT_CONFIG);
+  const [config, setConfig] = useState<EmbedTenantClientConfig>(initial);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +53,7 @@ export function useEmbedTenantConfig(
         }
       })
       .catch(() => {
-        /* keep gated defaults */
+        /* keep whatever we already have — server-resolved, or gated defaults */
       });
     return () => {
       cancelled = true;

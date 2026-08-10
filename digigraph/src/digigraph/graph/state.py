@@ -42,12 +42,20 @@ class WorkflowState(TypedDict, total=False):
     # Opaque URI from digiquant/export (Phase 2 artifact contract); workflow stores refs not blobs.
     quant_artifact_uri: str | None
     error: str | None
+    # Stable digichat contract code (e.g. free_quota_exceeded); set with error.
+    error_code: str | None
     # Session datasets: ref -> { ref, profile }. No reducer; last writer wins per key.
     stored_datasets: dict[str, dict[str, Any]]
     # Streaming only: callback(event_type, data). Not serialized; request-scoped.
     stream_callback: Callable[[str, Any], None]
     # Workflow profile: full_stack | research_rag | quant_backtest | plan_execute (set at invoke).
     workflow_profile: str
+    # Per-request corpus routing (X-Digi-Corpus-Index / X-Digi-Vault-Prefix / DIGI_TENANT_CORPUS_MAP).
+    # Must be declared here — LangGraph StateGraph(WorkflowState) drops undeclared keys, which
+    # silently ignored OCC occ_help overrides and left digisearch on digiproject default index.
+    digisearch_index: str | None
+    vault_path_prefix: str | None
+    research_system_prompt_override: str | None
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).
     supervisor_depth_remaining: int
     supervisor_route: str | None

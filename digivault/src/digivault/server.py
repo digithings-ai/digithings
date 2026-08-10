@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from digivault import __version__
+from digivault.local_search import search_local_vault
 from digivault.models import LintReport, Note
 from digivault.orchestrator_tools import (
     DEFAULT_SEARCH_NOTES_LIMIT,
@@ -52,7 +53,11 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="digivault",
-    description="Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags).",
+    description=(
+        "Obsidian-style markdown vault management for digithings "
+        "(frontmatter, wikilinks, backlinks, tags, lint). "
+        "Interactive docs: `/docs` (Swagger) and `/redoc`."
+    ),
     version=__version__,
 )
 install_metrics(app, service="digivault", version=__version__)
@@ -131,7 +136,7 @@ def _open_vault() -> Vault:
 
 
 def _open_supabase_store() -> SupabaseStore:
-    """Build the Supabase-backed store for full-text search (independent of DIGIVAULT_ROOT)."""
+    """Build the Supabase-backed store for FTS when DIGIVAULT_ROOT is unset."""
     try:
         return SupabaseStore.from_env()
     except SupabaseStoreError as exc:
@@ -164,6 +169,14 @@ class CreateNoteRequest(BaseModel):
     tags: list[str] | None = Field(default=None)
     body: str = Field(default="")
     subdir: str = Field(default="", description="Optional subfolder under the vault root")
+    overwrite: bool = Field(
+        default=False,
+        description="When true, upsert via Vault.write_note(overwrite=True) for idempotent ingest",
+    )
+    frontmatter: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional extra frontmatter keys merged with title/tags",
+    )
 
 
 class SetFrontmatterRequest(BaseModel):
@@ -241,13 +254,19 @@ def get_note(name: str) -> Note:
 
 @app.post("/v1/notes", response_model=Note, status_code=201)
 def create_note(req: CreateNoteRequest) -> Note:
-    fm: dict[str, Any] = {}
+    fm: dict[str, Any] = dict(req.frontmatter or {})
     if req.title:
         fm["title"] = req.title
     if req.tags:
         fm["tags"] = req.tags
     try:
-        return _open_vault().create_note(req.name, frontmatter=fm, body=req.body, subdir=req.subdir)
+        return _open_vault().write_note(
+            req.name,
+            frontmatter=fm,
+            body=req.body,
+            subdir=req.subdir,
+            overwrite=req.overwrite,
+        )
     except VaultError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -303,8 +322,8 @@ def orchestrator_invoke(
     args = req.arguments if isinstance(req.arguments, dict) else {}
     _require_tool_scope(request, tool)
 
-    # Supabase-backed full-text search is independent of DIGIVAULT_ROOT (the local
-    # filesystem vault) — it reads the vault mirrored into Postgres instead.
+    # Search precedence: local filesystem vault when DIGIVAULT_ROOT is set
+    # (Profile A / client volumes); otherwise Supabase FTS when credentials exist.
     if tool == TOOL_VAULT_SEARCH_NOTES:
         query = str(args.get("query") or "").strip()
         if not query:
@@ -314,7 +333,16 @@ def orchestrator_invoke(
         except (TypeError, ValueError):
             limit = DEFAULT_SEARCH_NOTES_LIMIT
         limit = max(1, min(limit, _MAX_SEARCH_NOTES_LIMIT))
-        hits = _open_supabase_store().search(query, limit=limit)
+        path_prefix_raw = args.get("path_prefix")
+        path_prefix = (
+            str(path_prefix_raw).strip().strip("/") if path_prefix_raw is not None else None
+        ) or None
+
+        root_env = (os.environ.get("DIGIVAULT_ROOT") or "").strip()
+        if root_env:
+            hits = search_local_vault(_open_vault(), query, limit=limit, path_prefix=path_prefix)
+        else:
+            hits = _open_supabase_store().search(query, limit=limit, path_prefix=path_prefix)
         data = {"hits": [h.model_dump(mode="json") for h in hits]}
         return OrchestratorInvokeResponse(ok=True, tool=tool, data=data)
 
