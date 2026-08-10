@@ -6,26 +6,25 @@ main = "src/index.ts"
 compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Zone routes — uncomment after first deploy (or attach in Dashboard).
-# Same hostname as Pages: Worker owns digichat paths; Pages owns /chat shells.
-# [[routes]]
-# pattern = "digithings.ai/embed*"
-# zone_name = "digithings.ai"
-# [[routes]]
-# pattern = "digithings.ai/api/chat*"
-# zone_name = "digithings.ai"
-# [[routes]]
-# pattern = "digithings.ai/api/embed*"
-# zone_name = "digithings.ai"
-# [[routes]]
-# pattern = "digithings.ai/api/byok*"
-# zone_name = "digithings.ai"
-# [[routes]]
-# pattern = "digithings.ai/api/health"
-# zone_name = "digithings.ai"
-# [[routes]]
-# pattern = "digithings.ai/_dtchat*"
-# zone_name = "digithings.ai"
+# Zone routes — same hostname as Pages: Worker owns digichat paths; Pages owns /chat shells.
+[[routes]]
+pattern = "digithings.ai/embed*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/chat*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/embed*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/byok*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/health"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/_dtchat*"
+zone_name = "digithings.ai"
 
 [[containers]]
 class_name = "DigiChatContainer"

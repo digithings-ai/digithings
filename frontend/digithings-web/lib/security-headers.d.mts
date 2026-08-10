@@ -10,6 +10,10 @@ export function frameSrcForCsp(
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): string;
 
+export function embedOriginForChat(
+  env?: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): string;
+
 export function digithingsCsp(frameSrc?: string): string;
 
 export function renderCloudflareHeaders(frameSrc?: string): string;
