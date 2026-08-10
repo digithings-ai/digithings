@@ -23,6 +23,7 @@ def plot_time_series(
         return {"error": f"Column {date_column!r} not found", "image_path": None, "summary": {}}
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
@@ -47,7 +48,10 @@ def plot_time_series(
     path = _next_filename(out_dir, "ts")
     fig, ax = plt.subplots()
     ax.plot(agg_df[date_col].to_list(), agg_df["value"].to_list(), marker="o", markersize=3)
-    ax.set_title(f"Time series: {date_column}" + (f" ({aggregation} of {value_column})" if value_column else " (count)"))
+    ax.set_title(
+        f"Time series: {date_column}"
+        + (f" ({aggregation} of {value_column})" if value_column else " (count)")
+    )
     ax.set_ylabel("value")
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()

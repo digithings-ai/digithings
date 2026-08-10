@@ -1,0 +1,28 @@
+# MCP server registry
+# Free providers are enabled by default.
+# Premium providers require env vars to be set.
+
+mcp_servers:
+  openbb:
+    description: "OpenBB financial data MCP server (yfinance, FRED, SEC EDGAR)"
+    enabled: true
+    tool_exposure_mode: summary  # Use summary mode to save context tokens
+    free_providers:
+      - name: yfinance
+        enabled: true
+      - name: fred
+        enabled: true
+        # Free key: https://fred.stlouisfed.org/docs/api/api_key.html
+        api_key_env: FRED_API_KEY
+        optional: true  # works without key but with rate limits
+      - name: sec_edgar
+        enabled: true
+      - name: fama_french
+        enabled: true
+    premium_providers:
+      - name: intrinio
+        enabled_if_env: INTRINIO_API_KEY
+      - name: benzinga
+        enabled_if_env: BENZINGA_API_KEY
+      - name: polygon
+        enabled_if_env: POLYGON_API_KEY

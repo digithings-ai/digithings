@@ -25,10 +25,15 @@ def plot_distribution(
         return {"error": "No non-null values", "image_path": None, "summary": {}}
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
-        return {"error": "matplotlib not installed", "image_path": None, "summary": {"count": len(s)}}
+        return {
+            "error": "matplotlib not installed",
+            "image_path": None,
+            "summary": {"count": len(s)},
+        }
     out_dir = _artifacts_dir(dataset_path)
     path = _next_filename(out_dir, "dist")
     fig, ax = plt.subplots()
@@ -41,7 +46,7 @@ def plot_distribution(
             ax.hist(s.to_list(), bins=50, density=True, alpha=0.5, label="hist")
             s_sorted = ser.sort()
             ax.plot(s_sorted.to_list(), [0.0] * len(s_sorted), "k-", linewidth=0.5)
-        except Exception:
+        except (pl.exceptions.PolarsError, ValueError, TypeError):
             ax.hist(s.to_list(), bins=50, alpha=0.8)
     elif kind == "box":
         ax.boxplot(s.to_list())

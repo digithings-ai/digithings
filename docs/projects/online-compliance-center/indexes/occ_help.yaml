@@ -1,0 +1,13 @@
+# indexes/occ_help.yaml — digisearch index manifest for OCC (client #1).
+#
+# Dual-sink onboard writes to digisearch_index: occ_help (see onboard.yaml).
+# Sources are populated by the onboard search sink, not static globs.
+
+index_name: occ_help
+backend: azure_search
+
+description: |
+  Online Compliance Center public help center (Joomla HTML + PDFs from
+  help.online-compliance-center.com). Grounding corpus for digithings.ai/chat/occ.
+
+sources: []

@@ -1,0 +1,146 @@
+provider: openai
+last_checked: 2026-07-19
+source: agent-research
+
+free_tier:
+  available: false
+  tier_type: null
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: true
+  cc_required: true
+  models: []
+  rate_limits:
+    rpm: null
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: null
+
+paid_tier:
+  available: true
+  models:
+    - name: gpt-4.1
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 32768
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 8.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.50
+      status: active
+    - name: gpt-4.1-mini
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 32768
+      cost_per_1m_input: 0.40
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 1.60
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.10
+      status: active
+    - name: o3
+      context_window: 200000
+      max_input_tokens: 200000
+      max_output_tokens: 100000
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 8.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.50
+      status: active
+    - name: gpt-5.5
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 131072
+      cost_per_1m_input: 5.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 30.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: 0.50
+      status: active
+    - name: gpt-5.5-pro
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 131072
+      cost_per_1m_input: 30.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 180.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # likely superseded by GPT-5.6 below — not yet confirmed removed from API
+    - name: gpt-5.6-luna
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 131072
+      cost_per_1m_input: 1.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 6.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # GPT-5.6 family went GA 2026-07-09
+    - name: gpt-5.6-terra
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 131072
+      cost_per_1m_input: 2.50
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 15.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # GPT-5.6 family went GA 2026-07-09
+    - name: gpt-5.6-sol
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 131072
+      cost_per_1m_input: 5.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 30.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # GPT-5.6 family went GA 2026-07-09; new top-line flagship
+  batching:
+    available: true
+    discount_pct: 50
+    max_batch_size: null
+    turnaround_hours: 24
+    notes: "Batch API; 50% discount on async requests"
+  prompt_caching:
+    available: true
+    min_cacheable_tokens: 1024
+    ttl_seconds: 3600
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: 0.50
+    notes: "Automatic caching for repeated prompt prefixes"
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: true      # o3 and gpt-5.5 series
+  streaming: true
+  vision: true
+  embeddings: true
+  modalities: [text, image, audio]
+
+data_privacy:
+  trains_on_free_tier: null
+  retention_days: null
+  zero_retention_on_paid: true  # with zero-data-retention add-on
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "MATERIAL CHANGE 2026-07-19: GPT-5.6 family went GA 2026-07-09 — Luna $1/$6, Terra $2.50/$15, Sol $5/$30 per 1M (input/output); this is a full flagship-lineup update, not just an add-on. gpt-5.5/gpt-5.5-pro remain callable per some sources but are likely aging out — not yet confirmed removed from the API (only ChatGPT-surface retirements confirmed: o3 retiring from ChatGPT 2026-08-26; GPT-4o/4.1/4.1-mini/o4-mini already retired from ChatGPT 2026-02-13; older GPT-5/o3 API snapshots deprecated 2026-06-11, removal scheduled 2026-12-11). gpt-4.1-mini corrected to $0.40/$1.60 (snapshot had $0.15/$0.60 which is gpt-4o-mini pricing). Container sessions now billed per-minute (5-min minimum) as of 2026-06-02. No key configured yet; no probe run (method: skipped)."

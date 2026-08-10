@@ -1,0 +1,98 @@
+{
+  "additionalProperties": false,
+  "description": "User investment profile (schema v1).\n\nAttributes\n----------\nschema_version\n    Monotonic schema version. Increment only on breaking changes.\n    Additive fields with defaults do not require a bump.\nrisk_tolerance\n    Coarse risk bucket. Refined risk metrics (e.g. CVaR limits) belong\n    on a per-portfolio policy object, not here.\nhorizon_years\n    Investment horizon in whole years. Bounded ``1..50`` to cover a\n    single tactical year through a multi-decade plan.\nliquidity_needs\n    How much of the portfolio may be locked up in illiquid positions:\n    ``low`` tolerates lockups, ``high`` requires daily liquidity.\nbase_currency\n    ISO 4217 alphabetic currency code (e.g. ``USD``). Normalized to\n    upper case before validation.\ntax_jurisdiction\n    Coarse tax bucket \u2014 finer detail (state, ISA, RRSP, PEA, etc.) is\n    deferred to a future ``TaxProfile`` companion model.\nesg_preference\n    ``none`` ignores ESG, ``tilt`` overweights leaders, ``strict``\n    excludes laggards entirely.\nexcluded_sectors\n    Free-form sector exclusion list (e.g. ``tobacco``, ``defense``).\n    Normalized to lower case and de-duplicated while preserving\n    insertion order.\nexperience_level\n    Self-reported sophistication. Used to gate complex order types\n    and structured products in the UI.",
+  "properties": {
+    "base_currency": {
+      "description": "ISO 4217 alphabetic currency code (3 upper-case letters).",
+      "pattern": "^[A-Z]{3}$",
+      "title": "Base Currency",
+      "type": "string"
+    },
+    "esg_preference": {
+      "description": "ESG posture: ignore, overweight leaders, or hard-exclude laggards.",
+      "enum": [
+        "none",
+        "tilt",
+        "strict"
+      ],
+      "title": "Esg Preference",
+      "type": "string"
+    },
+    "excluded_sectors": {
+      "description": "Sectors to exclude (lower-cased, de-duplicated).",
+      "items": {
+        "type": "string"
+      },
+      "title": "Excluded Sectors",
+      "type": "array"
+    },
+    "experience_level": {
+      "description": "Self-reported investing experience.",
+      "enum": [
+        "novice",
+        "intermediate",
+        "expert"
+      ],
+      "title": "Experience Level",
+      "type": "string"
+    },
+    "horizon_years": {
+      "description": "Investment horizon in whole years.",
+      "maximum": 50,
+      "minimum": 1,
+      "title": "Horizon Years",
+      "type": "integer"
+    },
+    "liquidity_needs": {
+      "description": "Tolerance for capital lockup; high = needs daily liquidity.",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "Liquidity Needs",
+      "type": "string"
+    },
+    "risk_tolerance": {
+      "description": "Coarse risk bucket.",
+      "enum": [
+        "conservative",
+        "moderate",
+        "aggressive"
+      ],
+      "title": "Risk Tolerance",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": 1,
+      "description": "Schema version; bump on breaking changes.",
+      "minimum": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "tax_jurisdiction": {
+      "description": "Coarse tax jurisdiction; refine via a future TaxProfile.",
+      "enum": [
+        "US",
+        "EU",
+        "UK",
+        "CA",
+        "AU",
+        "OTHER"
+      ],
+      "title": "Tax Jurisdiction",
+      "type": "string"
+    }
+  },
+  "required": [
+    "risk_tolerance",
+    "horizon_years",
+    "liquidity_needs",
+    "base_currency",
+    "tax_jurisdiction",
+    "esg_preference",
+    "experience_level"
+  ],
+  "title": "InvestmentProfile",
+  "type": "object"
+}

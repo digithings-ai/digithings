@@ -5,14 +5,12 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from digisearch.core.models import Chunk, Query, SearchResponse
+from digisearch.search import add_chunks
+from digisearch.server import QueryRequest, QueryResponse, app
 from fastapi.testclient import TestClient
 
-from digisearch.core.models import Query, SearchResponse
-from digisearch.server import QueryRequest, QueryResponse, app
-from digisearch.search import add_chunks
-from digisearch.core.models import Chunk
 from tests.digi_test_jwt import auth_headers
-
 
 # --- Index config accepts new fields ---------------------------------------
 

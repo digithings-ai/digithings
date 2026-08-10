@@ -3,11 +3,11 @@
 **Status:** accepted
 **Date:** 2026-04-19
 
-**Rationale for accepting:** All open questions in this ADR are deferred to post-GA validation rather than blocking — none require resolution before Phase 4/5 work (epics #10–13) can start. The two-axis pricing structure (seat + metered units), entitlement flow via DigiKey JWTs, and Stripe as billing provider are stable engineering decisions that downstream work can build against. Dollar figures and free-tier limits are explicitly illustrative and will be tuned once real usage data exists. Accepting unblocks billing integration, entitlement middleware, and Atlas UI copy.
+**Rationale for accepting:** All open questions in this ADR are deferred to post-GA validation rather than blocking — none require resolution before Phase 4/5 work (epics #10–13) can start. The two-axis pricing structure (seat + metered units), entitlement flow via digikey JWTs, and Stripe as billing provider are stable engineering decisions that downstream work can build against. Dollar figures and free-tier limits are explicitly illustrative and will be tuned once real usage data exists. Accepting unblocks billing integration, entitlement middleware, and Atlas UI copy.
 
 ## Context
 
-Atlas is the commercial surface on top of DigiQuant (epic #12, tracked by issue #13 and related tasks). DigiQuant itself is open-core: the engine, strategy registry, and backtest harness live in this repository under a permissive license. Atlas layers research workflows, persisted outputs, hosted compute, and a polished UI on top — and is the planned revenue driver for the financial-AI vertical (see [`docs/VISION.md`](../VISION.md) → "Atlas tiering").
+Atlas is the commercial surface on top of digiquant (epic #12, tracked by issue #13 and related tasks). digiquant itself is open-core: the engine, strategy registry, and backtest harness live in this repository under a permissive license. Atlas layers research workflows, persisted outputs, hosted compute, and a polished UI on top — and is the planned revenue driver for the financial-AI vertical (see [`docs/VISION.md`](../VISION.md) → "Atlas tiering").
 
 `docs/VISION.md` already commits to a **hybrid pricing model**: free batch tier + paid seats + metered API. Issue #28 asks for the *actual structure* — names, dimensions, illustrative numbers — so downstream work (billing integration, entitlement middleware, UI copy, sales collateral) can begin. Without a decided shape, epic #12 cannot execute.
 
@@ -49,8 +49,8 @@ Stripe. Self-serve checkout, Stripe-metered billing for overage, Stripe Customer
 ### Entitlement flow
 
 1. A buyer completes Stripe checkout; webhook lands on a new `atlas-billing` service.
-2. `atlas-billing` writes the tenant's plan + allowances to the DigiKey tenant record and mints / updates a **scoped API key** (DigiKey already supports scoped keys — [see `digikey/`](../../digikey/)) with the plan's entitlement claims (`atlas.tier`, `atlas.backtests_included`, `atlas.optimize_hours_included`).
-3. Atlas (and any DigiQuant endpoint that charges a meter) reads the entitlement claim from the presented JWT, checks live usage against the meter, and either serves, 402s (overage disabled), or records an overage event.
+2. `atlas-billing` writes the tenant's plan + allowances to the digikey tenant record and mints / updates a **scoped API key** (digikey already supports scoped keys — [see `digikey/`](../../digikey/)) with the plan's entitlement claims (`atlas.tier`, `atlas.backtests_included`, `atlas.optimize_hours_included`).
+3. Atlas (and any digiquant endpoint that charges a meter) reads the entitlement claim from the presented JWT, checks live usage against the meter, and either serves, 402s (overage disabled), or records an overage event.
 4. Overage events are written through `digibase.audit.redact_mapping` as immutable JSONL (see [`digibase/` audit pattern](../../digibase/)) *and* reported to Stripe as metered usage. The JSONL trail is the source of truth for disputes; Stripe is the source of truth for invoicing.
 
 ## Consequences
@@ -58,14 +58,14 @@ Stripe. Self-serve checkout, Stripe-metered billing for overage, Stripe Customer
 **Positive**
 - Heavy-compute users pay proportionally; light users are not overcharged. Matches the cost structure of the underlying compute (backtests and optimize sweeps are the dominant cost drivers).
 - Predictable *floor* (seat) plus scalable *ceiling* (metered). Customers can budget the floor and monitor the ceiling.
-- Entitlement claims live in DigiKey JWTs — no new auth surface. Scoped-key mechanism already exists and is tested.
+- Entitlement claims live in digikey JWTs — no new auth surface. Scoped-key mechanism already exists and is tested.
 - Audit trail for metered units is free: `digibase.audit` already enforces the redact-then-append pattern.
 - Stripe handles tax, dunning, PCI, and refunds. Zero in-house billing liability.
 
 **Negative / tradeoffs**
 - Two meters (backtests, optimize-hours) is more complex to communicate than a single unit. Pricing-page copy must make the distinction obvious.
 - Metered billing means customers can be surprised by a bill. Mitigation: in-product usage dashboard, email alert at 80% / 100% of included allowance, optional hard-cap setting that converts overage-eligible tiers into free-tier behavior past the allowance.
-- Entitlement enforcement must happen at *every* chargeable endpoint. A missing check is a revenue leak. Mitigation: entitlement middleware is a single library consumed by DigiQuant / Atlas handlers; CI requires every chargeable endpoint to declare its meter.
+- Entitlement enforcement must happen at *every* chargeable endpoint. A missing check is a revenue leak. Mitigation: entitlement middleware is a single library consumed by digiquant / Atlas handlers; CI requires every chargeable endpoint to declare its meter.
 - Stripe webhook reliability is now on the critical path for entitlement updates. Mitigation: idempotent webhook handler + nightly reconciliation job against Stripe's API.
 
 ## Alternatives considered
@@ -74,7 +74,7 @@ Stripe. Self-serve checkout, Stripe-metered billing for overage, Stripe Customer
 2. **Pure metered (no seats).** Rejected. Unpredictable monthly bills make procurement impossible for quant-fund buyers (who need pre-approved budgets) and spook individual traders (who dislike "the meter is running" anxiety). Also removes the recurring-revenue floor needed for forecasting.
 3. **Freemium only, no paid tier.** Rejected. No revenue path; contradicts `docs/VISION.md`'s commercial strategy for the financial-AI vertical.
 4. **Token-based metering (per-LLM-token).** Considered. Rejected for launch because backtests and optimize-hours are more legible units for a quant buyer (they map to work, not to a model-internal detail) and because LLM token cost is a subset of — not a proxy for — total compute cost. Revisit if LLM cost dominates the unit economics.
-5. **Per-domain-day metering** (Atlas research over N instrument-domains per day). Considered; noted in the VISION doc. Rejected for launch as too Atlas-specific — "backtest" and "optimize-hour" generalize across DigiQuant use beyond Atlas research runs. A research-specific meter can be added later without changing the structure.
+5. **Per-domain-day metering** (Atlas research over N instrument-domains per day). Considered; noted in the VISION doc. Rejected for launch as too Atlas-specific — "backtest" and "optimize-hour" generalize across digiquant use beyond Atlas research runs. A research-specific meter can be added later without changing the structure.
 
 ## Open questions
 
@@ -88,6 +88,6 @@ Stripe. Self-serve checkout, Stripe-metered billing for overage, Stripe Customer
 
 - Related: [ADR-0002 — Domain Unification](0002-domain-unification.md) (Atlas surface mounts at `digiquant.io/atlas`)
 - Related: [`docs/VISION.md`](../VISION.md) → "Atlas tiering"
-- Related: DigiKey scoped keys — [`digikey/`](../../digikey/)
+- Related: digikey scoped keys — [`digikey/`](../../digikey/)
 - Related: Audit pattern — [`digibase/`](../../digibase/)
 - Issue: #28 (this ADR), epic #12, dependency #10

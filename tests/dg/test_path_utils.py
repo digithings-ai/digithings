@@ -6,9 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from digigraph.path_utils import assert_safe_path
-
 
 # ---------------------------------------------------------------------------
 # Happy path — valid sub-paths

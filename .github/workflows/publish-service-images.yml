@@ -1,0 +1,120 @@
+# Publishes digithings HTTP service images to GHCR once changes reach main.
+# digichat keeps its own workflow (publish-digichat-image.yml) — versioned via package.json.
+#
+# Tags per service:
+#   ghcr.io/digithings-ai/<svc>:sha-<shortsha>
+#   ghcr.io/digithings-ai/<svc>:latest
+#   ghcr.io/digithings-ai/<svc>:v<pyproject-version>
+#
+# Refs #2016 / Fixes #2017
+name: "Publish: service images"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "digibase/**"
+      - "digikey/**"
+      - "digigraph/**"
+      - "digiquant/**"
+      - "digisearch/**"
+      - "digismith/**"
+      - "digivault/**"
+      - "digiclaw/**"
+      - "digillm/**"
+      - ".github/workflows/publish-service-images.yml"
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service to publish (or all)"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - digikey
+          - digigraph
+          - digiquant
+          - digisearch
+          - digismith
+          - digivault
+          - digiclaw
+
+concurrency:
+  group: publish-service-images
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.set.outputs.include }}
+    steps:
+      - id: set
+        env:
+          SELECTED: ${{ github.event.inputs.service || 'all' }}
+        run: |
+          python3 <<'PY'
+          import json, os
+          all_rows = [
+              {"service": "digikey", "dockerfile": "digikey/Dockerfile", "build_args": ""},
+              {"service": "digigraph", "dockerfile": "digigraph/Dockerfile", "build_args": ""},
+              {"service": "digiquant", "dockerfile": "digiquant/Dockerfile", "build_args": "NAUTILUS=1"},
+              {"service": "digisearch", "dockerfile": "digisearch/Dockerfile", "build_args": ""},
+              {"service": "digismith", "dockerfile": "digismith/Dockerfile", "build_args": ""},
+              {"service": "digivault", "dockerfile": "digivault/Dockerfile", "build_args": ""},
+              {"service": "digiclaw", "dockerfile": "digiclaw/Dockerfile", "build_args": ""},
+          ]
+          selected = os.environ.get("SELECTED") or "all"
+          rows = all_rows if selected == "all" else [r for r in all_rows if r["service"] == selected]
+          if not rows:
+              raise SystemExit(f"unknown service: {selected}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"include={json.dumps(rows)}\n")
+          PY
+
+  publish:
+    needs: matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.matrix.outputs.include) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read package version
+        id: version
+        run: |
+          ver=$(python3 -c "import tomllib,pathlib; p=pathlib.Path('${{ matrix.service }}/pyproject.toml'); print(tomllib.loads(p.read_text())['project']['version'])")
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          build-args: ${{ matrix.build_args }}
+          tags: |
+            ghcr.io/digithings-ai/${{ matrix.service }}:sha-${{ steps.version.outputs.short_sha }}
+            ghcr.io/digithings-ai/${{ matrix.service }}:latest
+            ghcr.io/digithings-ai/${{ matrix.service }}:v${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}

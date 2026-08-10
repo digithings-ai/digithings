@@ -10,6 +10,7 @@ from digisearch.ingestion.base import Parser
 
 try:
     import polars as pl
+
     _POLARS_AVAILABLE = True
 except ImportError:
     _POLARS_AVAILABLE = False

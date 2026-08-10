@@ -13,7 +13,6 @@ jwt = pytest.importorskip("jwt")
 def _issue_and_configure(monkeypatch):
     """Build a JWT signed with a fresh RSA key, wire env for local verify."""
     from cryptography.hazmat.primitives.asymmetric import rsa
-
     from digikey.crypto_keys import private_key_to_pem, public_key_to_pem
     from digikey.jwt_issue import issue_access_token
 

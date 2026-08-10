@@ -7,7 +7,6 @@ import pytest
 
 from digibase import DEFAULT_TIMEOUT, async_client, sync_client
 
-
 pytestmark = pytest.mark.unit
 
 

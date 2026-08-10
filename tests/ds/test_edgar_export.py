@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
 import yaml
-
 from digisearch.dev.edgar_sample_export import (
     row_to_markdown,
     row_to_sidecar_metadata,
@@ -11,6 +11,8 @@ from digisearch.dev.edgar_sample_export import (
     sidecar_yaml_dict,
     write_export_pair,
 )
+
+pytestmark = pytest.mark.unit
 
 
 def test_row_to_stem_sanitizes_cik() -> None:

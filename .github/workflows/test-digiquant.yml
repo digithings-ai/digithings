@@ -1,0 +1,64 @@
+name: "Test: digiquant"
+
+# Installs from the committed uv.lock rather than resolving fresh (#1714).
+#
+# THIS LANE DOES NOT USE `--all-extras`, and that is the whole point of the
+# comment. Every other converted gate syncs the full workspace; this one must
+# not, for two compounding reasons:
+#
+#   1. `--all-extras` installs `digiquant[nautilus]`. tests/dq/conftest.py drops
+#      nine nautilus-importing modules from collection ONLY when the extra is
+#      absent (`if importlib.util.find_spec("nautilus_trader") is None`). Install
+#      it and those modules come back — collection goes 573 → 1701 items, this
+#      lane starts duplicating test-nautilus.yml, and it reopens the SIGABRT
+#      (exit 134) that #42 exists to avoid.
+#   2. `digiquant[all]` is `["digiquant[nautilus]"]`, so excluding the nautilus
+#      extra alone does not work — `--no-extra nautilus` leaves `all` to pull it
+#      straight back in. Both would have to be excluded.
+#
+# So the lane pins its own extras instead of subtracting from everything, which
+# also keeps the historical set exact rather than approximately right:
+# `[dev,visualization]` transitively brings atlas, indicators and m2 (via dev)
+# but not prices, data, optimize, mcp, otel or nautilus. digibase and digikey
+# arrive as declared dependencies of digiquant.
+#
+# Verified equivalent: "491 passed, 18 skipped, 64 deselected" on develop under
+# pip (run 30503444075), and exactly 491/18/64 from the lock. For contrast,
+# `--all-extras` gave 1534 passed / 13 skipped / 79 deselected — a silent 3x
+# widening of the gate, which is what this shape avoids.
+#
+# `pip install cryptography pandas` dropped as redundant: both arrive
+# transitively (cryptography via digikey, pandas via the atlas/m2 extras).
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pure bash, no deps — deliberately ahead of the uv sync so a malformed or
+      # colliding migration filename fails in seconds rather than after an install
+      # (#1811). The `digiquant/**` filter in ci.yml covers supabase/migrations/**,
+      # so every PR touching the chain reaches this step.
+      - name: Supabase migration chain guard
+        run: bash digiquant/scripts/atlas/verify-supabase-migrations.sh
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --frozen fails if uv.lock is stale rather than silently re-resolving.
+      # Deliberately NOT --all-packages --all-extras — see the header.
+      - name: Install from lockfile (excludes nautilus — see header, #42)
+        run: uv sync --frozen --package digiquant --extra dev --extra visualization
+
+      - name: Ruff
+        run: uv run --frozen --no-sync ruff check digiquant/src
+
+      - name: Pytest
+        # Modules transitively importing nautilus_trader are dropped at
+        # collection by tests/dq/conftest.py when the extra isn't installed.
+        # Those files run in test-nautilus.yml instead (#1501).
+        run: uv run --frozen --no-sync pytest tests/dq/ -m unit -v --tb=short

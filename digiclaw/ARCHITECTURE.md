@@ -1,6 +1,6 @@
-# DigiClaw Architecture
+# digiclaw Architecture
 
-**Component:** DigiClaw — Gateway, Heartbeat, and Audit Layer
+**Component:** digiclaw — Gateway, Heartbeat, and Audit Layer
 **Status:** Phase 3 (heartbeat + audit implemented); OpenClaw gateway deferred
 **Last updated:** 2026-03-29
 
@@ -8,12 +8,12 @@
 
 ## 1. Overview
 
-DigiClaw is the intended user-facing gateway and runtime layer for the DigiThings stack. Its full vision encompasses a persistent, multi-channel interface (Slack, Discord, Telegram, WhatsApp), session and queue management, a WebSocket control plane, and a self-healing loop driven by ADDM drift detection. In practice, as of Phase 3, only two concerns are implemented:
+digiclaw is the intended user-facing gateway and runtime layer for the digithings stack. Its full vision encompasses a persistent, multi-channel interface (Slack, Discord, Telegram, WhatsApp), session and queue management, a WebSocket control plane, and a self-healing loop driven by ADDM drift detection. In practice, as of Phase 3, only two concerns are implemented:
 
-1. **Heartbeat runner** — a single-shot Python script that pings DigiGraph and DigiQuant health endpoints, checks for strategy drift via a stub ADDM endpoint, and logs results to the JSONL audit file.
+1. **Heartbeat runner** — a single-shot Python script that pings digigraph and digiquant health endpoints, checks strategy drift via digiquant `GET /check_drift` (requires a digikey bearer), and logs results to the JSONL audit file.
 2. **JSONL audit log** — an append-only structured log consumed by any component that imports `digiclaw.audit.audit_log`.
 
-Everything else in scope for DigiClaw — a persistent gateway runtime with channel adapters, session manager, queue manager, WebSocket control plane, and MCP skill integration — is deferred. The `digiclaw/skills/README.md` defines the `run_digigraph_workflow` skill contract as a Phase 0 placeholder; no runtime implements it yet.
+Everything else in scope for digiclaw — a persistent gateway runtime with channel adapters, session manager, queue manager, WebSocket control plane, and MCP skill integration — is deferred. The `digiclaw/skills/README.md` defines the `run_digigraph_workflow` skill contract as a Phase 0 placeholder; no runtime implements it yet.
 
 **What is NOT implemented today:**
 - OpenClaw Node.js runtime (any version)
@@ -21,8 +21,8 @@ Everything else in scope for DigiClaw — a persistent gateway runtime with chan
 - Session manager and queue manager
 - WebSocket control plane
 - `run_digigraph_workflow` MCP skill execution
-- Full ADDM drift detection (stub only — always returns no drift)
-- Any HTTP API or REST health endpoint for DigiClaw itself
+- Durable ADDM history across digiquant restarts (in-process deque today)
+- Any HTTP API or REST health endpoint for digiclaw itself
 
 ---
 
@@ -34,7 +34,7 @@ Everything else in scope for DigiClaw — a persistent gateway runtime with chan
 |------|------|
 | `digiclaw/__init__.py` | Package stub; one-line comment noting OpenClaw integration is deferred |
 | `digiclaw/__main__.py` | Entry point: imports `heartbeat_runner.main` and calls it via `raise SystemExit(main())` |
-| `digiclaw/heartbeat_runner.py` | Single-cycle heartbeat: pings `/health` on DigiGraph and DigiQuant, calls stub ADDM, triggers re-optimization when drift is reported, writes `HEARTBEAT.md` checklist-seen event |
+| `digiclaw/heartbeat_runner.py` | Single-cycle heartbeat: pings `/health` on digigraph and digiquant, calls `/check_drift` with digikey bearer, triggers re-optimization when drift is reported, writes `HEARTBEAT.md` checklist-seen event |
 | `digiclaw/audit.py` | `audit_log()` function: appends one JSONL line per call; optionally POSTs a copy to `AUDIT_SINK_URL` |
 | `digiclaw/skills/README.md` | Skill contract definition for `run_digigraph_workflow` (Phase 0 contract only, no implementation) |
 | `HEARTBEAT.md` (repo root) | Checklist document read by the heartbeat agent; documents four check categories and the 7-day unattended run milestone |
@@ -53,7 +53,7 @@ One cycle does the following in sequence:
 2. `_check_drift_and_reoptimize()` — HTTP GET to `{DIGIQUANT_URL}/check_drift?strategy_id=<REOPTIMIZE_STRATEGY>`; if `drift_detected` is true in the response body, logs `reoptimize_triggered`, then POSTs to `{DIGIQUANT_URL}/run_optimize`; logs `reoptimize_completed` or `reoptimize_failed`.
 3. `HEARTBEAT.md` presence check — if the file exists at `{DIGI_WORKSPACE}/HEARTBEAT.md`, logs `heartbeat_checklist_seen`.
 
-The current DigiQuant stub at `/check_drift` always returns `{"drift_detected": false}`, so steps 2b–2c never execute in practice.
+Drift checks are **auth-blocked**, not logic-blocked: without a digikey bearer (`digikey_bearer_token()`), the runner logs `drift_check_skipped` and never calls `/check_drift`. With a bearer and sufficient Sharpe history (≥3 observations via backtests), `/check_drift` may return `drift_detected: true` and trigger re-optimization.
 
 ### Audit log behaviour
 
@@ -76,7 +76,7 @@ The current DigiQuant stub at `/check_drift` always returns `{"drift_detected": 
 | `AUDIT_LOG_PATH` (JSONL file) | Append-only event log written by all components that import `digiclaw.audit` |
 | `AUDIT_SINK_URL` (HTTP POST) | Optional remote audit mirror (NDJSON); best-effort, no auth, no retry |
 
-DigiClaw has **no HTTP server of its own**. It only calls outbound HTTP (DigiGraph `/health`, DigiQuant `/health`, DigiQuant `/check_drift`, DigiQuant `/run_optimize`, optional `AUDIT_SINK_URL`).
+digiclaw has **no HTTP server of its own**. It only calls outbound HTTP (digigraph `/health`, digiquant `/health`, digiquant `/check_drift`, digiquant `/run_optimize`, optional `AUDIT_SINK_URL`).
 
 ### Planned (deferred)
 
@@ -101,10 +101,10 @@ Every line written by `audit_log()` is a JSON object with the following schema:
   "event_type": "<string>",                        // always present
   "agent_id":   "<string>",                        // always present (may be empty)
   "payload":    { ... },                           // always present (may be empty dict)
-  "key_prefix": "<string>",                        // optional; DigiKey correlation
-  "tenant":     "<string>",                        // optional; DigiKey correlation
-  "project_id": "<string>",                        // optional; DigiKey correlation
-  "jti":        "<string>",                        // optional; DigiKey JWT ID
+  "key_prefix": "<string>",                        // optional; digikey correlation
+  "tenant":     "<string>",                        // optional; digikey correlation
+  "project_id": "<string>",                        // optional; digikey correlation
+  "jti":        "<string>",                        // optional; digikey JWT ID
   "path":       "<string>"                         // optional; HTTP path that triggered the event
 }
 ```
@@ -135,9 +135,9 @@ For `event_type = "heartbeat"`, the `payload` object contains:
 | `reoptimize_failed` | `error` |
 | `reoptimize_skipped` | `error` (e.g. `"DIGIQUANT_DATA_DIR required"`) |
 
-### DigiKey correlation fields
+### digikey correlation fields
 
-When DigiGraph validates a JWT and emits an audit event, it may pass `key_prefix`, `tenant`, `project_id`, and `jti` into `audit_log()`. These fields allow post-hoc correlation of audit lines with the issuing API key or JWT without embedding the full token. The heartbeat runner does not currently populate these fields.
+When digigraph validates a JWT and emits an audit event, it may pass `key_prefix`, `tenant`, `project_id`, and `jti` into `audit_log()`. These fields allow post-hoc correlation of audit lines with the issuing API key or JWT without embedding the full token. The heartbeat runner does not currently populate these fields.
 
 ---
 
@@ -162,7 +162,7 @@ When DigiGraph validates a JWT and emits an audit event, it may pass `key_prefix
         |
         +-- _check_drift_and_reoptimize()
         |       |-- HTTP GET {DIGIQUANT_URL}/check_drift?strategy_id=...  (timeout 5s)
-        |       |   [stub: always returns drift_detected=false]
+        |       |   [skipped if no digikey bearer; else real Z-score check]
         |       |-- if drift_detected:
         |       |       audit_log("reoptimize_triggered", ...)
         |       |       HTTP POST {DIGIQUANT_URL}/run_optimize  (timeout 60s)
@@ -182,7 +182,7 @@ Any component (digiclaw / digigraph / digiquant)
   audit_log(event_type, agent_id, payload, ...)
         |
         +-- redact secrets in payload (key substring match)
-        +-- build event dict with ts, event_type, agent_id, payload, optional DigiKey fields
+        +-- build event dict with ts, event_type, agent_id, payload, optional digikey fields
         +-- open(AUDIT_LOG_PATH, "a") → write JSON line + "\n"
         |
         `-- if AUDIT_SINK_URL:
@@ -195,9 +195,9 @@ There is no queue, no buffer, and no batching. Each call opens, appends, and clo
 
 `HEARTBEAT.md` in the repo root defines four check categories: service health, portfolio/strategy drift, security, and macro/data. The heartbeat runner does not parse the checklist; it only tests whether the file exists at `{DIGI_WORKSPACE}/HEARTBEAT.md` and logs a `heartbeat_checklist_seen` event. All actual checklist logic is encoded in Python, not driven from the Markdown file. The file functions as documentation and a human-readable record of intent, not as executable configuration.
 
-### ADDM detection (stub to planned)
+### ADDM detection (auth-gated, in-process history)
 
-The current `_check_drift_and_reoptimize()` function calls DigiQuant's `/check_drift` endpoint and acts on the response. The DigiQuant stub implementation always returns `{"drift_detected": false}`. No statistical computation occurs anywhere in the codebase today. The re-optimization pathway is wired correctly — if a real ADDM implementation returns `drift_detected: true`, the heartbeat runner will immediately POST to `/run_optimize` with a hardcoded symbol list (`["AAPL", "MSFT", "GOOGL"]`). See Section 12 for a redesign recommendation.
+`_check_drift_and_reoptimize()` calls digiquant `GET /check_drift` with a digikey JWT. When no bearer is available, it logs `drift_check_skipped` (operators often misread this as “ADDM stub”). digiquant runs rolling Sharpe Z-score logic in `addm.py`; history is in-process until persisted. When `drift_detected` is true, the runner POSTs `/run_optimize` with a hardcoded symbol list (`["AAPL", "MSFT", "GOOGL"]`) — replace with strategy registry positions in a follow-up. See Section 12 for persistence and symbol wiring.
 
 ---
 
@@ -205,25 +205,25 @@ The current `_check_drift_and_reoptimize()` function calls DigiQuant's `/check_d
 
 ### Current posture
 
-**Loopback-only by default.** All service ports in `docker-compose.yml` are bound to `127.0.0.1`. The heartbeat container has no published port at all. There is no DigiClaw-owned network surface to attack remotely in the current implementation.
+**Loopback-only by default.** All service ports in `docker-compose.yml` are bound to `127.0.0.1`. The heartbeat container has no published port at all. There is no digiclaw-owned network surface to attack remotely in the current implementation.
 
-**No public interface.** DigiClaw makes only outbound HTTP calls to DigiGraph and DigiQuant on the internal Docker network (`http://digigraph:8000`, `http://digiquant:8001`). It does not listen on any port.
+**No public interface.** digiclaw makes only outbound HTTP calls to digigraph and digiquant on the internal Docker network (`http://digigraph:8000`, `http://digiquant:8001`). It does not listen on any port.
 
 **Audit log append-only.** The audit file is opened with `"a"` mode (append). There is no delete or overwrite path in `audit.py`. The Docker heartbeat service mounts the audit directory as a writable volume (`./digiquant/results/audit:/audit`); the workspace is mounted read-only (`.:/workspace:ro`).
 
 **Secret redaction.** `audit_log()` redacts payload keys containing `password`, `api_key`, `token`, or `secret` by case-insensitive substring match before writing to disk or forwarding to `AUDIT_SINK_URL`. This protects against accidental inclusion of credentials in heartbeat payloads.
 
-**Filesystem least privilege.** The heartbeat Docker container mounts the workspace read-only. It only requires write access to the audit volume. No broker keys, LiteLLM master keys, or DigiKey secrets are passed to the heartbeat environment by default.
+**Filesystem least privilege.** The heartbeat Docker container mounts the workspace read-only. It only requires write access to the audit volume. No broker keys, LiteLLM master keys, or digikey secrets are passed to the heartbeat environment by default.
 
-**Human gates.** `SECURITY.md` mandates explicit user confirmation for all irreversible actions (live trades, fund transfers, email sends). The current stub ADDM implementation never triggers re-optimization, so no automated irreversible action is possible. When ADDM is fully implemented, the re-optimization pathway (backtesting and optimizer invocation) must remain behind a human gate before any live execution.
+**Human gates.** `SECURITY.md` mandates explicit user confirmation for all irreversible actions (live trades, fund transfers, email sends). Automated re-optimization (backtest/optimize only) may run when drift is detected; live execution remains behind a human gate.
 
 ### OpenClaw CVE-2026-25253 context
 
-CVE-2026-25253 disclosed a one-click RCE pathway in the OpenClaw runtime: a malicious web page could pivot through a victim's browser tab to exfiltrate the gateway's auth token and achieve remote code execution on the host. Since DigiClaw does not yet run OpenClaw, this CVE does not affect the current codebase. However, it is the primary reason `SECURITY.md` mandates container isolation, loopback-only binding, and Tailscale/Cloudflare Tunnel for any remote access before OpenClaw integration proceeds.
+CVE-2026-25253 disclosed a one-click RCE pathway in the OpenClaw runtime: a malicious web page could pivot through a victim's browser tab to exfiltrate the gateway's auth token and achieve remote code execution on the host. Since digiclaw does not yet run OpenClaw, this CVE does not affect the current codebase. However, it is the primary reason `SECURITY.md` mandates container isolation, loopback-only binding, and Tailscale/Cloudflare Tunnel for any remote access before OpenClaw integration proceeds.
 
 ### ClawHavoc campaign context
 
-The ClawHavoc campaign identified over 800 malicious skills in the public ClawHub registry (approximately 20% of the marketplace), many delivering the Atomic macOS Stealer (AMOS). DigiClaw's `digiclaw/skills/README.md` defines a custom `run_digigraph_workflow` skill. This skill must be implemented as a local, internally-audited skill — never sourced from ClawHub or any third-party registry — when OpenClaw integration proceeds.
+The ClawHavoc campaign identified over 800 malicious skills in the public ClawHub registry (approximately 20% of the marketplace), many delivering the Atomic macOS Stealer (AMOS). digiclaw's `digiclaw/skills/README.md` defines a custom `run_digigraph_workflow` skill. This skill must be implemented as a local, internally-audited skill — never sourced from ClawHub or any third-party registry — when OpenClaw integration proceeds.
 
 ### Hardened deployment requirements
 
@@ -231,8 +231,8 @@ Per `SECURITY.md`:
 - Run the gateway in an isolated container or VM with no host-network access.
 - Bind only to loopback; use Tailscale or Cloudflare Tunnel for remote access.
 - Apply AppArmor or seccomp profiles to restrict syscalls available to the gateway container.
-- DigiKey JWTs (not static API keys) must authenticate all service-to-service calls.
-- MCP tools exposed by DigiQuant are read-only by default; no MCP skill may have fund-transfer rights without human gate configuration.
+- digikey JWTs (not static API keys) must authenticate all service-to-service calls.
+- MCP tools exposed by digiquant are read-only by default; no MCP skill may have fund-transfer rights without human gate configuration.
 
 ### Audit sink risk
 
@@ -256,7 +256,7 @@ The `AUDIT_SINK_URL` integration is fire-and-forget with a 3-second timeout and 
 
 ### Future Node.js gateway concurrency model
 
-The planned OpenClaw Node.js gateway is an event-loop-based runtime suited to concurrent WebSocket sessions and I/O-bound channel adapter work. The queue manager subsystem (per-session serialization) is necessary to prevent race conditions when multiple channel messages arrive for the same session simultaneously. CPU-bound work (strategy computation) is delegated to DigiQuant via HTTP rather than executed in the gateway process.
+The planned OpenClaw Node.js gateway is an event-loop-based runtime suited to concurrent WebSocket sessions and I/O-bound channel adapter work. The queue manager subsystem (per-session serialization) is necessary to prevent race conditions when multiple channel messages arrive for the same session simultaneously. CPU-bound work (strategy computation) is delegated to digiquant via HTTP rather than executed in the gateway process.
 
 ---
 
@@ -268,7 +268,7 @@ The Docker shell loop sleeps 1800 seconds (30 minutes) between cycles. `HEARTBEA
 
 ### JSONL append cost
 
-Each `audit_log()` call opens the file, writes a single line, and closes it. For the heartbeat use case (one event per 30 minutes), this is negligible. For high-frequency audit paths (every MCP tool call in a busy DigiGraph workflow), the repeated `open/write/close` cycle on a high-concurrency service is a potential bottleneck. A buffered async write or a logging handler with `RotatingFileHandler` would be more appropriate at scale.
+Each `audit_log()` call opens the file, writes a single line, and closes it. For the heartbeat use case (one event per 30 minutes), this is negligible. For high-frequency audit paths (every MCP tool call in a busy digigraph workflow), the repeated `open/write/close` cycle on a high-concurrency service is a potential bottleneck. A buffered async write or a logging handler with `RotatingFileHandler` would be more appropriate at scale.
 
 ### Audit sink HTTP round-trip
 
@@ -282,21 +282,21 @@ Both health checks in `run_heartbeat()` have a 5-second timeout. The total worst
 
 ## 9. Integration Points
 
-### DigiGraph
+### digigraph
 
-The heartbeat runner polls `{DIGIGRAPH_URL}/health` (default `http://127.0.0.1:8000`) via HTTP GET. In Docker, this resolves to the `digigraph` service container on the internal network. The heartbeat service declares `depends_on: digigraph: condition: service_healthy` in `docker-compose.yml`, so it will not start until DigiGraph's health check passes.
+The heartbeat runner polls `{DIGIGRAPH_URL}/health` (default `http://127.0.0.1:8000`) via HTTP GET. In Docker, this resolves to the `digigraph` service container on the internal network. The heartbeat service declares `depends_on: digigraph: condition: service_healthy` in `docker-compose.yml`, so it will not start until digigraph's health check passes.
 
-DigiGraph also imports `digiclaw.audit.audit_log` directly for its own audit events. The `AUDIT_LOG_PATH` environment variable is set to `/audit/events.jsonl` in both the `digigraph` and `heartbeat` service definitions, and both mount the same host directory (`./digiquant/results/audit`), so audit lines from all sources converge in one file.
+digigraph also imports `digiclaw.audit.audit_log` directly for its own audit events. The `AUDIT_LOG_PATH` environment variable is set to `/audit/events.jsonl` in both the `digigraph` and `heartbeat` service definitions, and both mount the same host directory (`./digiquant/results/audit`), so audit lines from all sources converge in one file.
 
-### DigiQuant
+### digiquant
 
 The heartbeat runner polls `{DIGIQUANT_URL}/health` (default `http://127.0.0.1:8001`) and calls `/check_drift` and `/run_optimize`. The heartbeat service declares `depends_on: digiquant: condition: service_healthy`.
 
-DigiQuant also writes to the same `AUDIT_LOG_PATH` (`/app/results/audit/events.jsonl` in its container, which maps to the same host path).
+digiquant also writes to the same `AUDIT_LOG_PATH` (`/app/results/audit/events.jsonl` in its container, which maps to the same host path).
 
-### DigiKey
+### digikey
 
-DigiKey correlation fields (`key_prefix`, `tenant`, `project_id`, `jti`) are optional parameters on `audit_log()`. They are populated by DigiGraph when it validates a DigiKey JWT and emits a workflow audit event. The heartbeat runner does not authenticate via DigiKey and does not populate these fields. There is no DigiKey-based authorization on the heartbeat service's outbound HTTP calls to DigiGraph and DigiQuant.
+digikey correlation fields (`key_prefix`, `tenant`, `project_id`, `jti`) are optional parameters on `audit_log()`. They are populated by digigraph when it validates a digikey JWT and emits a workflow audit event. The heartbeat runner does not authenticate via digikey and does not populate these fields. There is no digikey-based authorization on the heartbeat service's outbound HTTP calls to digigraph and digiquant.
 
 ### Optional AUDIT_SINK_URL
 
@@ -326,8 +326,8 @@ while true; do python -m digiclaw; sleep 1800; done
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `DIGIGRAPH_URL` | `http://127.0.0.1:8000` | DigiGraph base URL for health and workflow calls |
-| `DIGIQUANT_URL` | `http://127.0.0.1:8001` | DigiQuant base URL for health, drift check, and optimize |
+| `DIGIGRAPH_URL` | `http://127.0.0.1:8000` | digigraph base URL for health and workflow calls |
+| `DIGIQUANT_URL` | `http://127.0.0.1:8001` | digiquant base URL for health, drift check, and optimize |
 | `AUDIT_LOG_PATH` | `digiquant/results/audit/events.jsonl` | Destination for JSONL audit events |
 | `AUDIT_SINK_URL` | (unset) | Optional remote NDJSON sink URL |
 | `DIGI_WORKSPACE` | `.` | Directory searched for `HEARTBEAT.md` |
@@ -340,7 +340,7 @@ In Docker Compose, `DIGIGRAPH_URL` and `DIGIQUANT_URL` are overridden to use int
 
 The planned skill contract in `digiclaw/skills/README.md` describes a single MCP skill that POSTs to `{DIGIGRAPH_URL}/workflow`. When OpenClaw is integrated, this will require:
 1. A running OpenClaw Node.js process as the gateway.
-2. A registered custom skill that calls DigiGraph with a DigiKey-scoped Bearer token.
+2. A registered custom skill that calls digigraph with a digikey-scoped Bearer token.
 3. `DIGIGRAPH_URL` set to the internal Docker network address of the `digigraph` service.
 4. The skill registered in the OpenClaw workspace file, not sourced from ClawHub.
 
@@ -364,15 +364,15 @@ The core gap is the absence of any gateway runtime. The five planned subsystems 
 
 ### MCP skill integration
 
-The `run_digigraph_workflow` skill contract is defined but not implemented. When integrated, it needs DigiKey JWT-based auth on the DigiGraph call, not a hardcoded or unauthenticated request.
+The `run_digigraph_workflow` skill contract is defined but not implemented. When integrated, it needs digikey JWT-based auth on the digigraph call, not a hardcoded or unauthenticated request.
 
-### Full ADDM implementation
+### ADDM persistence and symbol wiring
 
-The re-optimization trigger exists; the drift detector does not. A real ADDM implementation requires: (a) a metric time-series from DigiQuant (e.g., rolling Sharpe or out-of-sample error rate), (b) a statistical process control test (e.g., CUSUM or Page-Hinkley), and (c) a severity score that determines whether to re-optimize or only alert. Currently none of this exists. See Section 12 for a concrete redesign recommendation.
+The re-optimization trigger and Z-score drift detector exist in digiquant (`addm.py`); gaps are durable history, heartbeat `current_sharpe`, and strategy-specific symbols instead of the hardcoded AAPL/MSFT/GOOGL list. See Section 12 recommendation (a).
 
 ### Self-healing loops
 
-Future work includes ensemble model updates driven by FinRL-Meta and GPU-accelerated parallel simulation. None of this is implemented. The re-optimization trigger in `heartbeat_runner.py` is the only self-healing mechanism, and it cannot fire because the stub ADDM always reports no drift.
+Future work includes ensemble model updates driven by FinRL-Meta and GPU-accelerated parallel simulation. None of that is implemented. The re-optimization trigger in `heartbeat_runner.py` is the only self-healing mechanism today; it fires only when digikey auth is configured and digiquant has enough Sharpe history for the strategy.
 
 ### Log rotation and remote audit durability
 
@@ -384,21 +384,21 @@ Neither log rotation nor retry logic for the remote audit sink is implemented. T
 
 The following recommendations address specific, concrete gaps in the current implementation. They are prioritized by operational risk.
 
-### (a) Implement ADDM drift detection using statistical process control
+### (a) Persist ADDM history and wire strategy symbols
 
-Replace the `/check_drift` stub with a real implementation in DigiQuant. The heartbeat runner should query a rolling window of out-of-sample strategy metrics (e.g., Sharpe ratio, max drawdown) from DigiQuant's results store. Apply a CUSUM (cumulative sum control chart) or Page-Hinkley test to detect a shift in the metric distribution. Return a structured response including `drift_detected`, `drift_severity` (float 0–1), and `metric_window` so the heartbeat runner can make a graduated decision: severity below threshold logs a warning; above threshold triggers re-optimization. The hardcoded symbol list `["AAPL", "MSFT", "GOOGL"]` in `heartbeat_runner.py` must be replaced with the actual active strategy positions from DigiQuant's strategy registry.
+digiquant already implements rolling Sharpe Z-score drift in `addm.py`. Next steps: persist history across restarts, pass `current_sharpe` from the heartbeat when available, replace the hardcoded `["AAPL", "MSFT", "GOOGL"]` symbol list with active strategy positions from digiquant's registry, and optionally add severity bands before triggering re-optimization.
 
 ### (b) Add retry with exponential backoff to the remote audit sink
 
-The current `except Exception: pass` block in `audit_log()` silently discards all delivery failures to `AUDIT_SINK_URL`. For FINRA 2026 compliance, the audit trail must be durable. Add a small in-memory retry queue (3 attempts, 1s/2s/4s backoff) running on a background thread. If all retries fail, emit a `WARN` log to stderr (never to the audit file, to avoid recursion) and increment a `audit_sink_failures_total` counter exposed via `GET /v1/status` (once DigiClaw has an HTTP surface). Until then, write the failure count to a dedicated side-channel file (e.g., `audit_sink_errors.jsonl`).
+The current `except Exception: pass` block in `audit_log()` silently discards all delivery failures to `AUDIT_SINK_URL`. For FINRA 2026 compliance, the audit trail must be durable. Add a small in-memory retry queue (3 attempts, 1s/2s/4s backoff) running on a background thread. If all retries fail, emit a `WARN` log to stderr (never to the audit file, to avoid recursion) and increment a `audit_sink_failures_total` counter exposed via `GET /v1/status` (once digiclaw has an HTTP surface). Until then, write the failure count to a dedicated side-channel file (e.g., `audit_sink_errors.jsonl`).
 
 ### (c) Implement log rotation for the JSONL audit file
 
 Add a `RotatingFileHandler`-style wrapper around the audit file write. Cap individual files at 100 MB with 10 backups (`events.jsonl`, `events.jsonl.1`, ..., `events.jsonl.10`). Alternatively, use a `TimedRotatingFileHandler` equivalent with daily rotation and 90-day retention to satisfy Regulation S-P and FINRA recordkeeping requirements. The current `open/write/close` pattern can be replaced with Python's `logging.handlers.RotatingFileHandler` targeting a `logging.Logger`, or a thin custom wrapper that checks `os.path.getsize()` before each append.
 
-### (d) Use DigiKey JWT for all service calls in the OpenClaw gateway
+### (d) Use digikey JWT for all service calls in the OpenClaw gateway
 
-The planned `run_digigraph_workflow` skill must not call DigiGraph with a hardcoded or unauthenticated token. The OpenClaw gateway should be provisioned with a machine API key (`dgk_live_` prefix) from DigiKey at startup. Each skill invocation should exchange that key for a short-lived JWT (`POST /v1/oauth/token`) and send it as `Authorization: Bearer <jwt>` on the DigiGraph call. This enforces the same DigiKey allowlist and audit trail that governs DigiChat and other BFFs. Without this, the gateway becomes a privilege-escalation surface: any connected channel user could trigger arbitrary DigiGraph workflows without authentication.
+The planned `run_digigraph_workflow` skill must not call digigraph with a hardcoded or unauthenticated token. The OpenClaw gateway should be provisioned with a machine API key (`dgk_live_` prefix) from digikey at startup. Each skill invocation should exchange that key for a short-lived JWT (`POST /v1/oauth/token`) and send it as `Authorization: Bearer <jwt>` on the digigraph call. This enforces the same digikey allowlist and audit trail that governs digichat and other BFFs. Without this, the gateway becomes a privilege-escalation surface: any connected channel user could trigger arbitrary digigraph workflows without authentication.
 
 ### (e) Add a channel adapter abstraction registry
 

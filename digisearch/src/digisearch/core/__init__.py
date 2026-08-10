@@ -1,4 +1,4 @@
-"""DigiSearch core models and config."""
+"""digisearch core models and config."""
 
 from digisearch.core.models import Chunk, Document, Query, Result
 

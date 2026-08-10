@@ -1,4 +1,4 @@
-"""Shared test fixtures for DigiKey tests."""
+"""Shared test fixtures for digikey tests."""
 
 from __future__ import annotations
 

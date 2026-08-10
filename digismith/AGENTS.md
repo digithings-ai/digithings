@@ -1,8 +1,8 @@
-# Agent Guide: DigiSmith
+# Agent Guide: digismith
 
 ## Purpose
 
-DigiSmith provides the observability layer for the DigiThings stack. As a **library** (`digismith.trace`, `digismith.config`), it wraps LangSmith tracing for every service via a single decorator. As an **HTTP microservice** (port 8003), it exposes read-only status endpoints that tell orchestrators whether tracing is active — without ever surfacing a secret.
+digismith provides the observability layer for the digithings stack. As a **library** (`digismith.trace`, `digismith.config`), it wraps LangSmith tracing for every service via a single decorator. As an **HTTP microservice** (port 8003), it exposes read-only status endpoints that tell orchestrators whether tracing is active — without ever surfacing a secret.
 
 ---
 
@@ -40,7 +40,7 @@ Beyond root `AGENTS.md`:
 - **Library is side-effect-free on import**: `digismith.trace` and `digismith.config` must not start threads, open sockets, or write files at import time.
 - **No-op fallback is not optional**: `traceable()` must return the unmodified function when LangSmith is not configured. Tests that run without `LANGSMITH_API_KEY` must still pass.
 - **LangSmith SDK is a soft optional**: Do not move `langsmith` from `[langsmith]` extra to a hard dependency. Services that don't need tracing must not pay the install cost.
-- **Do not add a database or background worker**: DigiSmith is stateless by design. Phase 2 observability platform additions belong in a separate scoped task.
+- **Do not add a database or background worker**: digismith is stateless by design. Phase 2 observability platform additions belong in a separate scoped task.
 - **`/v1/status/detailed` is deferred**: Do not implement this endpoint — it is a placeholder listed in `ARCHITECTURE.md` Section 11. Leave it until Phase 2 is explicitly scoped.
 
 ---
@@ -61,7 +61,7 @@ make test-unit
 ruff check digismith/ && ruff format --check digismith/
 
 # Stack smoke test (requires make up)
-curl -s http://localhost:8003/health
+curl -s http://localhost:8003/healthz
 curl -s http://localhost:8003/v1/status
 ```
 

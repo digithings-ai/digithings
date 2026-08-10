@@ -5,16 +5,15 @@ from __future__ import annotations
 import time
 
 import pytest
-
 from digiquant.addm import (
     _DEFAULT_TTL_SECONDS,
     _DEFAULT_Z_THRESHOLD,
+    _prune_stale_history,
     _sharpe_history,
     _sharpe_last_access,
     check_drift,
     clear_history,
     record_sharpe,
-    _prune_stale_history,
 )
 
 
@@ -29,6 +28,7 @@ def _clean_history():
 # ---------------------------------------------------------------------------
 # record_sharpe
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestRecordSharpe:
@@ -64,6 +64,7 @@ class TestRecordSharpe:
 # clear_history
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestClearHistory:
     def test_clear_single_strategy(self) -> None:
@@ -96,6 +97,7 @@ class TestClearHistory:
 # check_drift — insufficient history
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestCheckDriftInsufficientHistory:
     def test_zero_observations_returns_not_implemented(self) -> None:
@@ -120,6 +122,7 @@ class TestCheckDriftInsufficientHistory:
 # ---------------------------------------------------------------------------
 # check_drift — Z-score computation
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestCheckDriftZScore:
@@ -186,6 +189,7 @@ class TestCheckDriftZScore:
 # ---------------------------------------------------------------------------
 # TTL pruning
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestPruneStaleHistory:

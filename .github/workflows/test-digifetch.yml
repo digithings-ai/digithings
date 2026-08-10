@@ -1,0 +1,52 @@
+name: "Test: digifetch"
+
+# Follows the test-digibase.yml pattern (#1714): installs from the committed
+# uv.lock instead of resolving fresh, so a new release of a tool cannot change
+# what runs here without a lockfile change showing up in a diff.
+#
+# Added by #1788 alongside test-digillm.yml. Before it, `digifetch/tests` — 38
+# tests over browser-session lifecycle, HTTP fetch/download, rate limiting and
+# retry/backoff — ran in no CI lane at all, and `digifetch/**` was not lint-gated
+# either (the `ruff-and-scripts` job in ci.yml lints six other src trees plus
+# `tests`, not this one).
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --frozen fails if uv.lock is stale rather than silently re-resolving.
+      # --all-packages --all-extras matches the other lanes. It does install
+      # playwright (digifetch's [browser] extra), which the suite does not need:
+      # every browser test injects a mock `sync_playwright` factory, and
+      # test_missing_playwright_raises_actionable_error forces the ImportError by
+      # monkeypatching builtins.__import__ rather than by relying on absence. So
+      # the tests pass identically with or without it — no browser binary is ever
+      # downloaded (that would need a separate `playwright install`).
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      # Includes `ruff format --check` (the test-digivault.yml shape rather than
+      # the looser test-digibase.yml one) because digifetch/AGENTS.md's pre-flight
+      # checklist already mandates `ruff check digifetch/ && ruff format --check
+      # digifetch/`. That gate was unenforced, and browser.py had drifted past it
+      # — a 106-char `def` line that `ruff check` accepts because E501 is not in
+      # this repo's explicit rule selection. Reformatted in #1788 so this is green.
+      - name: Ruff
+        run: |
+          uv run --frozen --no-sync ruff check digifetch/src digifetch/tests
+          uv run --frozen --no-sync ruff format --check digifetch/src digifetch/tests
+
+      # Deliberately NOT `-m unit`, matching test-digillm.yml. Every file here
+      # does set `pytestmark = pytest.mark.unit`, so the filter would currently be
+      # a no-op — but leaving it off means a future unmarked test still runs
+      # instead of being silently skipped by a green lane.
+      - name: Unit tests (digifetch/tests)
+        run: uv run --frozen --no-sync pytest digifetch/tests -v --tb=short

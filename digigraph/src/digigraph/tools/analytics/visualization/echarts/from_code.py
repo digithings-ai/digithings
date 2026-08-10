@@ -37,7 +37,9 @@ def echarts_from_code(
             cols = list(column_refs.values()) if column_refs else list(df.columns)
         header = [c for c in cols if c in df.columns]
         if header:
-            option["dataset"]["source"] = [header] + [[df[c].to_list()[i] for c in header] for i in range(len(df))]
+            option["dataset"]["source"] = [header] + [
+                [df[c].to_list()[i] for c in header] for i in range(len(df))
+            ]
     # If option has series[].dataRef pointing to a column name, inject that column
     for series in option.get("series", []):
         if isinstance(series, dict) and "dataRef" in series:

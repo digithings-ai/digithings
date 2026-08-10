@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "digillm"
+version = "0.1.0"
+description = "digillm – provider-agnostic OpenAI-compatible LLM client (routing, retry, cache, tools, structured output) for digithings"
+readme = "ARCHITECTURE.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "openai>=1.0",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+# YAML-backed mode resolution (resolve_model with a file path). The dict-based
+# resolver path needs no extra dependency; only the path branch lazy-imports yaml.
+modes = ["pyyaml>=6"]
+# Optional LangSmith tracing via digismith. digillm has no hard dependency on it;
+# the @traceable decorator degrades to a no-op when digismith is absent.
+trace = ["digismith>=0.1.0"]
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "pyyaml>=6"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.format]
+# Markdown is not source — see the root ruff.toml and #1705. This component config
+# overrides the root for this tree, so the exclusion has to be restated here.
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+# Explicit rule selection — see the root ruff.toml and #1701. This component config
+# overrides the root for this tree, so the selection has to be restated here.
+select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# `unit` must be re-registered here, not just in the repo-root pytest.ini. Because this
+# section exists, `pytest digillm/tests` (the test-digillm.yml lane command) resolves
+# rootdir to digillm/ and reads THIS file as its configfile — the root pytest.ini's
+# `markers` never applies. Without this the lane prints PytestUnknownMarkWarning on every
+# run. digifetch needs no equivalent: its pyproject has no [tool.pytest.ini_options], so
+# it falls through to the root config. Wording matches pytest.ini.
+markers = [
+    "unit: Unit tests (no network, no Docker).",
+]

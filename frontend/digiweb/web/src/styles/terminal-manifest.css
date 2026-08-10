@@ -1,0 +1,193 @@
+/* ==========================================================================
+   TerminalManifest (@digithings/web) — `cli ps` manifest pane.
+   Owned by components/TerminalManifest.tsx. Only what CANNOT be a token
+   utility lives here (canon migrate-vs-leave): the two-colour color-mix pane
+   surface and row washes, the row-appear + cursor-blink keyframes, the dot's
+   color-mix glow, state combinators (.is-sel / .is-off / .no-anim), and the
+   container-query column collapse — narrow containers drop the port + blurb
+   columns; wide containers go two-column with internal scroll on both sides.
+   Import once in the app shell:
+     @import "@digithings/web/styles/terminal-manifest.css";
+   ========================================================================== */
+
+/* The wrapper is the size container: column behavior tracks the pane's own
+   width, not the viewport, so the pane adapts wherever it is embedded. */
+.tm {
+  container-type: inline-size;
+}
+
+.tm-pane {
+  /* two-colour mix — no token utility */
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+
+/* ── rows ─────────────────────────────────────────────────────────────── */
+.tm-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+}
+
+.tm-row {
+  animation: tm-row-in 0.5s var(--ease) both;
+}
+
+.tm.no-anim .tm-row {
+  animation: none;
+}
+
+@keyframes tm-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tm-row-link {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  display: grid;
+  grid-template-columns: 12px minmax(108px, 132px) 1fr;
+  align-items: center;
+  gap: 0.55rem 0.85rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  color: var(--ink-soft);
+  transition: background 0.18s var(--ease);
+}
+
+.tm.has-ports .tm-row-link {
+  grid-template-columns: 12px minmax(108px, 132px) minmax(4ch, auto) 1fr;
+}
+
+.tm-row-link:hover {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.tm-row.is-sel .tm-row-link {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.tm-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 65%, transparent);
+}
+
+.tm-dot.off {
+  background: transparent;
+  border: 1px solid var(--hair-2);
+  box-shadow: none;
+}
+
+.tm-row.is-off .tm-name,
+.tm-row.is-off .tm-port,
+.tm-row.is-off .tm-blurb {
+  opacity: 0.55;
+}
+
+/* ── output panel ─────────────────────────────────────────────────────── */
+.tm-body {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.tm-out {
+  margin-top: 0.6rem;
+  padding: 0.75rem 0.55rem 0.3rem;
+  border-top: 1px dashed var(--hair);
+  display: flex;
+  flex-direction: column;
+}
+
+.tm-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: var(--accent);
+  vertical-align: -2px;
+  animation: tm-blink 1.1s steps(1) infinite;
+}
+
+@keyframes tm-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ── container-query column collapse ──────────────────────────────────── */
+/* Narrow pane: dot + name only. */
+@container (max-width: 560px) {
+  .tm-row-link,
+  .tm.has-ports .tm-row-link {
+    grid-template-columns: 12px 1fr;
+  }
+
+  .tm-port,
+  .tm-blurb {
+    display: none;
+  }
+}
+
+/* Wide pane: two columns, both stretched to the SAME height. The scrollable
+   sides collapse min-content to 0, so the row list drives the pane height —
+   selecting a long detail never grows the card; the output scrolls
+   internally instead. */
+@container (min-width: 860px) {
+  .tm-body {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 1.6rem;
+    align-items: stretch;
+  }
+
+  .tm-rows {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .tm-out {
+    margin-top: 0;
+    border-top: 0;
+    border-left: 1px dashed var(--hair);
+    padding: 0.1rem 0 0.4rem 1.6rem;
+    min-height: 0;
+  }
+
+  .tm-out-show {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .tm-out-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-row {
+    animation: none;
+  }
+
+  .tm-cursor {
+    animation: none;
+  }
+}

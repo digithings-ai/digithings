@@ -8,7 +8,11 @@ from typing import Any
 import polars as pl
 
 from digigraph.tools.analytics.load import load_dataset
-from digigraph.tools.analytics.visualization._helpers import _artifacts_dir, _next_filename, _sanitize_node_id
+from digigraph.tools.analytics.visualization._helpers import (
+    _artifacts_dir,
+    _next_filename,
+    _sanitize_node_id,
+)
 
 
 def build_relationship_graph(
@@ -25,30 +29,52 @@ def build_relationship_graph(
     df = load_dataset(dataset_path)
     for c in (source_column, target_column):
         if c not in df.columns:
-            return {"error": f"Column {c!r} not found", "graph": None, "image_path": None, "mermaid_source": None}
+            return {
+                "error": f"Column {c!r} not found",
+                "graph": None,
+                "image_path": None,
+                "mermaid_source": None,
+            }
     if weight_column and weight_column not in df.columns:
-        return {"error": f"Column {weight_column!r} not found", "graph": None, "image_path": None, "mermaid_source": None}
+        return {
+            "error": f"Column {weight_column!r} not found",
+            "graph": None,
+            "image_path": None,
+            "mermaid_source": None,
+        }
     df = df.drop_nulls([source_column, target_column])
     if len(df) == 0:
-        return {"error": "No edges after dropping nulls", "graph": {"nodes": [], "edges": []}, "image_path": None, "mermaid_source": None}
+        return {
+            "error": "No edges after dropping nulls",
+            "graph": {"nodes": [], "edges": []},
+            "image_path": None,
+            "mermaid_source": None,
+        }
     if weight_column:
-        edges_df = df.group_by([source_column, target_column]).agg(pl.col(weight_column).sum().alias("weight"))
+        edges_df = df.group_by([source_column, target_column]).agg(
+            pl.col(weight_column).sum().alias("weight")
+        )
     else:
         edges_df = df.group_by([source_column, target_column]).agg(pl.len().alias("weight"))
     nodes = list(set(edges_df[source_column].to_list() + edges_df[target_column].to_list()))
     edges = [
         {"source": r[0], "target": r[1], "weight": r[2]}
-        for r in zip(edges_df[source_column].to_list(), edges_df[target_column].to_list(), edges_df["weight"].to_list())
+        for r in zip(
+            edges_df[source_column].to_list(),
+            edges_df[target_column].to_list(),
+            edges_df["weight"].to_list(),
+        )
     ]
     graph = {"nodes": [{"id": n} for n in nodes], "edges": edges}
     image_path = None
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         import networkx as nx
     except ImportError:
-        pass
+        pass  # matplotlib/networkx optional; graph payload still returned
     else:
         G = nx.DiGraph()
         for n in nodes:
@@ -76,7 +102,7 @@ def build_relationship_graph(
                 seen.add(key)
                 w = e.get("weight", "")
                 if w:
-                    lines.append(f'    {sid} -->|{w}| {tid}')
+                    lines.append(f"    {sid} -->|{w}| {tid}")
                 else:
                     lines.append(f"    {sid} --> {tid}")
         mermaid_source = "\n".join(lines)

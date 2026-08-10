@@ -1,4 +1,4 @@
-"""Scope matching for DigiKey (supports * and component:* wildcards)."""
+"""Scope matching for digikey (supports * and component:* wildcards)."""
 
 from __future__ import annotations
 
@@ -40,4 +40,5 @@ DEFAULT_BFF_SESSION_SCOPES: list[str] = [
     "digiquant:optimize",
     "digisearch:query",
     "digisearch:ingest",
+    "digivault:read",
 ]

@@ -1,0 +1,167 @@
+name: "Pipeline: digiquant backfill"
+
+# One-shot, manually-triggered workflow with two modes:
+#
+#   full-backfill     (default, #338) — fetch up to 40 years of OHLCV for the core
+#                     universe into price_history, compute technicals, ingest macro.
+#   repair-technicals (#1752)          — recompute price_technicals from the OHLCV
+#                     *already stored* in price_history. No network fetch. Use this to
+#                     repair the NULL long-window bands that the daily
+#                     `compute-technicals` cron wrote from its ephemeral 1y CSV cache.
+#
+# Trigger: workflow_dispatch only (manual safety — avoid accidental scheduled
+# full backfills). Re-running is safe; all writes are upserts on PK.
+#
+# repair-technicals is a LARGE write (a full-history repair is ~160k rows). Always
+# dispatch with dry_run=true first, window it with `since`, and keep it out of
+# 13:00-22:00 UTC on weekdays so it does not race the prices crons.
+#
+# Because this job checks out `ref: main`, the `prices recompute-technicals`
+# subcommand only exists here after a develop→main promotion. Dispatching
+# repair-technicals before that promotion fails at the CLI, harmlessly.
+#
+# Issue: #338 #1752  Epic: #335
+# NOTE: Best merged after #339 lands — so compute-technicals uses the
+# calendar-aware filter rather than computing indicators on non-trading days.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "full-backfill = fetch OHLCV + technicals + macro. repair-technicals = recompute technicals from stored price_history (no network fetch, #1752)"
+        type: choice
+        required: false
+        default: full-backfill
+        options:
+          - full-backfill
+          - repair-technicals
+      tickers:
+        description: "Comma-separated ticker list (leave empty for full watchlist)"
+        required: false
+        default: ""
+      years:
+        description: "full-backfill only — years of history (default: 40, covers SPY 1993 inception)"
+        required: false
+        default: "40"
+      since:
+        description: "repair-technicals only — earliest date to WRITE (ISO, e.g. 2021-04-08). Empty = last 30 days"
+        required: false
+        default: ""
+      dry_run:
+        description: "Dry run — print commands without executing"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    name: Backfill price history
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      # transition (#1090): legacy names fed from the same secrets until readers migrate
+      SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main   # scheduled triggers fire from default branch; code pinned to main (#1626)
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # From the lockfile in the checked-out tree (`main`) — see #1717/#1721.
+      - name: Install from lockfile
+        run: uv sync --frozen --package digiquant --extra prices
+
+      - name: Step 1 — Fetch price history
+        if: ${{ inputs.mode == 'full-backfill' && inputs.dry_run == false }}
+        run: |
+          TICKERS="${{ inputs.tickers }}"
+          YEARS="${{ inputs.years }}"
+          if [ -n "$TICKERS" ]; then
+            uv run --frozen --no-sync python -m digiquant prices fetch-quotes \
+              --tickers "$TICKERS" \
+              --period "${YEARS}y" \
+              --cache-dir data/price-history \
+              --supabase
+          else
+            uv run --frozen --no-sync python -m digiquant prices fetch-quotes \
+              --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
+              --period "${YEARS}y" \
+              --cache-dir data/price-history \
+              --supabase
+          fi
+
+      - name: Step 2 — Compute technicals (full history)
+        if: ${{ inputs.mode == 'full-backfill' && inputs.dry_run == false }}
+        run: |
+          # No --date: compute over the FULL cache. (--date is an *upper* bound
+          # "slice output to <= DATE"; the old --date 1990-01-01 sliced to
+          # <=1990, which a recent cache has none of → 0 rows. --days 99999
+          # keeps all computed rows.)
+          uv run --frozen --no-sync python -m digiquant prices compute-technicals \
+            --cache-dir data/price-history \
+            --days 99999 \
+            --supabase
+
+      - name: Step 3 — Fetch macro series (full backfill)
+        if: ${{ inputs.mode == 'full-backfill' && inputs.dry_run == false }}
+        run: |
+          uv run --frozen --no-sync python -m digiquant prices fetch-macro \
+            --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml \
+            --backfill \
+            --supabase
+
+      # Reads price_history, writes price_technicals — no network fetch, no CSV cache, so
+      # no ephemeral-window warm-up to clobber good values with NULL (#1752). `--since`
+      # bounds the WRITE; the read always extends ~320 calendar days earlier so every
+      # written row carries a full 200-session indicator warm-up behind it.
+      #
+      # `dry_run` here is a real CLI dry run: it reads and computes, reports the row
+      # counts, and skips the upsert. Use it to size a window before committing to it.
+      - name: Repair technicals from price_history
+        if: ${{ inputs.mode == 'repair-technicals' }}
+        env:
+          TICKERS: ${{ inputs.tickers }}
+          SINCE: ${{ inputs.since }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          ARGS=()
+          if [ -n "$TICKERS" ]; then
+            ARGS+=(--tickers "$TICKERS")
+          else
+            # Same universe as the daily cron: watchlist ETFs + sector single names.
+            ARGS+=(--watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md --include-sectors)
+          fi
+          if [ -n "$SINCE" ]; then
+            ARGS+=(--since "$SINCE")
+          fi
+          if [ "$DRY_RUN" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+          uv run --frozen --no-sync python -m digiquant prices recompute-technicals "${ARGS[@]}"
+
+      - name: Dry run — print commands
+        if: ${{ inputs.mode == 'full-backfill' && inputs.dry_run == true }}
+        run: |
+          TICKERS="${{ inputs.tickers }}"
+          YEARS="${{ inputs.years }}"
+          echo "Would run:"
+          if [ -n "$TICKERS" ]; then
+            echo "  python -m digiquant prices fetch-quotes --tickers \"$TICKERS\" --period ${YEARS}y --cache-dir data/price-history --supabase"
+          else
+            echo "  python -m digiquant prices fetch-quotes --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md --period ${YEARS}y --cache-dir data/price-history --supabase"
+          fi
+          echo "  python -m digiquant prices compute-technicals --cache-dir data/price-history --date 1990-01-01 --days 99999 --supabase"
+          echo "  python -m digiquant prices fetch-macro --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml --backfill --supabase"

@@ -1,0 +1,424 @@
+
+/* ==========================================================================
+   Chat core (@digithings/web) — the digichat turn grammar (canon §16).
+   Owned by components/chat/*: <ChatTranscript> term-surface pane,
+   <ChatMessage> marker+body grid rows, <ChatStreamCursor> blink caret, and
+   the <ChatMarkdown>/<ChatCodeBlock> rich-text frame. Only what CANNOT be a
+   token utility lives here (canon migrate-vs-leave): the pane shadow +
+   light-theme surface combinator + prop-driven ::before session header, the
+   caret blink keyframes, and the markdown element combinators with their
+   color-mix washes and ::marker accents.
+   Import once in the app shell:
+     @import "@digithings/web/styles/chat-core.css";
+   ========================================================================== */
+
+/* ── transcript pane ──────────────────────────────────────────────────── */
+
+.chat-transcript {
+  box-shadow: 0 30px 60px -42px rgba(0, 0, 0, 0.65);
+}
+
+.chat-transcript--flat {
+  box-shadow: none;
+}
+
+/* Light theme: the pane sits on --surface, not the dark term wash. The
+   combinator's specificity is the point — it wins over bg-term-bg. */
+:root[data-theme="light"] .chat-transcript {
+  background: var(--surface);
+}
+
+/* Faint session header, prop-driven: `session` renders as data-session and
+   the ::before mirrors it, so the header stays pure chrome. */
+.chat-transcript[data-session]::before {
+  content: attr(data-session);
+  display: block;
+  padding-bottom: 0.7rem;
+  margin-bottom: 0.2rem;
+  border-bottom: 1px solid var(--term-hair);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--term-mute);
+}
+
+/* Live-thread variant: thin scrollbar has no token utility. */
+.chat-transcript--scroll {
+  scrollbar-width: thin;
+}
+
+/* ── message row ──────────────────────────────────────────────────────── */
+
+/* Position anchor so hover affordances (a per-turn copy button, digichat-ui's
+   .dc-msg-copy) can pin to the row. Geometry is TSX utilities:
+   grid-cols-[1.25rem_minmax(0,1fr)] — the digichat .dc-term-row grid. */
+.chat-msg {
+  position: relative;
+}
+
+/* ── streaming caret ──────────────────────────────────────────────────── */
+
+/* The ▍ read as a glyph-metric-free block: same mark as digichat-ui's
+   .dt-cur and digichat's .dc-term-streaming::after. Holds a steady block
+   under reduced motion. */
+.chat-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-left: 2px;
+  background: var(--accent);
+  vertical-align: -2px;
+  animation: chat-cursor-blink 1.1s steps(1) infinite;
+}
+
+@keyframes chat-cursor-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ── markdown frame ───────────────────────────────────────────────────── */
+
+/* Element combinators, not per-node classes: any markdown renderer that
+   emits bare tags inside .chat-md picks up the grammar (digichat-ui's
+   .dc-md-* rules map 1:1 onto these). */
+.chat-md {
+  color: var(--ink-soft);
+}
+
+.chat-md > *:first-child {
+  margin-top: 0;
+}
+
+.chat-md > *:last-child {
+  margin-bottom: 0;
+}
+
+/* Assistant turns flatten the heading scale — every level reads as the same
+   display-face section head (the transcript, not the page, owns hierarchy). */
+/* h5/h6 are included because ChatMarkdownSource downshifts markdown headings two
+   levels (h1→h3 … h4→h6) so streamed model text cannot claim the page's <h1>.
+   Without them, a `###` in an answer would render structurally correct and
+   completely unstyled. h1/h2 stay listed for any caller that renders the
+   children path with its own heading tags. */
+.chat-md h1,
+.chat-md h2,
+.chat-md h3,
+.chat-md h4,
+.chat-md h5,
+.chat-md h6 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.15rem;
+  color: var(--ink);
+}
+
+.chat-md p {
+  margin: 0.6rem 0;
+}
+
+.chat-md strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.chat-md em {
+  color: var(--ink);
+}
+
+.chat-md code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+
+/* Tailwind preflight zeroes list-style on ul/ol — restore it here or the
+   ::marker accents below never render (carried silently from the specimen,
+   fixed at promotion). */
+.chat-md ul,
+.chat-md ol {
+  margin: 0.6rem 0;
+  padding-left: 1.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.chat-md ul {
+  list-style: disc;
+}
+
+.chat-md ol {
+  list-style: decimal;
+}
+
+.chat-md li {
+  padding-left: 0.2rem;
+}
+
+/* remark-gfm task lists carry their own checkbox; the disc from `.chat-md ul`
+   would sit beside it as a second marker. */
+.chat-md ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.chat-md ul li::marker {
+  color: var(--accent);
+}
+
+.chat-md ol li::marker {
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.chat-md blockquote {
+  margin: 0.8rem 0;
+  padding: 0.5rem 0.9rem;
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.chat-md a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+
+.chat-md hr {
+  border: 0;
+  border-top: 1px solid var(--hair);
+  margin: 0.8rem 0;
+}
+
+.chat-md table {
+  width: 100%;
+  margin: 0.8rem 0;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.chat-md th,
+.chat-md td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.chat-md thead th {
+  font-weight: 400;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.chat-md td {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Bare fenced block (a renderer without <ChatCodeBlock>) reads as the same
+   hairline box, just captionless. */
+.chat-md > pre {
+  margin: 0.8rem 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--hair);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  overflow-x: auto;
+}
+
+.chat-md > pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre;
+}
+
+/* ── fenced code figure + copy affordance ─────────────────────────────── */
+
+.chat-md-code {
+  margin: 0.8rem 0;
+  border: 1px solid var(--hair);
+  border-radius: 9px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.chat-md-code figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.chat-md-code pre {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  overflow-x: auto;
+}
+
+.chat-md-code code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre;
+}
+
+.chat-md-copy {
+  border: none;
+  background: transparent;
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: color 0.2s var(--ease);
+}
+
+.chat-md-copy:hover {
+  color: var(--accent);
+}
+
+.chat-md-copy.is-copied {
+  color: var(--up);
+}
+
+/* ── mermaid diagram figure ───────────────────────────────────────────────
+   Same hairline box as .chat-md-code — a diagram is a fence that happened to
+   draw. Colour inside the SVG comes from mermaid themeVariables filled with
+   these same tokens (ChatMermaidBlock), so the only job here is the frame,
+   the fit, and a couple of belt-and-braces overrides for the chrome mermaid
+   emits with no theme variable of its own. */
+
+.chat-md-mermaid {
+  margin: 0.8rem 0;
+  border: 1px solid var(--hair);
+  border-radius: 9px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.chat-md-mermaid figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.chat-md-mermaid-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+/* The parse-failure caption borrows the negative-semantics token so a diagram
+   that could not be drawn says so without a second affordance. */
+.chat-md-mermaid[data-state="source"] figcaption > span:first-child {
+  color: var(--down);
+}
+
+.chat-md-mermaid-fig {
+  padding: 0.9rem;
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  animation: chat-mermaid-in 0.24s var(--ease) both;
+}
+
+.chat-md-mermaid-fig svg {
+  max-width: 100%;
+  height: auto;
+  background: transparent;
+}
+
+/* Edge labels and cluster titles are the two places mermaid still paints a
+   literal white plate under text; force them onto the surface token so the
+   light theme does not get a white patch on paper and the dark theme does not
+   get a white patch at all. */
+.chat-md-mermaid-fig .edgeLabel,
+.chat-md-mermaid-fig .edgeLabel rect,
+.chat-md-mermaid-fig .label-container {
+  fill: var(--surface);
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.chat-md-mermaid pre {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  overflow-x: auto;
+}
+
+.chat-md-mermaid code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre;
+}
+
+@keyframes chat-mermaid-in {
+  from {
+    opacity: 0;
+  }
+}
+
+
+/* ── table scroll box ─────────────────────────────────────────────────────
+   Wide GFM tables scroll inside their own box; the .chat-md table combinator
+   above still owns the type. */
+.chat-md-table {
+  margin: 0.8rem 0;
+  overflow-x: auto;
+}
+
+.chat-md-table > table {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-cursor {
+    animation: none;
+  }
+
+  .chat-md-copy {
+    transition: none;
+  }
+
+  .chat-md-mermaid-fig {
+    animation: none;
+  }
+}

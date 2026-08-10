@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PM Direction Memo",
+  "description": "H7 portfolio direction artifact — direction and conviction rank only; weights are set by H8.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "date", "roster"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "date": { "type": "string", "format": "date" },
+    "memo": { "type": ["string", "null"], "maxLength": 8000 },
+    "roster": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ticker", "direction", "conviction_rank"],
+        "properties": {
+          "ticker": { "type": "string", "maxLength": 12 },
+          "direction": { "type": "string", "enum": ["long", "flat"] },
+          "conviction_rank": { "type": "integer", "minimum": 1 },
+          "narrative": { "type": ["string", "null"], "maxLength": 2000 }
+        }
+      }
+    }
+  }
+}

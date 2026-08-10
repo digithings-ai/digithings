@@ -21,7 +21,7 @@ ISSUE="${ISSUE#\#}"
 
 WORKTREES_DIR="${REPO_ROOT}/.worktrees"
 
-COMPONENTS="digigraph digiquant digisearch digismith digiclaw digibase digikey digichat"
+COMPONENTS="digigraph digiquant digisearch digismith digiclaw digibase digivault digikey digichat"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

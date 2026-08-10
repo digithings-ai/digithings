@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from collections import Counter
 
 from digisearch.core.models import Chunk, Query, Result
 
+logger = logging.getLogger(__name__)
+
 try:
     from rank_bm25 import BM25Okapi
+
     _BM25_AVAILABLE = True
 except ImportError:
     _BM25_AVAILABLE = False
@@ -24,6 +29,7 @@ class BM25Searcher:
         self._corpus = corpus
 
     def search(self, query: Query, top_k: int | None = None) -> list[Result]:
+        start = time.perf_counter()
         k = top_k or query.top_k
         tokens = query.text.lower().split()
         scores = self._bm25.get_scores(tokens)
@@ -40,6 +46,17 @@ class BM25Searcher:
                 metadata={},
             )
             out.append(Result(chunk=chunk, score=float(scores[idx]), rank=i + 1))
+        logger.info(
+            "bm25 search done",
+            extra={
+                "operation": "bm25_search",
+                "duration_ms": int((time.perf_counter() - start) * 1000),
+                "outcome": "ok",
+                "top_k": k,
+                "corpus_size": len(self._corpus),
+                "result_count": len(out),
+            },
+        )
         return out
 
 
@@ -62,15 +79,14 @@ class TFIDFSearcher:
     def search(self, query: Query, top_k: int | None = None) -> list[Result]:
         from math import log
 
+        start = time.perf_counter()
         k = top_k or query.top_k
         q_tokens = query.text.lower().split()
         scores: list[tuple[int, float]] = []
         for i, doc in enumerate(self._docs):
             tf = Counter(doc)
             score = sum(
-                (1 + log(tf.get(t, 0) + 1)) * self._idf.get(t, 0)
-                for t in q_tokens
-                if t in doc
+                (1 + log(tf.get(t, 0) + 1)) * self._idf.get(t, 0) for t in q_tokens if t in doc
             )
             scores.append((i, score))
         ranked = sorted(scores, key=lambda x: x[1], reverse=True)
@@ -86,4 +102,15 @@ class TFIDFSearcher:
                 metadata={},
             )
             out.append(Result(chunk=chunk, score=float(score), rank=rank))
+        logger.info(
+            "tfidf search done",
+            extra={
+                "operation": "tfidf_search",
+                "duration_ms": int((time.perf_counter() - start) * 1000),
+                "outcome": "ok",
+                "top_k": k,
+                "corpus_size": len(self._corpus),
+                "result_count": len(out),
+            },
+        )
         return out

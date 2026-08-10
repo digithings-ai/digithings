@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any
+
+import httpx
 
 from digigraph.agents.analysis.runner import run_analysis_agent
 from digigraph.agents.analysis.schema import ANALYSIS_AGENT_TOOL
@@ -18,17 +21,32 @@ from digigraph.agents.visualization.runner import run_visualization_agent
 from digigraph.agents.visualization.schema import VISUALIZATION_AGENT_TOOL
 from digigraph.orchestration.plugins import load_entrypoint_tools
 from digigraph.orchestration.registry import ToolContext, register_skill, register_tool
-from digigraph.policy import federated_hub_enabled
+from digigraph.policy import code_execution_allowed, federated_hub_enabled
 from digigraph.project_config import DigiProjectConfig
 from digigraph.trace_events import rag_sources_from_results
 from digigraph.vertical_orchestrator import (
-    fetch_digisearch_tool_dicts,
     fetch_digiquant_tool_dicts,
-    invoke_digisearch_tool,
+    fetch_digisearch_tool_dicts,
+    fetch_digivault_tool_dicts,
     invoke_digiquant_tool,
+    invoke_digisearch_tool,
+    invoke_digivault_tool,
 )
 
+logger = logging.getLogger(__name__)
+
 DELEGATE_TAGS = {"delegate", "parallel_safe"}
+
+_ORCHESTRATOR_CLIENT_ERRORS = (
+    httpx.HTTPStatusError,
+    httpx.RequestError,
+    json.JSONDecodeError,
+    OSError,
+    TypeError,
+    ValueError,
+)
+
+_STORE_ERRORS = (OSError, TypeError, ValueError, RuntimeError)
 
 
 def _merged_digisearch_filters(
@@ -100,6 +118,18 @@ def _digisearch_available(_context: ToolContext) -> bool:
     return bool(url and url.strip())
 
 
+def _digivault_available(_context: ToolContext) -> bool:
+    url = os.environ.get("DIGIVAULT_URL", "").strip()
+    if url:
+        return True
+    try:
+        cfg_url = DigiProjectConfig.load().get_digivault_url()
+        return bool(str(cfg_url).strip())
+    except Exception as exc:
+        logger.debug("digivault availability check via project config failed: %s", exc)
+        return False
+
+
 def _digi_bearer_from_context(context: ToolContext) -> str | None:
     st = context.state
     if isinstance(st, dict):
@@ -116,6 +146,10 @@ def _digiquant_service_base() -> str:
     return DigiProjectConfig.load().get_digiquant_url()
 
 
+def _digivault_service_base() -> str:
+    return DigiProjectConfig.load().get_digivault_url()
+
+
 def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[str, Any]:
     try:
         by_name = fetch_digisearch_tool_dicts(
@@ -127,14 +161,14 @@ def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[s
         t = by_name.get(tool_name)
         if t:
             return t
-    except Exception:
-        pass
+    except _ORCHESTRATOR_CLIENT_ERRORS as exc:
+        logger.warning("digisearch manifest fetch failed for %s: %s", tool_name, exc)
     if tool_name == "digisearch_fetch_all":
         return {
             "type": "function",
             "function": {
                 "name": "digisearch_fetch_all",
-                "description": "Fetch all matching documents (pagination). Requires reachable DigiSearch orchestrator API.",
+                "description": "Fetch all matching documents (pagination). Requires reachable digisearch orchestrator API.",
                 "parameters": {
                     "type": "object",
                     "properties": {"query": {"type": "string"}},
@@ -146,13 +180,85 @@ def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[s
         "type": "function",
         "function": {
             "name": "digisearch",
-            "description": "Search documents via DigiSearch. Requires DIGISEARCH_URL and POST /v1/orchestrator_tools.",
+            "description": "Search documents via digisearch. Requires DIGISEARCH_URL and POST /v1/orchestrator_tools.",
             "parameters": {
                 "type": "object",
                 "properties": {"query": {"type": "string"}},
                 "required": ["query"],
             },
         },
+    }
+
+
+def _schema_from_digivault_manifest(ctx: ToolContext) -> dict[str, Any]:
+    try:
+        by_name = fetch_digivault_tool_dicts(
+            _digivault_service_base(),
+            _digi_bearer_from_context(ctx),
+            ctx.request_id,
+        )
+        t = by_name.get("digivault_search_notes")
+        if t:
+            return t
+    except _ORCHESTRATOR_CLIENT_ERRORS as exc:
+        logger.warning("digivault manifest fetch failed for digivault_search_notes: %s", exc)
+    return {
+        "type": "function",
+        "function": {
+            "name": "digivault_search_notes",
+            "description": (
+                "Full-text search over the digithings architecture vault. "
+                "Requires DIGIVAULT_URL and POST /v1/orchestrator_tools."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+        },
+    }
+
+
+def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
+    q = args.get("query", "")
+    if not q or not str(q).strip():
+        return "No search query provided."
+    args_eff = dict(args)
+    if "path_prefix" not in args_eff and context.vault_path_prefix:
+        args_eff["path_prefix"] = context.vault_path_prefix
+    try:
+        inv = invoke_digivault_tool(
+            _digivault_service_base(),
+            "digivault_search_notes",
+            args_eff,
+            bearer_token=_digi_bearer_from_context(context),
+            request_id=context.request_id,
+        )
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
+        return f"digivault orchestrator invoke failed: {e}"
+    if not inv.get("ok"):
+        return json.dumps(inv)
+    data = inv.get("data")
+    if not isinstance(data, dict):
+        return "No results found."
+    hits = data.get("hits", [])
+    if not hits:
+        return "No matching documentation was found in the digivault for that query."
+    results = [
+        {
+            "content": h.get("body_markdown"),
+            "score": h.get("rank"),
+            "doc_id": h.get("vault_path"),
+            "metadata": {"title": h.get("title"), "tags": h.get("tags")},
+        }
+        for h in hits
+        if isinstance(h, dict)
+    ]
+    payload_for_llm = _search_payload_for_llm(results, len(results))
+    return {
+        "content": json.dumps(payload_for_llm),
+        "results": results,
+        "rag_sources": rag_sources_from_results(results),
     }
 
 
@@ -175,8 +281,8 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )
-    except Exception as e:
-        return f"DigiSearch orchestrator invoke failed: {e}"
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
+        return f"digisearch orchestrator invoke failed: {e}"
     if not inv.get("ok"):
         return json.dumps(inv)
     data = inv.get("data")
@@ -197,8 +303,8 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
                 "ref": dataset_ref,
                 "profile": {"row_count": len(results), "columns": cols},
             }
-        except Exception:
-            pass
+        except _STORE_ERRORS as exc:
+            logger.warning("write_search_results failed: %s", exc)
     if not results and not summary:
         return "No results found."
     payload_for_llm = _search_payload_for_llm(
@@ -246,8 +352,8 @@ def _handle_digisearch_fetch_all(
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )
-    except Exception as e:
-        return f"DigiSearch orchestrator invoke failed: {e}"
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
+        return f"digisearch orchestrator invoke failed: {e}"
     if not inv.get("ok"):
         return json.dumps(inv)
     data = inv.get("data")
@@ -267,8 +373,8 @@ def _handle_digisearch_fetch_all(
                 "ref": dataset_ref,
                 "profile": {"row_count": len(results), "columns": cols},
             }
-        except Exception:
-            pass
+        except _STORE_ERRORS as exc:
+            logger.warning("write_search_results failed: %s", exc)
     payload_for_llm = _search_payload_for_llm(results, total, dataset_ref=dataset_ref)
     out = {
         "content": json.dumps(payload_for_llm),
@@ -513,13 +619,13 @@ def _schema_digiquant_pipeline_delegate(ctx: ToolContext) -> dict[str, Any]:
         t = by_name.get("digiquant_pipeline_delegate") or by_name.get("digiquant_run_pipeline")
         if t:
             return t
-    except Exception:
-        pass
+    except _ORCHESTRATOR_CLIENT_ERRORS as exc:
+        logger.warning("digiquant manifest fetch failed: %s", exc)
     return {
         "type": "function",
         "function": {
             "name": "digiquant_pipeline_delegate",
-            "description": "Run DigiQuant pipeline. Requires DIGIQUANT_URL and POST /v1/orchestrator_tools.",
+            "description": "Run digiquant pipeline. Requires DIGIQUANT_URL and POST /v1/orchestrator_tools.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -555,8 +661,8 @@ def _handle_digisearch_research_delegate(
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )
-    except Exception as e:
-        return {"content": f"DigiSearch orchestrator invoke failed: {e}"}
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
+        return {"content": f"digisearch orchestrator invoke failed: {e}"}
     if not inv.get("ok"):
         return json.dumps(inv)
     data = inv.get("data")
@@ -609,7 +715,7 @@ def _handle_digiquant_pipeline_delegate(
             bearer_token=_digi_bearer_from_context(context),
             request_id=context.request_id,
         )
-    except Exception as e:
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return json.dumps({"ok": False, "error": str(e)})
     if not inv.get("ok"):
         return json.dumps(inv)
@@ -650,6 +756,12 @@ def _register_tools() -> None:
         schema_factory=lambda ctx: _schema_from_digisearch_manifest(ctx, "digisearch_fetch_all"),
     )
     register_tool(
+        "digivault_search_notes",
+        None,
+        _handle_digivault_search,
+        schema_factory=_schema_from_digivault_manifest,
+    )
+    register_tool(
         "visualization_agent",
         VISUALIZATION_AGENT_TOOL,
         _handle_visualization,
@@ -673,12 +785,13 @@ def _register_tools() -> None:
         _handle_data_manipulation,
         tags=DELEGATE_TAGS,
     )
-    register_tool(
-        "data_engineer_agent",
-        DATA_ENGINEER_AGENT_TOOL,
-        _handle_data_engineer,
-        tags=DELEGATE_TAGS,
-    )
+    if code_execution_allowed():
+        register_tool(
+            "data_engineer_agent",
+            DATA_ENGINEER_AGENT_TOOL,
+            _handle_data_engineer,
+            tags=DELEGATE_TAGS,
+        )
     register_tool(
         "digistore_list",
         DIGISTORE_LIST_TOOL,
@@ -716,6 +829,23 @@ def _register_tools() -> None:
         )
 
 
+def _sitaas_rag_tool_names() -> list[str]:
+    names = [
+        "digisearch",
+        "digisearch_fetch_all",
+        "digistore_list",
+        "digistore_profile",
+        "visualization_agent",
+        "analysis_agent",
+        "data_prep_agent",
+        "data_manipulation_agent",
+    ]
+    if code_execution_allowed():
+        names.append("data_engineer_agent")
+    names.extend(["todo", "create_plan", *_federated_delegate_tool_names()])
+    return names
+
+
 def _register_skills() -> None:
     search_bundle = ["digisearch", "digisearch_fetch_all", *_federated_delegate_tool_names()[:1]]
     register_skill(
@@ -725,21 +855,13 @@ def _register_skills() -> None:
     )
     register_skill(
         "sitaas_rag",
-        [
-            "digisearch",
-            "digisearch_fetch_all",
-            "digistore_list",
-            "digistore_profile",
-            "visualization_agent",
-            "analysis_agent",
-            "data_prep_agent",
-            "data_manipulation_agent",
-            "data_engineer_agent",
-            "todo",
-            "create_plan",
-            *_federated_delegate_tool_names(),
-        ],
+        _sitaas_rag_tool_names(),
         when=lambda ctx: ctx.has_run_data_dir,
+    )
+    register_skill(
+        "digivault",
+        ["digivault_search_notes"],
+        when=lambda ctx: _digivault_available(ctx),
     )
 
 

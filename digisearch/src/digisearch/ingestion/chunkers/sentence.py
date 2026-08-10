@@ -1,4 +1,4 @@
-"""SentenceChunker - sentence boundaries via nltk or spacy."""
+"""Sentence-boundary chunker (nltk/spacy when available)."""
 
 from __future__ import annotations
 
