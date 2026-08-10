@@ -376,6 +376,7 @@ START
                                │
                                ├─ error → END
                                ├─ research_rag profile → END
+                               ├─ DIGIQUANT_URL explicitly empty → END (Profile A / chat-only)
                                ├─ no strategy_name (document mode) → END
                                └─ has strategy_name → validate_strategy
                                                           │
@@ -659,7 +660,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - **Backtest node (direct):** Tries `POST /v1/jobs/backtest` first; falls back to `POST /backtest/start` + SSE progress, then `POST /run_backtest`. Polls `GET /v1/jobs/{id}/status` for async jobs; fetches result via `GET /backtest/{id}/result`.
 - **Optimize node (direct):** `POST /run_optimize`. Timeout: 300s.
 - **Auth:** Bearer via `outbound_service_headers(request_id, bearer)` from `digibase.http`.
-- **Env:** `DIGIQUANT_URL` (default `http://127.0.0.1:8001`). `DIGIQUANT_DATA_DIR` required for backtest and optimize nodes.
+- **Env:** `DIGIQUANT_URL` (default `http://127.0.0.1:8001` when unset). Explicit empty `DIGIQUANT_URL=` disables the backtest route (Profile A / chat-only). `DIGIQUANT_DATA_DIR` required for backtest and optimize nodes when digiquant is enabled.
 
 ### 9.3 digikey
 
@@ -752,7 +753,8 @@ digigraph:
 | `DIGI_CHECKPOINTER` | `sqlite` when project active, else `memory` | Checkpointer backend: `memory` / `sqlite` / `postgres` / `none` |
 | `DIGI_CHECKPOINTER_SQLITE_URI` | `~/.digigraph/checkpoints.sqlite` | SQLite file path |
 | `DIGI_CHECKPOINTER_POSTGRES_URI` | (empty) | Postgres connection string |
-| `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests |
+| `DIGIQUANT_URL` | `http://127.0.0.1:8001` when unset | digiquant base URL. Explicit empty string disables backtest routing (Profile A). |
+| `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests (required only when digiquant is enabled) |
 | `DIGISEARCH_INDEX` | `default` | Default vector index name |
 | `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt}` for multi-tenant corpus isolation (OCC). Headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` win when set. |
 | `DIGI_ENABLE_DEBUG_ENDPOINTS` | `0` | Enable `/test_llm` and `/v1/debug/*` |

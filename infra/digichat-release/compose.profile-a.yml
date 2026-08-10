@@ -146,7 +146,7 @@ services:
       - path: .env.profile-a
         required: false
     environment:
-      # Profile A: digivault on; digiquant / digisearch / digismith off
+      # Profile A: digivault on; digiquant / digismith HTTP off (chat-only).
       DIGIVAULT_URL: ${DIGIVAULT_URL:-http://digivault:8004}
       DIGIQUANT_URL: ${DIGIQUANT_URL:-}
       DIGISEARCH_URL: ${DIGISEARCH_URL:-}
@@ -157,7 +157,9 @@ services:
       DIGIKEY_PUBLIC_KEY_PEM: ${DIGIKEY_PUBLIC_KEY_PEM:-}
       OPENAI_API_BASE: http://litellm:4000/v1
       DIGI_CONFIG_PATH: /app/config
-      DIGI_PROJECT_CONFIG: ${DIGI_PROJECT_CONFIG:-}
+      DIGI_PROJECT_CONFIG: ${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}
+      DIGI_WORKFLOW_PROFILE: ${DIGI_WORKFLOW_PROFILE:-research_rag}
+      DIGI_ALLOWED_TOOLS: ${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes}
       DIGI_LLM_MODE: ${DIGI_LLM_MODE:-test}
       DIGI_ENABLE_DEBUG_ENDPOINTS: ${DIGI_ENABLE_DEBUG_ENDPOINTS:-0}
       DIGI_ENABLE_THREAD_API: ${DIGI_ENABLE_THREAD_API:-0}
