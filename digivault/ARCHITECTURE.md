@@ -91,8 +91,9 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
      volumes; no Supabase required). Optional `path_prefix` isolates client
      subdirs (e.g. `clients/online-compliance-center`).
   2. Else → Supabase FTS via `SupabaseStore.search` (the
-     `search_architecture_notes` RPC with optional `path_prefix`, anon-key,
-     read-only); returns 503 only if
+     `search_architecture_notes` RPC — always the 3-arg form from migration
+     068, with `path_prefix` null when unset; anon-key, read-only); returns
+     503 only if
      `CORE_SUPABASE_URL`/`CORE_SUPABASE_ANON_KEY` are unset.
   `limit` is clamped to `[1, 50]` regardless of caller input. The Supabase path
   is the same RPC the digithings.ai chat widget calls directly today
