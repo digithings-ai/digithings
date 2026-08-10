@@ -5,6 +5,9 @@ description: |
   digithings monorepo documentation: ARCHITECTURE.md, AGENTS.md, ADRs,
   component guides, install/release docs, OpenAPI README.
 globs:
+  - docs/projects/digithings/SHOWCASE.md
+  - docs/projects/digithings/README.md
+  - docs/projects/digithings/GAPLOG.md
   - README.md
   - ROADMAP.md
   - ARCHITECTURE.md
