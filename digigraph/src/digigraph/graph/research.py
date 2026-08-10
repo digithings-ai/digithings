@@ -347,7 +347,9 @@ def _run_document_rag_path(
     skill_ids = cfg.get_enabled_skills() if cfg else ["search", "sitaas_rag"]
 
     _raw_allowed = state.get("allowed_tool_names")
-    _allowed_names = frozenset(_raw_allowed) if _raw_allowed else None
+    # Distinguish unset (None → unrestricted) from empty allowlist ([] → deny all).
+    # Empty lists are falsy; do not coerce them to None (tool_policy / ARCHITECTURE).
+    _allowed_names = frozenset(_raw_allowed) if _raw_allowed is not None else None
     _ctx_rid = state.get("request_id")
     _ctx_wid = state.get("workflow_id")
     context = ToolContext(

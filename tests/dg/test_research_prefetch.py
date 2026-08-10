@@ -156,3 +156,52 @@ def test_document_rag_empty_tools_still_calls_run_tools() -> None:
 
     assert captured["tools"] == []
     assert out["research_response"] == "Answer only."
+
+
+@pytest.mark.unit
+def test_document_rag_empty_allowlist_skips_prefetch() -> None:
+    """``allowed_tool_names: []`` is deny-all — must not coerce to unrestricted None."""
+    cfg = DigiProjectConfig(
+        {
+            "agents": {
+                "always_retrieve_tools": ["digisearch", "digivault_search_notes"],
+                "enabled": ["research"],
+            }
+        }
+    )
+    state = {
+        "prompt": "q",
+        "session_id": "s",
+        "stored_datasets": {},
+        "allowed_tool_names": [],
+    }
+    captured: dict = {}
+
+    def capture_tools(skill_ids, context):
+        captured["allowed"] = context.allowed_tool_names
+        return [{"type": "function", "function": {"name": "digisearch"}}]
+
+    def fake_run_tools(*, model, messages, tools, execute_tool, on_tool_step=None, **_kw):
+        return "Answer only."
+
+    with (
+        patch("digigraph.skills.get_tools_for_skills", side_effect=capture_tools),
+        patch("digigraph.orchestration.registry.has_tool", return_value=True),
+        patch("digigraph.orchestration.execute") as exec_mock,
+        patch.object(research_mod, "run_tools", side_effect=fake_run_tools),
+        patch.object(research_mod, "get_model_for_mode", return_value="test-model"),
+    ):
+        out = research_mod._run_document_rag_path(
+            state=state,
+            config=None,
+            cfg=cfg,
+            system_prompt="sys",
+            index_name="idx",
+            index_display_name="idx",
+            prompt="q",
+        )
+
+    exec_mock.assert_not_called()
+    assert captured["allowed"] == frozenset()
+    assert captured["allowed"] is not None
+    assert out["research_response"] == "Answer only."

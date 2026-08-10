@@ -111,4 +111,5 @@ def test_policy_env_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.unit
 def test_state_list_from_frozen() -> None:
     assert state_list_from_frozen(None) is None
+    assert state_list_from_frozen(frozenset()) == []
     assert state_list_from_frozen(frozenset({"b", "a"})) == ["a", "b"]

@@ -35,11 +35,13 @@ def search_local_vault(
         # note.rel_path often includes .md; vault_path in hits historically used rel_path
         path_for_prefix = rel[:-3] if rel.endswith(".md") else rel
         if prefix:
+            # Boundary-aware: "clients/acme" must not match "clients/acme-evil/...".
+            # Match supabase_store.search / migration 068 (exact or prefix + "/").
             if not (
                 path_for_prefix == prefix
                 or path_for_prefix.startswith(prefix + "/")
+                or rel == prefix
                 or rel.startswith(prefix + "/")
-                or rel.startswith(prefix)
             ):
                 continue
         path = Path(vault.root) / note.rel_path
