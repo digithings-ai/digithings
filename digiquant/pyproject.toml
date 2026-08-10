@@ -115,4 +115,17 @@ select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
-pythonpath = ["src"]
+#
+# pythonpath must list the repo root plus every workspace sibling that src/digiquant or
+# tests/dq imports directly (digibase, digigraph, digikey, digillm) -- not just "src". Reason:
+# when pytest is invoked with no path args from *inside* digiquant/ (e.g.
+# `cd digiquant && uv run pytest -m unit`), its rootdir/config search starts at cwd and
+# stops at the first ancestor with a recognized config -- this file -- so it never walks
+# up to the repo-root pytest.ini, which carries the full list (". digibase/src digillm/src
+# digikey/src ..."). If that's the only thing putting a sibling's editable install (or the
+# repo root, needed for `from tests.conftest import ...` / `from tests.dq...` in the shared
+# test suite) on sys.path, the omission silently resolves imports against whatever global
+# site-packages that other interpreter has instead of the workspace's editable copy.
+# Listing them here is both the fix and the safety net. See digigraph's fix for the
+# original root-cause writeup (digillm/CallPurpose ImportError).
+pythonpath = ["..", "src", "../digibase/src", "../digigraph/src", "../digikey/src", "../digillm/src"]
