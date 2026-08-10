@@ -36,7 +36,7 @@
           },
           "openwebui_format": {
             "default": false,
-            "description": "If true, format tool blocks for Open WebUI (<details>, summary + tables). Also enabled when model is sitaas-rag unless the client opts out via X-Suppress-Tool-Stream or X-Response-Format: plain|neutral|none|digichat.",
+            "description": "If true, format tool blocks for Open WebUI (<details>, summary + tables). Also enabled by X-Response-Format: openwebui. model=sitaas-rag alone does not enable this; opt out anytime via X-Suppress-Tool-Stream or X-Response-Format: plain|neutral|none|digichat.",
             "title": "Openwebui Format",
             "type": "boolean"
           },
@@ -776,7 +776,7 @@
     },
     "/v1/chat/completions": {
       "post": {
-        "description": "OpenAI-compatible chat completions. Runs RAG workflow (LLM + search) and returns\nthe response as a chat message. Use as a model in Open WebUI.\nWhen stream=true: progressive SSE with tool-call blocks then final answer.\nTo get Open WebUI\u2013style tool blocks (<details>, markdown tables), send header\nX-Response-Format: openwebui (or openwebui_format=true, or model=sitaas-rag without an\nopt-out). digichat sends X-Suppress-Tool-Stream / X-Response-Format: plain so answer\nprose stays free of Open WebUI chrome; activity still arrives via digigraph_trace.",
+        "description": "OpenAI-compatible chat completions. Runs RAG workflow (LLM + search) and returns\nthe response as a chat message. Use as a model in Open WebUI.\nWhen stream=true: progressive SSE with tool-call blocks then final answer.\nTo get Open WebUI\u2013style tool blocks (<details>, markdown tables), send header\nX-Response-Format: openwebui or body openwebui_format=true. model=sitaas-rag alone\ndoes not enable that chrome. digichat sends X-Suppress-Tool-Stream /\nX-Response-Format: plain as belt-and-suspenders; activity arrives via digigraph_trace.",
         "operationId": "chat_completions_v1_chat_completions_post",
         "requestBody": {
           "content": {

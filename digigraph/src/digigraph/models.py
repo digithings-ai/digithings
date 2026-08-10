@@ -54,8 +54,9 @@ class ChatCompletionRequest(BaseModel):
         False,
         description=(
             "If true, format tool blocks for Open WebUI (<details>, summary + tables). "
-            "Also enabled when model is sitaas-rag unless the client opts out via "
-            "X-Suppress-Tool-Stream or X-Response-Format: plain|neutral|none|digichat."
+            "Also enabled by X-Response-Format: openwebui. model=sitaas-rag alone does "
+            "not enable this; opt out anytime via X-Suppress-Tool-Stream or "
+            "X-Response-Format: plain|neutral|none|digichat."
         ),
     )
     session_id: str | None = Field(

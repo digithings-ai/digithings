@@ -95,7 +95,7 @@ When `stored_datasets` is in graph state, the research node prepends a `[Current
 
 ### ECharts rendering
 
-`visualization_agent` returns ECharts option JSON when the request includes `X-Response-Format: openwebui` or uses the `sitaas-rag` model endpoint. Without this header, it falls back to a PNG path. The frontend must handle the `echarts_option` key in the tool result to render the chart.
+`visualization_agent` prefers ECharts tools (`echarts_*`) that return `echarts_option` JSON (optional SVG via Node SSR). Matplotlib-style `plot_*` tools return `image_path`. Stream `<details>` / table chrome for those results requires explicit Open WebUI opt-in (`X-Response-Format: openwebui` or `openwebui_format=true`) — not `model=sitaas-rag` alone. Frontends that consume tool results directly should handle the `echarts_option` key.
 
 ---
 
