@@ -6,14 +6,13 @@ tags: [digithings, seed]
 # digithings vault — seed overview
 
 Static vault seed for `clients/digithings/`. digichat sends
-`X-Digi-Vault-Prefix: clients/digithings` for the digithings tenant.
+`vaultPathPrefix=clients/digithings`.
 
-Meaningful notes in this folder (all `seed-*.md`, refreshed on every Container
-boot from the stack image):
+Topical notes (refreshed on Container boot from `seed-*.md`):
 
-- `seed-showcase.md` — how digithings.ai/chat is built (client #0)
-- `seed-architecture.md` — Profile A services and ports
-- `seed-products.md` — digichat / digigraph / digikey / digisearch / digivault
-- `seed-chat-faq.md` — common product questions
-
-Full corpus expansion uses `docs_onboard` against `docs/projects/digithings/`.
+- `seed-showcase.md` — client #0 / how chat is built
+- `seed-architecture.md` — Profile A ports and persistence
+- `seed-digikey-auth.md` — JWT / RS256 / scopes
+- `seed-digisearch-rag.md` — Chroma indexes and chunking
+- `seed-digivault-notes.md` — vault prefixes and wikilinks
+- `seed-chat-faq.md` — short FAQ

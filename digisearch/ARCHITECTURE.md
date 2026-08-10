@@ -245,7 +245,11 @@ Entry point: `digisearch` (Typer). All defined in `cli.py`.
 | `digisearch index build --config <path>` | Build/re-index (stub — prints guidance) |
 | `digisearch index inspect --index <name>` | Inspect stub index chunk counts |
 
-**Note:** CLI ingest uses the stub backend, not Chroma or Azure. For production ingest via CLI, operators must use `POST /ingest` via the HTTP API or call backend-specific code directly.
+**Note:** CLI ingest routes through `route_add_chunks` — Chroma when `CHROMA_PATH` /
+`CHROMA_HOST` is set (Profile A seed), otherwise the in-memory stub only when
+`DIGISEARCH_ALLOW_STUB=1`. Chunk metadata always inherits `Document.source` as
+`source` / `path` / `source_url` (plus a basename `title` when missing) via
+`merge_document_metadata_into_chunks` so citation UIs are not UUID-only.
 
 ---
 

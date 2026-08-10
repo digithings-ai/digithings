@@ -1,25 +1,20 @@
 # OCC getting started (seed)
 
-## Who this assistant is for
+First steps for the Online Compliance Center help assistant.
 
-Staff and operators using digithings.ai/chat/occ to look up Online Compliance
-Center help topics without logging into the customer portal.
+## How to ask
 
-## Typical first questions
+Ask about a **policy name**, a **procedure step**, or a **document type** you
+expect in the help center. Prefer concrete nouns over "how does this product
+work?" — digithings stack questions belong on digithings.ai/chat, not here.
 
-1. What is Online Compliance Center?
-2. Where do I find policies vs procedures?
-3. How are PDF help documents handled?
-4. What is out of scope (e-learning, portal, demo)?
+## What you get
 
-## How to ask good questions
+Grounded answers from `occ_help` plus vault notes under
+`clients/online-compliance-center/`. If the seed corpus has no match, the
+assistant should say so rather than inventing policy text.
 
-- Name the topic (e.g. “document retention policy”, “onboarding procedure”)
-- Ask for steps or definitions rather than legal advice
-- Expect citations to help articles or vault paths when available
+## Next notes
 
-## Replacing this seed
-
-After crawl approval, run `scripts/docs_onboard/run_onboard.py` against
-`docs/projects/online-compliance-center/onboard.yaml` targeting production
-digisearch + digivault (or re-seed via Container ops).
+- `faq-policies.md` — policies vs procedures
+- `faq-documents.md` — PDFs and corpus limits
