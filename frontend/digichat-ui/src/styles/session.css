@@ -46,69 +46,6 @@
   text-decoration: underline;
 }
 
-.dc-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  padding: 0.2rem 0.2rem 0.6rem;
-  color: var(--ink-soft);
-  font-size: 0.78rem;
-  overflow: hidden;
-  transition: max-height 0.25s var(--ease, ease), opacity 0.2s var(--ease, ease),
-    padding 0.25s var(--ease, ease);
-  max-height: 3rem;
-}
-.dc-bar.is-collapsed {
-  max-height: 0;
-  padding: 0;
-  opacity: 0;
-}
-.dc-bar-meta {
-  color: var(--ink-soft);
-}
-.dc-bar-model {
-  margin-left: 0.5rem;
-  font-size: 0.72rem;
-  color: var(--ink-soft);
-}
-.dc-bar-key {
-  font: inherit;
-  font-size: 0.72rem;
-  color: var(--ink-soft);
-  background: transparent;
-  border: 1px solid var(--hair);
-  border-radius: 999px;
-  padding: 0.1rem 0.45rem;
-  cursor: pointer;
-  margin-left: auto;
-  transition: color 0.18s var(--ease, ease), border-color 0.18s var(--ease, ease);
-}
-.dc-bar-key:hover {
-  color: var(--ink-soft);
-  border-color: color-mix(in srgb, var(--ink) 25%, var(--hair));
-}
-.dc-bar-toggle {
-  align-self: flex-start;
-  margin: 0 0 0.2rem;
-  font: inherit;
-  font-size: 0.7rem;
-  color: var(--ink-soft);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  padding: 0.1rem 0;
-  letter-spacing: 0.04em;
-}
-.dc-bar-toggle:hover {
-  color: var(--ink-soft);
-}
-@media (prefers-reduced-motion: reduce) {
-  .dc-bar {
-    transition: none;
-  }
-}
-
 .dc-thread {
   flex: 1;
   min-height: 0;

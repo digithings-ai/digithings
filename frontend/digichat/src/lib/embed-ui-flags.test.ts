@@ -11,10 +11,9 @@ describe("resolveEmbedUiFlags", () => {
         accent: null,
         attribution: false,
         showByok: true,
-        showStatusBar: true,
         layout: "page",
       }),
-    ).toEqual({ showByok: true, showStatusBar: true, layout: "page" });
+    ).toEqual({ showByok: true, layout: "page" });
   });
 
   it("does not derive showByok from gateMode", () => {
@@ -26,7 +25,7 @@ describe("resolveEmbedUiFlags", () => {
         accent: null,
         attribution: false,
       }),
-    ).toEqual({ showByok: false, showStatusBar: false, layout: "embed" });
+    ).toEqual({ showByok: false, layout: "embed" });
   });
 });
 

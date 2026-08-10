@@ -31,12 +31,10 @@ export function resolveAttributionPlacement(args: {
 
 export function resolveEmbedUiFlags(cfg: EmbedTenantClientConfig): {
   showByok: boolean;
-  showStatusBar: boolean;
   layout: "page" | "embed";
 } {
   return {
     showByok: cfg.showByok === true,
-    showStatusBar: cfg.showStatusBar === true,
     layout: cfg.layout === "page" ? "page" : "embed",
   };
 }

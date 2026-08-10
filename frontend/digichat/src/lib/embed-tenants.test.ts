@@ -330,7 +330,7 @@ describe("parseEmbedTenants", () => {
     });
   });
 
-  it("parses showByok, showStatusBar, layout independent of gateMode", () => {
+  it("parses showByok, layout independent of gateMode", () => {
     const reg = parseEmbedTenants(
       JSON.stringify({
         "digithings.ai": {
@@ -338,7 +338,6 @@ describe("parseEmbedTenants", () => {
           backend: { type: "digigraph" },
           gateMode: "ungated",
           showByok: true,
-          showStatusBar: true,
           layout: "page",
           activityDetail: "full",
           token: "t",
@@ -348,7 +347,6 @@ describe("parseEmbedTenants", () => {
     const t = reg.get("digithings.ai")!;
     expect(t.gateMode).toBe("ungated");
     expect(t.showByok).toBe(true);
-    expect(t.showStatusBar).toBe(true);
     expect(t.layout).toBe("page");
   });
 
@@ -435,7 +433,6 @@ describe("parseEmbedTenants", () => {
     );
     const t = reg.get("example.com")!;
     expect(t.showByok).toBeUndefined();
-    expect(t.showStatusBar).toBeUndefined();
     expect(t.layout).toBeUndefined();
   });
 

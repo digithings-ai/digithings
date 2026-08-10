@@ -633,7 +633,6 @@ function EmbedChat({
       placeholder={placeholder}
       showByok={showByok}
       showByokOnError={showByokOnError}
-      showStatusBar={uiFlags.showStatusBar}
       layout={uiFlags.layout}
       chat={{
         messages: chat.messages,

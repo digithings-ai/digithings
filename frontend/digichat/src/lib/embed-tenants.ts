@@ -68,8 +68,6 @@ export type EmbedTenantConfig = {
   activityDetail: ActivityDetail;
   /** When true, embed shows BYOK/settings. Independent of gateMode. */
   showByok?: boolean;
-  /** When true, embed shows digichat-ui status bar. Independent of gateMode. */
-  showStatusBar?: boolean;
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
   /**
@@ -224,9 +222,6 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showByok !== undefined && typeof v.showByok !== "boolean") {
     throw new Error(`${ctx}: showByok must be a boolean`);
   }
-  if (v.showStatusBar !== undefined && typeof v.showStatusBar !== "boolean") {
-    throw new Error(`${ctx}: showStatusBar must be a boolean`);
-  }
   if (v.layout !== undefined && v.layout !== "page" && v.layout !== "embed") {
     throw new Error(`${ctx}: layout must be "page" or "embed"`);
   }
@@ -254,7 +249,6 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     lockedContact: typeof v.lockedContact === "string" ? v.lockedContact : undefined,
     activityDetail: (v.activityDetail as ActivityDetail | undefined) ?? "labels",
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
-    showStatusBar: typeof v.showStatusBar === "boolean" ? v.showStatusBar : undefined,
     layout: v.layout === "page" || v.layout === "embed" ? v.layout : undefined,
     llmAccess: LLM_ACCESS.includes(v.llmAccess as EmbedLlmAccess)
       ? (v.llmAccess as EmbedLlmAccess)

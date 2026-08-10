@@ -5,7 +5,6 @@ import { ChatStreamCursor } from "@digithings/web";
 import { stripFoundryCitationMarkers, chainActivities } from "./activity-view";
 import { ChatActivities } from "./components/ChatActivities";
 import { CopyButton } from "./components/CopyButton";
-import { DigiChatWordmark } from "./components/DigiChatMark";
 import { MiniMarkdown } from "./components/MiniMarkdown";
 import type { DigiChatSessionProps } from "./types";
 import { useStreamingIntro } from "./useStreamingIntro";
@@ -19,7 +18,6 @@ export function DigiChatSession({
   showByok,
   /** When false, error rows omit the inline BYOK link (ungated dogfood / infra errors). */
   showByokOnError = true,
-  showStatusBar = false,
   branding,
   ariaLabel = "digichat",
   className,
@@ -40,13 +38,11 @@ export function DigiChatSession({
     send,
     stop,
     onRetry,
-    modelLabel,
     providerIsSet = false,
     openSettings,
   } = chat;
 
   const [input, setInput] = useState("");
-  const [barOpen, setBarOpen] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -126,28 +122,6 @@ export function DigiChatSession({
             </span>
           ) : null}
         </header>
-      ) : null}
-
-      {showStatusBar ? (
-        <>
-          <button
-            type="button"
-            className="dc-bar-toggle"
-            aria-expanded={barOpen}
-            onClick={() => setBarOpen((v) => !v)}
-          >
-            <DigiChatWordmark /> {barOpen ? "▾" : "▸"}
-          </button>
-          <div className={`dc-bar${barOpen ? "" : " is-collapsed"}`} aria-hidden={!barOpen}>
-            <span className="dc-bar-meta">vault-grounded · agentic · streams live</span>
-            {showByok ? (
-              <button type="button" className="dc-bar-key" onClick={handleOpenSettings}>
-                {providerIsSet ? "key ✓" : "bring your own key"}
-              </button>
-            ) : null}
-            {modelLabel ? <span className="dc-bar-model">model: {modelLabel}</span> : null}
-          </div>
-        </>
       ) : null}
 
       <div className="dc-thread" ref={threadRef} aria-live="polite" aria-atomic="false">
