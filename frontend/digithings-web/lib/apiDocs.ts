@@ -701,7 +701,7 @@ for hit in r.json()["results"]:
       { signature: "GET /v1/notes/{name}", description: "Read one note — body plus parsed YAML frontmatter." },
       { signature: "POST /v1/notes", description: "Create a note. Requires digivault:write." },
       { signature: "PATCH /v1/notes/{name}/frontmatter", description: "Update frontmatter in place." },
-      { signature: "POST /v1/notes/{name}/rename", description: "Rename a note and repair the [[wikilinks]] pointing at it." },
+      { signature: "POST /v1/notes/{name}/rename", description: "Rename a note and repair the wikilinks pointing at it." },
       { signature: "GET /v1/notes/{name}/backlinks", description: "Every note linking to this one." },
       { signature: "GET /v1/tags/{tag}", description: "Notes carrying a tag." },
       { signature: "GET /v1/lint", description: "Vault health: broken wikilinks, missing frontmatter, taxonomy drift." },
@@ -709,7 +709,7 @@ for hit in r.json()["results"]:
       { signature: "POST /v1/orchestrator_invoke", description: "Invoke one of those tools by name." },
     ],
     notes: [
-      "The vault is a folder of markdown files — YAML frontmatter, [[wikilinks]], tags, folder taxonomy. There is no database; the filesystem is the store.",
+      "The vault is a folder of markdown files — YAML frontmatter, wikilinks, tags, folder taxonomy. There is no database; the filesystem is the store.",
       "Its first consumer is this repository's own docs/vision/, which scripts/gen-api-vault.ts generates from the same module registry this page is built from.",
     ],
   },

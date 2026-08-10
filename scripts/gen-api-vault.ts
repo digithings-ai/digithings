@@ -24,6 +24,9 @@ const CREATED = new Date().toISOString().slice(0, 10);
 /** One-line summaries for the guide notes (the curated tagline becomes FTS weight B). */
 const GUIDE_SUMMARY: Record<string, string> = {
   "getting-started": "Run the digithings stack locally — prerequisites, compose, environment, and make targets.",
+  "self-host": "Pull GHCR images and run digithings without a local compose build — tags, profiles, loopback defaults.",
+  "digichat-install": "Install digichat from a pinned GHCR release — Profile A (digigraph) vs Profile B (Foundry).",
+  architecture: "Service topology and chat path — digigraph orchestrates, digikey authenticates, LiteLLM routes.",
   authentication: "Issue and use digikey JWTs across the stack — mint a key, exchange for a token, call a service.",
   conventions: "Shared HTTP conventions across services — liveness, error envelope, correlation IDs, rate limits, CORS.",
 };
@@ -31,6 +34,9 @@ const GUIDE_SUMMARY: Record<string, string> = {
 /** A related module per guide, so the note isn't an orphan (allow_orphans: false). */
 const GUIDE_LINK: Record<string, string> = {
   "getting-started": "digigraph",
+  "self-host": "digigraph",
+  "digichat-install": "digichat",
+  architecture: "digigraph",
   authentication: "digikey",
   conventions: "digibase",
 };

@@ -3,13 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "predev": "node ./lib/sync-openapi.mjs",
     "dev": "next dev --hostname 127.0.0.1",
-    "prebuild": "node ./lib/write-csp-headers.mjs",
+    "prebuild": "node ./lib/write-csp-headers.mjs && node ./lib/sync-openapi.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "write-csp-headers": "node ./lib/write-csp-headers.mjs"
+    "write-csp-headers": "node ./lib/write-csp-headers.mjs",
+    "sync-openapi": "node ./lib/sync-openapi.mjs"
   },
   "dependencies": {
     "@digithings/design": "*",
@@ -23,7 +25,8 @@
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "simple-icons": "^15.18.0"
+    "simple-icons": "^15.18.0",
+    "swagger-ui-dist": "^5.30.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.7",

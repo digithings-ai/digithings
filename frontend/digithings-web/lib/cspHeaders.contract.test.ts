@@ -44,6 +44,7 @@ describe("digithings-web security-headers", () => {
     expect(text).toContain(defaultCsp);
     expect(text).not.toMatch(/frame-src 'none'/);
     expect(text).toMatch(/frame-ancestors 'none'/);
+    expect(defaultCsp).toContain("worker-src 'self' blob:");
     expect(renderCloudflareHeaders(DEFAULT_DIGICHAT_EMBED_ORIGIN)).toContain(
       defaultCsp,
     );

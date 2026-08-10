@@ -70,6 +70,12 @@ bash scripts/write-build-info.sh dist/build-info.json digithings.ai
 grep -q 'aria-label="digithings module manifest"' dist/index.html || { echo "ERROR: module manifest missing from home page" >&2; exit 1; }
 [ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
+# Public OpenAPI explorer (#2058): committed specs + Swagger UI assets must ship.
+[ -f dist/docs/api/index.html ] || { echo "ERROR: dist/docs/api/index.html missing — OpenAPI index not exported" >&2; exit 1; }
+[ -f dist/openapi/digigraph.json ] || { echo "ERROR: dist/openapi/digigraph.json missing — OpenAPI sync did not run" >&2; exit 1; }
+[ -f dist/swagger-ui/swagger-ui-bundle.js ] || { echo "ERROR: dist/swagger-ui/swagger-ui-bundle.js missing — swagger-ui-dist not vendored" >&2; exit 1; }
+
+
 # Cloudflare Pages Functions live at the PROJECT ROOT (this script's CWD = repo root),
 # NOT inside the static output dir. Mirror from frontend/digithings-web/functions/
 # (Phase 3: digivault /api/chat + /api/byok on free Pages — no Containers).
