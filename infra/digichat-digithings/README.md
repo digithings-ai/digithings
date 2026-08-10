@@ -112,9 +112,26 @@ Set `DIGICHAT_EMBED_HOSTS` (and/or tenant host keys) at **runtime** so CSP `fram
 
 ## digithings.ai `/chat`
 
-Static Pages shell (`DtNav` + iframe) loads
+**Target path (dogfood):** static Pages shell (`DtNav` + iframe) loads
 `${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}/embed?host=digithings.ai` (first-party hosts
-skip embed token). The Pages Function OpenRouter digivault loop is **retired**.
+skip embed token). Backend: digichat → digigraph → digillm (+ digivault tools).
+
+**Fallback (#2068):** if `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` is **unset** at Pages
+build time, `/chat` renders `DigiChatSession` against the Pages Function
+`POST /api/chat` (OpenRouter digivault loop). That path is temporary so the
+public site stays usable until Tunnel + Pages env are live — do **not** treat
+it as the long-term architecture. Once the embed origin is set and
+`digichat.digithings.ai` serves `/api/health`, rebuild Pages; the iframe path
+takes over automatically.
+
+### Production cutover checklist (human)
+
+1. Tunnel: `digichat.digithings.ai` → operator digichat `:3005` (not NXDOMAIN)
+2. digichat runtime: `DIGICHAT_REQUIRE_ROOT_AUTH=0`, `DIGICHAT_EMBED_HOSTS` /
+   `DIGICHAT_EMBED_TENANTS` (see above)
+3. Cloudflare Pages (project `digithings-ai`): set
+   `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digichat.digithings.ai` and redeploy
+4. Smoke: `/chat` iframes `/embed`; vault-grounded Q&A via digigraph (not OpenRouter Pages)
 
 ## CSP verification (Stage 6)
 

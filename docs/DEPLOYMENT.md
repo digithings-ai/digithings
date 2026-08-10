@@ -175,7 +175,11 @@ To update the landing page: edit `frontend/digithings-web/`, run the build scrip
 
 - **Shell:** `digithings.ai/chat` on Cloudflare Pages embeds digichat `/embed` via
   `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (e.g. `https://digichat.digithings.ai`).
-- **Backend:** digichat BFF → digigraph (not a Pages Function OpenRouter loop).
+- **Backend (target):** digichat BFF → digigraph.
+- **Fallback (#2068):** if the Pages build env omits
+  `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, `/chat` uses DigiChatSession + Pages
+  Function `POST /api/chat` (OpenRouter digivault loop) so the site stays up
+  until Tunnel + env are configured.
 - **Operator host:** Compose + Cloudflare Tunnel — see
   [`infra/digichat-digithings/README.md`](../infra/digichat-digithings/README.md).
 
