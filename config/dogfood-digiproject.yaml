@@ -18,7 +18,7 @@ agents:
   llm_mode: free
   llm:
     provider: openrouter
-    model: deepseek/deepseek-chat-v3:free
+    model: openai/gpt-oss-20b:free
     api_key_env: OPENROUTER_API_KEY
   allowed_tools:
     - digisearch

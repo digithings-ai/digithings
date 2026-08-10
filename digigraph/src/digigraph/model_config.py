@@ -101,7 +101,7 @@ def get_llm_mode() -> str:
     return _get_llm_mode()
 
 
-_DEFAULT_FREE_MODEL = "openrouter/deepseek/deepseek-chat-v3:free"
+_DEFAULT_FREE_MODEL = "openrouter/openai/gpt-oss-20b:free"
 
 
 def _explicit_llm_from_env() -> tuple[str | None, str | None]:

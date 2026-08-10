@@ -22,8 +22,8 @@ from digigraph.project_config import DigiProjectConfig
 
 @pytest.mark.unit
 def test_is_free_tier_model() -> None:
-    assert is_free_tier_model("openrouter/deepseek/deepseek-chat-v3:free")
-    assert is_free_tier_model("deepseek/deepseek-chat-v3:free")
+    assert is_free_tier_model("openrouter/openai/gpt-oss-20b:free")
+    assert is_free_tier_model("openai/gpt-oss-20b:free")
     assert is_free_tier_model("ollama/qwen3:8b")
     assert not is_free_tier_model("openrouter/deepseek/deepseek-chat")
     assert not is_free_tier_model("gpt-4o-mini")
@@ -57,12 +57,12 @@ def test_free_mode_keeps_explicit_free_model(
         "  llm_mode: free\n"
         "  llm:\n"
         "    provider: openrouter\n"
-        "    model: deepseek/deepseek-chat-v3:free\n"
+        "    model: openai/gpt-oss-20b:free\n"
         "    api_key_env: OPENROUTER_API_KEY\n"
     )
     monkeypatch.setenv("DIGI_PROJECT_CONFIG", str(cfg))
     resolved = get_model_for_mode()
-    assert resolved == "openrouter/deepseek/deepseek-chat-v3:free"
+    assert resolved == "openrouter/openai/gpt-oss-20b:free"
 
 
 @pytest.mark.unit
@@ -98,14 +98,14 @@ def test_project_config_get_llm(tmp_path: Path) -> None:
         "  llm_mode: free\n"
         "  llm:\n"
         "    provider: openrouter\n"
-        "    model: deepseek/deepseek-chat-v3:free\n"
+        "    model: openai/gpt-oss-20b:free\n"
     )
     cfg = DigiProjectConfig.load(str(cfg_file))
     assert cfg.get_llm_mode() == "free"
     llm = cfg.get_llm()
     assert llm is not None
     assert llm.provider == "openrouter"
-    assert llm.model == "deepseek/deepseek-chat-v3:free"
+    assert llm.model == "openai/gpt-oss-20b:free"
     assert llm.resolved_api_key_env() == "OPENROUTER_API_KEY"
 
 
@@ -119,7 +119,7 @@ def test_effective_llm_settings_never_includes_secret(
         "  llm_mode: free\n"
         "  llm:\n"
         "    provider: openrouter\n"
-        "    model: deepseek/deepseek-chat-v3:free\n"
+        "    model: openai/gpt-oss-20b:free\n"
         "    api_key_env: OPENROUTER_API_KEY\n"
     )
     monkeypatch.setenv("DIGI_PROJECT_CONFIG", str(cfg))
@@ -163,7 +163,7 @@ def test_cli_llm_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsy
         "  llm_mode: free\n"
         "  llm:\n"
         "    provider: openrouter\n"
-        "    model: deepseek/deepseek-chat-v3:free\n"
+        "    model: openai/gpt-oss-20b:free\n"
     )
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-x")
     monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
@@ -172,7 +172,7 @@ def test_cli_llm_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsy
     assert main(["llm-settings", "--config", str(cfg)]) == 0
     out = capsys.readouterr().out
     assert "llm_mode: free" in out
-    assert "openrouter/deepseek/deepseek-chat-v3:free" in out
+    assert "openrouter/openai/gpt-oss-20b:free" in out
     assert "sk-or-x" not in out
     assert "api_key_present: True" in out
     # CLI must not leave DIGI_PROJECT_CONFIG sticky for later tests in-process.

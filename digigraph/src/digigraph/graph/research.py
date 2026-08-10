@@ -232,20 +232,23 @@ def _user_facing_llm_error(exc: Exception) -> tuple[str, str | None]:
     if _is_likely_network_failure(exc):
         base = (os.environ.get("OPENAI_API_BASE") or "").strip() or "(unset — OpenAI default URL)"
         vert = _vertical_url_host_hints()
+        if vert:
+            # Operator diagnostics only — never stream Docker Compose hostnames to embed clients.
+            logger.warning("research network failure host hints: %s", vert)
         return (
             "A network connection failed during research (LLM and/or tools calling digisearch). "
             f"OPENAI_API_BASE is {base}. "
             "Start LiteLLM (http://127.0.0.1:4000/v1) or Ollama (http://127.0.0.1:11434/v1) and ensure digigraph can reach it. "
             "Document/RAG also needs digisearch orchestrator at DIGISEARCH_URL (host: http://127.0.0.1:8002). "
-            + (vert + " " if vert else "")
-            + "If you use `make stack-local`, host.docker.internal in OPENAI_API_BASE is rewritten to 127.0.0.1. "
+            "If you use `make stack-local`, host.docker.internal in OPENAI_API_BASE is rewritten to 127.0.0.1. "
             "See docs/LOCAL_STACK.md.",
             None,
         )
     tail = _vertical_url_host_hints()
     if tail:
-        return f"RAG workflow failed: {exc!s} {tail}", None
-    return f"RAG workflow failed: {exc!s}", None
+        logger.warning("research failure host hints: %s", tail)
+    # Never echo raw exception text (may include Compose service DNS names like digisearch:8002).
+    return "Research failed. Please try again shortly.", None
 
 
 def _plan_result_preview(result: str | dict) -> str:

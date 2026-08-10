@@ -14,7 +14,7 @@
 # Local dev: DIGI_MODEL_MODES_FILE=model_modes.local.yaml + OPENAI_API_BASE.
 
 defaults:
-  free: openrouter/deepseek/deepseek-chat-v3:free
+  free: openrouter/openai/gpt-oss-20b:free
   test: ollama/qwen3:8b
   medium: ollama/qwen3:8b
   best: ollama/qwen3:8b

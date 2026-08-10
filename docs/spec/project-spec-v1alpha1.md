@@ -43,7 +43,7 @@ agents:
                           # free = operator free-tier only (OpenRouter :free / local Ollama); refuse paid IDs
   llm:                    # optional explicit provider/model pin (wins over mode defaults)
     provider: string      # openrouter | openai | ollama | gemini | anthropic | litellm
-    model: string         # provider-native id, e.g. deepseek/deepseek-chat-v3:free
+    model: string         # provider-native id, e.g. openai/gpt-oss-20b:free
     api_key_env: string   # optional; default from provider registry (never put secrets in YAML)
   planning_mode: bool     # Enable plan-then-execute flow (default: false)
   workflow_profile: string # Workflow graph profile name (default: "default")
