@@ -26,6 +26,7 @@
  */
 
 import { resolveEmbedClientConfigFromParams } from "@/lib/embed-client-config";
+import { parseEmbedThemeParam } from "@/lib/embed-theme-messages";
 import EmbedClient from "./embed-client";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,9 @@ export const dynamic = "force-dynamic";
  * `light` must not inherit the visitor's OS dark mode. Mirrors [data-theme]
  * onto the .dark/.light classes for the Tailwind `dark:` variant, same rule as
  * themeClassSyncScript — keep the three in lockstep.
+ *
+ * Optional `?theme=light|dark` (parent shell sync) overrides the registry theme
+ * for first paint so digithings.ai `/chat` matches the marketing site mode.
  *
  * No value from the request is interpolated into this string. The two scripts
  * are complete literals selected by a boolean, so even a registry entry that
@@ -65,11 +69,17 @@ export default async function EmbedPage({
     first(params.token),
     first(params.host),
   );
+  const urlTheme = parseEmbedThemeParam(first(params.theme));
+  const paintTheme = urlTheme ?? initialTenantCfg.theme;
+  const seededCfg =
+    urlTheme && urlTheme !== initialTenantCfg.theme
+      ? { ...initialTenantCfg, theme: urlTheme }
+      : initialTenantCfg;
 
   return (
     <>
-      <script dangerouslySetInnerHTML={{ __html: themePinScript(initialTenantCfg.theme) }} />
-      <EmbedClient initialTenantCfg={initialTenantCfg} />
+      <script dangerouslySetInnerHTML={{ __html: themePinScript(paintTheme) }} />
+      <EmbedClient initialTenantCfg={seededCfg} />
     </>
   );
 }

@@ -6,6 +6,8 @@
  *   ?accent=digithings|digiquant|digichat   (default: digichat)
  *   ?host=<the embedding page's own origin> — see resolveEmbedHost() (#1372)
  *   ?token=<per-tenant secret>
+ *   ?theme=light|dark — optional parent-site theme pin (first paint; live updates
+ *     via digichat:theme postMessage)
  *   ?welcome= / ?placeholder= / ?suggestions= — UI overrides (DataTapStream)
  *
  * Uses the shared @digithings/digichat-ui DigiChatSession widget.
@@ -14,17 +16,11 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { DigiChatSession } from "@digithings/digichat-ui";
-import { Key, ExternalLink, Eye, EyeOff } from "lucide-react";
+import { Key, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ByokCliFlow } from "@/components/byok-cli-flow";
 import {
   useBYOKKey,
-  validateBYOKKey,
-  validateBYOKModel,
-  byokRequiresModel,
-  byokModelPlaceholder,
-  BYOK_PROVIDER_LIST,
   type BYOKProvider,
 } from "@/hooks/use-byok-key";
 import { readEmbedConversationId, useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
@@ -63,7 +59,18 @@ import {
   READY_MESSAGE,
   isAllowedSeedParentOrigin,
   parseSeedMessage,
+  resolveReadyTargetOrigin,
 } from "@/lib/embed-seed-messages";
+import {
+  formatParentErrorLine,
+  parseParentErrorMessage,
+} from "@/lib/embed-parent-error-messages";
+import {
+  applyEmbedDocumentTheme,
+  parseEmbedThemeParam,
+  parseThemeMessage,
+  type EmbedTheme,
+} from "@/lib/embed-theme-messages";
 
 type Accent = "digithings" | "digiquant" | "digichat";
 
@@ -111,42 +118,68 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
   const token = searchParams.get("token") ?? undefined;
   const host = searchParams.get("host") ?? undefined;
   const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
+  const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
+  const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
+  // Parent postMessage > ?theme= URL pin > tenant registry (default dark).
+  const effectiveTheme: EmbedTheme =
+    parentTheme ?? urlTheme ?? (tenantCfg.theme === "light" ? "light" : "dark");
 
   useEffect(() => {
     emit("embed_loaded", { accent });
   }, [accent]);
-  // Tenant theme drives the canon [data-theme] on <html> — the semantic
-  // tokens are scoped :root[data-theme="…"] (tokens.css), so a subtree class
-  // alone no longer flips the palette. The first value is already correct on
-  // arrival: page.tsx resolves the tenant server-side, pins [data-theme]
-  // pre-paint, and seeds this component's config, so this effect re-asserts a
-  // theme rather than introducing one (this page is its own iframe document,
-  // so the root flip is scoped to the embed). The .dark/.light classes follow
-  // via ThemeClassSync
-  // (providers.tsx); the wrapper div below keeps its class for the Tailwind
-  // `dark:` variant inside the subtree.
+
+  // Allowed parents for digichat:theme (same allowlist shape as digichat:seed).
+  const themeParentOrigins = useMemo(() => {
+    const allowed = new Set<string>();
+    if (host) {
+      try {
+        allowed.add(host.includes("://") ? new URL(host).origin : `https://${host}`);
+      } catch {
+        /* ignore */
+      }
+    }
+    for (const h of ["https://digithings.ai", "https://www.digithings.ai"]) {
+      if (isAllowedSeedParentOrigin(h)) allowed.add(h);
+    }
+    return allowed;
+  }, [host]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onMessage = (event: MessageEvent) => {
+      const parsed = parseThemeMessage(event, themeParentOrigins);
+      if (!parsed) return;
+      setParentTheme(parsed.theme);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [themeParentOrigins]);
+
+  // Effective theme drives canon [data-theme] on <html> — the semantic tokens
+  // are scoped :root[data-theme="…"] (tokens.css), so a subtree class alone no
+  // longer flips the palette. First paint comes from page.tsx (?theme= or
+  // tenant); live parent toggles arrive via digichat:theme without reload.
+  // ThemeClassSync mirrors [data-theme] onto .dark/.light; the wrapper below
+  // keeps its class for Tailwind `dark:` inside the subtree.
   //
-  // The app-wide ThemeProvider (providers.tsx, from @digithings/web) installs a
-  // persistent prefers-color-scheme listener that rewrites <html data-theme> to
-  // the OS scheme whenever there is no `dt-theme` localStorage key — always the
-  // case for an anonymous embed visitor, who never toggles the theme. Without a
-  // guard, a mid-session OS light↔dark switch would silently flip a tenant's
-  // forced theme. Re-assert the tenant theme via a MutationObserver so it wins
-  // over any external writer; the guarded write (only when it actually differs)
-  // keeps the observer loop-free.
+  // The app-wide ThemeProvider installs a prefers-color-scheme listener that
+  // rewrites <html data-theme> whenever there is no `dt-theme` key — always
+  // true for an anonymous embed visitor. Re-assert the effective theme via a
+  // MutationObserver so OS flips (and ThemeProvider) cannot silently override
+  // a parent- or tenant-forced theme (#1434).
   useEffect(() => {
     const el = document.documentElement;
-    const desired = tenantCfg.theme === "light" ? "light" : "dark";
+    const desired = effectiveTheme;
     const apply = () => {
       if (el.getAttribute("data-theme") !== desired) {
-        el.setAttribute("data-theme", desired);
+        applyEmbedDocumentTheme(desired);
       }
     };
     apply();
     const observer = new MutationObserver(apply);
     observer.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
     return () => observer.disconnect();
-  }, [tenantCfg.theme]);
+  }, [effectiveTheme]);
 
   // The embedding site can theme the widget to its own brand by passing
   // `?accent=#rrggbb` (+ optional `?accentForeground=`), the same override
@@ -171,7 +204,7 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
       <style>{ACCENT_CSS}</style>
       <div className="dc-grain" aria-hidden />
       <div
-        className={`${tenantCfg.theme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col bg-background text-foreground`}
+        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col bg-background text-foreground`}
         style={accentStyle}
       >
         <EmbedChat
@@ -205,6 +238,7 @@ function EmbedChat({
     model: byokModel,
     isSet: byokIsSet,
     setKey: setByokKey,
+    clearKey: clearByokKey,
   } = useBYOKKey();
   const ungated = tenantCfg.gateMode === "ungated";
   const isTrialForm = tenantCfg.gateMode === "trial_form";
@@ -389,20 +423,11 @@ function EmbedChat({
 
   const [seedApplied, setSeedApplied] = useState(false);
   const [hideIntroForSeed, setHideIntroForSeed] = useState(false);
+  /** Parent handshake/load failures — DigiChatSession `.dtc-error` transcript lines. */
+  const [handshakeError, setHandshakeError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !host) return;
-    let parentOrigin: string;
-    try {
-      parentOrigin = host.includes("://") ? new URL(host).origin : `https://${host}`;
-    } catch {
-      return;
-    }
-    window.parent.postMessage(READY_MESSAGE, parentOrigin);
-  }, [host]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || seedApplied) return;
+  // Same first-party allowlist as digichat:seed / digichat:theme.
+  const firstPartyParentOrigins = useMemo(() => {
     const allowed = new Set<string>();
     if (host) {
       try {
@@ -414,10 +439,56 @@ function EmbedChat({
     for (const h of ["https://digithings.ai", "https://www.digithings.ai"]) {
       if (isAllowedSeedParentOrigin(h)) allowed.add(h);
     }
+    return allowed;
+  }, [host]);
+
+  // Ready handshake targets the *actual* parent browsing context, not virtual
+  // ?host= (e.g. occ.digithings.ai). Parent ChatEmbedShell listens on digithings.ai;
+  // posting ready to the virtual host is dropped and falsely times out.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.parent === window.self) return;
+    const ancestorOrigins =
+      "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
+    const target = resolveReadyTargetOrigin({
+      ancestorOrigins,
+      referrer: document.referrer,
+    });
+    if (!target) {
+      // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
+      queueMicrotask(() => {
+        setHandshakeError(formatParentErrorLine("ready_target_missing"));
+      });
+      return;
+    }
+    window.parent.postMessage(READY_MESSAGE, target);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onMessage = (event: MessageEvent) => {
+      // Late digichat:ready after a ready_timeout still gets theme (and maybe seed)
+      // from ChatEmbedShell — clear the sticky terminal line once the parent is
+      // talking again on the first-party channel.
+      if (parseThemeMessage(event, firstPartyParentOrigins)) {
+        setHandshakeError(null);
+        return;
+      }
+      const parentErr = parseParentErrorMessage(event, firstPartyParentOrigins);
+      if (!parentErr) return;
+      setHandshakeError(formatParentErrorLine(parentErr.code, parentErr.message));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [firstPartyParentOrigins]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || seedApplied) return;
 
     const onMessage = (event: MessageEvent) => {
-      const parsed = parseSeedMessage(event, allowed);
+      const parsed = parseSeedMessage(event, firstPartyParentOrigins);
       if (!parsed) return;
+      setHandshakeError(null);
       applyEmbedSeed(
         { messages: parsed.messages, pending: parsed.pending },
         { seed: chat.seed, send: chat.send },
@@ -427,7 +498,7 @@ function EmbedChat({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [host, seedApplied, chat.seed, chat.send]);
+  }, [firstPartyParentOrigins, seedApplied, chat.seed, chat.send]);
 
   // The upstream conversation id is the useful handle (it maps to the real backend
   // conversation); fall back to nothing rather than blocking the gate.
@@ -611,6 +682,7 @@ function EmbedChat({
   ) : null;
 
   const showByokOnError =
+    !handshakeError &&
     !trialLocked &&
     shouldSuggestByokOnEmbedError({
       llmAccess,
@@ -631,19 +703,23 @@ function EmbedChat({
       chat={{
         messages: chat.messages,
         busy: chat.busy,
-        // While the trial overlay path is active, the formReplacement notice is
-        // the warning (with "the trial form" + Retry). Hiding the raw trial_gate
-        // string avoids a duplicate banner whose Retry only regenerated a 402.
-        error: trialLocked ? null : chat.error,
+        // Handshake/load failures from the parent beat chat errors so the
+        // terminal line is visible. Trial overlay still suppresses chat errors.
+        error: handshakeError ?? (trialLocked ? null : chat.error),
         quotaPrompt: showByok && quotaPrompt && !byokIsSet,
         providerIsSet: byokIsSet,
         openSettings: showByok ? openSettings : undefined,
         send: wrappedSend,
         stop: chat.stop,
-        onRetry:
-          isTrialForm &&
-          !trialLocked &&
-          !!chat.error?.toLowerCase().includes("trial form")
+        onRetry: handshakeError
+          ? // regenerate() cannot repair a parent handshake/load failure; match
+            // the "refresh" copy and give the cold-start retry path teeth.
+            () => {
+              window.location.reload();
+            }
+          : isTrialForm &&
+              !trialLocked &&
+              !!chat.error?.toLowerCase().includes("trial form")
             ? reopenTrialForm
             : chat.onRetry,
       }}
@@ -651,13 +727,19 @@ function EmbedChat({
       footerSlot={footerSlot}
       settingsPanel={
         showByok && settingsOpen ? (
-          <EmbedByokPanel
-            onSave={onByokSaved}
+          <ByokCliFlow
             onClose={() => setSettingsOpen(false)}
+            onActivate={onByokSaved}
+            onClear={clearByokKey}
+            active={
+              byokIsSet
+                ? { provider: byokProvider, model: byokModel }
+                : null
+            }
             title={
               quotaPrompt
-                ? "Free tier exhausted — continue with your own key"
-                : "Bring your own API key"
+                ? "byok — free tier exhausted"
+                : "byok configure"
             }
           />
         ) : undefined
@@ -676,146 +758,6 @@ function EmbedChat({
       showIntro={!gate.locked && !trialLocked && !hideIntroForSeed}
       ariaLabel={headerTitle ?? "digichat embed"}
     />
-  );
-}
-
-function providerLabel(p: BYOKProvider): string {
-  switch (p) {
-    case "openai":
-      return "OpenAI";
-    case "anthropic":
-      return "Anthropic";
-    case "gemini":
-      return "Gemini";
-    case "openrouter":
-      return "OpenRouter";
-    default: {
-      const _exhaustive: never = p;
-      return _exhaustive;
-    }
-  }
-}
-
-function EmbedByokPanel({
-  onSave,
-  onClose,
-  title,
-}: {
-  onSave: (key: string, provider: BYOKProvider, model: string) => void;
-  onClose: () => void;
-  title: string;
-}) {
-  const [inputKey, setInputKey] = useState("");
-  const [provider, setProvider] = useState<BYOKProvider>("openrouter");
-  const [inputModel, setInputModel] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSave = useCallback(() => {
-    const err = validateBYOKKey(inputKey, provider) ?? validateBYOKModel(inputModel, provider);
-    if (err) {
-      setError(err);
-      return;
-    }
-    onSave(inputKey, provider, inputModel.trim());
-    setInputKey("");
-    setInputModel("");
-  }, [inputKey, inputModel, provider, onSave]);
-
-  return (
-    <div className="border-t border-border bg-muted/40 p-4">
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <p className="text-sm font-medium">{title}</p>
-        <Button type="button" size="sm" variant="ghost" onClick={onClose} aria-label="Close">
-          Close
-        </Button>
-      </div>
-      <p className="mb-3 text-xs text-muted-foreground">
-        OpenAI, OpenRouter, Anthropic, or Gemini — your key stays in this browser and is sent as
-        X-BYOK headers per request.
-      </p>
-      <div className="space-y-3">
-        <div className="flex flex-wrap gap-2">
-          {BYOK_PROVIDER_LIST.map((p) => (
-            <Button
-              key={p}
-              type="button"
-              size="sm"
-              variant={provider === p ? "default" : "outline"}
-              className="flex-1 capitalize"
-              onClick={() => {
-                setProvider(p);
-                setError(null);
-              }}
-            >
-              {providerLabel(p)}
-            </Button>
-          ))}
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="embed-byok-key" className="text-xs">
-            API key
-          </Label>
-          <div className="relative flex items-center">
-            <Input
-              id="embed-byok-key"
-              type={showKey ? "text" : "password"}
-              value={inputKey}
-              onChange={(e) => {
-                setInputKey(e.target.value);
-                setError(null);
-              }}
-              placeholder={
-                provider === "openai"
-                  ? "sk-…"
-                  : provider === "anthropic"
-                    ? "sk-ant-…"
-                    : provider === "gemini"
-                      ? "AIza…"
-                      : "sk-or-v1-…"
-              }
-              autoComplete="off"
-              spellCheck={false}
-              className="pr-9 font-mono text-sm"
-              aria-invalid={!!error}
-            />
-            <button
-              type="button"
-              className="absolute right-2.5 text-muted-foreground hover:text-foreground"
-              onClick={() => setShowKey((v) => !v)}
-              aria-label={showKey ? "Hide key" : "Show key"}
-              tabIndex={-1}
-            >
-              {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
-          </div>
-          {error && <p className="text-[11px] text-destructive">{error}</p>}
-        </div>
-        {byokRequiresModel(provider) ? (
-          <div className="space-y-1.5">
-            <Label htmlFor="embed-byok-model" className="text-xs">
-              Model
-            </Label>
-            <Input
-              id="embed-byok-model"
-              type="text"
-              value={inputModel}
-              onChange={(e) => {
-                setInputModel(e.target.value);
-                setError(null);
-              }}
-              placeholder={byokModelPlaceholder(provider)}
-              autoComplete="off"
-              spellCheck={false}
-              className="font-mono text-sm"
-            />
-          </div>
-        ) : null}
-        <Button type="button" size="sm" onClick={handleSave} disabled={!inputKey}>
-          Save key
-        </Button>
-      </div>
-    </div>
   );
 }
 
@@ -858,13 +800,13 @@ function PaywallCard({
 
   if (showBYOK) {
     return (
-      <EmbedByokPanel
-        onSave={(key, provider, model) => {
+      <ByokCliFlow
+        onActivate={(key, provider, model) => {
           onSave(key, provider, model);
           setShowBYOK(false);
         }}
         onClose={() => setShowBYOK(false)}
-        title={`You've used your ${EMBED_FREE_TURN_LIMIT} free questions`}
+        title={`byok — ${EMBED_FREE_TURN_LIMIT} free questions used`}
       />
     );
   }
@@ -875,8 +817,8 @@ function PaywallCard({
         You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions.
       </p>
       <p className="mb-3 text-xs text-muted-foreground">
-        Bring your own OpenRouter, OpenAI, Anthropic, or Gemini key for unlimited chat — your key is
-        stored only in your browser. Or open the full digichat app.
+        Bring your own OpenRouter, OpenAI, Anthropic, or Gemini key for unlimited chat — the key
+        stays in session memory only (refresh clears it). Or open the full digichat app.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -904,16 +846,6 @@ function PaywallCard({
   );
 }
 
-/**
- * The notice shown in place of the composer once the free turns are spent.
- *
- * Dismissing the parent's overlay used to be a dead end: the notice said to
- * complete the form, Retry only regenerated the failed turn, and nothing on
- * screen could bring the form back — reload + a fresh question was the only
- * route. Anything that tells a reader to do something has to be the thing that
- * lets them do it: "the trial form" is a control, and Retry reopens the same
- * overlay (via onOpen → gated postMessage with a bumped nonce).
- */
 function TrialGatePlaceholder({ onOpen }: { onOpen: () => void }) {
   return (
     <div className="border-t border-border bg-muted/40 p-4">

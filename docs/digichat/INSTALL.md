@@ -80,6 +80,11 @@ docker compose -f infra/digichat-release/compose.profile-a.yml \
 
 Does **not** start digiquant / digisearch / digismith / heartbeat / observability.
 
+**Local / digithings website parity:** one supervisord image (same as Cloudflare
+Containers) instead of N GHCR services — `make digichat-profile-a-bundle-up`
+([`compose.profile-a-bundle.yml`](../../infra/digichat-release/compose.profile-a-bundle.yml)).
+Clients who want per-service pins keep multi-image Profile A above.
+
 Config for LiteLLM / digigraph is vendored under
 [`infra/digichat-release/config/`](../../infra/digichat-release/config/) (no monorepo
 `config/` clone required). Stack GHCR packages appear after

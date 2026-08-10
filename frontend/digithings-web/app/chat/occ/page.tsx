@@ -23,7 +23,15 @@ export default function OccChatPage() {
   return (
     <>
       <DtNav />
-      <main>
+      <main
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100dvh",
+          paddingTop: "var(--dq-nav-h)",
+          boxSizing: "border-box",
+        }}
+      >
         <ChatEmbedShell
           embedOrigin={EMBED_ORIGIN}
           embedHost={OCC_CHAT_EMBED_HOST}

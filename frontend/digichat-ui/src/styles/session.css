@@ -402,6 +402,94 @@
   margin: 0;
 }
 
+
+/* Inline BYOK terminal flow (session-only keys) */
+.dc-byok-flow {
+  margin-top: var(--space-3);
+}
+.dc-byok-prompt {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.dc-byok-option-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 28rem;
+  outline: none;
+}
+.dc-byok-option-list:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+.dc-byok-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.2rem 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.dc-byok-option:hover,
+.dc-byok-option-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.dc-byok-option-cursor {
+  display: inline-block;
+  width: 1ch;
+  color: var(--accent);
+  font-family: var(--font-family-mono);
+}
+.dc-byok-input {
+  display: block;
+  width: 100%;
+  max-width: 28rem;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-term, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  outline: none;
+}
+.dc-byok-input:focus {
+  border-color: var(--accent);
+}
+.dc-byok-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.dc-byok-action {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dc-byok-action:hover {
+  color: var(--text-primary);
+}
+.dc-byok-action-danger {
+  color: var(--down, #e0654b);
+}
+
 .dc-attribution {
   border-top: 1px solid var(--hair);
   padding: 0.5rem 0.75rem;

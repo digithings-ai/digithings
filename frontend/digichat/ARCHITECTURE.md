@@ -107,14 +107,15 @@ both pre-paint (`dt-theme` localStorage key, shared with the marketing sites) an
 `[data-theme]` flip onto the `.dark`/`.light` classes for the Tailwind `dark:`
 variant. The old `@digithings/digichat-ui` `tokens-shadcn-bridge.css` (shadcn vars →
 token names, the reverse direction) is no longer imported; `/embed` sets
-`[data-theme]` on the root from the tenant `theme` (its own iframe document) and
+`[data-theme]` on the root from the effective theme (URL `?theme=`, parent
+`digichat:theme` postMessage, or tenant `theme` — its own iframe document) and
 per-tenant accent hexes still override at the wrapper. Because the shared
 `ThemeProvider` (in `providers.tsx`, which wraps `/embed` too via the root layout)
 keeps a `prefers-color-scheme` listener that rewrites `[data-theme]` to the OS scheme
 whenever there is no `dt-theme` key — always true for an anonymous embed visitor —
-`/embed` re-asserts the tenant theme with a `MutationObserver` on `html[data-theme]`
+`/embed` re-asserts the effective theme with a `MutationObserver` on `html[data-theme]`
 (guarded write, so the observer never loops), so a mid-session OS light↔dark flip
-can't silently override a tenant's forced theme (#1434).
+can't silently override a parent- or tenant-forced theme (#1434).
 
 **Shared controls layer** (`src/components/ui/*` — #1419): ten of the fifteen
 shadcn-derived wrappers are now thin re-exports of the `@digithings/web`
@@ -437,9 +438,32 @@ policy (digithings.ai = `free_then_byok` + `showByok: true`; foundry/DataTap =
 On structured `free_quota_exceeded` / clear rate-limit errors, embed tenants with
 `llmAccess: free_then_byok` stop the turn and open the in-chat BYOK sequence
 (even when `gateMode` is `ungated` — see `shouldSuggestByokOnEmbedError`). After
-the visitor saves a key, the failed turn is retried with existing `X-BYOK-*`
-headers. BYOK providers listed in the UI: OpenAI, OpenRouter, Anthropic, Gemini
-(model required for all non-OpenAI providers).
+the visitor activates a validated key, the failed turn is retried with existing
+`X-BYOK-*` headers. BYOK providers listed in the UI: OpenAI, OpenRouter,
+Anthropic, Gemini (model required for all non-OpenAI providers).
+
+### BYOK (bring-your-own-key) — session-only, inline terminal flow
+
+Visitor API keys are **session memory only** (`useBYOKKey` React state). They
+are never written to `localStorage`, `sessionStorage`, cookies, or Postgres.
+Legacy durable keys (`byok_api_key` / `byok_provider` / `byok_model`) are purged
+on hook mount. A page refresh clears BYOK.
+
+UX (`src/components/byok-cli-flow.tsx`) is a stepwise terminal sequence rendered
+**inline in the chat transcript** (DigiChatSession `settingsPanel` slot inside
+`.dc-thread`, and the app shell `ChatPanel` when `/key` opens BYOK mode):
+
+1. Select provider (arrow keys + Enter, or click)
+2. Paste API key
+3. Select model from presets (or custom slug)
+4. `POST /api/byok/test` ping — activation is refused until `ok: true`
+5. On success, key is held in-memory for this tab session and sent as
+   `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` on subsequent `/api/chat`
+   requests only
+
+The BFF forwards BYOK headers to digigraph for the request lifetime and never
+logs or returns the raw key. `byokActivationGate` + Vitest cover the
+session-only / validation-before-activate contract.
 
 **digithings rule:** digithings tenants use `backend.type: digigraph` only.
 digivault and digisearch are digigraph tools (activity mappers under
@@ -516,11 +540,38 @@ may use digichat `/embed` without presenting `X-Embed-Token` when registered in
 **not** allowlisted. `/chat/occ` iframes `?host=occ.digithings.ai` (no DNS) for
 OCC corpus isolation.
 
-**postMessage seed.** Embed emits `{ type: "digichat:ready" }` to the parent
-origin; digithings.ai posts `{ type: "digichat:seed", messages, pending, ts }`
-after origin checks (`ChatEmbedShell`). Validators and caps live in
-`src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` / `datatap:unlocked`
-channel is unchanged.
+**postMessage seed.** Embed emits `{ type: "digichat:ready" }` to the **actual
+parent browsing-context origin** (`location.ancestorOrigins[0]` or
+`document.referrer` via `resolveReadyTargetOrigin` in
+`src/lib/embed-seed-messages.ts`) — never the virtual `?host=` tenant key
+(e.g. `occ.digithings.ai`). digithings.ai posts
+`{ type: "digichat:seed", messages, pending, ts }` after checking
+`event.origin` against the digichat embed origin (`ChatEmbedShell`). Validators
+and caps live in `src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` /
+`datatap:unlocked` channel is unchanged.
+
+**postMessage theme.** digithings.ai `/chat` and `/chat/occ` (`ChatEmbedShell`)
+read the parent site's canon `html[data-theme]` (shared `ThemeProvider` /
+`dt-theme` localStorage), pin first paint with `?theme=light|dark` on the iframe
+URL, then post `{ type: "digichat:theme", theme, ts }` on `digichat:ready` and
+whenever the parent theme toggles — no iframe reload. The embed accepts theme
+messages from the same first-party allowlist as seed (`parseThemeMessage` in
+`src/lib/embed-theme-messages.ts`) and applies them via the existing
+`[data-theme]` + `.dark`/`.light` path (MutationObserver still defends against
+OS/`ThemeProvider` overrides). Priority: parent postMessage > URL `?theme=` >
+tenant registry theme.
+
+**postMessage parent-error.** After `READY_TIMEOUT_MS` (30s) without
+`digichat:ready`, `ChatEmbedShell` posts
+`{ type: "digichat:parent-error", code: "ready_timeout"|"embed_unloadable", ts }`
+into the iframe (same first-party allowlist as seed/theme). The embed formats a
+CLI-style DigiChatSession transcript line (`error: …` via
+`formatParentErrorLine` in `src/lib/embed-parent-error-messages.ts`) — no
+parent-page banner. If the iframe never loads, the shell shows the same line in
+the iframe slot. Copy references `DIGICHAT_EMBED_ORIGIN` / Containers (not the
+legacy tunnel / `DIGICHAT_EMBED_HOSTS` wording). When
+`resolveReadyTargetOrigin` returns null the embed self-reports
+`ready_target_missing`.
 
 **`X-Embed-Host` alone is not sufficient authorization (#1339).** A tenant's
 host string is its own public domain, so `resolveEmbedTenantByHost` never

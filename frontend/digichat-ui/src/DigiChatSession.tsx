@@ -256,6 +256,9 @@ export function DigiChatSession({
             ) : null}
           </p>
         ) : null}
+
+        {/* BYOK terminal flow — inline in the transcript, not a separate modal */}
+        {settingsPanel}
       </div>
 
       {formReplacement ?? (
@@ -279,7 +282,7 @@ export function DigiChatSession({
             aria-label={placeholder}
             rows={1}
             maxLength={2000}
-            disabled={busy}
+            disabled={busy || !!settingsPanel}
           />
           {busy && stop ? (
             <button type="button" className="dc-stop" onClick={stop} aria-label="Stop generating">
@@ -289,7 +292,7 @@ export function DigiChatSession({
             <button
               type="submit"
               className="dc-send"
-              disabled={!input.trim() || busy}
+              disabled={!input.trim() || busy || !!settingsPanel}
               aria-label="Send message"
             >
               ↵
@@ -299,7 +302,6 @@ export function DigiChatSession({
       )}
 
       {footerSlot}
-      {settingsPanel}
     </section>
   );
 }

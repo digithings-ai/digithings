@@ -130,6 +130,9 @@ web:
   # Pages does not build it; vitest/wrangler live in that package. Keep on the web lane
   # so package.json is never an orphan install-input (#2073 / #2074).
   - frontend/digichat-cloudflare/**
+  # Profile A stack Containers Worker (workspace digithings-stack-cloudflare).
+  # Same install-input / web-lane cover as digichat-cloudflare above.
+  - frontend/digithings-stack-cloudflare/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml

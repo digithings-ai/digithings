@@ -185,7 +185,14 @@ export function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
-  const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } = useBYOKKey();
+  const {
+    key: byokKey,
+    provider: byokProvider,
+    model: byokModel,
+    isSet: byokIsSet,
+    setKey: setByokKey,
+    clearKey: clearByokKey,
+  } = useBYOKKey();
 
   const transport = useMemo(
     () =>
@@ -339,22 +346,13 @@ export function ChatPanel({
 
   const startsWithSlash = text.trimStart().startsWith("/");
 
-  if (byokMode) {
-    return (
-      <div className="flex h-full min-h-0 flex-1 flex-col">
-        {headerSlot}
-        <ByokCliFlow onClose={() => onByokModeChange?.(false)} />
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
       {headerSlot}
 
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} className="h-full overflow-y-auto rounded-md border border-border/40 dc-term-pane">
-          {messages.length === 0 && systemNotes.length === 0 ? (
+          {messages.length === 0 && systemNotes.length === 0 && !byokMode ? (
             <div className="dc-term-row dc-term-row-assistant">
               <span className="dc-term-marker">▸</span>
               <div className="dc-term-body" style={{ color: "var(--text-secondary)" }}>
@@ -435,6 +433,22 @@ export function ChatPanel({
               </div>
             </div>
           ) : null}
+
+          {byokMode ? (
+            <ByokCliFlow
+              onClose={() => onByokModeChange?.(false)}
+              onActivate={(key, provider, model) => {
+                setByokKey(key, provider, model);
+                onByokModeChange?.(false);
+              }}
+              onClear={clearByokKey}
+              active={
+                byokIsSet
+                  ? { provider: byokProvider, model: byokModel }
+                  : null
+              }
+            />
+          ) : null}
         </div>
 
         {showJump ? (
@@ -472,7 +486,7 @@ export function ChatPanel({
           placeholder="ask digichat"
           className="app-input-field"
           rows={1}
-          disabled={busy}
+          disabled={busy || byokMode}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
