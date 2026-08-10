@@ -1,8 +1,10 @@
 # Online Compliance Center — client #1
 
-Public OCC help assistant at **`https://digithings.ai/chat/occ`** — same digichat +
-Profile A stack as digithings dogfood (client #0), grounded on the OCC help-center
-corpus only.
+**Target (not live until Pages deploy + crawl apply):** ungated OCC help assistant at
+`https://digithings.ai/chat/occ` — same digichat + Profile A stack as digithings
+dogfood (client #0), grounded on the OCC help-center corpus only. Code for the
+route and corpus routing is on `develop`; production URL is 404 until cutover.
+Full ingest remains **HOLD** (dry-run only — see GAPLOG).
 
 Digi product names are always lowercase in prose.
 
@@ -17,7 +19,7 @@ Digi product names are always lowercase in prose.
 | Sinks | Dual-sink: digivault + digisearch |
 | digisearch index | `occ_help` |
 | Vault / Supabase | Same `architecture_notes` table; path prefix `clients/online-compliance-center/…` |
-| Auth | Ungated embed; `llmAccess: free_then_byok` when free-tier-then-BYOK is on develop |
+| Auth | Ungated embed; operator may set `llmAccess: free_then_byok` (on develop via #2048) |
 | digiproject | `llm_mode: free`; research prompt for OCC help corpus |
 | Corpus cadence | **One-shot** for the demo — static until content changes; no crawl CI |
 

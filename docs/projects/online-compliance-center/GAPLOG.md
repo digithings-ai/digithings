@@ -25,10 +25,10 @@ Compare-and-gap after wiring digithings.ai/chat/occ. Digi names lowercase.
 
 | Gap | Status | Notes |
 |-----|--------|-------|
-| Per-tenant digisearch index | In PR | Headers `X-Digi-Corpus-Index` + `DIGI_TENANT_CORPUS_MAP` |
-| digivault path_prefix | In PR | Tool arg + local/Supabase filter; RPC optional path_prefix when migration applied |
+| Per-tenant digisearch index | Landed (#2051) | Headers `X-Digi-Corpus-Index` + `DIGI_TENANT_CORPUS_MAP`; wire operator env |
+| digivault path_prefix | Landed (#2051) | Tool arg + local/Supabase filter; RPC optional path_prefix when migration 068 applied |
 | Shared digigraph digiproject | Documented | OCC digiproject for OCC-only stacks; shared stack uses corpus map/headers |
-| free_then_byok on develop | Depends | Operator JSON may include `llmAccess` once free-tier-then-BYOK lands; ungated works without it |
+| free_then_byok on develop | Landed (#2048) | Operator JSON may include `llmAccess: free_then_byok`; ungated works without it |
 
 ## Prod cutover still needed
 
