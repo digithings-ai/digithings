@@ -93,6 +93,20 @@ operator digivault) then `scripts/sync_onboard_vault.py` to publish to the
 existing Supabase `architecture_notes` table (service role; `--dry-run` first).
 Do **not** point public digivault search at an unpublished local `DIGIVAULT_ROOT`
 only — that splits the brain from Supabase FTS.
+
+### digithings.ai CI (`main`)
+
+Corpus refresh for client #0 is automated by
+[`.github/workflows/docs-onboard-digithings.yml`](../../.github/workflows/docs-onboard-digithings.yml)
+on relevant pushes to `main` (and `workflow_dispatch`). The Action dry-runs
+classification, writes a filesystem vault (`--sinks vault`), then runs
+`sync_onboard_vault.py` with `CORE_SUPABASE_*` under the `production`
+environment — same secrets pattern as `sync-architecture-vault.yml`.
+
+digisearch dual-sink remains an **operator / local** step (or legacy
+`docs-reindex-guide.yml` on `develop`): Actions runners cannot post
+server-visible paths to a remote digisearch `/ingest`. Optional website crawl
+is a dispatch input (`crawl: true`), not the default push path.
 - Exit `0` on success; exit `2` if any sink reported errors (JSON `OnboardResult`
   still prints to stdout).
 - Leaf scripts (`scrape_site.py`, `classify_pages.py`, …) are runnable alone with

@@ -57,7 +57,21 @@ DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.di
 digiquant.io is **crawl-only** unless a human later requests iframing digithings
 chat as an embed parent.
 
-## First onboard (operator)
+## CI on `main` (automatic)
+
+[`.github/workflows/docs-onboard-digithings.yml`](../../../.github/workflows/docs-onboard-digithings.yml)
+runs on pushes to `main` that touch onboard sources (manifest, repo-docs /
+OpenAPI globs, pipeline scripts). It dry-runs classification, then **applies**
+a local vault sink and publishes via `scripts/sync_onboard_vault.py` to core
+Supabase `architecture_notes` (same `production` / `CORE_SUPABASE_*` pattern as
+`sync-architecture-vault.yml`). Manual runs: Actions → **Docs: onboard
+digithings** (`dry-run` / `apply`, optional website crawl).
+
+digisearch dual-sink is **not** applied from Actions (ingest needs a
+server-visible path). Use the operator path below or the legacy
+`docs-reindex-guide.yml` until remote ingest exists.
+
+## First onboard (operator / local)
 
 Dry-run (no network crawl / no sinks — validates manifest + static/repo/OpenAPI
 classification):
@@ -71,7 +85,8 @@ python scripts/docs_onboard/run_onboard.py \
 ```
 
 Apply (needs secrets + running digivault/digisearch/digikey — see
-[`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../digichat/CLIENT-DOCS-ONBOARD.md)):
+[`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../digichat/CLIENT-DOCS-ONBOARD.md)).
+Prefer this for digisearch dual-sink; vault→Supabase on `main` is covered by CI:
 
 ```bash
 export DIGIVAULT_URL="${DIGIVAULT_URL:-http://127.0.0.1:8004}"
