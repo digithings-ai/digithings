@@ -61,6 +61,7 @@ function ByokSettingsForm({
   const handleProviderChange = useCallback(
     (p: BYOKProvider) => {
       setInputProvider(p);
+      setInputModel("");
       if (inputKey) {
         setValidationError(validateBYOKKey(inputKey, p));
       }

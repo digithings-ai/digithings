@@ -142,6 +142,7 @@ export function ByokCliFlow({ onClose }: { onClose: () => void }) {
                     )}
                     onClick={() => {
                       setInputProvider(prov);
+                      setInputModel("");
                       setValidationError(null);
                       setTestResult(null);
                     }}
