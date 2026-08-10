@@ -14,7 +14,13 @@ max_depth: 4
 sinks: [vault, search]
 digisearch_index: digithings_docs
 vault_subdir: clients/digithings
-docs_path_prefixes: ["/docs", "/chat", "/modules", "/architecture"]
+docs_path_prefixes:
+  ["/docs", "/chat", "/modules", "/architecture",
+   # Marketing/product pages (verified against live nav 2026-08-11):
+   # digithings.ai — /about, /quality, /security, /services, /team
+   # digiquant.io — /olympus, /strategies
+   "/about", "/quality", "/security", "/services", "/team",
+   "/olympus", "/strategies"]
 skip_path_prefixes: ["/blog", "/careers", "/legal"]
 
 static_sources: docs/projects/digithings/sources/repo-docs.yaml
