@@ -115,6 +115,10 @@ on:
       # Content stability is the evidence for that, not path history: the lone commit at
       # this path is the `git mv` that created it, and `git log --follow` is unreliable
       # here (it walks back past the app's own creation).
+      # digithings-stack-cloudflare is an install-input workspace (CF Profile A
+      # Containers Worker). Pages does not build it; name the manifest so it is
+      # not an orphan under tests/scripts/test_deploy_build_inputs.py.
+      - "frontend/digithings-stack-cloudflare/package.json"
       - "frontend/digiweb/reference/package.json"
   workflow_dispatch:
 
