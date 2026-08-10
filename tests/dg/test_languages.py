@@ -117,6 +117,43 @@ def test_research_node_leaves_prompt_unchanged_for_english_or_unset(monkeypatch)
     assert captured["system_prompt"] == "You are a helpful assistant."
 
 
+def test_research_node_takes_quant_path_when_system_prompt_is_default(monkeypatch) -> None:
+    """Regression guard for the append-after-is_document_mode placement.
+
+    With no ``research_system_prompt_override`` and no tenant custom prompt,
+    ``_load_research_settings`` returns the real ``RESEARCH_SYSTEM`` constant, so
+    ``is_document_mode`` must be computed (and be False) BEFORE the language
+    directive is appended. If the append were moved before that comparison, the
+    appended directive text alone would make ``system_prompt != RESEARCH_SYSTEM``
+    and misroute this plain quant-strategy request into the document-RAG path.
+    """
+    from digigraph.graph.research import RESEARCH_SYSTEM
+
+    captured: dict = {}
+
+    monkeypatch.setattr(
+        "digigraph.graph.research._run_document_rag_path",
+        lambda **kwargs: captured.update(document_rag_called=True) or {"research_note": "ok"},
+    )
+    monkeypatch.setattr(
+        "digigraph.graph.research._run_quant_or_augmented_path",
+        lambda **kwargs: (
+            captured.update(quant_path_called=True, is_document_mode=kwargs.get("is_document_mode"))
+            or {"research_note": "LLM-extracted"}
+        ),
+    )
+    monkeypatch.setattr(
+        "digigraph.graph.research._load_research_settings",
+        lambda: (None, "default", "default", RESEARCH_SYSTEM),
+    )
+
+    research_node({"prompt": "build me a mean-reversion strategy", "response_language": "de"})
+
+    assert "document_rag_called" not in captured
+    assert captured.get("quant_path_called") is True
+    assert captured.get("is_document_mode") is False
+
+
 def test_research_node_appends_directive_to_tenant_override_prompt(monkeypatch) -> None:
     monkeypatch.setenv("DIGISEARCH_URL", "http://digisearch:8002")
     captured: dict = {}
