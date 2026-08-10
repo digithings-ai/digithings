@@ -3,8 +3,9 @@
 Relocated from the former monolithic ``digigraph.llm`` (decommissioned in #632
 P2). Owns everything about *which model string* a request should use:
 
-- ``model_modes.yaml`` loading + the ``test`` / ``medium`` / ``best`` mode
-  resolution (:func:`get_model_for_mode`, :func:`get_model_for_phase`).
+- ``model_modes.yaml`` loading + ``test`` / ``medium`` / ``best`` fallbacks
+  (:func:`get_model_for_mode`, :func:`get_model_for_phase`). ``llm_mode: free`` is
+  policy-only (no product slug pin); require ``agents.llm`` / ``DIGI_LLM_*``.
 - :func:`resolve_effective_model` — ``OLLAMA_MODEL`` / mode-YAML selection,
   normalized for the active ``OPENAI_API_BASE`` (strips the LiteLLM ``ollama/``
   prefix when talking directly to Ollama's OpenAI shim).
@@ -78,7 +79,7 @@ _BALANCED_FLAGSHIP_MARKERS = frozenset(
 _NATIVE_SEARCH_ONLY_PREFIXES = frozenset({"perplexity/"})
 
 
-# test = minimal tokens; free = operator free-tier (e.g. OpenRouter :free);
+# test = minimal tokens; free = free-tier *policy* (not a model pin);
 # medium = balanced; best = largest.
 # When DIGI_PROJECT_CONFIG is set, agents.llm_mode overrides DIGI_LLM_MODE.
 def _get_llm_mode() -> str:
@@ -101,7 +102,11 @@ def get_llm_mode() -> str:
     return _get_llm_mode()
 
 
-_DEFAULT_FREE_MODEL = "openrouter/openai/gpt-oss-20b:free"
+_FREE_MODE_MODEL_REQUIRED = (
+    "llm_mode=free requires an explicit model: set agents.llm in digiproject "
+    "or DIGI_LLM_MODEL (and DIGI_LLM_PROVIDER when the model id is not already "
+    "provider-prefixed). Use an OpenRouter :free id or ollama/ local model."
+)
 
 
 def _explicit_llm_from_env() -> tuple[str | None, str | None]:
@@ -171,18 +176,26 @@ def _compose_provider_model(provider: str, model: str) -> str:
     return f"{p}/{m}"
 
 
+def _resolve_explicit_model(provider: str | None, model: str | None) -> str | None:
+    """Compose an explicit pin, or return a standalone model id from env/YAML."""
+    if provider and model:
+        return _compose_provider_model(provider, model)
+    if model:
+        return model.strip()
+    return None
+
+
 def _refuse_paid_in_free_mode(resolved: str, mode: str) -> str:
-    """In ``free`` mode, replace non-free models with the free default (never silently upgrade to paid)."""
+    """In ``free`` mode, reject non-free models (never silently substitute a product slug)."""
     if mode != "free":
         return resolved
     if is_free_tier_model(resolved):
         return resolved
-    logger.warning(
-        "llm_mode=free refused paid/non-free model %r; using %r",
-        resolved,
-        _DEFAULT_FREE_MODEL,
+    msg = (
+        f"llm_mode=free refused paid/non-free model {resolved!r}; "
+        "set agents.llm or DIGI_LLM_MODEL to an OpenRouter :free or ollama/ local model"
     )
-    return _DEFAULT_FREE_MODEL
+    raise ValueError(msg)
 
 
 class ModelModesConfig(BaseModel):
@@ -627,7 +640,8 @@ def effective_llm_settings() -> dict[str, object]:
     mode = _get_llm_mode()
     provider, model, api_key_env = _explicit_llm_config()
     source = "default"
-    if provider and model:
+    resolved = _resolve_explicit_model(provider, model)
+    if resolved is not None:
         source = "agents.llm" if os.environ.get("DIGI_PROJECT_CONFIG") else "env"
         # Prefer more precise source when YAML provided the pin.
         if os.environ.get("DIGI_PROJECT_CONFIG"):
@@ -640,13 +654,15 @@ def effective_llm_settings() -> dict[str, object]:
                     source = "env"
             except (ImportError, OSError, AttributeError, TypeError, ValueError):
                 source = "env"
-        resolved = _compose_provider_model(provider, model)
+    elif mode == "free":
+        raise ValueError(_FREE_MODE_MODEL_REQUIRED)
     else:
         data = _load_model_modes()
         if data.default_model:
             resolved = str(data.default_model)
             source = "model_modes.default_model"
         else:
+            # ``free`` is policy-only — never read a product slug from defaults.free.
             resolved = data.defaults.get(mode) or data.defaults.get("test") or "gpt-4o-mini"
             source = "model_modes" if data.defaults else "default"
         if "/" in resolved:
@@ -675,9 +691,11 @@ def get_model_for_mode() -> str:
 
     Resolution order:
     1. Explicit ``agents.llm`` / ``DIGI_LLM_PROVIDER``+``DIGI_LLM_MODEL`` — operator pin.
-    2. ``default_model`` in model_modes.yaml — optional explicit fallback.
-    3. ``defaults[llm_mode]`` — mode-keyed fallback (includes ``free``).
-    4. ``"gpt-4o-mini"`` — hard last resort.
+    2. For ``llm_mode: free`` without an explicit pin → :class:`ValueError` (policy only;
+       no shared product slug in ``model_modes.yaml``).
+    3. ``default_model`` in model_modes.yaml — optional explicit fallback (non-free).
+    4. ``defaults[llm_mode]`` for ``test`` / ``medium`` / ``best`` — mode-keyed fallback.
+    5. ``"gpt-4o-mini"`` — hard last resort (non-free modes only).
 
     OpenRouter paid/Olympus auto-override is **not** applied here. Olympus/Atlas
     phases use :func:`get_model_for_phase`. Having ``OPENROUTER_API_KEY`` set alone
@@ -686,19 +704,16 @@ def get_model_for_mode() -> str:
     """
     mode = _get_llm_mode()
     provider, model, _api_key_env = _explicit_llm_config()
-    if provider and model:
-        resolved = _compose_provider_model(provider, model)
-    else:
+    resolved = _resolve_explicit_model(provider, model)
+    if resolved is None:
+        if mode == "free":
+            raise ValueError(_FREE_MODE_MODEL_REQUIRED)
         data = _load_model_modes()
         if data.default_model:
             resolved = str(data.default_model)
         else:
-            resolved = (
-                data.defaults.get(mode)
-                or (data.defaults.get("free") if mode == "free" else None)
-                or data.defaults.get("test")
-                or (_DEFAULT_FREE_MODEL if mode == "free" else "gpt-4o-mini")
-            )
+            # Never consult defaults.free — free is access policy, not a model pin.
+            resolved = data.defaults.get(mode) or data.defaults.get("test") or "gpt-4o-mini"
     resolved = _refuse_paid_in_free_mode(resolved, mode)
     return _apply_byok_model_override(resolved)
 

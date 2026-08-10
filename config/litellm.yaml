@@ -19,7 +19,8 @@ model_list:
       api_key: os.environ/OPENAI_API_KEY
 
   # ── OpenRouter :free examples (dogfood / optional — not required for all installs) ──
-  # Pin digiproject agents.llm to these when llm_mode: free. Roster may rotate.
+  # llm_mode: free is policy only; pin digiproject agents.llm (or DIGI_LLM_*) to a
+  # concrete :free id. Roster may rotate — do not put product pins in model_modes.yaml.
   # Verified live 2026-08-10 (deepseek/deepseek-chat-v3:free 404'd); tools+answer OK.
   - model_name: openrouter/openai/gpt-oss-20b:free
     litellm_params:

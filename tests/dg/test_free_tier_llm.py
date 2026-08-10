@@ -42,9 +42,36 @@ def test_free_mode_refuses_paid_model(monkeypatch: pytest.MonkeyPatch, tmp_path:
     )
     monkeypatch.setenv("DIGI_PROJECT_CONFIG", str(cfg))
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    resolved = get_model_for_mode()
-    assert ":free" in resolved
-    assert resolved.startswith("openrouter/")
+    with pytest.raises(ValueError, match="refused paid/non-free model"):
+        get_model_for_mode()
+
+
+@pytest.mark.unit
+def test_free_mode_without_explicit_model_errors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """free is policy-only — no hardcoded slug / model_modes.defaults.free fallback."""
+    (tmp_path / "model_modes.yaml").write_text(
+        "defaults:\n  test: ollama/mini\n  free: openrouter/openai/gpt-oss-20b:free\n"
+    )
+    monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+    monkeypatch.setenv("DIGI_LLM_MODE", "free")
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+    monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
+    with pytest.raises(ValueError, match="agents.llm|DIGI_LLM_MODEL"):
+        get_model_for_mode()
+
+
+@pytest.mark.unit
+def test_free_mode_uses_env_model(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/mini\n")
+    monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+    monkeypatch.setenv("DIGI_LLM_MODE", "free")
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+    monkeypatch.setenv("DIGI_LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("DIGI_LLM_MODEL", "openai/gpt-oss-20b:free")
+    assert get_model_for_mode() == "openrouter/openai/gpt-oss-20b:free"
 
 
 @pytest.mark.unit
