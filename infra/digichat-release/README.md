@@ -127,6 +127,13 @@ Profile A digigraph is **research_rag only**. The stack image ships
 digichat probes only digigraph (`DIGICHAT_ENABLED_SERVICES=digigraph`). OCC and
 website chat must never surface `DIGIQUANT_DATA_DIR` errors.
 
+**Local JSON env:** Docker's env-file parser strips unescaped `"` inside
+`DIGICHAT_EMBED_TENANTS` / `DIGI_TENANT_CORPUS_MAP`. Prefer single-quoting those
+values in `.env.profile-a-bundle`, or use
+`compose.profile-a-bundle.override.yml` (YAML-quoted JSON + optional
+`digi-digichat:local`). `make digichat-profile-a-bundle-up` includes the override
+when that file exists.
+
 ## Profile B — Foundry (client Azure only)
 
 digithings has **no Azure**. This snippet is for client environments (DataTap-like ACA /

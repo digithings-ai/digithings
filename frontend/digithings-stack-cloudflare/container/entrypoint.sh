@@ -62,17 +62,19 @@ if [ "$pem_ok" -ne 1 ]; then
   fi
 fi
 
-# Copy OCC vault seed notes (idempotent — do not overwrite operator edits).
-if [ -d /seed/vault/clients/online-compliance-center ]; then
-  mkdir -p "$DATA_VAULT/clients/online-compliance-center"
-  for f in /seed/vault/clients/online-compliance-center/*; do
+# Copy vault seed notes (idempotent — do not overwrite operator edits).
+for client_dir in /seed/vault/clients/*; do
+  [ -d "$client_dir" ] || continue
+  client=$(basename "$client_dir")
+  mkdir -p "$DATA_VAULT/clients/$client"
+  for f in "$client_dir"/*; do
     [ -f "$f" ] || continue
     base=$(basename "$f")
-    dest="$DATA_VAULT/clients/online-compliance-center/$base"
+    dest="$DATA_VAULT/clients/$client/$base"
     if [ ! -f "$dest" ]; then
       cp "$f" "$dest"
     fi
   done
-fi
+done
 
 exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/digithings.conf
