@@ -157,6 +157,35 @@ class TestOpenAICompatible:
         call_kw = m.call_args[0][0]
         assert "search for X" in call_kw.prompt
 
+    def test_chat_completions_multi_turn_preserves_assistant_history(
+        self, client: TestClient
+    ) -> None:
+        """digichat posts the full UI history; assistant turns must reach the workflow prompt."""
+        with patch("digigraph.server.run_digigraph_workflow") as m:
+            from digigraph.models import WorkflowResult
+
+            m.return_value = WorkflowResult(success=True, message="ok", backtest_result=None)
+            r = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "sitaas-rag",
+                    "messages": [
+                        {"role": "user", "content": "What is digigraph?"},
+                        {
+                            "role": "assistant",
+                            "content": "digigraph is the orchestration hub.",
+                        },
+                        {"role": "user", "content": "Say more about that."},
+                    ],
+                },
+            )
+        assert r.status_code == 200
+        m.assert_called_once()
+        prompt = m.call_args[0][0].prompt
+        assert "What is digigraph?" in prompt
+        assert "digigraph is the orchestration hub." in prompt
+        assert "Say more about that." in prompt
+
     def test_chat_completions_empty_messages(self, client: TestClient) -> None:
         r = client.post("/v1/chat/completions", json={"model": "sitaas-rag", "messages": []})
         assert r.status_code == 200

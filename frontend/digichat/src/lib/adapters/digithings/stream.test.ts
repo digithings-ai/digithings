@@ -81,6 +81,38 @@ it("never emits data-digigraphTrace on the authenticated path", async () => {
   expect(body).not.toContain('"workflow_id"');
 });
 
+it("posts the full multi-turn history to digigraph chat completions", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("data: [DONE]\n\n", {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    })
+  );
+
+  const messages = [
+    { id: "1", role: "user", parts: [{ type: "text", text: "first" }] },
+    { id: "2", role: "assistant", parts: [{ type: "text", text: "reply" }] },
+    { id: "3", role: "user", parts: [{ type: "text", text: "second" }] },
+  ] as UIMessage[];
+
+  await createDigigraphTraceStreamResponse({
+    messages,
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+
+  expect(fetchSpy).toHaveBeenCalled();
+  const init = fetchSpy.mock.calls[0]?.[1] as { body?: string };
+  const payload = JSON.parse(init.body ?? "{}") as {
+    messages?: Array<{ role: string; content: string }>;
+  };
+  expect(payload.messages).toHaveLength(3);
+  expect(payload.messages?.map((m) => m.content)).toEqual(["first", "reply", "second"]);
+});
+
 // On the embed path with activityDetail: "off", neither the legacy part nor
 // the gated activity span should be emitted — this prevents disclosure of
 // internal payload fields like workflow_id to anonymous visitors.
