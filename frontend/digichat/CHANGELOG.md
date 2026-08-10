@@ -1,5 +1,89 @@
 # Changelog
 
+## [1.0.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.0.0...digichat-v1.0.0) (2026-08-10)
+
+
+### Features
+
+* **chat:** ship the house type-out as digichat's waiting state ([c98ceab](https://github.com/digithings-ai/digithings/commit/c98ceab87ea8b6aa5f73550e567de40632908444))
+* **chat:** ship the house type-out as digichat's waiting state ([3656503](https://github.com/digithings-ai/digithings/commit/365650323cd92014990d60ac832fc9df8e9b67fa))
+* **design-system:** retire the QR favicon for a terminal identity ([#1843](https://github.com/digithings-ai/digithings/issues/1843)) ([7966e3b](https://github.com/digithings-ai/digithings/commit/7966e3be1c3ad548bb19835cbb25a769ace1d1e0)), closes [#1841](https://github.com/digithings-ai/digithings/issues/1841)
+* **digichat:** accept and store the chat access token from the unlock message ([2b34796](https://github.com/digithings-ai/digithings/commit/2b3479690efaeea6ee62666cb469eb49b213fb44))
+* **digichat:** add an optional per-tenant quota gate config ([1d9c31d](https://github.com/digithings-ai/digithings/commit/1d9c31d4882ea03b10352f9b79d03ff2b4a04d32))
+* **digichat:** add digichat ready/seed postMessage validators ([30094d8](https://github.com/digithings-ai/digithings/commit/30094d8d6372c1326572727b27aaca1bc8ad01a0))
+* **digichat:** add foundry backend, retiring the orphaned relay Function ([c1c10b7](https://github.com/digithings-ai/digithings/commit/c1c10b7bcc26679c758b46fc1381ea399d4b5fae))
+* **digichat:** add foundry backend, retiring the orphaned relay Function ([7c9866a](https://github.com/digithings-ai/digithings/commit/7c9866aac9a76dc260ad0d4edc2d5bba351e9960)), closes [#1396](https://github.com/digithings-ai/digithings/issues/1396)
+* **digichat:** add trial_form gate mode and shared turn-limit constants ([4a6706c](https://github.com/digithings-ai/digithings/commit/4a6706c88a79353007b6eb1db7b327e82475eb7a))
+* **digichat:** allow first-party digithings hosts without embed token ([556d9a7](https://github.com/digithings-ai/digithings/commit/556d9a7d4406639791b1bcd229de3e05666eaf66))
+* **digichat:** carry chat session id and questions on datatap:gated ([f06cdf9](https://github.com/digithings-ai/digithings/commit/f06cdf97dee8f12a2f0523c0a4adea6315d1166b))
+* **digichat:** DataTap embed polish — contact paywall, accent override, thinking indicator ([c176ca3](https://github.com/digithings-ai/digithings/commit/c176ca39d45464bbfcae9dd944479d06dcfbf781))
+* **digichat:** digigraph-centric adapters and digithings.ai cutover ([#2013](https://github.com/digithings-ai/digithings/issues/2013)) ([573b815](https://github.com/digithings-ai/digithings/commit/573b8157dd6a7d1c9ef516ba929266b9816b12d6))
+* **digichat:** digithings dogfood completion ([6bd3a9d](https://github.com/digithings-ai/digithings/commit/6bd3a9ddae9c5076259f79cf9dd35d087a208ba3))
+* **digichat:** drive embed BYOK/status/layout from tenant flags ([9dfe479](https://github.com/digithings-ai/digithings/commit/9dfe479af361f5f780e2b92ab4366b5f70c519ec))
+* **digichat:** enforce chat quota server-side when a tenant configures a gate ([b9848ca](https://github.com/digithings-ai/digithings/commit/b9848ca6302b24e356774a5a8b904b79929a748f))
+* **digichat:** enforce trial_form gate in /api/chat (402, unlock flag, fail-open) ([fb58be2](https://github.com/digithings-ai/digithings/commit/fb58be21e0bf0de8bfa2448e81e5ff4d0d9a7912))
+* **digichat:** in-memory per-IP trial-turn quota ([f86a03a](https://github.com/digithings-ai/digithings/commit/f86a03ae5658bde13e8c51af160ff24f8916b2d8))
+* **digichat:** parse independent embed UI flags from tenant config ([984c0d6](https://github.com/digithings-ai/digithings/commit/984c0d6c3167161a2adc0f211370b951b825dd87))
+* **digichat:** Phase 2 unification — digivault port + digigraph rich mapping ([#1859](https://github.com/digithings-ai/digithings/issues/1859)) ([8f56e17](https://github.com/digithings-ai/digithings/commit/8f56e1783c62d93131472707daef6c61b918412f))
+* **digichat:** Profile A/B overlays + self-hosted install/deploy docs (Tasks 3–8) ([#2022](https://github.com/digithings-ai/digithings/issues/2022)) ([1993606](https://github.com/digithings-ai/digithings/commit/199360647b0436c0f7debc759983d8a2ec47a563))
+* **digichat:** project embed UI flags through tenant-config API ([e4373f0](https://github.com/digithings-ai/digithings/commit/e4373f031d058f26467fa82970e1c8de871fc199))
+* **digichat:** runtime CSP frame-ancestors for stock GHCR ([#2031](https://github.com/digithings-ai/digithings/issues/2031)) ([2c30ee4](https://github.com/digithings-ai/digithings/commit/2c30ee40c30fe95edb23f4d4985d7d19e8329d44))
+* **digichat:** scaffold DigiThings DigiChat on Cloudflare Containers ([032493e](https://github.com/digithings-ai/digithings/commit/032493e33b6a22525769319d51724683626b3085))
+* **digichat:** send the chat access token at request time ([2ae275d](https://github.com/digithings-ai/digithings/commit/2ae275deb509e4ca130a9d6cdb1fce33d4a7b44e))
+* **digichat:** server-side chat quota gate (chat access Phase 2) ([6b5de4e](https://github.com/digithings-ai/digithings/commit/6b5de4e59491100acdce20fd9583ed473c71469d))
+* **digichat:** shared activity protocol (unification phase 1) ([#1817](https://github.com/digithings-ai/digithings/issues/1817)) ([32f8e92](https://github.com/digithings-ai/digithings/commit/32f8e92626c2ffe905cd5a8bfd8d0806c9ceebbd))
+* **digichat:** simplify embed gate for dogfood slice 1 ([4d05075](https://github.com/digithings-ai/digithings/commit/4d0507548145e13025a66c5d2b0baf737a700430)), closes [#2045](https://github.com/digithings-ai/digithings/issues/2045)
+* **digichat:** trial_form embed — postMessage gate/unlock handshake + unlock header ([6004410](https://github.com/digithings-ai/digithings/commit/60044101e4839ff239363d654f89aed580dd464e))
+* **digichat:** trial_form embed gate mode ([4fcf107](https://github.com/digithings-ai/digithings/commit/4fcf107d8b3d2633c992a6bc7e76e927bab8f41d))
+* **digichat:** unify the chat UI — canon transcript, mermaid/LaTeX, centred embed ([ead37ba](https://github.com/digithings-ai/digithings/commit/ead37baec4a0063f7c8a77eb8add362bbc73c73e))
+* **digichat:** wire ready/seed protocol into embed session ([2a6c075](https://github.com/digithings-ai/digithings/commit/2a6c0752bcc1a50cf25c7954051e68e63d02cd4e))
+* **digithings:** dogfood cutover — client [#0](https://github.com/digithings-ai/digithings/issues/0) onboard + auth Option A ([#2037](https://github.com/digithings-ai/digithings/issues/2037)) ([df14c20](https://github.com/digithings-ai/digithings/commit/df14c20e256396e1d069f4197ae75ba8660dc95d))
+* free-tier digithings LLM + BYOK (digigraph + digichat) ([#2048](https://github.com/digithings-ai/digithings/issues/2048)) ([0f0498e](https://github.com/digithings-ai/digithings/commit/0f0498ea8d14f460078812d816d24083e202d709))
+* **occ:** client [#1](https://github.com/digithings-ai/digithings/issues/1) chat at digithings.ai/chat/occ ([209a870](https://github.com/digithings-ai/digithings/commit/209a870ac762777592af4463bb017f14db5fc9b7))
+* **occ:** client [#1](https://github.com/digithings-ai/digithings/issues/1) chat demo with corpus routing ([4f7f5c3](https://github.com/digithings-ai/digithings/commit/4f7f5c3726e12ff8687e44d4663c1edf81169385))
+* **website:** Phase 3 Pages-native digichat-ui (no Containers) ([eefac60](https://github.com/digithings-ai/digithings/commit/eefac60179db807088335cca1f6177a5183dbb70))
+* **website:** retire CF chat Function and native useStackChat stack ([b54c73d](https://github.com/digithings-ai/digithings/commit/b54c73d4487cfd5329d3193801a0f1077f13ec6a))
+
+
+### Bug Fixes
+
+* **chat:** repair what the in-session review of [#1971](https://github.com/digithings-ai/digithings/issues/1971) found ([ab54c67](https://github.com/digithings-ai/digithings/commit/ab54c679d9b4a05e2a11a95b04563eeaecd38d4c))
+* **design-system:** scope KaTeX to math-rendering apps, and correct what [#1941](https://github.com/digithings-ai/digithings/issues/1941) and [#1940](https://github.com/digithings-ai/digithings/issues/1940) claimed ([#1948](https://github.com/digithings-ai/digithings/issues/1948)) ([286fc87](https://github.com/digithings-ai/digithings/commit/286fc875489e4c62a283b08d956fb6ffd4d793dd))
+* **digichat,digigraph:** prefer-const and ruff format for dogfood CI ([db4b325](https://github.com/digithings-ai/digithings/commit/db4b3253b6fb76db0e83ed75563b1cab3b34fa88))
+* **digichat:** accept readonly messages in embed seed ([1767bf3](https://github.com/digithings-ai/digithings/commit/1767bf3e708e7f6642ac2ba4e78a6e64ff962295))
+* **digichat:** apply URL hex accent after mount on embed ([#1854](https://github.com/digithings-ai/digithings/issues/1854)) ([720f96c](https://github.com/digithings-ai/digithings/commit/720f96c8f7153a39d6a28637f1c84f62374fa479))
+* **digichat:** centre the embed transcript instead of running it full-bleed ([6eebd8d](https://github.com/digithings-ai/digithings/commit/6eebd8d7ec8b0a28e38ab43495f8cc80a58bcb3b))
+* **digichat:** deny invalid quota tokens ([#1918](https://github.com/digithings-ai/digithings/issues/1918)) ([b815ce9](https://github.com/digithings-ai/digithings/commit/b815ce9ef9a0e10a85ba5cbb1c6f8d2a9629e0a8)), closes [#1914](https://github.com/digithings-ai/digithings/issues/1914)
+* **digichat:** drop Foundry tool-leak text and raw search JSON noise ([#1990](https://github.com/digithings-ai/digithings/issues/1990)) ([af20574](https://github.com/digithings-ai/digithings/commit/af2057485d4580efab64261017d1badaa2180573))
+* **digichat:** embed dogfood contrast and ungated error UX ([6fee5e3](https://github.com/digithings-ai/digithings/commit/6fee5e3b5b77a9167404120cfc17ae7b7fd12b23))
+* **digichat:** fall back to the contact card when the parent never answers the gate ([e155c76](https://github.com/digithings-ai/digithings/commit/e155c768e27fe4e6277ac71061a9335b495bc0a2))
+* **digichat:** flush FoundryToolLeakFilter's held buffer at stream end ([#2000](https://github.com/digithings-ai/digithings/issues/2000)) ([605d9bd](https://github.com/digithings-ai/digithings/commit/605d9bdde2f855b89e143caaa71c075165a054b8))
+* **digichat:** Foundry progressive stream + fourth-turn trial gate ([#1985](https://github.com/digithings-ai/digithings/issues/1985)) ([6f7d5a3](https://github.com/digithings-ai/digithings/commit/6f7d5a30261c3c193acc882c36f3444aaedd0cc1))
+* **digichat:** hide bare graph_update from activity chain ([e419830](https://github.com/digithings-ai/digithings/commit/e4198303d0eb3b5f98ca9b213f183d530c0f0dad))
+* **digichat:** hold the server-side turn cap at the advertised 3 ([bde4bfd](https://github.com/digithings-ai/digithings/commit/bde4bfdac30282e9a65265c49997fc5b74272dec))
+* **digichat:** opt out of OpenWebUI chrome for dogfood stream ([ea725b2](https://github.com/digithings-ai/digithings/commit/ea725b21761e1f6f99d8b7a954587af2326f0d5e))
+* **digichat:** parse azure_ai_search's url_citation annotation shape ([bf5bbe7](https://github.com/digithings-ai/digithings/commit/bf5bbe7fe25634e537d48ad4b4c06c774bd18cea))
+* **digichat:** parse azure_ai_search's url_citation annotation shape ([91caa0e](https://github.com/digithings-ai/digithings/commit/91caa0e01c20f457ff37e6a120cfd321c1b62253)), closes [#1601](https://github.com/digithings-ai/digithings/issues/1601)
+* **digichat:** persist the trial unlock and harden the gate's failure modes ([110d74c](https://github.com/digithings-ai/digithings/commit/110d74ca25c93ab4e6bb9d966dd585aefed789be))
+* **digichat:** post datatap:gated once per payload, not per stream chunk ([6bb9d72](https://github.com/digithings-ai/digithings/commit/6bb9d72e1626d55b11f946d8914035b7b6c28cdb))
+* **digichat:** read embed token/host via useSearchParams ([2763be4](https://github.com/digithings-ai/digithings/commit/2763be4dd41db1a858dd66994d7fbe2e8db64f7f))
+* **digichat:** read embed token/host via useSearchParams ([5b167df](https://github.com/digithings-ai/digithings/commit/5b167df1e842e1db98f4d0dc4b910b35ed7e07f3))
+* **digichat:** readable Sources rows for dogfood RAG traces ([899b802](https://github.com/digithings-ai/digithings/commit/899b80202555aa4b0cfee3b150eaea48365d7502)), closes [#2045](https://github.com/digithings-ai/digithings/issues/2045)
+* **digichat:** remove unused status bar chrome ([7959f4d](https://github.com/digithings-ai/digithings/commit/7959f4d7222ff5e3a774ebec874672ea83daa680))
+* **digichat:** resolve embed tenant theme server-side to kill the load flash ([#2002](https://github.com/digithings-ai/digithings/issues/2002)) ([5284970](https://github.com/digithings-ai/digithings/commit/52849702cc309036581cfeef580cefd59ca3ea22))
+* **digichat:** restore wordmark header without status bar ([2f4fec8](https://github.com/digithings-ai/digithings/commit/2f4fec8c23658562eedb4fd24d5e9feacb70ed7f))
+* **digichat:** retarget Phase 3 embed to same-origin /embed ([21ee786](https://github.com/digithings-ai/digithings/commit/21ee786b6a34077c867ba9cf8f4e966e69f181ba))
+* **digichat:** send trial unlock header at request time ([0daa626](https://github.com/digithings-ai/digithings/commit/0daa626b2e1af2592900643aef0ba1228fc5df39))
+* **digichat:** send trial unlock header at request time ([80e2f85](https://github.com/digithings-ai/digithings/commit/80e2f8510bc6f24826ea1abfe1139cfbcb1de4e5))
+* **digiquant:** Nautilus image + digichat self-hosted docs follow-up ([#2015](https://github.com/digithings-ai/digithings/issues/2015)) ([bb14aec](https://github.com/digithings-ai/digithings/commit/bb14aec6bce34673879cc91f74858775235a81a7))
+* **dogfood:** clean answer prose and force dual-sink retrieval ([c1aa684](https://github.com/digithings-ai/digithings/commit/c1aa6840efcdf4d6488dd05144a1eccb921033a1))
+* **website:** stop digiquant selling execution it has not built, and lowercase the brand ([#1887](https://github.com/digithings-ai/digithings/issues/1887)) ([f023a75](https://github.com/digithings-ai/digithings/commit/f023a7535259c261c7aa2b4574907bbc83c3143b)), closes [#1846](https://github.com/digithings-ai/digithings/issues/1846)
+
+
+### Miscellaneous Chores
+
+* **digichat:** force public release 1.0.0 ([f991cff](https://github.com/digithings-ai/digithings/commit/f991cff159fdfb6313062ef6b45dca4661e7bb8e))
+
 ## [1.0.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.9.3...digichat-v1.0.0) (2026-08-10)
 
 
