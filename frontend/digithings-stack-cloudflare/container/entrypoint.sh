@@ -24,6 +24,16 @@ export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"
 export PYTHONPATH="/app/digikey/src:/app/digigraph/src:/app/digisearch/src:/app/digivault/src:/app/digibase/src:/app/digillm/src:/app/digismith/src${PYTHONPATH:+:$PYTHONPATH}"
 export PATH="/usr/local/bin:$PATH"
 
+# Container envVars may mangle multiline PEMs — accept base64-wrapped secret.
+if [ -n "${DIGIKEY_PRIVATE_KEY_PEM:-}" ] && ! printf '%s' "$DIGIKEY_PRIVATE_KEY_PEM" | grep -q "BEGIN"; then
+  DIGIKEY_PRIVATE_KEY_PEM=$(printf '%s' "$DIGIKEY_PRIVATE_KEY_PEM" | base64 -d 2>/dev/null || true)
+  export DIGIKEY_PRIVATE_KEY_PEM
+fi
+if [ -z "${DIGIKEY_PRIVATE_KEY_PEM:-}" ] || ! printf '%s' "$DIGIKEY_PRIVATE_KEY_PEM" | grep -q "BEGIN"; then
+  echo "digithings-stack: WARN DIGIKEY_PRIVATE_KEY_PEM missing/invalid; enabling ephemeral key for this boot"
+  export DIGIKEY_ALLOW_EPHEMERAL_KEY=1
+fi
+
 # Copy OCC vault seed notes (idempotent — do not overwrite operator edits).
 if [ -d /seed/vault/clients/online-compliance-center ]; then
   mkdir -p "$DATA_VAULT/clients/online-compliance-center"

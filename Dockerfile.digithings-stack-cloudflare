@@ -52,8 +52,8 @@ COPY digivault/pyproject.toml digivault/ARCHITECTURE.md ./digivault/
 COPY digivault/src ./digivault/src
 RUN uv pip install --system -e "./digivault[service]"
 
-# LiteLLM proxy (berriai image not used — keep one process tree)
-RUN uv pip install --system "litellm[proxy]"
+# LiteLLM proxy — pin below fastapi breakage (get_flat_dependant removed).
+RUN uv pip install --system "litellm[proxy]==1.72.6" "fastapi<0.116"
 
 # Profile A LiteLLM + digigraph config
 COPY infra/digichat-release/config /app/config
