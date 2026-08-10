@@ -75,13 +75,15 @@ Confirm OCC corpus fields remain in `DIGICHAT_EMBED_TENANTS` (server-only;
 
 ## OCC `occ_help` seed
 
-Container entrypoint (before supervisord):
+Boot order (critical for Cloudflare Containers port probes):
 
-1. Copies vault notes into `/data/vault/clients/online-compliance-center/`
-   (does not overwrite operator edits).
-2. Once per volume (`/data/chroma/.occ_help_seeded`), runs
-   `digisearch ingest --index occ_help /seed/occ_help` into **Chroma**
-   (`CHROMA_PATH`). Seed runs *before* digisearch starts to avoid SQLite locks.
+1. Entrypoint copies vault notes, then **starts supervisord immediately** so
+   digigraph `:8000` / digikey `:8005` bind (do **not** block on Chroma seed).
+2. Supervisord starts redis → digikey (waits for Redis PONG) → digigraph.
+3. Oneshoot `seed_occ` waits for digigraph `/healthz`, then runs
+   `digisearch ingest --index occ_help /seed/occ_help` into Chroma.
+4. digisearch starts only after `.occ_help_seeded` or `.occ_help_seed_skipped`
+   so CLI ingest and the HTTP server never share a PersistentClient.
 
 **Full crawl** of help.online-compliance-center.com remains **HOLD** until
 explicit approval (`docs/projects/online-compliance-center/GAPLOG.md`). After
@@ -92,29 +94,39 @@ reach digisearch ingest with a JWT that has `digisearch:ingest`).
 
 ```bash
 # Inside the stack container (volume wipe or seed failure):
-rm -f /data/chroma/.occ_help_seeded
+supervisorctl stop digisearch
+rm -f /data/chroma/.occ_help_seeded /data/chroma/.occ_help_seed_skipped
 CHROMA_PATH=/data/chroma DIGISEARCH_ALLOW_STUB=0 \
   digisearch ingest --index occ_help /seed/occ_help
-# Prefer stopping digisearch briefly if the marker was already set while the
-# server held the Chroma PersistentClient open.
+touch /data/chroma/.occ_help_seeded
+supervisorctl start digisearch
 ```
 
 ### digichat secrets (CF) — only when stack is reachable
 
 Do **not** point digichat at `*.trycloudflare.com` tunnels.
 
-Retarget only after `https://graph.digithings.ai/healthz` and
-`https://key.digithings.ai/healthz` return 200 (custom domains enabled in
-`wrangler.toml` / Dashboard). Until then, leave existing digichat secrets and
-treat OCC RAG against the CF bundle as **blocked** on network cutover — local
-Profile A bundle compose still validates corpus headers + seed.
+1. Confirm workers.dev health (before custom domains):
+   - `https://digithings-stack.chris-stefan.workers.dev/healthz` → digigraph
+   - `https://digithings-stack.chris-stefan.workers.dev/_stack/key/healthz` → digikey
+2. Uncomment `[[routes]]` for `graph.digithings.ai` / `key.digithings.ai` in
+   `wrangler.toml` and redeploy (human gate — public backends).
+3. Retarget digichat Worker secrets to `https://graph.digithings.ai` /
+   `https://key.digithings.ai` (same `DIGIKEY_BFF_TOKEN` as the stack).
+
+Until step 2–3, leave existing digichat secrets; Mac tunnels may still be required.
 
 ## Smoke (backends only)
 
 ```bash
+# workers.dev (before custom domains)
+curl -sf https://digithings-stack.chris-stefan.workers.dev/_stack/meta
+curl -sf https://digithings-stack.chris-stefan.workers.dev/healthz
+curl -sf https://digithings-stack.chris-stefan.workers.dev/_stack/key/healthz
+
+# after custom domains enabled
 curl -sf https://graph.digithings.ai/healthz
 curl -sf https://key.digithings.ai/healthz
-curl -sf https://digithings.ai/api/health   # digraph should be ok; expect 200 once digiquant/digismith disabled or reachable
 ```
 
 Do **not** treat `/chat` UI E2E as done here — leave for a smoke agent.

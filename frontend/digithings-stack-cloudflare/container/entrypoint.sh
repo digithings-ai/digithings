@@ -1,12 +1,11 @@
 #!/bin/sh
-# Profile A stack entrypoint.
-# Seed OCC Chroma *before* supervisord so digisearch does not share a PersistentClient
-# with a second process (SQLite lock). digigraph/digikey then bind under supervisord.
+# Profile A stack entrypoint — start supervisord immediately (ports must open).
+# Cloudflare Containers probes :8000; blocking here causes error 1101 / port-not-ready.
+# OCC Chroma seed runs as a supervisord oneshot *before* digisearch (see supervisord.conf).
 set -eu
 
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
 DATA_VAULT="${DIGIVAULT_ROOT:-/data/vault}"
-SEED_MARKER="${DATA_CHROMA}/.occ_help_seeded"
 
 mkdir -p "$DATA_CHROMA" "$DATA_VAULT" /data/digikey /var/log/supervisor
 
@@ -46,23 +45,6 @@ if [ -d /seed/vault/clients/online-compliance-center ]; then
       cp "$f" "$dest"
     fi
   done
-fi
-
-# Seed occ_help into Chroma once per volume, before digisearch opens the DB.
-# CLI routes through route_add_chunks → Chroma when CHROMA_PATH is set (not stub).
-# Full help.online-compliance-center.com crawl remains HOLD (GAPLOG).
-# First boot may download Chroma's default embedding model (can take a minute).
-if [ ! -f "$SEED_MARKER" ] && [ -d /seed/occ_help ]; then
-  echo "digithings-stack: seeding occ_help index from /seed/occ_help (pre-supervisord)"
-  if CHROMA_PATH="$DATA_CHROMA" DIGISEARCH_ALLOW_STUB=0 \
-    digisearch ingest --index occ_help /seed/occ_help; then
-    touch "$SEED_MARKER"
-    echo "digithings-stack: occ_help seed complete"
-  else
-    echo "digithings-stack: WARN occ_help seed failed (continuing boot)"
-    echo "digithings-stack: re-seed later: CHROMA_PATH=$DATA_CHROMA digisearch ingest --index occ_help /seed/occ_help"
-    echo "digithings-stack: or after crawl approval: docs_onboard apply (see docs/projects/online-compliance-center/)"
-  fi
 fi
 
 exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/digithings.conf

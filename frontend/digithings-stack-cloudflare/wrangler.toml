@@ -12,9 +12,9 @@ main = "src/index.ts"
 compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Custom domains — enable after first successful Container application create.
-# Until then, use the workers.dev URL and retarget digichat secrets to it
-# (or add Domains in Dashboard).
+# Custom domains — enable AFTER workers.dev /healthz returns 200 (human gate:
+# public digigraph + digikey). Until then digichat may keep Mac tunnels.
+# After domains are live, retarget digichat secrets to graph./key. (not trycloudflare).
 # [[routes]]
 # pattern = "graph.digithings.ai"
 # zone_name = "digithings.ai"
@@ -32,6 +32,11 @@ image = "../../Dockerfile.digithings-stack-cloudflare"
 max_instances = 2
 # Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
 instance_type = "standard-2"
+
+# Ops SSH (wrangler containers ssh) — ed25519 debug key (private key not in repo).
+[[containers.authorized_keys]]
+name = "stack-debug"
+public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOWKJSXCImobvGW1hFjW5VV4mSM5ZnFoC/sTsW/cdFD9 digithings-stack-debug"
 
 [[durable_objects.bindings]]
 name = "STACK"

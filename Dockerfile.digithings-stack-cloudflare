@@ -60,8 +60,11 @@ COPY infra/digichat-release/config /app/config
 COPY frontend/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
      /etc/supervisor/conf.d/digithings.conf
 COPY frontend/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
+COPY frontend/digithings-stack-cloudflare/container/seed_occ_help.sh /seed_occ_help.sh
+COPY frontend/digithings-stack-cloudflare/container/start_digikey.sh /start_digikey.sh
+COPY frontend/digithings-stack-cloudflare/container/start_digisearch.sh /start_digisearch.sh
 COPY frontend/digithings-stack-cloudflare/container/seed /seed
-RUN chmod +x /entrypoint.sh \
+RUN chmod +x /entrypoint.sh /seed_occ_help.sh /start_digikey.sh /start_digisearch.sh \
     && mkdir -p /data/chroma /data/vault /data/digikey /var/log/supervisor
 
 EXPOSE 8000 8005

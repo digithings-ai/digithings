@@ -5,6 +5,10 @@
  *   graph.digithings.ai → digigraph :8000
  *   key.digithings.ai   → digikey   :8005
  *
+ * workers.dev fallbacks:
+ *   /healthz            → digigraph
+ *   /_stack/key/*       → digikey (strip prefix)
+ *
  * digisearch / digivault / LiteLLM are loopback-only inside the Container.
  * digichat Container calls these public URLs via DIGIGRAPH_INTERNAL_URL / DIGIKEY_URL.
  */
@@ -23,9 +27,8 @@ const env = workerEnvBinding as unknown as Env;
 export class DigiStackContainer extends Container {
   defaultPort = DIGIGRAPH_PORT;
   /**
-   * Only digigraph is required for Worker readiness. digikey still starts under
-   * supervisord; digichat needs it shortly after, but blocking on both ports
-   * caused indefinite hangs when digikey failed to bind under Firecracker.
+   * digigraph is required for Worker readiness. digikey is also waited on in
+   * fetch() once Redis-wait + early priority make bind reliable under Firecracker.
    */
   requiredPorts = [DIGIGRAPH_PORT];
   /** Keep warm — multi-process cold start is expensive. */
@@ -68,14 +71,15 @@ export class DigiStackContainer extends Container {
 
   /**
    * Wait longer than the default ~20s portReadyTimeout while supervisord
-   * brings up digigraph under Firecracker.
+   * brings up digigraph (and digikey) under Firecracker.
    */
   override async fetch(request: Request): Promise<Response> {
+    const targetPort = targetPortFromRequest(request);
     try {
       await this.startAndWaitForPorts({
-        ports: [DIGIGRAPH_PORT],
+        ports: [DIGIGRAPH_PORT, ...(targetPort === DIGIKEY_PORT ? [DIGIKEY_PORT] : [])],
         cancellationOptions: {
-          portReadyTimeoutMS: 120_000,
+          portReadyTimeoutMS: 180_000,
           instanceGetTimeoutMS: 60_000,
         },
       });
@@ -87,6 +91,17 @@ export class DigiStackContainer extends Container {
     }
     return this.containerFetch(request);
   }
+}
+
+function targetPortFromRequest(request: Request): number {
+  const header = request.headers.get("cf-container-target-port");
+  if (header) {
+    const parsed = Number.parseInt(header, 10);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return DIGIGRAPH_PORT;
 }
 
 export interface Env {
@@ -116,6 +131,13 @@ export interface Env {
   LITELLM_MASTER_KEY?: string;
 }
 
+function rewriteKeyStackPath(request: Request): Request {
+  const url = new URL(request.url);
+  const stripped = url.pathname.replace(/^\/_stack\/key/, "") || "/";
+  url.pathname = stripped;
+  return new Request(url.toString(), request);
+}
+
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -126,10 +148,17 @@ export default {
         note: "Worker up; container ports may still be starting",
       });
     }
+
+    // workers.dev digikey probe without custom domain: /_stack/key/healthz
+    if (url.pathname === "/_stack/key" || url.pathname.startsWith("/_stack/key/")) {
+      const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+      return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
+    }
+
     const port = portForHostname(url.hostname);
     if (port === null) {
       return new Response(
-        "digithings-stack: unknown host. Use graph.digithings.ai or key.digithings.ai.",
+        "digithings-stack: unknown host. Use graph.digithings.ai, key.digithings.ai, or /_stack/key/* on workers.dev.",
         { status: 404 },
       );
     }
