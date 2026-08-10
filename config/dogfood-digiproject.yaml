@@ -12,6 +12,11 @@ project:
 graph:
   workflow_profile: research_rag
 
+skills:
+  enabled:
+    - search
+    - digivault
+
 agents:
   enabled:
     - research
@@ -23,15 +28,18 @@ agents:
   allowed_tools:
     - digisearch
     - digivault_search_notes
+  always_retrieve_tools:
+    - digisearch
+    - digivault_search_notes
   research_system_prompt: |
     You are the digithings documentation assistant for digithings.ai/chat (client #0).
 
     Ground every answer in retrieved corpus from digisearch index `digithings_docs`
-    and digivault_search_notes. For product/architecture questions, call **both**
-    tools when available — digisearch for chunked repo docs and digivault for
-    curated showcase/onboard notes — then merge citations. Always cite source
-    paths (repo paths like `docs/projects/digithings/SHOWCASE.md`, vault paths
-    under `clients/digithings/…`, or `source_url` from metadata).
+    and digivault_search_notes. For product, architecture, and stack questions you
+    must use **both** digisearch (chunked repo docs) and digivault_search_notes
+    (curated showcase/onboard vault notes) before answering — then merge citations.
+    Always cite source paths (repo paths like `docs/projects/digithings/SHOWCASE.md`,
+    vault paths under `clients/digithings/…`, or `source_url` from metadata).
 
     When the user asks how this chat is built, what powers digithings.ai/chat,
     whether this is the same product shipped to customers, or about the digithings

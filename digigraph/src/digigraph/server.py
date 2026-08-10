@@ -596,6 +596,7 @@ def _stream_completions_progressive(
     allowed_tools: list[str] | None = None,
     request_id: str | None = None,
     workflow_extras: dict | None = None,
+    suppress_tool_stream: bool = False,
 ):
     """
     Generator: run workflow in thread, consume queue, yield SSE deltas.
@@ -655,9 +656,12 @@ def _stream_completions_progressive(
             if event_type == "tool_call":
                 pending_tool_calls.append(data or {})
             elif event_type == "tool_result":
-                call_data = pending_tool_calls.pop(0) if pending_tool_calls else {}
-                content = formatter.format_tool_call_with_result(call_data, data or {})
-                yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
+                if not suppress_tool_stream:
+                    call_data = pending_tool_calls.pop(0) if pending_tool_calls else {}
+                    content = formatter.format_tool_call_with_result(call_data, data or {})
+                    yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
+                elif pending_tool_calls:
+                    pending_tool_calls.pop(0)
             elif event_type == "reasoning":
                 if isinstance(data, str):
                     raw = data
@@ -702,6 +706,12 @@ def _stream_completions_progressive(
 
     yield f"data: {_sse_chunk(cid, created, model, '', 'stop')}\n\n"
     yield "data: [DONE]\n\n"
+
+
+def _resolve_suppress_tool_stream(request: Request) -> bool:
+    """True when client wants tool-call markup omitted from SSE content (activity via digigraph_trace)."""
+    header = (request.headers.get("X-Suppress-Tool-Stream") or "").strip().lower()
+    return header in ("1", "true", "yes")
 
 
 def _resolve_openwebui_format(req: ChatCompletionRequest, request: Request) -> bool:
@@ -791,6 +801,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
         session_id = workflow_thread_id(subject, session_id)
     allowed_tools = _resolve_allowed_tools_chat(req, request)
     openwebui_format = _resolve_openwebui_format(req, request)
+    suppress_tool_stream = _resolve_suppress_tool_stream(request)
     request_id = _resolve_request_id(request)
 
     summary = _chat_request_summary(req, request, prompt, session_id)
@@ -818,6 +829,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
                 allowed_tools=allowed_tools,
                 request_id=request_id,
                 workflow_extras=wf_extras,
+                suppress_tool_stream=suppress_tool_stream,
             ),
             media_type="text/event-stream",
             headers={

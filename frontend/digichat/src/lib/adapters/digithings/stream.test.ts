@@ -233,7 +233,8 @@ it("maps digigraph_error code to embed-chat-error payload", () => {
 });
 
 it("surfaces delta.digigraph_error as a stream error for BYOK handoff", async () => {
-  const quotaMessage = "Free-tier model quota is exhausted. Add your own API key (BYOK) to continue.";
+  const quotaMessage =
+    "Free-tier model quota is exhausted. Add your own API key (BYOK) to continue.";
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(
       [
@@ -251,8 +252,8 @@ it("surfaces delta.digigraph_error as a stream error for BYOK handoff", async ()
         })}\n\n`,
         "data: [DONE]\n\n",
       ].join(""),
-      { status: 200, headers: { "content-type": "text/event-stream" } }
-    )
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
   );
 
   const res = await createDigigraphTraceStreamResponse({
@@ -285,4 +286,37 @@ it("surfaces delta.digigraph_error as a stream error for BYOK handoff", async ()
       errorCode: embedErr?.code,
     }),
   ).toBe(true);
+});
+
+it("strips Open WebUI tool dumps from streamed answer text", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                content:
+                  "<details><summary>Tool</summary>dump</details>\n\nClean answer.",
+              },
+            },
+          ],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+  expect(body).toContain("Clean answer.");
+  expect(body).not.toContain("<details>");
 });

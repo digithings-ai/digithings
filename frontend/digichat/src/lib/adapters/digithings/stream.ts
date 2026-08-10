@@ -7,8 +7,8 @@ import {
 import {
   digigraphChatCompletionsUrl,
   digigraphModelName,
-  digigraphOpenWebUIFormat,
 } from "@/lib/digigraph";
+import { stripToolDumpFromAnswerDelta } from "@/lib/adapters/digithings/strip-tool-dump";
 import { coreMessagesToDigigraphOpenAi } from "@/lib/digigraph-messages";
 import {
   ACTIVITY_PART_TYPE,
@@ -90,7 +90,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
   upstreamBearer: string;
   activityDetail: ActivityDetail;
 }) {
-  const openwebui = digigraphOpenWebUIFormat();
   const stripped = opts.messages.map((m) => {
     const { id: _omit, ...rest } = m;
     void _omit;
@@ -112,14 +111,13 @@ export async function createDigigraphTraceStreamResponse(opts: {
         messages: coreMessagesToDigigraphOpenAi(coreMessages),
         stream: true,
       };
-      if (openwebui) bodyPayload.openwebui_format = true;
       const res = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
+          "X-Suppress-Tool-Stream": "1",
           ...opts.upstreamHeaders,
-          ...(openwebui ? { "X-Response-Format": "openwebui" } : {}),
         },
         body: JSON.stringify(bodyPayload),
       });
@@ -160,7 +158,10 @@ export async function createDigigraphTraceStreamResponse(opts: {
         }
         const c = delta.content;
         if (typeof c === "string" && c.length) {
-          writer.write({ type: "text-delta", id: textId, delta: c });
+          const cleaned = stripToolDumpFromAnswerDelta(c);
+          if (cleaned.length) {
+            writer.write({ type: "text-delta", id: textId, delta: cleaned });
+          }
         }
         const tr = delta.digigraph_trace;
         if (tr && typeof tr === "object") {

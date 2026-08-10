@@ -18,7 +18,7 @@ Plan questionnaire: Stage 8 of
 | 8 | What scopes does digikey issue for digivault writes? | | | |
 | 9 | Where do AGENTS.md non-negotiables live? | | | |
 | 10 | Auth on digithings.ai/chat — login wall or ungated embed? | | | |
-| 11 | How is digithings chat built? / same product as customers get? | Y (digisearch) | `docs/projects/digithings/SHOWCASE.md` (via source_url metadata) | Local smoke 2026-08-10 — digisearch only in one run; digivault works after container restart |
+| 11 | How is digithings chat built? / same product as customers get? | Y (digisearch + digivault) | `docs/projects/digithings/SHOWCASE.md`, `digigraph/ARCHITECTURE.md` | Local smoke 2026-08-10 — `always_retrieve_tools` + digivault skill; restart digivault after digikey rotation |
 
 ## UX / ops deltas
 
@@ -33,6 +33,8 @@ Plan questionnaire: Stage 8 of
 | 2026-08-10 | Showcase | Added `SHOWCASE.md` + `digiproject.yaml` / `config/dogfood-digiproject.yaml` for self-aware chat | Re-ingest on operator after merge |
 | 2026-08-10 | Free→BYOK | digichat embed `llmAccess: free_then_byok` + in-chat BYOK on `free_quota_exceeded` (ungated digithings.ai). digigraph typed error + Gemini/Anthropic BYOK spend owned by sibling PR. | Wire dogfood tenant env `llmAccess` + confirm digigraph returns `free_quota_exceeded` |
 | 2026-08-10 | Sources UI | `rag_sources` rows showed UUID `doc_id` paths; tool row labeled `rag_sources` / `digithings_docs` | Fixed activity mapper: `source_url` → readable path, `digisearch`/`digivault` labels (#2045) |
+| 2026-08-10 | Answer prose | Open WebUI `<details>` tool dumps leaked into assistant text when `DIGICHAT_OPENWEBUI_FORMAT=1` | digichat trace stream: `X-Suppress-Tool-Stream` + strip helper; default OpenWebUI off for dogfood |
+| 2026-08-10 | digivault tool | Skill `digivault` omitted from default `skills.enabled`; `DIGIVAULT_URL` empty hid skill even when project YAML had `digivault_url` | `always_retrieve_tools` prefetch + `skills.enabled: [search, digivault]`; compose override sets `DIGIVAULT_URL`; restart digivault after digikey |
 | 2026-08-10 | digivault auth | Stale JWKS cache after digikey restart → `invalid_token` on orchestrator routes until `docker compose restart digivault` | Documented in `docker-compose.override.yml`; restart digivault with digikey |
 
 ## Legacy retirement tracker

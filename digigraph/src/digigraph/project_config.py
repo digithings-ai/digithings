@@ -410,6 +410,13 @@ class DigiProjectConfig:
             return []
         return [str(x).strip() for x in raw if x and str(x).strip()]
 
+    def get_always_retrieve_tools(self) -> list[str]:
+        """Tools to invoke before the LLM tool loop (structural retrieval, not prompt-only)."""
+        raw = self.agents.get("always_retrieve_tools")
+        if not isinstance(raw, list) or not raw:
+            return []
+        return [str(x).strip() for x in raw if x and str(x).strip()]
+
     def get_limits(self) -> SitaasLimits:
         """Return SITAAS runtime limits (env overrides YAML overrides defaults)."""
         return SitaasLimits.from_config(self._data)

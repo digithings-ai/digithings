@@ -338,6 +338,26 @@ def _run_document_rag_path(
             data = {**data, "index_name": index_display_name}
         raw_callback(event_type, data)
 
+    from digigraph.orchestration.registry import has_tool
+
+    prefetch_names = cfg.get_always_retrieve_tools() if cfg else []
+    if prefetch_names and str(prompt).strip():
+        q = str(prompt).strip()
+        for tool_name in prefetch_names:
+            if not has_tool(tool_name):
+                continue
+            if _allowed_names is not None and tool_name not in _allowed_names:
+                continue
+            args: dict[str, Any] = {"query": q}
+            stream_callback("tool_call", {"name": tool_name, "arguments": args})
+            result = execute_search(tool_name, args)
+            payload = (
+                {**result, "name": tool_name}
+                if isinstance(result, dict)
+                else {"name": tool_name, "content": result}
+            )
+            stream_callback("tool_result", payload)
+
     user_content = str(prompt)
 
     # SITAAS-only (project mode): prepend NL filter hints so the LLM folds them into

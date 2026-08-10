@@ -82,6 +82,13 @@ def test_digi_project_config_allowed_tools() -> None:
     assert cfg.get_allowed_tools() == ["digisearch", "todo"]
 
 
+def test_digi_project_config_always_retrieve_tools() -> None:
+    cfg = DigiProjectConfig(
+        {"agents": {"always_retrieve_tools": ["digisearch", "digivault_search_notes"]}}
+    )
+    assert cfg.get_always_retrieve_tools() == ["digisearch", "digivault_search_notes"]
+
+
 def test_get_digivault_url_defaults_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DIGIVAULT_URL", raising=False)
     assert DigiProjectConfig({}).get_digivault_url() == "http://digivault:8004"
