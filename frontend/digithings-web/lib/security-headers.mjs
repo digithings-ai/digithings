@@ -6,7 +6,8 @@
  * `write-csp-headers.mjs` (npm prebuild) so staging/tunnel hosts stay aligned.
  */
 
-export const DEFAULT_DIGICHAT_EMBED_ORIGIN = "https://digichat.digithings.ai";
+/** Same-hostname digichat Container (Worker routes /embed*). Tunnel override via env. */
+export const DEFAULT_DIGICHAT_EMBED_ORIGIN = "https://digithings.ai";
 
 /**
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
@@ -28,6 +29,14 @@ export function resolveDigichatEmbedOrigin(env = process.env) {
  */
 export function frameSrcForCsp(env = process.env) {
   return resolveDigichatEmbedOrigin(env) ?? DEFAULT_DIGICHAT_EMBED_ORIGIN;
+}
+
+/**
+ * Origin for `/chat` and `/chat/occ` iframes — same as CSP `frame-src`.
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ */
+export function embedOriginForChat(env = process.env) {
+  return frameSrcForCsp(env);
 }
 
 /**
@@ -60,7 +69,7 @@ export function renderCloudflareHeaders(frameSrc = frameSrcForCsp()) {
   return [
     "# Cloudflare Pages headers for digithings.ai. Fonts are self-hosted (next/font).",
     "# /chat iframes digichat Node (digigraph). frame-src is injected at build from",
-    "# NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN (default https://digichat.digithings.ai).",
+    "# NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN (default https://digithings.ai Containers).",
     "# X-Frame-Options: DENY still blocks third parties framing digithings.ai itself.",
     "/*",
     "  X-Content-Type-Options: nosniff",

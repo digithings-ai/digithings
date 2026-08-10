@@ -35,6 +35,9 @@ if [ "$(uname -s)" = "Linux" ]; then
 fi
 
 echo "--- building digithings-web (Next.js static export) ---"
+# Same-hostname digichat Container by default; override for Tunnel staging.
+export NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN="${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN:-https://digithings.ai}"
+echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
 # prebuild rewrites public/_headers frame-src from NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN
 npm --workspace frontend/digithings-web run build
 

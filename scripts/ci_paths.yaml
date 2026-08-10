@@ -126,6 +126,10 @@ web:
   # two compose: that PR's union guard reads every glob in this file, so this directory
   # entry independently satisfies it.
   - frontend/digiweb/reference/**
+  # digichat Containers Worker + Dockerfile (workspace digithings-digichat-cloudflare).
+  # Pages does not build it; vitest/wrangler live in that package. Keep on the web lane
+  # so package.json is never an orphan install-input (#2073 / #2074).
+  - frontend/digichat-cloudflare/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
