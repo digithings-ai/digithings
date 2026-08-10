@@ -48,6 +48,9 @@ services:
       DIGISMITH_URL: ""
       OPENAI_API_BASE: http://127.0.0.1:4000/v1
       DIGI_CONFIG_PATH: /app/config
+      DIGI_PROJECT_CONFIG: /app/config/digiproject.yaml
+      DIGI_WORKFLOW_PROFILE: research_rag
+      DIGI_ALLOWED_TOOLS: digisearch,digivault_search_notes
       DIGI_LLM_MODE: ${DIGI_LLM_MODE:-test}
       # From .env.profile-a-bundle (see .env.profile-a-bundle.example OCC map).
       DIGI_TENANT_CORPUS_MAP: ${DIGI_TENANT_CORPUS_MAP:-}

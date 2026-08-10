@@ -143,6 +143,29 @@ instead of N monorepo services. Keep digichat (+ Postgres) separate — Node vs
 Python, different secrets and scale. Do **not** put digiquant / digismith HTTP /
 Ollama in this path unless you need them.
 
+### Chat-only service set
+
+| Service | Where | Purpose |
+|---|---|---|
+| digikey `:8005` | edge | JWT / BFF |
+| digigraph `:8000` | edge | Chat brain (`research_rag`) |
+| digisearch `:8002` | loopback | RAG |
+| digivault `:8004` | loopback | Notes |
+| LiteLLM `:4000` | loopback | LLM router |
+| Redis `:6379` | loopback | digikey blocklist |
+
+**Omitted on purpose:** digiquant, digismith HTTP, Ollama, heartbeat.
+
+digigraph chat-only env (set in `wrangler.toml` / entrypoint / bundle compose):
+
+- `DIGI_PROJECT_CONFIG=/app/config/digiproject.yaml` — `research_rag`, research only,
+  tools `digisearch` + `digivault_search_notes`
+- `DIGI_WORKFLOW_PROFILE=research_rag`
+- `DIGI_ALLOWED_TOOLS=digisearch,digivault_search_notes`
+- `DIGIQUANT_URL=` (empty) — never route to `backtest_node`
+
+digichat: `DIGICHAT_ENABLED_SERVICES=digigraph` (do not probe digiquant).
+
 ### Stop excess monorepo containers first
 
 Published host ports clash (`8000` / `8005` / `3005` / `5433`):

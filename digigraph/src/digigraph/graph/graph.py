@@ -179,11 +179,25 @@ def _route_after_supervisor(state: WorkflowState):
     return "research"
 
 
+def _digiquant_configured() -> bool:
+    """True when digiquant HTTP may run.
+
+    Explicit empty ``DIGIQUANT_URL=`` (Profile A / chat-only) disables backtest.
+    Unset env keeps the historical default URL in ``backtest_node``.
+    """
+    if "DIGIQUANT_URL" not in os.environ:
+        return True
+    return bool(os.environ.get("DIGIQUANT_URL", "").strip())
+
+
 def _route_after_research(state: WorkflowState):
     if state.get("error"):
         return END
     profile = (state.get("workflow_profile") or resolve_workflow_profile()).lower()
     if profile == "research_rag":
+        return END
+    # Chat-only / Profile A: digiquant not deployed — never enter backtest_node.
+    if not _digiquant_configured():
         return END
     # Document / RAG assistant mode: no strategy extraction → skip quant path.
     if state.get("research_response") and not state.get("strategy_name"):
