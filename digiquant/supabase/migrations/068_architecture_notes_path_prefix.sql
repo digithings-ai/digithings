@@ -2,8 +2,15 @@
 --
 -- Optional path_prefix filter on search_architecture_notes for multi-tenant
 -- corpora in the shared architecture_notes table (e.g. clients/digithings vs
--- clients/online-compliance-center). Additive: replaces the function with a
--- compatible signature that defaults path_prefix to null (same behaviour as 049).
+-- clients/online-compliance-center).
+--
+-- Signature change (not a compatible CREATE OR REPLACE): Postgres matches
+-- functions by full argument list, so adding path_prefix would leave the
+-- 049 two-arg overload in place and make two-arg calls ambiguous. Drop the
+-- old signature first, then create the three-arg function (path_prefix
+-- defaults to null → same unfiltered behaviour as 049).
+
+drop function if exists public.search_architecture_notes(text, int);
 
 create or replace function public.search_architecture_notes(
     query text,
@@ -38,5 +45,3 @@ as $$
 $$;
 
 grant execute on function public.search_architecture_notes(text, int, text) to anon;
--- Keep prior 2-arg grants working for older clients.
-grant execute on function public.search_architecture_notes(text, int) to anon;
