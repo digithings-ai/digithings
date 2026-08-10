@@ -369,6 +369,18 @@
             "description": "digiquant BacktestResult when workflow ran a backtest",
             "title": "Backtest Result"
           },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable machine code for digichat (e.g. free_quota_exceeded); None on success",
+            "title": "Error Code"
+          },
           "message": {
             "default": "",
             "description": "Human-readable summary",

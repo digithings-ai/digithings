@@ -24,24 +24,14 @@ OPENROUTER_API_KEY=sk-or-v1-...
 
 ```yaml
 model_list:
-  - model_name: or-deepseek-v3-free
+  - model_name: or-gpt-oss-20b-free
     litellm_params:
-      model: openrouter/deepseek/deepseek-chat-v3:free
+      model: openrouter/openai/gpt-oss-20b:free
       api_key: os.environ/OPENROUTER_API_KEY
 
-  - model_name: or-deepseek-r1-free
+  - model_name: or-gemma-4-31b-free
     litellm_params:
-      model: openrouter/deepseek/deepseek-r1:free
-      api_key: os.environ/OPENROUTER_API_KEY
-
-  - model_name: or-llama-70b-free
-    litellm_params:
-      model: openrouter/meta-llama/llama-3.3-70b-instruct:free
-      api_key: os.environ/OPENROUTER_API_KEY
-
-  - model_name: or-qwen-coder-free
-    litellm_params:
-      model: openrouter/qwen/qwen-2.5-coder-32b-instruct:free
+      model: openrouter/google/gemma-4-31b-it:free
       api_key: os.environ/OPENROUTER_API_KEY
 
   # Paid routes (no :free suffix) — pay upstream + ~5% OR markup
@@ -57,7 +47,7 @@ model_list:
 curl -s https://openrouter.ai/api/v1/chat/completions \
   -H "Authorization: Bearer $OPENROUTER_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"deepseek/deepseek-chat-v3:free","messages":[{"role":"user","content":"Say hi"}]}'
+  -d '{"model":"openai/gpt-oss-20b:free","messages":[{"role":"user","content":"Say hi"}]}'
 ```
 
 ## BYO-key mode

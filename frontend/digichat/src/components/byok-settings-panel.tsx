@@ -18,6 +18,9 @@ import {
   useBYOKKey,
   validateBYOKKey,
   validateBYOKModel,
+  byokRequiresModel,
+  byokModelPlaceholder,
+  BYOK_PROVIDER_LIST,
 } from "@/hooks/use-byok-key";
 
 type TestResult = { ok: boolean; model?: string; error?: string } | null;
@@ -80,7 +83,7 @@ function ByokSettingsForm({
         "X-BYOK-Key": inputKey,
         "X-BYOK-Provider": inputProvider,
       };
-      if (inputProvider === "openrouter") {
+      if (byokRequiresModel(inputProvider)) {
         headers["X-BYOK-Model"] = inputModel.trim();
       }
       const resp = await fetch(p("/api/byok/test"), {
@@ -125,7 +128,7 @@ function ByokSettingsForm({
           Provider
         </Label>
         <div className="flex gap-2">
-          {(["openrouter", "openai", "anthropic", "gemini"] as BYOKProvider[]).map((p) => (
+          {BYOK_PROVIDER_LIST.map((p) => (
             <Button
               key={p}
               type="button"
@@ -203,7 +206,7 @@ function ByokSettingsForm({
               : "OpenRouter keys start with sk-or- (from openrouter.ai/keys)"}
       </p>
 
-      {inputProvider === "openrouter" ? (
+      {byokRequiresModel(inputProvider) ? (
         <div className="mb-5 space-y-1.5">
           <Label htmlFor="byok-model-input" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
             Model
@@ -217,7 +220,7 @@ function ByokSettingsForm({
               setValidationError(null);
               setTestResult(null);
             }}
-            placeholder="openai/gpt-4o-mini"
+            placeholder={byokModelPlaceholder(inputProvider)}
             autoComplete="off"
             spellCheck={false}
             className="font-mono text-sm"

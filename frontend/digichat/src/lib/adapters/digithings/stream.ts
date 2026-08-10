@@ -27,6 +27,29 @@ export type DigigraphTracePayload = {
   session_id?: string;
 };
 
+/** Typed digichat contract from digigraph SSE `delta.digigraph_error`. */
+export type DigigraphErrorPayload = {
+  code?: string;
+  message?: string;
+};
+
+/** Map digigraph's `{ code, message }` to embed-chat-error's `{ error, message }`. */
+export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string {
+  const code = typeof err.code === "string" && err.code.length ? err.code : "digigraph_error";
+  const payload: { error: string; message?: string } = { error: code };
+  if (typeof err.message === "string" && err.message.length) {
+    payload.message = err.message;
+  }
+  return JSON.stringify(payload);
+}
+
+class DigigraphStreamContractError extends Error {
+  constructor(payload: string) {
+    super(payload);
+    this.name = "DigigraphStreamContractError";
+  }
+}
+
 async function* iterateOpenAiSse(
   body: ReadableStream<Uint8Array>
 ): AsyncGenerator<Record<string, unknown>> {
@@ -79,6 +102,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
   const apiKey = opts.upstreamBearer;
 
   const stream = createUIMessageStream({
+    onError: (error) => (error instanceof Error ? error.message : "digigraph stream error"),
     execute: async ({ writer }) => {
       const textId = "assistant-main";
       writer.write({ type: "text-start", id: textId });
@@ -127,6 +151,13 @@ export async function createDigigraphTraceStreamResponse(opts: {
         return;
       }
       for await (const delta of iterateOpenAiSse(res.body)) {
+        const dgErr = delta.digigraph_error;
+        if (dgErr && typeof dgErr === "object") {
+          writer.write({ type: "text-end", id: textId });
+          throw new DigigraphStreamContractError(
+            digigraphErrorToEmbedPayload(dgErr as DigigraphErrorPayload),
+          );
+        }
         const c = delta.content;
         if (typeof c === "string" && c.length) {
           writer.write({ type: "text-delta", id: textId, delta: c });

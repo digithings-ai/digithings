@@ -17,6 +17,39 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_PROJECT_VERSIONS: frozenset[str] = frozenset({"v1alpha1"})
 
+# Default env var holding the API key for each agents.llm.provider value.
+_DEFAULT_LLM_KEY_ENV: dict[str, str] = {
+    "openrouter": "OPENROUTER_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "ollama": "OLLAMA_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "litellm": "LITELLM_PROXY_API_KEY",
+}
+
+VALID_LLM_MODES: frozenset[str] = frozenset({"free", "test", "medium", "best"})
+VALID_LLM_PROVIDERS: frozenset[str] = frozenset(_DEFAULT_LLM_KEY_ENV)
+
+
+class AgentsLlmConfig(BaseModel):
+    """Explicit LLM provider/model pin under ``agents.llm`` (wins over mode defaults)."""
+
+    provider: str = Field(
+        ...,
+        description="openrouter | openai | ollama | gemini | anthropic | litellm",
+    )
+    model: str = Field(..., description="Provider-native model id (e.g. openrouter slug).")
+    api_key_env: str | None = Field(
+        default=None,
+        description="Env var holding the API key; defaults from the provider registry.",
+    )
+
+    def resolved_api_key_env(self) -> str:
+        """Return ``api_key_env`` or the provider's default key env name."""
+        if self.api_key_env and self.api_key_env.strip():
+            return self.api_key_env.strip()
+        return _DEFAULT_LLM_KEY_ENV.get(self.provider.strip().lower(), "OPENAI_API_KEY")
+
 
 class SitaasLimits(BaseModel):
     """Runtime limits for SITAAS / project-mode operations.
@@ -223,8 +256,30 @@ class DigiProjectConfig:
         return self.agents.get("enabled", ["research", "backtest"])
 
     def get_llm_mode(self) -> str:
-        """LLM mode: test | medium | best."""
+        """LLM mode: free | test | medium | best."""
         return self.agents.get("llm_mode", "test")
+
+    def get_llm(self) -> AgentsLlmConfig | None:
+        """Explicit ``agents.llm`` pin, or ``None`` when unset / invalid."""
+        raw = self.agents.get("llm")
+        if not isinstance(raw, dict) or not raw:
+            return None
+        provider = str(raw.get("provider") or "").strip().lower()
+        model = str(raw.get("model") or "").strip()
+        if not provider or not model:
+            return None
+        api_key_env = raw.get("api_key_env")
+        try:
+            return AgentsLlmConfig(
+                provider=provider,
+                model=model,
+                api_key_env=str(api_key_env).strip() if api_key_env else None,
+            )
+        except Exception:
+            logger.warning(
+                "Invalid agents.llm block ignored: provider=%r model=%r", provider, model
+            )
+            return None
 
     def get_indexes(self) -> list[dict[str, Any]]:
         """Index configs for digisearch."""

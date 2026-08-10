@@ -120,6 +120,7 @@ async def byok_header_context(request: Request, call_next):
     """
     from digigraph.llm_auth import (
         BYOK_ROUTABLE_PROVIDERS,
+        byok_model_required,
         byok_provider_supported,
         pop_byok,
         push_byok_header,
@@ -134,6 +135,18 @@ async def byok_header_context(request: Request, call_next):
                 message=(
                     f"BYOK provider {provider!r} is not routed by digigraph, so your key "
                     f"would not be used. Supported: {', '.join(BYOK_ROUTABLE_PROVIDERS)}."
+                ),
+                request=request,
+                service="digigraph",
+            )
+        model = (request.headers.get("x-byok-model") or "").strip()
+        if byok_model_required(provider) and not model:
+            return json_error_response(
+                status_code=400,
+                code="byok_model_required",
+                message=(
+                    f"BYOK provider {provider!r} requires X-BYOK-Model "
+                    "(e.g. openai/gpt-4o-mini, gemini/gemini-2.5-flash, claude-sonnet-4-6)."
                 ),
                 request=request,
                 service="digigraph",
@@ -531,6 +544,7 @@ def _sse_chunk(
     finish_reason: str | None = None,
     reasoning_content: str | None = None,
     digigraph_trace: dict | None = None,
+    digigraph_error: dict | None = None,
 ) -> str:
     """One SSE data line for chat.completion.chunk. Optionally include reasoning_content or digigraph_trace in delta."""
     delta: dict = {}
@@ -540,8 +554,15 @@ def _sse_chunk(
         delta["reasoning_content"] = reasoning_content
     if digigraph_trace is not None:
         delta["digigraph_trace"] = digigraph_trace
+    if digigraph_error is not None:
+        delta["digigraph_error"] = digigraph_error
     if finish_reason is not None:
-        if not content and not reasoning_content and digigraph_trace is None:
+        if (
+            not content
+            and not reasoning_content
+            and digigraph_trace is None
+            and digigraph_error is None
+        ):
             delta = {}
     return json.dumps(
         {
@@ -651,6 +672,12 @@ def _stream_completions_progressive(
                 if isinstance(data, dict) and data:
                     yield (
                         f"data: {_sse_chunk(cid, created, model, '', None, digigraph_trace=data)}\n\n"
+                    )
+            elif event_type == "error":
+                # Typed digichat contract (free_quota_exceeded / rate_limit) in delta.digigraph_error.
+                if isinstance(data, dict) and data.get("code"):
+                    yield (
+                        f"data: {_sse_chunk(cid, created, model, '', None, digigraph_error=data)}\n\n"
                     )
             elif event_type == "content":
                 thinking_block = flush_reasoning_as_thinking()
@@ -811,6 +838,21 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
             request_id=request_id,
         )
         result = run_digigraph_workflow(_with_digi_request_context(request, wf))
+        if not result.success and result.error_code in ("free_quota_exceeded", "rate_limit"):
+            from digigraph.llm_errors import FREE_QUOTA_EXCEEDED
+
+            status = 429
+            return json_error_response(
+                status_code=status,
+                code=result.error_code,
+                message=result.message,
+                request=request,
+                service="digigraph",
+                headers={
+                    "X-Digigraph-Error-Code": result.error_code,
+                    **({"Retry-After": "60"} if result.error_code == FREE_QUOTA_EXCEEDED else {}),
+                },
+            )
         content = result.message if result.success else f"Error: {result.message}"
     completion = _build_completion(req, content, prompt)
     return completion

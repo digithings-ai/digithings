@@ -15,7 +15,11 @@ graph:
 agents:
   enabled:
     - research
-  llm_mode: test
+  llm_mode: free
+  llm:
+    provider: openrouter
+    model: openai/gpt-oss-20b:free
+    api_key_env: OPENROUTER_API_KEY
   allowed_tools:
     - digisearch
     - digivault_search_notes

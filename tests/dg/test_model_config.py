@@ -64,11 +64,19 @@ class TestLoadModelModes:
         assert _load_model_modes() == ModelModesConfig()
 
 
+def _clear_explicit_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate mode/YAML resolution from sticky process env / project pins."""
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+    monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
+
+
 @pytest.mark.unit
 class TestGetModelForMode:
     """get_model_for_mode() respects DIGI_LLM_MODE and config."""
 
     def test_fallback_when_no_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_xyz")
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
         assert get_model_for_mode() == "gpt-4o-mini"
@@ -76,6 +84,7 @@ class TestGetModelForMode:
     def test_uses_defaults_test_from_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/mini\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
@@ -84,6 +93,7 @@ class TestGetModelForMode:
     def test_uses_defaults_medium_when_mode_medium(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text(
             "defaults:\n  test: t\n  medium: ollama/medium\n  best: b\n"
         )
@@ -95,6 +105,7 @@ class TestGetModelForMode:
     def test_falls_back_to_test_when_mode_missing_in_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/fallback\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "best")
@@ -103,6 +114,7 @@ class TestGetModelForMode:
     def test_normalizes_mode_lowercase(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/t\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "TEST")
@@ -116,6 +128,7 @@ class TestResolveEffectiveModel:
     def test_strips_prefix_for_local_ollama_base(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
@@ -126,6 +139,7 @@ class TestResolveEffectiveModel:
     def test_no_strip_for_litellm_base(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
@@ -183,6 +197,7 @@ class TestResolveRequestModel:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """Missing provider key → Ollama mode model (legacy silent fallback, not a raise)."""
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
@@ -195,6 +210,7 @@ class TestResolveRequestModel:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """A non-prefixed model resolves via resolve_effective_model (mode + ollama/ strip)."""
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")

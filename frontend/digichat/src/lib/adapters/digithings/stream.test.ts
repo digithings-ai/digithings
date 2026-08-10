@@ -1,6 +1,13 @@
 import { it, expect, vi, afterEach } from "vitest";
 import type { UIMessage } from "ai";
-import { createDigigraphTraceStreamResponse } from "./stream";
+import {
+  createDigigraphTraceStreamResponse,
+  digigraphErrorToEmbedPayload,
+} from "./stream";
+import {
+  parseEmbedChatError,
+  shouldSuggestByokOnEmbedError,
+} from "@/lib/embed-chat-error";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -212,4 +219,70 @@ it("emits rich retrieve activity for rag_sources on the gated path", async () =>
   expect(body).toContain('"tier":"tier_a"');
   expect(body).toContain('"year":2023');
   expect(body).not.toContain('"type":"data-digigraphTrace"');
+});
+
+it("maps digigraph_error code to embed-chat-error payload", () => {
+  const payload = digigraphErrorToEmbedPayload({
+    code: "free_quota_exceeded",
+    message: "Free-tier model quota is exhausted.",
+  });
+  expect(JSON.parse(payload)).toEqual({
+    error: "free_quota_exceeded",
+    message: "Free-tier model quota is exhausted.",
+  });
+});
+
+it("surfaces delta.digigraph_error as a stream error for BYOK handoff", async () => {
+  const quotaMessage = "Free-tier model quota is exhausted. Add your own API key (BYOK) to continue.";
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_error: {
+                  code: "free_quota_exceeded",
+                  message: quotaMessage,
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(body).toContain("free_quota_exceeded");
+  expect(body).toContain(quotaMessage);
+  const errorChunk = body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => line.slice(6))
+    .find((raw) => raw.includes("free_quota_exceeded"));
+  expect(errorChunk).toBeTruthy();
+  const parsed = JSON.parse(errorChunk!) as { type?: string; errorText?: string };
+  expect(parsed.type).toBe("error");
+  const embedErr = parseEmbedChatError(new Error(parsed.errorText));
+  expect(embedErr?.code).toBe("free_quota_exceeded");
+  expect(
+    shouldSuggestByokOnEmbedError({
+      llmAccess: "free_then_byok",
+      gateMode: "ungated",
+      errorCode: embedErr?.code,
+    }),
+  ).toBe(true);
 });

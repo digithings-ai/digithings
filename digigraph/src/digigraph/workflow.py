@@ -121,6 +121,8 @@ def _workflow_end_payload(
         payload["backtest_job_id"] = final.get("backtest_job_id")
     if err:
         payload["error"] = err
+    if final.get("error_code"):
+        payload["error_code"] = final.get("error_code")
     if streaming:
         payload["streaming"] = True
     if via_stream:
@@ -156,10 +158,12 @@ def run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
 def _workflow_result_from_state(final: dict) -> WorkflowResult:
     """Build WorkflowResult from graph state dict (shared by invoke and stream paths)."""
     error = final.get("error")
+    error_code = final.get("error_code")
     if error:
         return WorkflowResult(
             success=False,
             message=f"Workflow error: {error}",
+            error_code=str(error_code) if error_code else None,
             backtest_result=None,
             optimize_result=None,
             optimize_error=final.get("optimize_error"),
@@ -411,6 +415,14 @@ def run_digigraph_workflow_streaming(
     )
     error = final.get("error")
     if error:
+        err_code = final.get("error_code")
+        if err_code:
+            event_queue.put(
+                (
+                    "error",
+                    {"code": str(err_code), "message": str(error)},
+                )
+            )
         event_queue.put(("content", f"Error: {error}"))
         event_queue.put(("done", None))
         return

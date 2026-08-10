@@ -5,6 +5,35 @@ import { isOpenRouterKey } from "@/lib/byok-openrouter";
 
 export type BYOKProvider = "openai" | "anthropic" | "openrouter" | "gemini";
 
+export const BYOK_PROVIDER_LIST: readonly BYOKProvider[] = [
+  "openrouter",
+  "openai",
+  "anthropic",
+  "gemini",
+];
+
+/** Non-OpenAI BYOK requires an explicit model slug (digigraph spend path). */
+export function byokRequiresModel(provider: BYOKProvider): boolean {
+  return provider !== "openai";
+}
+
+export function byokModelPlaceholder(provider: BYOKProvider): string {
+  switch (provider) {
+    case "openrouter":
+      return "openai/gpt-4o-mini";
+    case "anthropic":
+      return "claude-sonnet-4-20250514";
+    case "gemini":
+      return "gemini/gemini-2.0-flash";
+    case "openai":
+      return "";
+    default: {
+      const _exhaustive: never = provider;
+      return _exhaustive;
+    }
+  }
+}
+
 export type BYOKKeyState = {
   key: string;
   provider: BYOKProvider;
@@ -77,11 +106,12 @@ export function validateBYOKKey(key: string, provider: BYOKProvider): string | n
   return null;
 }
 
-/** Validate model when required (OpenRouter). Returns null if valid. */
+/** Validate model when required (all non-OpenAI providers). Returns null if valid. */
 export function validateBYOKModel(model: string, provider: BYOKProvider): string | null {
-  if (provider !== "openrouter") return null;
+  if (!byokRequiresModel(provider)) return null;
   if (!model.trim()) {
-    return "Model is required for OpenRouter (e.g. openai/gpt-4o-mini).";
+    const hint = byokModelPlaceholder(provider);
+    return `Model is required for ${provider}${hint ? ` (e.g. ${hint})` : ""}.`;
   }
   return null;
 }

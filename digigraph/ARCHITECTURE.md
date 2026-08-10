@@ -606,7 +606,13 @@ This provides meaningful speedup for repeated identical prompts (e.g. heartbeat 
 
 `get_model_for_mode()` (now in `model_config.py`) resolves the model via `_load_model_modes()`, which is **mtime-cached per process**: `config/model_modes.yaml` is opened and parsed by PyYAML only when its mtime changes, so steady-state calls cost a single `path.stat()` plus the env reads (`DIGI_CONFIG_PATH`, `DIGI_MODEL_MODES_FILE`). The mode itself is re-read from env/config on every LLM call to pick up runtime changes.
 
-Three modes: `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`.
+Four modes: `free` (operator free-tier / OpenRouter `:free` or local Ollama), `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`. Optional `agents.llm` (provider + model + `api_key_env`) wins over mode defaults; env mirrors are `DIGI_LLM_PROVIDER` / `DIGI_LLM_MODEL`. Having `OPENROUTER_API_KEY` set alone does **not** auto-swap digigraph chat onto paid Olympus models — Olympus/Atlas use `get_model_for_phase()`. `llm_mode: free` refuses non-`:free` (non-Ollama) model ids.
+
+**BYOK spend path** (`llm_auth.py`): user keys via `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` are spent only for routable providers — OpenAI, OpenRouter, Gemini, Anthropic. Anthropic uses Anthropic's OpenAI-compatible endpoint (`https://api.anthropic.com/v1/`) with the **user's** key (never operator fallthrough). Non-OpenAI BYOK requires `X-BYOK-Model`.
+
+**Free-quota errors:** provider 429 / RPD under `llm_mode: free` maps to stable code `free_quota_exceeded` (HTTP 429 + SSE `delta.digigraph_error`) for digichat BYOK handoff. Generic rate limits outside free mode use `rate_limit`.
+
+CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effective provider/model/key-env present (never secrets).
 
 ### 8.3 digistore for LLM Context Reduction
 

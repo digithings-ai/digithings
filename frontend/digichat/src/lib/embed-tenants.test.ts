@@ -352,6 +352,60 @@ describe("parseEmbedTenants", () => {
     expect(t.layout).toBe("page");
   });
 
+  it("parses llmAccess free_then_byok for digithings-style tenants", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "digithings.ai": {
+          slug: "digithings",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          showByok: true,
+          llmAccess: "free_then_byok",
+          token: "t",
+        },
+      }),
+    );
+    expect(reg.get("digithings.ai")!.llmAccess).toBe("free_then_byok");
+  });
+
+  it("parses llmAccess backend_only for foundry / DataTap-style tenants", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "datatapstream.com": {
+          slug: "datatap",
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://example.services.ai.azure.com",
+            agentName: "agent",
+          },
+          gateMode: "trial_form",
+          showByok: false,
+          llmAccess: "backend_only",
+          token: "t",
+        },
+      }),
+    );
+    const t = reg.get("datatapstream.com")!;
+    expect(t.llmAccess).toBe("backend_only");
+    expect(t.showByok).toBe(false);
+  });
+
+  it("rejects invalid llmAccess", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "ex",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            llmAccess: "paid_only",
+            token: "t",
+          },
+        }),
+      ),
+    ).toThrow(/llmAccess must be/);
+  });
+
   it("rejects invalid layout", () => {
     expect(() =>
       parseEmbedTenants(

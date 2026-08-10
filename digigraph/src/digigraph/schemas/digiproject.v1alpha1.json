@@ -18,7 +18,20 @@
       "additionalProperties": false,
       "properties": {
         "enabled":               { "type": "array",  "items": { "type": "string" } },
-        "llm_mode":              { "type": "string",  "enum": ["test", "medium", "best"] },
+        "llm_mode":              { "type": "string",  "enum": ["free", "test", "medium", "best"] },
+        "llm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "model"],
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": ["openrouter", "openai", "ollama", "gemini", "anthropic", "litellm"]
+            },
+            "model": { "type": "string", "minLength": 1 },
+            "api_key_env": { "type": "string", "minLength": 1 }
+          }
+        },
         "planning_mode":         { "type": "boolean" },
         "workflow_profile":      { "type": "string" },
         "allowed_tools":         { "type": "array",  "items": { "type": "string" } },

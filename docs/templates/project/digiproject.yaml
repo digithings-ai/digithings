@@ -12,7 +12,11 @@ project:
 agents:
   enabled:
     - research            # only "research" is supported in Phase 1
-  llm_mode: test          # "test" | "medium" | "best"
+  llm_mode: test          # "free" | "test" | "medium" | "best"
+  # llm:                    # optional explicit pin (wins over mode defaults)
+  #   provider: openrouter
+  #   model: openai/gpt-oss-20b:free
+  #   api_key_env: OPENROUTER_API_KEY
   # planning_mode: false  # enable plan-then-execute flow
   # allowed_tools:        # restrict tool names (default: all)
   #   - digisearch

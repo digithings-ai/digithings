@@ -240,6 +240,10 @@ _EXTERNAL_PROVIDERS: dict[str, dict[str, str]] = {
         "base_url": "https://openrouter.ai/api/v1",
         "api_key_env": "OPENROUTER_API_KEY",
     },
+    "anthropic": {
+        "base_url": "https://api.anthropic.com/v1/",
+        "api_key_env": "ANTHROPIC_API_KEY",
+    },
 }
 
 
