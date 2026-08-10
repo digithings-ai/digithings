@@ -145,6 +145,7 @@ export default {
       return Response.json({
         ok: true,
         service: "digithings-stack",
+        containerId: SHARED_STACK_CONTAINER_ID,
         note: "Worker up; container ports may still be starting",
       });
     }
