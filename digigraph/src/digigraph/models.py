@@ -53,7 +53,7 @@ class ChatCompletionRequest(BaseModel):
     openwebui_format: bool = Field(
         False,
         description=(
-            'If true, format tool blocks for Open WebUI (<details>, summary + tables). '
+            "If true, format tool blocks for Open WebUI (<details>, summary + tables). "
             "Also enabled when model is sitaas-rag unless the client opts out via "
             "X-Suppress-Tool-Stream or X-Response-Format: plain|neutral|none|digichat."
         ),

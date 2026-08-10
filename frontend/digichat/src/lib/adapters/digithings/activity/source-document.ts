@@ -87,7 +87,7 @@ export function mapRawSourceToDocument(raw: Record<string, unknown>): ActivityDo
       ? raw.snippet.trim().slice(0, 280)
       : undefined;
   const pathRaw = resolveSourcePath(raw, meta);
-  let title = resolveSourceTitle(pathRaw, meta, snippet);
+  const title = resolveSourceTitle(pathRaw, meta, snippet);
   let path = pathRaw;
   if (path && isOpaqueId(path) && title) {
     // No repo path in metadata — show the heading only, not a bare UUID path.
