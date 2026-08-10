@@ -29,7 +29,7 @@ custom_domain = true
 class_name = "DigiStackContainer"
 # Build context is monorepo root (two levels up from this package).
 image = "../../Dockerfile.digithings-stack-cloudflare"
-max_instances = 3
+max_instances = 5
 # Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
 instance_type = "standard-2"
 
