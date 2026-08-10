@@ -30,11 +30,30 @@
             "title": "Body",
             "type": "string"
           },
+          "frontmatter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional extra frontmatter keys merged with title/tags",
+            "title": "Frontmatter"
+          },
           "name": {
             "description": "New note name (filename stem)",
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "overwrite": {
+            "default": false,
+            "description": "When true, upsert via Vault.write_note(overwrite=True) for idempotent ingest",
+            "title": "Overwrite",
+            "type": "boolean"
           },
           "subdir": {
             "default": "",
