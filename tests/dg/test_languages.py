@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from digigraph.graph.research import research_node
 from digigraph.graph.state import WorkflowState
 from digigraph.languages import LANGUAGE_NAMES, resolve_language_directive
 from digigraph.models import WorkflowRequest
@@ -75,3 +76,67 @@ def test_langgraph_preserves_response_language_through_invoke() -> None:
     graph = builder.compile()
     graph.invoke({"prompt": "x", "response_language": "de"})
     assert seen["response_language"] == "de"
+
+
+def test_research_node_appends_directive_for_known_language(monkeypatch) -> None:
+    monkeypatch.setenv("DIGISEARCH_URL", "http://digisearch:8002")
+    captured: dict = {}
+
+    def fake_document_rag_path(*, system_prompt, **_kwargs):
+        captured["system_prompt"] = system_prompt
+        return {"research_note": "ok"}
+
+    monkeypatch.setattr(
+        "digigraph.graph.research._run_document_rag_path",
+        lambda **kwargs: fake_document_rag_path(**kwargs),
+    )
+    monkeypatch.setattr(
+        "digigraph.graph.research._load_research_settings",
+        lambda: (None, "default", "default", "You are a helpful assistant."),
+    )
+    research_node({"prompt": "hallo", "response_language": "de"})
+    assert "You are a helpful assistant." in captured["system_prompt"]
+    assert "German" in captured["system_prompt"]
+
+
+def test_research_node_leaves_prompt_unchanged_for_english_or_unset(monkeypatch) -> None:
+    monkeypatch.setenv("DIGISEARCH_URL", "http://digisearch:8002")
+    captured: dict = {}
+
+    monkeypatch.setattr(
+        "digigraph.graph.research._run_document_rag_path",
+        lambda **kwargs: (
+            captured.update(system_prompt=kwargs["system_prompt"]) or {"research_note": "ok"}
+        ),
+    )
+    monkeypatch.setattr(
+        "digigraph.graph.research._load_research_settings",
+        lambda: (None, "default", "default", "You are a helpful assistant."),
+    )
+    research_node({"prompt": "hi", "response_language": "en"})
+    assert captured["system_prompt"] == "You are a helpful assistant."
+
+
+def test_research_node_appends_directive_to_tenant_override_prompt(monkeypatch) -> None:
+    monkeypatch.setenv("DIGISEARCH_URL", "http://digisearch:8002")
+    captured: dict = {}
+
+    monkeypatch.setattr(
+        "digigraph.graph.research._run_document_rag_path",
+        lambda **kwargs: (
+            captured.update(system_prompt=kwargs["system_prompt"]) or {"research_note": "ok"}
+        ),
+    )
+    monkeypatch.setattr(
+        "digigraph.graph.research._load_research_settings",
+        lambda: (None, "occ_help", "occ_help", "You are a helpful assistant."),
+    )
+    research_node(
+        {
+            "prompt": "hallo",
+            "response_language": "de",
+            "research_system_prompt_override": "You are the OCC help assistant.",
+        }
+    )
+    assert captured["system_prompt"].startswith("You are the OCC help assistant.")
+    assert "German" in captured["system_prompt"]
