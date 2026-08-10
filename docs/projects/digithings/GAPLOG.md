@@ -25,7 +25,7 @@ Plan questionnaire: Stage 8 of
 |---|---|---|---|
 | 2026-08-10 | Pipeline | Stage 7 onboard on `develop` (`d6b821a2`): dry-run 71 docs (0 crawl); apply 73 vault notes @ `/tmp/digithings-onboard-vault`; digisearch ~68–73 docs → `digithings_docs` (Compose path prefix `/app/digisearch/onboard`; rate limit 30/min) | Set `DIGISEARCH_INDEX=digithings_docs` on digigraph for chat smoke; throttle ingest in runbook |
 | 2026-08-10 | Supabase | `sync_onboard_vault.py --dry-run` parsed 73 notes; **apply skipped** — `CORE_SUPABASE_URL` + `CORE_SUPABASE_SERVICE_KEY` unset in env | Operator apply after secrets set |
-| 2026-08-10 | Supabase titles | Legacy `architecture_notes` rows at root vault paths (`digigraph`, `digikey`, …) still use CamelCase titles (`DigiGraph`, …) from `sync_architecture_vault.py`. New `clients/digithings/%` onboard rows use lowercase prose titles. **No bulk rewrite** — legacy rows refresh on cutover re-sync only. |
+| 2026-08-10 | Supabase titles | Normalized 15 legacy root `architecture_notes` titles (`DigiGraph` → `digigraph`, `DigiThings — Ecosystem Overview` → `digithings — Ecosystem Overview`, …) via core Supabase MCP; slugs unchanged (already lowercase). `clients/digithings/%` onboard rows were already lowercase. |
 | 2026-08-10 | digichat | Local `:3005` healthy but `.env.local` points at Foundry/DataTap, not digigraph dogfood tenant | Use digithings operator embed config or retarget local tenant |
 | 2026-08-10 | Dual-sink parity | Vault FS + digisearch index populated locally; production digithings.ai still on legacy Supabase corpus until sync | Run sync + redeploy smoke on `/chat` |
 | 2026-08-10 | Legacy retirement | Parallel legacy scripts not retired | Cut over after prod sync verified |
