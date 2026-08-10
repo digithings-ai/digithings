@@ -13,20 +13,23 @@ set -eu
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
 SEED_VER="v3"
 SEED_MARKER="${DATA_CHROMA}/.stack_chroma_seeded_${SEED_VER}"
-SEED_SKIPPED="${DATA_CHROMA}/.stack_chroma_seed_skipped_${SEED_VER}"
+# Failure is NOT gated here: a failed run must retry on the next boot rather
+# than being remembered as "done/skipped" forever. Only start_digisearch.sh's
+# own readiness timeout writes a skip marker (see there for why).
+SEED_FAILED="${DATA_CHROMA}/.stack_chroma_seed_failed_${SEED_VER}"
 
 # Legacy markers (v1 oneshot only seeded occ_help) — ignore; v2 re-seeds both.
 mkdir -p "$DATA_CHROMA"
 
-if [ -f "$SEED_MARKER" ] || [ -f "$SEED_SKIPPED" ]; then
-  echo "digithings-stack: chroma seed ${SEED_VER} already done/skipped"
+if [ -f "$SEED_MARKER" ]; then
+  echo "digithings-stack: chroma seed ${SEED_VER} already done"
   exit 0
 fi
 
 # Prefer edge readiness before heavy Chroma/embedding download (CF probes :8000).
 i=0
 while [ "$i" -lt 90 ]; do
-  if curl -sf "http://127.0.0.1:8000/healthz" >/dev/null 2>&1; then
+  if curl -sf --connect-timeout 2 --max-time 5 "http://127.0.0.1:8000/healthz" >/dev/null 2>&1; then
     break
   fi
   i=$((i + 1))
@@ -57,14 +60,18 @@ fi
 
 if [ "$ok" -eq 1 ]; then
   touch "$SEED_MARKER"
-  rm -f "$SEED_SKIPPED" \
+  rm -f "$SEED_FAILED" \
     "${DATA_CHROMA}/.occ_help_seeded" "${DATA_CHROMA}/.occ_help_seed_skipped" \
     "${DATA_CHROMA}/.digithings_docs_seeded" 2>/dev/null || true
   echo "digithings-stack: chroma seed ${SEED_VER} complete (digithings_docs + occ_help)"
   exit 0
 fi
 
-echo "digithings-stack: WARN chroma seed ${SEED_VER} incomplete (continuing boot)"
-echo "digithings-stack: re-seed later: supervisorctl stop digisearch; rm -f ${SEED_MARKER} ${SEED_SKIPPED}; /seed_chroma.sh"
-touch "$SEED_SKIPPED"
-exit 0
+# Fail closed: no SEED_MARKER is written, so this boot's start_digisearch.sh
+# will not see a success marker (it starts digisearch only after its own
+# readiness timeout — logged loudly there) and the NEXT container boot will
+# retry seeding from scratch instead of treating this as permanently done.
+echo "digithings-stack: ERROR chroma seed ${SEED_VER} incomplete; will retry on next boot"
+echo "digithings-stack: re-seed now: supervisorctl stop digisearch; rm -f ${SEED_MARKER}; /seed_chroma.sh"
+touch "$SEED_FAILED"
+exit 1
