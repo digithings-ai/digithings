@@ -68,6 +68,10 @@ import {
   resolveReadyTargetOrigin,
 } from "@/lib/embed-seed-messages";
 import {
+  formatParentErrorLine,
+  parseParentErrorMessage,
+} from "@/lib/embed-parent-error-messages";
+import {
   applyEmbedDocumentTheme,
   parseEmbedThemeParam,
   parseThemeMessage,
@@ -424,6 +428,24 @@ function EmbedChat({
 
   const [seedApplied, setSeedApplied] = useState(false);
   const [hideIntroForSeed, setHideIntroForSeed] = useState(false);
+  /** Parent handshake/load failures — DigiChatSession `.dtc-error` transcript lines. */
+  const [handshakeError, setHandshakeError] = useState<string | null>(null);
+
+  // Same first-party allowlist as digichat:seed / digichat:theme.
+  const firstPartyParentOrigins = useMemo(() => {
+    const allowed = new Set<string>();
+    if (host) {
+      try {
+        allowed.add(host.includes("://") ? new URL(host).origin : `https://${host}`);
+      } catch {
+        /* ignore */
+      }
+    }
+    for (const h of ["https://digithings.ai", "https://www.digithings.ai"]) {
+      if (isAllowedSeedParentOrigin(h)) allowed.add(h);
+    }
+    return allowed;
+  }, [host]);
 
   // Ready handshake targets the *actual* parent browsing context, not virtual
   // ?host= (e.g. occ.digithings.ai). Parent ChatEmbedShell listens on digithings.ai;
@@ -437,26 +459,29 @@ function EmbedChat({
       ancestorOrigins,
       referrer: document.referrer,
     });
-    if (!target) return;
+    if (!target) {
+      setHandshakeError(formatParentErrorLine("ready_target_missing"));
+      return;
+    }
     window.parent.postMessage(READY_MESSAGE, target);
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onMessage = (event: MessageEvent) => {
+      const parentErr = parseParentErrorMessage(event, firstPartyParentOrigins);
+      if (!parentErr) return;
+      setHandshakeError(formatParentErrorLine(parentErr.code, parentErr.message));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [firstPartyParentOrigins]);
+
+  useEffect(() => {
     if (typeof window === "undefined" || seedApplied) return;
-    const allowed = new Set<string>();
-    if (host) {
-      try {
-        allowed.add(host.includes("://") ? new URL(host).origin : `https://${host}`);
-      } catch {
-        /* ignore */
-      }
-    }
-    for (const h of ["https://digithings.ai", "https://www.digithings.ai"]) {
-      if (isAllowedSeedParentOrigin(h)) allowed.add(h);
-    }
 
     const onMessage = (event: MessageEvent) => {
-      const parsed = parseSeedMessage(event, allowed);
+      const parsed = parseSeedMessage(event, firstPartyParentOrigins);
       if (!parsed) return;
       applyEmbedSeed(
         { messages: parsed.messages, pending: parsed.pending },
@@ -467,7 +492,7 @@ function EmbedChat({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [host, seedApplied, chat.seed, chat.send]);
+  }, [firstPartyParentOrigins, seedApplied, chat.seed, chat.send]);
 
   // The upstream conversation id is the useful handle (it maps to the real backend
   // conversation); fall back to nothing rather than blocking the gate.
@@ -651,6 +676,7 @@ function EmbedChat({
   ) : null;
 
   const showByokOnError =
+    !handshakeError &&
     !trialLocked &&
     shouldSuggestByokOnEmbedError({
       llmAccess,
@@ -671,10 +697,9 @@ function EmbedChat({
       chat={{
         messages: chat.messages,
         busy: chat.busy,
-        // While the trial overlay path is active, the formReplacement notice is
-        // the warning (with "the trial form" + Retry). Hiding the raw trial_gate
-        // string avoids a duplicate banner whose Retry only regenerated a 402.
-        error: trialLocked ? null : chat.error,
+        // Handshake/load failures from the parent beat chat errors so the
+        // terminal line is visible. Trial overlay still suppresses chat errors.
+        error: handshakeError ?? (trialLocked ? null : chat.error),
         quotaPrompt: showByok && quotaPrompt && !byokIsSet,
         providerIsSet: byokIsSet,
         openSettings: showByok ? openSettings : undefined,

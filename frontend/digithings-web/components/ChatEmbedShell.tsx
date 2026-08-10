@@ -7,6 +7,8 @@ const READY = "digichat:ready";
 const SEED = "digichat:seed";
 /** Keep in sync with digichat `THEME_MESSAGE_TYPE` (`embed-theme-messages.ts`). */
 export const THEME = "digichat:theme";
+/** Keep in sync with digichat `PARENT_ERROR_MESSAGE_TYPE`. */
+export const PARENT_ERROR = "digichat:parent-error";
 
 /** Match digichat READY_TIMEOUT_MS — CF Container cold start can exceed 15s. */
 export const EMBED_READY_TIMEOUT_MS = 30_000;
@@ -18,6 +20,8 @@ export const DEFAULT_CHAT_EMBED_HOST = "digithings.ai";
 export const OCC_CHAT_EMBED_HOST = "occ.digithings.ai";
 
 export type EmbedShellTheme = "light" | "dark";
+
+export type EmbedParentErrorCode = "ready_timeout" | "embed_unloadable";
 
 /** Read parent digithings.ai `[data-theme]` (ThemeProvider / themeInitScript). */
 export function readParentDocumentTheme(
@@ -31,6 +35,25 @@ export function buildEmbedThemeMessage(
   ts = Date.now(),
 ): { type: typeof THEME; theme: EmbedShellTheme; ts: number } {
   return { type: THEME, theme, ts };
+}
+
+/** Parent → embed: surface handshake/load failures inside DigiChatSession. */
+export function buildEmbedParentErrorMessage(
+  code: EmbedParentErrorCode,
+  ts = Date.now(),
+): { type: typeof PARENT_ERROR; code: EmbedParentErrorCode; ts: number } {
+  return { type: PARENT_ERROR, code, ts };
+}
+
+/**
+ * Fallback when the iframe never loads (cannot postMessage into digichat).
+ * Keep in sync with digichat `formatParentErrorLine("embed_unloadable")`.
+ */
+export function formatShellLoadErrorLine(): string {
+  return (
+    "error: digichat embed failed to load — check DIGICHAT_EMBED_ORIGIN and " +
+    "Container readiness, then refresh"
+  );
 }
 
 function parseOrigin(raw: string): string {
@@ -63,6 +86,10 @@ export type ChatEmbedShellProps = {
  * Theme: reads parent `html[data-theme]` (shared `dt-theme` / ThemeProvider),
  * pins first paint via `?theme=`, then posts `digichat:theme` on ready and on
  * live toggles so the iframe stays in sync without reload.
+ *
+ * Ready failures: posts `digichat:parent-error` into the iframe for in-chat
+ * terminal lines (no page banner). If the iframe never loads, shows the same
+ * `error: …` line in the iframe slot.
  */
 export function ChatEmbedShell({
   embedOrigin,
@@ -72,7 +99,8 @@ export function ChatEmbedShell({
   const iframeLoadedRef = useRef(false);
   const embedReadyRef = useRef(false);
   const themeRef = useRef<EmbedShellTheme>("dark");
-  const [readyError, setReadyError] = useState<string | null>(null);
+  /** Only when iframe never loads — cannot deliver parent-error postMessage. */
+  const [shellLoadError, setShellLoadError] = useState<string | null>(null);
   // Defer iframe src until after mount so we can read the real parent theme
   // (themeInitScript already flipped data-theme) and avoid a wrong-mode flash.
   const [src, setSrc] = useState("");
@@ -110,13 +138,15 @@ export function ChatEmbedShell({
     let ready = false;
     iframeLoadedRef.current = false;
     embedReadyRef.current = false;
+    setShellLoadError(null);
+
     function onMessage(ev: MessageEvent) {
       if (ev.origin !== targetOrigin) return;
       const data = ev.data as { type?: string } | null;
       if (!data || data.type !== READY) return;
       ready = true;
       embedReadyRef.current = true;
-      setReadyError(null);
+      setShellLoadError(null);
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
       // Always sync theme on ready (covers cold load + late handshake).
@@ -136,15 +166,15 @@ export function ChatEmbedShell({
 
     window.addEventListener("message", onMessage);
     const t = window.setTimeout(() => {
-      // Chat can work without the ready handshake (composer still loads). Only
-      // surface a banner when the iframe itself never finished loading — a
-      // missing ready after a successful load is usually a cold-start race that
-      // self-heals, and a permanent banner would steal height from the chat.
-      if (!ready && !iframeLoadedRef.current) {
-        setReadyError(
-          "digichat embed did not load — refresh the page, or try again in a moment if the service is cold-starting.",
-        );
+      if (ready) return;
+      const win = iframeRef.current?.contentWindow;
+      if (iframeLoadedRef.current && win) {
+        // Iframe painted but never said ready — surface inside digichat transcript.
+        win.postMessage(buildEmbedParentErrorMessage("ready_timeout"), targetOrigin);
+        return;
       }
+      // No browsing context to post into — terminal line in the iframe slot.
+      setShellLoadError(formatShellLoadErrorLine());
     }, EMBED_READY_TIMEOUT_MS);
     return () => {
       window.removeEventListener("message", onMessage);
@@ -171,19 +201,22 @@ export function ChatEmbedShell({
         minHeight: 0,
       }}
     >
-      {readyError ? (
+      {shellLoadError ? (
         <p
+          className="font-mono"
           style={{
-            flexShrink: 0,
-            padding: "0.75rem 1rem",
-            opacity: 0.8,
+            flex: 1,
+            margin: 0,
+            padding: "0.85rem 0.75rem",
+            fontSize: "0.8rem",
+            color: "color-mix(in srgb, var(--down) 80%, var(--ink))",
           }}
-          role="status"
+          role="alert"
         >
-          {readyError}
+          <span aria-hidden="true">! </span>
+          {shellLoadError}
         </p>
-      ) : null}
-      {src ? (
+      ) : src ? (
         <iframe
           ref={iframeRef}
           title="digichat"
@@ -198,7 +231,7 @@ export function ChatEmbedShell({
           allow="clipboard-write"
           onLoad={() => {
             iframeLoadedRef.current = true;
-            setReadyError(null);
+            setShellLoadError(null);
           }}
         />
       ) : null}

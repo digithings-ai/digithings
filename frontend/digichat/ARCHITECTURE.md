@@ -538,6 +538,18 @@ messages from the same first-party allowlist as seed (`parseThemeMessage` in
 OS/`ThemeProvider` overrides). Priority: parent postMessage > URL `?theme=` >
 tenant registry theme.
 
+**postMessage parent-error.** After `READY_TIMEOUT_MS` (30s) without
+`digichat:ready`, `ChatEmbedShell` posts
+`{ type: "digichat:parent-error", code: "ready_timeout"|"embed_unloadable", ts }`
+into the iframe (same first-party allowlist as seed/theme). The embed formats a
+CLI-style DigiChatSession transcript line (`error: …` via
+`formatParentErrorLine` in `src/lib/embed-parent-error-messages.ts`) — no
+parent-page banner. If the iframe never loads, the shell shows the same line in
+the iframe slot. Copy references `DIGICHAT_EMBED_ORIGIN` / Containers (not the
+legacy tunnel / `DIGICHAT_EMBED_HOSTS` wording). When
+`resolveReadyTargetOrigin` returns null the embed self-reports
+`ready_target_missing`.
+
 **`X-Embed-Host` alone is not sufficient authorization (#1339).** A tenant's
 host string is its own public domain, so `resolveEmbedTenantByHost` never
 grants embed access by itself — `resolveVerifiedEmbedTenant`
