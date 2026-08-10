@@ -119,6 +119,7 @@ class WorkflowRequest(BaseModel):
     )
     digisearch_index: str | None = Field(
         None,
+        title="digisearch index",
         description="Per-request digisearch index override (X-Digi-Corpus-Index / tenant map).",
     )
     vault_path_prefix: str | None = Field(

@@ -258,7 +258,7 @@
               }
             ],
             "description": "Per-request digisearch index override (X-Digi-Corpus-Index / tenant map).",
-            "title": "Digisearch Index"
+            "title": "digisearch index"
           },
           "evidence_tier_preference": {
             "anyOf": [
@@ -946,7 +946,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Api Run Digigraph Workflow"
+        "summary": "Run digigraph workflow"
       }
     }
   }

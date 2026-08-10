@@ -686,7 +686,7 @@ for hit in r.json()["results"]:
   // ─────────────────────────────────────────────────────────────────────────
   digivault: {
     authNote:
-      "DigiAuthMiddleware with a per-path scope map: digivault:read for reads and for both orchestrator routes, digivault:write for mutations. /v1/orchestrator_invoke is gated at read because most of its tools are reads — the one mutating tool re-checks digivault:write in the handler, so a read-only caller cannot reach it through the shared endpoint.",
+      "`DigiAuthMiddleware` with a per-path scope map: digivault:read for reads and for both orchestrator routes, digivault:write for mutations. /v1/orchestrator_invoke is gated at read because most of its tools are reads — the one mutating tool re-checks digivault:write in the handler, so a read-only caller cannot reach it through the shared endpoint.",
     run: {
       cli: "docker compose --profile digivault up -d digivault   # opt-in profile, not up by default\ndigivault lint --root ./docs/vision",
     },

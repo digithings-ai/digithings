@@ -4,8 +4,8 @@ export const dynamic = "force-static";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "DigiThings",
-    short_name: "DigiThings",
+    name: "digithings",
+    short_name: "digithings",
     description: "Open-source AI infrastructure you own and operate.",
     start_url: "/",
     scope: "/",
