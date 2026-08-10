@@ -29,6 +29,8 @@ node_modules/
 venv/
 .env
 projects/*/.env
+config/dogfood-digiproject.local.yaml
+docker-compose.override.yml
 
 # Confidential: project configs and deployments (never share)
 # Anchored to repo root so docs/projects/ (public dogfooding projects) is not captured.

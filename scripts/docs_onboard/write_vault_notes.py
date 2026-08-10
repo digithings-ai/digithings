@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -24,6 +25,14 @@ from scripts.docs_onboard.workspace import Workspace
 _VAULT_PAGE_CLASSES = frozenset(
     {PageClass.docs, PageClass.pdf, PageClass.openapi, PageClass.repo_doc}
 )
+_H1 = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+
+
+def _markdown_title_from_body(body: str, fallback: str) -> str:
+    match = _H1.search(body.lstrip())
+    if match:
+        return normalize_digi_product_names(match.group(1).strip())
+    return fallback
 
 
 class NoteWriter(Protocol):
@@ -77,6 +86,8 @@ def _note_body_for(classified: ClassifiedPage, workspace: Workspace) -> tuple[st
         text = local.read_text(encoding="utf-8", errors="replace")
         if local.suffix.lower() in (".html", ".htm"):
             return title, html_to_markdown(text)
+        if local.suffix.lower() in (".md", ".markdown"):
+            title = _markdown_title_from_body(text, title)
         return title, text if text.endswith("\n") else text + "\n"
     return title, ""
 

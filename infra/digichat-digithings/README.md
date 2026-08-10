@@ -143,6 +143,15 @@ python scripts/docs_onboard/run_onboard.py \
 
 Apply + Supabase publish: see [`docs/projects/digithings/README.md`](../../docs/projects/digithings/README.md).
 
+Set digigraph dogfood project config:
+
+```bash
+export DIGI_PROJECT_CONFIG=config/dogfood-digiproject.yaml
+```
+
+The `research_system_prompt` steers “how is this chat built?” answers to
+`docs/projects/digithings/SHOWCASE.md` (onboarded into vault + `digithings_docs`).
+
 ## Historical note
 
 The `frontend/digichat-cloudflare/` Workers Paid Containers scaffold was removed

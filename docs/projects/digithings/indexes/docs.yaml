@@ -14,6 +14,8 @@ description: |
 
 # Source globs mirrored from sources/repo-docs.yaml (repo ingest + legacy compare).
 sources:
+  - docs/projects/digithings/SHOWCASE.md
+  - docs/projects/digithings/README.md
   - README.md
   - ROADMAP.md
   - ARCHITECTURE.md

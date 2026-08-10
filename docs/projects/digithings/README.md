@@ -23,7 +23,9 @@ Plan: [`docs/superpowers/plans/2026-08-10-digithings-dogfood-cutover.md`](../../
 ```text
 docs/projects/digithings/
   README.md
+  SHOWCASE.md          # canonical “how is this chat built?” note (onboarded)
   GAPLOG.md
+  digiproject.yaml     # DIGI_PROJECT_CONFIG co-located with manifest
   onboard.yaml
   sources/
     repo-docs.yaml
@@ -31,6 +33,18 @@ docs/projects/digithings/
   indexes/
     docs.yaml
 ```
+
+## digigraph project config
+
+Set **`DIGI_PROJECT_CONFIG`** to the committed dogfood snippet:
+
+```bash
+export DIGI_PROJECT_CONFIG=config/dogfood-digiproject.yaml
+# or: docs/projects/digithings/digiproject.yaml
+```
+
+Local overrides (e.g. `config/dogfood-digiproject.local.yaml`) may stay gitignored
+via `docker-compose.override.yml`.
 
 ## Embed (operator env)
 

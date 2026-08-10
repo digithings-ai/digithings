@@ -18,6 +18,7 @@ Plan questionnaire: Stage 8 of
 | 8 | What scopes does digikey issue for digivault writes? | | | |
 | 9 | Where do AGENTS.md non-negotiables live? | | | |
 | 10 | Auth on digithings.ai/chat — login wall or ungated embed? | | | |
+| 11 | How is digithings chat built? / same product as customers get? | Y (vault+digisearch) | `docs/projects/digithings/SHOWCASE.md` | Local smoke 2026-08-10 — vault #2 for “What powers…”; digisearch top-3 chunks |
 
 ## UX / ops deltas
 
@@ -28,7 +29,7 @@ Plan questionnaire: Stage 8 of
 | 2026-08-10 | Supabase titles | Normalized 15 legacy root `architecture_notes` titles (`DigiGraph` → `digigraph`, `DigiThings — Ecosystem Overview` → `digithings — Ecosystem Overview`, …) via core Supabase MCP; slugs unchanged (already lowercase). `clients/digithings/%` onboard rows were already lowercase. |
 | 2026-08-10 | digichat | Local `:3005` healthy but `.env.local` points at Foundry/DataTap, not digigraph dogfood tenant | Use digithings operator embed config or retarget local tenant |
 | 2026-08-10 | Dual-sink parity | Vault FS + digisearch index populated locally; production digithings.ai still on legacy Supabase corpus until sync | Run sync + redeploy smoke on `/chat` |
-| 2026-08-10 | Legacy retirement | Parallel legacy scripts not retired | Cut over after prod sync verified |
+| 2026-08-10 | Showcase | Added `SHOWCASE.md` + `digiproject.yaml` / `config/dogfood-digiproject.yaml` for self-aware chat | Re-ingest on operator after merge |
 
 ## Legacy retirement tracker
 
