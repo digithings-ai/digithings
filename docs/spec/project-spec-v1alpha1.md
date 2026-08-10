@@ -125,6 +125,8 @@ services:
         },
         "planning_mode":         { "type": "boolean" },
         "workflow_profile":      { "type": "string" },
+        "research_brief":        { "type": "boolean" },
+        "always_retrieve_tools": { "type": "array",  "items": { "type": "string" } },
         "allowed_tools":         { "type": "array",  "items": { "type": "string" } },
         "research_system_prompt":{ "type": "string" }
       }
