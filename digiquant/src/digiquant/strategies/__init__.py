@@ -1,13 +1,16 @@
-# DigiQuant strategy repository. See digiquant/ARCHITECTURE.md and docs/NAUTILUS_STRATEGIES.md.
+# digiquant strategy repository. See digiquant/ARCHITECTURE.md and docs/NAUTILUS_STRATEGIES.md.
 
+# Side-effect imports register each strategy with the registry on load.
+from digiquant.strategies import (
+    bollinger_mr,
+    ema_cross,
+    ema_cross_long,
+    ema_cross_trailing,
+    m2_liquidity,
+    macd_trend,
+    rsi_momentum,
+    slapper,
+)
 from digiquant.strategies.registry import get_strategy, list_strategies, register
-
-# Import wrappers to trigger registration
-from digiquant.strategies import ema_cross  # noqa: F401
-from digiquant.strategies import ema_cross_long  # noqa: F401
-from digiquant.strategies import ema_cross_trailing  # noqa: F401
-from digiquant.strategies import rsi_momentum  # noqa: F401
-from digiquant.strategies import bollinger_mr  # noqa: F401
-from digiquant.strategies import macd_trend  # noqa: F401
 
 __all__ = ["get_strategy", "list_strategies", "register"]

@@ -1,4 +1,4 @@
-"""DigiGraph MCP server. Exposes workflow, chat, thread state, and tool discovery as MCP tools.
+"""digigraph MCP server. Exposes workflow, chat, thread state, and tool discovery as MCP tools.
 
 Install::
 
@@ -9,7 +9,7 @@ Run standalone::
     python -m digigraph.mcp_server             # streamable-http on port 8766
     python -m digigraph.mcp_server --stdio     # stdio transport (Claude Desktop)
 
-**Trust model:** Treat streamable-http like any network API: bind to loopback, use a firewall, or terminate TLS with auth at a gateway. stdio is appropriate for trusted local clients (e.g. Claude Desktop). MCP does not add its own API-key layer; combine with ``DIGI_API_KEY`` on the DigiGraph HTTP app and network policy when the stack is reachable beyond localhost.
+**Trust model:** Treat streamable-http like any network API: bind to loopback, use a firewall, or terminate TLS with auth at a gateway. stdio is appropriate for trusted local clients (e.g. Claude Desktop). MCP does not add its own API-key layer; combine with ``DIGI_API_KEY`` on the digigraph HTTP app and network policy when the stack is reachable beyond localhost.
 
 **Graphiti / graph memory:** Not exposed via MCP yet; see ``digigraph/ARCHITECTURE.md`` Phase 2 roadmap.
 """
@@ -19,13 +19,55 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import uuid
 from typing import Any
 
+_THREAD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _validate_thread_id(thread_id: str | None) -> str | None:
+    if thread_id is None:
+        return None
+    tid = thread_id.strip()
+    if not tid or not _THREAD_ID_RE.match(tid):
+        raise ValueError("thread_id must be 1-128 alphanumeric characters (._- allowed)")
+    return tid
+
+
 logger = logging.getLogger(__name__)
+
+_MCP_WORKFLOW_ERRORS = (
+    ValueError,
+    OSError,
+    RuntimeError,
+    ImportError,
+    TypeError,
+    KeyError,
+    AttributeError,
+)
+
+_MCP_CLIENT_ERRORS = (
+    ImportError,
+    OSError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    KeyError,
+    AttributeError,
+)
+
+
+def _has_digikey_verifier_config() -> bool:
+    return bool(
+        (os.environ.get("DIGIKEY_JWKS_URL") or "").strip()
+        or (os.environ.get("DIGIKEY_PUBLIC_KEY_PEM") or "").strip()
+    )
+
 
 try:
     from mcp.server.fastmcp import FastMCP
+
     _MCP_AVAILABLE = True
 except ImportError:
     FastMCP = None  # type: ignore[assignment,misc]
@@ -33,21 +75,20 @@ except ImportError:
 
 if not _MCP_AVAILABLE:
     logger.warning(
-        "DigiGraph MCP server requires the 'mcp' package. "
-        "Install it with: pip install mcp"
+        "digigraph MCP server requires the 'mcp' package. Install it with: pip install mcp"
     )
 
 
 def _require_mcp() -> "FastMCP":
     if not _MCP_AVAILABLE:
         raise ImportError(
-            "DigiGraph MCP server requires the 'mcp' package. Install: pip install mcp"
+            "digigraph MCP server requires the 'mcp' package. Install: pip install mcp"
         )
     return FastMCP  # type: ignore[return-value]
 
 
 def create_mcp_server() -> Any:
-    """Build and return a FastMCP server exposing DigiGraph capabilities.
+    """Build and return a FastMCP server exposing digigraph capabilities.
 
     Tools:
     - ``workflow(prompt, thread_id)`` — run the full research+backtest graph
@@ -61,7 +102,7 @@ def create_mcp_server() -> Any:
     # MCP uses in-process HTTP (TestClient) for chat/thread routes; enable thread API in this process.
     os.environ.setdefault("DIGI_ENABLE_THREAD_API", "1")
 
-    mcp = FastMCP("DigiGraph")
+    mcp = FastMCP("digigraph")
 
     @mcp.tool()
     def list_orchestrator_tools() -> str:
@@ -82,7 +123,7 @@ def create_mcp_server() -> Any:
         prompt: str,
         thread_id: str | None = None,
     ) -> str:
-        """Run the DigiGraph research + backtest workflow.
+        """Run the digigraph research + backtest workflow.
 
         Accepts a natural-language investment idea (e.g. 'test a mean-reversion
         strategy on AAPL using the last 3 years of data') and returns a structured
@@ -95,23 +136,41 @@ def create_mcp_server() -> Any:
         from digigraph.models import WorkflowRequest
         from digigraph.workflow import run_digigraph_workflow
 
+        try:
+            session_id = _validate_thread_id(thread_id)
+        except ValueError as exc:
+            return json.dumps({"success": False, "message": str(exc), "backtest_result": None})
         req = WorkflowRequest(
             prompt=prompt,
-            session_id=thread_id,
+            session_id=session_id,
             request_id=str(uuid.uuid4()),
         )
+        if (
+            os.environ.get("DIGI_MCP_REQUIRE_AUTH", "").strip().lower() in ("1", "true", "yes")
+            and not _has_digikey_verifier_config()
+        ):
+            return json.dumps(
+                {
+                    "success": False,
+                    "message": "MCP workflow disabled: set DIGIKEY_JWKS_URL or DIGIKEY_PUBLIC_KEY_PEM, or unset DIGI_MCP_REQUIRE_AUTH",
+                    "backtest_result": None,
+                }
+            )
         try:
             result = run_digigraph_workflow(req)
-            return json.dumps({
-                "success": result.success,
-                "message": result.message,
-                "backtest_result": result.backtest_result,
-                "research_brief": result.research_brief,
-                "rag_sources": result.rag_sources,
-                "profiling_questions": result.profiling_questions,
-            }, indent=2)
-        except Exception as e:
-            logger.error("DigiGraph workflow MCP tool failed: %s", e)
+            return json.dumps(
+                {
+                    "success": result.success,
+                    "message": result.message,
+                    "backtest_result": result.backtest_result,
+                    "research_brief": result.research_brief,
+                    "rag_sources": result.rag_sources,
+                    "profiling_questions": result.profiling_questions,
+                },
+                indent=2,
+            )
+        except _MCP_WORKFLOW_ERRORS as e:
+            logger.error("digigraph workflow MCP tool failed: %s", e)
             return json.dumps({"success": False, "message": str(e), "backtest_result": None})
 
     @mcp.tool()
@@ -120,9 +179,9 @@ def create_mcp_server() -> Any:
         thread_id: str | None = None,
         model: str = "sitaas-rag",
     ) -> str:
-        """Send a single chat message to DigiGraph and get a response.
+        """Send a single chat message to digigraph and get a response.
 
-        Uses the full tool-calling loop (DigiSearch RAG, DigiQuant backtest, analytics)
+        Uses the full tool-calling loop (digisearch RAG, digiquant backtest, analytics)
         as needed. Maintains conversation history across calls when *thread_id* is reused.
 
         Args:
@@ -132,14 +191,20 @@ def create_mcp_server() -> Any:
         """
 
         try:
+            session_id = _validate_thread_id(thread_id)
+        except ValueError as exc:
+            return f"[digigraph chat error: {exc}]"
+        try:
             from fastapi.testclient import TestClient
+
             from digigraph.server import app as dg_app
+
             client = TestClient(dg_app, raise_server_exceptions=False)
             payload = {
                 "model": model,
                 "messages": [{"role": "user", "content": message}],
                 "stream": False,
-                "session_id": thread_id,
+                "session_id": session_id,
             }
             r = client.post("/v1/chat/completions", json=payload)
             if r.status_code == 200:
@@ -147,10 +212,10 @@ def create_mcp_server() -> Any:
                 choices = data.get("choices", [])
                 if choices:
                     return choices[0].get("message", {}).get("content", "")
-            return f"[DigiGraph chat error: HTTP {r.status_code}]"
-        except Exception as e:
-            logger.error("DigiGraph chat MCP tool failed: %s", e)
-            return f"[DigiGraph chat error: {e}]"
+            return f"[digigraph chat error: HTTP {r.status_code}]"
+        except _MCP_CLIENT_ERRORS as e:
+            logger.error("digigraph chat MCP tool failed: %s", e)
+            return f"[digigraph chat error: {e}]"
 
     @mcp.tool()
     def thread_state(thread_id: str) -> str:
@@ -163,15 +228,23 @@ def create_mcp_server() -> Any:
             thread_id: The session/thread ID to look up.
         """
         try:
+            tid = _validate_thread_id(thread_id)
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)})
+        if tid is None:
+            return json.dumps({"error": "thread_id is required"})
+        try:
             from fastapi.testclient import TestClient
+
             from digigraph.server import app as dg_app
+
             client = TestClient(dg_app, raise_server_exceptions=False)
-            r = client.get(f"/threads/{thread_id}/state")
+            r = client.get(f"/threads/{tid}/state")
             if r.status_code == 200:
                 return json.dumps(r.json(), indent=2)
             return json.dumps({"error": f"HTTP {r.status_code}", "detail": r.text})
-        except Exception as e:
-            logger.error("DigiGraph thread_state MCP tool failed: %s", e)
+        except _MCP_CLIENT_ERRORS as e:
+            logger.error("digigraph thread_state MCP tool failed: %s", e)
             return json.dumps({"error": str(e)})
 
     return mcp
@@ -190,22 +263,23 @@ def get_mcp_server() -> Any:
 
 def run_mcp(
     transport: str = "streamable-http",
-    host: str = "0.0.0.0",
+    host: str | None = None,
     port: int = 8766,
 ) -> None:
-    """Start the MCP server. Defaults: streamable-http on port 8766."""
+    """Start the MCP server. Defaults: streamable-http on 127.0.0.1:8766."""
+    bind = host or os.environ.get("DIGIGRAPH_MCP_HOST", "127.0.0.1")
     mcp = get_mcp_server()
-    logger.info("Starting DigiGraph MCP server on %s:%d (transport=%s)", host, port, transport)
-    mcp.run(transport=transport, host=host, port=port)
+    logger.info("Starting digigraph MCP server on %s:%d (transport=%s)", bind, port, transport)
+    mcp.run(transport=transport, host=bind, port=port)
 
 
 if __name__ == "__main__":
     import argparse
 
     logging.basicConfig(level=logging.INFO)
-    parser = argparse.ArgumentParser(description="DigiGraph MCP server")
+    parser = argparse.ArgumentParser(description="digigraph MCP server")
     parser.add_argument("--stdio", action="store_true", help="Use stdio transport (Claude Desktop)")
-    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--host", default=os.environ.get("DIGIGRAPH_MCP_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=8766)
     args = parser.parse_args()
 

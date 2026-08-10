@@ -1,4 +1,4 @@
-"""Mint RS256 test JWTs for DigiAuth middleware (pytest configures DIGIKEY_PUBLIC_KEY_PEM)."""
+"""Mint RS256 test JWTs for digiauth middleware (pytest configures DIGIKEY_PUBLIC_KEY_PEM)."""
 
 from __future__ import annotations
 

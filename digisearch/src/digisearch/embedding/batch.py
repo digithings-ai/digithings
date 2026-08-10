@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import time
 
 from digisearch.embedding.base import EmbeddingProvider
+
+logger = logging.getLogger(__name__)
+
+_EMBED_RETRY_ERRORS = (OSError, RuntimeError, TimeoutError, ValueError, TypeError)
 
 
 class BatchEmbedder:
@@ -28,17 +33,51 @@ class BatchEmbedder:
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed in batches with retry."""
+        perf_start = time.perf_counter()
         out: list[list[float]] = []
+        batches = 0
         for i in range(0, len(texts), self.batch_size):
             batch = texts[i : i + self.batch_size]
+            batches += 1
             for attempt in range(self.max_retries):
                 try:
                     emb = self.provider.embed(batch)
                     out.extend(emb)
                     break
-                except Exception:
+                except _EMBED_RETRY_ERRORS:
                     if attempt < self.max_retries - 1:
+                        logger.warning(
+                            "embed batch retry",
+                            extra={
+                                "operation": "embed_batch",
+                                "duration_ms": int((time.perf_counter() - perf_start) * 1000),
+                                "outcome": "error",
+                                "attempt": attempt + 1,
+                                "batch_size": len(batch),
+                            },
+                        )
                         time.sleep(self.delay * (attempt + 1))
                     else:
+                        logger.exception(
+                            "embed_batch failed",
+                            extra={
+                                "operation": "embed_batch",
+                                "duration_ms": int((time.perf_counter() - perf_start) * 1000),
+                                "outcome": "error",
+                                "text_count": len(texts),
+                            },
+                        )
                         raise
+        logger.info(
+            "embed_batch done",
+            extra={
+                "operation": "embed_batch",
+                "duration_ms": int((time.perf_counter() - perf_start) * 1000),
+                "outcome": "ok",
+                "text_count": len(texts),
+                "batch_count": batches,
+                "batch_size": self.batch_size,
+                "vector_dim": self.provider.dimensions,
+            },
+        )
         return out

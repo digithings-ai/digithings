@@ -1,0 +1,1702 @@
+/* ==========================================================================
+   @digithings/web — shared controls layer CSS (components/controls/*, #1419).
+   The static control atoms: Button, Badge, Card, Input, Label, Avatar —
+   plus the promoted controls patterns (#1548): Skeleton (sk-*), EmptyState
+   (ctl-empty*), SegmentedControl/Pager/IconButton (nb-*), TagsInput (tg-*),
+   SearchBar (ctl-search / sb-*). The #1548 families carry the reference
+   dress, plus olympus's shipped dresses where the two differ (nb-pager
+   "capsule", nb-seg "accent" — see the NavButtons dresses section;
+   tg-chip-quant accent chip and ctl-search-row dropdown filter row — see
+   the TagsInput / SearchBar sections); they
+   follow the same layering split as the chat dress — single-class defaults
+   in @layer components, state/structural rules unlayered.
+
+   Every control carries TWO dresses (per the E3 ruling — API compatibility
+   beats aesthetic purity, digichat's rendered look must be reproducible
+   exactly):
+
+   - the REFERENCE dress (`*-ref` classes, the default): the design-reference
+     controls grammar, value-for-value copies of the specimen CSS —
+     .btn-primary / .btn-ghost / .btn-quiet / .btn-danger / .btn-icon
+     (reference/app/globals.css + styles/nav-shell.css), .ff-input
+     (reference/app/controls/controls.css), and the .dg-tier pill
+     (styles/web-theme.css). Mono type, pill radii, hairline borders,
+     srgb color-mix — kept verbatim so a specimen swap is pixel-faithful.
+
+   - the CHAT dress (`*-chat` classes): digichat's current shadcn-derived
+     control dress translated utility-for-utility from
+     digichat/src/components/ui/{button,badge,card,input,label,avatar}.tsx.
+     digichat's shadcn vars all resolve to canon tokens (#1403 reverse
+     bridge), so each rule reads `var(--shadcn-slot, var(--canon-token))`:
+     exact inside digichat (where the slot vars exist), canonical fallback
+     everywhere else. Opacity washes use `color-mix(in oklab, …)` — the
+     exact color space Tailwind v4 emits for `/NN` modifiers — so the
+     rendered pixels match digichat's current build. Dark rules key off
+     [data-theme="dark"], which digichat keeps in lockstep with its legacy
+     `.dark` class.
+
+   Wiring — import AFTER the token bridge in the app's globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/controls-core.css";
+   The controls components carry NO Tailwind utilities (all dress lives
+   here, keyed off data-slot / data-size / aria state), so no @source line
+   is needed for this family. Import PLAINLY (no layer(...)) — this file
+   manages its own layering:
+
+   Layering of the CHAT dress is deliberate and load-bearing (the same
+   doctrine as controls-overlay.css). digichat's old ui/* wrappers ran
+   every class through cn() = tailwind-merge, so a call-site utility
+   (p-8, text-[9px], h-6 …) deterministically replaced the base dress's
+   conflicting plain utility, while variant-ed base utilities (hover:,
+   focus-visible:, disabled:, aria-*, data-*, has-*) compiled to ≥(0,2,0)
+   specificity and kept beating plain call-site utilities. Reproducing
+   that split without tailwind-merge:
+   - single-class DEFAULT rules (idle dress, sizes, part defaults) sit in
+     `@layer components`, where the app's `utilities` layer wins — the
+     call-site-override semantic;
+   - STATE / STRUCTURAL rules (pseudo-classes, [aria-*], [data-size],
+     [data-theme=dark], :has(...), descendant sizing) stay UNLAYERED so
+     they keep beating plain call-site utilities, exactly like their
+     ≥(0,2,0) compiled ancestors did.
+   The REFERENCE dress rules stay unlayered verbatim — they are
+   value-for-value specimen copies and no consumer composes Tailwind
+   utility overrides onto them.
+   ========================================================================== */
+
+/* ── Button — reference dress (reference/app/globals.css .btn-*) ────────── */
+
+.ctl-btn-ref {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  padding: 0.62rem 1.3rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.ctl-btn-ref--primary {
+  background: var(--accent);
+  color: var(--surface-inverse, #06110f);
+  border-color: var(--accent);
+}
+
+.ctl-btn-ref--primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ctl-btn-ref--ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--hair);
+}
+
+.ctl-btn-ref--ghost:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.ctl-btn-ref--quiet {
+  background: transparent;
+  color: var(--ink-mute);
+  border-color: transparent;
+  padding-left: 0.2rem;
+  padding-right: 0.2rem;
+}
+
+.ctl-btn-ref--quiet:hover {
+  color: var(--ink);
+}
+
+.ctl-btn-ref--danger {
+  background: transparent;
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
+}
+
+.ctl-btn-ref--danger:hover {
+  background: color-mix(in srgb, var(--down) 10%, transparent);
+}
+
+/* the borderless glyph button — the nav-shell tail-cluster grammar
+   (styles/nav-shell.css .btn-icon): no fill, no border, ink-mute → ink */
+.ctl-btn-ref--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--ink-mute);
+  transition: color 0.2s var(--ease);
+}
+
+.ctl-btn-ref--icon:hover {
+  color: var(--ink);
+  background: transparent;
+}
+
+.ctl-btn-ref--icon svg {
+  display: block;
+}
+
+/* loading state — .btn-loading / .btn-spinner grammar */
+.ctl-btn-ref--loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ctl-btn-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--surface-inverse, #06110f) 30%, transparent);
+  border-top-color: var(--surface-inverse, #06110f);
+  animation: ctl-btn-spin 0.7s linear infinite;
+}
+
+@keyframes ctl-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Button — chat dress (digichat ui/button.tsx, utility-for-utility) ────
+      defaults in @layer components (call-site utilities win, the cn()
+      semantic); states/structural rules unlayered (they beat plain
+      call-site utilities, as their ≥(0,2,0) compiled ancestors did) ─────── */
+
+@layer components {
+  .ctl-btn-chat {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-lg, 0.625rem);
+    border: 1px solid transparent;
+    background-clip: padding-box;
+    font-size: 0.875rem;
+    line-height: calc(1.25 / 0.875);
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+    user-select: none;
+  }
+
+  /* variants — hovers sit under (hover: hover) further down, exactly as
+     Tailwind v4 emits digichat's hover: utilities */
+  .ctl-btn-chat--default {
+    background: var(--primary, var(--accent));
+    color: var(--primary-foreground, var(--on-accent));
+  }
+
+  .ctl-btn-chat--outline {
+    border-color: var(--border, var(--hair));
+    background: var(--background, var(--bg));
+  }
+
+  .ctl-btn-chat--secondary {
+    background: var(--secondary, var(--surface-2));
+    color: var(--secondary-foreground, var(--ink));
+  }
+
+  .ctl-btn-chat--destructive {
+    background: color-mix(in oklab, var(--destructive, var(--down)) 10%, transparent);
+    color: var(--destructive, var(--down));
+  }
+
+  .ctl-btn-chat--link {
+    color: var(--primary, var(--accent));
+    text-underline-offset: 4px;
+  }
+}
+
+.ctl-btn-chat:focus-visible {
+  outline: none;
+  border-color: var(--ring, var(--accent));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring, var(--accent)) 50%, transparent);
+}
+
+.ctl-btn-chat:active {
+  transform: translateY(1px);
+}
+
+.ctl-btn-chat:disabled {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.ctl-btn-chat[aria-invalid="true"] {
+  border-color: var(--destructive, var(--down));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-btn-chat[aria-invalid="true"] {
+  border-color: color-mix(in oklab, var(--destructive, var(--down)) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+}
+
+.ctl-btn-chat svg {
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.ctl-btn-chat svg:not([class*="size-"]) {
+  width: 1rem;
+  height: 1rem;
+}
+
+.ctl-btn-chat--outline[aria-expanded="true"] {
+  background: var(--muted, var(--surface-2));
+  color: var(--foreground, var(--ink));
+}
+
+[data-theme="dark"] .ctl-btn-chat--outline {
+  border-color: var(--input, var(--hair));
+  background: color-mix(in oklab, var(--input, var(--hair)) 30%, transparent);
+}
+
+.ctl-btn-chat--secondary[aria-expanded="true"] {
+  background: var(--secondary, var(--surface-2));
+  color: var(--secondary-foreground, var(--ink));
+}
+
+.ctl-btn-chat--ghost[aria-expanded="true"] {
+  background: var(--muted, var(--surface-2));
+  color: var(--foreground, var(--ink));
+}
+
+.ctl-btn-chat--destructive:focus-visible {
+  border-color: color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-btn-chat--destructive {
+  background: color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-btn-chat--destructive:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+}
+
+@media (hover: hover) {
+  a.ctl-btn-chat--default:hover {
+    background: color-mix(in oklab, var(--primary, var(--accent)) 80%, transparent);
+  }
+
+  .ctl-btn-chat--outline:hover {
+    background: var(--muted, var(--surface-2));
+    color: var(--foreground, var(--ink));
+  }
+
+  [data-theme="dark"] .ctl-btn-chat--outline:hover {
+    background: color-mix(in oklab, var(--input, var(--hair)) 50%, transparent);
+  }
+
+  .ctl-btn-chat--secondary:hover {
+    background: color-mix(in oklab, var(--secondary, var(--surface-2)) 80%, transparent);
+  }
+
+  .ctl-btn-chat--ghost:hover {
+    background: var(--muted, var(--surface-2));
+    color: var(--foreground, var(--ink));
+  }
+
+  [data-theme="dark"] .ctl-btn-chat--ghost:hover {
+    background: color-mix(in oklab, var(--muted, var(--surface-2)) 50%, transparent);
+  }
+
+  .ctl-btn-chat--destructive:hover {
+    background: color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+  }
+
+  [data-theme="dark"] .ctl-btn-chat--destructive:hover {
+    background: color-mix(in oklab, var(--destructive, var(--down)) 30%, transparent);
+  }
+
+  .ctl-btn-chat--link:hover {
+    text-decoration-line: underline;
+  }
+}
+
+/* sizes — plain size dress in @layer components; icon-slot padding (:has)
+   and unsized-svg rules stay unlayered */
+@layer components {
+  .ctl-btn-chat--size-default {
+    height: 2rem;
+    gap: 0.375rem;
+    padding-inline: 0.625rem;
+  }
+
+  .ctl-btn-chat--size-xs {
+    height: 1.5rem;
+    gap: 0.25rem;
+    border-radius: min(var(--radius-md, 0.5rem), 10px);
+    padding-inline: 0.5rem;
+    font-size: 0.75rem;
+    line-height: calc(1 / 0.75);
+  }
+
+  .ctl-btn-chat--size-sm {
+    height: 1.75rem;
+    gap: 0.25rem;
+    border-radius: min(var(--radius-md, 0.5rem), 12px);
+    padding-inline: 0.625rem;
+    font-size: 0.8rem;
+  }
+
+  .ctl-btn-chat--size-lg {
+    height: 2.25rem;
+    gap: 0.375rem;
+    padding-inline: 0.625rem;
+  }
+
+  .ctl-btn-chat--size-icon {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .ctl-btn-chat--size-icon-xs {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: min(var(--radius-md, 0.5rem), 10px);
+  }
+
+  .ctl-btn-chat--size-icon-sm {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: min(var(--radius-md, 0.5rem), 12px);
+  }
+
+  .ctl-btn-chat--size-icon-lg {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+}
+
+.ctl-btn-chat--size-default:has([data-icon="inline-end"]) {
+  padding-right: 0.5rem;
+}
+
+.ctl-btn-chat--size-default:has([data-icon="inline-start"]) {
+  padding-left: 0.5rem;
+}
+
+.ctl-btn-chat--size-xs:has([data-icon="inline-end"]) {
+  padding-right: 0.375rem;
+}
+
+.ctl-btn-chat--size-xs:has([data-icon="inline-start"]) {
+  padding-left: 0.375rem;
+}
+
+.ctl-btn-chat--size-xs svg:not([class*="size-"]) {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.ctl-btn-chat--size-sm:has([data-icon="inline-end"]) {
+  padding-right: 0.375rem;
+}
+
+.ctl-btn-chat--size-sm:has([data-icon="inline-start"]) {
+  padding-left: 0.375rem;
+}
+
+.ctl-btn-chat--size-sm svg:not([class*="size-"]) {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.ctl-btn-chat--size-lg:has([data-icon="inline-end"]) {
+  padding-right: 0.75rem;
+}
+
+.ctl-btn-chat--size-lg:has([data-icon="inline-start"]) {
+  padding-left: 0.75rem;
+}
+
+.ctl-btn-chat--size-icon-xs svg:not([class*="size-"]) {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/* inside a button group the compact radii return to the group's lg radius */
+[data-slot="button-group"] .ctl-btn-chat--size-xs,
+[data-slot="button-group"] .ctl-btn-chat--size-sm,
+[data-slot="button-group"] .ctl-btn-chat--size-icon-xs,
+[data-slot="button-group"] .ctl-btn-chat--size-icon-sm {
+  border-radius: var(--radius-lg, 0.625rem);
+}
+
+/* ── Badge — reference dress (web-theme.css .dg-tier pill grammar) ──────── */
+
+.ctl-badge-ref {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  padding: 0.16rem 0.5rem;
+}
+
+.ctl-badge-ref--accent {
+  color: var(--accent);
+  border-color: var(--accent-weak);
+}
+
+.ctl-badge-ref--warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+}
+
+.ctl-badge-ref--up {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 40%, transparent);
+}
+
+.ctl-badge-ref--down {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, transparent);
+}
+
+/* ── Badge — chat dress (digichat ui/badge.tsx) — defaults in
+      @layer components, states/structural rules unlayered (see header) ──── */
+
+@layer components {
+  .ctl-badge-chat {
+    display: inline-flex;
+    height: 1.25rem;
+    width: fit-content;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    overflow: hidden;
+    border-radius: var(--radius-4xl, 1.625rem);
+    border: 1px solid transparent;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: calc(1 / 0.75);
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .ctl-badge-chat--default {
+    background: var(--primary, var(--accent));
+    color: var(--primary-foreground, var(--on-accent));
+  }
+
+  .ctl-badge-chat--secondary {
+    background: var(--secondary, var(--surface-2));
+    color: var(--secondary-foreground, var(--ink));
+  }
+
+  .ctl-badge-chat--destructive {
+    background: color-mix(in oklab, var(--destructive, var(--down)) 10%, transparent);
+    color: var(--destructive, var(--down));
+  }
+
+  .ctl-badge-chat--outline {
+    border-color: var(--border, var(--hair));
+    color: var(--foreground, var(--ink));
+  }
+
+  .ctl-badge-chat--link {
+    color: var(--primary, var(--accent));
+    text-underline-offset: 4px;
+  }
+}
+
+.ctl-badge-chat:focus-visible {
+  border-color: var(--ring, var(--accent));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring, var(--accent)) 50%, transparent);
+}
+
+.ctl-badge-chat:has([data-icon="inline-end"]) {
+  padding-right: 0.375rem;
+}
+
+.ctl-badge-chat:has([data-icon="inline-start"]) {
+  padding-left: 0.375rem;
+}
+
+.ctl-badge-chat[aria-invalid="true"] {
+  border-color: var(--destructive, var(--down));
+}
+
+.ctl-badge-chat[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-badge-chat[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+}
+
+.ctl-badge-chat > svg {
+  pointer-events: none;
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+}
+
+.ctl-badge-chat--destructive:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-badge-chat--destructive {
+  background: color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-badge-chat--destructive:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+}
+
+@media (hover: hover) {
+  a.ctl-badge-chat--default:hover {
+    background: color-mix(in oklab, var(--primary, var(--accent)) 80%, transparent);
+  }
+
+  a.ctl-badge-chat--secondary:hover {
+    background: color-mix(in oklab, var(--secondary, var(--surface-2)) 80%, transparent);
+  }
+
+  a.ctl-badge-chat--destructive:hover {
+    background: color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+  }
+
+  a.ctl-badge-chat--outline:hover {
+    background: var(--muted, var(--surface-2));
+    color: var(--muted-foreground, var(--ink-soft));
+  }
+
+  .ctl-badge-chat--ghost:hover {
+    background: var(--muted, var(--surface-2));
+    color: var(--muted-foreground, var(--ink-soft));
+  }
+
+  [data-theme="dark"] .ctl-badge-chat--ghost:hover {
+    background: color-mix(in oklab, var(--muted, var(--surface-2)) 50%, transparent);
+  }
+
+  .ctl-badge-chat--link:hover {
+    text-decoration-line: underline;
+  }
+}
+
+/* ── Card — reference dress (the hairline frame grammar: 12px radius,
+      surface fill, hairline head/foot rows — ChatWidgetFrame paddings) ──── */
+
+.ctl-card-ref {
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.ctl-card-ref .ctl-card-header {
+  display: grid;
+  grid-auto-rows: min-content;
+  align-items: start;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.ctl-card-ref .ctl-card-header:has([data-slot="card-action"]) {
+  grid-template-columns: 1fr auto;
+}
+
+.ctl-card-ref .ctl-card-header:has([data-slot="card-description"]) {
+  grid-template-rows: auto auto;
+}
+
+.ctl-card-ref .ctl-card-title {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.ctl-card-ref .ctl-card-description {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.ctl-card-ref .ctl-card-content {
+  padding: 1rem;
+}
+
+.ctl-card-ref .ctl-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem 1rem;
+  border-top: 1px solid var(--hair);
+}
+
+/* ── Card — chat dress (digichat ui/card.tsx) — defaults (root + part
+      dress) in @layer components; :has()/data-size/structural rules
+      unlayered (see header) ───────────────────────────────────────────── */
+
+@layer components {
+  .ctl-card-chat {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow: hidden;
+    border-radius: var(--radius-xl, 0.875rem);
+    background: var(--card, var(--surface));
+    padding-block: 1rem;
+    font-size: 0.875rem;
+    line-height: calc(1.25 / 0.875);
+    color: var(--card-foreground, var(--ink));
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground, var(--ink)) 10%, transparent);
+  }
+
+  .ctl-card-chat .ctl-card-header {
+    container: card-header / inline-size;
+    display: grid;
+    grid-auto-rows: min-content;
+    align-items: start;
+    gap: 0.25rem;
+    border-top-left-radius: var(--radius-xl, 0.875rem);
+    border-top-right-radius: var(--radius-xl, 0.875rem);
+    padding-inline: 1rem;
+  }
+
+  .ctl-card-chat .ctl-card-title {
+    font-family: var(--font-heading, var(--font-sans));
+    font-size: 1rem;
+    line-height: 1.375;
+    font-weight: 500;
+  }
+
+  .ctl-card-chat .ctl-card-description {
+    font-size: 0.875rem;
+    line-height: calc(1.25 / 0.875);
+    color: var(--muted-foreground, var(--ink-soft));
+  }
+
+  .ctl-card-chat .ctl-card-content {
+    padding-inline: 1rem;
+  }
+
+  .ctl-card-chat .ctl-card-footer {
+    display: flex;
+    align-items: center;
+    border-top: 1px solid var(--border, var(--hair));
+    background: color-mix(in oklab, var(--muted, var(--surface-2)) 50%, transparent);
+    padding: 1rem;
+    border-bottom-left-radius: var(--radius-xl, 0.875rem);
+    border-bottom-right-radius: var(--radius-xl, 0.875rem);
+  }
+
+  /* the action slot places itself the same way under both dresses */
+  .ctl-card-action {
+    grid-column-start: 2;
+    grid-row: 1 / span 2;
+    align-self: start;
+    justify-self: end;
+  }
+}
+
+.ctl-card-chat:has([data-slot="card-footer"]) {
+  padding-bottom: 0;
+}
+
+.ctl-card-chat:has(> img:first-child) {
+  padding-top: 0;
+}
+
+.ctl-card-chat[data-size="sm"] {
+  gap: 0.75rem;
+  padding-block: 0.75rem;
+}
+
+.ctl-card-chat[data-size="sm"]:has([data-slot="card-footer"]) {
+  padding-bottom: 0;
+}
+
+.ctl-card-chat > img:first-child {
+  border-top-left-radius: var(--radius-xl, 0.875rem);
+  border-top-right-radius: var(--radius-xl, 0.875rem);
+}
+
+.ctl-card-chat > img:last-child {
+  border-bottom-left-radius: var(--radius-xl, 0.875rem);
+  border-bottom-right-radius: var(--radius-xl, 0.875rem);
+}
+
+.ctl-card-chat .ctl-card-header:has([data-slot="card-action"]) {
+  grid-template-columns: 1fr auto;
+}
+
+.ctl-card-chat .ctl-card-header:has([data-slot="card-description"]) {
+  grid-template-rows: auto auto;
+}
+
+/* digichat's `[.border-b]:pb-4` — a header the consumer marked .border-b */
+.ctl-card-chat .ctl-card-header.border-b {
+  padding-bottom: 1rem;
+}
+
+.ctl-card-chat[data-size="sm"] .ctl-card-header {
+  padding-inline: 0.75rem;
+}
+
+.ctl-card-chat[data-size="sm"] .ctl-card-header.border-b {
+  padding-bottom: 0.75rem;
+}
+
+.ctl-card-chat[data-size="sm"] .ctl-card-title {
+  font-size: 0.875rem;
+}
+
+.ctl-card-chat[data-size="sm"] .ctl-card-content {
+  padding-inline: 0.75rem;
+}
+
+.ctl-card-chat[data-size="sm"] .ctl-card-footer {
+  padding: 0.75rem;
+}
+
+/* ── Input — reference dress (controls.css .ff-input, error/disabled keyed
+      off the input's own aria-invalid / :disabled instead of the specimen's
+      .ff-field wrapper hooks) ──────────────────────────────────────────── */
+
+.ctl-input-ref {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  outline: none;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.ctl-input-ref::placeholder {
+  color: var(--ink-mute);
+}
+
+.ctl-input-ref:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.ctl-input-ref[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--down) 60%, var(--hair));
+}
+
+.ctl-input-ref[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--down) 22%, transparent);
+}
+
+.ctl-input-ref:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Input — chat dress (digichat ui/input.tsx) — defaults in
+      @layer components, states unlayered (see header) ────────────────────── */
+
+@layer components {
+  .ctl-input-chat {
+    height: 2rem;
+    width: 100%;
+    min-width: 0;
+    border-radius: var(--radius-lg, 0.625rem);
+    border: 1px solid var(--input, var(--hair));
+    background: transparent;
+    padding: 0.25rem 0.625rem;
+    font-size: 1rem;
+    line-height: 1.5;
+    outline: none;
+    transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+      text-decoration-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+      fill 150ms cubic-bezier(0.4, 0, 0.2, 1), stroke 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @media (min-width: 48rem) {
+    .ctl-input-chat {
+      font-size: 0.875rem;
+      line-height: calc(1.25 / 0.875);
+    }
+  }
+
+  .ctl-input-chat::file-selector-button {
+    display: inline-flex;
+    height: 1.5rem;
+    border: 0;
+    background: transparent;
+    font-size: 0.875rem;
+    line-height: calc(1.25 / 0.875);
+    font-weight: 500;
+    color: var(--foreground, var(--ink));
+  }
+
+  .ctl-input-chat::placeholder {
+    color: var(--muted-foreground, var(--ink-soft));
+  }
+}
+
+.ctl-input-chat:focus-visible {
+  outline: none;
+  border-color: var(--ring, var(--accent));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring, var(--accent)) 50%, transparent);
+}
+
+.ctl-input-chat:disabled {
+  pointer-events: none;
+  cursor: not-allowed;
+  background: color-mix(in oklab, var(--input, var(--hair)) 50%, transparent);
+  opacity: 0.5;
+}
+
+.ctl-input-chat[aria-invalid="true"] {
+  border-color: var(--destructive, var(--down));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+}
+
+[data-theme="dark"] .ctl-input-chat {
+  background: color-mix(in oklab, var(--input, var(--hair)) 30%, transparent);
+}
+
+[data-theme="dark"] .ctl-input-chat:disabled {
+  background: color-mix(in oklab, var(--input, var(--hair)) 80%, transparent);
+}
+
+[data-theme="dark"] .ctl-input-chat[aria-invalid="true"] {
+  border-color: color-mix(in oklab, var(--destructive, var(--down)) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+}
+
+/* ── Label — reference dress (the form-fields mono micro-caps grammar) ──── */
+
+.ctl-label-ref {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+/* ── Label — chat dress (digichat ui/label.tsx) — default in
+      @layer components, group/peer dimming unlayered (see header) ─────────── */
+
+@layer components {
+  .ctl-label-chat {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1;
+    font-weight: 500;
+    user-select: none;
+  }
+}
+
+.group[data-disabled="true"] .ctl-label-chat {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.peer:disabled ~ .ctl-label-chat {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ── Avatar — chat dress only (digichat ui/avatar.tsx; the reference family
+      has no avatar specimen — reference dress deferred to a product ruling).
+      Defaults in @layer components, data-size/structural rules unlayered ── */
+
+@layer components {
+  .ctl-avatar {
+    position: relative;
+    display: flex;
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    user-select: none;
+  }
+
+  .ctl-avatar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border: 1px solid var(--border, var(--hair));
+    mix-blend-mode: darken;
+  }
+
+  .ctl-avatar-image {
+    aspect-ratio: 1 / 1;
+    width: 100%;
+    height: 100%;
+    border-radius: 9999px;
+    object-fit: cover;
+  }
+
+  .ctl-avatar-fallback {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: var(--muted, var(--surface-2));
+    font-size: 0.875rem;
+    line-height: calc(1.25 / 0.875);
+    color: var(--muted-foreground, var(--ink-soft));
+  }
+
+  .ctl-avatar-badge {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: var(--primary, var(--accent));
+    color: var(--primary-foreground, var(--on-accent));
+    background-blend-mode: color;
+    box-shadow: 0 0 0 2px var(--background, var(--bg));
+    user-select: none;
+  }
+}
+
+[data-theme="dark"] .ctl-avatar::after {
+  mix-blend-mode: lighten;
+}
+
+.ctl-avatar[data-size="lg"] {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.ctl-avatar[data-size="sm"] {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.ctl-avatar[data-size="sm"] .ctl-avatar-fallback {
+  font-size: 0.75rem;
+  line-height: calc(1 / 0.75);
+}
+
+.ctl-avatar[data-size="sm"] .ctl-avatar-badge {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+.ctl-avatar[data-size="sm"] .ctl-avatar-badge > svg {
+  display: none;
+}
+
+.ctl-avatar[data-size="default"] .ctl-avatar-badge {
+  width: 0.625rem;
+  height: 0.625rem;
+}
+
+.ctl-avatar[data-size="default"] .ctl-avatar-badge > svg {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+.ctl-avatar[data-size="lg"] .ctl-avatar-badge {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.ctl-avatar[data-size="lg"] .ctl-avatar-badge > svg {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+@layer components {
+  .ctl-avatar-group {
+    display: flex;
+  }
+
+  .ctl-avatar-group-count {
+    position: relative;
+    display: flex;
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: var(--muted, var(--surface-2));
+    font-size: 0.875rem;
+    line-height: calc(1.25 / 0.875);
+    color: var(--muted-foreground, var(--ink-soft));
+    box-shadow: 0 0 0 2px var(--background, var(--bg));
+  }
+}
+
+.ctl-avatar-group > :not(:last-child) {
+  margin-inline-end: -0.5rem;
+}
+
+.ctl-avatar-group > [data-slot="avatar"] {
+  box-shadow: 0 0 0 2px var(--background, var(--bg));
+}
+
+.ctl-avatar-group:has([data-size="lg"]) .ctl-avatar-group-count {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.ctl-avatar-group:has([data-size="sm"]) .ctl-avatar-group-count {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.ctl-avatar-group-count > svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.ctl-avatar-group:has([data-size="lg"]) .ctl-avatar-group-count > svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.ctl-avatar-group:has([data-size="sm"]) .ctl-avatar-group-count > svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/* ── Skeleton — the sk-* shimmer grammar (#1548, from
+      reference/app/controls/controls.css). Shape defaults in
+      @layer components so call-site width/height utilities can size them
+      (olympus's snapshot skeleton uses h-20 blocks); the ::after shimmer,
+      keyframes, and reduced-motion guard stay unlayered ─────────────────── */
+
+@layer components {
+  .sk {
+    position: relative;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--ink) 9%, transparent);
+    border-radius: 6px;
+  }
+
+  .sk-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  .sk-line {
+    height: 0.72rem;
+  }
+
+  .sk-line--sm {
+    height: 0.5rem;
+  }
+
+  .sk-btn {
+    width: 6.6rem;
+    height: 2rem;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  .sk-block {
+    height: 1.5rem;
+    width: 60%;
+    border-radius: 5px;
+  }
+}
+
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--ink) 13%, transparent),
+    transparent
+  );
+  animation: sk-shimmer 1.5s var(--ease) infinite;
+}
+
+@keyframes sk-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ── EmptyState — the no-results / first-run / error triple (#1548). The
+      specimen wore token utilities (empty-states-reference.tsx); translated
+      value-for-value here (the /NN washes as the color-mix(in oklab, …)
+      Tailwind v4 emits). Defaults in @layer components; the error-variant
+      glyph tint is a structural (descendant) rule and stays unlayered ───── */
+
+@layer components {
+  .ctl-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    background: color-mix(in oklab, var(--surface) 55%, transparent);
+    padding: 1.8rem 1.3rem;
+    text-align: center;
+  }
+
+  .ctl-empty-glyph {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin-bottom: 0.15rem;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--ink) 8%, transparent);
+    color: var(--ink-mute);
+  }
+
+  .ctl-empty-title {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
+    font-weight: 400;
+    color: var(--ink);
+  }
+
+  .ctl-empty-body {
+    margin: 0 0 0.4rem;
+    max-width: 24ch;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--ink-mute);
+  }
+
+  /* note — the italic "why it's empty" secondary line (olympus observability) */
+  .ctl-empty-note {
+    margin: 0;
+    max-width: 24ch;
+    font-size: 0.75rem;
+    font-style: italic;
+    line-height: calc(1 / 0.75);
+    color: color-mix(in oklab, var(--ink-mute) 60%, transparent);
+  }
+}
+
+/* the error state is the only one that spends the down color */
+.ctl-empty--error .ctl-empty-glyph {
+  background: color-mix(in oklab, var(--down) 12%, transparent);
+  color: var(--down);
+}
+
+/* ── EmptyState glass dresses (#1548 olympus adoption) — the app's shipped
+      looks, value-for-value from components/observability/shared.tsx and
+      components/db-unavailable.tsx. Type/spacing only: the surface stays the
+      call-site class (olympus `.glass-card`, unlayered app CSS, so it wins
+      the card chrome AND keeps the app's motion-reveal hook). No state rules
+      here, so everything sits in @layer components — call-site utilities may
+      still adjust geometry (e.g. db-unavailable's `max-w-md mx-auto`). ────── */
+
+@layer components {
+  /* dress="glass" — the observability quiet card (glass-card p-8 gap-2) */
+  .ctl-empty--glass {
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 2rem;
+  }
+
+  .ctl-empty--glass .ctl-empty-title {
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: calc(1.25 / 0.875);
+    font-weight: 500;
+    color: var(--ink-soft);
+  }
+
+  .ctl-empty--glass .ctl-empty-body {
+    margin: 0;
+    max-width: 28rem; /* max-w-md */
+    font-size: 0.75rem;
+    line-height: calc(1 / 0.75);
+    color: var(--ink-mute);
+  }
+
+  .ctl-empty--glass .ctl-empty-note {
+    margin-top: 0.25rem;
+    max-width: 28rem;
+  }
+
+  /* dress="glass-display" — the full-page gate card (db-unavailable):
+     font-display 2xl title, relaxed text-sm body, margin-driven rhythm */
+  .ctl-empty--glass-display {
+    justify-content: center;
+    gap: 0;
+    padding: 2rem 1.5rem;
+  }
+
+  .ctl-empty--glass-display .ctl-empty-title {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    line-height: calc(2 / 1.5);
+    letter-spacing: -0.025em; /* tracking-tight */
+    font-weight: 400;
+    color: var(--ink);
+  }
+
+  .ctl-empty--glass-display .ctl-empty-body {
+    margin: 0.5rem 0 0;
+    max-width: none;
+    font-size: 0.875rem;
+    line-height: 1.625; /* leading-relaxed */
+    color: var(--ink-mute);
+  }
+}
+
+/* ── NavButtons — segmented switch, pager, icon buttons (#1548, from
+      reference/app/controls/controls.css). Defaults in @layer components;
+      hover/disabled and the aria-pressed / aria-current selection states
+      (replacing the specimen's .on classes) stay unlayered. Order matters:
+      the aria selection rules sit after :hover at equal specificity, so a
+      hovered selected cell keeps the selected dress, as in the specimen ── */
+
+@layer components {
+  .nb-seg-group {
+    display: inline-flex;
+    overflow: hidden;
+    border: 1px solid var(--hair);
+    border-radius: 8px;
+  }
+
+  .nb-seg {
+    padding: 0.4rem 0.85rem;
+    border: none;
+    border-left: 1px solid var(--hair);
+    background: var(--surface);
+    color: var(--ink-mute);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
+  }
+
+  .nb-pager {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .nb-page,
+  .nb-page-edge {
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.6rem;
+    border: 1px solid var(--hair);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+  }
+
+  .nb-icon {
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-mute);
+    cursor: pointer;
+    transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
+  }
+}
+
+.nb-seg:first-child {
+  border-left: none;
+}
+
+.nb-seg:hover {
+  color: var(--ink-soft);
+}
+
+.nb-seg[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--accent-weak);
+}
+
+.nb-page:hover:not([aria-current="page"]),
+.nb-page-edge:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
+
+.nb-page[aria-current="page"] {
+  color: var(--surface-inverse, #06110f);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.nb-page-edge:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nb-icon:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+/* ── NavButtons dresses (#1548) — olympus's shipped looks, translated
+      exactly from its Tailwind utilities. Defaults in @layer components;
+      state overrides unlayered AFTER the reference state rules so they win
+      the tie at higher specificity. color-mix(in oklab, …) matches Tailwind
+      v4's opacity-modifier compilation (bg-accent/20, hover:bg-ink/[0.04]).
+
+      - .nb-pager--capsule (Pager dress="capsule"): one bordered term-bg
+        capsule (9px radius, mono 12.5px tabular) with borderless chevron
+        edges — olympus PipelineDaySelector.
+      - .nb-seg-group--accent (SegmentedControl dress="accent"): sans
+        font-medium cells on a transparent track, accent/20 wash + accent
+        text on the selection — olympus PerformanceDateRange. ─────────── */
+
+@layer components {
+  .nb-pager--capsule {
+    /* shipped capsule: gap-2 px-2.5 py-1.5 border-hair rounded-[9px]
+       bg-term-bg font-mono text-[12.5px] tabular-nums */
+    gap: 0.5rem;
+    padding: 0.375rem 0.625rem;
+    border: 1px solid var(--hair);
+    border-radius: 9px;
+    background: var(--term-bg);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .nb-pager--capsule .nb-page-edge {
+    /* shipped chevrons: borderless, transparent, content-sized */
+    min-width: 0;
+    height: auto;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink-mute);
+    transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .nb-seg-group--accent .nb-seg {
+    /* shipped cells: px-3 py-1.5 sans text-xs font-medium, no fill */
+    padding: 0.375rem 0.75rem;
+    background: transparent;
+    color: var(--ink-mute);
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition:
+      color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+.nb-pager--capsule .nb-page-edge:disabled {
+  /* shipped: disabled:opacity-30, default cursor (no not-allowed) */
+  opacity: 0.3;
+  cursor: default;
+}
+
+.nb-seg-group--accent .nb-seg:hover:not([aria-pressed="true"]) {
+  /* shipped: hover:bg-ink/[0.04] hover:text-ink (unselected only) */
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+}
+
+.nb-seg-group--accent .nb-seg[aria-pressed="true"] {
+  /* shipped selection: bg-accent/20 text-accent (hover leaves it alone) */
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 20%, transparent);
+}
+
+/* ── TagsInput — chips multi-select (#1548, from
+      reference/app/controls/controls.css; the specimen's baked-in
+      margin-top moved to the consumer). Defaults in @layer components;
+      focus-within, hovers, and the chipless-input stretch (structural
+      :first-child) stay unlayered ─────────────────────────────────────── */
+
+@layer components {
+  .tg-field {
+    width: min(100%, 30rem);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--hair);
+    border-radius: 10px;
+    background: var(--surface);
+    cursor: text;
+    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  }
+
+  .tg-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.22rem 0.35rem 0.22rem 0.6rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--hair));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  .tg-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.1rem;
+    border: none;
+    background: transparent;
+    color: var(--ink-mute);
+    cursor: pointer;
+    border-radius: 999px;
+    transition: color 0.15s var(--ease);
+  }
+
+  .tg-input {
+    min-width: 7rem;
+    border: none;
+    background: transparent;
+    padding: 0.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--ink);
+    outline: none;
+  }
+
+  .tg-input::placeholder {
+    color: var(--ink-mute);
+  }
+
+  .tg-suggest-row {
+    margin-top: 0.7rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .tg-suggest-label {
+    margin-right: 0.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.56rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-mute);
+  }
+
+  .tg-suggest-chip {
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--hair);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+  }
+}
+
+.tg-field:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* the input stretches to the full row only while the field is chipless
+   (the specimen's conditional flex-1: placeholder gets full width; once
+   chips exist the input sits compact after the last one) */
+.tg-field .tg-input:first-child {
+  flex: 1 1 0%;
+}
+
+.tg-x:hover {
+  color: var(--ink);
+}
+
+.tg-suggest-chip:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
+
+/* quant dress (#1548 olympus adoption — the NAV-comparables picker in
+   components/portfolio/performance-chart-workspace.tsx): a rounded-md 11px
+   accent chip, NOT the reference pill. Translated utility-for-utility from
+   the shipped chip (gap-0.5 pl-2 pr-1 py-0.5 rounded-md text-[11px]
+   font-medium border-accent/35 bg-accent/10 text-accent; × wears p-0.5
+   rounded text-ink-soft hover:text-ink hover:bg-ink/10). Same layering
+   split: single-class default in @layer components, descendant/state rules
+   unlayered. */
+@layer components {
+  .tg-chip.tg-chip-quant {
+    gap: 0.125rem;
+    padding: 0.125rem 0.25rem 0.125rem 0.5rem;
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 0.375rem;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+}
+
+.tg-chip-quant .tg-x {
+  padding: 0.125rem;
+  border-radius: 0.25rem;
+  color: var(--ink-soft);
+}
+
+.tg-chip-quant .tg-x:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+/* ── SearchBar — glyph · input · clear/hint (#1548, from
+      reference/app/controls/controls.css + the specimen's input/clear
+      utilities; the baked-in margin-top moved to the consumer). Defaults
+      in @layer components; focus-within, hover, and the UA search-cancel
+      reset stay unlayered. The reference `/` keycap hint (.sb-hint) stays
+      in the reference's controls.css — it is consumer markup, and its
+      unlayered .kbd override depends on that sheet's import order ──────── */
+
+@layer components {
+  .ctl-search {
+    width: min(100%, 26rem);
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--hair);
+    border-radius: 10px;
+    background: var(--surface);
+    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  }
+
+  .sb-glyph {
+    display: inline-flex;
+    color: var(--ink-mute);
+  }
+
+  .sb-input {
+    flex: 1 1 0%;
+    border: none;
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--ink);
+    outline: none;
+  }
+
+  .sb-input::placeholder {
+    color: var(--ink-mute);
+  }
+
+  .sb-clear {
+    padding: 0.1rem 0.2rem;
+    border: none;
+    background: transparent;
+    color: var(--ink-mute);
+    font-size: 0.7rem;
+    cursor: pointer;
+  }
+}
+
+.ctl-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* native search UA affordance has no Tailwind utility — kept as the
+   .sb-input class's rule; the clear button replaces it */
+.sb-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.sb-clear:hover {
+  color: var(--ink);
+}
+
+/* row dress (#1548 olympus adoption — the ticker filter row inside the
+   NAV-comparables dropdown pane, performance-chart-workspace.tsx): a
+   full-width radius-less hairline-bottom row with an inset accent focus
+   ring and no leading glyph. Translated utility-for-utility from the
+   shipped input (w-full px-2.5 py-2 text-sm border-b border-hair
+   focus:ring-1 focus:ring-inset focus:ring-accent/30). Same layering
+   split: single-class default in @layer components, structural/state
+   rules unlayered. */
+@layer components {
+  .ctl-search.ctl-search-row {
+    width: 100%;
+    gap: 0;
+    padding: 0 0.625rem 0 0;
+    border: none;
+    border-bottom: 1px solid var(--hair);
+    border-radius: 0;
+    background: transparent;
+  }
+}
+
+.ctl-search-row .sb-glyph {
+  display: none;
+}
+
+.ctl-search-row .sb-input {
+  padding: 0.5rem 0.625rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.ctl-search.ctl-search-row:focus-within {
+  border-color: var(--hair);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* ── reduced motion ─────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .ctl-btn-spinner {
+    animation: none !important;
+  }
+
+  /* skeletons go static — the ink-tint placeholder stays, the sweep stops */
+  .sk::after {
+    animation: none;
+  }
+}

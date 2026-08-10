@@ -1,0 +1,102 @@
+provider: github_models
+last_checked: 2026-07-19
+source: agent-research
+
+free_tier:
+  available: true
+  tier_type: standing
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: "RETIRING: GitHub Models is being fully retired 2026-07-30 — playground, model catalog, inference API, and BYOK endpoints all shut down for everyone, including existing customers. No longer available to new customers/orgs since 2026-06-16. Brownouts (intermittent errors) scheduled 2026-07-16 and 2026-07-23. Migration path: Microsoft Foundry or GitHub Copilot."
+  signup_required: false
+  cc_required: false
+  models:
+    - name: gpt-4o-mini
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 16384
+      status: deprecated        # full platform retirement 2026-07-30
+      verified: false
+      last_verified: 2026-07-19
+      last_verified_latency_ms: 317
+      verification_error: "Error code: 401 - {'error': {'code': 'unauthorized', 'message': 'The `models` permission is required to access this endpoint', 'details': 'The `models` permission is required to access this endpoint'}}"
+    - name: gpt-4o
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 16384
+      status: deprecated        # full platform retirement 2026-07-30
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: meta-llama/Llama-3.3-70B-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 4096
+      status: deprecated        # full platform retirement 2026-07-30
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: mistral-large-2411
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 4096
+      status: deprecated        # full platform retirement 2026-07-30
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: 10              # high-tier (GPT-4o): 10 RPM; low-tier models higher
+    rpd: 50              # high-tier (GPT-4o): 50 RPD (was ~8 — corrected); low-tier higher
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: calendar_day
+
+paid_tier:
+  available: true        # pay-as-you-go launched June 1 2026; production use now allowed
+  models: []             # same catalog as free but without RPD cap; routes to Azure pricing
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: false
+  streaming: true
+  vision: true
+  embeddings: true
+  modalities: [text, image]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: litellm_probe
+  probe_prompt: "Reply with the single word: ok"
+  probe_model_alias: github-gpt4o-mini
+  github_secret_key: GITHUB_TOKEN
+
+notes: "MATERIAL CHANGE 2026-07-19: GitHub confirmed (github.blog changelog) that GitHub Models is being FULLY RETIRED 2026-07-30 — this supersedes the June billing-change note below. Timeline: 2026-06-01 pay-as-you-go launched; 2026-06-16 blocked for new customers/orgs; 2026-07-01 full retirement announced for 2026-07-30 (11 days from this check); brownouts scheduled 2026-07-16 and 2026-07-23. PROBE 2026-07-19: gpt-4o-mini returned 401 'The `models` permission is required' — root cause confirmed via GitHub Docs: API access requires a token with `models:read` scope explicitly declared (fine-grained PAT, or `permissions: { models: read }` in an Actions workflow); the default Actions GITHUB_TOKEN does NOT carry this by default (contradicts this snapshot's prior claim that GITHUB_TOKEN 'always available — no extra secret needed'). Given the 11-day runway to full retirement, recommend NOT investing in an auth fix — instead plan removal of github_models from the digithings provider roster and migrate any dependent config to another provider before 2026-07-30. Catalog was expanded to 45+ models (DeepSeek, Phi-4, AI21 Jamba) prior to the retirement announcement — now moot."

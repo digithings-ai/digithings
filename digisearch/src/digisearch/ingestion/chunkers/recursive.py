@@ -1,9 +1,14 @@
-"""RecursiveChunker - hierarchical delimiter splits. LangChain-style."""
+"""Recursive chunker with hierarchical delimiters."""
 
 from __future__ import annotations
 
+import logging
+import time
+
 from digisearch.core.models import Chunk, Document
 from digisearch.ingestion.chunkers.base import Chunker
+
+logger = logging.getLogger(__name__)
 
 
 class RecursiveChunker(Chunker):
@@ -15,7 +20,32 @@ class RecursiveChunker(Chunker):
         self._separators = ["\n\n\n", "\n\n", "\n", ". ", " ", ""]
 
     def chunk(self, doc: Document) -> list[Chunk]:
-        return self._split(doc.content, doc.id, 0)
+        start = time.perf_counter()
+        try:
+            chunks = self._split(doc.content, doc.id, 0)
+        except Exception:
+            logger.exception(
+                "recursive chunk failed",
+                extra={
+                    "operation": "chunk_recursive",
+                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                    "outcome": "error",
+                    "doc_id": doc.id,
+                },
+            )
+            raise
+        logger.info(
+            "recursive chunk done",
+            extra={
+                "operation": "chunk_recursive",
+                "duration_ms": int((time.perf_counter() - start) * 1000),
+                "outcome": "ok",
+                "doc_id": doc.id,
+                "chunk_count": len(chunks),
+                "chunk_size": self.chunk_size,
+            },
+        )
+        return chunks
 
     def _split(self, text: str, doc_id: str, chunk_index: int) -> list[Chunk]:
         if not text.strip():

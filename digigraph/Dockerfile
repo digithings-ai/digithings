@@ -1,4 +1,4 @@
-# DigiGraph – Phase 0+ (LangGraph orchestration + MCP/HTTP)
+# digigraph – Phase 0+ (LangGraph orchestration + MCP/HTTP)
 # Build from repo root: docker compose build digigraph (context: .)
 # See digigraph/ARCHITECTURE.md and root SECURITY.md. Bind to 127.0.0.1 in production.
 
@@ -20,15 +20,20 @@ COPY digibase/pyproject.toml digibase/README.md ./digibase/
 COPY digibase/src ./digibase/src
 RUN uv pip install --system -e "./digibase"
 
-# DigiKey (JWT verification middleware)
+# digikey (JWT verification middleware)
 COPY digikey/pyproject.toml digikey/README.md ./digikey/
 COPY digikey/src ./digikey/src
 RUN uv pip install --system -e "./digikey"
 
-# DigiSmith (sibling package; tracing helpers + LangSmith SDK)
+# digismith (sibling package; tracing helpers + LangSmith SDK)
 COPY digismith/pyproject.toml digismith/ARCHITECTURE.md ./digismith/
 COPY digismith/src ./digismith/src
 RUN uv pip install --system -e "./digismith[langsmith]"
+
+# digillm (sibling package; LLM client/provider abstraction — digigraph runtime dep)
+COPY digillm/pyproject.toml digillm/ARCHITECTURE.md ./digillm/
+COPY digillm/src ./digillm/src
+RUN uv pip install --system -e "./digillm"
 
 COPY digigraph/pyproject.toml ./digigraph/
 COPY digigraph/src ./digigraph/src

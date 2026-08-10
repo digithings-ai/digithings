@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from digigraph.tools.analytics import load_dataset, plot_distribution, summary_stats
 
 

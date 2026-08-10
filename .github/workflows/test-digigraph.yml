@@ -1,0 +1,50 @@
+name: "Test: digigraph"
+
+# Installs from the committed uv.lock rather than resolving fresh (#1714).
+#
+# Verified equivalent: "416 passed, 14 deselected" on develop under pip
+# (run 30503444075); the lock collects the same 416/430 with 14 deselected.
+#
+# This is the one lane where syncing the whole workspace is not just convenient
+# but necessary: digigraph does not declare digiquant at all, yet the pip lane
+# installed `digiquant[nautilus]` by hand because tests/contracts asserts on
+# digiquant's OpenAPI. `uv sync --package digigraph` would miss it, and uv
+# rejects a repeated `--package`, so the workspace-wide sync is what reproduces
+# the historical set. Adding digiquant to digigraph's own dependencies to work
+# around that would be worse — it would put a CI-only edge into a published
+# package's metadata.
+#
+# `pip install cryptography pytest-cov` dropped as redundant: digigraph[dev]
+# declares `pytest-cov>=4,<8` and cryptography arrives via digikey.
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Ruff
+        run: |
+          uv run --frozen --no-sync ruff check digigraph/src
+          uv run --frozen --no-sync ruff format --check digigraph/src
+
+      - name: Pytest
+        run: |
+          uv run --frozen --no-sync pytest tests/dg/ tests/contracts/ \
+            -m unit -v --tb=short --cov=digigraph --cov-report=term-missing
+
+      - name: OpenAPI drift check
+        env:
+          DIGISEARCH_ALLOW_STUB: "1"
+          DIGIKEY_ALLOW_EPHEMERAL_KEY: "1"
+          DIGIKEY_DATABASE_URL: "sqlite:////tmp/digikey-openapi-ci.sqlite"
+        run: uv run --frozen --no-sync python scripts/export_openapi.py --check

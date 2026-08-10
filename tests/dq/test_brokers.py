@@ -1,9 +1,8 @@
-"""Unit tests for DigiQuant broker stubs."""
+"""Unit tests for digiquant broker stubs."""
 
 from __future__ import annotations
 
 import pytest
-
 from digiquant.brokers import AlpacaAdapterStub, IBAdapterStub, QuantConnectAdapterStub
 
 

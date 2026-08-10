@@ -1,0 +1,112 @@
+name: "Test: web apps"
+
+on:
+  workflow_call:
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ./package-lock.json
+
+      # Install at the monorepo root so npm wires the @digithings/web and
+      # @digithings/design workspace symlinks, then run each app in-workspace.
+      - name: Install (root workspaces)
+        run: npm ci --no-audit --no-fund
+
+      # Canon ratchet (#1404): frontends stay on token-backed utilities —
+      # no raw palette classes, legacy vocabulary, or color literals outside
+      # the sanctioned allowlist. Playbook: frontend/digiweb/MIGRATION.md
+      - name: Frontend canon guard
+        run: python3 scripts/check_frontend_canon.py
+
+      # Shape only, no --max-age-days: the homepage imports this snapshot, so a
+      # malformed or vanity-metric-carrying one must not reach the build. Staleness
+      # deliberately does NOT fail here — a missed cron run is not a reason to redden
+      # an unrelated website PR, and the page prints the snapshot's own date.
+      - name: Repo-activity snapshot is well-formed
+        run: python3 scripts/fetch_repo_activity.py --check
+
+      - name: Lint digithings-web
+        run: npm run lint --workspace digithings-web
+
+      # digithings-web gained vitest in #1868 (2026-08-05) — chatHandoff and the CSP
+      # contract — but no lane ever ran it, so those two files could not fail. That is
+      # the same silent-pass defect as a green build with no reviewer attached, caught
+      # a day later while adding a third test file. digiquant-web has no `test`
+      # script; add the step when it gets one.
+      - name: Test digithings-web
+        run: npm run test --workspace digithings-web
+
+      # The two shared chat packages declare `"test": "vitest run"` and nothing
+      # invoked either, so ~640 test lines added by #1941 could not fail —
+      # activity-view, ChatActivities, MiniMarkdown, chat-markdown.render and
+      # chat-mermaid.client. They are separate vitest roots, so digithings-web's
+      # run above does not glob them in — 3 files there, 5 in digichat-ui, 10 in
+      # @digithings/web, all disjoint (49 was digichat's count, a different lane). This lane
+      # owns them because both packages live under frontend/digiweb and are
+      # consumed by more than one app.
+      - name: Test @digithings/web
+        run: npm run test --workspace @digithings/web
+
+      - name: Test @digithings/digichat-ui
+        run: npm run test --workspace @digithings/digichat-ui
+
+      - name: Lint digiquant-web
+        run: npm run lint --workspace digiquant-web
+
+      # Nothing in .github/workflows built, linted or type-checked the design reference
+      # until these two steps — the only `run build` calls are test-digichat.yml and
+      # test-olympus.yml. It is the surface the other frontends copy patterns from
+      # (.claude/skills/digiweb/SKILL.md routes web work through it), so a broken pattern
+      # here propagates by design, and it took ~137 commits in the month after it was
+      # scaffolded (2026-07-06) with nothing able to fail.
+      #
+      # Not "no coverage at all", which overstates it: check_frontend_canon.py already
+      # scanned this workspace for raw palette utilities, legacy vocabulary and colour
+      # literals — only its CSS class-family census skips digiweb, deliberately, since
+      # the reference is where new families are born. What was missing is a lint and a
+      # typecheck. It belongs in this lane rather than one of its own because the root
+      # `npm ci` above already wires the @digithings/design and @digithings/web symlinks
+      # it declares.
+      - name: Lint design-reference
+        run: npm run lint --workspace design-reference
+
+      # Type-checked as well as linted, because eslint-config-next does not type-check:
+      # a bad prop type or a broken import in the reference passes `eslint .` clean.
+      #
+      # Scope is wider than the step name: @digithings/web exports raw `src/index.ts`, so
+      # tsc pulls ~103 of its sources into the program. A type error in that package —
+      # which digichat and olympus work also edits — reddens this step. Extra coverage,
+      # but read the error path before assuming the reference is at fault.
+      #
+      # Run through the workspace's own `typecheck` script rather than a bare root `tsc`
+      # so cwd and tsconfig selection are unambiguous. Today both resolve the same binary
+      # (root typescript 6.0.3; only frontend/digichat nests its own, 5.9.3, for its ^5
+      # pin) — the script is what keeps that true if the reference ever nests one.
+      #
+      # No `next build` here on purpose: neither Cloudflare site builds this workspace,
+      # so a production build would be cost with no consumer. The consequence to know
+      # about is that `.next/` never exists in CI, and the TRACKED `next-env.d.ts` line 3
+      # is `import "./.next/dev/types/routes.d.ts"` — a hard side-effect import of a
+      # gitignored path. This step is green only because tsconfig sets
+      # `skipLibCheck: true`, which swallows it; with `skipLibCheck: false` it fails
+      # TS2882 on a fresh checkout (and TS2309 out of simple-icons' .d.ts, so that flag
+      # is not a one-fix change). Do not "tighten" it without regenerating or excluding
+      # next-env.d.ts, and note Next rewrites that line itself on upgrade
+      # (`next dev` writes .next/dev/types, `next build` writes .next/types).
+      # Same pair frontend/digiweb/reference/README.md documents as the local gate.
+      - name: Typecheck design-reference
+        run: npm run typecheck --workspace design-reference

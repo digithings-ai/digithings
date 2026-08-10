@@ -22,6 +22,6 @@ def append_datasets(
     df2 = load_dataset(dataset_path_second)
     try:
         df = pl.concat([df1, df2], how="diagonal")
-    except Exception as e:
+    except (pl.exceptions.PolarsError, ValueError, TypeError) as e:
         return {"error": str(e), "dataset_ref": None, "rows": 0}
     return write_result(df, session_id, output_name)

@@ -1,0 +1,40 @@
+name: "Test: digivault"
+
+# Installs from the committed uv.lock rather than resolving fresh (#1714).
+#
+# Verified equivalent: "58 passed" on develop under pip (run 30503444075) and
+# 58 passed from the lock.
+#
+# The import-cost guard below still means what it did: it asserts FastAPI is not
+# imported as a side effect of `import digivault`, which is about import-time
+# leakage, not about whether FastAPI is installed. The pip lane installed it too
+# (via `digivault[service]`), so syncing the whole workspace does not weaken it.
+# Confirmed passing from the lock.
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Ruff
+        run: |
+          uv run --frozen --no-sync ruff check digivault/src tests/dv
+          uv run --frozen --no-sync ruff format --check digivault/src tests/dv
+
+      - name: Import-cost guard (core must not pull FastAPI)
+        run: |
+          uv run --frozen --no-sync python -c \
+            "import sys, digivault; assert 'fastapi' not in sys.modules, 'core import leaked FastAPI'"
+
+      - name: Unit tests (tests/dv)
+        run: uv run --frozen --no-sync pytest tests/dv -m unit -v --tb=short

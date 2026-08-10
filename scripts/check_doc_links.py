@@ -39,6 +39,14 @@ ROOT_DOC_NAMES: frozenset[str] = frozenset(
 
 LINK_RE = re.compile(r"!?\[[^\]]*]\(([^)]+)\)")
 
+FENCE_RE = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
+
+
+def _strip_fenced_code(text: str) -> str:
+    """Remove fenced code blocks so sample markdown in plans is not link-checked."""
+    return FENCE_RE.sub("", text)
+
+
 
 def _is_excluded(rel_posix: str) -> bool:
     return any(rel_posix == p.rstrip("/") or rel_posix.startswith(p) for p in EXCLUDE_PREFIXES)
@@ -103,7 +111,7 @@ def main() -> int:
     files = _collect_markdown_files()
     errors: list[str] = []
     for md in files:
-        text = md.read_text(encoding="utf-8", errors="replace")
+        text = _strip_fenced_code(md.read_text(encoding="utf-8", errors="replace"))
         rel_md = md.relative_to(REPO_ROOT).as_posix()
         for m in LINK_RE.finditer(text):
             raw = m.group(1)

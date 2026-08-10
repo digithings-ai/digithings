@@ -1,4 +1,4 @@
-"""Structured I/O for DigiGraph (Pydantic). All outputs are Pydantic models."""
+"""Structured I/O for digigraph (Pydantic). All outputs are Pydantic models."""
 
 from __future__ import annotations
 
@@ -45,14 +45,19 @@ class ChatMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     """OpenAI POST /v1/chat/completions request."""
 
-    model_config = {"extra": "ignore"}
+    model_config = ConfigDict(extra="forbid")
 
     model: str = Field("sitaas-rag", description="Model id (ignored; we use project config)")
     messages: list[ChatMessage] = Field(..., description="Conversation messages")
     stream: bool = Field(False, description="If true, return SSE stream")
     openwebui_format: bool = Field(
         False,
-        description='If true, format tool blocks for Open WebUI (<details type="tool_calls">, summary + Input/Output). Optional; also enabled when model is sitaas-rag.',
+        description=(
+            "If true, format tool blocks for Open WebUI (<details>, summary + tables). "
+            "Also enabled by X-Response-Format: openwebui. model=sitaas-rag alone does "
+            "not enable this; opt out anytime via X-Suppress-Tool-Stream or "
+            "X-Response-Format: plain|neutral|none|digichat."
+        ),
     )
     session_id: str | None = Field(
         None,
@@ -89,26 +94,43 @@ class WorkflowRequest(BaseModel):
     )
     trading_profile: dict[str, Any] | None = Field(
         None,
-        description="Optional DigiClone profile dict (maps into optimization constraints in graph).",
+        description="Optional digiclone profile dict (maps into optimization constraints in graph).",
     )
     strategy_params: dict[str, float | int | str] | None = Field(
         None,
-        description="Optional DigiQuant strategy parameters when skipping LLM extraction.",
+        description="Optional digiquant strategy parameters when skipping LLM extraction.",
     )
     research_filters: list[dict[str, Any]] | None = Field(
         None,
-        description="Optional structured DigiSearch filters merged into every digisearch tool call.",
+        description="Optional structured digisearch filters merged into every digisearch tool call.",
     )
     digi_bearer: str | None = Field(
         None,
-        description="DigiKey-issued JWT forwarded to DigiQuant/DigiSearch as Authorization Bearer.",
+        description="digikey-issued JWT forwarded to digiquant/digisearch as Authorization Bearer.",
     )
     digi_trace_key_prefix: str | None = Field(
-        None, description="DigiKey key prefix for audit (optional)."
+        None, description="digikey key prefix for audit (optional)."
     )
     digi_trace_tenant: str | None = Field(None, description="Tenant slug for audit (optional).")
     digi_trace_project_id: str | None = Field(None, description="Project id for audit (optional).")
     digi_trace_jti: str | None = Field(None, description="JWT jti for audit (optional).")
+    digi_subject: str | None = Field(
+        None,
+        description="JWT subject for checkpoint thread scoping (set from request auth).",
+    )
+    digisearch_index: str | None = Field(
+        None,
+        title="digisearch index",
+        description="Per-request digisearch index override (X-Digi-Corpus-Index / tenant map).",
+    )
+    vault_path_prefix: str | None = Field(
+        None,
+        description="Per-request digivault path prefix (X-Digi-Vault-Prefix / tenant map).",
+    )
+    research_system_prompt_override: str | None = Field(
+        None,
+        description="Optional research system prompt from DIGI_TENANT_CORPUS_MAP.",
+    )
     evidence_tier_preference: list[str] | None = Field(
         None,
         description="Preferred evidence_tier values (peer_reviewed, working_paper, …) added as a filter.",
@@ -120,11 +142,15 @@ class WorkflowResult(BaseModel):
 
     success: bool = Field(..., description="Whether the workflow completed successfully")
     message: str = Field("", description="Human-readable summary")
+    error_code: str | None = Field(
+        default=None,
+        description="Stable machine code for digichat (e.g. free_quota_exceeded); None on success",
+    )
     backtest_result: dict | None = Field(
-        None, description="DigiQuant BacktestResult when workflow ran a backtest"
+        None, description="digiquant BacktestResult when workflow ran a backtest"
     )
     optimize_result: dict | None = Field(
-        default=None, description="DigiQuant OptimizeResult when optimize step ran"
+        default=None, description="digiquant OptimizeResult when optimize step ran"
     )
     optimize_error: str | None = Field(
         default=None, description="Error from optimize step without failing whole workflow"
@@ -133,7 +159,7 @@ class WorkflowResult(BaseModel):
         default=None, description="Structured research brief when research subgraph produced one"
     )
     rag_sources: list[dict[str, Any]] | None = Field(
-        default=None, description="Aggregated DigiSearch citations from the research step"
+        default=None, description="Aggregated digisearch citations from the research step"
     )
     profiling_questions: list[str] | None = Field(
         default=None, description="Merged profiling questions (brief + trading profile gaps)"

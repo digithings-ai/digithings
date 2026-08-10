@@ -1,23 +1,23 @@
-# ADR 0001: DigiThings Project Spec
+# ADR 0001: digithings Project Spec
 
 **Status:** proposed
 **Date:** 2026-04-18
 
 ## Context
 
-DigiThings has grown into eight components (`digigraph`, `digisearch`, `digiquant`, `digichat`, `digikey`, `digiclaw`, `digismith`, `digibase`). The first real client engagement — **SITAAS** (`projects/sitaas/`) — demonstrated a reusable pattern for composing a subset of components into a running stack:
+digithings has grown into eight components (`digigraph`, `digisearch`, `digiquant`, `digichat`, `digikey`, `digiclaw`, `digismith`, `digibase`). The first real client engagement — **SITAAS** (`projects/sitaas/`) — demonstrated a reusable pattern for composing a subset of components into a running stack:
 
 - `config.yaml` — project metadata, enabled agents, LLM mode, system prompts, run-storage path, indexes directory, MCP config, service URLs.
 - `indexes/*.yaml` — per-index schema/field mapping.
 - `.env` + `.env.example` — connection strings and secrets only.
-- `docker-compose.yml` — composes published DigiThings images, mounts `config.yaml` as `DIGI_PROJECT_CONFIG`, mounts `indexes/` into `DigiSearch`.
+- `docker-compose.yml` — composes published digithings images, mounts `config.yaml` as `DIGI_PROJECT_CONFIG`, mounts `indexes/` into `digisearch`.
 - `Makefile` — project-local conveniences (`make update`, `make build-no-cache`).
 
-SITAAS does **not** include DigiQuant. Future projects will include different subsets (e.g. Atlas: DigiGraph + DigiSearch + DigiQuant; a client RAG-only project: DigiSearch + DigiChat). Today this composition pattern is **implicit** — documented only in the SITAAS README. Without a shared spec, each new project risks diverging conventions, per-project config shapes, and deployment quirks.
+SITAAS does **not** include digiquant. Future projects will include different subsets (e.g. Atlas: digigraph + digisearch + digiquant; a client RAG-only project: digisearch + digichat). Today this composition pattern is **implicit** — documented only in the SITAAS README. Without a shared spec, each new project risks diverging conventions, per-project config shapes, and deployment quirks.
 
 ## Decision
 
-Formalize the pattern as the **DigiThings Project Spec**: a declarative manifest that fully describes a deployable composition of DigiThings components. A "project" is the unit of client engagements, internal products, and pilots.
+Formalize the pattern as the **digithings Project Spec**: a declarative manifest that fully describes a deployable composition of digithings components. A "project" is the unit of client engagements, internal products, and pilots.
 
 ### Minimum required surface
 
@@ -26,7 +26,7 @@ Formalize the pattern as the **DigiThings Project Spec**: a declarative manifest
   digiproject.yaml       # required — the manifest
   docker-compose.yml     # required — composes component images per manifest
   .env.example           # required — all env vars the project needs
-  indexes/               # optional — per-index schemas (if DigiSearch is enabled)
+  indexes/               # optional — per-index schemas (if digisearch is enabled)
   prompts/               # optional — overrideable system prompts
   Makefile               # optional — project-local convenience targets
   README.md              # required — quick-start + deployment notes
@@ -91,8 +91,8 @@ Phase 2 (future, behind a feature flag): `digi project render <manifest>` → em
 ### Component contract
 
 Every component must:
-- Accept a manifest-supplied config via a documented env var (`DIGI_PROJECT_CONFIG` for DigiGraph; equivalents for the rest — to be specified).
-- Support being disabled — a project that only needs DigiSearch should not require DigiQuant to be pulled or running.
+- Accept a manifest-supplied config via a documented env var (`DIGI_PROJECT_CONFIG` for digigraph; equivalents for the rest — to be specified).
+- Support being disabled — a project that only needs digisearch should not require digiquant to be pulled or running.
 - Publish a **stable Docker image** on a registry (currently built locally; future: GHCR).
 
 ## Consequences

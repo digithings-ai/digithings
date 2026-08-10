@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 
+from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.models import WorkflowRequest
 from digigraph.project_config import DigiProjectConfig
 
@@ -21,8 +22,12 @@ def allowed_tool_names_for_workflow(
     if req.allowed_tools is not None:
         return frozenset(t.strip() for t in req.allowed_tools if t and str(t).strip())
 
-    cfg = cfg or DigiProjectConfig.load()
-    from_cfg = cfg.get_allowed_tools()
+    if cfg is None:
+        try:
+            cfg = DigiProjectConfig.load()
+        except PROJECT_CONFIG_ERRORS:
+            cfg = None
+    from_cfg = cfg.get_allowed_tools() if cfg is not None else []
     if from_cfg:
         return frozenset(str(t).strip() for t in from_cfg if str(t).strip())
 

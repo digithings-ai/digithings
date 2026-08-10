@@ -27,6 +27,7 @@ def plot_scatter(
         return {"error": "No non-null rows for x/y", "image_path": None, "summary": {}}
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:

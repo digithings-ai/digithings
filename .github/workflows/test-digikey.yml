@@ -1,0 +1,34 @@
+name: "Test: digikey"
+
+# Installs from the committed uv.lock rather than resolving fresh, so a new
+# release of a tool cannot change what runs here without a lockfile change
+# showing up in a diff. Follows the digibase pilot (#1714).
+#
+# Verified equivalent: this lane reported "41 passed" on develop under pip
+# (run 30503444075) and 41 passed from the lock.
+#
+# `pip install cryptography` is gone, not lost: digikey/pyproject.toml declares
+# `cryptography>=42`, so the explicit install was redundant — and unpinned,
+# which is the drift this change exists to remove. The lock pins it at 49.0.0.
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --frozen fails if uv.lock is stale rather than silently re-resolving.
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Ruff
+        run: uv run --frozen --no-sync ruff check digikey/src
+
+      - name: Pytest
+        run: uv run --frozen --no-sync pytest tests/dk/ -m unit -v --tb=short

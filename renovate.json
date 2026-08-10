@@ -1,0 +1,103 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+
+  "description": [
+    "Dependency updates arrive as PRs where CI runs BEFORE merge, instead of",
+    "resolving fresh on every run. Three CI breakages in 2026-07 came from that",
+    "gap: ruff 0.16 widened its default rule selection (#1701), the same release",
+    "began formatting Markdown (#1705), and mcp 2.0 removed mcp.server.fastmcp",
+    "(#1705, #1711). Each would have been one red PR here instead of a silent",
+    "landing mid-unrelated-work.",
+
+    "branchPrefix MUST stay under chore/. Two repo gates depend on it: the",
+    "module-branch-protection ruleset requires {feat,fix,docs,chore}/<slug>, and",
+    "ci-pr-hygiene.yml's linkage check bypasses chore/* — a bot PR cannot carry a",
+    "Fixes #N. Renovate's default 'renovate/' prefix fails both gates.",
+
+    "separateMajorMinor/separateMultipleMajor put a major bump in its own PR.",
+    "ruff 0.16 arriving alone and red is the entire point; grouped with routine",
+    "patches it would have been merged on a green summary.",
+
+    "lockFileMaintenance is off because there is no lockfile yet. Enable it once",
+    "uv.lock lands, so the lock refreshes on a schedule rather than only when a",
+    "constraint changes."
+  ],
+
+  "branchPrefix": "chore/renovate-",
+  "baseBranchPatterns": ["develop"],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "labels": ["dependencies"],
+  "timezone": "America/New_York",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+
+  "separateMajorMinor": true,
+  "separateMultipleMajor": true,
+
+  "lockFileMaintenance": { "enabled": false },
+
+  "packageRules": [
+    {
+      "description": "CI-gating tooling: its OUTPUT decides whether the build is green, so these move deliberately and are never grouped with anything else. See the Dependency version bounds section in CLAUDE.md.",
+      "matchPackageNames": ["ruff", "mypy", "pytest", "pytest-cov"],
+      "groupName": "ci toolchain",
+      "separateMinorPatch": true,
+      "addLabels": ["ci-toolchain"]
+    },
+    {
+      "description": "mcp is capped below 2.0 for a KNOWN incompatibility: 2.0 removed mcp.server.fastmcp, which four packages import (digigraph, digiquant, digisearch, digivault). Raising the cap requires porting to the 2.x API, so surface it on the dashboard but never open it unattended.",
+      "matchPackageNames": ["mcp"],
+      "dependencyDashboardApproval": true,
+      "addLabels": ["needs-migration"]
+    },
+    {
+      "description": "Runtime libraries are deliberately unbounded — an upper bound in a published library propagates to every consumer. Group their non-major updates into one reviewable PR.",
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchPackageNames": ["!ruff", "!mypy", "!pytest", "!pytest-cov", "!mcp"],
+      "groupName": "python runtime deps (non-major)"
+    },
+    {
+      "description": "GitHub Actions. Several are already SHA-pinned; Renovate keeps the trailing version comment in sync. checkout@v4 and setup-python@v5 currently emit Node 20 deprecation warnings on every run.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "pinDigests": false
+    },
+    {
+      "description": "Security fixes jump the queue. prPriority is only valid on a packageRule, not inside vulnerabilityAlerts.",
+      "matchDatasources": ["pypi", "npm"],
+      "matchUpdateTypes": ["patch", "minor", "major"],
+      "isVulnerabilityAlert": true,
+      "prPriority": 10
+    },
+    {
+      "description": "Never propose changes to the intra-monorepo path dependencies; they resolve locally, not from an index.",
+      "matchPackageNames": [
+        "digibase",
+        "digiclaw",
+        "digifetch",
+        "digigraph",
+        "digikey",
+        "digillm",
+        "digiquant",
+        "digisearch",
+        "digiskills",
+        "digismith",
+        "digivault"
+      ],
+      "enabled": false
+    }
+  ],
+
+  "vulnerabilityAlerts": {
+    "description": "Security fixes bypass the weekly schedule; PR ordering is boosted by the isVulnerabilityAlert packageRule above.",
+    "labels": ["security"],
+    "schedule": ["at any time"]
+  },
+
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Dependency Dashboard"
+}

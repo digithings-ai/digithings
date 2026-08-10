@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from digigraph.cli import main as cli_main
 from digigraph.project_validate import ValidationReport, validate_project_file
 

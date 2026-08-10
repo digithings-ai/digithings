@@ -1,6 +1,6 @@
-# Contributing to DigiThings
+# Contributing to digithings
 
-Thanks for your interest in contributing to **DigiThings** (digithings.ai) — the open-core agentic stack.
+Thanks for your interest in contributing to **digithings** (digithings.ai) — the open-core agentic stack.
 
 All AI coding agents read [AGENTS.md](AGENTS.md) first. Human contributors: the rules below apply to you too.
 
@@ -20,7 +20,7 @@ All AI coding agents read [AGENTS.md](AGENTS.md) first. Human contributors: the 
 - **NautilusTrader core** — all backtest/optimize/live execution goes through Nautilus.
 - **LiteLLM with caching** — token efficiency is mandatory.
 - **Dockerized** — every component runs via the root `docker-compose.yml`.
-- **LangGraph supervisor + sub-graph** — all agent logic in DigiGraph follows this pattern.
+- **LangGraph supervisor + sub-graph** — all agent logic in digigraph follows this pattern.
 - **Security** — follow every rule in [SECURITY.md](SECURITY.md): loopback by default, least privilege, human gates before any live trade.
 - **Projects** — anything under `projects/` is confidential client/pilot work. Never push to public remotes.
 

@@ -19,7 +19,10 @@ def echarts_pie(
     if column not in df.columns:
         return {"error": f"Column {column!r} not found", "echarts_option": None, "data_summary": {}}
     counts = df[column].value_counts().head(top_n)
-    data = [{"name": str(counts[column].to_list()[i]), "value": counts["count"].to_list()[i]} for i in range(len(counts))]
+    data = [
+        {"name": str(counts[column].to_list()[i]), "value": counts["count"].to_list()[i]}
+        for i in range(len(counts))
+    ]
     if not data:
         return {"error": "No data", "echarts_option": None, "data_summary": {}}
     option = {

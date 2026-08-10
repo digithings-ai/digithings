@@ -1,4 +1,4 @@
-"""DigiGraph HTTP API. Phase 0: run_digigraph_workflow. Phase 1+: LangGraph + MCP."""
+"""digigraph HTTP API. Phase 0: run_digigraph_workflow. Phase 1+: LangGraph + MCP."""
 
 from __future__ import annotations
 
@@ -7,8 +7,10 @@ import logging
 import os
 import time
 import uuid
-from queue import Queue
-from threading import Thread
+from queue import Empty, Queue
+from threading import Event, Thread
+
+from openai import OpenAIError
 
 logger = logging.getLogger(__name__)
 
@@ -16,16 +18,21 @@ logger = logging.getLogger(__name__)
 _DEBUG_REQUEST_LOG: list[dict] = []
 _DEBUG_REQUEST_LOG_MAX = 5
 
-from fastapi import APIRouter, FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-
 from digibase.cors import install_cors, resolve_cors_origins
 from digibase.errors import json_error_response, register_fastapi_error_handlers
+from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digigraph_path_scopes
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+
+from digigraph import __version__
+from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS, STREAM_SSE_ERRORS
+from digigraph.chat_prompt import messages_to_workflow_prompt
 from digigraph.formatters import get_stream_formatter
-from digigraph.llm import chat_completion, get_model_for_mode
+from digigraph.llm_client import completion_text
+from digigraph.model_config import get_model_for_mode
 from digigraph.models import (
     ChatCompletionRequest,
     ResumeThreadRequest,
@@ -33,7 +40,35 @@ from digigraph.models import (
     WorkflowResult,
 )
 from digigraph.policy import debug_endpoints_enabled, thread_api_enabled
+from digigraph.thread_scope import (
+    assert_thread_access,
+    auth_subject_from_request,
+    resolve_client_thread_id,
+    workflow_thread_id,
+)
 from digigraph.workflow import run_digigraph_workflow, run_digigraph_workflow_streaming
+
+_LLM_PROBE_ERRORS = (
+    OpenAIError,
+    OSError,
+    RuntimeError,
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
+
+_THREAD_GRAPH_ERRORS = GRAPH_RUNTIME_ERRORS
+
+
+def _thread_error_response(e: Exception, request: Request | None = None) -> JSONResponse:
+    return json_error_response(
+        status_code=400,
+        code="thread_error",
+        message=str(e),
+        request=request,
+        service="digigraph",
+    )
 
 
 def _allowed_origins() -> list[str]:
@@ -51,19 +86,23 @@ def _allowed_origins() -> list[str]:
 
 
 app = FastAPI(
-    title="DigiGraph",
-    description="Orchestration brain: run_digigraph_workflow (DigiClaw custom skill)",
-    version="0.1.0",
+    title="digigraph",
+    description=(
+        "Orchestration brain for digithings: LangGraph workflows, OpenAI-compatible chat, "
+        "and federated vertical tools (digisearch, digiquant, digivault). "
+        "Interactive docs: `/docs` (Swagger) and `/redoc`."
+    ),
+    version=__version__,
 )
-install_metrics(app, service="digigraph")
+install_metrics(app, service="digigraph", version=__version__)
 install_cors(app, service="digigraph")
 app.add_middleware(DigiAuthMiddleware, service="digigraph", path_scopes=digigraph_path_scopes)
 
 
 @app.middleware("http")
 async def lite_llm_proxy_header_context(request: Request, call_next):
-    """Apply per-request LiteLLM Bearer from X-LiteLLM-Proxy-Key (DigiKey funnel via DigiChat)."""
-    from digigraph.llm import pop_lite_llm_proxy, push_lite_llm_proxy_header
+    """Apply per-request LiteLLM Bearer from X-LiteLLM-Proxy-Key (digikey funnel via digichat)."""
+    from digigraph.llm_auth import pop_lite_llm_proxy, push_lite_llm_proxy_header
 
     tok = push_lite_llm_proxy_header(request)
     try:
@@ -74,13 +113,45 @@ async def lite_llm_proxy_header_context(request: Request, call_next):
 
 @app.middleware("http")
 async def byok_header_context(request: Request, call_next):
-    """Apply per-request BYOK user API key from X-BYOK-Key / X-BYOK-Provider (DigiChat BYOK flow).
+    """Apply per-request BYOK user API key from X-BYOK-Key / X-BYOK-Provider (digichat BYOK flow).
 
     The key is bound to a ContextVar for the duration of the request only.
     It is never logged or persisted server-side. On each request the key
     overrides the LLM client credentials for that single execution.
     """
-    from digigraph.llm import pop_byok, push_byok_header
+    from digigraph.llm_auth import (
+        BYOK_ROUTABLE_PROVIDERS,
+        byok_model_required,
+        byok_provider_supported,
+        pop_byok,
+        push_byok_header,
+    )
+
+    if (request.headers.get("x-byok-key") or "").strip():
+        provider = (request.headers.get("x-byok-provider") or "openai").strip().lower()
+        if not byok_provider_supported(provider):
+            return json_error_response(
+                status_code=400,
+                code="byok_provider_unsupported",
+                message=(
+                    f"BYOK provider {provider!r} is not routed by digigraph, so your key "
+                    f"would not be used. Supported: {', '.join(BYOK_ROUTABLE_PROVIDERS)}."
+                ),
+                request=request,
+                service="digigraph",
+            )
+        model = (request.headers.get("x-byok-model") or "").strip()
+        if byok_model_required(provider) and not model:
+            return json_error_response(
+                status_code=400,
+                code="byok_model_required",
+                message=(
+                    f"BYOK provider {provider!r} requires X-BYOK-Model "
+                    "(e.g. openai/gpt-4o-mini, gemini/gemini-2.5-flash, claude-sonnet-4-6)."
+                ),
+                request=request,
+                service="digigraph",
+            )
 
     tok = push_byok_header(request)
     try:
@@ -138,23 +209,17 @@ async def rate_limit(request: Request, call_next):
     return await call_next(request)
 
 
-@app.middleware("http")
-async def correlation_id(request: Request, call_next):
-    """Propagate X-Request-ID header; generate one if absent; expose on request.state."""
-    req_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
-    request.state.request_id = req_id
-    response = await call_next(request)
-    response.headers["X-Request-ID"] = req_id
-    return response
+install_request_id_middleware(app)
+install_request_id_logging()
 
 
-# OpenAI-compatible API (expose DigiGraph as a model in Open WebUI)
+# OpenAI-compatible API (expose digigraph as a model in Open WebUI)
 v1 = APIRouter(prefix="/v1", tags=["openai-compatible"])
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Legacy health check for Docker and DigiClaw (kept for back-compat)."""
+    """Legacy health check for Docker and digiclaw (kept for back-compat)."""
     return {"status": "ok", "service": "digigraph"}
 
 
@@ -163,30 +228,57 @@ def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
     Contract: returns HTTP 200 with ``{"ok": true}``. Intended for load
-    balancers and k8s probes. For richer diagnostics, see DigiSmith's
+    balancers and k8s probes. For richer diagnostics, see digismith's
     ``/v1/status``.
     """
     return {"ok": True}
 
 
 def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
+    from digigraph.corpus_routing import resolve_corpus_override
+
     bearer = getattr(http_request.state, "digi_bearer", None)
     auth = getattr(http_request.state, "digi_auth", None)
     updates: dict[str, str | None] = {"digi_bearer": bearer}
+    tenant_from_auth: str | None = None
     if auth is not None:
+        if auth.subject:
+            updates["digi_subject"] = auth.subject
         if auth.key_prefix:
             updates["digi_trace_key_prefix"] = auth.key_prefix
         if auth.tenant_slug:
             updates["digi_trace_tenant"] = auth.tenant_slug
+            tenant_from_auth = auth.tenant_slug
         if auth.project_id:
             updates["digi_trace_project_id"] = auth.project_id
         if auth.jti:
             updates["digi_trace_jti"] = auth.jti
+    corpus = resolve_corpus_override(
+        headers=http_request.headers,
+        tenant_slug=tenant_from_auth,
+    )
+    if corpus.digisearch_index:
+        updates["digisearch_index"] = corpus.digisearch_index
+    if corpus.vault_path_prefix:
+        updates["vault_path_prefix"] = corpus.vault_path_prefix
+    if corpus.research_system_prompt:
+        updates["research_system_prompt_override"] = corpus.research_system_prompt
     return updates
 
 
 def _with_digi_request_context(http_request: Request, req: WorkflowRequest) -> WorkflowRequest:
-    return req.model_copy(update=_digi_fields_from_request(http_request))
+    updates = _digi_fields_from_request(http_request)
+    subject = updates.get("digi_subject")
+    if subject:
+        updates["session_id"] = workflow_thread_id(subject, req.session_id)
+    return req.model_copy(update=updates)
+
+
+def _thread_config(http_request: Request, thread_id: str) -> dict:
+    subject = auth_subject_from_request(http_request)
+    scoped = resolve_client_thread_id(subject, thread_id)
+    assert_thread_access(subject, scoped)
+    return {"configurable": {"thread_id": scoped}}
 
 
 @v1.get("/debug/input_messages")
@@ -234,17 +326,17 @@ def serve_file(path: str):
 @app.get("/test_llm")
 def test_llm() -> dict[str, str | bool]:
     """
-    Test DigiGraph → LiteLLM → Ollama (or configured provider).
+    Test digigraph → LiteLLM → Ollama (or configured provider).
     Same code path as workflow research node; no backtest.
     """
     try:
         model = get_model_for_mode()
-        reply = chat_completion(
+        reply = completion_text(
             model,
             [{"role": "user", "content": "Reply with exactly: OK"}],
         )
         return {"ok": True, "model": model, "reply": reply or "(empty)"}
-    except Exception as e:  # noqa: BLE001
+    except _LLM_PROBE_ERRORS as e:
         return {"ok": False, "model": "", "reply": "", "error": str(e)}
 
 
@@ -257,11 +349,16 @@ def _resolve_request_id(request: Request) -> str | None:
     return h or None
 
 
-@app.post("/workflow", response_model=WorkflowResult, operation_id="run_digigraph_workflow")
+@app.post(
+    "/workflow",
+    response_model=WorkflowResult,
+    operation_id="run_digigraph_workflow",
+    summary="Run digigraph workflow",
+)
 def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> WorkflowResult:
     """
-    DigiClaw custom skill: run_digigraph_workflow.
-    Phase 0: user idea → backtest via DigiQuant → result in < 10s.
+    digiclaw custom skill: run_digigraph_workflow.
+    Phase 0: user idea → backtest via digiquant → result in < 10s.
     """
     rid = _resolve_request_id(http_request)
     if rid and not (req.request_id and str(req.request_id).strip()):
@@ -292,7 +389,7 @@ def _safe_state_values(values: dict | None) -> dict:
 
 
 @app.get("/threads/{thread_id}/state")
-def get_thread_state(thread_id: str, checkpoint_id: str | None = None):
+def get_thread_state(http_request: Request, thread_id: str, checkpoint_id: str | None = None):
     """
     Return current (or specified) checkpoint state for a thread.
     Requires a checkpointer (default: memory when DIGI_CHECKPOINTER unset). Returns stored_datasets, research_response, error, etc.
@@ -300,13 +397,13 @@ def get_thread_state(thread_id: str, checkpoint_id: str | None = None):
     from digigraph.graph import build_workflow_graph
 
     graph = build_workflow_graph()
-    config: dict = {"configurable": {"thread_id": thread_id}}
+    config: dict = _thread_config(http_request, thread_id)
     if checkpoint_id:
         config["configurable"]["checkpoint_id"] = checkpoint_id
     try:
         snapshot = graph.get_state(config)
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"detail": str(e)})
+    except _THREAD_GRAPH_ERRORS as e:
+        return _thread_error_response(e, http_request)
     if snapshot is None:
         return {"thread_id": thread_id, "values": {}, "next": ()}
     values = getattr(snapshot, "values", None) or {}
@@ -319,7 +416,7 @@ def get_thread_state(thread_id: str, checkpoint_id: str | None = None):
 
 
 @app.get("/threads/{thread_id}/history")
-def get_thread_history(thread_id: str):
+def get_thread_history(http_request: Request, thread_id: str):
     """
     Return checkpoint history for a thread (debug). Most recent first.
     Requires a checkpointer. Each entry is a safe subset of state values.
@@ -327,11 +424,11 @@ def get_thread_history(thread_id: str):
     from digigraph.graph import build_workflow_graph
 
     graph = build_workflow_graph()
-    config = {"configurable": {"thread_id": thread_id}}
+    config = _thread_config(http_request, thread_id)
     try:
         history = list(graph.get_state_history(config))
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"detail": str(e)})
+    except _THREAD_GRAPH_ERRORS as e:
+        return _thread_error_response(e, http_request)
     out = []
     for snapshot in history:
         out.append(
@@ -348,7 +445,7 @@ def get_thread_history(thread_id: str):
 
 
 @app.post("/threads/{thread_id}/resume")
-def resume_thread(thread_id: str, body: ResumeThreadRequest | None = None):
+def resume_thread(http_request: Request, thread_id: str, body: ResumeThreadRequest | None = None):
     """
     Resume a thread that was interrupted (e.g. after research when DIGI_INTERRUPT_AFTER_RESEARCH=1).
     Optional body: {"resume": <value>} passed to LangGraph Command(resume=...). Same graph config required.
@@ -356,7 +453,7 @@ def resume_thread(thread_id: str, body: ResumeThreadRequest | None = None):
     from digigraph.graph import build_workflow_graph
 
     graph = build_workflow_graph()
-    config = {"configurable": {"thread_id": thread_id}}
+    config = _thread_config(http_request, thread_id)
     resume_value = body.resume if body is not None else None
     try:
         if resume_value is not None:
@@ -368,8 +465,8 @@ def resume_thread(thread_id: str, body: ResumeThreadRequest | None = None):
                 result = graph.invoke(None, config=config)
         else:
             result = graph.invoke(None, config=config)
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"detail": str(e)})
+    except _THREAD_GRAPH_ERRORS as e:
+        return _thread_error_response(e, http_request)
     return {"thread_id": thread_id, "values": _safe_state_values(result)}
 
 
@@ -379,7 +476,7 @@ def resume_thread(thread_id: str, body: ResumeThreadRequest | None = None):
 @v1.get("/model-info")
 def model_info() -> dict:
     """Return the LLM model used for Sitaas RAG completions. Use to validate config."""
-    from digigraph.llm import get_model_for_mode
+    from digigraph.model_config import get_model_for_mode
 
     mode = os.environ.get("DIGI_LLM_MODE", "test")
     try:
@@ -387,7 +484,7 @@ def model_info() -> dict:
 
         cfg = DigiProjectConfig.load()
         mode = cfg.get_llm_mode() or mode
-    except Exception:
+    except PROJECT_CONFIG_ERRORS:
         pass
     model = get_model_for_mode()
     return {"model": model, "mode": mode, "base_url": os.environ.get("OPENAI_API_BASE", "")}
@@ -405,7 +502,7 @@ def status() -> dict:
 
     try:
         cfg = DigiProjectConfig.load()
-    except Exception:  # noqa: BLE001
+    except PROJECT_CONFIG_ERRORS:
         cfg = DigiProjectConfig({})
     project = cfg.project or {}
     return {
@@ -467,6 +564,7 @@ def _sse_chunk(
     finish_reason: str | None = None,
     reasoning_content: str | None = None,
     digigraph_trace: dict | None = None,
+    digigraph_error: dict | None = None,
 ) -> str:
     """One SSE data line for chat.completion.chunk. Optionally include reasoning_content or digigraph_trace in delta."""
     delta: dict = {}
@@ -476,8 +574,15 @@ def _sse_chunk(
         delta["reasoning_content"] = reasoning_content
     if digigraph_trace is not None:
         delta["digigraph_trace"] = digigraph_trace
+    if digigraph_error is not None:
+        delta["digigraph_error"] = digigraph_error
     if finish_reason is not None:
-        if not content and not reasoning_content and digigraph_trace is None:
+        if (
+            not content
+            and not reasoning_content
+            and digigraph_trace is None
+            and digigraph_error is None
+        ):
             delta = {}
     return json.dumps(
         {
@@ -511,6 +616,7 @@ def _stream_completions_progressive(
     allowed_tools: list[str] | None = None,
     request_id: str | None = None,
     workflow_extras: dict | None = None,
+    suppress_tool_stream: bool = False,
 ):
     """
     Generator: run workflow in thread, consume queue, yield SSE deltas.
@@ -518,7 +624,8 @@ def _stream_completions_progressive(
     session_id isolates digistore and checkpoint state per conversation when provided by the client.
     """
     formatter = get_stream_formatter(openwebui_format)
-    event_queue: Queue = Queue()
+    event_queue: Queue = Queue(maxsize=256)
+    cancel_event = Event()
     wf_kw: dict = {
         "prompt": prompt,
         "session_id": session_id,
@@ -528,8 +635,11 @@ def _stream_completions_progressive(
     if workflow_extras:
         wf_kw.update(workflow_extras)
     workflow_req = WorkflowRequest(**wf_kw)
-    thread = Thread(target=run_digigraph_workflow_streaming, args=(workflow_req, event_queue))
-    thread.start()
+    worker = Thread(
+        target=run_digigraph_workflow_streaming,
+        args=(workflow_req, event_queue, cancel_event),
+    )
+    worker.start()
 
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
@@ -549,22 +659,37 @@ def _stream_completions_progressive(
 
     try:
         while True:
-            ev = event_queue.get()
+            if cancel_event.is_set():
+                break
+            try:
+                ev = event_queue.get(timeout=0.5)
+            except Empty:
+                continue
             event_type = ev[0]
             data = ev[1] if len(ev) > 1 else None
 
             if event_type == "done":
-                thinking_block = flush_reasoning_as_thinking()
-                if thinking_block:
-                    yield f"data: {_sse_chunk(cid, created, model, thinking_block, None)}\n\n"
+                if not suppress_tool_stream:
+                    thinking_block = flush_reasoning_as_thinking()
+                    if thinking_block:
+                        yield f"data: {_sse_chunk(cid, created, model, thinking_block, None)}\n\n"
+                else:
+                    reasoning_buffer.clear()
                 break
             if event_type == "tool_call":
                 pending_tool_calls.append(data or {})
             elif event_type == "tool_result":
-                call_data = pending_tool_calls.pop(0) if pending_tool_calls else {}
-                content = formatter.format_tool_call_with_result(call_data, data or {})
-                yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
+                if not suppress_tool_stream:
+                    call_data = pending_tool_calls.pop(0) if pending_tool_calls else {}
+                    content = formatter.format_tool_call_with_result(call_data, data or {})
+                    yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
+                elif pending_tool_calls:
+                    pending_tool_calls.pop(0)
             elif event_type == "reasoning":
+                # digichat (and other non–Open WebUI clients) get activity via
+                # digigraph_trace; never inject Open WebUI <thinking> chrome.
+                if suppress_tool_stream:
+                    continue
                 if isinstance(data, str):
                     raw = data
                 elif isinstance(data, dict):
@@ -579,10 +704,17 @@ def _stream_completions_progressive(
                     yield (
                         f"data: {_sse_chunk(cid, created, model, '', None, digigraph_trace=data)}\n\n"
                     )
+            elif event_type == "error":
+                # Typed digichat contract (free_quota_exceeded / rate_limit) in delta.digigraph_error.
+                if isinstance(data, dict) and data.get("code"):
+                    yield (
+                        f"data: {_sse_chunk(cid, created, model, '', None, digigraph_error=data)}\n\n"
+                    )
             elif event_type == "content":
-                thinking_block = flush_reasoning_as_thinking()
-                if thinking_block:
-                    yield f"data: {_sse_chunk(cid, created, model, thinking_block, None)}\n\n"
+                if not suppress_tool_stream:
+                    thinking_block = flush_reasoning_as_thinking()
+                    if thinking_block:
+                        yield f"data: {_sse_chunk(cid, created, model, thinking_block, None)}\n\n"
                 raw = (
                     data
                     if isinstance(data, str)
@@ -591,22 +723,51 @@ def _stream_completions_progressive(
                 content = (raw or "").replace("<", "&lt;").replace(">", "&gt;")
                 if content:
                     yield f"data: {_sse_chunk(cid, created, model, content, None)}\n\n"
-    except Exception as e:
+    except GeneratorExit:
+        cancel_event.set()
+        raise
+    except STREAM_SSE_ERRORS as e:
         logger.exception("stream_completions error")
         yield f"data: {_sse_chunk(cid, created, model, f'Error: {e!s}', None)}\n\n"
+    finally:
+        cancel_event.set()
 
     yield f"data: {_sse_chunk(cid, created, model, '', 'stop')}\n\n"
     yield "data: [DONE]\n\n"
 
 
+def _resolve_suppress_tool_stream(request: Request) -> bool:
+    """True when client wants tool-call markup omitted from SSE content (activity via digigraph_trace)."""
+    header = (request.headers.get("X-Suppress-Tool-Stream") or "").strip().lower()
+    return header in ("1", "true", "yes")
+
+
 def _resolve_openwebui_format(req: ChatCompletionRequest, request: Request) -> bool:
-    """True when client requests Open WebUI format: header X-Response-Format: openwebui, or openwebui_format=true, or model=sitaas-rag."""
-    if getattr(req, "openwebui_format", False):
-        return True
-    if (getattr(req, "model", "") or "").strip().lower() == "sitaas-rag":
-        return True
+    """True only when the client explicitly requests Open WebUI format.
+
+    ``model=sitaas-rag`` alone does **not** enable ``<details>`` tool chrome
+    (that id is the OpenAI-compat discovery name shared by digichat and Open WebUI).
+    ``<thinking>`` chrome is separate: it is suppressed only by
+    ``X-Suppress-Tool-Stream``, not by this flag.
+
+    Enable with either:
+
+    - ``X-Response-Format: openwebui``
+    - ``openwebui_format=true`` in the JSON body
+
+    Opt-outs still force off even if the body asks for Open WebUI:
+
+    - ``X-Suppress-Tool-Stream: 1`` (digichat trace stream)
+    - ``X-Response-Format: plain|neutral|none|digichat``
+    """
+    if _resolve_suppress_tool_stream(request):
+        return False
     header = (request.headers.get("X-Response-Format") or "").strip().lower()
-    return header == "openwebui"
+    if header in ("plain", "neutral", "none", "digichat"):
+        return False
+    if header == "openwebui":
+        return True
+    return bool(getattr(req, "openwebui_format", False))
 
 
 def _resolve_allowed_tools_chat(req: ChatCompletionRequest, request: Request) -> list[str] | None:
@@ -668,20 +829,23 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
     OpenAI-compatible chat completions. Runs RAG workflow (LLM + search) and returns
     the response as a chat message. Use as a model in Open WebUI.
     When stream=true: progressive SSE with tool-call blocks then final answer.
-    To get Open WebUI–style tool blocks (<details>, markdown tables), send header X-Response-Format: openwebui (or openwebui_format=true, or model=sitaas-rag).
+    To get Open WebUI–style tool blocks (<details>, markdown tables), send header
+    X-Response-Format: openwebui or body openwebui_format=true. model=sitaas-rag alone
+    does not enable that chrome. digichat sends X-Suppress-Tool-Stream /
+    X-Response-Format: plain as belt-and-suspenders; activity arrives via digigraph_trace.
     """
     if not req.messages:
         content = "No messages provided."
         prompt = ""
     else:
-        user_parts: list[str] = []
-        for m in req.messages:
-            if m.role == "user" and m.content:
-                user_parts.append(m.content)
-        prompt = "\n\n".join(user_parts) if user_parts else req.messages[-1].content or ""
+        prompt = messages_to_workflow_prompt(req.messages)
 
     session_id = _resolve_session_id(req, request)
+    subject = auth_subject_from_request(request)
+    if subject:
+        session_id = workflow_thread_id(subject, session_id)
     allowed_tools = _resolve_allowed_tools_chat(req, request)
+    suppress_tool_stream = _resolve_suppress_tool_stream(request)
     openwebui_format = _resolve_openwebui_format(req, request)
     request_id = _resolve_request_id(request)
 
@@ -710,6 +874,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
                 allowed_tools=allowed_tools,
                 request_id=request_id,
                 workflow_extras=wf_extras,
+                suppress_tool_stream=suppress_tool_stream,
             ),
             media_type="text/event-stream",
             headers={
@@ -730,6 +895,21 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
             request_id=request_id,
         )
         result = run_digigraph_workflow(_with_digi_request_context(request, wf))
+        if not result.success and result.error_code in ("free_quota_exceeded", "rate_limit"):
+            from digigraph.llm_errors import FREE_QUOTA_EXCEEDED
+
+            status = 429
+            return json_error_response(
+                status_code=status,
+                code=result.error_code,
+                message=result.message,
+                request=request,
+                service="digigraph",
+                headers={
+                    "X-Digigraph-Error-Code": result.error_code,
+                    **({"Retry-After": "60"} if result.error_code == FREE_QUOTA_EXCEEDED else {}),
+                },
+            )
         content = result.message if result.success else f"Error: {result.message}"
     completion = _build_completion(req, content, prompt)
     return completion
