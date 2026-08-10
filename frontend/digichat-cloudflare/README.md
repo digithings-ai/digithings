@@ -24,22 +24,26 @@ Future chats = new Pages route under `/chat/<slug>` + a row in
 Browser
   → digithings.ai/chat[/occ]     (Pages)
        → iframe digithings.ai/embed?host=…   (Worker → one DigiChat Container)
-            → DIGIGRAPH_INTERNAL_URL         (Profile A / stack elsewhere)
+            → DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
+            → DIGIKEY_URL=https://key.digithings.ai
 ```
 
-## What is NOT in the Container
+## What is NOT in the digichat Container
 
-digigraph, digikey, LiteLLM, digivault, digisearch stay on a Compose / Profile A
-host (or another reachable URL). Set `DIGIGRAPH_INTERNAL_URL` (and digikey BFF
-vars) on the Container so digichat can call them. The Container replaces
-**operator digichat Node + Tunnel hostname**, not the whole stack.
+digigraph, digikey, LiteLLM, digivault, digisearch run in the **sibling** Profile A
+stack Container — [`../digithings-stack-cloudflare/`](../digithings-stack-cloudflare/README.md).
+Set digichat secrets `DIGIGRAPH_INTERNAL_URL` / `DIGIKEY_URL` to those stable
+hostnames (not Mac Compose, not `*.trycloudflare.com` quick tunnels).
+
+Mac Compose remains **dev-only** — see
+[`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
 
 ## Prerequisites
 
 - Docker running locally (for `wrangler deploy` image build)
 - Cloudflare account with **Workers Paid**
 - `npx wrangler login` (digithings CF account — same zone as digithings.ai)
-- Reachable digigraph stack URL for `DIGIGRAPH_INTERNAL_URL`
+- Profile A stack deployed (or reachable digigraph/digikey URLs for bring-up)
 
 ## Deploy
 
@@ -51,8 +55,8 @@ npm install
 
 npx wrangler secret put AUTH_SECRET
 npx wrangler secret put DIGICHAT_EMBED_TENANTS
-npx wrangler secret put DIGIGRAPH_INTERNAL_URL
-npx wrangler secret put DIGIKEY_URL
+npx wrangler secret put DIGIGRAPH_INTERNAL_URL   # https://graph.digithings.ai
+npx wrangler secret put DIGIKEY_URL              # https://key.digithings.ai
 npx wrangler secret put DIGIKEY_BFF_TOKEN
 
 npx wrangler deploy

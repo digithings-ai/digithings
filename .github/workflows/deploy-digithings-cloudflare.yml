@@ -156,6 +156,10 @@ on:
       # given above about #1702/#1708/#1712: the path is younger than the claim. Content
       # stability is the evidence, and `git log --follow` is not — it walks back to
       # 2026-04-27, before this app existed.
+      # digithings-stack-cloudflare is an install-input workspace (CF Profile A
+      # Containers Worker). Pages does not build it; name the manifest so it is
+      # not an orphan under tests/scripts/test_deploy_build_inputs.py.
+      - "frontend/digithings-stack-cloudflare/package.json"
       - "frontend/digiweb/reference/package.json"
   workflow_dispatch:
 
