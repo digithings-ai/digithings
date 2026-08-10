@@ -198,7 +198,12 @@ export function ChatPanel({
           if (byokKey) {
             h.set("X-BYOK-Key", byokKey);
             h.set("X-BYOK-Provider", byokProvider);
-            if (byokProvider === "openrouter" && byokModel.trim()) {
+            if (
+              (byokProvider === "openrouter" ||
+                byokProvider === "anthropic" ||
+                byokProvider === "gemini") &&
+              byokModel.trim()
+            ) {
               h.set("X-BYOK-Model", byokModel.trim());
             }
           }

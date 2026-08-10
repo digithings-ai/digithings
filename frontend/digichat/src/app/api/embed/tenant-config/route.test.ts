@@ -124,6 +124,7 @@ describe("GET /api/embed/tenant-config", () => {
           showByok: true,
           showStatusBar: true,
           layout: "page",
+          llmAccess: "free_then_byok",
           activityDetail: "full",
           token: "t",
         },
@@ -139,5 +140,6 @@ describe("GET /api/embed/tenant-config", () => {
     expect(body.showByok).toBe(true);
     expect(body.showStatusBar).toBe(true);
     expect(body.layout).toBe("page");
+    expect(body.llmAccess).toBe("free_then_byok");
   });
 });

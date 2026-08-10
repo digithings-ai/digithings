@@ -196,12 +196,16 @@ export async function POST(req: Request) {
     }) as Omit<UIMessage, "id">[]
   );
 
-  // OpenRouter BYOK requires a model slug before forwarding to digigraph.
-  if (byokKey && byokProvider === "openrouter" && !byokModel) {
+  // Non-OpenAI BYOK requires a model slug before forwarding to digigraph.
+  const byokNeedsModel =
+    byokProvider === "openrouter" ||
+    byokProvider === "anthropic" ||
+    byokProvider === "gemini";
+  if (byokKey && byokNeedsModel && !byokModel) {
     return new Response(
       JSON.stringify({
         error: "byok_model_required",
-        message: "OpenRouter BYOK requires X-BYOK-Model (e.g. openai/gpt-4o-mini).",
+        message: `${byokProvider} BYOK requires X-BYOK-Model (e.g. openai/gpt-4o-mini, claude-…, gemini/…).`,
       }),
       { status: 400, headers: { "content-type": "application/json" } }
     );
@@ -248,7 +252,7 @@ export async function POST(req: Request) {
     if (byokProvider) {
       upstreamHeaders["X-BYOK-Provider"] = byokProvider;
     }
-    if (byokProvider === "openrouter" && byokModel) {
+    if (byokNeedsModel && byokModel) {
       upstreamHeaders["X-BYOK-Model"] = byokModel;
     }
   }

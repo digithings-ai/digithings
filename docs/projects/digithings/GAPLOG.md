@@ -30,6 +30,7 @@ Plan questionnaire: Stage 8 of
 | 2026-08-10 | digichat | Local `:3005` healthy but `.env.local` points at Foundry/DataTap, not digigraph dogfood tenant | Use digithings operator embed config or retarget local tenant |
 | 2026-08-10 | Dual-sink parity | Vault FS + digisearch index populated locally; production digithings.ai still on legacy Supabase corpus until sync | Run sync + redeploy smoke on `/chat` |
 | 2026-08-10 | Showcase | Added `SHOWCASE.md` + `digiproject.yaml` / `config/dogfood-digiproject.yaml` for self-aware chat | Re-ingest on operator after merge |
+| 2026-08-10 | Free→BYOK | digichat embed `llmAccess: free_then_byok` + in-chat BYOK on `free_quota_exceeded` (ungated digithings.ai). digigraph typed error + Gemini/Anthropic BYOK spend owned by sibling PR. | Wire dogfood tenant env `llmAccess` + confirm digigraph returns `free_quota_exceeded` |
 
 ## Legacy retirement tracker
 

@@ -13,7 +13,11 @@
 
 import { isFirstPartyEmbedHost } from "@/lib/embed-first-party";
 import { getTenantSuggestionPool } from "@/lib/embed-suggestion-pools";
-import { resolveEmbedTenantByHost, type EmbedTenantConfig } from "@/lib/embed-tenants";
+import {
+  resolveEmbedTenantByHost,
+  type EmbedLlmAccess,
+  type EmbedTenantConfig,
+} from "@/lib/embed-tenants";
 
 export type EmbedTenantClientConfig = {
   slug: string;
@@ -29,6 +33,7 @@ export type EmbedTenantClientConfig = {
   showByok?: boolean;
   showStatusBar?: boolean;
   layout?: "page" | "embed";
+  llmAccess?: EmbedLlmAccess;
 };
 
 /** Legacy defaults — deliberately the *gated* configuration, so a slow or
@@ -61,6 +66,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     showByok: cfg.showByok ?? false,
     showStatusBar: cfg.showStatusBar ?? false,
     layout: cfg.layout ?? "embed",
+    llmAccess: cfg.llmAccess,
   };
 }
 

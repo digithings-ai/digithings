@@ -22,9 +22,16 @@ import {
   useBYOKKey,
   validateBYOKKey,
   validateBYOKModel,
+  byokRequiresModel,
+  byokModelPlaceholder,
+  BYOK_PROVIDER_LIST,
   type BYOKProvider,
 } from "@/hooks/use-byok-key";
 import { readEmbedConversationId, useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
+import {
+  parseEmbedChatError,
+  shouldSuggestByokOnEmbedError,
+} from "@/lib/embed-chat-error";
 import {
   emit,
   readTrialUnlocked,
@@ -193,13 +200,21 @@ function EmbedChat({
   host?: string;
   uiParams: EmbedUiParams;
 }) {
-  const { key: byokKey, provider: byokProvider, model: byokModel, isSet: byokIsSet } =
-    useBYOKKey();
+  const {
+    key: byokKey,
+    provider: byokProvider,
+    model: byokModel,
+    isSet: byokIsSet,
+    setKey: setByokKey,
+  } = useBYOKKey();
   const ungated = tenantCfg.gateMode === "ungated";
   const isTrialForm = tenantCfg.gateMode === "trial_form";
+  const llmAccess = tenantCfg.llmAccess;
   const uiFlags = resolveEmbedUiFlags(tenantCfg);
   // trial_form still hides BYOK until parent unlock — product rule for DataTap only
-  const showByok = isTrialForm ? false : uiFlags.showByok;
+  // backend_only never shows BYOK even if misconfigured showByok
+  const showByok =
+    isTrialForm || llmAccess === "backend_only" ? false : uiFlags.showByok;
 
   // Mirrors useEmbedGate's own host resolution (resolveEmbedHost(host)) so the
   // persisted trial-unlock flag is keyed identically to the persisted turn
@@ -233,6 +248,12 @@ function EmbedChat({
   }, []);
 
   const [serverGated, setServerGated] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [quotaPrompt, setQuotaPrompt] = useState(false);
+  /** After BYOK save following a free-quota error, regenerate with X-BYOK-* headers. */
+  const pendingByokRetryRef = useRef(false);
+  /** Dedupes quota→BYOK open for the same AI SDK error instance/message. */
+  const handledQuotaErrorRef = useRef<string | null>(null);
 
   const gate = useEmbedGate(
     byokIsSet || ungated || trialUnlocked,
@@ -300,6 +321,69 @@ function EmbedChat({
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
   });
+
+  // Free-tier / rate-limit → stop turn + open in-chat BYOK (free_then_byok, even when ungated).
+  useEffect(() => {
+    if (!chat.rawError || byokIsSet) return;
+    const errKey = chat.rawError.message;
+    if (handledQuotaErrorRef.current === errKey) return;
+    const parsed = parseEmbedChatError(chat.rawError);
+    if (
+      !shouldSuggestByokOnEmbedError({
+        llmAccess,
+        showByok,
+        gateMode: tenantCfg.gateMode,
+        errorCode: parsed?.code,
+      })
+    ) {
+      return;
+    }
+    handledQuotaErrorRef.current = errKey;
+    void chat.stop?.();
+    setQuotaPrompt(true);
+    pendingByokRetryRef.current = true;
+    setSettingsOpen(true);
+  }, [chat.rawError, byokIsSet, llmAccess, showByok, tenantCfg.gateMode, chat]);
+
+  // After BYOK save, transport rebuilds with X-BYOK-* — retry the failed turn
+  // or release a question held at the gate / byok_only prompt.
+  useEffect(() => {
+    if (!byokIsSet || chat.busy) return;
+    const held = heldQuestionRef.current;
+    if (pendingByokRetryRef.current) {
+      pendingByokRetryRef.current = false;
+      setQuotaPrompt(false);
+      setSettingsOpen(false);
+      if (held) {
+        heldQuestionRef.current = null;
+        void chat.send(held);
+        if (!ungated) gate.increment();
+        return;
+      }
+      chat.onRetry?.();
+      return;
+    }
+    if (held && !gate.locked) {
+      heldQuestionRef.current = null;
+      void chat.send(held);
+      if (!ungated) gate.increment();
+    }
+  }, [byokIsSet, byokKey, byokProvider, byokModel, chat.busy, chat.onRetry, chat.send, ungated, gate]);
+
+  const openSettings = useCallback(() => {
+    setQuotaPrompt(false);
+    setSettingsOpen(true);
+  }, []);
+
+  const onByokSaved = useCallback(
+    (key: string, provider: BYOKProvider, model: string) => {
+      setByokKey(key, provider, model);
+      emit("embed_byok_saved", { provider });
+      setSettingsOpen(false);
+      // Retry effect runs once byokIsSet flips (pendingByokRetryRef may already be set).
+    },
+    [setByokKey],
+  );
 
   const [seedApplied, setSeedApplied] = useState(false);
   const [hideIntroForSeed, setHideIntroForSeed] = useState(false);
@@ -459,6 +543,13 @@ function EmbedChat({
 
   const wrappedSend = useCallback(
     (question: string) => {
+      // byok_only: require a key before any send
+      if (llmAccess === "byok_only" && !byokIsSet) {
+        heldQuestionRef.current = question;
+        pendingByokRetryRef.current = true;
+        setSettingsOpen(true);
+        return;
+      }
       // Out of free turns: HOLD the question and raise the form. Dropping it
       // on the floor (what this did) meant the visitor's fourth question just
       // vanished — they had typed it, pressed send, and got nothing back.
@@ -476,7 +567,7 @@ function EmbedChat({
       });
       if (!ungated) gate.increment();
     },
-    [chat, gate, trialLocked, ungated, accent, byokIsSet],
+    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess],
   );
 
   /* At most one credit, and the footer wins — see resolveAttributionPlacement. */
@@ -532,12 +623,17 @@ function EmbedChat({
       showStatusBar={uiFlags.showStatusBar}
       layout={uiFlags.layout}
       chat={{
-        ...chat,
-        send: wrappedSend,
+        messages: chat.messages,
+        busy: chat.busy,
         // While the trial overlay path is active, the formReplacement notice is
         // the warning (with "the trial form" + Retry). Hiding the raw trial_gate
         // string avoids a duplicate banner whose Retry only regenerated a 402.
         error: trialLocked ? null : chat.error,
+        quotaPrompt: showByok && quotaPrompt && !byokIsSet,
+        providerIsSet: byokIsSet,
+        openSettings: showByok ? openSettings : undefined,
+        send: wrappedSend,
+        stop: chat.stop,
         onRetry:
           isTrialForm &&
           !trialLocked &&
@@ -547,15 +643,28 @@ function EmbedChat({
       }}
       headerSlot={headerSlot}
       footerSlot={footerSlot}
+      settingsPanel={
+        showByok && settingsOpen ? (
+          <EmbedByokPanel
+            onSave={onByokSaved}
+            onClose={() => setSettingsOpen(false)}
+            title={
+              quotaPrompt
+                ? "Free tier exhausted — continue with your own key"
+                : "Bring your own API key"
+            }
+          />
+        ) : undefined
+      }
       formReplacement={
         trialLocked ? (
           resolveGateFallbackCard({ noParentChannel, parentUnresponsive }) === "paywall" ? (
-            <PaywallCard lockedContact={tenantCfg.lockedContact} />
+            <PaywallCard lockedContact={tenantCfg.lockedContact} onSave={onByokSaved} />
           ) : (
             <TrialGatePlaceholder onOpen={reopenTrialForm} />
           )
         ) : gate.locked && !ungated && !isTrialForm ? (
-          <PaywallCard lockedContact={tenantCfg.lockedContact} />
+          <PaywallCard lockedContact={tenantCfg.lockedContact} onSave={onByokSaved} />
         ) : undefined
       }
       showIntro={!gate.locked && !trialLocked && !hideIntroForSeed}
@@ -564,31 +673,158 @@ function EmbedChat({
   );
 }
 
-function PaywallCard({ lockedContact }: { lockedContact?: string }) {
-  const { setKey } = useBYOKKey();
-  const [showBYOK, setShowBYOK] = useState(false);
+function providerLabel(p: BYOKProvider): string {
+  switch (p) {
+    case "openai":
+      return "OpenAI";
+    case "anthropic":
+      return "Anthropic";
+    case "gemini":
+      return "Gemini";
+    case "openrouter":
+      return "OpenRouter";
+    default: {
+      const _exhaustive: never = p;
+      return _exhaustive;
+    }
+  }
+}
+
+function EmbedByokPanel({
+  onSave,
+  onClose,
+  title,
+}: {
+  onSave: (key: string, provider: BYOKProvider, model: string) => void;
+  onClose: () => void;
+  title: string;
+}) {
   const [inputKey, setInputKey] = useState("");
   const [provider, setProvider] = useState<BYOKProvider>("openrouter");
   const [inputModel, setInputModel] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    emit("embed_gate_hit", {});
-  }, []);
-
-  const onSave = useCallback(() => {
+  const handleSave = useCallback(() => {
     const err = validateBYOKKey(inputKey, provider) ?? validateBYOKModel(inputModel, provider);
     if (err) {
       setError(err);
       return;
     }
-    setKey(inputKey, provider, inputModel.trim());
-    emit("embed_byok_saved", { provider });
+    onSave(inputKey, provider, inputModel.trim());
     setInputKey("");
     setInputModel("");
-    setShowBYOK(false);
-  }, [inputKey, inputModel, provider, setKey]);
+  }, [inputKey, inputModel, provider, onSave]);
+
+  return (
+    <div className="border-t border-border bg-muted/40 p-4">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <p className="text-sm font-medium">{title}</p>
+        <Button type="button" size="sm" variant="ghost" onClick={onClose} aria-label="Close">
+          Close
+        </Button>
+      </div>
+      <p className="mb-3 text-xs text-muted-foreground">
+        OpenAI, OpenRouter, Anthropic, or Gemini — your key stays in this browser and is sent as
+        X-BYOK headers per request.
+      </p>
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {BYOK_PROVIDER_LIST.map((p) => (
+            <Button
+              key={p}
+              type="button"
+              size="sm"
+              variant={provider === p ? "default" : "outline"}
+              className="flex-1 capitalize"
+              onClick={() => {
+                setProvider(p);
+                setError(null);
+              }}
+            >
+              {providerLabel(p)}
+            </Button>
+          ))}
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="embed-byok-key" className="text-xs">
+            API key
+          </Label>
+          <div className="relative flex items-center">
+            <Input
+              id="embed-byok-key"
+              type={showKey ? "text" : "password"}
+              value={inputKey}
+              onChange={(e) => {
+                setInputKey(e.target.value);
+                setError(null);
+              }}
+              placeholder={
+                provider === "openai"
+                  ? "sk-…"
+                  : provider === "anthropic"
+                    ? "sk-ant-…"
+                    : provider === "gemini"
+                      ? "AIza…"
+                      : "sk-or-v1-…"
+              }
+              autoComplete="off"
+              spellCheck={false}
+              className="pr-9 font-mono text-sm"
+              aria-invalid={!!error}
+            />
+            <button
+              type="button"
+              className="absolute right-2.5 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowKey((v) => !v)}
+              aria-label={showKey ? "Hide key" : "Show key"}
+              tabIndex={-1}
+            >
+              {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+          </div>
+          {error && <p className="text-[11px] text-destructive">{error}</p>}
+        </div>
+        {byokRequiresModel(provider) ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="embed-byok-model" className="text-xs">
+              Model
+            </Label>
+            <Input
+              id="embed-byok-model"
+              type="text"
+              value={inputModel}
+              onChange={(e) => {
+                setInputModel(e.target.value);
+                setError(null);
+              }}
+              placeholder={byokModelPlaceholder(provider)}
+              autoComplete="off"
+              spellCheck={false}
+              className="font-mono text-sm"
+            />
+          </div>
+        ) : null}
+        <Button type="button" size="sm" onClick={handleSave} disabled={!inputKey}>
+          Save key
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PaywallCard({
+  lockedContact,
+  onSave,
+}: {
+  lockedContact?: string;
+  onSave: (key: string, provider: BYOKProvider, model: string) => void;
+}) {
+  const [showBYOK, setShowBYOK] = useState(false);
+
+  useEffect(() => {
+    emit("embed_gate_hit", {});
+  }, []);
 
   // Contact-us variant: tenants that would rather route capped visitors to
   // sales than offer BYOK set `lockedContact` (see embed-tenants.ts). Placed
@@ -614,13 +850,26 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
     );
   }
 
+  if (showBYOK) {
+    return (
+      <EmbedByokPanel
+        onSave={(key, provider, model) => {
+          onSave(key, provider, model);
+          setShowBYOK(false);
+        }}
+        onClose={() => setShowBYOK(false)}
+        title={`You've used your ${EMBED_FREE_TURN_LIMIT} free questions`}
+      />
+    );
+  }
+
   return (
     <div className="border-t border-border bg-muted/40 p-4">
       <p className="mb-2 text-sm font-medium">
         You&rsquo;ve used your {EMBED_FREE_TURN_LIMIT} free questions.
       </p>
       <p className="mb-3 text-xs text-muted-foreground">
-        Bring your own OpenRouter, OpenAI, or Anthropic key for unlimited chat — your key is
+        Bring your own OpenRouter, OpenAI, Anthropic, or Gemini key for unlimited chat — your key is
         stored only in your browser. Or open the full digichat app.
       </p>
 
@@ -628,7 +877,7 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
         <Button
           type="button"
           size="sm"
-          onClick={() => setShowBYOK((v) => !v)}
+          onClick={() => setShowBYOK(true)}
           style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
         >
           <Key className="mr-1.5 size-3.5" />
@@ -645,93 +894,6 @@ function PaywallCard({ lockedContact }: { lockedContact?: string }) {
           Open digichat
         </a>
       </div>
-
-      {showBYOK && (
-        <div className="mt-4 space-y-3">
-          <div className="flex gap-2">
-            {(["openrouter", "openai", "anthropic", "gemini"] as BYOKProvider[]).map((p) => (
-              <Button
-                key={p}
-                type="button"
-                size="sm"
-                variant={provider === p ? "default" : "outline"}
-                className="flex-1 capitalize"
-                onClick={() => setProvider(p)}
-              >
-                {p === "openai"
-                  ? "OpenAI"
-                  : p === "anthropic"
-                    ? "Anthropic"
-                    : p === "gemini"
-                      ? "Gemini"
-                      : "OpenRouter"}
-              </Button>
-            ))}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="embed-byok-key" className="text-xs">
-              API key
-            </Label>
-            <div className="relative flex items-center">
-              <Input
-                id="embed-byok-key"
-                type={showKey ? "text" : "password"}
-                value={inputKey}
-                onChange={(e) => {
-                  setInputKey(e.target.value);
-                  setError(null);
-                }}
-                placeholder={
-                  provider === "openai"
-                    ? "sk-…"
-                    : provider === "anthropic"
-                      ? "sk-ant-…"
-                      : provider === "gemini"
-                        ? "AIza…"
-                        : "sk-or-v1-…"
-                }
-                autoComplete="off"
-                spellCheck={false}
-                className="pr-9 font-mono text-sm"
-                aria-invalid={!!error}
-              />
-              <button
-                type="button"
-                className="absolute right-2.5 text-muted-foreground hover:text-foreground"
-                onClick={() => setShowKey((v) => !v)}
-                aria-label={showKey ? "Hide key" : "Show key"}
-                tabIndex={-1}
-              >
-                {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </button>
-            </div>
-            {error && <p className="text-[11px] text-destructive">{error}</p>}
-          </div>
-          {provider === "openrouter" ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="embed-byok-model" className="text-xs">
-                Model
-              </Label>
-              <Input
-                id="embed-byok-model"
-                type="text"
-                value={inputModel}
-                onChange={(e) => {
-                  setInputModel(e.target.value);
-                  setError(null);
-                }}
-                placeholder="openai/gpt-4o-mini"
-                autoComplete="off"
-                spellCheck={false}
-                className="font-mono text-sm"
-              />
-            </div>
-          ) : null}
-          <Button type="button" size="sm" onClick={onSave} disabled={!inputKey}>
-            Save key
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

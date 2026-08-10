@@ -426,7 +426,17 @@ per-host `slug`, `backend` (`digigraph` | `foundry` + https `projectEndpoint` +
 (`dark` | `light`), optional `accent` hex pair, `activityDetail`
 (`off` | `labels` | `full`), optional UI flags `showByok` / `showStatusBar` /
 `layout` (`page` | `embed`) — independent of `gateMode` (never derive
-`showByok = !ungated`), `attribution` flag, `aliases`, and a required `token`.
+`showByok = !ungated`), optional `llmAccess`
+(`free_then_byok` | `byok_only` | `backend_only` | `operator`) for LLM spend
+policy (digithings.ai = `free_then_byok` + `showByok: true`; foundry/DataTap =
+`backend_only` + BYOK off), `attribution` flag, `aliases`, and a required `token`.
+
+On structured `free_quota_exceeded` / clear rate-limit errors, embed tenants with
+`llmAccess: free_then_byok` stop the turn and open the in-chat BYOK sequence
+(even when `gateMode` is `ungated` — see `shouldSuggestByokOnEmbedError`). After
+the visitor saves a key, the failed turn is retried with existing `X-BYOK-*`
+headers. BYOK providers listed in the UI: OpenAI, OpenRouter, Anthropic, Gemini
+(model required for all non-OpenAI providers).
 
 **digithings rule:** digithings tenants use `backend.type: digigraph` only.
 digivault and digisearch are digigraph tools (activity mappers under

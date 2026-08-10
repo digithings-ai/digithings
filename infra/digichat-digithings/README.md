@@ -95,7 +95,7 @@ digichat runtime embed registry (never a Docker build-arg — tokens leak in lay
 ```bash
 export DIGICHAT_REQUIRE_ROOT_AUTH=0
 export DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai
-export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","attribution":false,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}}}'
+export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","attribution":false,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}}}'
 ```
 
 Set `DIGICHAT_EMBED_HOSTS` (and/or tenant host keys) at **runtime** so CSP `frame-ancestors` includes digithings.ai — no digichat image rebuild. **Do not** add digiquant.io to embed hosts for chat (crawl-only).

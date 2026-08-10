@@ -19,6 +19,22 @@ export type EmbedBackendConfig =
   | { type: "digigraph" }
   | { type: "foundry"; projectEndpoint: string; agentName: string };
 
+/**
+ * How this tenant expects visitors to pay for LLM spend.
+ * - `free_then_byok` — operator free tier until quota → in-chat BYOK (digithings.ai)
+ * - `byok_only` — require a user key before send
+ * - `backend_only` — no digichat BYOK; foundry/DataTap-style backends own spend
+ * - `operator` — operator/backend keys only (no visitor BYOK handoff)
+ */
+export type EmbedLlmAccess = "free_then_byok" | "byok_only" | "backend_only" | "operator";
+
+const LLM_ACCESS: readonly EmbedLlmAccess[] = [
+  "free_then_byok",
+  "byok_only",
+  "backend_only",
+  "operator",
+];
+
 export type EmbedTenantConfig = {
   slug: string;
   aliases?: string[];
@@ -56,6 +72,11 @@ export type EmbedTenantConfig = {
   showStatusBar?: boolean;
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
+  /**
+   * LLM spend policy for this embed. Independent of gateMode — digithings.ai
+   * is `ungated` + `free_then_byok` so free-quota errors still open BYOK.
+   */
+  llmAccess?: EmbedLlmAccess;
   /**
    * Per-tenant secret. Knowing a tenant's host string is public (it's the
    * tenant's own domain) so registry membership alone must never grant
@@ -209,6 +230,13 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.layout !== undefined && v.layout !== "page" && v.layout !== "embed") {
     throw new Error(`${ctx}: layout must be "page" or "embed"`);
   }
+  if (v.llmAccess !== undefined) {
+    if (typeof v.llmAccess !== "string" || !LLM_ACCESS.includes(v.llmAccess as EmbedLlmAccess)) {
+      throw new Error(
+        `${ctx}: llmAccess must be "free_then_byok", "byok_only", "backend_only", or "operator"`,
+      );
+    }
+  }
 
   return {
     slug: v.slug,
@@ -228,6 +256,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
     showStatusBar: typeof v.showStatusBar === "boolean" ? v.showStatusBar : undefined,
     layout: v.layout === "page" || v.layout === "embed" ? v.layout : undefined,
+    llmAccess: LLM_ACCESS.includes(v.llmAccess as EmbedLlmAccess)
+      ? (v.llmAccess as EmbedLlmAccess)
+      : undefined,
     gate,
   };
 }

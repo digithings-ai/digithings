@@ -5,6 +5,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
+import { byokRequiresModel, type BYOKProvider } from "@/hooks/use-byok-key";
 import { p } from "@/lib/base-path";
 import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
 import {
@@ -177,8 +178,9 @@ export function useEmbedDigiChat({
           if (effectiveToken) headers["X-Embed-Token"] = effectiveToken;
           if (byokKey) {
             headers["X-BYOK-Key"] = byokKey;
-            headers["X-BYOK-Provider"] = byokProvider ?? "openrouter";
-            if (byokProvider === "openrouter" && byokModel?.trim()) {
+            const provider = (byokProvider ?? "openrouter") as BYOKProvider;
+            headers["X-BYOK-Provider"] = provider;
+            if (byokRequiresModel(provider) && byokModel?.trim()) {
               headers["X-BYOK-Model"] = byokModel.trim();
             }
           }
@@ -213,7 +215,7 @@ export function useEmbedDigiChat({
     [accent, token, host, embedHost, byokKey, byokProvider, byokModel, trialUnlocked],
   );
 
-  const { messages, sendMessage, status, error, regenerate, setMessages } = useChat<UIMessage>({
+  const { messages, sendMessage, status, error, regenerate, setMessages, stop } = useChat<UIMessage>({
     transport,
   });
 
@@ -287,8 +289,15 @@ export function useEmbedDigiChat({
     messages: digiMessages,
     busy,
     error: chatError,
+    /** Raw AI SDK error — for structured code detection (quota → BYOK). */
+    rawError: error,
     send,
-    onRetry: () => regenerate(),
+    stop: () => {
+      void stop();
+    },
+    onRetry: () => {
+      void regenerate();
+    },
     seed,
   };
 }
