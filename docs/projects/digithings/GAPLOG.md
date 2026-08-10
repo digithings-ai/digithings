@@ -18,7 +18,7 @@ Plan questionnaire: Stage 8 of
 | 8 | What scopes does digikey issue for digivault writes? | | | |
 | 9 | Where do AGENTS.md non-negotiables live? | | | |
 | 10 | Auth on digithings.ai/chat — login wall or ungated embed? | | | |
-| 11 | How is digithings chat built? / same product as customers get? | Y (vault+digisearch) | `docs/projects/digithings/SHOWCASE.md` | Local smoke 2026-08-10 — vault #2 for “What powers…”; digisearch top-3 chunks |
+| 11 | How is digithings chat built? / same product as customers get? | Y (digisearch) | `docs/projects/digithings/SHOWCASE.md` (via source_url metadata) | Local smoke 2026-08-10 — digisearch only in one run; digivault works after container restart |
 
 ## UX / ops deltas
 
@@ -32,6 +32,8 @@ Plan questionnaire: Stage 8 of
 | 2026-08-10 | Dual-sink parity | Vault FS + digisearch index populated locally; production digithings.ai still on legacy Supabase corpus until sync | Run sync + redeploy smoke on `/chat` |
 | 2026-08-10 | Showcase | Added `SHOWCASE.md` + `digiproject.yaml` / `config/dogfood-digiproject.yaml` for self-aware chat | Re-ingest on operator after merge |
 | 2026-08-10 | Free→BYOK | digichat embed `llmAccess: free_then_byok` + in-chat BYOK on `free_quota_exceeded` (ungated digithings.ai). digigraph typed error + Gemini/Anthropic BYOK spend owned by sibling PR. | Wire dogfood tenant env `llmAccess` + confirm digigraph returns `free_quota_exceeded` |
+| 2026-08-10 | Sources UI | `rag_sources` rows showed UUID `doc_id` paths; tool row labeled `rag_sources` / `digithings_docs` | Fixed activity mapper: `source_url` → readable path, `digisearch`/`digivault` labels (#2045) |
+| 2026-08-10 | digivault auth | Stale JWKS cache after digikey restart → `invalid_token` on orchestrator routes until `docker compose restart digivault` | Documented in `docker-compose.override.yml`; restart digivault with digikey |
 
 ## Legacy retirement tracker
 
