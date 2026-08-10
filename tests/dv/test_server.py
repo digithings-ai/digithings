@@ -280,7 +280,11 @@ def test_orchestrator_invoke_search_notes(monkeypatch: pytest.MonkeyPatch) -> No
     assert fake_client.rpc_calls == [
         (
             "search_architecture_notes",
-            {"query": "what does digigraph orchestrate", "match_limit": 3},
+            {
+                "query": "what does digigraph orchestrate",
+                "match_limit": 3,
+                "path_prefix": None,
+            },
         )
     ]
 
@@ -374,7 +378,7 @@ def test_orchestrator_invoke_search_notes_default_limit(monkeypatch: pytest.Monk
         _fake_request(),
     )
     assert fake_client.rpc_calls == [
-        ("search_architecture_notes", {"query": "auth", "match_limit": 7})
+        ("search_architecture_notes", {"query": "auth", "match_limit": 7, "path_prefix": None})
     ]
 
 
@@ -390,7 +394,7 @@ def test_orchestrator_invoke_search_notes_clamps_limit(monkeypatch: pytest.Monke
         _fake_request(),
     )
     assert fake_client.rpc_calls == [
-        ("search_architecture_notes", {"query": "auth", "match_limit": 50})
+        ("search_architecture_notes", {"query": "auth", "match_limit": 50, "path_prefix": None})
     ]
 
     fake_client_negative = _FakeSearchClient(rpc_data=[])
@@ -404,7 +408,7 @@ def test_orchestrator_invoke_search_notes_clamps_limit(monkeypatch: pytest.Monke
         _fake_request(),
     )
     assert fake_client_negative.rpc_calls == [
-        ("search_architecture_notes", {"query": "auth", "match_limit": 1})
+        ("search_architecture_notes", {"query": "auth", "match_limit": 1, "path_prefix": None})
     ]
 
 

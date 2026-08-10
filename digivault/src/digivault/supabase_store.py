@@ -34,7 +34,7 @@ _SELECT = "vault_path,title,frontmatter,body_markdown"
 
 
 class VaultSearchHit(BaseModel):
-    """A ranked full-text hit from the ``search_architecture_notes`` RPC (migration 049)."""
+    """A ranked full-text hit from the ``search_architecture_notes`` RPC (migration 068)."""
 
     vault_path: str
     title: str
@@ -133,27 +133,17 @@ class SupabaseStore:
     ) -> list[VaultSearchHit]:
         """Full-text search via the ``search_architecture_notes`` RPC (ranked hits).
 
-        When ``path_prefix`` is set, call the 3-arg RPC when available; otherwise
-        oversample and filter client-side (pre-migration 068).
+        Always calls the 3-arg RPC (migration 068): ``path_prefix`` is ``None`` when
+        unset so Postgres applies the default (unfiltered). Requires 068 applied.
         """
-        prefix = (path_prefix or "").strip().strip("/")
-        if not prefix:
-            response = self._client.rpc(
-                self._search_rpc, {"query": query, "match_limit": limit}
-            ).execute()
-            return [VaultSearchHit.model_validate(row) for row in _rows(response)][:limit]
-
-        try:
-            response = self._client.rpc(
-                self._search_rpc,
-                {"query": query, "match_limit": limit, "path_prefix": prefix},
-            ).execute()
-        except Exception:
-            response = self._client.rpc(
-                self._search_rpc,
-                {"query": query, "match_limit": min(20, max(limit * 5, limit))},
-            ).execute()
+        prefix = (path_prefix or "").strip().strip("/") or None
+        response = self._client.rpc(
+            self._search_rpc,
+            {"query": query, "match_limit": limit, "path_prefix": prefix},
+        ).execute()
         hits = [VaultSearchHit.model_validate(row) for row in _rows(response)]
+        if prefix is None:
+            return hits[:limit]
         return [h for h in hits if h.vault_path == prefix or h.vault_path.startswith(prefix + "/")][
             :limit
         ]
