@@ -18,6 +18,7 @@ from digigraph.graph.research import (
 from digigraph.graph.state import WorkflowState
 from digigraph.llm_client import completion_text
 from digigraph.model_config import get_model_for_mode
+from digigraph.project_config import is_research_brief_enabled
 from digigraph.research_brief_models import (
     BRIEF_SYSTEM,
     ResearchBrief,
@@ -92,6 +93,11 @@ def _legacy_json_extract_after_brief(
 def research_brief_builder_node(state: WorkflowState, config: dict | None = None) -> dict[str, Any]:
     """Emit ResearchBrief + merged profiling questions; optionally fill quant fields from brief or legacy extract."""
     if state.get("error"):
+        return {}
+    if not is_research_brief_enabled():
+        logger.debug(
+            "research_brief_builder skipped (agents.research_brief / DIGI_RESEARCH_BRIEF off)"
+        )
         return {}
     synthesis = (state.get("research_response") or "").strip()
     rag = state.get("rag_sources")
