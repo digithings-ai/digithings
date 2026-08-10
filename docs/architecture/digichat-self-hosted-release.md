@@ -37,7 +37,7 @@ Bite-sized tasks (release packaging → Profile A/B → install guide → gap fi
 
 | Artifact | Status | Notes |
 |---|---|---|
-| **Git tag** `digichat-vX.Y.Z` | Exists | [release-please-digichat.yml](../../.github/workflows/release-please-digichat.yml) on `develop`; changelog in `frontend/digichat/CHANGELOG.md`. Current app version: `0.9.3` (`private: true` in package.json). |
+| **Git tag** `digichat-vX.Y.Z` | Exists | [release-please-digichat.yml](../../.github/workflows/release-please-digichat.yml) on `develop`; changelog in `frontend/digichat/CHANGELOG.md`. Current app version: `1.0.0` (`private: true` in package.json). `v0.9.3` remains on GHCR for DataTap / existing clients. |
 | **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | Exists | [publish-digichat-image.yml](../../.github/workflows/publish-digichat-image.yml) on `main` when `frontend/digichat/**` changes; skips if that version tag already published. `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
 | **npm package for digichat Node** | Does **not** exist | App is `private: true`; clients do not `npm install digichat`. |
 | **`@digithings/digichat-ui`** | Workspace / site embed | Shared React UI for marketing shells and digichat itself — **not** the self-host install unit. |
@@ -230,7 +230,7 @@ Short backlog (file as separate `agent-task` issues; no epic required):
 - **Compose overlay: pull GHCR** — e.g. `compose.digichat-release.yml` with `image:` pin + env file template (no monorepo build context).
 - **Compose overlay: Profile A minimal** — digichat + db + digikey + digigraph + LiteLLM + digivault only; document optional profiles.
 - ~~**CSP / embed hosts for clients**~~ — **Addressed:** runtime `DIGICHAT_EMBED_HOSTS` / tenant host keys via `src/proxy.ts` (stock GHCR, no rebuild).
-- **Makefile target** — `digichat-release-up VERSION=0.9.3` (or similar) wrapping the release overlay.
+- **Makefile target** — `digichat-release-up VERSION=1.0.0` (or similar) wrapping the release overlay.
 - **Profile B snippet** — Minimal digichat-only deploy example (Compose or ACA stub) + Foundry tenant JSON; point at DataTap as reference, keep digithings Azure-free.
 - **Release smoke checklist** — After each `digichat-v*` publish: GHCR pull, `/api/health`, embed smoke for digigraph tenant fixture (and Foundry if credentials available in CI secrets — optional).
 

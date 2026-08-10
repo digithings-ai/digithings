@@ -4,7 +4,7 @@
 #     -f infra/digichat-release/compose.digichat-release.yml \
 #     --profile digichat up -d
 #
-# Or: make digichat-release-up VERSION=0.9.3
+# Or: make digichat-release-up VERSION=1.0.0
 #
 # Clients without the monorepo should prefer compose.profile-a.yml /
 # compose.profile-b.yml which are self-contained (Profile A still builds
@@ -15,6 +15,6 @@
 
 services:
   digichat:
-    image: ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION:?set DIGICHAT_VERSION e.g. 0.9.3}
+    image: ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION:?set DIGICHAT_VERSION e.g. 1.0.0}
     build: !reset null
     pull_policy: always

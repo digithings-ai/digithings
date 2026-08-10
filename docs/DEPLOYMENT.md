@@ -34,7 +34,8 @@ Prefer this when you want published images instead of `docker compose build`. Re
 
 ```bash
 cp .env.example .env
-# Optional pins (production): DIGI_IMAGE_TAG=sha-<12-char-sha> DIGICHAT_IMAGE_TAG=v0.9.3
+# Optional pins (production): DIGI_IMAGE_TAG=sha-<12-char-sha> DIGICHAT_IMAGE_TAG=v1.0.0
+# (DataTap / existing clients may keep DIGICHAT_IMAGE_TAG=v0.9.3 — that GHCR tag remains.)
 docker compose \
   -f docker-compose.yml \
   -f infra/self-host/compose.ghcr.yml \
