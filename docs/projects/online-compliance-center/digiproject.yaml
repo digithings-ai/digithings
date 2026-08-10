@@ -14,6 +14,8 @@ graph:
 agents:
   enabled:
     - research
+  # llm_mode is policy (free-tier enforcement). Actual model id is agents.llm —
+  # not config/model_modes.yaml. Swap when OpenRouter retires a :free slug.
   llm_mode: free
   llm:
     provider: openrouter

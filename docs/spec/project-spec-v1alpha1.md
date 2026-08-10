@@ -40,10 +40,11 @@ agents:
   enabled:                # List of agent IDs to activate (default: ["research"])
     - research            # Only "research" is supported in Phase 1
   llm_mode: string        # "free" | "test" | "medium" | "best" (default: env DIGI_LLM_MODE or "test")
-                          # free = operator free-tier only (OpenRouter :free / local Ollama); refuse paid IDs
-  llm:                    # optional explicit provider/model pin (wins over mode defaults)
+                          # policy only: free = must resolve to OpenRouter :free / ollama; refuse paid IDs
+                          # free does NOT pick a model from model_modes.yaml — set agents.llm (or DIGI_LLM_*)
+  llm:                    # required when llm_mode is free; optional pin for other modes (wins over defaults)
     provider: string      # openrouter | openai | ollama | gemini | anthropic | litellm
-    model: string         # provider-native id, e.g. openai/gpt-oss-20b:free
+    model: string         # provider-native id, e.g. openai/gpt-oss-20b:free (operator-chosen; roster rotates)
     api_key_env: string   # optional; default from provider registry (never put secrets in YAML)
   planning_mode: bool     # Enable plan-then-execute flow (default: false)
   workflow_profile: string # Workflow graph profile name (default: "default")
@@ -158,8 +159,8 @@ services:
 
 | Field | Env override | Notes |
 |---|---|---|
-| `agents.llm_mode` | `DIGI_LLM_MODE` | Project YAML wins if set (`free` \| `test` \| `medium` \| `best`) |
-| `agents.llm.provider` / `agents.llm.model` | `DIGI_LLM_PROVIDER` / `DIGI_LLM_MODEL` | YAML wins when set; env fills gaps. API keys stay in env only. |
+| `agents.llm_mode` | `DIGI_LLM_MODE` | Project YAML wins if set (`free` \| `test` \| `medium` \| `best`). Policy only — not a model slug. |
+| `agents.llm.provider` / `agents.llm.model` | `DIGI_LLM_PROVIDER` / `DIGI_LLM_MODEL` | YAML wins when set; env fills gaps. **Required for `llm_mode: free`.** API keys stay in env only. |
 | `run_data_dir` | `DIGI_RUN_DATA_DIR` | Env wins if set; YAML is fallback |
 | `services.digisearch_url` | `DIGISEARCH_URL` | Env wins |
 | `services.litellm_url` | `OPENAI_API_BASE` | Env wins |
