@@ -42,4 +42,4 @@ Compare-and-gap after wiring digithings.ai/chat/occ. Digi names lowercase.
 
 | Date | Command | Result |
 |------|---------|--------|
-| (pending) | `run_onboard.py … --dry-run` | Record page/PDF counts here after first operator dry-run |
+| 2026-08-10 | `DOCS_ONBOARD_DRY_RUN_CRAWL=1 … run_onboard.py --dry-run` | `pages_seen=32`, `docs_kept=30`, `skipped=2`; workdir had **8 HTML** + **22 PDFs**. Sinks skipped (`vault_notes=0`, `search_docs=0`). Full apply still **HOLD** pending crawl approval. |
