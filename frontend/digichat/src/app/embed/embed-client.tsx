@@ -6,6 +6,8 @@
  *   ?accent=digithings|digiquant|digichat   (default: digichat)
  *   ?host=<the embedding page's own origin> — see resolveEmbedHost() (#1372)
  *   ?token=<per-tenant secret>
+ *   ?theme=light|dark — optional parent-site theme pin (first paint; live updates
+ *     via digichat:theme postMessage)
  *   ?welcome= / ?placeholder= / ?suggestions= — UI overrides (DataTapStream)
  *
  * Uses the shared @digithings/digichat-ui DigiChatSession widget.
@@ -63,7 +65,18 @@ import {
   READY_MESSAGE,
   isAllowedSeedParentOrigin,
   parseSeedMessage,
+  resolveReadyTargetOrigin,
 } from "@/lib/embed-seed-messages";
+import {
+  formatParentErrorLine,
+  parseParentErrorMessage,
+} from "@/lib/embed-parent-error-messages";
+import {
+  applyEmbedDocumentTheme,
+  parseEmbedThemeParam,
+  parseThemeMessage,
+  type EmbedTheme,
+} from "@/lib/embed-theme-messages";
 
 type Accent = "digithings" | "digiquant" | "digichat";
 
@@ -111,42 +124,68 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
   const token = searchParams.get("token") ?? undefined;
   const host = searchParams.get("host") ?? undefined;
   const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
+  const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
+  const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
+  // Parent postMessage > ?theme= URL pin > tenant registry (default dark).
+  const effectiveTheme: EmbedTheme =
+    parentTheme ?? urlTheme ?? (tenantCfg.theme === "light" ? "light" : "dark");
 
   useEffect(() => {
     emit("embed_loaded", { accent });
   }, [accent]);
-  // Tenant theme drives the canon [data-theme] on <html> — the semantic
-  // tokens are scoped :root[data-theme="…"] (tokens.css), so a subtree class
-  // alone no longer flips the palette. The first value is already correct on
-  // arrival: page.tsx resolves the tenant server-side, pins [data-theme]
-  // pre-paint, and seeds this component's config, so this effect re-asserts a
-  // theme rather than introducing one (this page is its own iframe document,
-  // so the root flip is scoped to the embed). The .dark/.light classes follow
-  // via ThemeClassSync
-  // (providers.tsx); the wrapper div below keeps its class for the Tailwind
-  // `dark:` variant inside the subtree.
+
+  // Allowed parents for digichat:theme (same allowlist shape as digichat:seed).
+  const themeParentOrigins = useMemo(() => {
+    const allowed = new Set<string>();
+    if (host) {
+      try {
+        allowed.add(host.includes("://") ? new URL(host).origin : `https://${host}`);
+      } catch {
+        /* ignore */
+      }
+    }
+    for (const h of ["https://digithings.ai", "https://www.digithings.ai"]) {
+      if (isAllowedSeedParentOrigin(h)) allowed.add(h);
+    }
+    return allowed;
+  }, [host]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onMessage = (event: MessageEvent) => {
+      const parsed = parseThemeMessage(event, themeParentOrigins);
+      if (!parsed) return;
+      setParentTheme(parsed.theme);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [themeParentOrigins]);
+
+  // Effective theme drives canon [data-theme] on <html> — the semantic tokens
+  // are scoped :root[data-theme="…"] (tokens.css), so a subtree class alone no
+  // longer flips the palette. First paint comes from page.tsx (?theme= or
+  // tenant); live parent toggles arrive via digichat:theme without reload.
+  // ThemeClassSync mirrors [data-theme] onto .dark/.light; the wrapper below
+  // keeps its class for Tailwind `dark:` inside the subtree.
   //
-  // The app-wide ThemeProvider (providers.tsx, from @digithings/web) installs a
-  // persistent prefers-color-scheme listener that rewrites <html data-theme> to
-  // the OS scheme whenever there is no `dt-theme` localStorage key — always the
-  // case for an anonymous embed visitor, who never toggles the theme. Without a
-  // guard, a mid-session OS light↔dark switch would silently flip a tenant's
-  // forced theme. Re-assert the tenant theme via a MutationObserver so it wins
-  // over any external writer; the guarded write (only when it actually differs)
-  // keeps the observer loop-free.
+  // The app-wide ThemeProvider installs a prefers-color-scheme listener that
+  // rewrites <html data-theme> whenever there is no `dt-theme` key — always
+  // true for an anonymous embed visitor. Re-assert the effective theme via a
+  // MutationObserver so OS flips (and ThemeProvider) cannot silently override
+  // a parent- or tenant-forced theme (#1434).
   useEffect(() => {
     const el = document.documentElement;
-    const desired = tenantCfg.theme === "light" ? "light" : "dark";
+    const desired = effectiveTheme;
     const apply = () => {
       if (el.getAttribute("data-theme") !== desired) {
-        el.setAttribute("data-theme", desired);
+        applyEmbedDocumentTheme(desired);
       }
     };
     apply();
     const observer = new MutationObserver(apply);
     observer.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
     return () => observer.disconnect();
-  }, [tenantCfg.theme]);
+  }, [effectiveTheme]);
 
   // The embedding site can theme the widget to its own brand by passing
   // `?accent=#rrggbb` (+ optional `?accentForeground=`), the same override
@@ -171,7 +210,7 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
       <style>{ACCENT_CSS}</style>
       <div className="dc-grain" aria-hidden />
       <div
-        className={`${tenantCfg.theme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col bg-background text-foreground`}
+        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col bg-background text-foreground`}
         style={accentStyle}
       >
         <EmbedChat
@@ -389,20 +428,11 @@ function EmbedChat({
 
   const [seedApplied, setSeedApplied] = useState(false);
   const [hideIntroForSeed, setHideIntroForSeed] = useState(false);
+  /** Parent handshake/load failures — DigiChatSession `.dtc-error` transcript lines. */
+  const [handshakeError, setHandshakeError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !host) return;
-    let parentOrigin: string;
-    try {
-      parentOrigin = host.includes("://") ? new URL(host).origin : `https://${host}`;
-    } catch {
-      return;
-    }
-    window.parent.postMessage(READY_MESSAGE, parentOrigin);
-  }, [host]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || seedApplied) return;
+  // Same first-party allowlist as digichat:seed / digichat:theme.
+  const firstPartyParentOrigins = useMemo(() => {
     const allowed = new Set<string>();
     if (host) {
       try {
@@ -414,10 +444,56 @@ function EmbedChat({
     for (const h of ["https://digithings.ai", "https://www.digithings.ai"]) {
       if (isAllowedSeedParentOrigin(h)) allowed.add(h);
     }
+    return allowed;
+  }, [host]);
+
+  // Ready handshake targets the *actual* parent browsing context, not virtual
+  // ?host= (e.g. occ.digithings.ai). Parent ChatEmbedShell listens on digithings.ai;
+  // posting ready to the virtual host is dropped and falsely times out.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.parent === window.self) return;
+    const ancestorOrigins =
+      "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
+    const target = resolveReadyTargetOrigin({
+      ancestorOrigins,
+      referrer: document.referrer,
+    });
+    if (!target) {
+      // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
+      queueMicrotask(() => {
+        setHandshakeError(formatParentErrorLine("ready_target_missing"));
+      });
+      return;
+    }
+    window.parent.postMessage(READY_MESSAGE, target);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onMessage = (event: MessageEvent) => {
+      // Late digichat:ready after a ready_timeout still gets theme (and maybe seed)
+      // from ChatEmbedShell — clear the sticky terminal line once the parent is
+      // talking again on the first-party channel.
+      if (parseThemeMessage(event, firstPartyParentOrigins)) {
+        setHandshakeError(null);
+        return;
+      }
+      const parentErr = parseParentErrorMessage(event, firstPartyParentOrigins);
+      if (!parentErr) return;
+      setHandshakeError(formatParentErrorLine(parentErr.code, parentErr.message));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [firstPartyParentOrigins]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || seedApplied) return;
 
     const onMessage = (event: MessageEvent) => {
-      const parsed = parseSeedMessage(event, allowed);
+      const parsed = parseSeedMessage(event, firstPartyParentOrigins);
       if (!parsed) return;
+      setHandshakeError(null);
       applyEmbedSeed(
         { messages: parsed.messages, pending: parsed.pending },
         { seed: chat.seed, send: chat.send },
@@ -427,7 +503,7 @@ function EmbedChat({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [host, seedApplied, chat.seed, chat.send]);
+  }, [firstPartyParentOrigins, seedApplied, chat.seed, chat.send]);
 
   // The upstream conversation id is the useful handle (it maps to the real backend
   // conversation); fall back to nothing rather than blocking the gate.
@@ -611,6 +687,7 @@ function EmbedChat({
   ) : null;
 
   const showByokOnError =
+    !handshakeError &&
     !trialLocked &&
     shouldSuggestByokOnEmbedError({
       llmAccess,
@@ -631,19 +708,23 @@ function EmbedChat({
       chat={{
         messages: chat.messages,
         busy: chat.busy,
-        // While the trial overlay path is active, the formReplacement notice is
-        // the warning (with "the trial form" + Retry). Hiding the raw trial_gate
-        // string avoids a duplicate banner whose Retry only regenerated a 402.
-        error: trialLocked ? null : chat.error,
+        // Handshake/load failures from the parent beat chat errors so the
+        // terminal line is visible. Trial overlay still suppresses chat errors.
+        error: handshakeError ?? (trialLocked ? null : chat.error),
         quotaPrompt: showByok && quotaPrompt && !byokIsSet,
         providerIsSet: byokIsSet,
         openSettings: showByok ? openSettings : undefined,
         send: wrappedSend,
         stop: chat.stop,
-        onRetry:
-          isTrialForm &&
-          !trialLocked &&
-          !!chat.error?.toLowerCase().includes("trial form")
+        onRetry: handshakeError
+          ? // regenerate() cannot repair a parent handshake/load failure; match
+            // the "refresh" copy and give the cold-start retry path teeth.
+            () => {
+              window.location.reload();
+            }
+          : isTrialForm &&
+              !trialLocked &&
+              !!chat.error?.toLowerCase().includes("trial form")
             ? reopenTrialForm
             : chat.onRetry,
       }}
