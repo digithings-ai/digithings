@@ -85,6 +85,10 @@ Boot order (critical for Cloudflare Containers port probes):
 4. digisearch starts only after `.occ_help_seeded` or `.occ_help_seed_skipped`
    so CLI ingest and the HTTP server never share a PersistentClient.
 
+**Firecracker note:** supervisord must log to `/var/log/supervisor/*.log`,
+**not** `/dev/stdout`. Logging to `/dev/stdout` raises `ENXIO` and every
+program stays `FATAL` (no ports ever bind — CF error 1101).
+
 **Full crawl** of help.online-compliance-center.com remains **HOLD** until
 explicit approval (`docs/projects/online-compliance-center/GAPLOG.md`). After
 approval, run docs_onboard apply against the production stack (ops job that can

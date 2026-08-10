@@ -2,6 +2,8 @@
 # Profile A stack entrypoint — start supervisord immediately (ports must open).
 # Cloudflare Containers probes :8000; blocking here causes error 1101 / port-not-ready.
 # OCC Chroma seed runs as a supervisord oneshot *before* digisearch (see supervisord.conf).
+#
+# CRITICAL (Firecracker): supervisord must log to files, NOT /dev/stdout — ENXIO otherwise.
 set -eu
 
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
@@ -24,13 +26,28 @@ export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"
 export PYTHONPATH="/app/digikey/src:/app/digigraph/src:/app/digisearch/src:/app/digivault/src:/app/digibase/src:/app/digillm/src:/app/digismith/src${PYTHONPATH:+:$PYTHONPATH}"
 export PATH="/usr/local/bin:$PATH"
 
-# Container envVars may mangle multiline PEMs — accept base64-wrapped secret.
+# Container envVars may mangle multiline PEMs — accept base64-wrapped secret,
+# and expand literal \n sequences from secret stores.
 if [ -n "${DIGIKEY_PRIVATE_KEY_PEM:-}" ] && ! printf '%s' "$DIGIKEY_PRIVATE_KEY_PEM" | grep -q "BEGIN"; then
   DIGIKEY_PRIVATE_KEY_PEM=$(printf '%s' "$DIGIKEY_PRIVATE_KEY_PEM" | base64 -d 2>/dev/null || true)
   export DIGIKEY_PRIVATE_KEY_PEM
 fi
-if [ -z "${DIGIKEY_PRIVATE_KEY_PEM:-}" ] || ! printf '%s' "$DIGIKEY_PRIVATE_KEY_PEM" | grep -q "BEGIN"; then
+if [ -n "${DIGIKEY_PRIVATE_KEY_PEM:-}" ] && printf '%s' "$DIGIKEY_PRIVATE_KEY_PEM" | grep -q '\\n'; then
+  DIGIKEY_PRIVATE_KEY_PEM=$(printf '%s' "$DIGIKEY_PRIVATE_KEY_PEM" | sed 's/\\n/\
+/g')
+  export DIGIKEY_PRIVATE_KEY_PEM
+fi
+
+# Validate PEM with cryptography; CF secrets often look like PEM but fail to deserialize.
+pem_ok=0
+if [ -n "${DIGIKEY_PRIVATE_KEY_PEM:-}" ] && printf '%s' "$DIGIKEY_PRIVATE_KEY_PEM" | grep -q "BEGIN"; then
+  if python3 -c "from cryptography.hazmat.primitives.serialization import load_pem_private_key; load_pem_private_key(__import__('os').environ['DIGIKEY_PRIVATE_KEY_PEM'].encode(), password=None)" 2>/dev/null; then
+    pem_ok=1
+  fi
+fi
+if [ "$pem_ok" -ne 1 ]; then
   echo "digithings-stack: WARN DIGIKEY_PRIVATE_KEY_PEM missing/invalid; enabling ephemeral key for this boot"
+  unset DIGIKEY_PRIVATE_KEY_PEM
   export DIGIKEY_ALLOW_EPHEMERAL_KEY=1
 fi
 
