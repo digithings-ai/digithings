@@ -11,6 +11,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field
 
+from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.env_utils import resolve_env_refs
 
 logger = logging.getLogger(__name__)
@@ -410,6 +411,37 @@ class DigiProjectConfig:
             return []
         return [str(x).strip() for x in raw if x and str(x).strip()]
 
+    def get_always_retrieve_tools(self) -> list[str]:
+        """Tools to invoke before the LLM tool loop (structural retrieval, not prompt-only)."""
+        raw = self.agents.get("always_retrieve_tools")
+        if not isinstance(raw, list) or not raw:
+            return []
+        return [str(x).strip() for x in raw if x and str(x).strip()]
+
+    def get_research_brief(self) -> bool:
+        """Whether to run ``research_brief_builder`` after research.
+
+        Env ``DIGI_RESEARCH_BRIEF`` overrides YAML ``agents.research_brief``.
+        Default True (existing behavior). Set ``agents.research_brief: false`` or
+        ``DIGI_RESEARCH_BRIEF=0`` to end the stream when the answer completes
+        (dogfood / latency-sensitive chat).
+        """
+        env = (os.environ.get("DIGI_RESEARCH_BRIEF") or "").strip().lower()
+        if env in ("0", "false", "no", "off"):
+            return False
+        if env in ("1", "true", "yes", "on"):
+            return True
+        raw = self.agents.get("research_brief")
+        if raw is None:
+            return True
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, (int, float)):
+            return bool(raw)
+        if isinstance(raw, str):
+            return raw.strip().lower() not in ("0", "false", "no", "off", "")
+        return bool(raw)
+
     def get_limits(self) -> SitaasLimits:
         """Return SITAAS runtime limits (env overrides YAML overrides defaults)."""
         return SitaasLimits.from_config(self._data)
@@ -428,3 +460,23 @@ class DigiProjectConfig:
         if isinstance(raw, str) and raw.strip():
             return raw.strip().lower()
         return "full_stack"
+
+
+def is_research_brief_enabled() -> bool:
+    """Resolve ``agents.research_brief`` / ``DIGI_RESEARCH_BRIEF`` for the active project.
+
+    Defaults to True when no project config is loaded. Used by the research
+    subgraph wiring and ``research_brief_builder_node`` short-circuit.
+    """
+    try:
+        return DigiProjectConfig.load().get_research_brief()
+    except PROJECT_CONFIG_ERRORS as exc:
+        logger.debug("is_research_brief_enabled: config load failed (%s); env/default", exc)
+    except Exception as exc:
+        logger.debug("is_research_brief_enabled: unexpected error (%s); env/default", exc)
+    env = (os.environ.get("DIGI_RESEARCH_BRIEF") or "").strip().lower()
+    if env in ("0", "false", "no", "off"):
+        return False
+    if env in ("1", "true", "yes", "on"):
+        return True
+    return True

@@ -47,6 +47,9 @@ agents:
     api_key_env: string   # optional; default from provider registry (never put secrets in YAML)
   planning_mode: bool     # Enable plan-then-execute flow (default: false)
   workflow_profile: string # Workflow graph profile name (default: "default")
+  research_brief: bool    # Run ResearchBrief post-pass after answer (default: true; env DIGI_RESEARCH_BRIEF)
+  always_retrieve_tools:  # Prefetch these tools before the LLM turn; inject results; strip from tools_for_llm
+    - digisearch
   allowed_tools:          # Restrict tool names available to the research node (default: all)
     - digisearch
     - visualization_agent

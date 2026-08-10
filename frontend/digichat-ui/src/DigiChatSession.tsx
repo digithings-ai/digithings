@@ -17,7 +17,8 @@ export function DigiChatSession({
   suggestions = [],
   placeholder,
   showByok,
-  showStatusBar = false,
+  /** When false, error rows omit the inline BYOK link (ungated dogfood / infra errors). */
+  showByokOnError = true,
   branding,
   ariaLabel = "digichat",
   className,
@@ -38,13 +39,11 @@ export function DigiChatSession({
     send,
     stop,
     onRetry,
-    modelLabel,
     providerIsSet = false,
     openSettings,
   } = chat;
 
   const [input, setInput] = useState("");
-  const [barOpen, setBarOpen] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -104,7 +103,12 @@ export function DigiChatSession({
 
   return (
     <section className={sessionClass} aria-label={ariaLabel}>
-      {headerSlot}
+      {headerSlot ??
+        (branding?.title ? null : (
+          <header className="dc-wordmark-header">
+            <DigiChatWordmark />
+          </header>
+        ))}
 
       {branding?.title ? (
         <header className="dc-brand">
@@ -124,28 +128,6 @@ export function DigiChatSession({
             </span>
           ) : null}
         </header>
-      ) : null}
-
-      {showStatusBar ? (
-        <>
-          <button
-            type="button"
-            className="dc-bar-toggle"
-            aria-expanded={barOpen}
-            onClick={() => setBarOpen((v) => !v)}
-          >
-            <DigiChatWordmark /> {barOpen ? "▾" : "▸"}
-          </button>
-          <div className={`dc-bar${barOpen ? "" : " is-collapsed"}`} aria-hidden={!barOpen}>
-            <span className="dc-bar-meta">vault-grounded · agentic · streams live</span>
-            {showByok ? (
-              <button type="button" className="dc-bar-key" onClick={handleOpenSettings}>
-                {providerIsSet ? "key ✓" : "bring your own key"}
-              </button>
-            ) : null}
-            {modelLabel ? <span className="dc-bar-model">model: {modelLabel}</span> : null}
-          </div>
-        </>
       ) : null}
 
       <div className="dc-thread" ref={threadRef} aria-live="polite" aria-atomic="false">
@@ -256,7 +238,7 @@ export function DigiChatSession({
         {error ? (
           <p className="dtc-error" role="alert">
             {error}
-            {showByok && !providerIsSet ? (
+            {showByok && !providerIsSet && showByokOnError ? (
               <>
                 {" "}
                 <button type="button" className="dc-inline-link" onClick={handleOpenSettings}>

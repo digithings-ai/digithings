@@ -47,7 +47,6 @@ describe("GET /api/embed/tenant-config", () => {
       attribution: true,
       suggestions: [...DATATAPSTREAM_SUGGESTION_POOL],
       showByok: false,
-      showStatusBar: false,
       layout: "embed",
     });
     expect(JSON.stringify(body)).not.toContain("example.services.ai.azure.com");
@@ -69,7 +68,6 @@ describe("GET /api/embed/tenant-config", () => {
       accent: null,
       attribution: false,
       showByok: false,
-      showStatusBar: false,
       layout: "embed",
     });
   });
@@ -83,7 +81,6 @@ describe("GET /api/embed/tenant-config", () => {
       accent: null,
       attribution: false,
       showByok: false,
-      showStatusBar: false,
       layout: "embed",
     });
   });
@@ -113,7 +110,7 @@ describe("GET /api/embed/tenant-config", () => {
     expect(body.gateMode).toBe("ungated");
   });
 
-  it("projects showByok, showStatusBar, layout to the client body", async () => {
+  it("projects showByok, layout to the client body", async () => {
     vi.stubEnv(
       "DIGICHAT_EMBED_TENANTS",
       JSON.stringify({
@@ -122,7 +119,6 @@ describe("GET /api/embed/tenant-config", () => {
           backend: { type: "digigraph" },
           gateMode: "ungated",
           showByok: true,
-          showStatusBar: true,
           layout: "page",
           llmAccess: "free_then_byok",
           activityDetail: "full",
@@ -138,7 +134,6 @@ describe("GET /api/embed/tenant-config", () => {
     );
     const body = await res.json();
     expect(body.showByok).toBe(true);
-    expect(body.showStatusBar).toBe(true);
     expect(body.layout).toBe("page");
     expect(body.llmAccess).toBe("free_then_byok");
   });

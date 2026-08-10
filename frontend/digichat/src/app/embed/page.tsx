@@ -5,8 +5,8 @@
  *
  * Why this file exists at all: the client tree can only learn its tenant by
  * fetching /api/embed/tenant-config after mount, and until that resolves it
- * necessarily renders the gated defaults — dark theme, `.accent-digichat`
- * (#1f1f1f). For a light-themed tenant that painted the whole embed dark for a
+ * necessarily renders the gated defaults — dark theme, default digichat accent.
+ * For a light-themed tenant that painted the whole embed dark for a
  * round-trip and then flipped, a visible dark→light flash on every load. The
  * root layout hardcodes `data-theme="dark"` as its no-JS default (layout.tsx),
  * so the flash started in the SSR HTML itself and no client-side change could

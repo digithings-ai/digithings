@@ -72,7 +72,7 @@ const ACCENTS: readonly Accent[] = ["digithings", "digiquant", "digichat"];
 const ACCENT_CSS = `
 .accent-digithings { --accent: #7c3aed; --accent-foreground: #f5f3ff; }
 .accent-digiquant  { --accent: #10b981; --accent-foreground: #ecfdf5; }
-.accent-digichat   { --accent: #1f1f1f; --accent-foreground: #e6e6e6; }
+.accent-digichat   { --accent: var(--accent-digichat, #e2708a); --accent-foreground: var(--on-accent, #04201c); }
 `;
 
 const DEFAULT_WELCOME =
@@ -162,9 +162,8 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
     urlColors.accent ?? tenantCfg.accent?.color,
     urlColors.accentForeground ?? tenantCfg.accent?.foreground,
   );
-  // When a brand hex is active, drop the named `.accent-*` class — ACCENT_CSS
-  // paints `.accent-digichat { --accent: #1f1f1f }`, which is exactly the
-  // wrong color observers saw when the inline style failed to attach.
+  // When a brand hex is active, drop the named `.accent-*` class so the inline
+  // style is the sole --accent source (DataTap terracotta regression).
   const brandAccentActive = accentStyle != null;
 
   return (
@@ -581,31 +580,25 @@ function EmbedChat({
   const footerAttribution = attributionAt === "footer";
   const headerAttribution = attributionAt === "header";
 
-  const headerSlot =
-    headerTitle || !ungated ? (
-      <header className="dc-brand">
-        {headerTitle ? <span>{headerTitle}</span> : <span>digichat</span>}
-        {headerAttribution ? (
-          <span className="dc-brand-by">
-            (
-            <a
-              href="https://digithings.ai"
-              target="_blank"
-              rel="noreferrer noopener"
-              className="dc-brand-link"
-            >
-              by digichat
-            </a>
-            )
-          </span>
-        ) : null}
-        {!ungated ? (
-          <span className="dc-header-meta" aria-label={`Turns used: ${gate.turns} of ${gate.limit}`}>
-            {byokIsSet ? "BYOK unlocked" : `${gate.turns}/${gate.limit} free`}
-          </span>
-        ) : null}
-      </header>
-    ) : null;
+  const headerSlot = headerTitle ? (
+    <header className="dc-brand">
+      <span>{headerTitle}</span>
+      {headerAttribution ? (
+        <span className="dc-brand-by">
+          (
+          <a
+            href="https://digithings.ai"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="dc-brand-link"
+          >
+            by digichat
+          </a>
+          )
+        </span>
+      ) : null}
+    </header>
+  ) : null;
 
   const footerSlot = footerAttribution ? (
     <p className="dc-attribution">
@@ -617,13 +610,23 @@ function EmbedChat({
     </p>
   ) : null;
 
+  const showByokOnError =
+    !trialLocked &&
+    shouldSuggestByokOnEmbedError({
+      llmAccess,
+      showByok,
+      gateMode: tenantCfg.gateMode,
+      errorCode: parseEmbedChatError(chat.rawError)?.code,
+      errorMessage: chat.error,
+    });
+
   return (
     <DigiChatSession
       welcomeIntro={welcomeIntro}
       suggestions={suggestions}
       placeholder={placeholder}
       showByok={showByok}
-      showStatusBar={uiFlags.showStatusBar}
+      showByokOnError={showByokOnError}
       layout={uiFlags.layout}
       chat={{
         messages: chat.messages,

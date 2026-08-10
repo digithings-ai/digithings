@@ -5,6 +5,7 @@ import {
   parseEmbedChatError,
   shouldSuggestByokOnEmbedError,
 } from "./embed-chat-error";
+import { LEGACY_EMBED_DISABLED_MESSAGE } from "./embed-legacy-gate";
 
 describe("formatEmbedChatError", () => {
   it("returns null for empty errors", () => {
@@ -16,16 +17,16 @@ describe("formatEmbedChatError", () => {
       new Error(
         JSON.stringify({
           error: "embed_disabled",
-          message: "Embed requires DIGICHAT_EMBED_ENABLED=1.",
+          message: LEGACY_EMBED_DISABLED_MESSAGE,
         }),
       ),
     );
-    expect(msg).toBe("Embed requires DIGICHAT_EMBED_ENABLED=1.");
+    expect(msg).toBe(LEGACY_EMBED_DISABLED_MESSAGE);
   });
 
   it("detects embed_disabled in plain text", () => {
     expect(formatEmbedChatError(new Error('{"error":"embed_disabled"}'))).toContain(
-      "not enabled",
+      "DIGICHAT_EMBED_TENANTS",
     );
   });
 
@@ -57,6 +58,24 @@ describe("formatEmbedChatError", () => {
     expect(
       formatEmbedChatError(new Error(JSON.stringify({ error: "free_quota_exceeded" }))),
     ).toMatch(/Free tier quota/i);
+  });
+
+  it("maps fetch failed to a stack hint instead of raw transport text", () => {
+    const msg = formatEmbedChatError(new Error("fetch failed"));
+    expect(msg).toContain("make digichat-dev");
+    expect(msg).toContain("make stack-local");
+  });
+
+  it("surfaces upstream_auth message from JSON bodies", () => {
+    const msg = formatEmbedChatError(
+      new Error(
+        JSON.stringify({
+          error: "upstream_auth",
+          message: "digikey token exchange failed",
+        }),
+      ),
+    );
+    expect(msg).toBe("digikey token exchange failed");
   });
 });
 
@@ -137,6 +156,26 @@ describe("shouldSuggestByokOnEmbedError", () => {
         showByok: false,
         gateMode: "ungated",
         errorCode: "free_quota_exceeded",
+      }),
+    ).toBe(false);
+  });
+
+  it("never suggests BYOK for network or upstream failures", () => {
+    expect(
+      shouldSuggestByokOnEmbedError({
+        llmAccess: "free_then_byok",
+        showByok: true,
+        gateMode: "ungated",
+        errorMessage: "Could not reach digichat.",
+      }),
+    ).toBe(false);
+    expect(
+      shouldSuggestByokOnEmbedError({
+        llmAccess: "free_then_byok",
+        showByok: true,
+        gateMode: "turn_limited",
+        errorCode: "upstream_auth",
+        errorMessage: "digikey token exchange failed",
       }),
     ).toBe(false);
   });

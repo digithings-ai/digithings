@@ -12,6 +12,9 @@ export type DigigraphTraceLike = {
   payload?: Record<string, unknown>;
 };
 
+/** LangGraph housekeeping trace types — never shown in the activity chain. */
+const SUPPRESSED_TRACE_TYPES = new Set(["graph_step", "span"]);
+
 function mapGraphUpdate(payload: Record<string, unknown>): ActivitySpan | null {
   const briefRaw = payload.research_brief;
   if (!briefRaw || typeof briefRaw !== "object" || Array.isArray(briefRaw)) return null;
@@ -56,6 +59,8 @@ export function mapDigigraphTraceToSpans(
   trace: DigigraphTraceLike,
   detail: ActivityDetail
 ): ActivitySpan[] {
+  if (SUPPRESSED_TRACE_TYPES.has(trace.type)) return [];
+
   let raw: ActivitySpan | null = null;
   if (trace.type === "rag_sources") {
     raw = mapDigisearchRagSources(trace.payload ?? {});
@@ -67,8 +72,9 @@ export function mapDigigraphTraceToSpans(
     raw = mapDigivaultSearchNotes(trace.payload ?? {});
     if (!raw) raw = mapOpaque(trace);
   } else if (trace.type === "graph_update") {
+    // Only research_brief graph_update events surface as "Research brief".
+    // Bare LangGraph stream updates (payload.update) are internal housekeeping.
     raw = mapGraphUpdate(trace.payload ?? {});
-    if (!raw) raw = mapOpaque(trace);
   } else {
     raw = mapOpaque(trace);
   }

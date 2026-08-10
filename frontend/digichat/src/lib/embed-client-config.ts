@@ -31,7 +31,6 @@ export type EmbedTenantClientConfig = {
   placeholder?: string;
   lockedContact?: string;
   showByok?: boolean;
-  showStatusBar?: boolean;
   layout?: "page" | "embed";
   llmAccess?: EmbedLlmAccess;
 };
@@ -45,7 +44,6 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   accent: null,
   attribution: false,
   showByok: false,
-  showStatusBar: false,
   layout: "embed",
 };
 
@@ -64,7 +62,6 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     placeholder: cfg.placeholder,
     lockedContact: cfg.lockedContact,
     showByok: cfg.showByok ?? false,
-    showStatusBar: cfg.showStatusBar ?? false,
     layout: cfg.layout ?? "embed",
     llmAccess: cfg.llmAccess,
   };

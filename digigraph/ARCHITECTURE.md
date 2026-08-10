@@ -109,7 +109,7 @@ When `stream: true` in `POST /v1/chat/completions`:
 3. Event types produced by the workflow thread:
    - `tool_call` / `tool_result` — formatted with the stream formatter (neutral or Open WebUI `<details>` style)
    - `content` — LLM token deltas, HTML-escaped
-   - `reasoning` — accumulated into a `<thinking>` block before the first `content` chunk
+   - `reasoning` — accumulated into a `<thinking>` block before the first `content` chunk (skipped when `X-Suppress-Tool-Stream` is set)
    - `trace` — `TraceEventV1` dicts embedded in `delta.digigraph_trace` for digichat
    - `done` — terminates the generator loop
 4. If the client disconnects mid-stream, the generator raises an exception; the background thread continues running until it completes naturally. There is no cancellation token or thread interrupt mechanism — see Section 6 (Security Analysis).
@@ -298,7 +298,7 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 | `model` | `str` | Default `"sitaas-rag"`; not used for routing (LiteLLM handles it) |
 | `messages` | `list[ChatMessage]` | Role + content; content coerced from AI SDK part lists |
 | `stream` | `bool` | SSE streaming |
-| `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks |
+| `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Also implied by `model=sitaas-rag` unless `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
 | `session_id` | `str \| None` | Conversation isolation |
 | `allowed_tools` | `list[str] \| None` | Tool allowlist for this request |
 
@@ -372,7 +372,7 @@ START
   └─[default]─────────────► research subgraph
                                 │
                                 ├─ research_inner (research_node)
-                                └─ research_brief_builder
+                                └─ research_brief_builder (skipped when `agents.research_brief: false` / `DIGI_RESEARCH_BRIEF=0`)
                                │
                                ├─ error → END
                                ├─ research_rag profile → END
@@ -386,6 +386,10 @@ START
                                                                ├─ no result → END
                                                                └─ optimize enabled → optimize → END
 ```
+
+When `agents.always_retrieve_tools` is set, `research_node` (document RAG path) invokes those tools **before** the LLM turn, injects `[tool_name results]…` blocks into the user message, and **strips** those tool names from `tools_for_llm` so the model cannot re-call the same retrieval tools. If no tools remain, `run_tools` runs a single streamed completion (no tool rounds).
+
+`agents.research_brief` (default `true`; env `DIGI_RESEARCH_BRIEF=0/1` overrides) controls whether `build_research_subgraph()` wires `research_brief_builder` after `research_inner`. When false, the subgraph ends when the answer stream completes — dogfood chat uses this to avoid a post-answer `completion_text` latency tax.
 
 The graph is compiled once per `build_workflow_graph()` call. In practice, `workflow.py` calls `build_workflow_graph()` on **every** request — there is no module-level compiled graph cache. This means the StateGraph is recompiled on each call; the checkpointer instance is shared (process-wide singleton).
 
@@ -755,6 +759,7 @@ digigraph:
 | `DIGI_SUPERVISOR` | (empty) | Enable supervisor node: `1` / `true` |
 | `DIGI_HUB_MODE` | `legacy` | Hub mode: `legacy` (default) or `federated` |
 | `DIGI_WORKFLOW_PROFILE` | `full_stack` | Workflow profile when not set in project config |
+| `DIGI_RESEARCH_BRIEF` | (unset → YAML / default on) | Override `agents.research_brief`: `0`/`false` skips ResearchBrief post-pass |
 | `DIGI_ALLOWED_TOOLS` | (empty) | Comma-separated allowlist (env fallback) |
 | `DIGI_ALLOW_CODE_EXEC` | (empty) | Enable `data_engineer_agent` code execution: `1` / `true` |
 | `DIGI_RUN_DATA_DIR` | (empty) | Session dataset storage; enables `sitaas_rag` skill |

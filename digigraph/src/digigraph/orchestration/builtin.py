@@ -119,8 +119,15 @@ def _digisearch_available(_context: ToolContext) -> bool:
 
 
 def _digivault_available(_context: ToolContext) -> bool:
-    url = os.environ.get("DIGIVAULT_URL", "")
-    return bool(url and url.strip())
+    url = os.environ.get("DIGIVAULT_URL", "").strip()
+    if url:
+        return True
+    try:
+        cfg_url = DigiProjectConfig.load().get_digivault_url()
+        return bool(str(cfg_url).strip())
+    except Exception as exc:
+        logger.debug("digivault availability check via project config failed: %s", exc)
+        return False
 
 
 def _digi_bearer_from_context(context: ToolContext) -> str | None:

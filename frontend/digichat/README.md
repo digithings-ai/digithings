@@ -43,7 +43,7 @@ Docker: `docker compose --profile digichat up -d --build digichat` from repo roo
 - **Analytics:** `src/lib/embed-gate.ts` exports `emit(event, props)` — a no-op today, single call-site for future vendor wiring.
 - **Non-goals (see #241):** no backend rate limiting, no model selector, no SSO.
 
-**Production embed gate:** `POST /api/chat` returns **503** for embed requests (`X-Embed-Host`) unless `DIGICHAT_EMBED_ENABLED=1` or `X-Embed-Token` matches `DIGICHAT_EMBED_TOKEN`. Configure one of these before exposing `/embed` on a public host.
+**Production embed gate:** `POST /api/chat` returns **503** for embed requests (`X-Embed-Host`) on **unregistered** hosts unless `DIGICHAT_LEGACY_EMBED_ENABLED=1` (or deprecated `DIGICHAT_EMBED_ENABLED=1`) or `X-Embed-Token` matches `DIGICHAT_EMBED_TOKEN`. Registered tenants in `DIGICHAT_EMBED_TENANTS` use their own token, or first-party bypass for `digithings.ai` / `www.digithings.ai` (and `localhost` / `127.0.0.1` in development when registered). Legacy generic embed does **not** default on when tenants are configured.
 
 Local iframe test:
 ```bash

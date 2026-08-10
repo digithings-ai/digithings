@@ -261,6 +261,61 @@ def _plan_result_preview(result: str | dict) -> str:
     return s[:400] + "..." if len(s) > 400 else s
 
 
+def _format_prefetch_context(tool_name: str, result: str | dict) -> str:
+    """Format a prefetched tool result for injection into the user/LLM message."""
+    max_chars = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "12000"))
+    if isinstance(result, dict):
+        body = result.get("content")
+        if not isinstance(body, str) or not body.strip():
+            # Prefer compact JSON of retrieval payload (results / rag_sources / notes).
+            slim: dict[str, Any] = {}
+            for key in ("results", "rag_sources", "notes", "hits", "error", "content"):
+                if key in result:
+                    slim[key] = result[key]
+            body = json.dumps(slim or result, default=str)
+    else:
+        body = str(result)
+    if len(body) > max_chars:
+        body = (
+            body[: max_chars - 80].rstrip()
+            + "\n...[truncated for LLM context; full tool payload retained upstream]"
+        )
+    return f"[{tool_name} results]\n{body}"
+
+
+def _tool_definition_name(tool: dict[str, Any] | str) -> str | None:
+    """Extract the orchestrator tool name from an OpenAI tool dict or SUMMARY string."""
+    if isinstance(tool, str):
+        return tool.split(":", 1)[0].strip() or None
+    if not isinstance(tool, dict):
+        return None
+    fn = tool.get("function")
+    if isinstance(fn, dict):
+        name = fn.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    name = tool.get("name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return None
+
+
+def _strip_tools_by_name(
+    tools: list[dict[str, Any]] | list[str],
+    names: set[str],
+) -> list[dict[str, Any]] | list[str]:
+    """Remove tool defs whose names are in ``names`` (after always_retrieve prefetch)."""
+    if not names or not tools:
+        return tools
+    kept: list[Any] = []
+    for tool in tools:
+        tname = _tool_definition_name(tool)
+        if tname is not None and tname in names:
+            continue
+        kept.append(tool)
+    return kept  # type: ignore[return-value]
+
+
 def _run_document_rag_path(
     *,
     state: WorkflowState,
@@ -338,6 +393,30 @@ def _run_document_rag_path(
             data = {**data, "index_name": index_display_name}
         raw_callback(event_type, data)
 
+    from digigraph.orchestration.registry import has_tool
+
+    prefetch_names = cfg.get_always_retrieve_tools() if cfg else []
+    prefetch_blocks: list[str] = []
+    prefetched: set[str] = set()
+    if prefetch_names and str(prompt).strip():
+        q = str(prompt).strip()
+        for tool_name in prefetch_names:
+            if not has_tool(tool_name):
+                continue
+            if _allowed_names is not None and tool_name not in _allowed_names:
+                continue
+            args: dict[str, Any] = {"query": q}
+            stream_callback("tool_call", {"name": tool_name, "arguments": args})
+            result = execute_search(tool_name, args)
+            payload = (
+                {**result, "name": tool_name}
+                if isinstance(result, dict)
+                else {"name": tool_name, "content": result}
+            )
+            stream_callback("tool_result", payload)
+            prefetch_blocks.append(_format_prefetch_context(tool_name, result))
+            prefetched.add(tool_name)
+
     user_content = str(prompt)
 
     # SITAAS-only (project mode): prepend NL filter hints so the LLM folds them into
@@ -376,6 +455,19 @@ def _run_document_rag_path(
                 + user_content
             )
 
+    if prefetch_blocks:
+        user_content = (
+            "Retrieved context (already fetched — do not re-call these tools):\n\n"
+            + "\n\n".join(prefetch_blocks)
+            + "\n\nUser question:\n"
+            + user_content
+        )
+
+    # Prefetch already ran; strip those tools so the model cannot re-search.
+    if prefetched:
+        tools_for_llm = _strip_tools_by_name(tools_for_llm, prefetched)
+
+    # Empty tools_for_llm → single streamed completion (no tool rounds).
     content = run_tools(
         model=get_model_for_mode(),
         messages=[
