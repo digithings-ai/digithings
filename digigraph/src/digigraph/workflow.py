@@ -66,6 +66,12 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
         initial["research_filters"] = req.research_filters
     if req.evidence_tier_preference:
         initial["evidence_tier_preference"] = req.evidence_tier_preference
+    if req.digisearch_index:
+        initial["digisearch_index"] = req.digisearch_index
+    if req.vault_path_prefix:
+        initial["vault_path_prefix"] = req.vault_path_prefix
+    if req.research_system_prompt_override:
+        initial["research_system_prompt_override"] = req.research_system_prompt_override
     return initial
 
 

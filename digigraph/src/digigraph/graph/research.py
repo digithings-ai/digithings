@@ -359,6 +359,12 @@ def _run_document_rag_path(
         allowed_tool_names=_allowed_names,
         request_id=None if _ctx_rid is None else (str(_ctx_rid).strip() or None),
         workflow_id=None if _ctx_wid is None else (str(_ctx_wid).strip() or None),
+        vault_path_prefix=(
+            str(state["vault_path_prefix"]).strip()
+            if state.get("vault_path_prefix")
+            else None
+        )
+        or None,
     )
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     collected_stored: dict[str, dict] = {}
@@ -640,6 +646,13 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
         }
 
     cfg, index_name, index_display_name, system_prompt = _load_research_settings()
+    override_index = state.get("digisearch_index")
+    if override_index and str(override_index).strip():
+        index_name = str(override_index).strip()
+        index_display_name = index_name
+    override_prompt = state.get("research_system_prompt_override")
+    if override_prompt and str(override_prompt).strip():
+        system_prompt = str(override_prompt).strip()
     is_document_mode = system_prompt != RESEARCH_SYSTEM
 
     if is_document_mode and _digisearch_available():

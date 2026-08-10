@@ -111,6 +111,14 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
                         "type": "integer",
                         "description": f"Max hits to return (default {DEFAULT_SEARCH_NOTES_LIMIT}).",
                     },
+                    "path_prefix": {
+                        "type": "string",
+                        "description": (
+                            "Optional vault_path prefix filter (e.g. "
+                            "clients/online-compliance-center). Isolates multi-tenant "
+                            "corpora in the shared architecture_notes table."
+                        ),
+                    },
                 },
                 "required": ["query"],
             },

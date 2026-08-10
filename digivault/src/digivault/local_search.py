@@ -17,13 +17,31 @@ def _tokens(text: str) -> list[str]:
     return [t.lower() for t in _TOKEN.findall(text)]
 
 
-def search_local_vault(vault: Vault, query: str, *, limit: int = 7) -> list[VaultSearchHit]:
+def search_local_vault(
+    vault: Vault,
+    query: str,
+    *,
+    limit: int = 7,
+    path_prefix: str | None = None,
+) -> list[VaultSearchHit]:
     """Rank notes by token overlap in title + body. Deterministic; no network."""
     q = [t for t in _tokens(query) if t]
     if not q or vault.root is None:
         return []
+    prefix = (path_prefix or "").strip().strip("/")
     scored: list[VaultSearchHit] = []
     for note in vault.list_notes():
+        rel = note.rel_path.replace("\\", "/")
+        # note.rel_path often includes .md; vault_path in hits historically used rel_path
+        path_for_prefix = rel[:-3] if rel.endswith(".md") else rel
+        if prefix:
+            if not (
+                path_for_prefix == prefix
+                or path_for_prefix.startswith(prefix + "/")
+                or rel.startswith(prefix + "/")
+                or rel.startswith(prefix)
+            ):
+                continue
         path = Path(vault.root) / note.rel_path
         raw = path.read_text(encoding="utf-8")
         _fm, body = split_frontmatter(raw)

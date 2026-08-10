@@ -333,12 +333,20 @@ def orchestrator_invoke(
         except (TypeError, ValueError):
             limit = DEFAULT_SEARCH_NOTES_LIMIT
         limit = max(1, min(limit, _MAX_SEARCH_NOTES_LIMIT))
+        path_prefix_raw = args.get("path_prefix")
+        path_prefix = (
+            str(path_prefix_raw).strip().strip("/") if path_prefix_raw is not None else None
+        ) or None
 
         root_env = (os.environ.get("DIGIVAULT_ROOT") or "").strip()
         if root_env:
-            hits = search_local_vault(_open_vault(), query, limit=limit)
+            hits = search_local_vault(
+                _open_vault(), query, limit=limit, path_prefix=path_prefix
+            )
         else:
-            hits = _open_supabase_store().search(query, limit=limit)
+            hits = _open_supabase_store().search(
+                query, limit=limit, path_prefix=path_prefix
+            )
         data = {"hits": [h.model_dump(mode="json") for h in hits]}
         return OrchestratorInvokeResponse(ok=True, tool=tool, data=data)
 

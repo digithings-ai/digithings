@@ -20,4 +20,7 @@ manifests under `docs/projects/<client>/` (or private `projects/`). These are
 
 - Runbook: [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../digichat/CLIENT-DOCS-ONBOARD.md)
 - Plan: [`docs/superpowers/plans/2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md)
+- Client #0 (dogfood): [`docs/projects/digithings/`](../projects/digithings/)
+- Client #1 (OCC): [`docs/projects/online-compliance-center/`](../projects/online-compliance-center/)
+- OCC chat plan: [`docs/superpowers/plans/2026-08-10-occ-client-chat.md`](../superpowers/plans/2026-08-10-occ-client-chat.md)
 - Fit: [`docs/architecture/digichat-self-host-picks-fit.md`](../architecture/digichat-self-host-picks-fit.md)

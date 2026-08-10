@@ -80,6 +80,8 @@ class ToolContext:
     allowed_tool_names: frozenset[str] | None = None
     request_id: str | None = None
     workflow_id: str | None = None
+    # Optional digivault path prefix for multi-tenant corpus isolation.
+    vault_path_prefix: str | None = None
 
     @property
     def has_run_data_dir(self) -> bool:
