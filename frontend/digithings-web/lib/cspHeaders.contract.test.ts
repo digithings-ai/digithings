@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_DIGICHAT_EMBED_ORIGIN,
   digithingsCsp,
+  embedOriginForChat,
   frameSrcForCsp,
   renderCloudflareHeaders,
   resolveDigichatEmbedOrigin,
@@ -33,9 +34,15 @@ describe("digithings-web security-headers", () => {
       }),
     ).toBe("https://staging-chat.example");
     expect(frameSrcForCsp({})).toBe(DEFAULT_DIGICHAT_EMBED_ORIGIN);
+    expect(DEFAULT_DIGICHAT_EMBED_ORIGIN).toBe("https://digithings.ai");
     expect(digithingsCsp("https://staging-chat.example")).toContain(
       "frame-src https://staging-chat.example",
     );
+  });
+
+  it("aligns /chat iframe origin with CSP (Containers same-host default)", () => {
+    expect(embedOriginForChat({})).toBe("https://digithings.ai");
+    expect(embedOriginForChat({})).toBe(frameSrcForCsp({}));
   });
 
   it("keeps committed _headers aligned with default CSP", () => {
