@@ -84,3 +84,42 @@ def test_write_vault_notes_html_includes_source_url(tmp_path: Path) -> None:
     assert fm.get("source_url") == url
     assert "Ship agents safely" in body
     assert "client:example" in (fm.get("tags") or [])
+
+
+def test_write_vault_notes_normalizes_digi_product_title(tmp_path: Path) -> None:
+    manifest = OnboardManifest(
+        client="example",
+        seed_url="https://docs.example.com/",
+        vault_subdir="clients/example",
+    )
+    ws = Workspace.create(tmp_path / "work")
+    url = "https://docs.example.com/modules/digigraph"
+    html_rel = "html/digigraph.html"
+    (ws.html_dir / "digigraph.html").write_text(
+        "<html><title>DigiGraph</title><body><main>Orchestration brain</main></body></html>",
+        encoding="utf-8",
+    )
+    ws.append_classified(
+        ClassifiedPage(
+            page=DiscoveredPage(
+                url=url,
+                final_url=url,
+                content_type="text/html",
+                title="DigiGraph",
+                depth=1,
+                html_path=html_rel,
+            ),
+            page_class=PageClass.docs,
+            score=80.0,
+            reasons=("docs_prefix:/modules",),
+        )
+    )
+    vault_root = tmp_path / "vault"
+    vault_root.mkdir()
+    vault = Vault(vault_root)
+    n = write_vault_notes(manifest, ws, vault)
+    assert n == 1
+    notes = vault.list_notes()
+    raw = vault.read_text(notes[0].name)
+    fm, _ = split_frontmatter(raw)
+    assert fm.get("title") == "digigraph"
