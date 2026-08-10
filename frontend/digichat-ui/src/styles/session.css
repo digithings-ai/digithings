@@ -46,6 +46,13 @@
   text-decoration: underline;
 }
 
+.dc-wordmark-header {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--hair);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.82rem;
+}
+
 .dc-thread {
   flex: 1;
   min-height: 0;
@@ -405,12 +412,4 @@
 .dc-attribution a {
   color: var(--accent);
   text-decoration: underline;
-}
-
-.dc-header-meta {
-  margin-left: auto;
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
 }

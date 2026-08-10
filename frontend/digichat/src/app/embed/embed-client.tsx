@@ -580,31 +580,25 @@ function EmbedChat({
   const footerAttribution = attributionAt === "footer";
   const headerAttribution = attributionAt === "header";
 
-  const headerSlot =
-    headerTitle || !ungated ? (
-      <header className="dc-brand">
-        {headerTitle ? <span>{headerTitle}</span> : <span>digichat</span>}
-        {headerAttribution ? (
-          <span className="dc-brand-by">
-            (
-            <a
-              href="https://digithings.ai"
-              target="_blank"
-              rel="noreferrer noopener"
-              className="dc-brand-link"
-            >
-              by digichat
-            </a>
-            )
-          </span>
-        ) : null}
-        {!ungated ? (
-          <span className="dc-header-meta" aria-label={`Turns used: ${gate.turns} of ${gate.limit}`}>
-            {byokIsSet ? "BYOK unlocked" : `${gate.turns}/${gate.limit} free`}
-          </span>
-        ) : null}
-      </header>
-    ) : null;
+  const headerSlot = headerTitle ? (
+    <header className="dc-brand">
+      <span>{headerTitle}</span>
+      {headerAttribution ? (
+        <span className="dc-brand-by">
+          (
+          <a
+            href="https://digithings.ai"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="dc-brand-link"
+          >
+            by digichat
+          </a>
+          )
+        </span>
+      ) : null}
+    </header>
+  ) : null;
 
   const footerSlot = footerAttribution ? (
     <p className="dc-attribution">

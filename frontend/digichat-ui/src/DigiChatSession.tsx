@@ -5,6 +5,7 @@ import { ChatStreamCursor } from "@digithings/web";
 import { stripFoundryCitationMarkers, chainActivities } from "./activity-view";
 import { ChatActivities } from "./components/ChatActivities";
 import { CopyButton } from "./components/CopyButton";
+import { DigiChatWordmark } from "./components/DigiChatMark";
 import { MiniMarkdown } from "./components/MiniMarkdown";
 import type { DigiChatSessionProps } from "./types";
 import { useStreamingIntro } from "./useStreamingIntro";
@@ -102,7 +103,12 @@ export function DigiChatSession({
 
   return (
     <section className={sessionClass} aria-label={ariaLabel}>
-      {headerSlot}
+      {headerSlot ??
+        (branding?.title ? null : (
+          <header className="dc-wordmark-header">
+            <DigiChatWordmark />
+          </header>
+        ))}
 
       {branding?.title ? (
         <header className="dc-brand">
