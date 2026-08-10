@@ -106,7 +106,9 @@ Production `DIGICHAT_EMBED_TENANTS` must include OCC:
 digichat forwards `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix`; digigraph
 `corpus_routing` applies them to digisearch / digivault tools.
 
-Stack entrypoint seeds a **minimal** `occ_help` FAQ + vault notes into Chroma
+Stack oneshot seeds **`digithings_docs` + `occ_help`** FAQ/showcase notes into Chroma
+(and refreshes vault `seed-*.md` under both client prefixes) so digithings.ai/chat
+and `/chat/occ` have grounded retrieval before a full docs_onboard apply.
 **before** supervisord starts digisearch (avoids multi-process SQLite locks).
 Full crawl of help.online-compliance-center.com remains **HOLD** until approval
 ([GAPLOG](../../docs/projects/online-compliance-center/GAPLOG.md)).

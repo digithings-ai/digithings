@@ -37,7 +37,7 @@ Compare-and-gap after wiring digithings.ai/chat/occ. Digi names lowercase.
 - Cloudflare Pages deploy of digithings-web including `/chat/occ`
 - Apply digivault Supabase migration for `path_prefix` on `search_architecture_notes` (or rely on oversample+filter / local vault seed until applied)
 - ~~`DIGI_TENANT_CORPUS_MAP` on digigraph~~ — set in Profile A stack `wrangler.toml` `[vars]` + local bundle compose default
-- Static `occ_help` seed ships in `frontend/digithings-stack-cloudflare/container/seed/`; entrypoint ingests into Chroma **before** supervisord
+- Static `digithings_docs` + `occ_help` seeds ship in `frontend/digithings-stack-cloudflare/container/seed/`; oneshot `seed_chroma` ingests both into Chroma **before** digisearch starts (vault `seed-*.md` refreshed on every boot)
 - **BLOCKER (2026-08-10):** `graph.digithings.ai` / `key.digithings.ai` custom domains are not live yet (routes commented in stack `wrangler.toml`; healthz unreachable). Do **not** retarget digichat Worker `DIGIGRAPH_INTERNAL_URL` / `DIGIKEY_URL` to those hosts (and never to Mac `*.trycloudflare.com` tunnels) until both healthz probes succeed. Until cutover, CF-hosted OCC RAG against the bundle index cannot be verified end-to-end.
 
 ## Dry-run log
