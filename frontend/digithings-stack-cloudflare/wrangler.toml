@@ -80,4 +80,4 @@ DIGIVAULT_ROOT = "/data/vault"
 DIGIKEY_DATABASE_URL = "sqlite:////data/digikey.db"
 DIGISEARCH_INDEX = "digithings_docs"
 # Defense-in-depth corpus map (headers from digichat still win).
-DIGI_TENANT_CORPUS_MAP = "{\"occ\":{\"digisearchIndex\":\"occ_help\",\"vaultPathPrefix\":\"clients/online-compliance-center\"}}"
+DIGI_TENANT_CORPUS_MAP = "{\"digithings\":{\"digisearchIndex\":\"digithings_docs\",\"vaultPathPrefix\":\"clients/digithings\"},\"occ\":{\"digisearchIndex\":\"occ_help\",\"vaultPathPrefix\":\"clients/online-compliance-center\"}}"

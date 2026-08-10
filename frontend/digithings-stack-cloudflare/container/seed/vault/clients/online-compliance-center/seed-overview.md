@@ -6,9 +6,14 @@ tags: [occ, seed]
 
 # OCC help — seed overview
 
-Static vault seed for `clients/online-compliance-center/`. Used by digigraph
-`digivault` tools when digichat sends `X-Digi-Vault-Prefix:
-clients/online-compliance-center`.
+Static vault seed for `clients/online-compliance-center/`. digichat sends
+`X-Digi-Vault-Prefix: clients/online-compliance-center` for the OCC tenant.
 
-Replace via docs_onboard apply after crawl approval
-(`docs/projects/online-compliance-center/GAPLOG.md`).
+Seed notes (refreshed on Container boot from `seed-*.md` in the stack image):
+
+- `seed-getting-started.md` — what OCC is / how to ask
+- `seed-policies.md` — policies vs procedures
+- `seed-documents.md` — help PDFs and corpus limits
+
+Full crawl of help.online-compliance-center.com remains HOLD until explicit
+approval (`docs/projects/online-compliance-center/GAPLOG.md`).
