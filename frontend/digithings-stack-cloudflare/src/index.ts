@@ -74,6 +74,9 @@ export class DigiStackContainer extends Container {
    * brings up digigraph (and digikey) under Firecracker.
    */
   override async fetch(request: Request): Promise<Response> {
+    // switchPort sets cf-container-target-port; containerFetch(request) alone
+    // ignores that header and always uses defaultPort (digigraph :8000) — which
+    // made key.digithings.ai / JWKS / bff_session hit digigraph (smoke NO-GO).
     const targetPort = targetPortFromRequest(request);
     try {
       await this.startAndWaitForPorts({
@@ -89,7 +92,7 @@ export class DigiStackContainer extends Container {
         status: 503,
       });
     }
-    return this.containerFetch(request);
+    return this.containerFetch(request, targetPort);
   }
 }
 

@@ -30,7 +30,7 @@ zone_name = "digithings.ai"
 class_name = "DigiChatContainer"
 # Build context is monorepo root (two levels up from this package).
 image = "../../Dockerfile.digichat-cloudflare"
-max_instances = 3
+max_instances = 5
 
 [[durable_objects.bindings]]
 name = "DIGICHAT"
@@ -58,3 +58,7 @@ new_sqlite_classes = ["DigiChatContainer"]
 DIGICHAT_EMBED_ENABLED = "1"
 DIGICHAT_REQUIRE_ROOT_AUTH = "0"
 DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai"
+# Profile A: digisearch/digivault are loopback inside digithings-stack; digichat
+# only talks to digigraph (+ digikey for bff_session). Do not probe digisearch
+# / digiquant / digismith from /api/health (defaults would be unreachable).
+DIGICHAT_ENABLED_SERVICES = "digigraph"
