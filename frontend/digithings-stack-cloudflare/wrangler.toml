@@ -12,18 +12,17 @@ main = "src/index.ts"
 compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Custom domains — enable AFTER workers.dev /healthz returns 200 (human gate:
-# public digigraph + digikey). Until then digichat may keep Mac tunnels.
-# After domains are live, retarget digichat secrets to graph./key. (not trycloudflare).
-# [[routes]]
-# pattern = "graph.digithings.ai"
-# zone_name = "digithings.ai"
-# custom_domain = true
-#
-# [[routes]]
-# pattern = "key.digithings.ai"
-# zone_name = "digithings.ai"
-# custom_domain = true
+# Custom domains (enabled after workers.dev /healthz returned 200).
+# Human gate: public digigraph + digikey; JWT/BFF still required on APIs.
+[[routes]]
+pattern = "graph.digithings.ai"
+zone_name = "digithings.ai"
+custom_domain = true
+
+[[routes]]
+pattern = "key.digithings.ai"
+zone_name = "digithings.ai"
+custom_domain = true
 
 [[containers]]
 class_name = "DigiStackContainer"
