@@ -28,7 +28,11 @@ import {
 
 /** Foundry has no per-call system-prompt slot (see module doc comment) — the
  * language directive is prepended to the raw input text instead, resent on
- * every turn since Foundry, not this adapter, holds conversation history. */
+ * every turn since Foundry, not this adapter, holds conversation history.
+ * The bracketed `[...]` phrasing (vs. digigraph's plain-sentence directive in
+ * digigraph.languages) is deliberate: this text is persisted verbatim into
+ * Foundry's own conversation history across turns, so the brackets mark it as
+ * an out-of-band instruction rather than part of the literal user message. */
 export function applyLanguageDirective(message: string, responseLanguage?: string): string {
   if (!responseLanguage || responseLanguage === "en") return message;
   const language = LANGUAGES.find((l) => l.code === responseLanguage);

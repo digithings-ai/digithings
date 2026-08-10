@@ -263,6 +263,7 @@ Pydantic v2 model for `POST /workflow` and internal use:
 | `digi_bearer` | `str \| None` | JWT propagated downstream |
 | `digi_trace_key_prefix` / `digi_trace_tenant` / `digi_trace_project_id` / `digi_trace_jti` | `str \| None` | digikey audit fields |
 | `evidence_tier_preference` | `list[str] \| None` | Evidence tier filter |
+| `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`); see 4.1 |
 
 ### 4.3 WorkflowResult (`models.py`)
 

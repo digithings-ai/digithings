@@ -8,6 +8,7 @@ import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { byokRequiresModel, type BYOKProvider } from "@/hooks/use-byok-key";
 import { p } from "@/lib/base-path";
 import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
+import { resolveLanguageCode } from "@/lib/languages";
 import {
   ACTIVITY_PART_TYPE,
   sanitizeActivitySpan,
@@ -188,8 +189,12 @@ export function useEmbedDigiChat({
               headers["X-BYOK-Model"] = byokModel.trim();
             }
           }
-          if (responseLanguage && responseLanguage !== "en") {
-            headers["X-Digi-Language"] = responseLanguage;
+          // Normalize against the curated list before forwarding — defense-in-depth
+          // for a hypothetical future caller of this exported hook that doesn't
+          // already pass a curated-safe value (see #2103 final review, Fix 6).
+          const normalizedLanguage = resolveLanguageCode(responseLanguage);
+          if (normalizedLanguage !== "en") {
+            headers["X-Digi-Language"] = normalizedLanguage;
           }
           // Send-time unlock check — transport is frozen on first render (#1339),
           // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
