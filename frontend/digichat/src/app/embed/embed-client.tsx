@@ -54,6 +54,8 @@ import {
   type EmbedTenantClientConfig,
 } from "@/hooks/use-embed-tenant-config";
 import { resolveAttributionPlacement, resolveEmbedUiFlags } from "@/lib/embed-ui-flags";
+import { LanguageSelect } from "@/components/language-select";
+import { detectBrowserLanguageCode } from "@/lib/languages";
 import { applyEmbedSeed } from "@/lib/embed-seed-apply";
 import {
   READY_MESSAGE,
@@ -244,6 +246,7 @@ function EmbedChat({
   const isTrialForm = tenantCfg.gateMode === "trial_form";
   const llmAccess = tenantCfg.llmAccess;
   const uiFlags = resolveEmbedUiFlags(tenantCfg);
+  const [language, setLanguage] = useState(() => detectBrowserLanguageCode());
   // trial_form still hides BYOK until parent unlock — product rule for DataTap only
   // backend_only never shows BYOK even if misconfigured showByok
   const showByok =
@@ -353,6 +356,7 @@ function EmbedChat({
     byokModel,
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
+    responseLanguage: language,
   });
 
   // Free-tier / rate-limit → stop turn + open in-chat BYOK (free_then_byok, even when ungated).
@@ -651,9 +655,9 @@ function EmbedChat({
   const footerAttribution = attributionAt === "footer";
   const headerAttribution = attributionAt === "header";
 
-  const headerSlot = headerTitle ? (
+  const headerSlot = headerTitle || uiFlags.showLanguageSelector ? (
     <header className="dc-brand">
-      <span>{headerTitle}</span>
+      {headerTitle ? <span>{headerTitle}</span> : null}
       {headerAttribution ? (
         <span className="dc-brand-by">
           (
@@ -667,6 +671,9 @@ function EmbedChat({
           </a>
           )
         </span>
+      ) : null}
+      {uiFlags.showLanguageSelector ? (
+        <LanguageSelect value={language} onChange={setLanguage} />
       ) : null}
     </header>
   ) : null;
