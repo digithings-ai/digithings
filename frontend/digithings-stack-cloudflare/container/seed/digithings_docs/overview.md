@@ -1,5 +1,11 @@
 # digithings documentation — seed overview
 
-Minimal index pointer for digisearch collection `digithings_docs`. Prefer the
-sibling notes (`showcase.md`, `architecture.md`, `products.md`, `chat-faq.md`)
-for grounded answers about digithings.ai/chat.
+Pointer note for digisearch collection `digithings_docs`. Prefer topical siblings
+for grounded answers:
+
+- `showcase.md` — client #0 / how digithings.ai/chat is built
+- `architecture.md` — Profile A ports and persistence paths
+- `digikey-auth.md` — JWT, RS256, JWKS, scopes
+- `digisearch-rag.md` — Chroma indexes, chunking, hybrid query
+- `digivault-notes.md` — vault prefixes, frontmatter, wikilinks
+- `chat-faq.md` — short product FAQ

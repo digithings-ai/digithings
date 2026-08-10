@@ -5,17 +5,8 @@ tags: [digithings, seed, showcase]
 
 # digithings chat — product showcase
 
-**digithings.ai/chat is client #0:** the same self-hosted digichat + digigraph +
-digivault + digisearch stack shipped to customers — not a separate demo.
-
-## Layers
-
-- **digichat** — Next.js UI + BFF (`/embed`, ungated on digithings.ai)
-- **digigraph** — LangGraph research_rag workflow, tool routing
-- **digikey** — JWT + BFF session grants
-- **digivault** — notes under `clients/digithings/`
-- **digisearch** — RAG index `digithings_docs`
-- **digillm** — LiteLLM model proxy
+**digithings.ai/chat is client #0:** the same self-hosted chat stack shipped to
+customers — not a separate demo.
 
 ## Retrieval path
 
@@ -27,5 +18,5 @@ digithings.ai/chat → digichat /embed → digigraph
 
 ## Same product customers deploy
 
-Profile A self-host (Compose / Cloudflare Containers) uses the same components.
-Public chat is embed-only ungated; digikey still protects backend APIs.
+Profile A Compose / Cloudflare Containers path. Public chat is embed-only
+ungated; backend APIs still require scoped tokens.

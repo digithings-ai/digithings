@@ -2,28 +2,26 @@
 
 ## What is this chat?
 
-The public documentation assistant for digithings. It is **client #0 dogfood**:
-the same digichat + digigraph stack customers can self-host.
+Public documentation assistant for digithings. **Client #0 dogfood** of the
+self-host chat path.
 
-## Why do I see Sources / digisearch / digivault?
+## Why do I see Sources?
 
-Every answer is grounded. digigraph prefetches digisearch (`digithings_docs`)
-and digivault notes under `clients/digithings/` before writing a reply. Cite
-those paths when explaining how the product works.
+Answers are grounded. digigraph prefetches digisearch and digivault before
+writing a reply. Cite the returned paths.
 
 ## Is OCC the same chat?
 
-**Online Compliance Center** is a separate embed tenant (`/chat/occ`) with its
-own corpus (`occ_help` + `clients/online-compliance-center/`). digithings.ai/chat
-(default) uses digithings docs, not OCC policies.
+**Online Compliance Center** is a separate embed tenant (`/chat/occ`) with corpus
+`occ_help` and vault prefix `clients/online-compliance-center/`. Default
+digithings.ai/chat does not load OCC policies.
 
 ## Can I bring my own API key?
 
-When the tenant enables BYOK, digichat can use a session-only provider key for
-generation. Service auth to digigraph still goes through digikey.
+When the tenant enables BYOK, digichat may use a session-only provider key for
+generation. Service auth still goes through digikey.
 
 ## Where does the corpus come from?
 
-1. **Stack image seeds** (this file and siblings) — first-boot grounding
-2. **docs_onboard** — full website crawl + monorepo docs + OpenAPI into vault +
-   digisearch (operator / CI path)
+1. Stack image seeds (these markdown files) — first-boot grounding
+2. `docs_onboard` — full website crawl + monorepo docs + OpenAPI (operator path)

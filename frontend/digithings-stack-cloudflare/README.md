@@ -84,10 +84,10 @@ Boot order (critical for Cloudflare Containers port probes):
 3. Oneshot `seed_chroma` waits for digigraph `/healthz`, then runs
    `digisearch ingest` for **`digithings_docs`** (`/seed/digithings_docs`) and
    **`occ_help`** (`/seed/occ_help`) into Chroma.
-4. digisearch starts only after `.stack_chroma_seeded_v2` (or
-   `.stack_chroma_seed_skipped_v2`) so CLI ingest and the HTTP server never share
-   a PersistentClient. Bump the `v2` suffix in `seed_chroma.sh` when seed
-   markdown changes so existing volumes re-ingest.
+4. digisearch starts only after `.stack_chroma_seeded_v3` (or
+   `.stack_chroma_seed_skipped_v3`) so CLI ingest and the HTTP server never share
+   a PersistentClient. Bump the `v3` suffix in `seed_chroma.sh` / `start_digisearch.sh`
+   when seed markdown changes so existing volumes re-ingest.
 
 **Firecracker note:** supervisord must log to `/var/log/supervisor/*.log`,
 **not** `/dev/stdout`. Logging to `/dev/stdout` raises `ENXIO` and every
@@ -103,7 +103,7 @@ reach digisearch ingest with a JWT that has `digisearch:ingest`).
 ```bash
 # Inside the stack container (volume wipe or seed failure):
 supervisorctl stop digisearch
-rm -f /data/chroma/.stack_chroma_seeded_v2 /data/chroma/.stack_chroma_seed_skipped_v2
+rm -f /data/chroma/.stack_chroma_seeded_v3 /data/chroma/.stack_chroma_seed_skipped_v3
 /bin/sh /seed_chroma.sh
 supervisorctl start digisearch
 ```

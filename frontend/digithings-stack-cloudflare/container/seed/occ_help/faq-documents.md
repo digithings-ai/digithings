@@ -1,24 +1,21 @@
 # OCC documents and PDFs (seed)
 
-## Help center documents
+## Expected document types
 
-The public OCC help center publishes HTML FAQ pages and direct PDF links.
-Sample reconnaissance counted on the order of tens of HTML paths and ~24 PDFs
-(see project SCOPE). This seed does **not** include those binary PDFs.
+After a full help-center crawl / onboard, expect:
 
-## How digisearch treats docs
+- Policy PDFs
+- Procedure guides
+- FAQ / how-to articles
 
-When full onboard runs, PDFs with text layers are ingested as searchable chunks.
-OCR is a fallback (`DIGISEARCH_OCR_ENABLED`), not the default path.
+## Current seed limits
 
-## Vault notes
+Until crawl approval lands, this seed explains document expectations only — it
+does **not** contain the live help PDF bodies. Operators should ingest approved
+sources into digisearch `occ_help` and the vault prefix
+`clients/online-compliance-center/`.
 
-Onboarded pages become markdown notes under
-`clients/online-compliance-center/` with source URLs in metadata when available.
-Until then, use these seed FAQ notes for dogfood chat.
+## Retrieval tip
 
-## What to tell users
-
-- Public help content is the grounding source for this assistant
-- Portal-only or demo-only content is not in this corpus
-- If a specific PDF is not retrieved, say it is not in the indexed set yet
+Ask for a document **title** or **topic keyword** (retention, onboarding,
+incident) rather than generic "show me everything".

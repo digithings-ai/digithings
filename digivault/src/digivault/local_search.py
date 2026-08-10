@@ -12,9 +12,66 @@ from digivault.vault import Vault
 
 _TOKEN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 
+# Common English function words — always_retrieve passes the full user prompt as
+# the query, so without filtering "what/is/how/the" scores every note and Prefetch
+# returns the same vault set on every turn.
+_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "can",
+        "do",
+        "does",
+        "for",
+        "from",
+        "how",
+        "i",
+        "in",
+        "is",
+        "it",
+        "me",
+        "my",
+        "of",
+        "on",
+        "or",
+        "our",
+        "please",
+        "tell",
+        "that",
+        "the",
+        "their",
+        "this",
+        "to",
+        "us",
+        "we",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+        "with",
+        "you",
+        "your",
+    }
+)
+
 
 def _tokens(text: str) -> list[str]:
     return [t.lower() for t in _TOKEN.findall(text)]
+
+
+def _query_tokens(query: str) -> list[str]:
+    """Tokenize query and drop stopwords; fall back to raw tokens if all were stopped."""
+    raw = [t for t in _tokens(query) if t]
+    content = [t for t in raw if t not in _STOPWORDS and len(t) > 1]
+    return content or raw
 
 
 def search_local_vault(
@@ -25,7 +82,7 @@ def search_local_vault(
     path_prefix: str | None = None,
 ) -> list[VaultSearchHit]:
     """Rank notes by token overlap in title + body. Deterministic; no network."""
-    q = [t for t in _tokens(query) if t]
+    q = _query_tokens(query)
     if not q or vault.root is None:
         return []
     prefix = (path_prefix or "").strip().strip("/")
