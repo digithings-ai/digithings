@@ -1,4 +1,4 @@
-"""SemanticChunker - embedding cosine distance splits. Requires EmbeddingProvider."""
+"""Semantic chunker using embedding cosine distance."""
 
 from __future__ import annotations
 

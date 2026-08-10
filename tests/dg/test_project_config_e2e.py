@@ -1,4 +1,4 @@
-"""E2E loader test: DigiGraph resolves digiproject.yaml and surfaces it via /v1/status.
+"""E2E loader test: digigraph resolves digiproject.yaml and surfaces it via /v1/status.
 
 Self-contained via FastAPI TestClient — no running stack required, but marked `e2e`
 per epic #3 so it runs under the e2e suite.
@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 import yaml
-from fastapi.testclient import TestClient
-
 from digigraph.project_config import DigiProjectConfig
 from digigraph.server import app
+from fastapi.testclient import TestClient
+
 from tests.digi_test_jwt import auth_headers
 
 TEMPLATE_PATH = (

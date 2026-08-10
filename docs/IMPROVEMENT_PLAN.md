@@ -1,7 +1,7 @@
-# DigiThings — Improvement Plan v2.0
+# digithings — Improvement Plan v2.0
 
 **Based on:** `docs/CODE_REVIEW_BASELINE.md` v2.0 (2026-03-18)
-**Starting scores:** DigiGraph 6.2 · DigiQuant 7.0 · DigiSearch 5.7
+**Starting scores:** digigraph 6.2 · digiquant 7.0 · digisearch 5.7
 **Goal:** Reach composite ≥ 8.5 across all three components
 
 ---
@@ -23,7 +23,7 @@ Each phase lists items by component with file references and estimated line coun
 
 *Goal: No critical or high-severity security issues remain. No silent production failures.*
 
-### 1.1 — API Key Timing Attack (DigiGraph, DigiQuant, DigiSearch)
+### 1.1 — API Key Timing Attack (digigraph, digiquant, digisearch)
 
 **All three `server.py` files compare API keys with `!=`.**
 
@@ -40,7 +40,7 @@ if not secrets.compare_digest(request.headers.get("X-API-Key", ""), expected_key
 - Lines: 1-line change each
 - Effort: XS
 
-### 1.2 — Path Traversal: Resolve-First Pattern (DigiGraph)
+### 1.2 — Path Traversal: Resolve-First Pattern (digigraph)
 
 **Current:** `server.py` and `run_storage.py` check for `".."` in the raw string, then resolve. A URL-encoded path (`%2e%2e`) or symlink bypasses the check.
 
@@ -65,7 +65,7 @@ Replace calls in `server.py:92`, `run_storage.py:14-16`, `digistore.py:57-58`, `
 - Lines: ~20 new, ~12 replaced
 - Effort: S
 
-### 1.3 — OData Filter Injection (DigiSearch)
+### 1.3 — OData Filter Injection (digisearch)
 
 **`server.py` passes raw `filter` string from HTTP request body directly to the Azure backend.**
 
@@ -94,7 +94,7 @@ def validate_odata_filter(filter_str: str) -> str:
 - Lines: ~40 new
 - Effort: S
 
-### 1.4 — Session ID Length Limit (DigiGraph)
+### 1.4 — Session ID Length Limit (digigraph)
 
 **`run_storage.py` sanitizes session IDs to alphanumeric+underscore+hyphen but sets no length limit.**
 
@@ -107,7 +107,7 @@ _SESSION_RE = re.compile(r'^[a-zA-Z0-9_\-]{1,64}$')
 - Lines: 1-line change
 - Effort: XS
 
-### 1.5 — DigiSearch Stub: Explicit Error When No Backend (DigiSearch)
+### 1.5 — digisearch Stub: Explicit Error When No Backend (digisearch)
 
 **`_stub.py` silently returns 0.9-scored fake results when no backend is configured.** Users cannot distinguish real from stub results.
 
@@ -115,7 +115,7 @@ Fix: Return `SearchResponse(status="no_backend_configured", results=[])` and log
 
 ```python
 # digisearch/src/digisearch/search/_stub.py
-logger.warning("DigiSearch: no backend configured — all queries return empty results. "
+logger.warning("digisearch: no backend configured — all queries return empty results. "
                "Set DIGISEARCH_BACKEND or CHROMA_PATH.")
 ```
 
@@ -133,7 +133,7 @@ Change default from `["*"]` to `["http://localhost:3000", "http://localhost:8000
 - Lines: 1-line change each
 - Effort: XS
 
-### 1.7 — Data Directory Traversal (DigiQuant)
+### 1.7 — Data Directory Traversal (digiquant)
 
 **`nautilus_runner.py` iterates CSV files in `data_dir` with no path containment check.**
 
@@ -148,7 +148,7 @@ if not candidate.is_relative_to(Path(data_dir).resolve()):
 - Lines: 4 lines
 - Effort: XS
 
-### 1.8 — Disable or Sandbox `execute_python.py` (DigiGraph)
+### 1.8 — Disable or Sandbox `execute_python.py` (digigraph)
 
 **`exec()` with restricted globals is not a real sandbox** — `__subclasses__()` chain allows arbitrary code execution. This is the highest-severity unresolved issue.
 
@@ -166,7 +166,7 @@ Options:
 
 *Goal: Remove structural debt. One source of truth per concern.*
 
-### 2.1 — Shared `_subst_env()` Utility (DigiGraph + DigiSearch)
+### 2.1 — Shared `_subst_env()` Utility (digigraph + digisearch)
 
 Both `digigraph/project_config.py` and `digisearch/core/config.py` implement identical `_subst_env()` functions.
 
@@ -184,7 +184,7 @@ def subst_env(value: str) -> str:
 - Lines: ~15 new, ~20 removed
 - Effort: S
 
-### 2.2 — OpenAI Client Connection Pool (DigiGraph)
+### 2.2 — OpenAI Client Connection Pool (digigraph)
 
 **`get_client()` creates a new `OpenAI` instance on every call** — no connection reuse.
 
@@ -208,7 +208,7 @@ def get_client() -> OpenAI:
 - Lines: ~10
 - Effort: XS
 
-### 2.3 — Async HTTP in Tool Handlers (DigiGraph)
+### 2.3 — Async HTTP in Tool Handlers (digigraph)
 
 **`digisearch_tool.py` and `digiquant_tool.py` use `httpx.Client` (sync) inside async FastAPI routes.** Under concurrent load, ASGI workers stall waiting for blocking IO.
 
@@ -229,7 +229,7 @@ Tool dispatch in `chat_completion_with_tools` would need to `await` handlers or 
 - Lines: ~40 changed
 - Effort: M
 
-### 2.4 — `nautilus_runner.py` Decomposition (DigiQuant)
+### 2.4 — `nautilus_runner.py` Decomposition (digiquant)
 
 **292-line monolith** mixes data loading, bar period inference, Nautilus execution, result parsing, and tearsheet generation — untestable in isolation.
 
@@ -245,7 +245,7 @@ Benefit: each can be unit-tested independently; `result_parser.py` can be tested
 - Lines: ~50 net new (interfaces); existing ~292 redistributed
 - Effort: L
 
-### 2.5 — DigiSearch Backend Registry (DigiSearch)
+### 2.5 — digisearch Backend Registry (digisearch)
 
 **`client.py` uses `if/elif` chain for backend selection.** Adding a backend requires editing core client code.
 
@@ -260,7 +260,7 @@ _BACKEND_REGISTRY: dict[str, type[DigiIndex]] = {
 def _create_backend(name: str, config: DigiSearchConfig) -> DigiIndex:
     cls = _BACKEND_REGISTRY.get(name.lower())
     if cls is None:
-        raise ValueError(f"Unknown DigiSearch backend: {name!r}. Choices: {list(_BACKEND_REGISTRY)}")
+        raise ValueError(f"Unknown digisearch backend: {name!r}. Choices: {list(_BACKEND_REGISTRY)}")
     return cls(config)
 ```
 
@@ -268,7 +268,7 @@ def _create_backend(name: str, config: DigiSearchConfig) -> DigiIndex:
 - Lines: ~20 changed
 - Effort: S
 
-### 2.6 — YAML Spec File Cache (DigiQuant)
+### 2.6 — YAML Spec File Cache (digiquant)
 
 **`_load_yaml_specs()` parses the YAML file on every `get_param_specs()` call.** Cache with file mtime, same pattern as `project_config.py`.
 
@@ -294,7 +294,7 @@ def _load_yaml_specs() -> dict[str, dict[str, tuple]]:
 - Lines: ~15
 - Effort: XS
 
-### 2.7 — Strategy Name Whitelist (DigiQuant)
+### 2.7 — Strategy Name Whitelist (digiquant)
 
 **`run_backtest()` accepts any string as `strategy_name` — passed to Nautilus without validation.**
 
@@ -312,7 +312,7 @@ def run_backtest(strategy_name: str, ...):
 - Lines: ~10
 - Effort: XS
 
-### 2.8 — `addm.py` History TTL / Expiry (DigiQuant)
+### 2.8 — `addm.py` History TTL / Expiry (digiquant)
 
 **`_sharpe_history` is a process-global dict with no expiry.** Long-running processes accumulate stale keys forever.
 
@@ -322,7 +322,7 @@ Add a simple TTL via `(strategy_id, last_recorded_at)` tracking; prune entries o
 - Lines: ~20
 - Effort: XS
 
-### 2.9 — `SemanticChunker` Batch Embedding (DigiSearch)
+### 2.9 — `SemanticChunker` Batch Embedding (digisearch)
 
 **Calls `embedder.embed([sentence])` per sentence** — 1,000 embed calls for a 100-page document.
 
@@ -338,9 +338,9 @@ embeddings = self.embedder.embed(all_sentences)  # one call
 - Lines: ~30 changed
 - Effort: S
 
-### 2.10 — `SentenceChunker` Lazy NLTK Download (DigiSearch)
+### 2.10 — `SentenceChunker` Lazy NLTK Download (digisearch)
 
-**`nltk.download()` runs at module import time** — makes a network call on first import of any DigiSearch code.
+**`nltk.download()` runs at module import time** — makes a network call on first import of any digisearch code.
 
 ```python
 # Move into __init__ with a flag guard
@@ -365,7 +365,7 @@ class SentenceChunker:
 
 *Goal: ≥ 80% unit test coverage on all non-stub code. Production failures visible within 60 seconds.*
 
-### 3.1 — Test: `nautilus_runner` Result Parser (DigiQuant)
+### 3.1 — Test: `nautilus_runner` Result Parser (digiquant)
 
 The most fragile untested code. Create fixture CSV files mimicking Nautilus account reports, test against `result_parser.py` (post-2.4 refactor).
 
@@ -374,7 +374,7 @@ The most fragile untested code. Create fixture CSV files mimicking Nautilus acco
 - Lines: ~80 tests
 - Effort: M (after 2.4)
 
-### 3.2 — Test: `tradingview.py` and `addm.py` (DigiQuant)
+### 3.2 — Test: `tradingview.py` and `addm.py` (digiquant)
 
 New Phase 3 code has no tests.
 
@@ -396,7 +396,7 @@ New Phase 3 code has no tests.
 - Lines: ~120 tests total
 - Effort: S
 
-### 3.3 — Test: Bayesian Optimization (DigiQuant)
+### 3.3 — Test: Bayesian Optimization (digiquant)
 
 `optimize_bayesian.py` has zero tests.
 
@@ -408,7 +408,7 @@ New Phase 3 code has no tests.
 - Lines: ~60 tests
 - Effort: S
 
-### 3.4 — Test: Hybrid Search, RRF Merge (DigiSearch)
+### 3.4 — Test: Hybrid Search, RRF Merge (digisearch)
 
 Core search logic is untested.
 
@@ -420,7 +420,7 @@ Core search logic is untested.
 - Lines: ~50 tests
 - Effort: S
 
-### 3.5 — Test: OData Filter Validator (DigiSearch)
+### 3.5 — Test: OData Filter Validator (digisearch)
 
 After 1.3 is implemented:
 
@@ -433,7 +433,7 @@ After 1.3 is implemented:
 - Lines: ~30 tests
 - Effort: XS
 
-### 3.6 — Test: Path Traversal Rejection (DigiGraph, DigiQuant)
+### 3.6 — Test: Path Traversal Rejection (digigraph, digiquant)
 
 After 1.2 is implemented:
 
@@ -446,7 +446,7 @@ After 1.2 is implemented:
 - Lines: ~40 tests
 - Effort: S
 
-### 3.7 — Test: DigiGraph Concurrency (DigiGraph)
+### 3.7 — Test: digigraph Concurrency (digigraph)
 
 Concurrent sessions should not share state.
 
@@ -458,9 +458,9 @@ Concurrent sessions should not share state.
 - Lines: ~50 tests
 - Effort: M (needs async test support via `pytest-anyio`)
 
-### 3.8 — Structured Logging Throughout DigiSearch (DigiSearch)
+### 3.8 — Structured Logging Throughout digisearch (digisearch)
 
-**Zero logging in DigiSearch.** Every failure is a silent fallback.
+**Zero logging in digisearch.** Every failure is a silent fallback.
 
 Add `import logging; logger = logging.getLogger(__name__)` to:
 - `client.py` — log backend selection, fallback events
@@ -475,7 +475,7 @@ Add `import logging; logger = logging.getLogger(__name__)` to:
 
 ### 3.9 — Request Correlation ID (All Three)
 
-**Cannot trace a user request across DigiGraph → DigiQuant → DigiSearch.** Each service logs independently with no shared identifier.
+**Cannot trace a user request across digigraph → digiquant → digisearch.** Each service logs independently with no shared identifier.
 
 ```python
 # Middleware in all three server.py files:
@@ -489,15 +489,15 @@ async def add_request_id(request: Request, call_next):
     return response
 ```
 
-Pass `X-Request-ID` in outgoing HTTP calls from DigiGraph to child services.
+Pass `X-Request-ID` in outgoing HTTP calls from digigraph to child services.
 
 - Files: all three `server.py`, `tools/digisearch.py`, `graph/nodes.py`
 - Lines: ~25 total
 - Effort: S
 
-### 3.10 — Circuit Breaker for Downstream Services (DigiGraph)
+### 3.10 — Circuit Breaker for Downstream Services (digigraph)
 
-**DigiGraph makes synchronous-style HTTP calls to DigiQuant and DigiSearch.** If either is down, all DigiGraph requests fail with a 15-second timeout per call.
+**digigraph makes synchronous-style HTTP calls to digiquant and digisearch.** If either is down, all digigraph requests fail with a 15-second timeout per call.
 
 Use `tenacity` (already likely available) or a simple in-memory state machine:
 
@@ -522,7 +522,7 @@ def call_digiquant(url: str, payload: dict) -> dict:
 
 *Goal: Complete stubbed features; reach stated documentation targets.*
 
-### 4.1 — Multi-Symbol Backtest (DigiQuant)
+### 4.1 — Multi-Symbol Backtest (digiquant)
 
 **`nautilus_runner.py` loads only the first symbol** from `data_dir`. Multi-symbol strategies are documented but not functional.
 
@@ -534,7 +534,7 @@ def call_digiquant(url: str, payload: dict) -> dict:
 - Lines: ~60 changed
 - Effort: L
 
-### 4.2 — Lazy Tearsheet (DigiQuant)
+### 4.2 — Lazy Tearsheet (digiquant)
 
 **`tearsheet.py` builds all charts unconditionally** even when caller only wants Sharpe/drawdown.
 
@@ -552,24 +552,24 @@ Expose `full` param in `run_backtest()` and HTTP API.
 - Lines: ~30 changed
 - Effort: S
 
-### 4.3 — Streaming Backtest Progress (DigiGraph)
+### 4.3 — Streaming Backtest Progress (digigraph)
 
-**30-second blocking wait on DigiQuant with no user feedback.**
+**30-second blocking wait on digiquant with no user feedback.**
 
-Replace with SSE polling or DigiQuant progress endpoint:
+Replace with SSE polling or digiquant progress endpoint:
 
 ```python
-# DigiQuant: add GET /backtest/{job_id}/progress -> SSE stream
-# DigiGraph: use httpx streaming to forward progress tokens to user
+# digiquant: add GET /backtest/{job_id}/progress -> SSE stream
+# digigraph: use httpx streaming to forward progress tokens to user
 async for event in client.stream("GET", f"{DIGIQUANT_URL}/backtest/{job_id}/progress"):
     yield event
 ```
 
-- Files: DigiQuant `server.py`, DigiGraph `graph/nodes.py`
+- Files: digiquant `server.py`, digigraph `graph/nodes.py`
 - Lines: ~80 total
 - Effort: L
 
-### 4.4 — PDF OCR Backend (DigiSearch)
+### 4.4 — PDF OCR Backend (digisearch)
 
 **`pdf.py` returns placeholder text for scanned PDFs.**
 
@@ -590,7 +590,7 @@ Gate behind `DIGISEARCH_OCR_ENABLED=true`. Try `pdfplumber` first (text PDF), fa
 - Lines: ~50
 - Effort: M
 
-### 4.5 — Multi-Index MCP Fix (DigiSearch)
+### 4.5 — Multi-Index MCP Fix (digisearch)
 
 **`mcp_server.py` ignores its `client` parameter.** All queries use global default client.
 
@@ -606,9 +606,9 @@ def create_mcp_server(client: DigiSearchClient) -> FastMCP:
 - Lines: ~15 changed
 - Effort: XS
 
-### 4.6 — DigiGraph MCP Server Entrypoint
+### 4.6 — digigraph MCP Server Entrypoint
 
-**No MCP server for DigiGraph.** Agents can't call DigiGraph workflow via MCP.
+**No MCP server for digigraph.** Agents can't call digigraph workflow via MCP.
 
 Create `digigraph/src/digigraph/mcp_server.py`:
 - `workflow(prompt, thread_id)` — triggers research+backtest graph
@@ -619,7 +619,7 @@ Create `digigraph/src/digigraph/mcp_server.py`:
 - Lines: ~100
 - Effort: M
 
-### 4.7 — LLM Response Caching (DigiGraph)
+### 4.7 — LLM Response Caching (digigraph)
 
 **Identical LLM prompts (e.g. repeated research node) make 2 API calls.**
 
@@ -671,9 +671,9 @@ Per-endpoint limits:
 
 | Component | v2.0 Now | After Phase 1 | After Phase 2 | After Phase 3 | After Phase 4 |
 |-----------|:--------:|:-------------:|:-------------:|:-------------:|:-------------:|
-| DigiGraph | 6.2 | 7.0 | 7.8 | 8.5 | 9.0 |
-| DigiQuant | 7.0 | 7.5 | 8.2 | 8.8 | 9.2 |
-| DigiSearch | 5.7 | 6.5 | 7.5 | 8.3 | 8.8 |
+| digigraph | 6.2 | 7.0 | 7.8 | 8.5 | 9.0 |
+| digiquant | 7.0 | 7.5 | 8.2 | 8.8 | 9.2 |
+| digisearch | 5.7 | 6.5 | 7.5 | 8.3 | 8.8 |
 
 ---
 
@@ -695,39 +695,39 @@ Per-endpoint limits:
 | Item | Component | Impact | Effort | Phase |
 |------|-----------|:------:|:------:|:-----:|
 | 1.1 API key timing attack | All | Security | XS | 1 |
-| 1.2 Path traversal resolve-first | DigiGraph | Security | S | 1 |
-| 1.3 OData filter injection | DigiSearch | Security | S | 1 |
-| 1.4 Session ID length limit | DigiGraph | Security | XS | 1 |
-| 1.5 Stub silent fix | DigiSearch | Reliability | XS | 1 |
+| 1.2 Path traversal resolve-first | digigraph | Security | S | 1 |
+| 1.3 OData filter injection | digisearch | Security | S | 1 |
+| 1.4 Session ID length limit | digigraph | Security | XS | 1 |
+| 1.5 Stub silent fix | digisearch | Reliability | XS | 1 |
 | 1.6 CORS default | All | Security | XS | 1 |
-| 1.7 Data dir traversal | DigiQuant | Security | XS | 1 |
-| 1.8 exec() sandbox/gate | DigiGraph | Security | M | 1 |
-| 2.2 OpenAI client pool | DigiGraph | Performance | XS | 2 |
-| 2.5 Backend registry | DigiSearch | Architecture | S | 2 |
-| 2.6 YAML spec cache | DigiQuant | Performance | XS | 2 |
-| 2.7 Strategy whitelist | DigiQuant | Security | XS | 2 |
-| 2.8 ADDM TTL | DigiQuant | Reliability | XS | 2 |
-| 2.9 SemanticChunker batch | DigiSearch | Performance | S | 2 |
-| 2.10 NLTK lazy download | DigiSearch | Reliability | XS | 2 |
-| 2.3 Async HTTP tools | DigiGraph | Performance | M | 2 |
-| 2.4 nautilus_runner split | DigiQuant | Architecture | L | 2 |
-| 3.1 Result parser tests | DigiQuant | Testing | M | 3 |
-| 3.2 tradingview/addm tests | DigiQuant | Testing | S | 3 |
-| 3.3 Bayesian opt tests | DigiQuant | Testing | S | 3 |
-| 3.4 Hybrid search tests | DigiSearch | Testing | S | 3 |
-| 3.5 OData validator tests | DigiSearch | Testing | XS | 3 |
-| 3.6 Path traversal tests | DigiGraph | Testing | S | 3 |
-| 3.7 Concurrency tests | DigiGraph | Testing | M | 3 |
-| 3.8 DigiSearch logging | DigiSearch | Observability | S | 3 |
+| 1.7 Data dir traversal | digiquant | Security | XS | 1 |
+| 1.8 exec() sandbox/gate | digigraph | Security | M | 1 |
+| 2.2 OpenAI client pool | digigraph | Performance | XS | 2 |
+| 2.5 Backend registry | digisearch | Architecture | S | 2 |
+| 2.6 YAML spec cache | digiquant | Performance | XS | 2 |
+| 2.7 Strategy whitelist | digiquant | Security | XS | 2 |
+| 2.8 ADDM TTL | digiquant | Reliability | XS | 2 |
+| 2.9 SemanticChunker batch | digisearch | Performance | S | 2 |
+| 2.10 NLTK lazy download | digisearch | Reliability | XS | 2 |
+| 2.3 Async HTTP tools | digigraph | Performance | M | 2 |
+| 2.4 nautilus_runner split | digiquant | Architecture | L | 2 |
+| 3.1 Result parser tests | digiquant | Testing | M | 3 |
+| 3.2 tradingview/addm tests | digiquant | Testing | S | 3 |
+| 3.3 Bayesian opt tests | digiquant | Testing | S | 3 |
+| 3.4 Hybrid search tests | digisearch | Testing | S | 3 |
+| 3.5 OData validator tests | digisearch | Testing | XS | 3 |
+| 3.6 Path traversal tests | digigraph | Testing | S | 3 |
+| 3.7 Concurrency tests | digigraph | Testing | M | 3 |
+| 3.8 digisearch logging | digisearch | Observability | S | 3 |
 | 3.9 Request correlation ID | All | Observability | S | 3 |
-| 3.10 Circuit breaker | DigiGraph | Reliability | M | 3 |
-| 4.1 Multi-symbol backtest | DigiQuant | Feature | L | 4 |
-| 4.2 Lazy tearsheet | DigiQuant | Performance | S | 4 |
-| 4.3 Streaming backtest progress | DigiGraph | Feature | L | 4 |
-| 4.4 PDF OCR | DigiSearch | Feature | M | 4 |
-| 4.5 Multi-index MCP fix | DigiSearch | Feature | XS | 4 |
-| 4.6 DigiGraph MCP server | DigiGraph | Feature | M | 4 |
-| 4.7 LLM response cache | DigiGraph | Performance | S | 4 |
+| 3.10 Circuit breaker | digigraph | Reliability | M | 3 |
+| 4.1 Multi-symbol backtest | digiquant | Feature | L | 4 |
+| 4.2 Lazy tearsheet | digiquant | Performance | S | 4 |
+| 4.3 Streaming backtest progress | digigraph | Feature | L | 4 |
+| 4.4 PDF OCR | digisearch | Feature | M | 4 |
+| 4.5 Multi-index MCP fix | digisearch | Feature | XS | 4 |
+| 4.6 digigraph MCP server | digigraph | Feature | M | 4 |
+| 4.7 LLM response cache | digigraph | Performance | S | 4 |
 | 4.8 Rate limiting | All | Security | S | 4 |
 
 ---

@@ -2,17 +2,27 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from queue import Queue
+from threading import Event
 from typing import Any
 
 from digigraph.audit import audit_log as dg_audit_log
+from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS
 from digigraph.graph import build_workflow_graph
 from digigraph.models import WorkflowRequest, WorkflowResult
 from digigraph.project_config import DigiProjectConfig
+from digigraph.thread_scope import workflow_thread_id
 from digigraph.tool_policy import allowed_tool_names_for_workflow, state_list_from_frozen
 
-__all__ = ["run_digigraph_workflow", "run_digigraph_workflow_streaming", "run_digigraph_workflow_via_stream"]
+__all__ = [
+    "run_digigraph_workflow",
+    "run_digigraph_workflow_streaming",
+    "run_digigraph_workflow_via_stream",
+]
+
+logger = logging.getLogger(__name__)
 
 
 def _audit_digi_kwargs(req: WorkflowRequest) -> dict[str, str]:
@@ -37,11 +47,14 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     }
     if req.digi_bearer:
         initial["digi_bearer"] = req.digi_bearer
+    cfg = None
     try:
-        initial["workflow_profile"] = DigiProjectConfig.load().get_workflow_profile()
-    except Exception:
+        cfg = DigiProjectConfig.load()
+        initial["workflow_profile"] = cfg.get_workflow_profile()
+    except PROJECT_CONFIG_ERRORS as e:
+        logger.warning("workflow_profile load failed; using full_stack: %s", e)
         initial["workflow_profile"] = "full_stack"
-    frozen = allowed_tool_names_for_workflow(req)
+    frozen = allowed_tool_names_for_workflow(req, cfg=cfg)
     names = state_list_from_frozen(frozen)
     if names is not None:
         initial["allowed_tool_names"] = names
@@ -53,10 +66,22 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
         initial["research_filters"] = req.research_filters
     if req.evidence_tier_preference:
         initial["evidence_tier_preference"] = req.evidence_tier_preference
+    if req.digisearch_index:
+        initial["digisearch_index"] = req.digisearch_index
+    if req.vault_path_prefix:
+        initial["vault_path_prefix"] = req.vault_path_prefix
+    if req.research_system_prompt_override:
+        initial["research_system_prompt_override"] = req.research_system_prompt_override
     return initial
 
 
-def _workflow_start_payload(req: WorkflowRequest, workflow_id: str, **flags: bool) -> dict[str, Any]:
+def _graph_thread_config(req: WorkflowRequest) -> dict:
+    return {"configurable": {"thread_id": workflow_thread_id(req.digi_subject, req.session_id)}}
+
+
+def _workflow_start_payload(
+    req: WorkflowRequest, workflow_id: str, **flags: bool
+) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "prompt_len": len(req.prompt or ""),
         "session_id": req.session_id or "",
@@ -102,6 +127,8 @@ def _workflow_end_payload(
         payload["backtest_job_id"] = final.get("backtest_job_id")
     if err:
         payload["error"] = err
+    if final.get("error_code"):
+        payload["error_code"] = final.get("error_code")
     if streaming:
         payload["streaming"] = True
     if via_stream:
@@ -111,7 +138,7 @@ def _workflow_end_payload(
 
 def run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
     """
-    Single custom skill entrypoint: chat idea → research (LLM + DigiSearch) → backtest (optional).
+    Single custom skill entrypoint: chat idea → research (LLM + digisearch) → backtest (optional).
     When backtest disabled (e.g. Sitas): research-only, returns research output.
     """
     workflow_id = str(uuid.uuid4())
@@ -123,7 +150,7 @@ def run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
     )
     graph = build_workflow_graph()
     initial: dict[str, Any] = _initial_graph_state(req, workflow_id)
-    config: dict = {"configurable": {"thread_id": req.session_id or "default"}}
+    config: dict = _graph_thread_config(req)
     final = graph.invoke(initial, config=config)
     dg_audit_log(
         "workflow_end",
@@ -137,15 +164,21 @@ def run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
 def _workflow_result_from_state(final: dict) -> WorkflowResult:
     """Build WorkflowResult from graph state dict (shared by invoke and stream paths)."""
     error = final.get("error")
+    error_code = final.get("error_code")
     if error:
         return WorkflowResult(
             success=False,
             message=f"Workflow error: {error}",
+            error_code=str(error_code) if error_code else None,
             backtest_result=None,
             optimize_result=None,
             optimize_error=final.get("optimize_error"),
-            research_brief=final.get("research_brief") if isinstance(final.get("research_brief"), dict) else None,
-            rag_sources=final.get("rag_sources") if isinstance(final.get("rag_sources"), list) else None,
+            research_brief=final.get("research_brief")
+            if isinstance(final.get("research_brief"), dict)
+            else None,
+            rag_sources=final.get("rag_sources")
+            if isinstance(final.get("rag_sources"), list)
+            else None,
             profiling_questions=final.get("profiling_questions")
             if isinstance(final.get("profiling_questions"), list)
             else None,
@@ -175,8 +208,12 @@ def _workflow_result_from_state(final: dict) -> WorkflowResult:
             backtest_result=backtest,
             optimize_result=opt_res if isinstance(opt_res, dict) else None,
             optimize_error=str(opt_err) if opt_err else None,
-            research_brief=final.get("research_brief") if isinstance(final.get("research_brief"), dict) else None,
-            rag_sources=final.get("rag_sources") if isinstance(final.get("rag_sources"), list) else None,
+            research_brief=final.get("research_brief")
+            if isinstance(final.get("research_brief"), dict)
+            else None,
+            rag_sources=final.get("rag_sources")
+            if isinstance(final.get("rag_sources"), list)
+            else None,
             profiling_questions=final.get("profiling_questions")
             if isinstance(final.get("profiling_questions"), list)
             else None,
@@ -187,15 +224,19 @@ def _workflow_result_from_state(final: dict) -> WorkflowResult:
     else:
         strategy = final.get("strategy_name")
         symbols = final.get("symbols", [])
-        msg = f"Research completed: strategy={strategy}, symbols={symbols}. No backtest (DigiQuant not in project)."
+        msg = f"Research completed: strategy={strategy}, symbols={symbols}. No backtest (digiquant not in project)."
     return WorkflowResult(
         success=True,
         message=msg,
         backtest_result=None,
         optimize_result=opt_res if isinstance(opt_res, dict) else None,
         optimize_error=str(opt_err) if opt_err else None,
-        research_brief=final.get("research_brief") if isinstance(final.get("research_brief"), dict) else None,
-        rag_sources=final.get("rag_sources") if isinstance(final.get("rag_sources"), list) else None,
+        research_brief=final.get("research_brief")
+        if isinstance(final.get("research_brief"), dict)
+        else None,
+        rag_sources=final.get("rag_sources")
+        if isinstance(final.get("rag_sources"), list)
+        else None,
         profiling_questions=final.get("profiling_questions")
         if isinstance(final.get("profiling_questions"), list)
         else None,
@@ -217,7 +258,7 @@ def run_digigraph_workflow_via_stream(req: WorkflowRequest) -> WorkflowResult:
     )
     graph = build_workflow_graph()
     initial = _initial_graph_state(req, workflow_id)
-    config = {"configurable": {"thread_id": req.session_id or "default"}}
+    config = _graph_thread_config(req)
     for _ in graph.stream(initial, config=config, stream_mode="updates"):
         pass
     snapshot = graph.get_state(config)
@@ -242,7 +283,11 @@ def _stream_update_summary(update: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
-def run_digigraph_workflow_streaming(req: WorkflowRequest, event_queue: Queue) -> None:
+def run_digigraph_workflow_streaming(
+    req: WorkflowRequest,
+    event_queue: Queue,
+    cancel_event: Event | None = None,
+) -> None:
     """
     Run the workflow with stream_callback that puts (event_type, data) on event_queue.
     Events: ("tool_call", ...), ("tool_result", ...), ("trace", TraceEventV1 dict),
@@ -266,7 +311,9 @@ def run_digigraph_workflow_streaming(req: WorkflowRequest, event_queue: Queue) -
     def stream_callback(event_type: str, data: Any) -> None:
         nonlocal content_streamed
         if event_type == "content" and data:
-            raw = data if isinstance(data, str) else (data.get("delta") or data.get("content") or "")
+            raw = (
+                data if isinstance(data, str) else (data.get("delta") or data.get("content") or "")
+            )
             if raw:
                 content_streamed = True
         if event_type == "tool_call" and isinstance(data, dict):
@@ -302,7 +349,10 @@ def run_digigraph_workflow_streaming(req: WorkflowRequest, event_queue: Queue) -
                         workflow_id=trace_ctx["workflow_id"],
                         request_id=trace_ctx["request_id"],
                         session_id=trace_ctx["session_id"],
-                        payload={"sources": data["rag_sources"], "tool": data.get("name", "digisearch")},
+                        payload={
+                            "sources": data["rag_sources"],
+                            "tool": data.get("name", "digisearch"),
+                        },
                     ).model_dump(),
                 )
             )
@@ -320,9 +370,15 @@ def run_digigraph_workflow_streaming(req: WorkflowRequest, event_queue: Queue) -
     try:
         initial = _initial_graph_state(req, workflow_id)
         config: dict = {
-            "configurable": {"thread_id": req.session_id or "default", "stream_callback": stream_callback},
+            "configurable": {
+                "thread_id": workflow_thread_id(req.digi_subject, req.session_id),
+                "stream_callback": stream_callback,
+            },
         }
         for update in graph.stream(initial, config=config, stream_mode="updates"):
+            if cancel_event is not None and cancel_event.is_set():
+                event_queue.put(("done", None))
+                return
             event_queue.put(
                 (
                     "trace",
@@ -337,7 +393,7 @@ def run_digigraph_workflow_streaming(req: WorkflowRequest, event_queue: Queue) -
             )
         snapshot = graph.get_state(config)
         final = dict(snapshot.values) if snapshot and snapshot.values else {}
-    except Exception as e:
+    except GRAPH_RUNTIME_ERRORS as e:
         dg_audit_log(
             "workflow_end",
             agent_id="digigraph",
@@ -365,6 +421,14 @@ def run_digigraph_workflow_streaming(req: WorkflowRequest, event_queue: Queue) -
     )
     error = final.get("error")
     if error:
+        err_code = final.get("error_code")
+        if err_code:
+            event_queue.put(
+                (
+                    "error",
+                    {"code": str(err_code), "message": str(error)},
+                )
+            )
         event_queue.put(("content", f"Error: {error}"))
         event_queue.put(("done", None))
         return

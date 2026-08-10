@@ -1,4 +1,4 @@
-"""LangGraph pipeline for DigiQuant: validate → backtest → optional optimize → optional export."""
+"""LangGraph pipeline for digiquant: validate → backtest → optional optimize → optional export."""
 
 from __future__ import annotations
 
@@ -8,8 +8,17 @@ from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from digiquant.models import BacktestResult, ExportResult, OptimizeResult, OptimizationConstraints
+from digiquant.models import BacktestResult, ExportResult, OptimizationConstraints, OptimizeResult
 from digiquant.service import service_run_backtest, service_run_export, service_run_optimize
+
+
+class PipelineTraceStep(TypedDict, total=False):
+    """One pipeline trace entry — refs only, no embedded result bodies (SIMP-035)."""
+
+    step: str
+    status: str
+    detail: str | None
+    run_id: str | None
 
 
 class QuantPipelineState(TypedDict, total=False):
@@ -28,7 +37,7 @@ class QuantPipelineState(TypedDict, total=False):
     optimize: OptimizeResult | None
     export: ExportResult | None
     error: str | None
-    trace: Annotated[list[dict[str, Any]], add]
+    trace: Annotated[list[PipelineTraceStep], add]
 
 
 def _allow_export() -> bool:
@@ -103,7 +112,9 @@ def node_export(state: QuantPipelineState) -> dict[str, Any]:
         return {}
     if not _allow_export():
         return {
-            "trace": [{"step": "export", "status": "skipped", "detail": "DIGIQUANT_ALLOW_EXPORT disabled"}]
+            "trace": [
+                {"step": "export", "status": "skipped", "detail": "DIGIQUANT_ALLOW_EXPORT disabled"}
+            ]
         }
     opt = state.get("optimize")
     params: dict[str, float | int | str] = {}
@@ -153,8 +164,14 @@ def route_after_optimize(state: QuantPipelineState) -> str:
     return END
 
 
+_pipeline_graph_cache: object | None = None
+
+
 def build_pipeline_graph():  # type: ignore[no-untyped-def]
-    """Compile the quant pipeline graph. Requires ``langgraph``."""
+    """Compile the quant pipeline graph once per process. Requires ``langgraph``."""
+    global _pipeline_graph_cache
+    if _pipeline_graph_cache is not None:
+        return _pipeline_graph_cache
     g: StateGraph[QuantPipelineState] = StateGraph(QuantPipelineState)
     g.add_node("validate", node_validate)
     g.add_node("backtest", node_backtest)
@@ -169,7 +186,8 @@ def build_pipeline_graph():  # type: ignore[no-untyped-def]
     )
     g.add_conditional_edges("optimize", route_after_optimize, {"export": "export", END: END})
     g.add_edge("export", END)
-    return g.compile()
+    _pipeline_graph_cache = g.compile()
+    return _pipeline_graph_cache
 
 
 def run_quant_workflow(initial: dict[str, Any]) -> dict[str, Any]:

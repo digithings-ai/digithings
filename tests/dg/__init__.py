@@ -1,1 +1,1 @@
-# DigiGraph tests
+# digigraph tests

@@ -1,0 +1,114 @@
+/* ==========================================================================
+   @digithings/web — WordReveal structural CSS (components/typography/WordReveal).
+   Import AFTER the token bridge, in the app's globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/word-reveal.css";
+     @source "<path-to>/digiweb/web/src/components/typography";
+   The @source line is load-bearing (path relative to the app's globals.css):
+   the component carries token-backed kicker/title utilities, and Tailwind does
+   not scan package sources on its own.
+
+   Utilities in <WordReveal/> carry the kicker/title type + the scroll→opacity/
+   blur mapping (inline MotionValues). This file holds only what must stay CSS:
+   the taller-than-viewport pinned track, the sticky pin, the display-line type,
+   and the reduced-motion + no-JS static fallbacks — the reveal must never gate
+   the claim; it reads fully with no JS.
+
+   Reference note: the muted/outline sibling variants (reference-only) reuse the
+   .wr-track / .wr-sticky / .word-line shell defined here and add their own
+   per-word color treatments in reference/app/typography/typography.css.
+   ========================================================================== */
+
+/* ── pinned track ──────────────────────────────────────────────────────────
+   .wr-track is taller than the viewport and .wr-sticky pins the line at
+   mid-viewport. The reveal itself rides the line's ENTRY (scroll offset
+   ["start end","start start"] in WordReveal.tsx): words fill as the line
+   rises and finish by the time the pin engages, so the pinned remainder
+   (height − 100vh) is only a short hold before the page flows on — the text
+   can never leave the viewport half-revealed. Keep the track short: the tail
+   after the pin is dead scroll. */
+.wr-track {
+  position: relative;
+  height: 150vh;
+}
+
+.wr-sticky {
+  position: sticky;
+  top: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+}
+
+/* static branch (the useReducedMotion hook adds .is-static) */
+.wr-track.is-static {
+  height: auto;
+}
+
+.wr-track.is-static .wr-sticky {
+  position: static;
+  min-height: 0;
+  padding: 2.5rem 0;
+}
+
+/* ── display line ──────────────────────────────────────────────────────────── */
+.word-line {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.55rem, 4.2vw, 2.6rem);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  max-width: 24ch;
+}
+
+.word {
+  display: inline-block;
+  margin-right: 0.35em;
+  will-change: transform, opacity, filter;
+}
+
+/* ── reduced motion: final state, no pinned scroll gap ──────────────────────
+   The hook renders the static branch; this covers pre-hydration paint and
+   forces the finished state regardless of the inline MotionValues. */
+@media (prefers-reduced-motion: reduce) {
+  .wr-track {
+    height: auto;
+  }
+
+  .wr-sticky {
+    position: static;
+    min-height: 0;
+    padding: 2.5rem 0;
+  }
+
+  .word {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
+  }
+}
+
+/* ── no JS: content-first (law 06) ──────────────────────────────────────────
+   With scripts off the reveal never runs AND the reduced-motion query may not
+   fire, so SSR's baked-in low opacity/blur would hide the claim. html.no-js
+   (set on <html>, stripped pre-paint when JS runs) neutralizes it: final text,
+   no 240vh empty scroll gap. Mirrors the hero's html.no-js fallback rules. */
+html.no-js .wr-track {
+  height: auto;
+}
+
+html.no-js .wr-sticky {
+  position: static;
+  min-height: 0;
+  padding: 2.5rem 0;
+}
+
+html.no-js .word {
+  opacity: 1 !important;
+  transform: none !important;
+  filter: none !important;
+}

@@ -28,4 +28,8 @@ class NeutralStreamFormatter:
 
     def format_tool_call_with_result(self, call_data: dict, result_data: dict) -> str:
         """Single block: tool call content then result content (no separate sections)."""
-        return self.format_tool_call(call_data).rstrip() + "\n\n" + self.format_tool_result(result_data)
+        return (
+            self.format_tool_call(call_data).rstrip()
+            + "\n\n"
+            + self.format_tool_result(result_data)
+        )

@@ -1,0 +1,503 @@
+.dc-page {
+  min-height: 100vh;
+  padding: calc(var(--dq-nav-h, 62px) + 0.6rem) clamp(0.7rem, 3vw, 1.4rem) clamp(0.7rem, 3vw, 1.2rem);
+  display: flex;
+}
+
+.dc-session {
+  width: 100%;
+  max-width: min(1080px, 96vw);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--dq-nav-h, 62px) - 1.4rem);
+  min-height: 440px;
+  font-family: var(--font-mono);
+  background: transparent;
+}
+
+.dc-session-embed {
+  flex: 1;
+  min-height: 0;
+  max-width: none;
+  height: auto;
+}
+
+.dc-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  border-bottom: 1px solid var(--hair);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.dc-brand-by {
+  font-weight: 400;
+  color: var(--ink-mute);
+}
+.dc-brand-link {
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+}
+.dc-brand-link:hover {
+  text-decoration: underline;
+}
+
+.dc-wordmark-header {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--hair);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.dc-thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 0.85rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.dc-msg {
+  position: relative;
+  display: grid;
+  grid-template-columns: 0.85rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: start;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+.dc-who {
+  color: var(--accent);
+  font-weight: 600;
+  user-select: none;
+}
+.dc-user .dc-who {
+  color: var(--accent);
+  font-weight: 700;
+}
+.dc-body {
+  min-width: 0;
+  color: var(--ink-soft);
+  word-break: break-word;
+}
+.dc-user .dc-body,
+.dc-intro .dc-body {
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.dc-intro-body {
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.dc-intro .dc-body {
+  color: var(--ink-soft);
+}
+.dc-out-dim {
+  color: var(--ink-mute);
+}
+
+/* Busy turn: one bare <ChatStreamCursor> under the chain / answer. Tool rows
+   carry running/ok themselves — no typed TerminalStepCaret status line. */
+.dc-body > .tl-line {
+  color: var(--ink-mute);
+}
+
+.dc-body a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+.dc-code-inline {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: 5px;
+  padding: 0.05rem 0.3rem;
+}
+.dc-code-block {
+  position: relative;
+  margin: 0.6rem 0;
+}
+.dc-code-block pre {
+  margin: 0;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border: 1px solid var(--hair);
+  border-radius: 9px;
+  padding: 0.7rem 0.8rem;
+  overflow-x: auto;
+}
+.dc-code-block code {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--ink);
+  white-space: pre;
+}
+
+.dc-code-copy,
+.dc-msg-copy {
+  font: inherit;
+  font-size: 0.7rem;
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  padding: 0.12rem 0.4rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease, ease);
+}
+.dc-code-copy {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+}
+.dc-msg-copy {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+.dc-code-block:hover .dc-code-copy,
+.dc-msg:hover .dc-msg-copy,
+.dc-code-copy:focus-visible,
+.dc-msg-copy:focus-visible {
+  opacity: 1;
+}
+
+.dc-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding-left: 1.6rem;
+}
+
+.dc-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem 0.75rem;
+  border-top: 1px solid var(--hair);
+  background: transparent;
+}
+.dc-textarea {
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  width: 100%;
+  resize: none;
+  max-height: 140px;
+  padding: 0.35rem 0;
+}
+.dc-textarea::placeholder {
+  color: var(--ink-soft);
+}
+.dc-textarea:focus {
+  outline: none;
+}
+.dc-send,
+.dc-stop {
+  font: inherit;
+  align-self: stretch;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0.3rem 0.65rem;
+  transition: background 0.18s var(--ease, ease);
+}
+.dc-send {
+  font-size: 1rem;
+}
+.dc-stop {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.dc-send:hover:not(:disabled),
+.dc-stop:hover {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.dc-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dc-code-copy,
+  .dc-msg-copy,
+  .dc-send,
+  .dc-stop {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Agent chain (#1418 gap 6).
+ *
+ * The rows themselves are the shared chat primitives (ChatToolCall /
+ * ChatThinking / ChatWidgetFrame / ChatMessage from @digithings/web), which
+ * carry their own token utilities — generated by each consumer's
+ * `@source ".../digiweb/web/src/components/chat"`. What lives here is only the
+ * chain container and the content ChatActivities nests INSIDE a primitive
+ * (the source list, the reasoning blob, the brief body): no consumer @sources
+ * this package, so utilities written in its .tsx would never generate.
+ *
+ * The pre-canon bordered `.dc-activities` box is gone — the canon reads as a
+ * flowing chain of fold-away rows (the Claude Code / opencode pattern), not a
+ * panel. The selector stays (consumed API); only its dress changed.
+ * ------------------------------------------------------------------------- */
+.dc-activities {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.55rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+/* System aside (`·` ChatMessage) — sits at the chain's text size rather than
+   the transcript's, so it reads as chain chrome and not as an answer. */
+.dc-act-status {
+  font-size: 0.72rem;
+}
+.dc-act-hits {
+  margin: 0.1rem 0 0;
+  padding-left: 0.9rem;
+  list-style: disc;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  /* Cap so a 5-note search with 4-line snippets can't own the transcript —
+     same scroll grammar as `.dc-act-reasoning-text`. */
+  max-height: 14rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.dc-act-hits li {
+  margin: 0.12rem 0;
+  color: var(--ink-mute);
+}
+.dc-act-hits li::marker {
+  color: var(--accent);
+}
+.dc-act-hit-title {
+  color: var(--ink-soft);
+}
+.dc-act-hit-path {
+  margin-left: 0.35rem;
+  color: var(--ink-mute);
+  font-size: 0.92em;
+}
+.dc-act-hit-tier,
+.dc-act-hit-year {
+  margin-left: 0.35rem;
+  color: var(--ink-mute);
+  font-size: 0.88em;
+}
+/* Snippet disclosure — closed by default so a 5-note search shows titles
+   only; click a title to read the chunk. Native <details>, no JS. */
+.dc-act-hit {
+  display: block;
+}
+.dc-act-hit-summary {
+  cursor: pointer;
+  list-style: none;
+}
+.dc-act-hit-summary::-webkit-details-marker {
+  display: none;
+}
+.dc-act-hit-snippet {
+  margin: 0.2rem 0 0;
+  color: var(--ink-mute);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Reasoning blob inside the ChatThinking disclosure. Wraps rather than
+   scrolls sideways — the embed runs down to 375px. */
+.dc-act-reasoning-text {
+  margin: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+/* Research brief — a ChatWidgetFrame card; the frame is unpadded by contract,
+   so the body owns its padding. */
+.dc-act-brief {
+  margin: 0.25rem 0;
+}
+.dc-act-brief-body {
+  padding: 0.6rem 0.8rem;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--ink-mute);
+}
+.dc-act-brief-themes {
+  margin: 0;
+  padding-left: 1rem;
+}
+.dc-act-brief-label {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.dc-act-brief-questions {
+  margin-top: 0.4rem;
+}
+.dc-act-brief-q-heading {
+  margin: 0 0 0.2rem;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+}
+.dc-act-brief-questions ol {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.dc-inline-link {
+  font: inherit;
+  font-size: inherit;
+  color: var(--accent-digichat, var(--accent));
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 500;
+}
+.dc-inline-link:hover {
+  color: var(--ink);
+}
+.dc-intro-byok {
+  display: inline;
+  margin: 0;
+  color: var(--ink-soft);
+}
+.dc-quota-banner {
+  margin: 0.2rem 0 0 1.6rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--down) 35%, var(--hair));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--down) 8%, transparent);
+  font-size: 0.74rem;
+  color: var(--ink-soft);
+}
+.dc-quota-banner p {
+  margin: 0;
+}
+
+
+/* Inline BYOK terminal flow (session-only keys) */
+.dc-byok-flow {
+  margin-top: var(--space-3);
+}
+.dc-byok-prompt {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.dc-byok-option-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 28rem;
+  outline: none;
+}
+.dc-byok-option-list:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+.dc-byok-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.2rem 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.dc-byok-option:hover,
+.dc-byok-option-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.dc-byok-option-cursor {
+  display: inline-block;
+  width: 1ch;
+  color: var(--accent);
+  font-family: var(--font-family-mono);
+}
+.dc-byok-input {
+  display: block;
+  width: 100%;
+  max-width: 28rem;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-term, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  outline: none;
+}
+.dc-byok-input:focus {
+  border-color: var(--accent);
+}
+.dc-byok-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.dc-byok-action {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dc-byok-action:hover {
+  color: var(--text-primary);
+}
+.dc-byok-action-danger {
+  color: var(--down, #e0654b);
+}
+
+.dc-attribution {
+  border-top: 1px solid var(--hair);
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+.dc-attribution a {
+  color: var(--accent);
+  text-decoration: underline;
+}

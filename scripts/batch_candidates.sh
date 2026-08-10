@@ -4,7 +4,7 @@
 # Usage:
 #   bash scripts/batch_candidates.sh
 #   bash scripts/batch_candidates.sh --phase "Phase 3 — Domain unification"
-#   bash scripts/batch_candidates.sh --area DigiGraph
+#   bash scripts/batch_candidates.sh --area digigraph
 #   bash scripts/batch_candidates.sh --phase "Phase 2 — Hardening" --area Cross-cutting
 
 set -euo pipefail

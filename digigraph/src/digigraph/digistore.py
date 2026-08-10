@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 from digigraph.run_storage import _check_dataset_size_cap, _sanitize_session_id, get_run_data_dir
+
+log = logging.getLogger(__name__)
 
 
 def _datasets_dir(session_id: str | None) -> Path:
@@ -101,7 +104,8 @@ def digistore_list(session_id: str | None, include_row_count: bool = False) -> l
             try:
                 data = json.loads(p.read_text(encoding="utf-8"))
                 entry["row_count"] = len(data) if isinstance(data, list) else 0
-            except Exception:
+            except (OSError, json.JSONDecodeError) as e:
+                log.warning("digistore_list: could not read row_count for %s: %s", name, e)
                 entry["row_count"] = None
         out.append(entry)
     return out

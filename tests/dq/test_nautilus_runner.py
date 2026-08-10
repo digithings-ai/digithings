@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
-
-from digiquant.nautilus_runner import _extract_pnl, _build_result
-
+from digiquant.nautilus_runner import _build_result, _extract_pnl
 
 # ---------------------------------------------------------------------------
 # _extract_pnl
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestExtractPnl:
@@ -87,6 +86,7 @@ class TestExtractPnl:
 # _build_result
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestBuildResult:
     _BASE_NS = 1_700_000_000_000_000_000  # ~2023-11 in nanoseconds
@@ -155,7 +155,7 @@ class TestBuildResult:
             perf=self._perf(sharpe=1.5, max_dd=12.3),
         )
         assert r.sharpe_ratio == pytest.approx(1.5)
-        assert r.max_drawdown_pct == pytest.approx(12.3)
+        assert r.max_drawdown_pct == pytest.approx(-12.3)
 
     def test_nan_pnl_becomes_zero(self) -> None:
         r = _build_result(

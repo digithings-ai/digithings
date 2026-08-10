@@ -69,6 +69,6 @@ def transform_columns(
                             elif sep == " / ":
                                 df = df.with_columns((pl.col(left) / pl.col(right)).alias(new_col))
                             break
-            except Exception as e:
+            except (pl.exceptions.PolarsError, ValueError, TypeError) as e:
                 return {"error": str(e), "dataset_ref": None, "rows": 0, "columns": []}
     return write_result(df, session_id, output_name)

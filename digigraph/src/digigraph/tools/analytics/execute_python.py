@@ -1,17 +1,22 @@
 """Sandboxed execution of Python (Polars) code on session datasets. Produces a new dataset_ref.
 
-WARNING: exec() with restricted globals is NOT a real sandbox. This tool is disabled by default.
-Set DIGI_ALLOW_CODE_EXEC=true to enable it (only in controlled environments).
+When ``DIGI_ALLOW_CODE_EXEC`` is enabled, code runs in an isolated subprocess with a timeout.
+Default is disabled (fail closed). In-process ``exec()`` is not used when execution is allowed.
 """
 
 from __future__ import annotations
 
+import json
 import logging
-import signal
 from typing import Any
 
 from digigraph.policy import code_execution_allowed
 from digigraph.tools.analytics.data_manipulation._helpers import write_result
+from digigraph.tools.analytics.execute_python_sandbox import (
+    UserCodeRejected,
+    run_in_subprocess,
+    validate_user_code,
+)
 from digigraph.tools.analytics.load import load_dataset
 
 logger = logging.getLogger(__name__)
@@ -32,69 +37,46 @@ def execute_python_on_datasets(
     Disabled by default. Set DIGI_ALLOW_CODE_EXEC=true to enable.
     """
     if not code_execution_allowed():
-        logger.warning("execute_python_on_datasets called but DIGI_ALLOW_CODE_EXEC is not set — refusing")
+        logger.warning(
+            "execute_python_on_datasets called but DIGI_ALLOW_CODE_EXEC is not set — refusing"
+        )
         return {
             "error": "Code execution is disabled. Set DIGI_ALLOW_CODE_EXEC=true to enable (controlled environments only).",
             "dataset_ref": None,
             "rows": 0,
         }
-    if not code or not code.strip():
-        return {"error": "code is required", "dataset_ref": None, "rows": 0}
+    try:
+        validate_user_code(code)
+    except UserCodeRejected as e:
+        return {"error": str(e), "dataset_ref": None, "rows": 0}
     if not dataset_paths:
         return {"error": "at least one dataset_ref is required", "dataset_ref": None, "rows": 0}
 
     dataframes: list[Any] = []
     for p in dataset_paths:
         try:
-            df = load_dataset(p)
-            dataframes.append(df)
-        except Exception as e:
+            dataframes.append(load_dataset(p))
+        except (OSError, ValueError, FileNotFoundError, json.JSONDecodeError) as e:
             return {"error": f"Failed to load dataset: {e}", "dataset_ref": None, "rows": 0}
 
-    # Build restricted globals: only pl, math, datetime, and injected dfs
-    import math
-    import datetime
-    import polars as pl
-
-    restricted: dict[str, Any] = {
-        "pl": pl,
-        "math": math,
-        "datetime": datetime,
-        "result": None,
-    }
-    for i, df in enumerate(dataframes):
-        restricted[f"df_{i}"] = df
-
     try:
-        if hasattr(signal, "SIGALRM"):
-            def timeout_handler(signum: int, frame: Any) -> None:
-                raise TimeoutError("Execution timed out")
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(timeout_seconds)
-        exec(compile(code.strip(), "<user_code>", "exec"), restricted)
-        if hasattr(signal, "SIGALRM"):
-            signal.alarm(0)
-    except TimeoutError as e:
-        if hasattr(signal, "SIGALRM"):
-            signal.alarm(0)
+        result_df, err = run_in_subprocess(
+            code=code,
+            dataframes=dataframes,
+            timeout_seconds=timeout_seconds,
+        )
+    except UserCodeRejected as e:
         return {"error": str(e), "dataset_ref": None, "rows": 0}
-    except Exception as e:
-        if hasattr(signal, "SIGALRM"):
-            signal.alarm(0)
-        return {"error": f"Execution failed: {e}", "dataset_ref": None, "rows": 0}
-
-    result = restricted.get("result")
-    if result is None:
-        # Try last assignment to a name that looks like a DataFrame
-        for k, v in restricted.items():
-            if k.startswith("df_") and hasattr(v, "to_dicts"):
-                result = v
-                break
-    if result is None or not hasattr(result, "to_dicts"):
-        return {"error": "Code must assign a Polars DataFrame to 'result'", "dataset_ref": None, "rows": 0}
+    if err:
+        return {"error": err, "dataset_ref": None, "rows": 0}
+    if result_df is None:
+        return {
+            "error": "Code must assign a Polars DataFrame to 'result'",
+            "dataset_ref": None,
+            "rows": 0,
+        }
 
     try:
-        df_out = result if hasattr(result, "to_dicts") else result
-        return write_result(df_out, session_id, output_name)
-    except Exception as e:
+        return write_result(result_df, session_id, output_name)
+    except (OSError, ValueError, TypeError) as e:
         return {"error": str(e), "dataset_ref": None, "rows": 0}

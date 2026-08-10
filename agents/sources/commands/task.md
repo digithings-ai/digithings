@@ -3,4 +3,4 @@ description: Start a backlog task end-to-end via `make task ISSUE=N` with pre-fl
 argument-hint: <issue-number>
 ---
 
-Use the `worktree-task-start` skill to run the pre-flight checklist for issue #$ARGUMENTS, then invoke `make task ISSUE=$ARGUMENTS`. Do not modify `make task` behavior — the Makefile target is the source of truth.
+Invoke `make task ISSUE=$ARGUMENTS`. The Makefile target is the source of truth for the full pipeline — it creates an isolated worktree, pauses for implementation, runs tests, scores, and opens a PR.

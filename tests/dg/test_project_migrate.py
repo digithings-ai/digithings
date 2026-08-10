@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from digigraph.cli import main as cli_main
 from digigraph.project_migrate import migrate_mapping, migrate_project_file
 from digigraph.project_validate import validate_project_file

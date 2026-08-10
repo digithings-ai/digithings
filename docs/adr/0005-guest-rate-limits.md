@@ -2,10 +2,11 @@
 
 **Status:** proposed
 **Date:** 2026-04-18
+**Note (2026-07-01):** this ADR assumes the `chat.digithings.ai` subdomain from ADR-0002. That domain plan was superseded by [ADR-0018](0018-digichat-path-routing.md), which serves digichat at `digithings.ai/chat` instead. The token-bucket/IP-hash/cost-ceiling design below is otherwise independent of the domain vs. path decision and still applies, adjusted for path-based routing.
 
 ## Context
 
-ADR-0002 commits us to a "metered guest tier" on `chat.digithings.ai` — unauthenticated visitors who click **Try it now** on `digithings.ai` can send a handful of messages to the ecosystem guide before being nudged into bring-your-own-key (BYOK) or a signed-in account. The guest pool is a **marketing expense**, not a revenue line: its purpose is to remove the friction of "sign up to try it" while letting prospects experience DigiGraph answering questions about the stack.
+ADR-0002 commits us to a "metered guest tier" on `chat.digithings.ai` — unauthenticated visitors who click **Try it now** on `digithings.ai` can send a handful of messages to the ecosystem guide before being nudged into bring-your-own-key (BYOK) or a signed-in account. The guest pool is a **marketing expense**, not a revenue line: its purpose is to remove the friction of "sign up to try it" while letting prospects experience digigraph answering questions about the stack.
 
 Three concrete risks bound the design:
 
@@ -15,11 +16,11 @@ Three concrete risks bound the design:
 
 At the same time, the **false-positive cost is high**: a prospect who hits a rate-limit wall on their second question and sees a generic `429` error is a lost conversion. Any limit that blocks a legitimate five-minute evaluation defeats the marketing premise.
 
-No guest-tier enforcement exists today. DigiChat (`digichat/`, Next.js + BFF) currently assumes authenticated sessions via Auth.js; the guest path has to be bolted onto the BFF without leaking guest traffic into tenant tables.
+No guest-tier enforcement exists today. digichat (`digichat/`, Next.js + BFF) currently assumes authenticated sessions via Auth.js; the guest path has to be bolted onto the BFF without leaking guest traffic into tenant tables.
 
 ## Decision
 
-**Two-axis token-bucket rate limiting at the DigiChat BFF, backed by Upstash Redis, returning HTTP 429 with a sign-in CTA on exhaustion.** Numbers below are starting points — calibrated monthly against actual cost and conversion data.
+**Two-axis token-bucket rate limiting at the digichat BFF, backed by Upstash Redis, returning HTTP 429 with a sign-in CTA on exhaustion.** Numbers below are starting points — calibrated monthly against actual cost and conversion data.
 
 ### Limits (initial values)
 
@@ -36,7 +37,7 @@ Per-IP and per-session are enforced independently — a user who opens five anon
 
 ### Enforcement
 
-- **Layer:** DigiChat BFF middleware, in front of the DigiGraph proxy. Guest requests never reach DigiGraph without a valid bucket debit.
+- **Layer:** digichat BFF middleware, in front of the digigraph proxy. Guest requests never reach digigraph without a valid bucket debit.
 - **Backend:** Upstash Redis (serverless-native, fits Vercel deployment, sliding-window primitives). Token-bucket keyed by `ip_hash` and `session_id`.
 - **IP handling:** we store only `sha256(ip || daily_salt)` — never raw IP. Salt rotates daily, so buckets expire naturally and we retain no long-lived IP log. This is the GDPR-defensible posture for a marketing trial tier.
 - **Session:** opaque cookie, rotated per-browser. Session counter increments on each successful BFF call; the sign-in nudge is rendered client-side when the counter crosses threshold.
@@ -55,7 +56,7 @@ Per-IP and per-session are enforced independently — a user who opens five anon
 - Guest experience stays conversational: the first five messages feel unthrottled, and the wall is a product nudge rather than an error.
 - Cost is bounded with a hard ceiling; abuse is bounded by per-IP + per-output-token caps.
 - No PII retained — hashed, salted, daily-rotated IPs are consistent with the "marketing expense, not a data grab" framing.
-- Reuses DigiChat's existing Redis/Upstash connection if present; otherwise a small add.
+- Reuses digichat's existing Redis/Upstash connection if present; otherwise a small add.
 
 **Negative / tradeoffs**
 
@@ -75,6 +76,6 @@ Per-IP and per-session are enforced independently — a user who opens five anon
 ## Links
 
 - Related: ADR-0002 (Domain Unification)
-- Related: issue #29 (this decision), epic #8 (DigiChat ecosystem guide)
-- DigiChat app: `digichat/`
+- Related: issue #29 (this decision), epic #8 (digichat ecosystem guide)
+- digichat app: `digichat/`
 - LLM mode plumbing: `DIGI_LLM_MODE` in `config/litellm.yaml`

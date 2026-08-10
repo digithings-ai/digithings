@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from digigraph.skills import builtin  # noqa: F401 - register built-in skill metadata
+from digigraph.skills import builtin  # register built-in skill metadata
 from digigraph.skills.registry import Skill, get_tools_for_skills, register_skill
 
 __all__ = ["Skill", "get_tools_for_skills", "register_skill"]

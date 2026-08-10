@@ -69,7 +69,7 @@ def load_or_create_signing_key() -> tuple[RSAPrivateKey, str]:
     )
     if not allow:
         raise RuntimeError(
-            "DigiKey requires DIGIKEY_PRIVATE_KEY_PEM, or set DIGIKEY_ALLOW_EPHEMERAL_KEY=1 "
+            "digikey requires DIGIKEY_PRIVATE_KEY_PEM, or set DIGIKEY_ALLOW_EPHEMERAL_KEY=1 "
             "for a non-persistent dev key (JWKS rotates on restart)."
         )
     key = generate_rsa_private_key()

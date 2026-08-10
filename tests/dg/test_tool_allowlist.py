@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from digigraph.models import WorkflowRequest
 from digigraph.orchestration.registry import ToolContext, execute, get_tools
 from digigraph.project_config import DigiProjectConfig

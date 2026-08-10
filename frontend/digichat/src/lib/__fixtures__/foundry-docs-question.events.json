@@ -1,0 +1,271 @@
+[
+  {
+    "type": "response.output_item.added",
+    "item": {
+      "type": "reasoning",
+      "id": "rs_0dec40d3fa0dc01e006a75cd5a474c8190b6484a93d8a5d524",
+      "summary": [],
+      "content": []
+    },
+    "output_index": 0,
+    "sequence_number": 2
+  },
+  {
+    "type": "response.output_item.done",
+    "item": {
+      "type": "reasoning",
+      "id": "rs_0dec40d3fa0dc01e006a75cd5a474c8190b6484a93d8a5d524",
+      "summary": [],
+      "content": []
+    },
+    "output_index": 0,
+    "sequence_number": 3
+  },
+  {
+    "type": "response.output_item.added",
+    "item": {
+      "type": "reasoning",
+      "id": "rs_0dec40d3fa0dc01e006a75cd5ab470819097d3c0e626c3cff4",
+      "summary": [],
+      "content": []
+    },
+    "output_index": 1,
+    "sequence_number": 4
+  },
+  {
+    "type": "response.output_item.done",
+    "item": {
+      "type": "reasoning",
+      "id": "rs_0dec40d3fa0dc01e006a75cd5ab470819097d3c0e626c3cff4",
+      "summary": [],
+      "content": []
+    },
+    "output_index": 1,
+    "sequence_number": 5
+  },
+  {
+    "type": "response.output_item.added",
+    "item": {
+      "type": "reasoning",
+      "id": "rs_0dec40d3fa0dc01e006a75cd5ac2ec8190a95ad04a386f2035",
+      "summary": [],
+      "content": []
+    },
+    "output_index": 2,
+    "sequence_number": 6
+  },
+  {
+    "type": "response.output_item.done",
+    "item": {
+      "type": "reasoning",
+      "id": "rs_0dec40d3fa0dc01e006a75cd5ac2ec8190a95ad04a386f2035",
+      "summary": [],
+      "content": []
+    },
+    "output_index": 2,
+    "sequence_number": 7
+  },
+  {
+    "type": "response.output_item.added",
+    "item": {
+      "type": "reasoning",
+      "id": "rs_0dec40d3fa0dc01e006a75cd5accf4819090728711cd86cedc",
+      "summary": [],
+      "content": []
+    },
+    "output_index": 3,
+    "sequence_number": 8
+  },
+  {
+    "type": "response.output_item.done",
+    "item": {
+      "type": "reasoning",
+      "id": "rs_0dec40d3fa0dc01e006a75cd5accf4819090728711cd86cedc",
+      "summary": [],
+      "content": []
+    },
+    "output_index": 3,
+    "sequence_number": 9
+  },
+  {
+    "type": "response.output_item.added",
+    "item": {
+      "type": "reasoning",
+      "id": "rs_0dec40d3fa0dc01e006a75cd5aed848190b33b3b46f6f30165",
+      "summary": [],
+      "content": []
+    },
+    "output_index": 4,
+    "sequence_number": 10
+  },
+  {
+    "type": "response.output_item.done",
+    "item": {
+      "type": "reasoning",
+      "id": "rs_0dec40d3fa0dc01e006a75cd5aed848190b33b3b46f6f30165",
+      "summary": [],
+      "content": []
+    },
+    "output_index": 4,
+    "sequence_number": 11
+  },
+  {
+    "type": "response.output_item.added",
+    "item": {
+      "type": "azure_ai_search_call",
+      "id": "fc_0dec40d3fa0dc01e006a75cd5b2130819091758df49194c6c2",
+      "call_id": "call_9b28841e799442f187b68b0b98ebd47e",
+      "arguments": "",
+      "status": "in_progress"
+    },
+    "output_index": 5,
+    "sequence_number": 12
+  },
+  {
+    "type": "response.output_item.done",
+    "item": {
+      "type": "azure_ai_search_call",
+      "id": "fc_0dec40d3fa0dc01e006a75cd5b2130819091758df49194c6c2",
+      "call_id": "call_9b28841e799442f187b68b0b98ebd47e",
+      "arguments": "{\"query\":\"/api/config endpoint return DataTapStream\"}",
+      "status": "completed"
+    },
+    "output_index": 5,
+    "sequence_number": 13
+  },
+  {
+    "type": "response.output_item.added",
+    "item": {
+      "type": "azure_ai_search_call_output",
+      "id": "fco_0dec40d3fa0dc01e006a75cd5c40408190893f7005f662d952",
+      "call_id": "call_9b28841e799442f187b68b0b98ebd47e",
+      "output": "[]",
+      "status": "in_progress"
+    },
+    "output_index": 6,
+    "sequence_number": 14
+  },
+  {
+    "type": "response.output_item.done",
+    "item": {
+      "type": "azure_ai_search_call_output",
+      "id": "fco_0dec40d3fa0dc01e006a75cd5c40408190893f7005f662d952",
+      "call_id": "call_9b28841e799442f187b68b0b98ebd47e",
+      "output": "{\"documents\": [{\"id\": \"openapi_public__chunk4\", \"content\": \"ning (filter by `jobTypes`, `connector`).\\\\n- `GET api/{tenantId}/reporting` \\u2014 finished job reports (filter by `jobId`, `\", \"filepath\": \"\", \"title\": \"\", \"url\": \"https://dg-search-datatap-web.search.windows.net/\", \"score\": 8.669824, \"knowledgeSourceIndex\": 0}, {\"id\": \"page__docs_workflows_use-cases_list-mailboxes___chunk0\", \"content\": \"# 6 \\u00b7 Discover all the mailboxes\\n\\nList every user and shared mailbox in your Exchange source, following the `Options.Mar\", \"filepath\": \"\", \"title\": \"\", \"url\": \"https://dg-search-datatap-web.search.windows.net/\", \"score\": 8.301083, \"knowledgeSourceIndex\": 0}, {\"id\": \"openapi_public__chunk5\", \"content\": \"obs \\u2014\\\\n  both are GUIDs.\\\\n\\\\n## Important notes\\\\n\\\\n- All write operations are idempotent only where stated; re-issuing a \", \"filepath\": \"\", \"title\": \"\", \"url\": \"https://dg-search-datatap-web.search.windows.net/\", \"score\": 8.195859, \"knowledgeSourceIndex\": 0}], \"get_urls\": [\"https://dg-search-datatap-web.search.windows.net/indexes/document_chunks_hnsw_tnt_j1leaudd2qywunnhngyglcg1/docs/openapi_public__chunk4?api-version=2024-07-01&$select=DocumentChunkId,Text\", \"https://dg-search-datatap-web.search.windows.net/indexes/document_chunks_hnsw_tnt_j1leaudd2qywunnhngyglcg1/docs/page__docs_workflows_use-cases_list-mailboxes___chunk0?api-version=2024-07-01&$select=DocumentChunkId,Text\", \"https://dg-search-datatap-web.search.windows.net/indexes/document_chunks_hnsw_tnt_j1leaudd2qywunnhngyglcg1/docs/openapi_public__chunk5?api-version=2024-07-01&$select=DocumentChunkId,Text\", \"https://dg-search-datatap-web.search.windows.net/indexes/document_chunks_hnsw_tnt_j1leaudd2qywunnhngyglcg1/docs/openapi_public__chunk13?api-version=2024-07-01&$select=DocumentChunkId,Text\", \"https://dg-search-datatap-web.search.windows.net/indexes/document_chunks_hnsw_tnt_j1leaudd2qywunnhngyglcg1/docs/page__docs_workflows_use-cases_list-restore-pdfs___chunk0?api-version=2024-07-01&$select=DocumentChunkId,Text\"]}",
+      "status": "completed"
+    },
+    "output_index": 6,
+    "sequence_number": 15
+  },
+  {
+    "type": "response.output_item.added",
+    "item": {
+      "type": "reasoning",
+      "id": "rs_0dec40d3fa0dc01e006a75cd5d08888190976e72f25fc7a8f9",
+      "summary": [],
+      "content": []
+    },
+    "output_index": 7,
+    "sequence_number": 16
+  },
+  {
+    "type": "response.output_item.done",
+    "item": {
+      "type": "reasoning",
+      "id": "rs_0dec40d3fa0dc01e006a75cd5d08888190976e72f25fc7a8f9",
+      "summary": [],
+      "content": []
+    },
+    "output_index": 7,
+    "sequence_number": 17
+  },
+  {
+    "type": "response.output_item.added",
+    "item": {
+      "type": "message",
+      "id": "msg_0dec40d3fa0dc01e006a75cd60a40881909cd01b088626cecc",
+      "role": "assistant",
+      "content": [],
+      "status": "in_progress"
+    },
+    "output_index": 8,
+    "sequence_number": 18
+  },
+  {
+    "type": "response.output_text.annotation.added",
+    "annotation": {
+      "type": "url_citation",
+      "end_index": 328,
+      "start_index": 316,
+      "title": "doc_0",
+      "url": "https://dg-search-datatap-web.search.windows.net/"
+    },
+    "annotation_index": 0,
+    "content_index": 0,
+    "item_id": "msg_0dec40d3fa0dc01e006a75cd60a40881909cd01b088626cecc",
+    "output_index": 8,
+    "sequence_number": 88
+  },
+  {
+    "type": "response.output_text.annotation.added",
+    "annotation": {
+      "type": "url_citation",
+      "end_index": 340,
+      "start_index": 328,
+      "title": "doc_3",
+      "url": "https://dg-search-datatap-web.search.windows.net/"
+    },
+    "annotation_index": 1,
+    "content_index": 0,
+    "item_id": "msg_0dec40d3fa0dc01e006a75cd60a40881909cd01b088626cecc",
+    "output_index": 8,
+    "sequence_number": 90
+  },
+  {
+    "type": "response.output_text.done",
+    "content_index": 0,
+    "item_id": "msg_0dec40d3fa0dc01e006a75cd60a40881909cd01b088626cecc",
+    "logprobs": [],
+    "output_index": 8,
+    "sequence_number": 92,
+    "text": "The API exposes GET /api/config/{tenantId} (tenant-readable) and it returns that tenant's effective configuration as JSON (the Config schema \u2014 e.g., container version and related settings). For the tenant log level there is GET /api/config/{tenantId}/loglevel which returns the tenant's current log level as a string\u30109:0\u2020source\u3011\u30109:3\u2020source\u3011."
+  },
+  {
+    "type": "response.output_item.done",
+    "item": {
+      "type": "message",
+      "id": "msg_0dec40d3fa0dc01e006a75cd60a40881909cd01b088626cecc",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "The API exposes GET /api/config/{tenantId} (tenant-readable) and it returns that tenant's effective configuration as JSON (the Config schema \u2014 e.g., container version and related settings). For the tenant log level there is GET /api/config/{tenantId}/loglevel which returns the tenant's current log level as a string\u30109:0\u2020source\u3011\u30109:3\u2020source\u3011.",
+          "annotations": [
+            {
+              "type": "url_citation",
+              "url": "https://dg-search-datatap-web.search.windows.net/",
+              "start_index": 316,
+              "end_index": 328,
+              "title": "doc_0"
+            },
+            {
+              "type": "url_citation",
+              "url": "https://dg-search-datatap-web.search.windows.net/",
+              "start_index": 328,
+              "end_index": 340,
+              "title": "doc_3"
+            }
+          ],
+          "logprobs": []
+        }
+      ],
+      "status": "completed"
+    },
+    "output_index": 8,
+    "sequence_number": 94
+  },
+  {
+    "type": "response.completed",
+    "sequence_number": 95
+  }
+]

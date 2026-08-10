@@ -11,6 +11,7 @@ from digisearch.ingestion.base import Parser
 
 try:
     from docx import Document
+
     _DOCX_AVAILABLE = True
 except ImportError:
     _DOCX_AVAILABLE = False

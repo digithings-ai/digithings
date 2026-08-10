@@ -1,0 +1,307 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { ChatStreamCursor } from "@digithings/web";
+import { stripFoundryCitationMarkers, chainActivities } from "./activity-view";
+import { ChatActivities } from "./components/ChatActivities";
+import { CopyButton } from "./components/CopyButton";
+import { DigiChatWordmark } from "./components/DigiChatMark";
+import { MiniMarkdown } from "./components/MiniMarkdown";
+import type { DigiChatSessionProps } from "./types";
+import { useStreamingIntro } from "./useStreamingIntro";
+
+const MAX_INPUT_LINES = 5;
+
+export function DigiChatSession({
+  welcomeIntro,
+  suggestions = [],
+  placeholder,
+  showByok,
+  /** When false, error rows omit the inline BYOK link (ungated dogfood / infra errors). */
+  showByokOnError = true,
+  branding,
+  ariaLabel = "digichat",
+  className,
+  layout = "page",
+  chat,
+  headerSlot,
+  footerSlot,
+  formReplacement,
+  settingsPanel,
+  renderAssistantContent,
+  showIntro = true,
+}: DigiChatSessionProps) {
+  const {
+    messages,
+    busy,
+    error,
+    quotaPrompt,
+    send,
+    stop,
+    onRetry,
+    providerIsSet = false,
+    openSettings,
+  } = chat;
+
+  const [input, setInput] = useState("");
+  const threadRef = useRef<HTMLDivElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  const introEnabled = showIntro && messages.length === 0 && !formReplacement;
+  const { text: intro, done: introDone } = useStreamingIntro(welcomeIntro, introEnabled);
+
+  useEffect(() => {
+    const el = threadRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, busy, intro, quotaPrompt, formReplacement]);
+
+  function resizeTextarea(ta: HTMLTextAreaElement) {
+    const style = getComputedStyle(ta);
+    const lineHeight = parseFloat(style.lineHeight) || 21;
+    const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const maxHeight = lineHeight * MAX_INPUT_LINES + padding;
+    ta.style.height = "0px";
+    const next = Math.min(ta.scrollHeight, maxHeight);
+    ta.style.height = `${next}px`;
+    ta.style.overflowY = ta.scrollHeight > maxHeight ? "auto" : "hidden";
+  }
+
+  function submit(question: string) {
+    const q = question.trim();
+    if (!q || busy) return;
+    void send(q);
+    setInput("");
+    if (taRef.current) {
+      taRef.current.style.height = "auto";
+      taRef.current.style.overflowY = "hidden";
+    }
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submit(input);
+    }
+  }
+
+  const handleOpenSettings = () => openSettings?.();
+
+  const sessionClass = [
+    "dc-session",
+    layout === "embed" ? "dc-session-embed" : "",
+    className ?? "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const renderAssistant = (content: string, streaming: boolean) => {
+    const clean = stripFoundryCitationMarkers(content);
+    if (renderAssistantContent) return renderAssistantContent(clean, streaming);
+    if (!clean) return null;
+    return <MiniMarkdown text={clean} />;
+  };
+
+  return (
+    <section className={sessionClass} aria-label={ariaLabel}>
+      {headerSlot ??
+        (branding?.title ? null : (
+          <header className="dc-wordmark-header">
+            <DigiChatWordmark />
+          </header>
+        ))}
+
+      {branding?.title ? (
+        <header className="dc-brand">
+          <span>{branding.title}</span>
+          {branding.attributionUrl ? (
+            <span className="dc-brand-by">
+              (
+              <a
+                href={branding.attributionUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="dc-brand-link"
+              >
+                {branding.attributionLabel ?? "by digichat"}
+              </a>
+              )
+            </span>
+          ) : null}
+        </header>
+      ) : null}
+
+      <div className="dc-thread" ref={threadRef} aria-live="polite" aria-atomic="false">
+        {introEnabled && welcomeIntro ? (
+          <div className="dc-msg dc-assistant dc-intro" aria-live="off">
+            <span className="dc-who" aria-hidden="true">
+              ·
+            </span>
+            <div className="dc-body dc-intro-body">
+              {intro}
+              {/* Shared caret primitive (#1418); keeps .dt-cur so consumer CSS
+                  and the cursor.css contract stay authoritative on ties. */}
+              {!introDone && <ChatStreamCursor className="dt-cur" />}
+              {introDone && showByok && !providerIsSet ? (
+                <p className="dc-intro-byok">
+                  {" "}
+                  <button type="button" className="dc-inline-link" onClick={handleOpenSettings}>
+                    Bring your own API key
+                  </button>{" "}
+                  to use any provider.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {introDone && messages.length === 0 && suggestions.length > 0 && (
+          <div className="dc-suggest">
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="dtc-chip"
+                onClick={() => submit(s)}
+                disabled={busy}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {messages.map((m, i) => {
+          const streaming = busy && m.role === "assistant" && i === messages.length - 1;
+          /* Working… (and any other Foundry ack) is caret-only noise in the
+             chain — strip it. Tool rows carry their own running/ok state. */
+          const chain = chainActivities(m.activities ?? []);
+          return (
+            <div key={i} className={`dc-msg dc-${m.role}`}>
+              <span className="dc-who" aria-hidden="true">
+                {m.role === "user" ? ">" : "·"}
+              </span>
+              <div className="dc-body">
+                {m.role === "assistant" ? (
+                  <>
+                    {chain.length ? <ChatActivities activities={chain} /> : null}
+                    {renderAssistant(m.content, streaming)}
+                    {/* One bare flash for the whole turn: under an empty wait,
+                        under the growing tool chain, then under the answer as
+                        it streams. Tool rows themselves say Searching/done —
+                        no typed "Working…" / "Searching for…" line on top.
+                        Gone the moment busy clears. */}
+                    {streaming ? <ChatStreamCursor className="dt-cur" /> : null}
+                  </>
+                ) : (
+                  m.content
+                )}
+              </div>
+              {/* No copy button on embed: the clipboard API is unavailable in a
+                  cross-origin iframe, so the button silently no-ops. */}
+              {layout !== "embed" && m.role === "assistant" && !streaming && m.content ? (
+                <CopyButton
+                  text={stripFoundryCitationMarkers(m.content)}
+                  className="dc-msg-copy"
+                  ariaLabel="Copy answer"
+                />
+              ) : null}
+            </div>
+          );
+        })}
+
+        {/* useChat only appends the assistant message once the first stream
+            chunk arrives — often seconds after submit (Foundry create +
+            empty reasoning). Until then the last row is still the user turn,
+            so mount a placeholder assistant with the same bare caret. */}
+        {busy && (messages.length === 0 || messages[messages.length - 1]?.role === "user") ? (
+          <div className="dc-msg dc-assistant" aria-busy="true">
+            <span className="dc-who" aria-hidden="true">
+              ·
+            </span>
+            <div className="dc-body">
+              <ChatStreamCursor className="dt-cur" />
+            </div>
+          </div>
+        ) : null}
+
+        {showByok && quotaPrompt && !providerIsSet ? (
+          <div className="dc-quota-banner" role="status">
+            <p>
+              Free tier quota may be exhausted.{" "}
+              <button type="button" className="dc-inline-link" onClick={handleOpenSettings}>
+                Continue with your own key
+              </button>
+            </p>
+          </div>
+        ) : null}
+
+        {error ? (
+          <p className="dtc-error" role="alert">
+            {error}
+            {showByok && !providerIsSet && showByokOnError ? (
+              <>
+                {" "}
+                <button type="button" className="dc-inline-link" onClick={handleOpenSettings}>
+                  Add your API key
+                </button>
+              </>
+            ) : null}
+            {onRetry ? (
+              <>
+                {" "}
+                <button type="button" className="dc-inline-link" onClick={onRetry}>
+                  Retry
+                </button>
+              </>
+            ) : null}
+          </p>
+        ) : null}
+
+        {/* BYOK terminal flow — inline in the transcript, not a separate modal */}
+        {settingsPanel}
+      </div>
+
+      {formReplacement ?? (
+        <form
+          className="dc-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit(input);
+          }}
+        >
+          <textarea
+            ref={taRef}
+            className="dc-textarea"
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              resizeTextarea(e.target);
+            }}
+            onKeyDown={onKeyDown}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            rows={1}
+            maxLength={2000}
+            disabled={busy || !!settingsPanel}
+          />
+          {busy && stop ? (
+            <button type="button" className="dc-stop" onClick={stop} aria-label="Stop generating">
+              stop
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="dc-send"
+              disabled={!input.trim() || busy || !!settingsPanel}
+              aria-label="Send message"
+            >
+              ↵
+            </button>
+          )}
+        </form>
+      )}
+
+      {footerSlot}
+    </section>
+  );
+}

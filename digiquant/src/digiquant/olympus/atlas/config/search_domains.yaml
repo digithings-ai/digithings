@@ -1,0 +1,66 @@
+# Curated allowlists for the OpenRouter `openrouter:web_search` grounding pre-pass
+# (web_grounding.py) — maps to Exa `allowed_domains`. Keeps the day-to-day search
+# flow consistent and high-signal. Edit to tune sources.
+#
+# NOTE: allowlists are capped at 5 domains per request. Each list below is truncated
+# to its first 5 entries before being sent.
+
+# Default allowlist for segments with no per-segment entry (and the macro fallback).
+web_allowed_websites:
+  - reuters.com         # broad market/financial news
+  - apnews.com          # broad newswire
+  - sec.gov             # filings (13F, 8-K, etc.)
+  - federalreserve.gov  # Fed policy / statements
+  - bls.gov             # CPI, jobs, official econ data
+
+# Per-segment overrides — each phase searches its highest-signal sources (<=5).
+# Prefer secondary aggregators over first-level origins where they parse the feed
+# (capitoltrades, quiverquant, whalewisdom). Unmapped segments use web_allowed_websites.
+per_segment:
+  macro:
+    - federalreserve.gov
+    - bls.gov
+    - treasury.gov
+    - reuters.com
+    - apnews.com
+  international:
+    - reuters.com
+    - apnews.com
+    - ft.com
+    - cnbc.com
+    - imf.org
+  alt-sentiment-news:
+    - reuters.com
+    - apnews.com
+    - cnbc.com
+    - marketwatch.com
+    - bloomberg.com
+  alt-cta-positioning:
+    - cftc.gov
+    - reuters.com
+    - marketwatch.com
+    - finance.yahoo.com
+  alt-options-derivatives:
+    - cboe.com
+    - finance.yahoo.com
+    - marketwatch.com
+    - barchart.com
+  alt-politician-signals:
+    - capitoltrades.com
+    - quiverquant.com
+    - sec.gov
+  inst-institutional-flows:
+    - whalewisdom.com
+    - sec.gov
+    - etf.com
+    - reuters.com
+  inst-hedge-fund-intel:
+    - whalewisdom.com
+    - sec.gov
+    - reuters.com
+    - ft.com
+
+recency_days: 7
+# Live search is billed per source; 8 -> 4 roughly halves the per-search spend with minimal
+# grounding loss (top results dominate). Tune up if grounding quality regresses.
+max_search_results: 4

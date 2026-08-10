@@ -85,9 +85,9 @@ def reverse_string(s: str) -> str:
 | Disabled | Turns off detection entirely |
 | Custom | Specify your own start/end tag |
 
-### DigiGraph streaming of model reasoning
+### digigraph streaming of model reasoning
 
-When the upstream LLM (Ollama, LiteLLM, OpenAI, etc.) sends **reasoning_content** in the stream (e.g. reasoning/thinking models), DigiGraph:
+When the upstream LLM (Ollama, LiteLLM, OpenAI, etc.) sends **reasoning_content** in the stream (e.g. reasoning/thinking models), digigraph:
 
 1. Forwards each reasoning chunk in the SSE stream as `choices[0].delta.reasoning_content` for clients that support real-time reasoning display.
 2. Buffers reasoning and, before the first main content chunk (or at end of stream), emits a single **`<thinking>...</thinking>`** block in the content stream so Open WebUI’s tag detection shows a collapsible “Thinking…” block in the chat.
@@ -526,7 +526,7 @@ Using consistent emoji prefixes makes it easy to scan the step trail at a glance
 
 ## Tool‑Specific Output & Open WebUI Formatting
 
-This section describes how DigiGraph tools and delegate agents format their
+This section describes how digigraph tools and delegate agents format their
 results so that the Open WebUI formatter can render tables, images, mermaid
 diagrams, and summaries instead of dumping raw JSON.
 
@@ -556,14 +556,14 @@ diagrams, and summaries instead of dumping raw JSON.
 5. **Errors** – if a payload contains an `error` field it is shown clearly as
    bold text rather than buried in JSON.
 
-6. **Session isolation (digistore)** – Run storage (digistore, dataset_ref, stored_datasets) and checkpoint state are keyed by **session_id**. If the client does not send a session id, DigiGraph uses `"default"`, so **all conversations share the same digistore and can see each other’s datasets**. To isolate per conversation, send one of:
+6. **Session isolation (digistore)** – Run storage (digistore, dataset_ref, stored_datasets) and checkpoint state are keyed by **session_id**. If the client does not send a session id, digigraph uses `"default"`, so **all conversations share the same digistore and can see each other’s datasets**. To isolate per conversation, send one of:
    - **Body:** `session_id` in the chat completions request (e.g. the conversation or chat id from your UI).
    - **Header:** `X-Session-Id` or `X-Thread-Id` with a stable id per conversation.
    Configure your Open WebUI connection (or proxy) to send the current chat/conversation id so each chat has its own session and digistore does not leak between conversations.
 
 ### Tools & expected output keys
 
-The following tables enumerate every tool that DigiGraph or its sub‑agents may
+The following tables enumerate every tool that digigraph or its sub‑agents may
 return.  The *formatter* uses these keys to decide how to render the result for
 Open WebUI.
 
@@ -571,7 +571,7 @@ Open WebUI.
 
 | Tool | Description | Output shape (to LLM / stream) |
 |------|-------------|--------------------------------|
-| **digisearch** | Search the document index (DigiSearch). | `content`, `results`, `summary`, `dataset_ref` (storage path when `run_data_dir` set). **Storage path is shown in the result** so the same retrieval can be reused without re‑running search. OWU: table + “Stored at: …” line. |
+| **digisearch** | Search the document index (digisearch). | `content`, `results`, `summary`, `dataset_ref` (storage path when `run_data_dir` set). **Storage path is shown in the result** so the same retrieval can be reused without re‑running search. OWU: table + “Stored at: …” line. |
 | **visualization_agent** | Delegate to visualization specialist. | `content`: JSON string from sub‑agent (see visualization tools below). |
 | **analysis_agent** | Delegate to analysis specialist. | `content`: JSON string from sub‑agent (see analysis tools below). |
 | **data_prep_agent** | Delegate to data prep (export, filter, sample). | `content`: JSON string from sub‑agent (see data prep tools below). |
@@ -623,6 +623,9 @@ Open WebUI.
   (If the file is unavailable it falls back to `Image: <path>`.)
 * The formatter lives in `digigraph/formatters/openwebui.py` and is invoked by
   `get_stream_formatter()` when `openwebui_format=True`.
+* **Opt-in required:** `model=sitaas-rag` alone does **not** enable this
+  formatter. Open WebUI (or any proxy) must send
+  `X-Response-Format: openwebui` and/or body `openwebui_format=true`.
 * Unit tests live in `tests/dg/test_openwebui_formatter.py`; they cover
   branching by tool name, JSON parsing of delegate tools, and error formatting.
 

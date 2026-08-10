@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from digigraph.research_brief_models import ResearchBrief
 
 
