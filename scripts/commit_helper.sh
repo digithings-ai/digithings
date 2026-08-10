@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# commit_helper.sh — Conventional commit helper for DigiThings.
+# commit_helper.sh — Conventional commit helper for digithings.
 #
 # Validates and applies commits in the format:
 #   type(component): description
@@ -11,12 +11,12 @@
 #
 # Valid types:    feat fix refactor test docs chore style perf
 # Valid components: digigraph digiquant digisearch digismith digiclaw
-#                   digibase digikey digichat website config root
+#                   digibase digifetch digivault digikey digichat website config root
 
 set -euo pipefail
 
 VALID_TYPES=(feat fix refactor test docs chore style perf)
-VALID_COMPONENTS=(digigraph digiquant digisearch digismith digiclaw digibase digikey digichat website config root)
+VALID_COMPONENTS=(digigraph digiquant digisearch digismith digiclaw digibase digifetch digivault digikey digichat website config root)
 COAUTHOR="Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -70,7 +70,7 @@ do_commit() {
 # ── Interactive mode ──────────────────────────────────────────────────────────
 
 interactive_mode() {
-  echo "── DigiThings Commit Helper ─────────────────────────────────────────"
+  echo "── digithings Commit Helper ─────────────────────────────────────────"
   echo ""
 
   echo "Type (${VALID_TYPES[*]}):"

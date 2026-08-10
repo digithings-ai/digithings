@@ -1,6 +1,6 @@
-"""OpenAI-style orchestrator tool definitions for DigiQuant.
+"""OpenAI-style orchestrator tool definitions for digiquant.
 
-DigiGraph fetches these via ``POST /v1/orchestrator_tools`` and executes via
+digigraph fetches these via ``POST /v1/orchestrator_tools`` and executes via
 ``POST /v1/orchestrator_invoke`` so quant tooling is owned by this service.
 """
 
@@ -127,14 +127,14 @@ def build_digiquant_pipeline_delegate_tool() -> dict[str, Any]:
         "type": "function",
         "function": {
             "name": "digiquant_pipeline_delegate",
-            "description": "DigiGraph hub alias for digiquant_run_pipeline (same HTTP /v1/workflow behavior).",
+            "description": "digigraph hub alias for digiquant_run_pipeline (same HTTP /v1/workflow behavior).",
             "parameters": _pipeline_parameters(),
         },
     }
 
 
 def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
-    """Return the full DigiQuant orchestrator tool surface."""
+    """Return the full digiquant orchestrator tool surface."""
     return [
         build_digiquant_list_strategies_tool(),
         build_digiquant_run_backtest_tool(),

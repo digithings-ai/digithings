@@ -11,11 +11,45 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field
 
+from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.env_utils import resolve_env_refs
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_PROJECT_VERSIONS: frozenset[str] = frozenset({"v1alpha1"})
+
+# Default env var holding the API key for each agents.llm.provider value.
+_DEFAULT_LLM_KEY_ENV: dict[str, str] = {
+    "openrouter": "OPENROUTER_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "ollama": "OLLAMA_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "litellm": "LITELLM_PROXY_API_KEY",
+}
+
+VALID_LLM_MODES: frozenset[str] = frozenset({"free", "test", "medium", "best"})
+VALID_LLM_PROVIDERS: frozenset[str] = frozenset(_DEFAULT_LLM_KEY_ENV)
+
+
+class AgentsLlmConfig(BaseModel):
+    """Explicit LLM provider/model pin under ``agents.llm`` (wins over mode defaults)."""
+
+    provider: str = Field(
+        ...,
+        description="openrouter | openai | ollama | gemini | anthropic | litellm",
+    )
+    model: str = Field(..., description="Provider-native model id (e.g. openrouter slug).")
+    api_key_env: str | None = Field(
+        default=None,
+        description="Env var holding the API key; defaults from the provider registry.",
+    )
+
+    def resolved_api_key_env(self) -> str:
+        """Return ``api_key_env`` or the provider's default key env name."""
+        if self.api_key_env and self.api_key_env.strip():
+            return self.api_key_env.strip()
+        return _DEFAULT_LLM_KEY_ENV.get(self.provider.strip().lower(), "OPENAI_API_KEY")
 
 
 class SitaasLimits(BaseModel):
@@ -223,11 +257,33 @@ class DigiProjectConfig:
         return self.agents.get("enabled", ["research", "backtest"])
 
     def get_llm_mode(self) -> str:
-        """LLM mode: test | medium | best."""
+        """LLM mode: free | test | medium | best."""
         return self.agents.get("llm_mode", "test")
 
+    def get_llm(self) -> AgentsLlmConfig | None:
+        """Explicit ``agents.llm`` pin, or ``None`` when unset / invalid."""
+        raw = self.agents.get("llm")
+        if not isinstance(raw, dict) or not raw:
+            return None
+        provider = str(raw.get("provider") or "").strip().lower()
+        model = str(raw.get("model") or "").strip()
+        if not provider or not model:
+            return None
+        api_key_env = raw.get("api_key_env")
+        try:
+            return AgentsLlmConfig(
+                provider=provider,
+                model=model,
+                api_key_env=str(api_key_env).strip() if api_key_env else None,
+            )
+        except Exception:
+            logger.warning(
+                "Invalid agents.llm block ignored: provider=%r model=%r", provider, model
+            )
+            return None
+
     def get_indexes(self) -> list[dict[str, Any]]:
-        """Index configs for DigiSearch."""
+        """Index configs for digisearch."""
         return self.indexes
 
     def get_search_index_name(self) -> str:
@@ -303,15 +359,21 @@ class DigiProjectConfig:
         return self.mcp.get("enabled", True)
 
     def get_digisearch_url(self) -> str:
-        """DigiSearch service URL."""
+        """digisearch service URL."""
         return self.services.get(
             "digisearch_url", os.environ.get("DIGISEARCH_URL", "http://digisearch:8002")
         )
 
     def get_digiquant_url(self) -> str:
-        """DigiQuant service URL."""
+        """digiquant service URL."""
         return self.services.get(
             "digiquant_url", os.environ.get("DIGIQUANT_URL", "http://digiquant:8001")
+        )
+
+    def get_digivault_url(self) -> str:
+        """digivault service URL."""
+        return self.services.get(
+            "digivault_url", os.environ.get("DIGIVAULT_URL", "http://digivault:8004")
         )
 
     def get_research_system_prompt(self) -> str | None:
@@ -349,6 +411,37 @@ class DigiProjectConfig:
             return []
         return [str(x).strip() for x in raw if x and str(x).strip()]
 
+    def get_always_retrieve_tools(self) -> list[str]:
+        """Tools to invoke before the LLM tool loop (structural retrieval, not prompt-only)."""
+        raw = self.agents.get("always_retrieve_tools")
+        if not isinstance(raw, list) or not raw:
+            return []
+        return [str(x).strip() for x in raw if x and str(x).strip()]
+
+    def get_research_brief(self) -> bool:
+        """Whether to run ``research_brief_builder`` after research.
+
+        Env ``DIGI_RESEARCH_BRIEF`` overrides YAML ``agents.research_brief``.
+        Default True (existing behavior). Set ``agents.research_brief: false`` or
+        ``DIGI_RESEARCH_BRIEF=0`` to end the stream when the answer completes
+        (dogfood / latency-sensitive chat).
+        """
+        env = (os.environ.get("DIGI_RESEARCH_BRIEF") or "").strip().lower()
+        if env in ("0", "false", "no", "off"):
+            return False
+        if env in ("1", "true", "yes", "on"):
+            return True
+        raw = self.agents.get("research_brief")
+        if raw is None:
+            return True
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, (int, float)):
+            return bool(raw)
+        if isinstance(raw, str):
+            return raw.strip().lower() not in ("0", "false", "no", "off", "")
+        return bool(raw)
+
     def get_limits(self) -> SitaasLimits:
         """Return SITAAS runtime limits (env overrides YAML overrides defaults)."""
         return SitaasLimits.from_config(self._data)
@@ -367,3 +460,23 @@ class DigiProjectConfig:
         if isinstance(raw, str) and raw.strip():
             return raw.strip().lower()
         return "full_stack"
+
+
+def is_research_brief_enabled() -> bool:
+    """Resolve ``agents.research_brief`` / ``DIGI_RESEARCH_BRIEF`` for the active project.
+
+    Defaults to True when no project config is loaded. Used by the research
+    subgraph wiring and ``research_brief_builder_node`` short-circuit.
+    """
+    try:
+        return DigiProjectConfig.load().get_research_brief()
+    except PROJECT_CONFIG_ERRORS as exc:
+        logger.debug("is_research_brief_enabled: config load failed (%s); env/default", exc)
+    except Exception as exc:
+        logger.debug("is_research_brief_enabled: unexpected error (%s); env/default", exc)
+    env = (os.environ.get("DIGI_RESEARCH_BRIEF") or "").strip().lower()
+    if env in ("0", "false", "no", "off"):
+        return False
+    if env in ("1", "true", "yes", "on"):
+        return True
+    return True

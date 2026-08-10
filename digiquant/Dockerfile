@@ -1,6 +1,10 @@
-# DigiQuant – Phase 0+ (Nautilus + Polars)
+# digiquant – NautilusTrader + Polars quant pipeline
 # Build from repo root: docker compose build digiquant (context: .)
 # See digiquant/ARCHITECTURE.md and root SECURITY.md. Bind to 127.0.0.1 in production.
+#
+# Image ships digiquant[nautilus] like peer module images (digikey, digigraph):
+# install package + extras only — no network fetch of upstream Nautilus fixtures.
+# Sample market CSVs for backtests live under digiquant/data/ (compose-mounted).
 
 FROM python:3.12-slim
 
@@ -14,7 +18,6 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN pip install --upgrade pip && pip install uv
 
-# Shared digibase (errors, OTel hooks)
 COPY digibase/pyproject.toml digibase/README.md ./digibase/
 COPY digibase/src ./digibase/src
 RUN uv pip install --system -e "./digibase"
@@ -26,15 +29,7 @@ RUN uv pip install --system -e "./digikey"
 COPY digiquant/pyproject.toml ./
 COPY digiquant/src ./src
 COPY digiquant/data ./data
-ARG NAUTILUS=1
-RUN if [ "$NAUTILUS" = "1" ]; then uv pip install --system -e ".[nautilus]"; else uv pip install --system -e .; fi
-
-ARG NAUTILUS=1
-RUN if [ "$NAUTILUS" = "1" ]; then \
-  NTEST=$(python3 -c "import nautilus_trader; from pathlib import Path; p=Path(nautilus_trader.__file__).resolve().parent.parent/'tests'/'test_data'/'binance'; print(p)"); \
-  mkdir -p "$NTEST" && curl -sfL -o "$NTEST/ethusdt-trades.csv" "https://raw.githubusercontent.com/nautechsystems/nautilus_trader/develop/tests/test_data/binance/ethusdt-trades.csv" && \
-  test -s "$NTEST/ethusdt-trades.csv" || (echo "Failed to download Nautilus test data" && exit 1); \
-  fi
+RUN uv pip install --system -e ".[nautilus]"
 
 EXPOSE 8001
 CMD ["uvicorn", "digiquant.server:app", "--host", "0.0.0.0", "--port", "8001"]

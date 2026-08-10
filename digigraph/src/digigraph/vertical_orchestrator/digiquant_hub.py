@@ -1,14 +1,13 @@
-"""DigiQuant orchestrator manifest + invoke (tools owned by DigiQuant HTTP API)."""
+"""digiquant orchestrator manifest + invoke (tools owned by digiquant HTTP API)."""
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from digibase.http import outbound_service_headers
 from digibase.http_client import sync_client
 
-logger = logging.getLogger(__name__)
+from digigraph.vertical_orchestrator._common import HUB_CLIENT_ERRORS, log_manifest_fetch_failure
 
 _MANIFEST_CACHE: dict[str, list[dict[str, Any]]] = {}
 
@@ -29,8 +28,8 @@ def fetch_digiquant_tool_dicts(
                 r = client.post(url, json={}, headers=headers)
                 r.raise_for_status()
                 body = r.json()
-        except Exception as e:
-            logger.warning("DigiQuant orchestrator_tools fetch failed: %s", e)
+        except HUB_CLIENT_ERRORS as e:
+            log_manifest_fetch_failure("digiquant", e)
             raise
         tools = body.get("tools") or []
         if not isinstance(tools, list):
@@ -52,7 +51,7 @@ def invoke_digiquant_tool(
     bearer_token: str | None,
     request_id: str | None,
 ) -> dict[str, Any]:
-    """POST ``/v1/orchestrator_invoke`` on DigiQuant."""
+    """POST ``/v1/orchestrator_invoke`` on digiquant."""
     url = f"{base_url.strip().rstrip('/')}/v1/orchestrator_invoke"
     headers = outbound_service_headers(request_id, bearer_token)
     headers["Content-Type"] = "application/json"

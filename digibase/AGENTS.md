@@ -1,8 +1,8 @@
-# Agent Guide: DigiBase
+# Agent Guide: digibase
 
 ## Purpose
 
-DigiBase is both a **shared Python library** (`digibase` package) installed in every service, and a **future data-plane broker service** (roadmap). Today only the library exists: it provides standardized JSON error envelopes, outbound HTTP correlation headers, audit payload redaction, and optional OpenTelemetry wiring. The library has no server, no port, and no persistent state.
+digibase is both a **shared Python library** (`digibase` package) installed in every service, and a **future data-plane broker service** (roadmap). Today only the library exists: it provides standardized JSON error envelopes, outbound HTTP correlation headers, audit payload redaction, and optional OpenTelemetry wiring. The library has no server, no port, and no persistent state.
 
 ---
 
@@ -12,7 +12,7 @@ In this order, before writing any code:
 
 1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — library vs service distinction, full API surface, security analysis, phase roadmap
 2. [`../AGENTS.md`](../AGENTS.md) — non-negotiable stack-wide rules
-3. [`../ROADMAP.md`](../ROADMAP.md) — DigiBase data-plane service is Phase 2+; do not build it now
+3. [`../ROADMAP.md`](../ROADMAP.md) — digibase data-plane service is Phase 2+; do not build it now
 4. [`../docs/agent-backlog/INDEX.md`](../docs/agent-backlog/INDEX.md) — current task queue
 
 ---
@@ -36,7 +36,7 @@ Before making any change to `digibase/`:
 Beyond root `AGENTS.md`:
 
 - **Library is side-effect-free on import**: No threads, no sockets, no file writes at import time. All functions are pure or accept explicit parameters.
-- **Do not build the data-plane service**: The `DigiBase` broker service (credential vending, quota enforcement, Postgres/Redis handle brokering) is Phase 2+. Do not stub, scaffold, or add HTTP endpoints to `digibase/` without explicit scope.
+- **Do not build the data-plane service**: The `digibase` broker service (credential vending, quota enforcement, Postgres/Redis handle brokering) is Phase 2+. Do not stub, scaffold, or add HTTP endpoints to `digibase/` without explicit scope.
 - **`ApiErrorEnvelope` is a contract**: Every service uses `json_error_response()` and parses `{"error": {"code", "message", "request_id", "service"}}`. Field renames or type changes are fleet-wide breaking changes.
 - **OTel stays optional**: `digibase[otel]` is an optional extra. The base package must install and function without any OTel packages present.
 - **No secrets in headers helper output**: `outbound_service_headers()` accepts a bearer token argument — it must never log it, cache it, or include it in error messages.

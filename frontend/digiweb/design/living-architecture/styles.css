@@ -1,0 +1,147 @@
+/* ==========================================================================
+   @digithings/design — living-architecture/styles.css
+   All classes are scoped under `.la-*`. Consumes tokens from ../tokens.css.
+   ========================================================================== */
+
+.la-host {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+.la-host:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent, var(--fg));
+  border-radius: var(--radius-md);
+}
+
+.la-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* --- Edges --------------------------------------------------------------- */
+.la-edge {
+  fill: none;
+  stroke: var(--border-color);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 8;
+  stroke-dashoffset: 0;
+  opacity: 0.7;
+  animation: la-flow 6s linear infinite;
+  transition:
+    stroke 0.4s var(--transition-ease),
+    opacity 0.4s var(--transition-ease),
+    stroke-width 0.3s var(--transition-ease);
+}
+.la-edge.la-is-hot {
+  stroke: var(--accent, var(--fg));
+  stroke-width: 1.6;
+  opacity: 1;
+}
+
+@keyframes la-flow {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -48; }
+}
+
+/* --- Nodes --------------------------------------------------------------- */
+.la-node {
+  cursor: pointer;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    opacity 0.4s var(--transition-ease),
+    transform 0.3s var(--transition-ease);
+}
+.la-node.la-is-dim { opacity: 0.28; }
+
+.la-node .la-halo {
+  fill: var(--accent, var(--fg));
+  opacity: 0;
+  transition: opacity 0.3s linear;
+}
+.la-node:hover .la-halo,
+.la-node:focus-visible .la-halo,
+.la-node.la-is-active .la-halo {
+  opacity: 0.22;
+}
+.la-node.la-is-active .la-halo { opacity: 0.35; }
+
+.la-node .la-ring {
+  fill: rgba(255, 255, 255, 0.02);
+  stroke: var(--border-color);
+  stroke-width: 1;
+  transition: stroke 0.3s, stroke-width 0.3s;
+}
+.la-node:hover .la-ring,
+.la-node:focus-visible .la-ring,
+.la-node.la-is-active .la-ring {
+  stroke: var(--accent, var(--fg));
+  stroke-width: 2;
+}
+
+.la-node .la-dot {
+  fill: var(--accent, var(--fg));
+  opacity: 0.5;
+}
+
+.la-node .la-label {
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  fill: var(--text-primary);
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+
+.la-node:focus { outline: none; }
+.la-node:focus-visible .la-ring { stroke-dasharray: 3 3; }
+
+/* --- Zoom-out button ----------------------------------------------------- */
+.la-zoom-out-btn {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: rgba(10, 10, 10, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.la-zoom-out-btn:hover,
+.la-zoom-out-btn:focus-visible {
+  color: var(--fg);
+  border-color: var(--accent, var(--fg));
+  background: rgba(18, 18, 18, 0.9);
+  outline: none;
+}
+
+/* --- Reduced motion ------------------------------------------------------ */
+.la-host.la-reduced-motion .la-edge { animation: none; }
+.la-host.la-reduced-motion .la-node,
+.la-host.la-reduced-motion .la-halo,
+.la-host.la-reduced-motion .la-ring,
+.la-host.la-reduced-motion .la-edge {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .la-edge { animation: none; }
+  .la-node,
+  .la-halo,
+  .la-ring { transition: none; }
+}

@@ -1,4 +1,4 @@
-"""Research node: document RAG (tool loop), quant JSON extraction, and DigiSearch-augmented prompts."""
+"""Research node: document RAG (tool loop), quant JSON extraction, and digisearch-augmented prompts."""
 
 from __future__ import annotations
 
@@ -9,9 +9,11 @@ import re
 from contextvars import ContextVar
 from typing import Any
 
+from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.filter_hints import extract_filter_hints
 from digigraph.graph.state import WorkflowState
-from digigraph.llm import chat_completion, chat_completion_with_tools, get_model_for_mode
+from digigraph.llm_client import completion_text, run_tools
+from digigraph.model_config import get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
 from digigraph.tools.digisearch import digisearch
 from digigraph.trace_events import merge_rag_sources_accumulator
@@ -30,7 +32,7 @@ If the user names tickers or a universe, every symbol must appear in "symbols". 
 
 
 def _coerce_strategy_params(raw: object) -> dict[str, float | int | str] | None:
-    """Normalize LLM-provided strategy_params for DigiQuant (flat JSON numbers/strings only)."""
+    """Normalize LLM-provided strategy_params for digiquant (flat JSON numbers/strings only)."""
     if raw is None:
         return None
     if isinstance(raw, dict) and len(raw) == 0:
@@ -105,41 +107,21 @@ def _coerce_symbols_from_llm(raw: object) -> list[str]:
     return []
 
 
-def _project_config() -> DigiProjectConfig | None:
+def _load_research_settings() -> tuple[DigiProjectConfig | None, str, str, str]:
+    """Load project config once; return (cfg, index_name, index_display_name, system_prompt)."""
+    default_index = os.environ.get("DIGISEARCH_INDEX", "default")
     try:
-        return DigiProjectConfig.load()
-    except Exception as exc:
+        cfg = DigiProjectConfig.load()
+    except PROJECT_CONFIG_ERRORS as exc:
         logger.debug("DigiProjectConfig.load failed: %s", exc)
-        return None
-
-
-def _get_search_index(cfg: DigiProjectConfig | None) -> str:
-    if cfg:
-        try:
-            return cfg.get_search_index_name()
-        except Exception as exc:
-            logger.debug("get_search_index_name: %s", exc)
-    return os.environ.get("DIGISEARCH_INDEX", "default")
-
-
-def _get_search_index_display_name(cfg: DigiProjectConfig | None) -> str:
-    if cfg:
-        try:
-            return cfg.get_search_index_display_name()
-        except Exception as exc:
-            logger.debug("get_search_index_display_name: %s", exc)
-    return os.environ.get("DIGISEARCH_INDEX", "default")
-
-
-def _get_research_system_prompt(cfg: DigiProjectConfig | None) -> str:
-    if cfg:
-        try:
-            custom = cfg.get_research_system_prompt()
-            if custom and str(custom).strip():
-                return str(custom).strip()
-        except Exception as exc:
-            logger.debug("get_research_system_prompt: %s", exc)
-    return RESEARCH_SYSTEM
+        return None, default_index, default_index, RESEARCH_SYSTEM
+    index_name = cfg.get_search_index_name()
+    index_display = cfg.get_search_index_display_name()
+    system_prompt = RESEARCH_SYSTEM
+    custom = cfg.get_research_system_prompt()
+    if custom and str(custom).strip():
+        system_prompt = str(custom).strip()
+    return cfg, index_name, index_display, system_prompt
 
 
 def _digisearch_available() -> bool:
@@ -215,33 +197,58 @@ def _is_likely_network_failure(exc: Exception) -> bool:
     return False
 
 
-def _user_facing_llm_error(exc: Exception) -> str:
+def _user_facing_llm_error(exc: Exception) -> tuple[str, str | None]:
+    """Return ``(message, error_code)`` for an LLM failure.
+
+    ``error_code`` is a stable digichat contract value (e.g. ``free_quota_exceeded``)
+    or ``None`` when the failure is unclassified.
+    """
+    from digigraph.llm_errors import (
+        FREE_QUOTA_EXCEEDED,
+        RATE_LIMIT,
+        classify_llm_error,
+        free_quota_message,
+        rate_limit_message,
+    )
+
+    code = classify_llm_error(exc)
+    if code == FREE_QUOTA_EXCEEDED:
+        return free_quota_message(), FREE_QUOTA_EXCEEDED
+    if code == RATE_LIMIT:
+        return rate_limit_message(), RATE_LIMIT
+
     msg = str(exc).lower()
     if "context window exceeds limit" in msg or "context_length_exceeded" in msg:
         return (
             "The conversation or context is too long for this model. "
-            "Try: start a new chat, use a model with a larger context (e.g. set DIGI_LLM_MODE=medium), or shorten your question."
+            "Try: start a new chat, use a model with a larger context (e.g. set DIGI_LLM_MODE=medium), or shorten your question.",
+            None,
         )
-    if "rate limit" in msg or "rate_limit" in msg:
-        return "Rate limit reached. Please wait a moment and try again."
     if "invalid api key" in msg or "authentication" in msg or "401" in msg:
-        return "API authentication failed. Check your model provider settings (e.g. OLLAMA_API_KEY, OPENAI_API_KEY)."
+        return (
+            "API authentication failed. Check your model provider settings (e.g. OLLAMA_API_KEY, OPENAI_API_KEY).",
+            None,
+        )
     if _is_likely_network_failure(exc):
         base = (os.environ.get("OPENAI_API_BASE") or "").strip() or "(unset — OpenAI default URL)"
         vert = _vertical_url_host_hints()
+        if vert:
+            # Operator diagnostics only — never stream Docker Compose hostnames to embed clients.
+            logger.warning("research network failure host hints: %s", vert)
         return (
-            "A network connection failed during research (LLM and/or tools calling DigiSearch). "
+            "A network connection failed during research (LLM and/or tools calling digisearch). "
             f"OPENAI_API_BASE is {base}. "
-            "Start LiteLLM (http://127.0.0.1:4000/v1) or Ollama (http://127.0.0.1:11434/v1) and ensure DigiGraph can reach it. "
-            "Document/RAG also needs DigiSearch orchestrator at DIGISEARCH_URL (host: http://127.0.0.1:8002). "
-            + (vert + " " if vert else "")
-            + "If you use `make stack-local`, host.docker.internal in OPENAI_API_BASE is rewritten to 127.0.0.1. "
-            "See docs/LOCAL_STACK.md."
+            "Start LiteLLM (http://127.0.0.1:4000/v1) or Ollama (http://127.0.0.1:11434/v1) and ensure digigraph can reach it. "
+            "Document/RAG also needs digisearch orchestrator at DIGISEARCH_URL (host: http://127.0.0.1:8002). "
+            "If you use `make stack-local`, host.docker.internal in OPENAI_API_BASE is rewritten to 127.0.0.1. "
+            "See docs/LOCAL_STACK.md.",
+            None,
         )
     tail = _vertical_url_host_hints()
     if tail:
-        return f"RAG workflow failed: {exc!s} {tail}"
-    return f"RAG workflow failed: {exc!s}"
+        logger.warning("research failure host hints: %s", tail)
+    # Never echo raw exception text (may include Compose service DNS names like digisearch:8002).
+    return "Research failed. Please try again shortly.", None
 
 
 def _plan_result_preview(result: str | dict) -> str:
@@ -252,6 +259,61 @@ def _plan_result_preview(result: str | dict) -> str:
         return content or json.dumps(result)[:400]
     s = str(result)
     return s[:400] + "..." if len(s) > 400 else s
+
+
+def _format_prefetch_context(tool_name: str, result: str | dict) -> str:
+    """Format a prefetched tool result for injection into the user/LLM message."""
+    max_chars = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "12000"))
+    if isinstance(result, dict):
+        body = result.get("content")
+        if not isinstance(body, str) or not body.strip():
+            # Prefer compact JSON of retrieval payload (results / rag_sources / notes).
+            slim: dict[str, Any] = {}
+            for key in ("results", "rag_sources", "notes", "hits", "error", "content"):
+                if key in result:
+                    slim[key] = result[key]
+            body = json.dumps(slim or result, default=str)
+    else:
+        body = str(result)
+    if len(body) > max_chars:
+        body = (
+            body[: max_chars - 80].rstrip()
+            + "\n...[truncated for LLM context; full tool payload retained upstream]"
+        )
+    return f"[{tool_name} results]\n{body}"
+
+
+def _tool_definition_name(tool: dict[str, Any] | str) -> str | None:
+    """Extract the orchestrator tool name from an OpenAI tool dict or SUMMARY string."""
+    if isinstance(tool, str):
+        return tool.split(":", 1)[0].strip() or None
+    if not isinstance(tool, dict):
+        return None
+    fn = tool.get("function")
+    if isinstance(fn, dict):
+        name = fn.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    name = tool.get("name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return None
+
+
+def _strip_tools_by_name(
+    tools: list[dict[str, Any]] | list[str],
+    names: set[str],
+) -> list[dict[str, Any]] | list[str]:
+    """Remove tool defs whose names are in ``names`` (after always_retrieve prefetch)."""
+    if not names or not tools:
+        return tools
+    kept: list[Any] = []
+    for tool in tools:
+        tname = _tool_definition_name(tool)
+        if tname is not None and tname in names:
+            continue
+        kept.append(tool)
+    return kept  # type: ignore[return-value]
 
 
 def _run_document_rag_path(
@@ -297,6 +359,10 @@ def _run_document_rag_path(
         allowed_tool_names=_allowed_names,
         request_id=None if _ctx_rid is None else (str(_ctx_rid).strip() or None),
         workflow_id=None if _ctx_wid is None else (str(_ctx_wid).strip() or None),
+        vault_path_prefix=(
+            str(state["vault_path_prefix"]).strip() if state.get("vault_path_prefix") else None
+        )
+        or None,
     )
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     collected_stored: dict[str, dict] = {}
@@ -330,6 +396,36 @@ def _run_document_rag_path(
         ):
             data = {**data, "index_name": index_display_name}
         raw_callback(event_type, data)
+
+    from digigraph.orchestration.registry import has_tool
+
+    prefetch_names = cfg.get_always_retrieve_tools() if cfg else []
+    prefetch_blocks: list[str] = []
+    prefetched: set[str] = set()
+    if prefetch_names and str(prompt).strip():
+        q = str(prompt).strip()
+        for tool_name in prefetch_names:
+            if not has_tool(tool_name):
+                continue
+            if _allowed_names is not None and tool_name not in _allowed_names:
+                continue
+            # Bound prefetch recall so a tiny seed corpus does not dump the whole
+            # index into every turn (default digisearch top_k=10 / vault limit=7).
+            args: dict[str, Any] = {"query": q}
+            if tool_name in ("digisearch", "digisearch_fetch_all"):
+                args["top_k"] = 4
+            elif tool_name == "digivault_search_notes":
+                args["limit"] = 3
+            stream_callback("tool_call", {"name": tool_name, "arguments": args})
+            result = execute_search(tool_name, args)
+            payload = (
+                {**result, "name": tool_name}
+                if isinstance(result, dict)
+                else {"name": tool_name, "content": result}
+            )
+            stream_callback("tool_result", payload)
+            prefetch_blocks.append(_format_prefetch_context(tool_name, result))
+            prefetched.add(tool_name)
 
     user_content = str(prompt)
 
@@ -369,7 +465,20 @@ def _run_document_rag_path(
                 + user_content
             )
 
-    content = chat_completion_with_tools(
+    if prefetch_blocks:
+        user_content = (
+            "Retrieved context (already fetched — do not re-call these tools):\n\n"
+            + "\n\n".join(prefetch_blocks)
+            + "\n\nUser question:\n"
+            + user_content
+        )
+
+    # Prefetch already ran; strip those tools so the model cannot re-search.
+    if prefetched:
+        tools_for_llm = _strip_tools_by_name(tools_for_llm, prefetched)
+
+    # Empty tools_for_llm → single streamed completion (no tool rounds).
+    content = run_tools(
         model=get_model_for_mode(),
         messages=[
             {"role": "system", "content": system_prompt},
@@ -393,7 +502,7 @@ def _run_document_rag_path(
             "The following plan was executed. Summarize the results for the user.\n\n"
             "Plan results:\n" + "\n".join(synthesis_parts) + "\n\nOriginal request: " + user_content
         )
-        content = chat_completion(
+        content = completion_text(
             get_model_for_mode(),
             [
                 {"role": "system", "content": system_prompt},
@@ -448,11 +557,11 @@ def _run_quant_or_augmented_path(
     user_content = str(prompt)
     if doc_context:
         user_content = (
-            f"[Document context from DigiSearch]\n{doc_context}\n\n[User prompt]\n{prompt}"
+            f"[Document context from digisearch]\n{doc_context}\n\n[User prompt]\n{prompt}"
         )
 
     try:
-        content = chat_completion(
+        content = completion_text(
             model=get_model_for_mode(),
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -516,14 +625,17 @@ def _run_quant_or_augmented_path(
             out["strategy_params"] = sp
         return out
     except Exception as e:
-        err_msg = _user_facing_llm_error(e)
-        return {
+        err_msg, err_code = _user_facing_llm_error(e)
+        out: dict = {
             "strategy_name": None,
             "symbols": None,
             "research_note": "error",
             "research_response": None,
             "error": err_msg,
         }
+        if err_code:
+            out["error_code"] = err_code
+        return out
 
 
 def research_node(state: WorkflowState, config: dict | None = None) -> dict:
@@ -537,11 +649,15 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
             "error": "prompt required (non-empty).",
         }
 
-    cfg = _project_config()
-    system_prompt = _get_research_system_prompt(cfg)
+    cfg, index_name, index_display_name, system_prompt = _load_research_settings()
+    override_index = state.get("digisearch_index")
+    if override_index and str(override_index).strip():
+        index_name = str(override_index).strip()
+        index_display_name = index_name
+    override_prompt = state.get("research_system_prompt_override")
+    if override_prompt and str(override_prompt).strip():
+        system_prompt = str(override_prompt).strip()
     is_document_mode = system_prompt != RESEARCH_SYSTEM
-    index_name = _get_search_index(cfg)
-    index_display_name = _get_search_index_display_name(cfg)
 
     if is_document_mode and _digisearch_available():
         try:
@@ -555,14 +671,17 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
                 prompt=str(prompt),
             )
         except Exception as e:
-            err_msg = _user_facing_llm_error(e)
-            return {
+            err_msg, err_code = _user_facing_llm_error(e)
+            out: dict = {
                 "strategy_name": None,
                 "symbols": None,
                 "research_note": "error",
                 "research_response": None,
                 "error": err_msg,
             }
+            if err_code:
+                out["error_code"] = err_code
+            return out
 
     _req_rid = state.get("request_id")
     _norm_rid = None if _req_rid is None else (str(_req_rid).strip() or None)

@@ -1,8 +1,8 @@
-# Agent Guide: DigiSearch
+# Agent Guide: digisearch
 
 ## Purpose
 
-DigiSearch is the centralized RAG and document-search vertical. It owns the complete retrieval pipeline: ingest → parse → chunk → embed → index → query → rerank, and exposes that pipeline via HTTP REST, MCP, CLI, and the orchestrator-tool manifest that DigiGraph consumes.
+digisearch is the centralized RAG and document-search vertical. It owns the complete retrieval pipeline: ingest → parse → chunk → embed → index → query → rerank, and exposes that pipeline via HTTP REST, MCP, CLI, and the orchestrator-tool manifest that digigraph consumes.
 
 ---
 
@@ -24,9 +24,9 @@ Before making any change to `digisearch/`:
 - [ ] Read the `ARCHITECTURE.md` section for the area you're touching (ingestion, embedding, search, server, MCP)
 - [ ] Run `pytest tests/ -m unit -k "digisearch" -v` — passes before and after
 - [ ] Run `ruff check digisearch/ && ruff format --check digisearch/` — zero errors
-- [ ] Confirm no `import pandas` anywhere (Polars-only; DigiSearch has no Nautilus boundary exception)
+- [ ] Confirm no `import pandas` anywhere (Polars-only; digisearch has no Nautilus boundary exception)
 - [ ] Confirm `DIGISEARCH_ALLOW_STUB=1` is never set in production code paths
-- [ ] Confirm `GET /azure_status` does not gain auth — but no new unauthenticated endpoints that leak config
+- [ ] Confirm `GET /azure_status` stays behind `digisearch:query` via `DigiAuthMiddleware` (not public)
 - [ ] Confirm any new ingest path validates the `source` path before opening it (no path traversal)
 
 ---
@@ -40,8 +40,8 @@ Beyond root `AGENTS.md`:
 - **Entity naming**: Class and model names drop the `Digi` prefix: `Document`, `Chunk`, `Query`, `Result` — not `DigiDocument`. Follow this for all new models.
 - **Structured filters over raw OData**: New query callers must use `filters: list[dict]` not raw `filter: str`. Raw OData requires `allow_raw_filter` flag and is only safe for trusted internal callers.
 - **Ingest source is a filesystem path**: `POST /ingest` `source` field is a server-side path. Never accept a raw URL in this field without implementing URL fetch + sandboxing first.
-- **Scope enforcement**: All new endpoints require the appropriate `digisearch:query` or `digisearch:ingest` scope via DigiKey middleware.
-- **No full doc bodies in spans**: DigiSmith trace attributes must not carry raw document text or chunk content.
+- **Scope enforcement**: All new endpoints require the appropriate `digisearch:query` or `digisearch:ingest` scope via digikey middleware.
+- **No full doc bodies in spans**: digismith trace attributes must not carry raw document text or chunk content.
 - **bulk ingest worker is a stub**: `ingest_worker.py` logs and exits. Do not add a queue consumer there until Phase 2 is scoped.
 
 ---

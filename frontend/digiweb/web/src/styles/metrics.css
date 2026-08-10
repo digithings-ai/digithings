@@ -1,0 +1,82 @@
+/* ==========================================================================
+   @digithings/web — metrics family structural CSS (components/metrics/*:
+   <PerfMetrics/> + <StatCounter/>). Import AFTER the token bridge, in the
+   app's globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/metrics.css";
+     @source "<path-to>/digiweb/web/src/components/metrics";
+   The @source line is load-bearing (path relative to the app's globals.css):
+   the components carry token-backed utilities, and Tailwind does not scan
+   package sources on its own.
+
+   Utilities in the components carry the grid container, cell padding, and
+   label/value typography. This file holds only what must stay CSS: the
+   sibling-index hairline grids (Tailwind can't express nth-child), keyed off
+   the container's data-cols and re-derived for the 2-up collapse ≤ 720px
+   (matching the components' max-[720px]:grid-cols-2 utility).
+   ========================================================================== */
+
+/* ── PerfMetrics: n-up hairline cell grid ────────────────────────────────── */
+
+.perf-metric {
+  border-left: 1px solid var(--hair);
+  border-top: 1px solid var(--hair);
+}
+
+/* first row has no top border; first column no left border */
+.perf-metrics[data-cols="4"] .perf-metric:nth-child(-n + 4),
+.perf-metrics[data-cols="3"] .perf-metric:nth-child(-n + 3),
+.perf-metrics[data-cols="2"] .perf-metric:nth-child(-n + 2) {
+  border-top: none;
+}
+
+.perf-metrics[data-cols="4"] .perf-metric:nth-child(4n + 1),
+.perf-metrics[data-cols="3"] .perf-metric:nth-child(3n + 1),
+.perf-metrics[data-cols="2"] .perf-metric:nth-child(2n + 1) {
+  border-left: none;
+}
+
+/* ≤ 720px the grid is two-up whatever data-cols says — re-derive the
+   hairlines. Selectors keep the [data-cols] attr so they tie the desktop
+   rules on specificity and win by order. */
+@media (max-width: 720px) {
+  .perf-metrics[data-cols="4"] .perf-metric:nth-child(-n + 4),
+  .perf-metrics[data-cols="3"] .perf-metric:nth-child(-n + 3) {
+    border-top: 1px solid var(--hair);
+  }
+
+  .perf-metrics[data-cols] .perf-metric:nth-child(-n + 2) {
+    border-top: none;
+  }
+
+  .perf-metrics[data-cols="4"] .perf-metric:nth-child(4n + 1),
+  .perf-metrics[data-cols="3"] .perf-metric:nth-child(3n + 1) {
+    border-left: 1px solid var(--hair);
+  }
+
+  .perf-metrics[data-cols] .perf-metric:nth-child(2n + 1) {
+    border-left: none;
+  }
+}
+
+/* ── StatCounter: single-row strip, left hairlines between stats ─────────── */
+
+.sc-stat {
+  border-left: 1px solid var(--hair);
+}
+
+.sc-stat:first-child {
+  border-left: none;
+}
+
+@media (max-width: 720px) {
+  .sc-stat:nth-child(2n + 1) {
+    border-left: none;
+  }
+
+  .sc-stat:nth-child(n + 3) {
+    border-top: 1px solid var(--hair);
+  }
+}

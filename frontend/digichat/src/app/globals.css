@@ -1,0 +1,565 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* ---------------------------------------------------------------------------
+ * digithings design canon (#1403; supersedes the #273/#260 shadcn palette).
+ *
+ * Token flow is now one-directional, canon-first:
+ *   @digithings/design/tokens.css   — [data-theme] semantic tokens
+ *                                     (--bg / --surface / --ink / --hair / …)
+ *   @digithings/web web-theme.css   — THE Tailwind bridge for token-named
+ *                                     utilities (text-ink, bg-surface, …)
+ *   :root[data-theme] blocks below  — shadcn vars DERIVE from the tokens
+ *                                     (--background: var(--bg); …)
+ *   local @theme inline             — maps shadcn-named utilities onto the
+ *                                     shadcn vars (which chain to tokens).
+ *
+ * The old @digithings/digichat-ui tokens-shadcn-bridge.css (which mapped
+ * shadcn vars INTO token names — backwards from canon) is retired here: with
+ * [data-theme] on <html> (layout.tsx), session.css / cursor.css read the canon
+ * tokens directly, exactly like digithings-web /chat does.
+ *
+ * Collision resolution (--accent):
+ *   - tokens.css sets --accent per theme (phosphor cyan dark / deep teal
+ *     light) at :root[data-theme].
+ *   - <body> carries `.accent-digichat` (tokens.css livery class), so the
+ *     whole app resolves --accent to the digichat rose (--accent-digichat,
+ *     ruled 2026-07-06). `.app-shell` re-scopes the same rose for the chrome.
+ *   - shadcn's `--accent` therefore also resolves rose under <body> — this
+ *     matches digichat 0.2.0's rendered state (the body livery class already
+ *     outranked the old neutral-gray :root definition via inheritance).
+ * ------------------------------------------------------------------------- */
+@import "@digithings/design/tokens.css";
+@import "@digithings/web/styles/web-theme.css";
+@import "@digithings/design/app-shell-terminal/styles.css";
+/* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
+   the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
+   caret's animation shorthand when an element carries both .chat-cursor
+   and .dt-cur). */
+@import "@digithings/web/styles/chat-core.css";
+/* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
+   (~1 MB). This app renders <DigiChatSession>, so it reaches
+   remark-math/rehype-katex and genuinely needs them; olympus and the design
+   reference deliberately do not import this. Must come AFTER chat-core.css. */
+@import "@digithings/web/styles/chat-math.css";
+@import "@digithings/web/styles/chat-widgets.css";
+/* The .tl-* frame for <TerminalStepCaret>, which <DigiChatSession> shows while
+   an answer is still on its way. Also AFTER chat-core.css: the caret inside it
+   is <ChatStreamCursor>, so the block, blink and reduced-motion still all come
+   from there and this sheet only frames the line. */
+@import "@digithings/web/styles/terminal-loaders.css";
+/* Controls layer (#1419) — dress for the shared controls that
+   src/components/ui/* now re-export (Button/Badge/Card/Input/Label/Avatar
+   in controls-core, DropdownMenu/Sheet/Tooltip in controls-overlay).
+   Imported plainly — the sheets manage their own @layer components /
+   unlayered split so call-site utility overrides keep the exact cascade
+   the old tailwind-merge wrappers produced. Like chat-core, they sit
+   before the digichat-ui sheets. */
+@import "@digithings/web/styles/controls-core.css";
+@import "@digithings/web/styles/controls-overlay.css";
+@import "@digithings/digichat-ui/styles/cursor.css";
+@import "@digithings/digichat-ui/styles/session.css";
+
+/* Tailwind never scans package sources — generate the token utilities the
+   shared chat components carry (MIGRATION.md rule 3). */
+@source "../../../digiweb/web/src/components/chat";
+/* … and the utilities the shared behavioral controls carry (#1419) — the
+   @source is load-bearing for controls-overlay's components. */
+@source "../../../digiweb/web/src/components/controls";
+/* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
+@source "../../../digiweb/web/src/components/terminal";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --radius: 0.625rem;
+}
+
+/*
+ * shadcn vars derive from the canon tokens (full mapping table in #1403).
+ * Scoped to :root[data-theme] — the attribute is SSR'd ("dark", layout.tsx)
+ * and re-pointed pre-paint by the shared themeInitScript. The `.dark`/`.light`
+ * classes are kept in lockstep on <html> (layout.tsx inline snippet +
+ * ThemeClassSync in providers.tsx) because the `dark:` variant above and the
+ * embed wrapper still key off classes.
+ */
+:root[data-theme] {
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary-foreground: var(--on-accent);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-2);
+  /* --ink-soft, not --ink-mute: the pre-canon values (#9aa0a6 dark /
+     #5c636a light) are exactly --ink-soft in both themes; --ink-mute would
+     drop contrast on ~50 text-muted-foreground call sites. */
+  --muted-foreground: var(--ink-soft);
+  /* shadcn --accent intentionally NOT defined here — the canon token flows
+     through (body livery resolves it to the digichat rose; see header). */
+  --accent-foreground: var(--ink);
+  --destructive: var(--down);
+  /* Error copy sits on --destructive/10 tints, never on solid red, and
+     rendered inherited ink pre-canon (the var was undefined) — keep ink. */
+  --destructive-foreground: var(--ink);
+  --border: var(--hair);
+  --input: var(--hair);
+  --chart-2: var(--up);
+  --chart-3: var(--ink-soft);
+  --chart-4: var(--warn);
+  --chart-5: var(--down);
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary-foreground: var(--on-accent);
+  --sidebar-accent: var(--surface-2);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--hair);
+
+  /* digichat self-hosts Geist via next/font (CSP-safe); re-point the canon
+     font tokens at the loaded families (digiquant-web pattern — tokens.css
+     ships literal family names that only the geist package registers). */
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Legacy @digithings/design primitives (consumed by the imported app-shell
+     chrome and the .dc-* classes below) — now theme-aware via canon tokens. */
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--term-bg);
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-soft);
+  --border-color: var(--hair);
+  --fg: var(--ink);
+  /* The colours above were re-pointed; the legacy font token was missed.
+     tokens.css:56 names JetBrains Mono / Fira Code / Space Mono — none of which
+     is loaded anywhere (no @font-face in frontend, no next/font import), so the
+     app-shell chrome and .dc-term-* fell through to the OS default mono while
+     the <pre> blocks beside them got Geist Mono. Same fix as olympus:101. */
+  --font-family-mono: var(--font-mono);
+}
+
+/*
+ * Brand-accented shadcn slots differ per theme, mirroring tokens.css's own
+ * --up convention: dark wears the rose livery (--accent-digichat, ruled
+ * 2026-07-06); light runs the deeper phosphor teal for contrast on paper
+ * (rose is 2.4:1 on the light canvas — fails AA).
+ */
+:root[data-theme="dark"] {
+  --primary: var(--accent-digichat);
+  --ring: var(--accent-digichat);
+  --chart-1: var(--accent-digichat);
+  --sidebar-primary: var(--accent-digichat);
+  --sidebar-ring: var(--accent-digichat);
+}
+:root[data-theme="light"] {
+  --primary: var(--accent);
+  --ring: var(--accent);
+  --chart-1: var(--accent);
+  --sidebar-primary: var(--accent);
+  --sidebar-ring: var(--accent);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * #273 — digichat modern-terminal chrome.
+ *
+ * `.app-shell` scopes the brand `--accent` so the design primitives
+ * pick up the digichat rose without disturbing shadcn's neutral `--accent` at
+ * `:root`. `.dc-term-*` classes layer chat-specific affordances (message
+ * rows, tool chips, sources accordion, streaming caret) on top of the
+ * primitive palette.
+ * ------------------------------------------------------------------------- */
+/* Brand accent for the digichat chrome — rose is the official livery
+   (ruled 2026-07-06, split off digiquant's shared cyan; tokens.css
+   --accent-digichat is the single source). Still scoped to .app-shell
+   so shadcn's neutral --accent hover stays authoritative elsewhere. */
+.app-shell {
+  --accent: var(--accent-digichat);
+}
+
+.app-shell .app-input {
+  align-items: end;
+}
+
+.app-shell .app-input-field {
+  overflow-y: hidden;
+}
+
+.dc-term-pane {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-4);
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0)),
+    var(--bg-primary);
+}
+
+.dc-term-row {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  gap: 10px;
+  margin: 0 0 var(--space-3);
+  align-items: start;
+}
+.dc-term-row + .dc-term-row { margin-top: var(--space-3); }
+
+.dc-term-marker {
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  user-select: none;
+  padding-top: 2px;
+}
+.dc-term-row-user .dc-term-marker {
+  color: var(--accent, var(--text-secondary));
+}
+.dc-term-row-assistant .dc-term-marker {
+  color: color-mix(in srgb, var(--accent, var(--fg)) 60%, var(--text-secondary));
+}
+
+.dc-term-body {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.dc-term-streaming::after {
+  content: "▍";
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--accent, var(--text-secondary));
+  animation: dc-term-blink 1.1s steps(2, start) infinite;
+}
+@keyframes dc-term-blink {
+  to { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dc-term-streaming::after { animation: none; }
+}
+
+.dc-term-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent, var(--fg)) 40%, var(--border-color));
+  background: color-mix(in srgb, var(--accent, var(--fg)) 12%, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/* Inline BYOK terminal flow (session-only keys) */
+.dc-byok-flow {
+  margin-top: var(--space-3);
+}
+.dc-byok-prompt {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.dc-byok-option-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 28rem;
+  outline: none;
+}
+.dc-byok-option-list:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+.dc-byok-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.2rem 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.dc-byok-option:hover,
+.dc-byok-option-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.dc-byok-option-cursor {
+  display: inline-block;
+  width: 1ch;
+  color: var(--accent);
+  font-family: var(--font-family-mono);
+}
+.dc-byok-input {
+  display: block;
+  width: 100%;
+  max-width: 28rem;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-term, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  outline: none;
+}
+.dc-byok-input:focus {
+  border-color: var(--accent);
+}
+.dc-byok-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.dc-byok-action {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dc-byok-action:hover {
+  color: var(--text-primary);
+}
+.dc-byok-action-danger {
+  color: var(--down, #e0654b);
+}
+
+.dc-sources {
+  margin-top: var(--space-2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.dc-sources summary {
+  cursor: pointer;
+  padding: 6px 10px;
+  color: var(--text-secondary);
+  outline: none;
+}
+
+.dc-sidebar-brand {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+.dc-sidebar-brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent, var(--fg)) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, var(--fg)) 35%, var(--border-color));
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  display: grid;
+  place-items: center;
+}
+.dc-sidebar-brand-name {
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.1;
+}
+.dc-sidebar-brand-version {
+  font-family: var(--font-family-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.dc-sidebar-newchat {
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: var(--space-4);
+  background: color-mix(in srgb, var(--accent, var(--fg)) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, var(--fg)) 40%, var(--border-color));
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.dc-sidebar-newchat:hover {
+  background: color-mix(in srgb, var(--accent, var(--fg)) 24%, transparent);
+}
+
+.dc-sidebar-thread {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: 12px;
+  line-height: 1.3;
+  border: 1px solid transparent;
+}
+.dc-sidebar-thread:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.dc-sidebar-thread.is-active {
+  background: color-mix(in srgb, var(--accent, var(--fg)) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent, var(--fg)) 30%, transparent);
+}
+.dc-sidebar-thread-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+.dc-sidebar-thread-time {
+  font-family: var(--font-family-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.dc-sidebar-cmd {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 6px;
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+}
+.dc-sidebar-cmd-key {
+  color: var(--accent, var(--text-primary));
+}
+
+.dc-input-slash-glyph {
+  color: var(--accent, var(--text-secondary));
+}
+
+.dc-settings-pane {
+  padding: var(--space-4);
+  background: var(--bg-primary);
+  animation: dc-settings-in 400ms var(--transition-ease) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dc-settings-pane { animation: none; }
+}
+@keyframes dc-settings-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ---------------------------------------------------------------------------
+ * /embed readable measure.
+ *
+ * digichat-ui's `.dc-session-embed` (session.css) resets `max-width: none`, so
+ * the embed transcript ran full-bleed: in a 1280px+ iframe the lines spanned
+ * the whole viewport and read as a wall of text with no gutters.
+ *
+ * digithings.ai/chat solves this on `.dc-session` itself — `width: 100%;
+ * max-width: min(1080px, 96vw); margin: 0 auto` — and that is the grammar
+ * copied here, re-asserted at (0,2,0) so it outranks the embed reset. Scoped
+ * to `.dc-embed-shell` (embed/layout.tsx) so the app's own chat surfaces are
+ * untouched.
+ *
+ * The gutters are background, not padding on a fixed box: the shell stays
+ * 100% wide, so `bg-background` and the tenant accent still paint edge to
+ * edge, and only the column is capped. Selector targets `.dc-session` rather
+ * than `.dc-session-embed` so a tenant on `layout: "page"` centres identically.
+ *
+ * The `96vw` term is what keeps this safe at arbitrary iframe widths: below
+ * ~1125px the cap is proportional, never a fixed floor, so a 375px mobile
+ * iframe fills sensibly (~7px either side) and no width can produce
+ * horizontal scroll.
+ * ------------------------------------------------------------------------- */
+.dc-embed-shell .dc-session {
+  width: 100%;
+  max-width: min(1080px, 96vw);
+  margin-inline: auto;
+}
+
+.dc-grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  z-index: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}

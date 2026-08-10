@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import bcrypt
 import secrets
+
+import bcrypt
 
 from digikey.settings import KEY_PREFIX_LEN, RAW_KEY_PREFIX
 
@@ -23,5 +24,5 @@ def hash_secret(raw: str) -> str:
 def verify_secret(raw: str, key_hash: str) -> bool:
     try:
         return bcrypt.checkpw(raw.encode("utf-8"), key_hash.encode("utf-8"))
-    except Exception:
+    except (ValueError, TypeError):
         return False

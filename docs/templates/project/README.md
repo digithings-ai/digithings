@@ -1,6 +1,6 @@
 # Project Template
 
-Starter for a new DigiThings project. Copy this directory to `projects/<your-project>/` and customise.
+Starter for a new digithings project. Copy this directory to `projects/<your-project>/` and customise.
 
 ## Quick start
 
@@ -27,8 +27,8 @@ Enable capabilities by setting fields in `digiproject.yaml`:
 | Capability | How to enable |
 |---|---|
 | Custom research prompt (document RAG) | Set `agents.research_system_prompt` |
-| Digistore + delegate tools | Set `run_data_dir` |
-| DigiSearch tool | Set `DIGISEARCH_URL` env var |
+| digistore + delegate tools | Set `run_data_dir` |
+| digisearch tool | Set `DIGISEARCH_URL` env var |
 | Multi-index discovery | Set `indexes_dir` pointing to a directory of `*.yaml` index files |
 | MCP server | `mcp.enabled: true` |
 | Restrict available tools | `agents.allowed_tools: [...]` |

@@ -1,0 +1,204 @@
+/* ==========================================================================
+   @digithings/web — finance-composites family structural CSS
+   (components/finance-composites/*: <StockTicker/>, <OrderBook/>,
+   <SortableTable/>, <PerformanceDashboard/>, <SyncedTearsheet/>).
+   Import PLAINLY (no layer(…) wrapper) AFTER the token bridge, in the app's
+   globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/finance-composites.css";
+     @source "<path-to>/digiweb/web/src/components/finance-composites";
+   The @source line is load-bearing (path relative to the app's globals.css):
+   the components carry token-backed utilities, and Tailwind does not scan
+   package sources on its own.
+
+   Layering (the cascade contract, MIGRATION.md): single-class defaults live
+   in @layer components so call-site utilities can override them; state and
+   structural rules (:hover, .is-active, descendant sizing, sibling-index
+   hairlines, keyframes, media blocks) stay UNLAYERED on purpose — they must
+   keep outranking plain utilities. Do not wrap this import in layer(…).
+   OrderBook is pure token utilities and needs nothing here; SyncedTearsheet
+   paints on canvas from tokens read at runtime.
+   ========================================================================== */
+
+/* ── StockTicker: seamless scrolling tape (tk-*) ─────────────────────────── */
+
+@layer components {
+  .tk {
+    overflow: hidden;
+    border-block: 1px solid var(--hair);
+    /* mask alpha, not a palette color — #000 is "fully opaque" in mask space
+       (migrate-vs-leave sanctions masks staying concrete). */
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+  }
+
+  .tk-track {
+    display: inline-flex;
+    width: max-content;
+    animation: tk-scroll 42s linear infinite;
+    will-change: transform;
+  }
+}
+
+/* state/motion rules — unlayered on purpose */
+.tk:hover .tk-track {
+  animation-play-state: paused;
+}
+
+@keyframes tk-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tk-track {
+    animation: none;
+  }
+}
+
+/* ── SortableTable: leaderboard grammar (srt-*) ──────────────────────────── */
+
+@layer components {
+  .srt-table {
+    width: 100%;
+    min-width: 560px;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.82rem;
+  }
+
+  .srt-l {
+    text-align: left;
+  }
+  .srt-r {
+    text-align: right;
+  }
+
+  .srt-head {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.7rem 1rem;
+    border: none;
+    background: transparent;
+    color: var(--ink-mute);
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: color 0.15s var(--ease);
+  }
+
+  .srt-caret {
+    font-size: 0.6rem;
+    opacity: 0.55;
+  }
+}
+
+/* descendant/state rules — unlayered on purpose (they must beat utilities,
+   exactly like the reference-app originals) */
+.srt-table thead th {
+  padding: 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.srt-r .srt-head {
+  justify-content: flex-end;
+}
+
+.srt-head:hover {
+  color: var(--ink-soft);
+}
+
+.srt-head.is-active {
+  color: var(--ink);
+}
+
+.srt-head.is-active .srt-caret {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.srt-table td {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--hair) 55%, transparent);
+  color: var(--ink-soft);
+}
+
+.srt-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* identifier-column emphasis. Written as td.srt-sym so it actually outranks
+   the `.srt-table td` read above — the reference's bare `.srt-sym` lost that
+   specificity fight (0,1,0 vs 0,1,1) and was silently dead. */
+.srt-table td.srt-sym {
+  color: var(--ink);
+}
+
+/* money colors, column-scoped — P&L semantics only, never a livery */
+.srt-table td.up {
+  color: var(--up);
+}
+.srt-table td.down {
+  color: var(--down);
+}
+
+/* ── PerformanceDashboard: hairline grammar (pdash-*) ────────────────────── */
+/* Sibling-index hairlines Tailwind can't express — all structural, all
+   unlayered on purpose. Utilities in the component carry everything else. */
+
+/* headline cells: left hairlines between cells; stacked with top hairlines
+   when the row collapses to one column ≤ 720px */
+.pdash-head {
+  border-left: 1px solid var(--hair);
+}
+
+.pdash-head:first-child {
+  border-left: none;
+}
+
+@media (max-width: 720px) {
+  .pdash-head {
+    border-left: none;
+    border-top: 1px solid var(--hair);
+  }
+
+  .pdash-head:first-child {
+    border-top: none;
+  }
+}
+
+/* ratio strip: left hairlines between cells, re-derived per row keyed off
+   the strip's data-cols (n-up desktop, 3-up ≤ 720px) */
+.pdash-ratio {
+  border-left: 1px solid var(--hair);
+}
+
+.pdash-ratios[data-cols="6"] .pdash-ratio:nth-child(6n + 1),
+.pdash-ratios[data-cols="5"] .pdash-ratio:nth-child(5n + 1),
+.pdash-ratios[data-cols="4"] .pdash-ratio:nth-child(4n + 1),
+.pdash-ratios[data-cols="3"] .pdash-ratio:nth-child(3n + 1) {
+  border-left: none;
+}
+
+@media (max-width: 720px) {
+  /* the strip is 3-up whatever data-cols says (max-[720px]:grid-cols-3) —
+     re-derive. Selectors keep the [data-cols] attr so they tie the desktop
+     rules on specificity and win by order. */
+  .pdash-ratios[data-cols="6"] .pdash-ratio:nth-child(6n + 1),
+  .pdash-ratios[data-cols="5"] .pdash-ratio:nth-child(5n + 1),
+  .pdash-ratios[data-cols="4"] .pdash-ratio:nth-child(4n + 1) {
+    border-left: 1px solid var(--hair);
+  }
+
+  .pdash-ratios[data-cols] .pdash-ratio:nth-child(3n + 1) {
+    border-left: none;
+  }
+}

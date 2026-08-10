@@ -1,4 +1,4 @@
-# indexes/docs.yaml — DigiSearch index manifest for the DigiThings-guide project.
+# indexes/docs.yaml — digisearch index manifest for the digithings-guide project.
 #
 # Discovered by digigraph.project_config._discover_indexes_from_dir: each *.yaml
 # under indexes/ becomes one index tool (digisearch_<index_name>_query).
@@ -7,7 +7,7 @@
 # `_discover_indexes_from_dir` reads only `index_name` + `backend`; the
 # `sources` globs below are consumed by scripts/reindex_digithings_guide.py and
 # by the reindex-digithings-guide GitHub Action's `paths:` filter. When a
-# service-less ingest entry point lands in DigiSearch, it should consume this
+# service-less ingest entry point lands in digisearch, it should consume this
 # same block.
 
 index_name: docs
@@ -15,9 +15,9 @@ backend: azure_search
 
 # Human-readable description used by the research node when routing.
 description: |
-  The DigiThings ecosystem documentation: root README, ROADMAP, VISION,
+  The digithings ecosystem documentation: root README, ROADMAP, VISION,
   ADRs, component ARCHITECTURE + AGENTS + DIGI*.md files. Use for
-  questions about how DigiThings works, what each component does, or
+  questions about how digithings works, what each component does, or
   why a design decision was made.
 
 # Source globs (relative to repo root). Keep in sync with the `paths:` filter
@@ -67,6 +67,6 @@ sources:
   - digismith/AGENTS.md
   - digismith/DIGI*.md
 
-# Chunking / embedding intentionally omitted — inherit DigiSearch defaults
+# Chunking / embedding intentionally omitted — inherit digisearch defaults
 # (recursive 512/64 chunker; backend-configured embeddings). Override only
 # after an ADR documents the reason.

@@ -1,6 +1,6 @@
-"""DigiSearch HTTP client helpers for DigiGraph (direct ``POST /query``).
+"""digisearch HTTP client helpers for digigraph (direct ``POST /query``).
 
-Orchestrator tool *definitions* and hub dispatch live in DigiSearch
+Orchestrator tool *definitions* and hub dispatch live in digisearch
 (``/v1/orchestrator_tools``, ``/v1/orchestrator_invoke``). This module keeps
 thin ``POST /query`` helpers for code paths that call search without the
 orchestrator manifest (e.g. research node utilities).
@@ -8,6 +8,7 @@ orchestrator manifest (e.g. research node utilities).
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
@@ -21,6 +22,15 @@ from digigraph.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 # Timeout of 15 s matches the previous per-call default.
 _sync_client: httpx.Client | None = None
 _cb = CircuitBreaker("digisearch", failure_threshold=5, recovery_timeout=30.0)
+
+_QUERY_ERRORS = (
+    httpx.HTTPStatusError,
+    httpx.RequestError,
+    json.JSONDecodeError,
+    OSError,
+    TypeError,
+    ValueError,
+)
 
 
 def _get_sync_client() -> httpx.Client:
@@ -48,7 +58,7 @@ def digisearch(
     request_id: str | None = None,
     authorization_bearer: str | None = None,
 ) -> dict[str, Any] | None:
-    """Search DigiSearch. Returns raw response dict (results, query, index_name, total, summary?, facets?) or None."""
+    """Search digisearch. Returns raw response dict (results, query, index_name, total, summary?, facets?) or None."""
     base_url = os.environ.get("DIGISEARCH_URL", "").strip()
     if not base_url:
         return None
@@ -83,7 +93,7 @@ def digisearch(
             return r.json()
     except CircuitBreakerOpen:
         return None
-    except Exception:
+    except _QUERY_ERRORS:
         return None
 
 
@@ -138,7 +148,7 @@ async def async_digisearch(
             r = await client.post(url, json=payload, headers=headers)
             r.raise_for_status()
             return r.json()
-    except Exception:
+    except _QUERY_ERRORS:
         return None
 
 

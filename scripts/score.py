@@ -38,6 +38,49 @@ THRESHOLDS = {
     "accuracy": 9,
 }
 
+# File-level opt-out: add ``# score:allow <rule>`` near the top of a file.
+# Rules: pandas, pd., bare exec(), subprocess, blocking sleep, untyped any
+#
+# Legacy path-prefix suppressions — prefer file pragmas for new allowlists.
+SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
+    (
+        "digigraph/src/digigraph/tools/analytics/execute_python_worker.py",
+        "bare exec()",
+    ),
+    (
+        "digigraph/src/digigraph/tools/analytics/execute_python_sandbox.py",
+        "subprocess",
+    ),
+    # Atlas agent scripts: yfinance/pandas_ta boundary (SIMP-038/039 deferred Polars migration)
+    ("digiquant/scripts/atlas/preload-history.py", "pandas"),
+    ("digiquant/scripts/atlas/preload-history.py", "pd."),
+    ("digiquant/scripts/atlas/update_tearsheet.py", "pandas"),
+    # RegExp.exec in terminal highlighter — not Python exec() (DESLOP-027)
+    ("frontend/digiweb/design/terminal/highlight-dom.js", "bare exec()"),
+    # projects/ are confidential standalone research scripts, not services
+    ("projects/", "blocking sleep"),
+    ("projects/", "requests import"),
+    ("projects/", "untyped Any"),
+)
+
+_SCORE_ALLOW_RE = re.compile(r"#\s*score:allow\s+(.+)")
+_FILE_ALLOW_CACHE: dict[str, frozenset[str]] = {}
+
+# Paths excluded from scoring (meta-tooling, audit prose, security policy docs).
+SCORE_SKIP_PATH_FRAGMENTS: tuple[str, ...] = (
+    "scripts/score.py",
+    "docs/reviews/",
+    "digigraph/docs/SECURITY.md",
+    "digigraph/src/digigraph/tools/analytics/execute_python.py",
+    # Shared design system (CSS/JS presentation) — score.py's anti-pattern
+    # heuristics are Python-oriented and misfire on CSS/JS (eval/exec/TODO scans
+    # hit all files). This is the source-of-truth design dir we iterate heavily;
+    # secrets are still covered by gitleaks. See #1310.
+    "frontend/digiweb/design/",
+    # Lockfile integrity hashes contain XXX substrings that trip TODO/FIXME scan.
+    "package-lock.json",
+)
+
 # ── Anti-pattern definitions ──────────────────────────────────────────────────
 # Each entry: (pattern, description, dimension, only_added_lines)
 # only_added_lines=True means only flag lines starting with "+" in the diff
@@ -47,46 +90,114 @@ PATTERNS: list[tuple[re.Pattern, str, str, bool]] = [
     (re.compile(r"import pandas"), "pandas import (use Polars)", "security", True),
     (re.compile(r"\beval\s*\("), "bare eval() — code injection risk", "security", True),
     (re.compile(r"\bexec\s*\("), "bare exec() — code injection risk", "security", True),
-    (re.compile(r"shell\s*=\s*True"), "subprocess shell=True — command injection risk", "security", True),
-    (re.compile(r"(?i)(api_key|password|secret|token)\s*=\s*['\"][^'\"]{8,}['\"]"),
-     "potential hardcoded secret", "security", True),
+    (
+        re.compile(r"shell\s*=\s*True"),
+        "subprocess shell=True — command injection risk",
+        "security",
+        True,
+    ),
+    (
+        # Negative lookahead (?!\$) excludes env-var references like KEY="$VAR_NAME"
+        re.compile(r"(?i)(api_key|password|secret|token)\s*=\s*['\"](?!\$)[^'\"]{8,}['\"]"),
+        "potential hardcoded secret",
+        "security",
+        True,
+    ),
     (re.compile(r"0\.0\.0\.0"), "binding to 0.0.0.0 (loopback-only rule)", "security", True),
-    (re.compile(r"DIGICHAT_DEV_AUTH.*=.*1|DIGIKEY_ALLOW_DEV_GLOBAL.*=.*1"),
-     "dev-only flag that must not reach production", "security", True),
-    (re.compile(r"\b(live_trading|execute_trade|place_order)\b"),
-     "live-trading path touched — requires human approval (see agents.yml human_gates)",
-     "security", True),
-
+    (
+        re.compile(r"DIGICHAT_DEV_AUTH.*=.*1|DIGIKEY_ALLOW_DEV_GLOBAL.*=.*1"),
+        "dev-only flag that must not reach production",
+        "security",
+        True,
+    ),
+    (
+        re.compile(r"\b(live_trading|execute_trade|place_order)\b"),
+        "live-trading path touched — requires human approval (see agents.yml human_gates)",
+        "security",
+        True,
+    ),
     # Quality
-    (re.compile(r"from typing import.*\bAny\b(?!.*# noqa)"),
-     "untyped Any without # noqa annotation", "quality", True),
-    (re.compile(r"@validator\b"), "Pydantic v1 @validator (use @field_validator v2)", "quality", True),
+    (
+        # Deliberately NOT ruff's suppression marker. Ruff's RUF100 rule strips
+        # suppression directives that suppress nothing, which silently deleted
+        # this gate's markers (#1709). `score:allow` is this tool's own token,
+        # already used for the file-level pragmas documented above.
+        re.compile(r"from typing import.*\bAny\b(?!.*score:allow)"),
+        "untyped Any without # score:allow annotation",
+        "quality",
+        True,
+    ),
+    (
+        re.compile(r"@validator\b"),
+        "Pydantic v1 @validator (use @field_validator v2)",
+        "quality",
+        True,
+    ),
     (re.compile(r"\bpd\."), "pandas usage (pd.) — use Polars", "quality", True),
     (re.compile(r"import pandas"), "pandas import — use Polars", "quality", True),
-    (re.compile(r"except\s*:\s*$|except\s*:\s*#"), "bare except clause — hides errors", "quality", True),
-    (re.compile(r"# type: ignore(?!\s*\[)"), "unscoped type: ignore — be specific", "quality", True),
-
+    (
+        re.compile(r"except\s*:\s*$|except\s*:\s*#"),
+        "bare except clause — hides errors",
+        "quality",
+        True,
+    ),
+    (
+        re.compile(r"# type: ignore(?!\s*\[)"),
+        "unscoped type: ignore — be specific",
+        "quality",
+        True,
+    ),
     # Optimization
-    (re.compile(r"openai\.(?:ChatCompletion|Completion|chat\.completions)"),
-     "direct openai.* call — route through LiteLLM (digigraph/llm.py)", "optimization", True),
-    (re.compile(r"\.collect\(\)\s*\.\s*filter\("),
-     "Polars .collect() before .filter() — apply filter before collecting", "optimization", True),
-    (re.compile(r"for .+ in .+:\s*\n.*\.query\(|for .+ in .+:\s*\n.*\.get\("),
-     "possible N+1 query pattern in loop", "optimization", True),
-    (re.compile(r"time\.sleep\((?!0)"),
-     "blocking sleep in sync code — use asyncio.sleep in async context", "optimization", True),
-    (re.compile(r"^import requests\b|^from requests\b"),
-     "direct `requests` import — prefer httpx (async-safe) or the shared HTTP client in digibase",
-     "optimization", True),
-
+    (
+        re.compile(r"openai\.(?:ChatCompletion|Completion|chat\.completions)"),
+        "direct openai.* call — route through LiteLLM (digigraph/llm.py)",
+        "optimization",
+        True,
+    ),
+    (
+        re.compile(r"\.collect\(\)\s*\.\s*filter\("),
+        "Polars .collect() before .filter() — apply filter before collecting",
+        "optimization",
+        True,
+    ),
+    (
+        re.compile(r"for .+ in .+:\s*\n.*\.query\(|for .+ in .+:\s*\n.*\.get\("),
+        "possible N+1 query pattern in loop",
+        "optimization",
+        True,
+    ),
+    (
+        re.compile(r"time\.sleep\((?!0)"),
+        "blocking sleep in sync code — use asyncio.sleep in async context",
+        "optimization",
+        True,
+    ),
+    (
+        re.compile(r"^import requests\b|^from requests\b"),
+        "direct `requests` import — prefer httpx (async-safe) or the shared HTTP client in digibase",
+        "optimization",
+        True,
+    ),
     # Accuracy
-    (re.compile(r"except\s+Exception\s*:\s*\n\s*pass"),
-     "silenced exception (except Exception: pass) — errors must not be swallowed", "accuracy", True),
-    (re.compile(r"except\s*:\s*\n\s*pass"),
-     "silenced bare exception — errors must not be swallowed", "accuracy", True),
+    (
+        re.compile(r"except\s+Exception\s*:\s*\n\s*pass"),
+        "silenced exception (except Exception: pass) — errors must not be swallowed",
+        "accuracy",
+        True,
+    ),
+    (
+        re.compile(r"except\s*:\s*\n\s*pass"),
+        "silenced bare exception — errors must not be swallowed",
+        "accuracy",
+        True,
+    ),
     (re.compile(r"TODO|FIXME|HACK|XXX"), "unresolved TODO/FIXME in diff", "accuracy", True),
-    (re.compile(r"raise NotImplementedError"),
-     "NotImplementedError stub in production path", "accuracy", True),
+    (
+        re.compile(r"raise NotImplementedError"),
+        "NotImplementedError stub in production path",
+        "accuracy",
+        True,
+    ),
 ]
 
 
@@ -117,13 +228,11 @@ class DimensionResult:
 def get_diff(mode: str) -> str:
     if mode == "staged":
         result = subprocess.run(
-            ["git", "diff", "--staged"],
-            capture_output=True, text=True, cwd=REPO_ROOT
+            ["git", "diff", "--staged"], capture_output=True, text=True, cwd=REPO_ROOT
         )
     else:
         result = subprocess.run(
-            ["git", "diff", mode],
-            capture_output=True, text=True, cwd=REPO_ROOT
+            ["git", "diff", mode], capture_output=True, text=True, cwd=REPO_ROOT
         )
     return result.stdout
 
@@ -154,12 +263,76 @@ def parse_diff_lines(diff: str) -> list[tuple[str, int, str, bool]]:
     return entries
 
 
+def _skip_file(filename: str) -> bool:
+    return any(fragment in filename for fragment in SCORE_SKIP_PATH_FRAGMENTS)
+
+
+def _is_test_fixture_file(filename: str) -> bool:
+    """Vitest/pytest fixtures often set *_TOKEN env vars — not production secrets."""
+    return (
+        filename.startswith("tests/")
+        or "/tests/" in filename
+        or ".test." in filename
+        or filename.endswith("_test.py")
+    )
+
+
+def _description_rule_key(description: str) -> str | None:
+    lower = description.lower()
+    if "pandas import" in lower or "pandas usage" in lower:
+        return "pandas"
+    if "pd." in lower:
+        return "pd."
+    if "bare exec()" in lower:
+        return "bare exec()"
+    if "subprocess" in lower:
+        return "subprocess"
+    if "blocking sleep" in lower:
+        return "blocking sleep"
+    if "untyped any" in lower:
+        return "untyped any"
+    return None
+
+
+def _file_score_allows(filename: str) -> frozenset[str]:
+    cached = _FILE_ALLOW_CACHE.get(filename)
+    if cached is not None:
+        return cached
+    path = REPO_ROOT / filename
+    rules: set[str] = set()
+    if path.is_file():
+        head = path.read_text(encoding="utf-8", errors="replace").splitlines()[:40]
+        for line in head:
+            match = _SCORE_ALLOW_RE.search(line)
+            if match:
+                rules.update(part.strip() for part in match.group(1).split(","))
+    frozen = frozenset(rules)
+    _FILE_ALLOW_CACHE[filename] = frozen
+    return frozen
+
+
+def _is_suppressed(filename: str, description: str) -> bool:
+    if _skip_file(filename):
+        return True
+    if description == "potential hardcoded secret" and _is_test_fixture_file(filename):
+        return True
+    rule_key = _description_rule_key(description)
+    if rule_key and rule_key in _file_score_allows(filename):
+        return True
+    for path_fragment, desc_fragment in SCORE_PATH_SUPPRESSIONS:
+        if path_fragment in filename and desc_fragment.lower() in description.lower():
+            return True
+    return False
+
+
 def scan(diff: str) -> dict[str, DimensionResult]:
     results = {dim: DimensionResult(dim, thresh) for dim, thresh in THRESHOLDS.items()}
     diff_lines = parse_diff_lines(diff)
 
     for pattern, description, dimension, only_added in PATTERNS:
         for filename, line_no, content, is_added in diff_lines:
+            if _is_suppressed(filename, description):
+                continue
             # Skip non-Python/non-relevant files for certain checks
             if only_added and not is_added:
                 continue
@@ -181,7 +354,9 @@ def format_text(results: dict[str, DimensionResult], diff_mode: str) -> str:
 
     for dim, result in results.items():
         status = "✓ PASS" if result.passed else "✗ FAIL"
-        lines.append(f"  {status}  {dim.capitalize():12s}  {result.score}/10  (threshold ≥{result.threshold})")
+        lines.append(
+            f"  {status}  {dim.capitalize():12s}  {result.score}/10  (threshold ≥{result.threshold})"
+        )
         for f in result.findings:
             lines.append(f"           ↳  {f.file}:{f.line_no}  —  {f.description}")
             lines.append(f"              {f.line[:100]}")
@@ -217,16 +392,33 @@ def format_json(results: dict[str, DimensionResult]) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--staged", action="store_true", default=False,
-                        help="Score staged changes (default if no flag given)")
-    parser.add_argument("--diff", metavar="REF", default=None,
-                        help="Score diff against ref, e.g. HEAD~1 or main")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--staged",
+        action="store_true",
+        default=False,
+        help="Score staged changes (default if no flag given)",
+    )
+    parser.add_argument(
+        "--diff", metavar="REF", default=None, help="Score diff against ref, e.g. HEAD~1 or main"
+    )
+    parser.add_argument(
+        "--diff-file",
+        metavar="PATH",
+        default=None,
+        help="Score a precomputed unified diff file (e.g. code-only paths from CI)",
+    )
     parser.add_argument("--format", choices=["text", "json"], default="text")
     args = parser.parse_args()
 
-    diff_mode = args.diff if args.diff else "staged"
-    diff = get_diff(diff_mode)
+    if args.diff_file:
+        diff = Path(args.diff_file).read_text(encoding="utf-8")
+        diff_mode = args.diff_file
+    else:
+        diff_mode = args.diff if args.diff else "staged"
+        diff = get_diff(diff_mode)
 
     if not diff.strip():
         if args.format == "json":

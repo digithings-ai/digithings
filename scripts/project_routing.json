@@ -8,7 +8,10 @@
   "component:digismith": 7,
   "component:digiclaw": 8,
   "component:digibase": 9,
+  "component:digivault": 1,
   "component:website": 1,
+  "component:digiquant-web": 1,
+  "component:design-system": 1,
   "component:root": 1,
   "default": 1,
   "branches": {
@@ -20,7 +23,10 @@
     "component:digismith": "module/digismith",
     "component:digiclaw": "module/digiclaw",
     "component:digibase": "module/digibase",
+    "component:digivault": "develop",
     "component:website": "develop",
+    "component:digiquant-web": "develop",
+    "component:design-system": "develop",
     "component:root": "develop",
     "default": "develop"
   }

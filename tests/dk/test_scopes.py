@@ -1,6 +1,9 @@
-"""DigiKey scope matching."""
+"""digikey scope matching."""
 
-from digikey.scopes import scope_grants_required
+import pytest
+from digikey.scopes import DEFAULT_BFF_SESSION_SCOPES, scope_grants_required
+
+pytestmark = pytest.mark.unit
 
 
 def test_star_grants_all():
@@ -22,3 +25,8 @@ def test_run_pipeline_dual():
     assert scope_grants_required(["*"], req)
     assert scope_grants_required(["digiquant:backtest", "digiquant:optimize"], req)
     assert not scope_grants_required(["digiquant:backtest"], req)
+
+
+def test_default_bff_session_scopes_include_digivault_read():
+    """digichat BFF JWT must include vault read for MCP vault tools."""
+    assert "digivault:read" in DEFAULT_BFF_SESSION_SCOPES

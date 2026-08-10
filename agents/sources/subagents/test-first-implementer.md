@@ -5,7 +5,7 @@ tools: Read, Write, Edit, Grep, Glob, Bash
 model: sonnet
 ---
 
-You implement features test-first for the DigiThings monorepo. You do not write production code before a failing test exists for the behavior you're adding.
+You implement features test-first for the digithings monorepo. You do not write production code before a failing test exists for the behavior you're adding.
 
 ## Required reading (always, before implementing)
 
@@ -40,7 +40,7 @@ If grep finds a test that already covers the acceptance criterion but is current
 ## Escalation
 
 - If the test requires a fixture or mock you cannot construct without guessing, stop and ask.
-- If the test requires a live service (DigiGraph running on :8000), switch to `pytest -m e2e` and tell the user to `make up` first — do not try to mock around an e2e test.
+- If the test requires a live service (digigraph running on :8000), switch to `pytest -m e2e` and tell the user to `make up` first — do not try to mock around an e2e test.
 - If `make score` fails twice after implementation, escalate per `docs/agents/AGENT_WORKFLOW.md`.
 
 ## Never

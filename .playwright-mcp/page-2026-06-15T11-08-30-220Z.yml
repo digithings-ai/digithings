@@ -1,0 +1,229 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - img [ref=e7]
+          - generic [ref=e12]: Atlas
+        - button "Collapse sidebar" [ref=e13]:
+          - img [ref=e14]
+      - navigation [ref=e16]:
+        - link "Overview" [ref=e17] [cursor=pointer]:
+          - /url: /olympus/
+          - img [ref=e18]
+          - generic [ref=e23]: Overview
+        - link "Portfolio" [ref=e24] [cursor=pointer]:
+          - /url: /olympus/portfolio/
+          - img [ref=e25]
+          - generic [ref=e28]: Portfolio
+        - link "Research" [ref=e29] [cursor=pointer]:
+          - /url: /olympus/research/
+          - img [ref=e30]
+          - generic [ref=e32]: Research
+      - button "Settings" [ref=e35]:
+        - img [ref=e36]
+        - generic [ref=e39]: Settings
+    - main [ref=e40]:
+      - generic [ref=e41]:
+        - generic [ref=e42]:
+          - strong [ref=e43]: Olympus
+          - text: / investment intelligence
+        - generic [ref=e44]:
+          - link "Open digiquant.io ->" [ref=e45] [cursor=pointer]:
+            - /url: https://digiquant.io
+          - generic [ref=e46]: v0.1 · dev
+      - generic [ref=e48]:
+        - paragraph [ref=e50]:
+          - strong [ref=e51]: Atlas
+          - text: is a daily market intelligence system driven by a multi-phase AI pipeline.
+          - strong [ref=e52]: Canonical state is DB-first
+          - text: "(Supabase): JSON artifacts and snapshots are the source of truth; markdown in the app is derived. GitHub Actions refresh prices and metrics; agents publish research and portfolio decisions via"
+          - code [ref=e53]: run_db_first.py
+          - text: and related scripts.
+        - generic [ref=e54]:
+          - generic [ref=e55]:
+            - heading "Pipeline flow" [level=2] [ref=e56]
+            - generic [ref=e57]:
+              - generic [ref=e58]:
+                - generic [ref=e59]: Schedule
+                - generic [ref=e60]: →
+              - generic [ref=e61]:
+                - generic [ref=e62]: Ingest
+                - generic [ref=e63]: →
+              - generic [ref=e64]:
+                - generic [ref=e65]: Agents
+                - generic [ref=e66]: →
+              - generic [ref=e67]:
+                - generic [ref=e68]: Validate
+                - generic [ref=e69]: →
+              - generic [ref=e71]: Publish
+            - paragraph [ref=e72]: Scheduled runs trigger ingestion of market inputs; agent phases produce segment JSON and portfolio artifacts; validation gates writes; publish commits rows to Supabase for the Atlas UI.
+          - generic [ref=e73]:
+            - heading "Data flow" [level=2] [ref=e74]
+            - generic [ref=e75]:
+              - generic [ref=e76]: Sources & files
+              - generic [ref=e77]: →
+              - generic [ref=e78]: Python runners / agents
+              - generic [ref=e79]: →
+              - generic [ref=e80]: Supabase (Postgres)
+              - generic [ref=e81]: →
+              - generic [ref=e82]: Next.js (Atlas)
+            - paragraph [ref=e83]: The dashboard reads published documents, snapshots, and price history through typed queries; no filesystem reads occur in the browser.
+        - generic [ref=e84]:
+          - generic [ref=e85]:
+            - img [ref=e86]
+            - heading "Three-Tier Cadence" [level=2] [ref=e89]
+          - generic [ref=e90]:
+            - generic [ref=e91]:
+              - generic [ref=e92]:
+                - heading "Sunday Baseline" [level=3] [ref=e93]
+                - generic [ref=e94]: Sunday
+              - paragraph [ref=e95]: Full pipeline — Atlas phases 1–7 plus Hermes deliberation, regenerated from scratch
+              - paragraph [ref=e96]: "Token cost: 100%"
+            - generic [ref=e97]:
+              - generic [ref=e98]:
+                - heading "Daily Delta" [level=3] [ref=e99]
+                - generic [ref=e100]: Mon–Sat
+              - paragraph [ref=e101]: Lightweight delta — only changed segments
+              - paragraph [ref=e102]: "Token cost: ~20–30%"
+            - generic [ref=e103]:
+              - generic [ref=e104]:
+                - heading "Monthly Synthesis" [level=3] [ref=e105]
+                - generic [ref=e106]: Month-end
+              - paragraph [ref=e107]: Review of all baselines + deltas for the month
+              - paragraph [ref=e108]: "Token cost: ~40–50%"
+        - generic [ref=e109]:
+          - generic [ref=e110]:
+            - img [ref=e111]
+            - heading "Research Pipeline — Atlas Phases" [level=2] [ref=e113]
+          - table [ref=e116]:
+            - rowgroup [ref=e117]:
+              - row "Phase Analysis Output Description" [ref=e118]:
+                - columnheader "Phase" [ref=e119]
+                - columnheader "Analysis" [ref=e120]
+                - columnheader "Output" [ref=e121]
+                - columnheader "Description" [ref=e122]
+            - rowgroup [ref=e123]:
+              - row "1 Alternative Data segment JSON → Supabase Sentiment, CTA, options, political signals (canonical JSON; MD derived)" [ref=e124]:
+                - cell "1" [ref=e125]
+                - cell "Alternative Data" [ref=e126]
+                - cell "segment JSON → Supabase" [ref=e127]
+                - cell "Sentiment, CTA, options, political signals (canonical JSON; MD derived)" [ref=e128]
+              - row "2 Institutional Intel segment JSON → Supabase ETF flows, hedge fund activity, smart money" [ref=e129]:
+                - cell "2" [ref=e130]
+                - cell "Institutional Intel" [ref=e131]
+                - cell "segment JSON → Supabase" [ref=e132]
+                - cell "ETF flows, hedge fund activity, smart money" [ref=e133]
+              - row "3 Macro Analysis segment JSON → Supabase Rates, regime, VIX, DXY, leading indicators" [ref=e134]:
+                - cell "3" [ref=e135]
+                - cell "Macro Analysis" [ref=e136]
+                - cell "segment JSON → Supabase" [ref=e137]
+                - cell "Rates, regime, VIX, DXY, leading indicators" [ref=e138]
+              - row "4A Bonds & Rates segment JSON → Supabase Treasury yields, credit spreads, duration" [ref=e139]:
+                - cell "4A" [ref=e140]
+                - cell "Bonds & Rates" [ref=e141]
+                - cell "segment JSON → Supabase" [ref=e142]
+                - cell "Treasury yields, credit spreads, duration" [ref=e143]
+              - row "4B Commodities segment JSON → Supabase Energy, metals, agriculture" [ref=e144]:
+                - cell "4B" [ref=e145]
+                - cell "Commodities" [ref=e146]
+                - cell "segment JSON → Supabase" [ref=e147]
+                - cell "Energy, metals, agriculture" [ref=e148]
+              - row "4C Forex segment JSON → Supabase DXY, majors, EM FX" [ref=e149]:
+                - cell "4C" [ref=e150]
+                - cell "Forex" [ref=e151]
+                - cell "segment JSON → Supabase" [ref=e152]
+                - cell "DXY, majors, EM FX" [ref=e153]
+              - row "4D Crypto segment JSON → Supabase BTC, ETH, on-chain, alt rotation" [ref=e154]:
+                - cell "4D" [ref=e155]
+                - cell "Crypto" [ref=e156]
+                - cell "segment JSON → Supabase" [ref=e157]
+                - cell "BTC, ETH, on-chain, alt rotation" [ref=e158]
+              - row "4E International segment JSON → Supabase EFA, EEM, country risk" [ref=e159]:
+                - cell "4E" [ref=e160]
+                - cell "International" [ref=e161]
+                - cell "segment JSON → Supabase" [ref=e162]
+                - cell "EFA, EEM, country risk" [ref=e163]
+              - row "5A US Equities segment JSON → Supabase SPY, QQQ, breadth, factors" [ref=e164]:
+                - cell "5A" [ref=e165]
+                - cell "US Equities" [ref=e166]
+                - cell "segment JSON → Supabase" [ref=e167]
+                - cell "SPY, QQQ, breadth, factors" [ref=e168]
+              - row "5B–L 11 GICS Sectors sectors/*.json Per-sector JSON → Supabase documents" [ref=e169]:
+                - cell "5B–L" [ref=e170]
+                - cell "11 GICS Sectors" [ref=e171]
+                - cell "sectors/*.json" [ref=e172]
+                - cell "Per-sector JSON → Supabase documents" [ref=e173]
+              - row "6 Consolidation segment JSON → Supabase Cross-segment consolidation ahead of synthesis" [ref=e174]:
+                - cell "6" [ref=e175]
+                - cell "Consolidation" [ref=e176]
+                - cell "segment JSON → Supabase" [ref=e177]
+                - cell "Cross-segment consolidation ahead of synthesis" [ref=e178]
+              - row "7 Digest Synthesis snapshot.json + daily_snapshots Canonical digest JSON; documents.digest; markdown derived for UI" [ref=e179]:
+                - cell "7" [ref=e180]
+                - cell "Digest Synthesis" [ref=e181]
+                - cell "snapshot.json + daily_snapshots" [ref=e182]
+                - cell "Canonical digest JSON; documents.digest; markdown derived for UI" [ref=e183]
+        - generic [ref=e184]:
+          - generic [ref=e185]:
+            - img [ref=e186]
+            - heading "Phase Graph" [level=2] [ref=e189]
+          - generic [ref=e190]:
+            - generic [ref=e191]:
+              - heading "Alt Data" [level=3] [ref=e192]: Alt Data
+              - paragraph [ref=e194]: Phase 1 — alternative data gathering across parallel sub-nodes
+              - paragraph [ref=e195]: atlas/phases/phase1_altdata.py
+            - generic [ref=e196]:
+              - heading "Institutional" [level=3] [ref=e197]: Institutional
+              - paragraph [ref=e199]: Phase 2 — ETF flows, hedge funds, smart-money intelligence
+              - paragraph [ref=e200]: atlas/phases/phase2_institutional.py
+            - generic [ref=e201]:
+              - heading "Macro" [level=3] [ref=e202]: Macro
+              - paragraph [ref=e204]: Phase 3 — rates, regime, leading indicators
+              - paragraph [ref=e205]: atlas/phases/phase3_macro.py
+            - generic [ref=e206]:
+              - heading "Asset Class" [level=3] [ref=e207]: Asset Class
+              - paragraph [ref=e209]: Phase 4 — bonds, commodities, FX, crypto, international
+              - paragraph [ref=e210]: atlas/phases/phase4_assetclass.py
+            - generic [ref=e211]:
+              - heading "Equities" [level=3] [ref=e212]: Equities
+              - paragraph [ref=e214]: Phase 5 — US breadth, factors, 11 GICS sector deep-dives
+              - paragraph [ref=e215]: atlas/phases/phase5_equities.py
+            - generic [ref=e216]:
+              - heading "Consolidate" [level=3] [ref=e217]: Consolidate
+              - paragraph [ref=e219]: Phase 6 — cross-segment consolidation
+              - paragraph [ref=e220]: atlas/phases/phase6_consolidate.py
+            - generic [ref=e221]:
+              - heading "Synthesis" [level=3] [ref=e222]: Synthesis
+              - paragraph [ref=e224]: Phase 7 — canonical digest; owns the snapshot publish path
+              - paragraph [ref=e225]: atlas/phases/phase7_synthesis.py
+            - generic [ref=e226]:
+              - heading "Analyst" [level=3] [ref=e227]: Analyst
+              - paragraph [ref=e229]: Phase 7C — 4-axis per-ticker analyst specialists
+              - paragraph [ref=e230]: hermes/phases/phase7c_analyst.py
+            - generic [ref=e231]:
+              - heading "Debate" [level=3] [ref=e232]: Debate
+              - paragraph [ref=e234]: Phase 7CD — bull/bear debate over analyst verdicts
+              - paragraph [ref=e235]: hermes/phases/phase7cd_debate.py
+            - generic [ref=e236]:
+              - heading "Portfolio Mgr" [level=3] [ref=e237]: Portfolio Mgr
+              - paragraph [ref=e239]: Phase 7D — sizing, rebalancing, risk
+              - paragraph [ref=e240]: hermes/phases/phase7d_pm.py
+            - generic [ref=e241]:
+              - heading "Evolution" [level=3] [ref=e242]: Evolution
+              - paragraph [ref=e244]: Phase 9 — closed-loop reflection and alpha scoring
+              - paragraph [ref=e245]: hermes/phases/phase9_evolution.py
+        - generic [ref=e246]:
+          - generic [ref=e247]:
+            - paragraph [ref=e248]: "50"
+            - paragraph [ref=e249]: Skill packages
+          - generic [ref=e250]:
+            - paragraph [ref=e251]: "11"
+            - paragraph [ref=e252]: Graph phases
+          - generic [ref=e253]:
+            - paragraph [ref=e254]: "11"
+            - paragraph [ref=e255]: GICS Sectors
+          - generic [ref=e256]:
+            - paragraph [ref=e257]: Sun baseline
+            - paragraph [ref=e258]: Cadence
+  - alert [ref=e259]

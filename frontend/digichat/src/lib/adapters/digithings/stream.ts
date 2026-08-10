@@ -1,0 +1,187 @@
+import {
+  convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  type UIMessage,
+} from "ai";
+import {
+  digigraphChatCompletionsUrl,
+  digigraphModelName,
+} from "@/lib/digigraph";
+import { stripToolDumpFromAnswerDelta } from "@/lib/adapters/digithings/strip-tool-dump";
+import { coreMessagesToDigigraphOpenAi } from "@/lib/digigraph-messages";
+import {
+  ACTIVITY_PART_TYPE,
+  type ActivityDetail,
+} from "@/lib/chat-activity";
+import { mapDigigraphTraceToSpans } from "@/lib/adapters/digithings/activity";
+
+export type DigigraphTracePayload = {
+  v?: number;
+  type: string;
+  /** Originating vertical or hub: digigraph | digisearch | digiquant */
+  service?: string;
+  payload?: Record<string, unknown>;
+  workflow_id?: string;
+  request_id?: string;
+  session_id?: string;
+};
+
+/** Typed digichat contract from digigraph SSE `delta.digigraph_error`. */
+export type DigigraphErrorPayload = {
+  code?: string;
+  message?: string;
+};
+
+/** Map digigraph's `{ code, message }` to embed-chat-error's `{ error, message }`. */
+export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string {
+  const code = typeof err.code === "string" && err.code.length ? err.code : "digigraph_error";
+  const payload: { error: string; message?: string } = { error: code };
+  if (typeof err.message === "string" && err.message.length) {
+    payload.message = err.message;
+  }
+  return JSON.stringify(payload);
+}
+
+class DigigraphStreamContractError extends Error {
+  constructor(payload: string) {
+    super(payload);
+    this.name = "DigigraphStreamContractError";
+  }
+}
+
+async function* iterateOpenAiSse(
+  body: ReadableStream<Uint8Array>
+): AsyncGenerator<Record<string, unknown>> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buf.indexOf("\n\n")) !== -1) {
+      const block = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      for (const line of block.split("\n")) {
+        if (!line.startsWith("data: ")) continue;
+        const raw = line.slice(6).trim();
+        if (raw === "[DONE]") continue;
+        try {
+          const json = JSON.parse(raw) as {
+            choices?: Array<{ delta?: Record<string, unknown> }>;
+          };
+          const delta = json.choices?.[0]?.delta;
+          if (delta && Object.keys(delta).length) yield delta;
+        } catch {
+          /* skip malformed chunk */
+        }
+      }
+    }
+  }
+}
+
+export async function createDigigraphTraceStreamResponse(opts: {
+  messages: UIMessage[];
+  digigraphBaseUrl: string;
+  upstreamHeaders: Record<string, string>;
+  responseHeaders: Record<string, string>;
+  upstreamBearer: string;
+  activityDetail: ActivityDetail;
+}) {
+  const stripped = opts.messages.map((m) => {
+    const { id: _omit, ...rest } = m;
+    void _omit;
+    return rest;
+  }) as Omit<UIMessage, "id">[];
+  const coreMessages = await convertToModelMessages(stripped);
+  const url = digigraphChatCompletionsUrl(opts.digigraphBaseUrl);
+  const model = digigraphModelName();
+  const apiKey = opts.upstreamBearer;
+
+  const stream = createUIMessageStream({
+    onError: (error) => (error instanceof Error ? error.message : "digigraph stream error"),
+    execute: async ({ writer }) => {
+      const textId = "assistant-main";
+      writer.write({ type: "text-start", id: textId });
+      let activitySeq = 0;
+      const bodyPayload: Record<string, unknown> = {
+        model,
+        messages: coreMessagesToDigigraphOpenAi(coreMessages),
+        stream: true,
+      };
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+          ...opts.upstreamHeaders,
+          // After upstreamHeaders so dogfood never inherits Open WebUI format.
+          // digigraph still treats model=sitaas-rag as Open WebUI unless opted out.
+          "X-Suppress-Tool-Stream": "1",
+          "X-Response-Format": "plain",
+        },
+        body: JSON.stringify(bodyPayload),
+      });
+      if (!res.ok) {
+        // Log the upstream detail server-side; never stream it. A 500 body can
+        // carry stack traces, internal hostnames, and prompt echoes, and this
+        // response goes to anonymous embed visitors.
+        const detail = (await res.text().catch(() => "")).trim();
+        console.error(
+          `[digigraph] upstream ${res.status} ${res.statusText}`,
+          detail.length > 1500 ? `${detail.slice(0, 1500)}…` : detail
+        );
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta: "The assistant is unavailable right now. Please try again shortly.",
+        });
+        writer.write({ type: "text-end", id: textId });
+        return;
+      }
+      if (!res.body) {
+        console.error(`[digigraph] upstream ${res.status} returned an empty body`);
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta: "The assistant is unavailable right now. Please try again shortly.",
+        });
+        writer.write({ type: "text-end", id: textId });
+        return;
+      }
+      for await (const delta of iterateOpenAiSse(res.body)) {
+        const dgErr = delta.digigraph_error;
+        if (dgErr && typeof dgErr === "object") {
+          writer.write({ type: "text-end", id: textId });
+          throw new DigigraphStreamContractError(
+            digigraphErrorToEmbedPayload(dgErr as DigigraphErrorPayload),
+          );
+        }
+        const c = delta.content;
+        if (typeof c === "string" && c.length) {
+          const cleaned = stripToolDumpFromAnswerDelta(c);
+          if (cleaned.length) {
+            writer.write({ type: "text-delta", id: textId, delta: cleaned });
+          }
+        }
+        const tr = delta.digigraph_trace;
+        if (tr && typeof tr === "object") {
+          const payload = tr as DigigraphTracePayload;
+
+          for (const span of mapDigigraphTraceToSpans(payload, opts.activityDetail)) {
+            writer.write({
+              type: ACTIVITY_PART_TYPE,
+              id: `dg-activity-${activitySeq++}`,
+              data: span,
+            });
+          }
+        }
+      }
+      writer.write({ type: "text-end", id: textId });
+    },
+  });
+
+  return createUIMessageStreamResponse({ stream, headers: opts.responseHeaders });
+}

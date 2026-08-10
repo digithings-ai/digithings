@@ -17,7 +17,6 @@ from __future__ import annotations
 import urllib.request
 from pathlib import Path
 
-
 NAUTILUS_TEST_DATA_URL = (
     "https://raw.githubusercontent.com/nautechsystems/nautilus_trader/develop"
     "/tests/test_data/binance/ethusdt-trades.csv"
@@ -26,7 +25,7 @@ NAUTILUS_TEST_DATA_URL = (
 
 def main() -> int:
     try:
-        import nautilus_trader.test_kit.providers as pmod  # noqa: F401
+        import nautilus_trader.test_kit.providers as pmod
     except ImportError:
         print("nautilus_trader not installed. Run: uv pip install -e '.[nautilus]'")
         return 1

@@ -1,0 +1,1 @@
+Invoke the `dictation-normalizer` agent on the user's most recent message. The agent will reshape rambling or dictated input into a clean, structured instruction block that preserves every requirement. Output the normalized block so the user can confirm it before any implementation begins.

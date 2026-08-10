@@ -1,0 +1,198 @@
+/* ==========================================================================
+   @digithings/design — app-shell-terminal/styles.css
+   Scoped under `.app-shell*`, `.app-sidebar*`, `.app-main*`, `.app-topbar*`,
+   `.app-input*`, `.slash-hint`, `.shell-cmd-ref`. Consumes tokens.
+   ========================================================================== */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  transition: grid-template-columns 0.25s var(--transition-ease);
+}
+.app-shell.app-shell-sidebar-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+.app-shell.app-shell-reduced-motion {
+  transition: none;
+}
+
+/* --- Sidebar ----------------------------------------------------------- */
+.app-sidebar {
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  overflow: hidden auto;
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.app-shell-sidebar-collapsed .app-sidebar {
+  border-right: none;
+}
+.app-sidebar-body { padding: var(--space-4); }
+
+.app-sidebar-section {
+  margin-bottom: var(--space-4);
+}
+.app-sidebar-section h3 {
+  margin: 0 0 var(--space-2);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.app-sidebar-section ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.app-sidebar-section li {
+  padding: 4px 0;
+  color: var(--text-primary);
+}
+
+/* --- Main column ------------------------------------------------------- */
+.app-shell-main-col {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 100vh;
+  min-width: 0;
+}
+
+/* --- Top bar ----------------------------------------------------------- */
+.app-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(10, 10, 10, 0.7);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.app-topbar-title { color: var(--text-primary); letter-spacing: 0.02em; }
+.app-topbar-meta { color: var(--text-secondary); }
+
+/* --- Main slot --------------------------------------------------------- */
+.app-main {
+  padding: var(--space-5);
+  overflow: auto;
+}
+
+/* --- Input bar --------------------------------------------------------- */
+.app-input {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  font-family: var(--font-family-mono);
+}
+.app-input-marker {
+  color: var(--accent, var(--text-secondary));
+  user-select: none;
+}
+.app-input-field {
+  width: 100%;
+  min-height: 1.8em;
+  max-height: 200px;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+}
+.app-input-field:focus {
+  border-color: var(--accent, var(--border-color));
+}
+.slash-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.slash-hint kbd,
+.shell-cmd-ref {
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+/* --- Command palette --------------------------------------------------- */
+.app-shell-palette {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: start center;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  z-index: 100;
+}
+.app-shell-palette[hidden] { display: none; }
+
+.app-shell-palette-inner {
+  width: min(560px, 92vw);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.app-shell-palette-input {
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 14px;
+  outline: none;
+}
+.app-shell-palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 50vh;
+  overflow: auto;
+}
+.app-shell-palette-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+}
+.app-shell-palette-item.is-active,
+.app-shell-palette-item:hover,
+.app-shell-palette-item:focus-visible {
+  background: color-mix(in srgb, var(--accent, var(--fg)) 14%, transparent);
+}
+.app-shell-palette-desc {
+  color: var(--text-secondary);
+}
+
+/* --- Reduced motion ---------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .app-shell { transition: none; }
+}
