@@ -18,7 +18,7 @@ from digivault.vault import Vault
 
 from scripts.docs_onboard.html_to_markdown import html_to_markdown
 from scripts.docs_onboard.models import ClassifiedPage, OnboardManifest, PageClass, load_manifest
-from scripts.docs_onboard.naming import slug_for_url
+from scripts.docs_onboard.naming import normalize_digi_product_names, slug_for_url
 from scripts.docs_onboard.workspace import Workspace
 
 _VAULT_PAGE_CLASSES = frozenset(
@@ -53,7 +53,7 @@ def _pdf_text(path: Path) -> str:
 def _note_body_for(classified: ClassifiedPage, workspace: Workspace) -> tuple[str, str]:
     """Return ``(title, body_markdown)`` for a classified page."""
     page = classified.page
-    title = page.title or Path(page.url).name or "Untitled"
+    title = normalize_digi_product_names(page.title or Path(page.url).name or "Untitled")
     if classified.page_class == PageClass.docs:
         if not page.html_path:
             return title, ""
