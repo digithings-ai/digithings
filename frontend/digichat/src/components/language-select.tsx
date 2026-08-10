@@ -18,7 +18,10 @@ export function LanguageSelect({
   const current = LANGUAGES.find((l) => l.code === resolveLanguageCode(value)) ?? LANGUAGES[0]!;
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger aria-label={`Response language: ${current.label}`}>
+      <DropdownMenuTrigger
+        aria-label={`Response language: ${current.label}`}
+        className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+      >
         {current.label}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
