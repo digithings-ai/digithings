@@ -742,11 +742,17 @@ def _resolve_suppress_tool_stream(request: Request) -> bool:
 
 
 def _resolve_openwebui_format(req: ChatCompletionRequest, request: Request) -> bool:
-    """True when client requests Open WebUI format.
+    """True only when the client explicitly requests Open WebUI format.
 
-    digichat dogfood uses model id ``sitaas-rag`` (OpenAI-compat discovery name) but must
-    never receive ``<details>`` / ``<thinking>`` chrome. Opt-outs win over the legacy
-    ``sitaas-rag`` default:
+    ``model=sitaas-rag`` alone does **not** enable ``<details>`` / ``<thinking>`` chrome
+    (that id is the OpenAI-compat discovery name shared by digichat and Open WebUI).
+
+    Enable with either:
+
+    - ``X-Response-Format: openwebui``
+    - ``openwebui_format=true`` in the JSON body
+
+    Opt-outs still force off even if the body asks for Open WebUI:
 
     - ``X-Suppress-Tool-Stream: 1`` (digichat trace stream)
     - ``X-Response-Format: plain|neutral|none|digichat``
@@ -758,10 +764,7 @@ def _resolve_openwebui_format(req: ChatCompletionRequest, request: Request) -> b
         return False
     if header == "openwebui":
         return True
-    if getattr(req, "openwebui_format", False):
-        return True
-    # Legacy Open WebUI clients pick model=sitaas-rag and expect <details> tool blocks.
-    return (getattr(req, "model", "") or "").strip().lower() == "sitaas-rag"
+    return bool(getattr(req, "openwebui_format", False))
 
 
 def _resolve_allowed_tools_chat(req: ChatCompletionRequest, request: Request) -> list[str] | None:
@@ -824,9 +827,9 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
     the response as a chat message. Use as a model in Open WebUI.
     When stream=true: progressive SSE with tool-call blocks then final answer.
     To get Open WebUI–style tool blocks (<details>, markdown tables), send header
-    X-Response-Format: openwebui (or openwebui_format=true, or model=sitaas-rag without an
-    opt-out). digichat sends X-Suppress-Tool-Stream / X-Response-Format: plain so answer
-    prose stays free of Open WebUI chrome; activity still arrives via digigraph_trace.
+    X-Response-Format: openwebui or body openwebui_format=true. model=sitaas-rag alone
+    does not enable that chrome. digichat sends X-Suppress-Tool-Stream /
+    X-Response-Format: plain as belt-and-suspenders; activity arrives via digigraph_trace.
     """
     if not req.messages:
         content = "No messages provided."

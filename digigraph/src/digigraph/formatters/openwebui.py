@@ -1,4 +1,4 @@
-"""Open WebUI stream formatter: <details> blocks and markdown tables. Use when client sends X-Response-Format: openwebui (or model sitaas-rag, etc.)."""
+"""Open WebUI stream formatter: <details> blocks and markdown tables. Use when client sends X-Response-Format: openwebui or openwebui_format=true."""
 
 from __future__ import annotations
 

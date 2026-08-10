@@ -40,6 +40,7 @@ class TestWorkflow:
     def test_returns_200_with_valid_prompt(self, client: TestClient) -> None:
         with patch("digigraph.workflow.run_digigraph_workflow") as m:
             from digigraph.models import WorkflowResult
+
             m.return_value = WorkflowResult(
                 success=True,
                 message="Done",
@@ -54,6 +55,7 @@ class TestWorkflow:
     def test_calls_workflow_with_request_body(self, client: TestClient) -> None:
         with patch("digigraph.server.run_digigraph_workflow") as m:
             from digigraph.models import WorkflowResult
+
             m.return_value = WorkflowResult(success=True, message="", backtest_result={})
             client.post("/workflow", json={"prompt": "Build me a stat-arb on tech"})
             m.assert_called_once()
@@ -116,10 +118,16 @@ class TestOpenAICompatible:
     def test_chat_completions_returns_openai_format(self, client: TestClient) -> None:
         with patch("digigraph.server.run_digigraph_workflow") as m:
             from digigraph.models import WorkflowResult
-            m.return_value = WorkflowResult(success=True, message="Found 3 docs.", backtest_result=None)
+
+            m.return_value = WorkflowResult(
+                success=True, message="Found 3 docs.", backtest_result=None
+            )
             r = client.post(
                 "/v1/chat/completions",
-                json={"model": "sitaas-rag", "messages": [{"role": "user", "content": "search for X"}]},
+                json={
+                    "model": "sitaas-rag",
+                    "messages": [{"role": "user", "content": "search for X"}],
+                },
             )
         assert r.status_code == 200
         data = r.json()
@@ -133,6 +141,7 @@ class TestOpenAICompatible:
         """Vercel AI SDK sends user messages as content: [{type: text, text: ...}]."""
         with patch("digigraph.server.run_digigraph_workflow") as m:
             from digigraph.models import WorkflowResult
+
             m.return_value = WorkflowResult(success=True, message="ok", backtest_result=None)
             r = client.post(
                 "/v1/chat/completions",
@@ -162,7 +171,11 @@ class TestOpenAICompatible:
         with patch("digigraph.server.run_digigraph_workflow_streaming", side_effect=fake_streaming):
             r = client.post(
                 "/v1/chat/completions",
-                json={"model": "sitaas-rag", "messages": [{"role": "user", "content": "hi"}], "stream": True},
+                json={
+                    "model": "sitaas-rag",
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "stream": True,
+                },
             )
         assert r.status_code == 200
         assert r.headers.get("content-type", "").startswith("text/event-stream")
@@ -171,8 +184,11 @@ class TestOpenAICompatible:
         assert "[DONE]" in body
         assert "chat.completion.chunk" in body
 
-    def test_chat_completions_stream_includes_tool_details_blocks(self, client: TestClient) -> None:
-        """Progressive stream includes <details> block for tool call/result (Open WebUI Method 4; summary = 🔧 Tool Call: name)."""
+    def test_chat_completions_stream_sitaas_rag_alone_uses_neutral_formatter(
+        self, client: TestClient
+    ) -> None:
+        """model=sitaas-rag alone must not enable Open WebUI <details> chrome."""
+
         def fake_streaming(req, queue, cancel_event=None):
             queue.put(("tool_call", {"name": "digisearch", "arguments": {"query": "test q"}}))
             queue.put(("tool_result", {"content": "Snippet from index."}))
@@ -182,7 +198,39 @@ class TestOpenAICompatible:
         with patch("digigraph.server.run_digigraph_workflow_streaming", side_effect=fake_streaming):
             r = client.post(
                 "/v1/chat/completions",
-                json={"model": "sitaas-rag", "messages": [{"role": "user", "content": "search"}], "stream": True},
+                json={
+                    "model": "sitaas-rag",
+                    "messages": [{"role": "user", "content": "search"}],
+                    "stream": True,
+                },
+            )
+        assert r.status_code == 200
+        body = r.text
+        assert "<details>" not in body
+        assert "Tool:" in body or "digisearch" in body  # neutral formatter
+        assert "Final" in body and "here" in body
+        assert "data: [DONE]" in body
+
+    def test_chat_completions_stream_openwebui_header_enables_details(
+        self, client: TestClient
+    ) -> None:
+        """X-Response-Format: openwebui enables <details> tool blocks (Open WebUI Method 4)."""
+
+        def fake_streaming(req, queue, cancel_event=None):
+            queue.put(("tool_call", {"name": "digisearch", "arguments": {"query": "test q"}}))
+            queue.put(("tool_result", {"content": "Snippet from index."}))
+            queue.put(("content", "Final answer here."))
+            queue.put(("done", None))
+
+        with patch("digigraph.server.run_digigraph_workflow_streaming", side_effect=fake_streaming):
+            r = client.post(
+                "/v1/chat/completions",
+                headers={"X-Response-Format": "openwebui"},
+                json={
+                    "model": "sitaas-rag",
+                    "messages": [{"role": "user", "content": "search"}],
+                    "stream": True,
+                },
             )
         assert r.status_code == 200
         body = r.text
@@ -193,8 +241,37 @@ class TestOpenAICompatible:
         assert "Final" in body and "here" in body
         assert "data: [DONE]" in body
 
-    def test_chat_completions_stream_suppress_omits_openwebui_chrome(self, client: TestClient) -> None:
-        """X-Suppress-Tool-Stream drops <details> and <thinking> even when model=sitaas-rag."""
+    def test_chat_completions_stream_openwebui_format_body_enables_details(
+        self, client: TestClient
+    ) -> None:
+        """openwebui_format=true in the JSON body enables <details> tool blocks."""
+
+        def fake_streaming(req, queue, cancel_event=None):
+            queue.put(("tool_call", {"name": "digisearch", "arguments": {"query": "q"}}))
+            queue.put(("tool_result", {"content": "hit"}))
+            queue.put(("content", "Answer."))
+            queue.put(("done", None))
+
+        with patch("digigraph.server.run_digigraph_workflow_streaming", side_effect=fake_streaming):
+            r = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "sitaas-rag",
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "stream": True,
+                    "openwebui_format": True,
+                },
+            )
+        assert r.status_code == 200
+        body = r.text
+        assert "<details>" in body
+        assert "digisearch" in body
+        assert "Answer" in body
+
+    def test_chat_completions_stream_suppress_omits_openwebui_chrome(
+        self, client: TestClient
+    ) -> None:
+        """X-Suppress-Tool-Stream drops <details> and <thinking> even with openwebui header."""
 
         def fake_streaming(req, queue, cancel_event=None):
             queue.put(("tool_call", {"name": "digisearch", "arguments": {"query": "test q"}}))
@@ -206,7 +283,10 @@ class TestOpenAICompatible:
         with patch("digigraph.server.run_digigraph_workflow_streaming", side_effect=fake_streaming):
             r = client.post(
                 "/v1/chat/completions",
-                headers={"X-Suppress-Tool-Stream": "1"},
+                headers={
+                    "X-Suppress-Tool-Stream": "1",
+                    "X-Response-Format": "openwebui",
+                },
                 json={
                     "model": "sitaas-rag",
                     "messages": [{"role": "user", "content": "search"}],
@@ -221,8 +301,10 @@ class TestOpenAICompatible:
         assert "internal chain of thought" not in body
         assert "Final" in body and "here" in body
 
-    def test_chat_completions_stream_plain_format_opts_out_of_sitaas_rag(self, client: TestClient) -> None:
-        """X-Response-Format: plain disables Open WebUI formatter despite model=sitaas-rag."""
+    def test_chat_completions_stream_plain_format_opts_out_of_openwebui(
+        self, client: TestClient
+    ) -> None:
+        """X-Response-Format: plain disables Open WebUI formatter despite openwebui_format=true."""
 
         def fake_streaming(req, queue, cancel_event=None):
             queue.put(("tool_call", {"name": "digisearch", "arguments": {"query": "q"}}))
@@ -238,6 +320,7 @@ class TestOpenAICompatible:
                     "model": "sitaas-rag",
                     "messages": [{"role": "user", "content": "hi"}],
                     "stream": True,
+                    "openwebui_format": True,
                 },
             )
         assert r.status_code == 200
