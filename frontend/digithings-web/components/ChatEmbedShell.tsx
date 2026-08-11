@@ -240,6 +240,11 @@ export function ChatEmbedShell({
         width: "100%",
         maxWidth: "min(1280px, 90vw)",
         marginInline: "auto",
+        // Symmetric with paddingBottom: the parent <main> no longer reserves
+        // --dq-nav-h up top (DtNav is autoHide="hover" now, overlaying rather
+        // than pushing content down), so without this the chat sat flush
+        // against the very top while keeping its bottom gap — lopsided.
+        paddingTop: "clamp(0.75rem, 2.5vw, 1.75rem)",
         paddingBottom: "clamp(0.75rem, 2.5vw, 1.75rem)",
         // Transparent, not var(--bg): the page's fixed .grain/.glow layers (site.css,
         // z-index 0) sit behind this shell, and an opaque fill here paints a visible

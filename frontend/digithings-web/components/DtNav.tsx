@@ -13,12 +13,13 @@ import { NavShell, GitHubGlyph } from "@digithings/web";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
 import { DigiChatMark } from "@digithings/digichat-ui";
 
-export function DtNav() {
+export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
   return (
     <NavShell
       brand={<Brand />}
       links={DT_NAV_PRIMARY}
       homeLabel="digithings home"
+      autoHide={autoHide}
       actions={
         <>
           <a
