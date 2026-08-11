@@ -61,7 +61,7 @@ def resolve_sources(manifest_path: Path) -> tuple[str, list[Path]]:
 def dry_run(index_name: str, paths: list[Path]) -> int:
     """Parse + chunk each file in-process; print a summary. Uses the digisearch stub backend."""
     try:
-        from digisearch.ingestion.chunkers.recursive import RecursiveChunker
+        from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
         from digisearch.ingestion.registry import ParserRegistry
     except ImportError as exc:
         print(f"digisearch not importable: {exc}", file=sys.stderr)
@@ -72,7 +72,8 @@ def dry_run(index_name: str, paths: list[Path]) -> int:
         return 2
 
     registry = ParserRegistry()
-    chunker = RecursiveChunker()
+    # Must match what POST /ingest actually uses, or the preview under-reports.
+    chunker = SegmentAwareChunker()
     total_chunks = 0
     skipped: list[tuple[Path, str]] = []
     for path in paths:
