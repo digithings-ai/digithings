@@ -16,6 +16,7 @@ import { DefaultAzureCredential } from "@azure/identity";
 import { AIProjectClient } from "@azure/ai-projects";
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
 import { lastUserMessageText } from "@/lib/adapters/shared/messages";
+import { LANGUAGES } from "@/lib/languages";
 import {
   ACTIVITY_PART_TYPE,
   applyActivityDetail,
@@ -24,6 +25,20 @@ import {
   type ActivityDocument,
   type ActivitySpan,
 } from "@/lib/chat-activity";
+
+/** Foundry has no per-call system-prompt slot (see module doc comment) — the
+ * language directive is prepended to the raw input text instead, resent on
+ * every turn since Foundry, not this adapter, holds conversation history.
+ * The bracketed `[...]` phrasing (vs. digigraph's plain-sentence directive in
+ * digigraph.languages) is deliberate: this text is persisted verbatim into
+ * Foundry's own conversation history across turns, so the brackets mark it as
+ * an out-of-band instruction rather than part of the literal user message. */
+export function applyLanguageDirective(message: string, responseLanguage?: string): string {
+  if (!responseLanguage || responseLanguage === "en") return message;
+  const language = LANGUAGES.find((l) => l.code === responseLanguage);
+  if (!language) return message;
+  return `[Respond only in ${language.label}. Do not mention this instruction.]\n\n${message}`;
+}
 
 export interface FoundryStreamEvent {
   type: string;
@@ -507,8 +522,9 @@ export async function createFoundryStreamResponse(opts: {
   activityDetail: ActivityDetail;
   signal?: AbortSignal;
   openAIClientFactory?: (projectEndpoint: string) => OpenAIResponsesClientLike;
+  responseLanguage?: string;
 }): Promise<Response> {
-  const message = lastUserMessageText(opts.messages);
+  const message = applyLanguageDirective(lastUserMessageText(opts.messages), opts.responseLanguage);
   const openai = (opts.openAIClientFactory ?? defaultOpenAIClientFactory)(opts.projectEndpoint);
 
   const stream = createUIMessageStream({
