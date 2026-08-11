@@ -555,6 +555,50 @@
   margin-inline: auto;
 }
 
+/* digichat-ui's `.dc-session` sizes itself for a top-level page: `height:
+ * calc(100vh - var(--dq-nav-h, 62px) - 1.4rem)` and `min-height: 440px`, both
+ * written to clear a *real* nav bar above it. Inside `.dc-embed-shell` there is
+ * no nav — `--dq-nav-h` is never set, so it falls back to 62px regardless — so
+ * the calc always shaves off a phantom ~84px, and on a short iframe (embedded
+ * in a small viewport) the 440px floor pushes the session past the shell's
+ * actual height. `.dc-embed-shell` is `overflow-hidden` (embed/layout.tsx), so
+ * that overflow doesn't scroll — it clips, and the input textarea at the
+ * bottom of `.dc-session` is the first thing to go. Just fill the shell: it's
+ * already sized correctly (`h-dvh`), and `.dc-thread`'s own `flex: 1;
+ * min-height: 0` is what should absorb a short viewport, not a hard floor.
+ */
+.dc-embed-shell .dc-session {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Full-page embedder opt-out (?wide=1 — digithings.ai /chat, /chat/occ): the
+ * embed IS the page there, not a widget dropped into someone else's layout,
+ * so the 1080px readable-measure cap above has no host-page gutter to
+ * protect — it would just be a second, redundant cap stacked underneath
+ * whatever box the *host page* already sized. The gutter, and the bottom
+ * breathing room, are ChatEmbedShell's job now (digithings-web) — sized
+ * against the host page's own breakpoints, not a copy of them kept in sync
+ * across the iframe boundary. Same (0,2,0) specificity as the rule it
+ * overrides — source order (this comes after) breaks the tie. */
+.dc-embed-shell .dc-session--wide {
+  max-width: none;
+}
+
+/* Same opt-out, for background: `.dc-embed-shell` and `body` both paint an
+ * opaque `bg-background` by design (a lone <iframe> on an arbitrary host page
+ * needs its own backdrop). digithings.ai's own /chat and /chat/occ are the
+ * page, not a widget on someone else's layout — they want their fixed
+ * `.grain`/`.glow` (site.css) showing straight through. `data-wide` is set by
+ * embed-client.tsx (no prop path reaches the server-rendered shell div from
+ * here), `:has()` carries it up to `body`. */
+.dc-embed-shell[data-wide="1"] {
+  background: transparent;
+}
+body:has(.dc-embed-shell[data-wide="1"]) {
+  background: transparent;
+}
+
 .dc-grain {
   position: fixed;
   inset: 0;

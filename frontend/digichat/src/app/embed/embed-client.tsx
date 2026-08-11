@@ -201,12 +201,23 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
   // style is the sole --accent source (DataTap terracotta regression).
   const brandAccentActive = accentStyle != null;
 
+  // ?wide=1 also means "the embedder wants to show its own page background
+  // through" (digithings.ai /chat, /chat/occ — see ChatEmbedShell). The shell
+  // (embed/layout.tsx) and body both paint an opaque bg-background by design,
+  // for the common case of embedding on an arbitrary host page; there's no
+  // prop path from this client tree up to that server-rendered ancestor, so
+  // flag it via a DOM attribute + `:has()` in globals.css (same pattern as the
+  // [data-theme] sync above, just targeting an ancestor instead of <html>).
+  useEffect(() => {
+    document.querySelector(".dc-embed-shell")?.setAttribute("data-wide", urlColors.wide ? "1" : "0");
+  }, [urlColors.wide]);
+
   return (
     <>
       <style>{ACCENT_CSS}</style>
-      <div className="dc-grain" aria-hidden />
+      {urlColors.wide ? null : <div className="dc-grain" aria-hidden />}
       <div
-        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col bg-background text-foreground`}
+        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide ? "" : "bg-background"} text-foreground`}
         style={accentStyle}
       >
         <EmbedChat
@@ -785,6 +796,7 @@ function EmbedChat({
       }
       showIntro={!gate.locked && !trialLocked && !hideIntroForSeed}
       ariaLabel={headerTitle ?? "digichat embed"}
+      className={uiParams.wide ? "dc-session--wide" : undefined}
     />
   );
 }
