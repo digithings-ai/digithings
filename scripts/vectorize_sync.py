@@ -18,18 +18,18 @@ URL with no translation -- a mismatched name means every chat query 404s against
 an index that was never populated. Today those values are underscore-form
 (``digithings_docs``, ``occ_help``), matching this script's examples below.
 
-Caveat -- unresolved as of this writing: Cloudflare's own Vectorize docs describe
-index names as kebab-case (lowercase ASCII letters/digits/hyphens, starting with
-a letter) and do not list ``_`` as a valid character
+Cloudflare's own Vectorize docs only ever *show* kebab-case index names
 (https://developers.cloudflare.com/vectorize/best-practices/create-indexes/,
-https://developers.cloudflare.com/vectorize/get-started/intro/). Whether the
-Vectorize API actually *rejects* an underscore name, or only Cloudflare's own
-tooling discourages it stylistically, was not verified against a live
-``wrangler vectorize create`` call. If it does reject underscores, the
-``DIGISEARCH_INDEX`` values above cannot be used as Vectorize index names as-is
--- resolving that (e.g. decoupling the corpus-map key from the actual Vectorize
-index name via an explicit mapping) is a design decision, not something to
-guess your way around here.
+https://developers.cloudflare.com/vectorize/get-started/intro/) -- that's
+convention, not a documented constraint, and it is not a claim that underscores
+are documented as supported. Verified empirically against the live account on
+2026-08-11: ``npx wrangler vectorize create digithings_docs --dimensions=384
+--metric=cosine`` and the same call for ``occ_help`` both succeeded, and
+``npx wrangler vectorize list`` shows both indexes at 384 dimensions, cosine
+metric. Underscore index names are accepted, so no rename of
+``DIGISEARCH_INDEX``, the corpus map, or the Chroma collection names in
+``seed_chroma.sh`` is needed -- ``digithings_docs`` / ``occ_help`` are the
+single canonical name on both sides of the pairing.
 
 Apply::
 

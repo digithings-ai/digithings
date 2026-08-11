@@ -27,19 +27,19 @@ sync landed before traffic depends on it.
   populated. Today those values are underscore-form: `digithings_docs` and
   `occ_help`.
 
-  **Caveat, unresolved as of this writing:** Cloudflare's own Vectorize docs
-  describe index names as kebab-case (lowercase ASCII letters/digits/hyphens,
-  starting with a letter) and do not list `_` as a valid character
+  **Verified 2026-08-11:** Cloudflare's own Vectorize docs only ever *show*
+  kebab-case index names
   ([best-practices/create-indexes](https://developers.cloudflare.com/vectorize/best-practices/create-indexes/),
-  [get-started/intro](https://developers.cloudflare.com/vectorize/get-started/intro/)).
-  Whether `wrangler vectorize create` actually rejects an underscore name, or
-  Cloudflare's docs/tooling only recommend against it stylistically, has not
-  been verified against a live call. **Try creating the index with the
-  underscore name first (below); if Cloudflare rejects it, stop and raise a
-  design decision** (e.g. an explicit mapping between the corpus-map key and
-  the real Vectorize index name) — do not rename `DIGISEARCH_INDEX` or the
-  Chroma collection names to "fix" this unilaterally; the Chroma fallback's
-  collection names are hardcoded to the underscore form in
+  [get-started/intro](https://developers.cloudflare.com/vectorize/get-started/intro/))
+  — that's convention, not a documented constraint, and this is not a claim
+  that underscores are documented as supported. Underscore index names are
+  empirically accepted: `npx wrangler vectorize create digithings_docs
+  --dimensions=384 --metric=cosine` and the same call for `occ_help` both
+  succeeded against the live account, and `npx wrangler vectorize list`
+  confirms both indexes at 384 dimensions, cosine metric. No rename of
+  `DIGISEARCH_INDEX` or the Chroma collection names is needed —
+  `digithings_docs` / `occ_help` remain the single canonical name across
+  both sides of the pairing, including the hardcoded collection names in
   `frontend/digithings-stack-cloudflare/container/seed_chroma.sh`.
 
 ## 1. Create the indexes

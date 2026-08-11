@@ -171,10 +171,13 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     re-recorded at 42 for #2201 (Vectorize backend docs added to
     ARCHITECTURE.md), then again at 43 for the #2201 final-review fixes (the
     index-naming-coupling and fetch-all-clamp paragraphs added to the
-    Vectorize section): the chunker did not change, only the fixture content
-    grew, so this fingerprint is expected to be regenerated whenever
-    ARCHITECTURE.md's prose changes materially — it is not itself a
-    chunker-behavior assertion beyond the ``<= 2000`` size invariant.
+    Vectorize section), then hashes only (count unchanged at 43) when the
+    same #2201 branch corrected the index-naming caveat from "unresolved" to
+    "verified 2026-08-11 against the live account": the chunker did not
+    change, only the fixture content changed, so this fingerprint is
+    expected to be regenerated whenever ARCHITECTURE.md's prose changes
+    materially — it is not itself a chunker-behavior assertion beyond the
+    ``<= 2000`` size invariant.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -205,8 +208,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "09b95dddeb54c404",
         "99ce6e6e0f28628b",
         "63a471e295e59f9a",
-        "5828a18e573ce194",
-        "816132ebea937a9a",
+        "fb9e30671b48d2c4",
+        "16bea1bbfea529fc",
         "5b438889eafdfbb9",
         "2181660c1f2b61f1",
         "b36181233771c6b2",

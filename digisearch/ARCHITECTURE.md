@@ -601,18 +601,19 @@ underscore-form (`digithings_docs`, `occ_help`) to match the hardcoded Chroma
 collection names in `container/seed_chroma.sh` — renaming either side without
 renaming the other breaks that pairing outright.
 
-**Unresolved caveat:** Cloudflare's own Vectorize documentation describes
-index names as kebab-case (lowercase ASCII letters/digits/hyphens, starting
-with a letter) and does not list `_` as a valid character
+**Verified 2026-08-11:** Cloudflare's own Vectorize documentation only ever
+*shows* index names in kebab-case
 ([best-practices/create-indexes](https://developers.cloudflare.com/vectorize/best-practices/create-indexes/),
-[get-started/intro](https://developers.cloudflare.com/vectorize/get-started/intro/)).
-Whether the Vectorize API actually *rejects* an underscore index name, or
-Cloudflare's docs/tooling merely recommend against it, was not verified
-against a live `wrangler vectorize create` call from this repo. If underscores
-are rejected, `digithings_docs` / `occ_help` cannot be created as Vectorize
-index names as-is, and this pairing needs a design decision (e.g. an explicit
-mapping between the corpus-map key and the actual Vectorize index name) before
-a production cutover — not a unilateral rename of either side.
+[get-started/intro](https://developers.cloudflare.com/vectorize/get-started/intro/))
+— that is convention, not a documented constraint, and this is not a claim
+that underscores are documented as supported. Empirically, underscore index
+names are accepted: `npx wrangler vectorize create digithings_docs
+--dimensions=384 --metric=cosine` and the equivalent call for `occ_help` both
+succeeded against the live account, and `npx wrangler vectorize list` shows
+both indexes at 384 dimensions, cosine metric. No rename of
+`DIGISEARCH_INDEX`, the corpus map, or the Chroma collection names is
+needed — `digithings_docs` / `occ_help` remain the single canonical name on
+both sides of the pairing.
 
 Fourth, `VectorizeBackend.query()` clamps `top_k` to `MAX_TOP_K` (50) and logs
 a warning when it does, but a caller paging through results with `page_size >
