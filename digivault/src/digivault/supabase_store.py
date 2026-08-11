@@ -124,6 +124,39 @@ class SupabaseStore:
             pairs.append((f"{vault_path}.md", _fm.dump_frontmatter(frontmatter, body)))
         return pairs
 
+    def list_notes(
+        self,
+        *,
+        path_prefix: str | None = None,
+        page_size: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Every note under ``path_prefix``, paginated.
+
+        ``sources()`` cannot be used for this: it selects the whole table with no
+        prefix filter and no pagination, so it silently truncates at PostgREST's
+        server-side row cap. This pages explicitly with ``.range()`` and stops on
+        the first short page.
+        """
+        prefix = (path_prefix or "").strip().strip("/")
+        out: list[dict[str, Any]] = []
+        start = 0
+        while True:
+            query = self._client.table(self._table).select(_SELECT)
+            if prefix:
+                query = query.like("vault_path", f"{prefix}%")
+            page = query.order("vault_path").range(start, start + page_size - 1).execute()
+            rows = list(getattr(page, "data", None) or [])
+            for row in rows:
+                vault_path = str(row.get("vault_path") or "").strip()
+                if not vault_path:
+                    continue
+                if prefix and vault_path != prefix and not vault_path.startswith(prefix + "/"):
+                    continue
+                out.append(row)
+            if len(rows) < page_size:
+                return out
+            start += page_size
+
     def load_vault(self, *, config: VaultConfig | None = None) -> Vault:
         """Materialize a read-only :class:`Vault` from the table."""
         return Vault.from_sources(self.sources(), config=config)

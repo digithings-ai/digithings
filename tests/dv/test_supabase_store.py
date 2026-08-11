@@ -22,14 +22,37 @@ class _Response:
 
 
 class _Query:
-    def __init__(self, data: list[dict[str, Any]]) -> None:
+    def __init__(self, data: list[dict[str, Any]], client: "_FakeClient") -> None:
         self._data = data
+        self._client = client
+        self._like: str | None = None
+        self._range: tuple[int, int] | None = None
 
     def select(self, *_a: Any, **_k: Any) -> "_Query":
         return self
 
+    def like(self, _column: str, pattern: str) -> "_Query":
+        self._like = pattern
+        return self
+
+    def order(self, *_a: object, **_k: object) -> "_Query":
+        return self
+
+    def range(self, start: int, end: int) -> "_Query":
+        self._client.range_calls.append((start, end))
+        self._range = (start, end)
+        return self
+
     def execute(self) -> _Response:
-        return _Response(self._data)
+        rows = self._data
+        if self._like is not None:
+            pattern = self._like
+            prefix = pattern[:-1] if pattern.endswith("%") else pattern
+            rows = [r for r in rows if str(r.get("vault_path", "")).startswith(prefix)]
+        if self._range is not None:
+            start, end = self._range
+            rows = rows[start : end + 1]
+        return _Response(rows)
 
 
 class _FakeClient:
@@ -39,13 +62,14 @@ class _FakeClient:
         self._rows = rows
         self._rpc_data = rpc_data or []
         self.rpc_calls: list[tuple[str, dict[str, Any]]] = []
+        self.range_calls: list[tuple[int, int]] = []
 
     def table(self, _name: str) -> _Query:
-        return _Query(self._rows)
+        return _Query(self._rows, self)
 
     def rpc(self, fn: str, params: dict[str, Any]) -> _Query:
         self.rpc_calls.append((fn, params))
-        return _Query(self._rpc_data)
+        return _Query(self._rpc_data, self)
 
 
 _ROWS = [
@@ -176,3 +200,41 @@ def test_from_env_raises_without_credentials(monkeypatch: pytest.MonkeyPatch) ->
         monkeypatch.delenv(var, raising=False)
     with pytest.raises(SupabaseStoreError, match="not configured"):
         SupabaseStore.from_env()
+
+
+def test_list_notes_filters_by_prefix_and_paginates() -> None:
+    rows = [
+        {
+            "vault_path": f"clients/digithings/n{i}",
+            "title": f"n{i}",
+            "frontmatter": {},
+            "body_markdown": "body",
+        }
+        for i in range(7)
+    ] + [
+        {"vault_path": "clients/other/x", "title": "x", "frontmatter": {}, "body_markdown": "body"}
+    ]
+    client = _FakeClient(rows)
+    store = SupabaseStore(client)
+    out = store.list_notes(path_prefix="clients/digithings", page_size=3)
+    assert len(out) == 7
+    assert all(r["vault_path"].startswith("clients/digithings/") for r in out)
+    assert len(client.range_calls) >= 3
+
+
+def test_list_notes_without_prefix_returns_all() -> None:
+    rows = [{"vault_path": "a/b", "title": "t", "frontmatter": {}, "body_markdown": "x"}]
+    store = SupabaseStore(_FakeClient(rows))
+    assert len(store.list_notes()) == 1
+
+
+def test_list_notes_stops_on_short_page() -> None:
+    rows = [
+        {"vault_path": f"p/n{i}", "title": "t", "frontmatter": {}, "body_markdown": "x"}
+        for i in range(2)
+    ]
+    client = _FakeClient(rows)
+    store = SupabaseStore(client)
+    out = store.list_notes(path_prefix="p", page_size=500)
+    assert len(out) == 2
+    assert len(client.range_calls) == 1
