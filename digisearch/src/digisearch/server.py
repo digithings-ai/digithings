@@ -19,6 +19,7 @@ from digikey.integrations.service_middleware import DigiAuthMiddleware, digisear
 from digisearch import __version__
 from digisearch.agent.pipeline_models import ResearchTurnOutput
 from digisearch.core.models import Query
+from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
 from digisearch.ingest_paths import resolve_ingest_source
 from digisearch.logging import configure_logging
 from digisearch.orchestrator_tools import (
@@ -62,7 +63,7 @@ app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=digisea
 
 @app.on_event("startup")
 def _require_real_search_backend() -> None:
-    """Fail startup unless Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
+    """Fail startup unless Vectorize, Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
     allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
         "1",
         "true",
@@ -70,6 +71,11 @@ def _require_real_search_backend() -> None:
     )
     if allow_stub:
         logger.warning("digisearch: DIGISEARCH_ALLOW_STUB=1 — in-memory stub allowed (tests only).")
+        return
+    if (
+        os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
+        and os.environ.get("VECTORIZE_API_TOKEN", "").strip()
+    ):
         return
     from digisearch.indexes.backends import azure_search as _az
 
@@ -82,7 +88,8 @@ def _require_real_search_backend() -> None:
     chroma_ok = bool(os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"))
     if not azure_ok and not chroma_ok:
         raise RuntimeError(
-            "digisearch requires a real backend: set AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
+            "digisearch requires a real backend: set VECTORIZE_ACCOUNT_ID+VECTORIZE_API_TOKEN, "
+            "AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
             "or DIGISEARCH_ALLOW_STUB=1 for tests only."
         )
 
@@ -224,7 +231,7 @@ class QueryResponse(BaseModel):
     )
     backend: str | None = Field(
         default=None,
-        description="Index backend that served the query: azure_ai_search | chroma | stub",
+        description="Index backend that served the query: vectorize | azure_ai_search | chroma | stub",
     )
 
 
@@ -419,6 +426,15 @@ class OrchestratorFetchAllData(BaseModel):
     total: int
     query: str
     index_name: str
+    possibly_truncated: bool = Field(
+        default=False,
+        description=(
+            "True when a page came back capped at the Vectorize backend's per-query "
+            "match limit before this tool's own total/max_results check ended pagination "
+            "-- `total` above may undercount the actual number of matches. Chroma/Azure "
+            "pages never set this; only Vectorize's fixed per-query cap can trigger it."
+        ),
+    )
 
 
 class OrchestratorInvokeResponse(BaseModel):
@@ -540,6 +556,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         skip = 0
         total_so_far = 0
         total_estimate: int | None = None
+        possibly_truncated = False
         while True:
             qreq = _query_request_from_digisearch_args(
                 {
@@ -565,6 +582,31 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             all_results.extend(results)
             total_so_far += len(results)
             total_estimate = payload.get("total")
+            # I4: Vectorize clamps any query to MAX_TOP_K (50) matches regardless of
+            # the requested page_size. A page landing at exactly that cap while a
+            # bigger page was requested is indistinguishable from "no more results"
+            # by the len(results) < page_size check below -- it means this backend
+            # cannot even see whether more matches exist, let alone page to them
+            # (VectorizeBackend.query() does not consult Query.skip). Flag it rather
+            # than let the caller believe `total` is exhaustive.
+            if (
+                payload.get("backend") == "vectorize"
+                and page_size > _VECTORIZE_MAX_TOP_K
+                and len(results) == _VECTORIZE_MAX_TOP_K
+            ):
+                possibly_truncated = True
+                logger.warning(
+                    "digisearch_fetch_all page capped at Vectorize's per-query limit "
+                    "(%d matches, page_size=%d requested); result set may be incomplete",
+                    _VECTORIZE_MAX_TOP_K,
+                    page_size,
+                    extra={
+                        "operation": "digisearch_fetch_all",
+                        "outcome": "clamped",
+                        "index_name": idx,
+                        "backend": "vectorize",
+                    },
+                )
             if total_estimate is not None and total_so_far >= int(total_estimate):
                 break
             if max_results is not None and total_so_far >= max_results:
@@ -582,6 +624,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
                 total=len(all_results),
                 query=qtext,
                 index_name=idx,
+                possibly_truncated=possibly_truncated,
             ),
         )
 

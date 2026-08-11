@@ -70,6 +70,41 @@ def test_orchestrator_invoke_fetch_all_respects_cap(
     assert r.status_code == 200
     data = r.json().get("data") or {}
     assert data.get("total", 0) <= 5
+    assert data.get("possibly_truncated") is False
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_fetch_all_flags_vectorize_clamp_truncation(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """I4 repro: a Vectorize page capped at MAX_TOP_K must set `possibly_truncated`
+    rather than silently reporting the collected result set as complete."""
+    import digisearch.server as server_module
+    from digisearch.indexes.backends.vectorize import MAX_TOP_K
+
+    def _fake_run_query(req: object) -> server_module.QueryResponse:
+        results = [{"id": f"r{i}"} for i in range(MAX_TOP_K)]
+        return server_module.QueryResponse(
+            results=results,
+            query=getattr(req, "text", ""),
+            index_name=getattr(req, "index_name", "any"),
+            total=len(results),
+            backend="vectorize",
+        )
+
+    monkeypatch.setattr(server_module, "run_query", _fake_run_query)
+
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={
+            "tool": "digisearch_fetch_all",
+            "arguments": {"query": "x", "index_name": "any", "max_results": 1000},
+        },
+    )
+    assert r.status_code == 200
+    data = r.json().get("data") or {}
+    assert data.get("possibly_truncated") is True
+    assert data.get("total") == MAX_TOP_K
 
 
 @pytest.mark.unit

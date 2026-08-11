@@ -4,6 +4,17 @@
 set -eu
 
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
+
+# DIGI_VECTORIZE_ACTIVE is computed once in entrypoint.sh (delegated to
+# python3 so it agrees with digisearch's own os.environ.get(...).strip()
+# check byte-for-byte) and exported before supervisord starts this program;
+# default to unconfigured (0) under set -u if it were ever missing, which
+# reproduces today's behaviour of waiting for the marker.
+if [ "${DIGI_VECTORIZE_ACTIVE:-0}" = "1" ]; then
+  echo "digithings-stack: Vectorize configured; starting digisearch without seed wait"
+  exec uvicorn digisearch.server:app --host 127.0.0.1 --port 8002
+fi
+
 SEED_VER="v3"
 SEED_MARKER="${DATA_CHROMA}/.stack_chroma_seeded_${SEED_VER}"
 SEED_FAILED="${DATA_CHROMA}/.stack_chroma_seed_failed_${SEED_VER}"
