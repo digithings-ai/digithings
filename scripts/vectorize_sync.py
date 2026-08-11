@@ -5,6 +5,11 @@ Runs on an operator machine or in CI — never inside the Cloudflare Container, 
 only ever queries. Chunking goes through the same SegmentAwareChunker path production
 retrieval assumes, so the index matches the pipeline that was validated.
 
+``--dry-run`` still reads notes from Supabase and chunks them — that's the only way
+to get an accurate count — but skips both the embedder and the Vectorize upsert, so
+it costs no ONNX inference, no model download, and no network write. The reported
+count is the number of vectors that *would* be upserted.
+
 Apply::
 
     CORE_SUPABASE_URL=… CORE_SUPABASE_ANON_KEY=… \\
@@ -20,10 +25,6 @@ import sys
 from typing import Any, Protocol  # score:allow untyped any — Supabase rows are open dicts
 
 from digisearch.core.models import Chunk, Document, Segment
-
-#: Identifies the embedding model in every vector's metadata. Upsert and query must
-#: use the same model; the sync refuses to mix models within one index.
-DEFAULT_MODEL_ID = "all-MiniLM-L6-v2-384"  # must equal MINILM_MODEL_ID from Task 0
 
 
 class ModelMismatchError(RuntimeError):
@@ -57,12 +58,20 @@ def _segments_for(body: str) -> list[Segment]:
 def sync_corpus(
     notes: list[dict[str, Any]],
     chunker: ChunkerProtocol,
-    embedder: Embedder,
+    embedder: Embedder | None,
     sink: VectorSink,
     *,
-    model_id: str = DEFAULT_MODEL_ID,
+    model_id: str,
+    embed: bool = True,
 ) -> int:
-    """Chunk, embed and upsert every note. Returns the number of vectors sent."""
+    """Chunk, optionally embed, and upsert every note. Returns the number of vectors sent.
+
+    ``embed=False`` (what ``--dry-run`` uses) skips the embedder entirely — chunks are
+    sent with ``embedding=None`` so a count-only preview costs no ONNX inference and
+    no model download. ``embedder`` may be ``None`` only when ``embed=False``.
+    """
+    if embed and embedder is None:
+        raise ValueError("embedder is required when embed=True")
     total = 0
     for note in notes:
         vault_path = str(note.get("vault_path") or "").strip()
@@ -80,15 +89,19 @@ def sync_corpus(
         chunks = chunker.chunk(doc)
         if not chunks:
             continue
-        embeddings = embedder.embed([c.content for c in chunks])
+        if embed:
+            embeddings = embedder.embed([c.content for c in chunks])  # type: ignore[union-attr]
+            pairs = zip(chunks, embeddings, strict=True)
+        else:
+            pairs = ((chunk, None) for chunk in chunks)
         prepared: list[Chunk] = []
-        for index, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
+        for index, (chunk, embedding) in enumerate(pairs):
             prepared.append(
                 Chunk(
                     id=_vector_id(vault_path, index),
                     content=chunk.content,
                     doc_id=vault_path,
-                    embedding=list(embedding),
+                    embedding=list(embedding) if embedding is not None else None,
                     metadata={
                         **dict(chunk.metadata),
                         "vault_path": vault_path,
@@ -131,7 +144,14 @@ def main(argv: list[str] | None = None) -> int:
         "--prefix", required=True, help="vault_path prefix, e.g. clients/digithings"
     )
     parser.add_argument("--index", required=True, help="Vectorize index name, e.g. digithings-docs")
-    parser.add_argument("--dry-run", action="store_true", help="Chunk and count; do not upsert.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Read notes from Supabase, chunk, and report the vector count — skip "
+            "embedding and the Vectorize upsert entirely."
+        ),
+    )
     args = parser.parse_args(argv)
 
     import os
@@ -162,10 +182,15 @@ def main(argv: list[str] | None = None) -> int:
         sink = VectorizeBackend(args.index, account_id=account_id, api_token=api_token)
 
     if not args.dry_run:
-        assert_index_model(sink, model_id=DEFAULT_MODEL_ID, dimensions=384)
+        assert_index_model(sink, model_id=MINILM_MODEL_ID, dimensions=384)
 
     total = sync_corpus(
-        notes, SegmentAwareChunker(), MiniLMEmbedder(), sink, model_id=MINILM_MODEL_ID
+        notes,
+        SegmentAwareChunker(),
+        None if args.dry_run else MiniLMEmbedder(),
+        sink,
+        model_id=MINILM_MODEL_ID,
+        embed=not args.dry_run,
     )
     print(f"{'would upsert' if args.dry_run else 'upserted'} {total} vectors → {args.index}")
     return 0

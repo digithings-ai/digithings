@@ -110,3 +110,93 @@ def test_sync_allows_matching_or_empty_index() -> None:
             return []
 
     assert_index_model(_EmptyBackend(), model_id="m", dimensions=384)
+
+
+def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A future MINILM_MODEL_ID change must reach the guard and the stamp identically.
+
+    Regression for the stale-constant finding: the guard used to be called with a
+    hand-maintained literal while ``sync_corpus`` was stamped with the imported
+    ``MINILM_MODEL_ID`` — nothing enforced they stayed equal.
+    """
+    import digisearch.embedding.providers.minilm as minilm_module
+    import digisearch.indexes.backends.vectorize as vectorize_module
+    import digivault.supabase_store as supabase_store_module
+
+    import scripts.vectorize_sync as vectorize_sync_module
+
+    class _FakeSupabaseStore:
+        @classmethod
+        def from_env(cls) -> "_FakeSupabaseStore":
+            return cls()
+
+        def list_notes(self, *, path_prefix: str) -> list[dict[str, Any]]:
+            return []
+
+    class _FakeVectorizeBackend:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+    seen: dict[str, str] = {}
+
+    def _fake_assert_index_model(backend: Any, *, model_id: str, dimensions: int) -> None:
+        seen["guard"] = model_id
+
+    def _fake_sync_corpus(
+        notes: Any, chunker: Any, embedder: Any, sink: Any, *, model_id: str, **kwargs: Any
+    ) -> int:
+        seen["sync"] = model_id
+        return 0
+
+    monkeypatch.setattr(supabase_store_module, "SupabaseStore", _FakeSupabaseStore)
+    monkeypatch.setattr(vectorize_module, "VectorizeBackend", _FakeVectorizeBackend)
+    # Simulate a model upgrade: the guard and the stamp must track this together.
+    monkeypatch.setattr(minilm_module, "MINILM_MODEL_ID", "temporarily-different-id")
+    monkeypatch.setattr(vectorize_sync_module, "assert_index_model", _fake_assert_index_model)
+    monkeypatch.setattr(vectorize_sync_module, "sync_corpus", _fake_sync_corpus)
+    monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("VECTORIZE_API_TOKEN", "token")
+
+    vectorize_sync_module.main(["--prefix", "clients/acme", "--index", "acme-docs"])
+
+    assert seen["guard"] == seen["sync"] == "temporarily-different-id"
+
+
+def test_dry_run_makes_zero_embed_calls(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--dry-run must not construct or call the embedder — chunk-and-count only."""
+    import digisearch.embedding.providers.minilm as minilm_module
+    import digivault.supabase_store as supabase_store_module
+
+    from scripts.vectorize_sync import main
+
+    embed_calls: list[list[str]] = []
+
+    class _SpyEmbedder:
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            embed_calls.append(list(texts))
+            return [[0.0] * 384 for _ in texts]
+
+        @property
+        def dimensions(self) -> int:
+            return 384
+
+    class _FakeSupabaseStore:
+        @classmethod
+        def from_env(cls) -> "_FakeSupabaseStore":
+            return cls()
+
+        def list_notes(self, *, path_prefix: str) -> list[dict[str, Any]]:
+            return [_note("clients/acme/a", "# A\n\nSome real body text worth chunking.\n")]
+
+    monkeypatch.setattr(minilm_module, "MiniLMEmbedder", _SpyEmbedder)
+    monkeypatch.setattr(supabase_store_module, "SupabaseStore", _FakeSupabaseStore)
+
+    exit_code = main(["--prefix", "clients/acme", "--index", "acme-docs", "--dry-run"])
+
+    assert exit_code == 0
+    assert embed_calls == []
+    out = capsys.readouterr().out
+    assert "would upsert" in out
+    assert "would upsert 0 vectors" not in out
