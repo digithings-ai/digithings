@@ -58,6 +58,7 @@ DigiIndex.add() — persists chunks + embeddings
   ▼ (at query time)
 query_index() router
   ├─ AzureAISearchBackend  (BM25 + vector natively, OData filters)
+  ├─ VectorizeBackend      (Cloudflare Vectorize v2 REST API, cosine, remote-only)
   ├─ ChromaBackend         (cosine ANN, Chroma where-clause filters)
   └─ in-memory stub        (substring; tests only)
   ▼
@@ -70,7 +71,7 @@ POST /query → QueryResponse
 
 ### Multi-backend strategy
 
-digisearch uses a **backend registry** pattern (`search/_stub.py`). Backends register as callables `(Query, index_name) -> SearchResponse | None`. The router tries them in registration order (Azure first, then Chroma). Returning `None` means "not configured here; try next." This lets the same codebase serve both an Azure-hosted enterprise deployment and a local Chroma-on-disk deployment with zero code changes — only environment variables differ.
+digisearch uses a **backend registry** pattern (`search/_stub.py`). Backends register as callables `(Query, index_name) -> SearchResponse | None`. The router tries them in registration order (Azure first, then Vectorize, then Chroma). Returning `None` means "not configured here; try next." This lets the same codebase serve an Azure-hosted enterprise deployment, a local Chroma-on-disk deployment, or a Cloudflare Vectorize remote-index deployment with zero code changes — only environment variables differ.
 
 The in-memory stub (`DIGISEARCH_ALLOW_STUB=1`) is permanently last and exists for unit tests only. Startup enforcement (`_require_real_search_backend`) prevents the stub from activating in production.
 
@@ -97,6 +98,8 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | `DigiIndex` abstract interface | Implemented | `indexes/base.py` |
 | `ChromaBackend` (persistent + in-memory) | Implemented | `indexes/backends/chroma.py` |
 | `AzureAISearchBackend` (`query_azure`) | Implemented | `indexes/backends/azure_search.py` |
+| `VectorizeBackend` (Cloudflare Vectorize v2 REST) | Implemented | `indexes/backends/vectorize.py` |
+| `MiniLMEmbedder` (local ONNX, 384-dim) | Implemented | `embedding/providers/minilm.py` |
 | `HippoRAGBackend`, `PageIndexBackend` | Experimental stubs | `indexes/backends/` |
 | `HybridSearcher` (RRF fusion) | Implemented | `search/hybrid.py` |
 | `Reranker` (Cohere, BGE) | Implemented | `search/reranker.py` |
@@ -167,7 +170,7 @@ Key request fields:
 | `format` | `str` | `default` \| `table` (markdown table in `response.formatted`) |
 | `workspace_id` | `str?` | Tenant/workspace isolation hint |
 
-Response includes `backend` field: `azure_ai_search` | `chroma` | `stub`.
+Response includes `backend` field: `vectorize` | `azure_ai_search` | `chroma` | `stub`.
 
 #### `POST /ingest`
 
@@ -319,7 +322,7 @@ SearchResponse
 ├── results: list[Result]
 ├── facets: dict[str, list[{value, count}]]?  # Azure facet counts
 ├── total_count: int?          # full match count when include_total_count=True
-└── backend: str?              # "azure_ai_search" | "chroma" | "stub"
+└── backend: str?              # "vectorize" | "azure_ai_search" | "chroma" | "stub"
 ```
 
 ### Standard JSON hit shape
@@ -423,7 +426,8 @@ digisearch/src/digisearch/
 │   ├── cache.py               # EmbeddingCache (SQLite, keyed by SHA-256 content hash)
 │   ├── batch.py               # BatchEmbedder (batch_size=100, retry, linear backoff)
 │   └── providers/
-│       └── openai.py          # OpenAIEmbedder (others: azure_openai, cohere, huggingface, ollama)
+│       ├── openai.py          # OpenAIEmbedder (others: azure_openai, cohere, huggingface, ollama)
+│       └── minilm.py          # MiniLMEmbedder (local ONNX, 384-dim; Vectorize's default embedder)
 │
 ├── embeddings/
 │   └── config.py              # EmbeddingModelSpec (model_id, dimensions, version)
@@ -433,6 +437,8 @@ digisearch/src/digisearch/
 │   └── backends/
 │       ├── chroma.py          # ChromaBackend (cosine HNSW, persistent or in-memory)
 │       ├── azure_search.py    # AzureAISearchBackend (query_azure, _build_odata_filter)
+│       ├── vectorize.py       # VectorizeBackend (Cloudflare Vectorize v2 REST API)
+│       ├── vectorize_errors.py # VectorizeBackendError (isolated so it survives a broken vectorize.py import)
 │       └── faiss.py           # FAISSBackend (stub — not registered for production)
 │
 ├── search/
@@ -537,9 +543,91 @@ query_index(query, index_name):
   # fall through to stub or empty
 ```
 
-Azure is registered first (preferred), Chroma second, stub last. Adding a new backend requires only calling `register_backend()` at import time. There is no configuration-driven selection — the first configured backend wins.
+Azure is registered first (preferred), then Vectorize, then Chroma, stub last. Adding a new backend requires only calling `register_backend()` at import time. There is no configuration-driven selection — the first configured backend wins.
 
-**Weakness:** if Azure is misconfigured (credentials present but wrong), the Azure backend raises, logs a warning, returns `None`, and silently falls through to Chroma. Operators may not notice that a production query is served by the wrong backend.
+**Weakness:** if Azure is misconfigured (credentials present but wrong), the Azure backend raises, logs a warning, returns `None`, and silently falls through to Chroma. Operators may not notice that a production query is served by the wrong backend. Vectorize is deliberately exempt from this fall-through — see below.
+
+#### Vectorize (remote index)
+
+`indexes/backends/vectorize.py` implements `DigiIndex` over the Cloudflare
+Vectorize v2 REST API. `search/_stub.py`'s `_vectorize_backend` activates it
+ahead of Chroma whenever `VECTORIZE_ACCOUNT_ID` and `VECTORIZE_API_TOKEN` are
+both set (non-empty after `.strip()`), and it is what the production
+Cloudflare Container uses (`frontend/digithings-stack-cloudflare/container/`
+unsets `CHROMA_PATH` and skips the Chroma seed once Vectorize is configured).
+
+It exists because Cloudflare Container disk is ephemeral: a container-local
+Chroma index has to be rebuilt from scratch on every cold boot. With Vectorize
+the container holds no corpus at all and only issues queries against the
+remote index that `scripts/vectorize_sync.py` maintains from an operator
+machine or CI.
+
+Two operational notes. First, upsert and query share one embedding model:
+`scripts/vectorize_sync.py` embeds with an explicit `MiniLMEmbedder()`, and
+`VectorizeBackend.query()` falls back to the same class (`MINILM_MODEL_ID =
+"all-MiniLM-L6-v2-384"`, 384 dimensions) as its process-wide default embedder
+whenever no `embedding_provider` is injected and `Query.embedding` is absent —
+this is also the model `ChromaBackend` embeds with internally, so a Chroma-built
+and a Vectorize-built index over the same corpus are directly comparable. The
+`embedding_model` stamp in vector metadata and the mismatch guard
+(`assert_index_model()`, which probes one existing vector before a sync and
+refuses to upsert under a different model) both live in `vectorize_sync.py`,
+not in `VectorizeBackend` itself — a chunk added through the generic
+`POST /ingest` → `route_add_chunks` path is not stamped or checked this way.
+
+Second, unlike `ChromaBackend.query`, which catches its errors and returns
+`[]`, a Vectorize failure propagates. `VectorizeBackend.query()` raises a plain
+`RuntimeError` on an HTTP error status or an HTTP-200-with-`success: false`
+body; `_vectorize_backend` then wraps *any* exception from that call —
+including an `ImportError` while importing `VectorizeBackend` itself — as
+`VectorizeBackendError` (defined in `vectorize_errors.py`, a separate module so
+the type stays importable even when `vectorize.py`'s own import fails).
+`VectorizeBackendError` is deliberately absent from `query_index()`'s
+`_BACKEND_ERRORS` tuple, so it is never swallowed and never falls through to
+Chroma: for a remote index, a silent empty result is indistinguishable to a
+user from "the docs do not mention that."
+
+Chunk text rides in vector metadata (`content`), because Vectorize returns
+only ids, scores and metadata on query — there is no document store behind
+this backend to reconstruct it from.
+
+Third, the index name is not a free choice. `_stub.py`'s `_vectorize_backend`
+passes digisearch's `index_name` straight into the Vectorize URL with no
+translation, so the Vectorize index **must be named exactly** what the
+digisearch server for that tenant is configured with — `DIGISEARCH_INDEX` /
+the `DIGI_TENANT_CORPUS_MAP` entry, both set in
+`frontend/digithings-stack-cloudflare/wrangler.toml`. Today that value is
+underscore-form (`digithings_docs`, `occ_help`) to match the hardcoded Chroma
+collection names in `container/seed_chroma.sh` — renaming either side without
+renaming the other breaks that pairing outright.
+
+**Verified 2026-08-11:** Cloudflare's docs give **advisory** naming guidance
+— [get-started/intro](https://developers.cloudflare.com/vectorize/get-started/intro/)
+states in prose that "a good index name is: a combination of lowercase
+and/or numeric ASCII characters, shorter than 32 characters, starts with a
+letter, and uses dashes (-) instead of spaces" — but no enforced charset or
+regex is published, and there is a real 64-byte length cap that both
+`digithings_docs` and `occ_help` clear. This is not a claim that underscores
+are documented as supported, and it is not a claim the docs are silent on
+the matter — both would be false. Empirically, underscore index
+names are accepted: `npx wrangler vectorize create digithings_docs
+--dimensions=384 --metric=cosine` and the equivalent call for `occ_help` both
+succeeded against the live account, and `npx wrangler vectorize list` shows
+both indexes at 384 dimensions, cosine metric. No rename of
+`DIGISEARCH_INDEX`, the corpus map, or the Chroma collection names is
+needed — `digithings_docs` / `occ_help` remain the single canonical name on
+both sides of the pairing.
+
+Fourth, `VectorizeBackend.query()` clamps `top_k` to `MAX_TOP_K` (50) and logs
+a warning when it does, but a caller paging through results with `page_size >
+50` (e.g. `digisearch_fetch_all`, see §Orchestrator dispatch pattern below)
+sees a short page and — for every other backend — correctly reads that as "no
+more results." Against Vectorize it is ambiguous: the page really might be the
+last one, or it might just be capped at 50. `api_orchestrator_invoke` sets
+`OrchestratorFetchAllData.possibly_truncated=True` when it detects this
+pattern so the caller can tell the two apart; it does not implement real
+pagination against Vectorize (that needs `Query.skip` support the backend
+does not have — a design decision, not fixed here).
 
 ### Embedding cache layer
 
@@ -569,7 +657,7 @@ RRF_score(rank, k=60) = 1 / (60 + rank)
 
 Default `alpha = 0.6` (60% weight on vector results). The RRF constant `k=60` is hardcoded and not configurable.
 
-**Important:** The `HybridSearcher` class is not what the production server actually uses. The server delegates to `query_index()` which calls the registered backends (Azure or Chroma) directly. Azure supports native hybrid (BM25 + vector) internally. Chroma does not support BM25 natively — the `HybridSearcher` would need to be wired at a higher level for Chroma-based hybrid. The current server uses `mode` as a passthrough hint to the backend, but Chroma only supports ANN (cosine distance) — `mode="keyword"` or `mode="hybrid"` on a Chroma backend falls back to vector-only.
+**Important:** The `HybridSearcher` class is not what the production server actually uses. The server delegates to `query_index()` which calls the registered backends (Azure, Vectorize, or Chroma) directly. Azure supports native hybrid (BM25 + vector) internally. Neither Chroma nor Vectorize supports BM25 natively — the `HybridSearcher` would need to be wired at a higher level for hybrid on either. The current server uses `mode` as a passthrough hint to the backend, but Chroma and Vectorize only support ANN (cosine distance) — `mode="keyword"` or `mode="hybrid"` on either backend falls back to vector-only.
 
 ### Orchestrator dispatch pattern
 
@@ -602,7 +690,7 @@ digisearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middlewa
 
 ### Multi-tenant isolation
 
-When `workspace_id` is set on `POST /query`, the server injects a mandatory structured filter clause (`workspace_id eq …`) into `Query.filters`. Chroma and stub backends apply this at query time; Azure receives the clause via structured filter → OData translation.
+When `workspace_id` is set on `POST /query`, the server injects a mandatory structured filter clause (`workspace_id eq …`) into `Query.filters`. Chroma and stub backends apply this at query time; Azure receives the clause via structured filter → OData translation. **Vectorize applies no filter at all** — `VectorizeBackend.query()` sends only `{vector, topK, returnMetadata, returnValues}` and does not consult `Query.filters`, so `workspace_id` isolation is not enforced for this backend today.
 
 Callers omitting `workspace_id` receive unscoped results (single-tenant default). Multi-tenant deployments should require `workspace_id` at the BFF layer.
 
@@ -726,7 +814,7 @@ The reranker is not wired into the production `POST /query` path. It is availabl
 
 ### Index backends (production inventory)
 
-**Production:** Chroma (local persistent or HTTP) and Azure AI Search only.
+**Production:** Chroma (local persistent or HTTP), Azure AI Search, and Cloudflare Vectorize (`VectorizeBackend`) — the production Cloudflare Container runs Vectorize exclusively (Chroma is unset once `VECTORIZE_ACCOUNT_ID`/`VECTORIZE_API_TOKEN` are present); Docker Compose deployments still default to Chroma.
 
 **Not in production:** `FAISSBackend` (`indexes/backends/faiss.py`) and `PineconeBackend` are unregistered stubs — do not enable without a new ADR and registry wiring.
 
@@ -815,6 +903,8 @@ docker compose --profile digisearch-mcp up
 |----------|---------|---------|
 | `CHROMA_PATH` | _(unset)_ | Path to persistent Chroma data directory; activates Chroma backend |
 | `CHROMA_HOST` | _(unset)_ | Chroma HTTP server host; activates Chroma backend (remote mode) |
+| `VECTORIZE_ACCOUNT_ID` | _(unset)_ | Cloudflare account id owning the Vectorize indexes; with `VECTORIZE_API_TOKEN`, activates Vectorize and takes priority over Chroma |
+| `VECTORIZE_API_TOKEN` | _(unset)_ | Cloudflare API token for the Vectorize v2 REST API |
 | `AZURE_SEARCH_ENDPOINT` | _(unset)_ | Azure AI Search service endpoint URL |
 | `AZURE_SEARCH_API_KEY` | _(unset)_ | Azure AI Search admin or query key |
 | `AZURE_SEARCH_INDEX_NAME` | _(unset)_ | Default Azure index name |
@@ -866,6 +956,7 @@ The current graph is minimal: `node_plan` validates input, `node_retrieve` calls
 
 - **Chroma:** route to a named collection per workspace (`{workspace_id}_{index_name}`) or inject `{"workspace_id": workspace_id}` as a mandatory `where` clause
 - **Azure:** inject an OData filter clause `(workspace_id eq '{workspace_id}')` for all queries
+- **Vectorize:** `VectorizeBackend.query()` sends no filter field today; post-filter matches by `metadata.workspace_id`, route to a per-workspace index, or adopt the Vectorize API's own metadata-filter support if applicable
 - **Stub:** filter post-retrieval by `chunk.metadata.get("workspace_id")`
 
 Without this, `workspace_id` is decorative.

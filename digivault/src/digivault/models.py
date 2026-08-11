@@ -6,7 +6,9 @@ service and MCP layers serialize these directly.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class LinkRef(BaseModel):
@@ -40,6 +42,53 @@ class Note(BaseModel):
     backlinks: tuple[str, ...] = Field(
         default=(), description="Names of notes that link to this note"
     )
+
+
+class NoteRow(BaseModel):
+    """A single row read from the Supabase notes table (``architecture_notes`` /
+    ``knowledge_notes``), returned by :meth:`SupabaseStore.list_notes` and consumed
+    by ``scripts/vectorize_sync.py``.
+
+    Deliberately not named ``Note``: that name is already taken by the on-disk
+    vault's note model above, whose shape (``name``, ``rel_path``, ``outlinks``,
+    ``backlinks``, ...) is unrelated to a raw Supabase row.
+
+    The table carries columns beyond the four below (``slug``, ``note_type``,
+    ``status``, ``tags``, ``summary``, ``wikilinks``, ``sources``, timestamps).
+    Extras are ignored rather than forbidden (the default for a bare
+    ``BaseModel``, same as :class:`Note` and :class:`LinkRef` above) — a normal
+    full-table row must validate, not crash, when it carries columns this model
+    doesn't need.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    vault_path: str = Field(
+        default="", description="Table's vault_path column; blank/missing rows are skipped"
+    )
+    title: str | None = Field(default=None, description="Note title column; may be null")
+    frontmatter: dict = Field(
+        default_factory=dict, description="Parsed frontmatter jsonb column; may be null"
+    )
+    body_markdown: str = Field(default="", description="Markdown body column; may be null/empty")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _null_columns_to_defaults(cls, data: Any) -> Any:
+        """Supabase returns SQL NULL, not absence, for an empty jsonb/text column.
+
+        Coerce those to this model's falsy defaults before field validation so a
+        null ``frontmatter``/``body_markdown``/``vault_path`` still validates
+        instead of raising — mirroring the ``row.get(...) or default`` pattern
+        this model replaces.
+        """
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        for key, default in (("vault_path", ""), ("frontmatter", {}), ("body_markdown", "")):
+            if data.get(key) is None:
+                data[key] = default
+        return data
 
 
 class ValidationIssue(BaseModel):
