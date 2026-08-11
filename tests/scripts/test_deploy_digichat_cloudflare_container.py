@@ -11,6 +11,7 @@ what this test actually exercises).
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
@@ -100,6 +101,52 @@ def test_the_deploy_step_uses_repo_secrets_not_hardcoded_credentials() -> None:
     )
     assert deploy_step["with"]["apiToken"] == "${{ secrets.CLOUDFLARE_API_TOKEN }}"
     assert deploy_step["with"]["accountId"] == "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+
+
+def test_the_deploy_step_pins_a_wrangler_version_that_supports_containers() -> None:
+    """wrangler-action's own default (no `wranglerVersion` given) installed a
+    hardcoded 3.90.0 on this workflow's first real run -- 3.x predates Cloudflare
+    Containers entirely and silently ignored the `[[containers]]` config instead
+    of failing, deploying only the Worker routing shell and never rebuilding the
+    actual Container image. Must match (or exceed) the floor the project's own
+    frontend/digichat-cloudflare/package.json declares."""
+    deploy_step = next(
+        s
+        for s in _deploy_job()["steps"]
+        if s.get("uses", "").startswith("cloudflare/wrangler-action")
+    )
+    pinned = deploy_step["with"]["wranglerVersion"]
+    assert pinned, "wranglerVersion must be set explicitly, not left to the action's default"
+
+    declared = json.loads(
+        (REPO_ROOT / "frontend" / "digichat-cloudflare" / "package.json").read_text(
+            encoding="utf-8"
+        )
+    )["devDependencies"]["wrangler"]
+    assert pinned == declared, (
+        f"workflow pins wrangler {pinned!r} but package.json declares {declared!r} -- "
+        "keep both in agreement so a local `npm ci` and the CI deploy resolve the same wrangler."
+    )
+
+
+def test_workspace_dependencies_are_installed_before_deploying() -> None:
+    """frontend/digichat-cloudflare has no lockfile of its own -- it's an npm
+    workspace under the root package-lock.json. Without a real `npm ci` at repo
+    root first, wrangler 4.x fails loudly trying to bundle
+    src/index.ts's `@cloudflare/containers` import (verified locally: `Could not
+    resolve "@cloudflare/containers"`) because node_modules was never populated."""
+    steps = _deploy_job()["steps"]
+    deploy_index = next(
+        i for i, s in enumerate(steps) if s.get("uses", "").startswith("cloudflare/wrangler-action")
+    )
+    install_step = next(
+        (s for s in steps[:deploy_index] if s.get("run", "").strip() == "npm ci"),
+        None,
+    )
+    assert install_step is not None, "no `npm ci` step found before the Deploy step"
+    # Gated the same as the deploy itself -- no reason to spend the install time
+    # (or trigger `cache: npm`'s restore) when the gate already decided to skip.
+    assert install_step["if"] == "steps.check.outputs.deploy == 'true'"
 
 
 def test_the_gate_reads_before_via_env_not_inline_interpolation() -> None:

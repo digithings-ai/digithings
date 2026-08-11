@@ -94,6 +94,26 @@ jobs:
             echo "deploy=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.deploy == 'true'
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install workspace dependencies
+        if: steps.check.outputs.deploy == 'true'
+        # frontend/digichat-cloudflare has no lockfile of its own -- it's an npm
+        # workspace under the root package-lock.json (see "workspaces" in the root
+        # package.json). `npm ci` must run at repo root so wrangler can resolve
+        # frontend/digichat-cloudflare/src/index.ts's `@cloudflare/containers`
+        # import when it bundles the Worker. Without this, wrangler 3.x (the
+        # version wrangler-action installed by default before this fix pinned
+        # wranglerVersion below) silently ignored `[[containers]]` and never tried
+        # to bundle that import at all; wrangler 4.x tries to build it for real and
+        # fails loudly with "Could not resolve '@cloudflare/containers'" if
+        # node_modules isn't there -- verified locally both ways.
+        run: npm ci
+
       - name: Deploy
         if: steps.check.outputs.deploy == 'true'
         uses: cloudflare/wrangler-action@v3
@@ -102,3 +122,11 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: frontend/digichat-cloudflare
           command: deploy
+          # wrangler-action's own default (no `wranglerVersion` given) installed a
+          # hardcoded 3.90.0 on its first real run here (#2199), silently ignoring
+          # this project's own `"wrangler": "^4.28.0"` devDependency -- 3.x predates
+          # Cloudflare Containers entirely, so it printed "Unexpected fields found
+          # in top-level field: containers" and deployed only the Worker routing
+          # shell, never rebuilding the actual Container image. Pin to the same
+          # range package.json declares so both installs agree on what's supported.
+          wranglerVersion: "^4.28.0"
