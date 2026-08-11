@@ -25,19 +25,29 @@ export DIGI_CONFIG_PATH="${DIGI_CONFIG_PATH:-/app/config}"
 export DIGI_PROJECT_CONFIG="${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}"
 export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"
 export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes}"
-# Trim whitespace with the same semantics as digisearch's Python side
-# (os.environ.get(...).strip(), see digisearch/src/digisearch/search/_stub.py)
-# so the shell's notion of "configured" can never disagree with Python's --
-# a lone space/newline from a mangled secret rollout must count as unconfigured
-# on both sides, or one side silently falls through to an also-unconfigured
-# Chroma and serves empty results with no error (see issue discussion).
-_digi_trim() {
-  printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
-}
+# "Is Vectorize configured?" must agree with digisearch's own Python check
+# (os.environ.get(name, "").strip() truthiness, see
+# digisearch/src/digisearch/search/_stub.py) byte-for-byte, or one side
+# silently falls through to an also-unconfigured Chroma and serves empty
+# results with no error (see issue discussion). A sed [[:space:]] rewrite
+# can only ever *approximate* str.strip() -- it is ASCII-whitespace-only
+# (or locale-dependent in ways that still don't match Python's Unicode
+# whitespace table, e.g. U+00A0 NBSP survives sed's trim but not Python's),
+# so the decision is delegated to python3 itself (already invoked below for
+# PEM validation), which makes the two checks identical by construction
+# instead of by approximation.
+#
+# Fail closed: if the python3 invocation errors, treat Vectorize as NOT
+# configured -- the same "unconfigured" default this script has always had
+# -- rather than risk skipping the Chroma seed on a value we could not
+# actually evaluate.
+if _digi_vectorize_check=$(python3 -c '
+import os
 
-_vectorize_account_trimmed=$(_digi_trim "${VECTORIZE_ACCOUNT_ID:-}")
-_vectorize_token_trimmed=$(_digi_trim "${VECTORIZE_API_TOKEN:-}")
-if [ -n "$_vectorize_account_trimmed" ] && [ -n "$_vectorize_token_trimmed" ]; then
+account = os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
+token = os.environ.get("VECTORIZE_API_TOKEN", "").strip()
+print("1" if (account and token) else "0")
+' 2>/dev/null) && [ "$_digi_vectorize_check" = "1" ]; then
   DIGI_VECTORIZE_ACTIVE=1
 else
   DIGI_VECTORIZE_ACTIVE=0
