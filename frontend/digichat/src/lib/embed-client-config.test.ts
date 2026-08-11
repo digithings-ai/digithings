@@ -108,3 +108,48 @@ describe("toEmbedClientConfig", () => {
     expect(cfg).not.toHaveProperty("activityDetail");
   });
 });
+
+describe("toEmbedClientConfig — showLanguageSelector", () => {
+  it("defaults to true when the registry entry doesn't set it", () => {
+    const registry = parseEmbedTenants(REGISTRY);
+    expect(toEmbedClientConfig(registry.get("digithings.ai")!).showLanguageSelector).toBe(true);
+  });
+
+  it("passes through an explicit false", () => {
+    const registry = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          attribution: false,
+          token: "t",
+          showLanguageSelector: false,
+        },
+      }),
+    );
+    expect(toEmbedClientConfig(registry.get("example.com")!).showLanguageSelector).toBe(false);
+  });
+
+  it("passes through an explicit true", () => {
+    const registry = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          attribution: false,
+          token: "t",
+          showLanguageSelector: true,
+        },
+      }),
+    );
+    expect(toEmbedClientConfig(registry.get("example.com")!).showLanguageSelector).toBe(true);
+  });
+});
+
+describe("DEFAULT_EMBED_TENANT_CONFIG", () => {
+  it("is false — an unresolved/gated tenant never shows it", () => {
+    expect(DEFAULT_EMBED_TENANT_CONFIG.showLanguageSelector).toBe(false);
+  });
+});

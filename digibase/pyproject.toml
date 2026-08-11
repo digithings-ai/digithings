@@ -26,6 +26,12 @@ otel = [
     "opentelemetry-instrumentation-fastapi>=0.45b0",
     "opentelemetry-exporter-otlp>=1.24.0",
 ]
+
+[dependency-groups]
+# Synced by default with plain `uv sync` (unlike [project.optional-dependencies], which
+# needs --extra/--all-extras) -- so these tools are always present in digibase's own venv
+# regardless of which extras a given `uv sync` invocation requests. Bounds match CLAUDE.md's
+# "Dependency version bounds": tools whose output gates CI are capped to their current major.
 dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "mypy>=2,<3"]
 
 [tool.setuptools.packages.find]

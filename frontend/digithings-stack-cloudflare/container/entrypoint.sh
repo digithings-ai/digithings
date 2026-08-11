@@ -1,7 +1,8 @@
 #!/bin/sh
 # Profile A stack entrypoint — start supervisord immediately (ports must open).
 # Cloudflare Containers probes :8000; blocking here causes error 1101 / port-not-ready.
-# OCC Chroma seed runs as a supervisord oneshot *before* digisearch (see supervisord.conf).
+# Chroma seed (digithings_docs + occ_help) runs as a supervisord oneshot *before*
+# digisearch (see supervisord.conf / seed_chroma.sh).
 #
 # CRITICAL (Firecracker): supervisord must log to files, NOT /dev/stdout — ENXIO otherwise.
 set -eu
@@ -24,7 +25,46 @@ export DIGI_CONFIG_PATH="${DIGI_CONFIG_PATH:-/app/config}"
 export DIGI_PROJECT_CONFIG="${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}"
 export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"
 export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes}"
-export CHROMA_PATH="$DATA_CHROMA"
+# "Is Vectorize configured?" must agree with digisearch's own Python check
+# (os.environ.get(name, "").strip() truthiness, see
+# digisearch/src/digisearch/search/_stub.py) byte-for-byte, or one side
+# silently falls through to an also-unconfigured Chroma and serves empty
+# results with no error (see issue discussion). A sed [[:space:]] rewrite
+# can only ever *approximate* str.strip() -- it is ASCII-whitespace-only
+# (or locale-dependent in ways that still don't match Python's Unicode
+# whitespace table, e.g. U+00A0 NBSP survives sed's trim but not Python's),
+# so the decision is delegated to python3 itself (already invoked below for
+# PEM validation), which makes the two checks identical by construction
+# instead of by approximation.
+#
+# Fail closed: if the python3 invocation errors, treat Vectorize as NOT
+# configured -- the same "unconfigured" default this script has always had
+# -- rather than risk skipping the Chroma seed on a value we could not
+# actually evaluate.
+if _digi_vectorize_check=$(python3 -c '
+import os
+
+account = os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
+token = os.environ.get("VECTORIZE_API_TOKEN", "").strip()
+print("1" if (account and token) else "0")
+' 2>/dev/null) && [ "$_digi_vectorize_check" = "1" ]; then
+  DIGI_VECTORIZE_ACTIVE=1
+else
+  DIGI_VECTORIZE_ACTIVE=0
+fi
+# Computed once here and exported so seed_chroma.sh / start_digisearch.sh
+# (both launched by supervisord below) read the same verdict instead of
+# re-deriving it and risking drift between the three scripts.
+export DIGI_VECTORIZE_ACTIVE
+
+# Vectorize is a remote index: exporting CHROMA_PATH would make _stub.py's
+# Chroma branch win and answer from an empty local index instead.
+if [ "$DIGI_VECTORIZE_ACTIVE" = "1" ]; then
+  unset CHROMA_PATH
+  echo "digithings-stack: Vectorize configured; skipping local chroma"
+else
+  export CHROMA_PATH="$DATA_CHROMA"
+fi
 export DIGIVAULT_ROOT="$DATA_VAULT"
 export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}"
 export DIGIKEY_BLOCKLIST_REDIS_URL="${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://127.0.0.1:6379/0}"
@@ -62,7 +102,9 @@ if [ "$pem_ok" -ne 1 ]; then
   fi
 fi
 
-# Copy vault seed notes (idempotent — do not overwrite operator edits).
+# Copy vault seed notes. Files named seed-*.md are always refreshed from the
+# image (dogfood corpus). Other filenames are copied only if missing so
+# operator / docs_onboard notes are never overwritten.
 for client_dir in /seed/vault/clients/*; do
   [ -d "$client_dir" ] || continue
   client=$(basename "$client_dir")
@@ -71,9 +113,16 @@ for client_dir in /seed/vault/clients/*; do
     [ -f "$f" ] || continue
     base=$(basename "$f")
     dest="$DATA_VAULT/clients/$client/$base"
-    if [ ! -f "$dest" ]; then
-      cp "$f" "$dest"
-    fi
+    case "$base" in
+      seed-*.md|seed-*.markdown)
+        cp "$f" "$dest"
+        ;;
+      *)
+        if [ ! -f "$dest" ]; then
+          cp "$f" "$dest"
+        fi
+        ;;
+    esac
   done
 done
 

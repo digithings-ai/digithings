@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.1.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.0.0...digichat-v1.1.0) (2026-08-11)
+
+
+### Features
+
+* **digichat:** add curated language list + browser detection ([#2103](https://github.com/digithings-ai/digithings/issues/2103)) ([996e2d7](https://github.com/digithings-ai/digithings/commit/996e2d78c48632fcc6de278fba48416a918944f7))
+* **digichat:** add LanguageSelect dropdown component ([#2103](https://github.com/digithings-ai/digithings/issues/2103)) ([7a344c6](https://github.com/digithings-ai/digithings/commit/7a344c692c891bacde2980089dfa3405c0f1bc9c))
+* **digichat:** forward response language as X-Digi-Language header ([#2103](https://github.com/digithings-ai/digithings/issues/2103)) ([cded3ac](https://github.com/digithings-ai/digithings/commit/cded3ac8c27e97b297f4b310ee1ec495ae08519b))
+* **digichat:** forward response language to both backend adapters ([#2103](https://github.com/digithings-ai/digithings/issues/2103)) ([e725130](https://github.com/digithings-ai/digithings/commit/e7251309e0aff10c5a96b3243040ffc791fbd229))
+* **digichat:** Foundry adapter prepends response-language directive ([#2103](https://github.com/digithings-ai/digithings/issues/2103)) ([14d6201](https://github.com/digithings-ai/digithings/commit/14d620157c585b970796b53f68abd703a82de2ce))
+* **digichat:** language selector — digigraph + Foundry ([#2103](https://github.com/digithings-ai/digithings/issues/2103)) ([e7a92c7](https://github.com/digithings-ai/digithings/commit/e7a92c7ddd75f53c49b63662a02f3ad177ee0015))
+* **digichat:** render language selector in embed header ([#2103](https://github.com/digithings-ai/digithings/issues/2103)) ([e54a99b](https://github.com/digithings-ai/digithings/commit/e54a99b128081a03e30fe724720d577ca3b8d491))
+* **digichat:** thread showLanguageSelector through tenant config ([#2103](https://github.com/digithings-ai/digithings/issues/2103)) ([cfe092f](https://github.com/digithings-ai/digithings/commit/cfe092f893c6f6491a0c9fb73b3570f07b8f92bc))
+
+
+### Bug Fixes
+
+* address CodeRabbit findings for promote [#2053](https://github.com/digithings-ai/digithings/issues/2053) ([#2061](https://github.com/digithings-ai/digithings/issues/2061)) ([d0f4270](https://github.com/digithings-ai/digithings/commit/d0f4270e2a6990205e15cd66cea90756da2d81a9))
+* **digichat:** admit embed BYOK ping without DigiChat session ([#2089](https://github.com/digithings-ai/digithings/issues/2089)) ([ef1f41f](https://github.com/digithings-ai/digithings/commit/ef1f41f5b93c6c9cc69156fc4acd880052d4f8e3))
+* **digichat:** allow local http parents for embed iframes ([#2096](https://github.com/digithings-ai/digithings/issues/2096)) ([287ab38](https://github.com/digithings-ai/digithings/commit/287ab387b55f6b86389821885eb15f02b007c36a))
+* **digichat:** full-height embed, OCC ready origin, parent theme sync ([#2082](https://github.com/digithings-ai/digithings/issues/2082)) ([e1288f2](https://github.com/digithings-ai/digithings/commit/e1288f2bf679b890beb765dc86b290cd4fc22b55))
+* **digichat:** read response language at send time, not mount ([#2103](https://github.com/digithings-ai/digithings/issues/2103)) ([7d6d8ee](https://github.com/digithings-ai/digithings/commit/7d6d8ee8a68ed55a724edf4e1d3e769487201755))
+* **digichat:** relax exact react/react-dom pin to fix duplicate install ([cdca505](https://github.com/digithings-ai/digithings/commit/cdca505f5fd056d46b0eda84d2a339c909279d57))
+* **digichat:** relax exact react/react-dom pin to fix duplicate install ([a26f8d4](https://github.com/digithings-ai/digithings/commit/a26f8d4c5849fd952a73ea8cf17b0ccd16ef5c6b))
+* **digichat:** session-only BYOK via inline terminal flow ([#2086](https://github.com/digithings-ai/digithings/issues/2086)) ([9ece6ee](https://github.com/digithings-ai/digithings/commit/9ece6ee3eac73f4b35c7db97aeda9810f94843cb))
+* **digichat:** style and right-align the LanguageSelect trigger ([#2103](https://github.com/digithings-ai/digithings/issues/2103)) ([eab55c1](https://github.com/digithings-ai/digithings/commit/eab55c1b2537a11a4ac384092733ab0763a9e851))
+* **digigraph:** preserve multi-turn chat history in workflow prompt ([#2101](https://github.com/digithings-ai/digithings/issues/2101)) ([9849a8f](https://github.com/digithings-ai/digithings/commit/9849a8f28ac397324530c785973c12cf80b2fe6f))
+* full-bleed digichat overlay + nav polish for /chat, /chat/occ ([#2185](https://github.com/digithings-ai/digithings/issues/2185)) ([183f2e0](https://github.com/digithings-ai/digithings/commit/183f2e0ff985b0e1a60fab3ed51033a50da5e37d))
+
 ## [1.0.0](https://github.com/digithings-ai/digithings/compare/digichat-v0.9.3...digichat-v1.0.0) (2026-08-10)
 
 

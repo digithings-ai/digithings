@@ -73,6 +73,18 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # The gate starts here. e03c7095 is develop at the time this script landed;
 # everything up to and including it predates the rule.
+#
+# Do NOT "fix" old orphaned PRs (e.g. #1265, #1247 -- merged in early July, long
+# before this gate existed) by advancing this value. Checked while investigating
+# exactly that on 2026-08-11: those two commits are not ancestors of e03c7095
+# *or* of any later commit on main's post-squash lineage (PR #2124 squash-merged
+# develop -> main and discarded prior commits as recognized ancestors), so no
+# baseline value skips them -- advancing the baseline to main's current tip
+# changed zero commits' status when tested against a live 111-commit range.
+# e03c7095 itself is still a correct, working ancestor of both main and develop
+# today and needs no change. Orphaned pre-gate commits like these need their own
+# hatch label (risk:low / reviewed:owner) applied directly -- there is no
+# baseline value that retroactively covers a severed-ancestry commit.
 BASELINE_SHA = "e03c7095"
 
 # Squash merges land as "subject (#1234)"; GitHub merge commits as
@@ -144,6 +156,38 @@ def associated_pr_number(sha: str) -> int | None:
 
 def is_merge_commit(parents: str) -> bool:
     return len(parents.split()) > 1
+
+
+def resolve_pr_number(
+    subject: str, sha: str, cache: dict[int, dict], invalid: set[int] | None = None
+) -> int | None:
+    """The PR whose review state judges this commit, or None if it has none.
+
+    `parse_pr_number`'s trailing "(#N)" match assumes a squash-merge PR
+    reference, but a commit subject can cite an issue number in the same
+    shape (e.g. "docs: foo (#2103)" naming issue #2103, not a PR) --
+    `_pr_review_state` on a number that isn't a real PR raises. Rather than
+    letting that crash the whole gate, fall back to the real commit -> PR
+    association, the same path unnumbered commits already use.
+
+    `invalid` memoizes numbers already found bogus this run, so a repo where
+    several commits cite the same non-PR number (e.g. a whole PR's worth of
+    commits referencing one tracking issue) doesn't re-attempt the same
+    failing `gh pr view` call per commit.
+    """
+    number = parse_pr_number(subject)
+    if number is not None and invalid is not None and number in invalid:
+        number = None
+    elif number is not None and number not in cache:
+        try:
+            cache[number] = _pr_review_state(number)
+        except subprocess.CalledProcessError:
+            if invalid is not None:
+                invalid.add(number)
+            number = None
+    if number is None:
+        number = associated_pr_number(sha)
+    return number
 
 
 def commits_in_range(base: str, head: str) -> list[dict]:
@@ -317,6 +361,7 @@ def main() -> int:
     checked: list[dict] = []
     unreviewed: list[dict] = []
     cache: dict[int, dict] = {}
+    invalid_numbers: set[int] = set()
 
     for commit in commits:
         short = commit["sha"][:8]
@@ -335,9 +380,7 @@ def main() -> int:
             checked.append(row)
             continue
 
-        number = parse_pr_number(commit["subject"])
-        if number is None:
-            number = associated_pr_number(commit["sha"])
+        number = resolve_pr_number(commit["subject"], commit["sha"], cache, invalid_numbers)
         if number is None:
             row.update(
                 reviewed=False,

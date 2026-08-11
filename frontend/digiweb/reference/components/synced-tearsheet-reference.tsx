@@ -31,5 +31,10 @@ function generate(n: number): TearsheetPoint[] {
 const EQUITY = generate(210);
 
 export function SyncedTearsheetReference() {
-  return <SyncedTearsheet equity={EQUITY} />;
+  return (
+    <SyncedTearsheet
+      equity={EQUITY}
+      ariaLabel="Synced tearsheet — cumulative equity and underwater drawdown, weekly demo series 2022–2026"
+    />
+  );
 }

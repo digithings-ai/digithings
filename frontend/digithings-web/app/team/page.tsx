@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Footer, Reveal } from "@digithings/web";
-import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
 import { PageHead } from "../_company/prose";
+import { ContactMailto } from "@/components/ContactMailto";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
@@ -141,12 +142,9 @@ export default function TeamPage() {
               <Link className="btn btn-ghost" href="/services">
                 View services
               </Link>
-              <a
-                className="btn btn-ghost"
-                href={`mailto:${DT_CONTACT_EMAIL}?subject=digithings%20inquiry`}
-              >
+              <ContactMailto className="btn btn-ghost" subject="digithings%20inquiry">
                 Contact digithings
-              </a>
+              </ContactMailto>
             </div>
           </div>
         </section>

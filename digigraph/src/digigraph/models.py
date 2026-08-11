@@ -131,6 +131,13 @@ class WorkflowRequest(BaseModel):
         None,
         description="Optional research system prompt from DIGI_TENANT_CORPUS_MAP.",
     )
+    response_language: str | None = Field(
+        None,
+        description=(
+            "Per-request response language code (X-Digi-Language). One of the curated "
+            "codes in digigraph.languages.LANGUAGE_NAMES; unrecognized values are ignored."
+        ),
+    )
     evidence_tier_preference: list[str] | None = Field(
         None,
         description="Preferred evidence_tier values (peer_reviewed, working_paper, …) added as a filter.",

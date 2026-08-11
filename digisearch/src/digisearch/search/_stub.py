@@ -1,8 +1,14 @@
 """Search index router with pluggable backend registry (DESLOP-016 / SIMP-021).
 
-Backends are tried in registration order. Azure/Chroma return :class:`SearchResponse`
-when configured. In-memory stub runs only when ``DIGISEARCH_ALLOW_STUB=1`` (tests);
-stub branches are intentional fail-closed test hooks, not dead code.
+Backends are tried in registration order: Azure, then Vectorize, then Chroma.
+Vectorize/Azure/Chroma return :class:`SearchResponse` when configured. Vectorize is
+the authoritative remote index once configured, so a failure there raises
+``VectorizeBackendError`` (deliberately not a member of ``_BACKEND_ERRORS``) which
+propagates out of :func:`query_index` instead of falling through to Chroma and
+silently answering from a different corpus. Azure/Chroma failures still fall
+through on error -- they are optional local backends, not authoritative ones.
+In-memory stub runs only when ``DIGISEARCH_ALLOW_STUB=1`` (tests); stub branches
+are intentional fail-closed test hooks, not dead code.
 """
 
 from __future__ import annotations
@@ -13,7 +19,8 @@ import time
 from typing import Callable
 
 from digisearch.core.models import Chunk, Query, SearchResponse
-from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB
+from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB, BACKEND_VECTORIZE
+from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +55,44 @@ def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
     except _BACKEND_ERRORS as exc:
         logger.warning("Azure backend error: %s", exc)
         return None
+
+
+@register_backend
+def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
+    """Cloudflare Vectorize backend. Active when VECTORIZE_ACCOUNT_ID + VECTORIZE_API_TOKEN are set.
+
+    Vectorize is the authoritative remote index once configured: any failure here
+    (HTTP error, application-level failure, missing dependency) is wrapped as
+    `VectorizeBackendError` and re-raised. That type is deliberately absent from
+    `_BACKEND_ERRORS`, so `query_index` cannot catch it and fall through to Chroma --
+    a configured, failing remote index must never be answered from a different
+    corpus with no error surfaced to the caller.
+
+    The `VectorizeBackend` import itself lives inside the `try` (not just the query
+    call) so an `ImportError` there -- a missing dependency, a broken transitive
+    import -- is wrapped the same as every other failure. `VectorizeBackendError` is
+    imported at module level from `vectorize_errors` (not from `vectorize` itself)
+    precisely so it stays available to wrap that failure: a failed
+    `from vectorize import VectorizeBackend, VectorizeBackendError` binds neither
+    name, so referencing `VectorizeBackendError` in the `except` clause would raise
+    `UnboundLocalError` instead if it were imported from the same failing module.
+    """
+    account_id = os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
+    api_token = os.environ.get("VECTORIZE_API_TOKEN", "").strip()
+    if not account_id or not api_token:
+        return None
+
+    try:
+        from digisearch.indexes.backends.vectorize import VectorizeBackend
+
+        backend = VectorizeBackend(index_name, account_id=account_id, api_token=api_token)
+        results = backend.query(query)
+    except Exception as exc:
+        # str(exc) carries the underlying failure detail (e.g. "vectorize query
+        # failed (500): boom"); VectorizeBackend never puts the API token in a
+        # raised message, so re-raising it here cannot leak one either.
+        raise VectorizeBackendError(str(exc)) from exc
+    return SearchResponse(results=list(results), facets=None, backend=BACKEND_VECTORIZE)
 
 
 @register_backend
@@ -172,12 +217,25 @@ def _stub_add_chunks(index_name: str, chunks: list[Chunk]) -> None:
 
 
 def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
-    """Route ingest to Chroma when configured; stub only when DIGISEARCH_ALLOW_STUB=1.
+    """Route ingest to Vectorize when configured, else Chroma; stub only when
+    DIGISEARCH_ALLOW_STUB=1.
 
-    Returns backend id (``chroma`` / ``stub``) or raises when no backend is available.
+    Returns backend id (``vectorize`` / ``chroma`` / ``stub``) or raises when no
+    backend is available.
     """
     if not chunks:
         return None
+
+    vectorize_account = os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
+    vectorize_token = os.environ.get("VECTORIZE_API_TOKEN", "").strip()
+    if vectorize_account and vectorize_token:
+        from digisearch.indexes.backends.vectorize import VectorizeBackend
+
+        backend = VectorizeBackend(
+            index_name, account_id=vectorize_account, api_token=vectorize_token
+        )
+        backend.add(chunks)
+        return BACKEND_VECTORIZE
 
     chroma_path = os.environ.get("CHROMA_PATH")
     chroma_host = os.environ.get("CHROMA_HOST")
@@ -232,7 +290,7 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
 
 
 def add_chunks(index_name: str, chunks: list[Chunk]) -> None:
-    """Add chunks via :func:`route_add_chunks` (Chroma or stub)."""
+    """Add chunks via :func:`route_add_chunks` (Vectorize, Chroma, or stub)."""
     route_add_chunks(index_name, chunks)
 
 

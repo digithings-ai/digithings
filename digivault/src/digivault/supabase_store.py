@@ -22,7 +22,7 @@ from typing import (  # score:allow untyped any — Supabase client/response sha
 from pydantic import BaseModel, Field
 
 from digivault import frontmatter as _fm
-from digivault.models import VaultConfig
+from digivault.models import NoteRow, VaultConfig
 from digivault.vault import Vault
 
 DEFAULT_TABLE = "architecture_notes"
@@ -123,6 +123,42 @@ class SupabaseStore:
             body = str(row.get("body_markdown") or "")
             pairs.append((f"{vault_path}.md", _fm.dump_frontmatter(frontmatter, body)))
         return pairs
+
+    def list_notes(
+        self,
+        *,
+        path_prefix: str | None = None,
+        page_size: int = 500,
+    ) -> list[NoteRow]:
+        """Every note under ``path_prefix``, paginated.
+
+        ``sources()`` cannot be used for this: it selects the whole table with no
+        prefix filter and no pagination, so it silently truncates at PostgREST's
+        server-side row cap. This pages explicitly with ``.range()`` and stops on
+        the first short page.
+        """
+        if page_size <= 0:
+            raise ValueError(f"page_size must be positive, got {page_size}")
+        prefix = (path_prefix or "").strip().strip("/")
+        out: list[NoteRow] = []
+        start = 0
+        while True:
+            query = self._client.table(self._table).select(_SELECT)
+            if prefix:
+                query = query.like("vault_path", f"{prefix}%")
+            page = query.order("vault_path").range(start, start + page_size - 1).execute()
+            rows = list(getattr(page, "data", None) or [])
+            for row in rows:
+                note = NoteRow.model_validate(row)
+                vault_path = note.vault_path.strip()
+                if not vault_path:
+                    continue
+                if prefix and vault_path != prefix and not vault_path.startswith(prefix + "/"):
+                    continue
+                out.append(note)
+            if len(rows) < page_size:
+                return out
+            start += page_size
 
     def load_vault(self, *, config: VaultConfig | None = None) -> Vault:
         """Materialize a read-only :class:`Vault` from the table."""

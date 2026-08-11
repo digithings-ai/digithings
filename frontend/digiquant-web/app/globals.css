@@ -157,6 +157,11 @@ html {
 
 /* Olympus CTA (NavShell sheet slot): real Olympus mark + label */
 .olympus-cta { display: inline-flex; align-items: center; gap: 0.45rem; }
+/* Desktop tail twin (SiteNav.tsx) — plain icon + label in the theme's own ink
+   tone, no `.btn-primary` fill. Same treatment as digithings.ai's
+   `.dt-nav-chat-cta`. */
+.dq-nav-olympus-cta { color: var(--ink); font-size: 0.9rem; font-weight: 500; text-decoration: none; border: 1px solid var(--hair-2); border-radius: 8px; padding: 0.38rem 0.75rem; background: transparent; opacity: 0.92; transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease); }
+.dq-nav-olympus-cta:hover { opacity: 1; border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 6%, transparent); }
 .olympus-mark { transform-origin: 50% 50%; }
 /* mark strokes are fully drawn at rest; the Open-Olympus button replays the
    dashboard's loader (stroke-draw + scale pulse) on hover. */

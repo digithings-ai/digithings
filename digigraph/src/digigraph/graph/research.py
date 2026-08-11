@@ -12,6 +12,7 @@ from typing import Any
 from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.filter_hints import extract_filter_hints
 from digigraph.graph.state import WorkflowState
+from digigraph.languages import resolve_language_directive
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
@@ -409,7 +410,13 @@ def _run_document_rag_path(
                 continue
             if _allowed_names is not None and tool_name not in _allowed_names:
                 continue
+            # Bound prefetch recall so a tiny seed corpus does not dump the whole
+            # index into every turn (default digisearch top_k=10 / vault limit=7).
             args: dict[str, Any] = {"query": q}
+            if tool_name in ("digisearch", "digisearch_fetch_all"):
+                args["top_k"] = 4
+            elif tool_name == "digivault_search_notes":
+                args["limit"] = 3
             stream_callback("tool_call", {"name": tool_name, "arguments": args})
             result = execute_search(tool_name, args)
             payload = (
@@ -652,6 +659,10 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
     if override_prompt and str(override_prompt).strip():
         system_prompt = str(override_prompt).strip()
     is_document_mode = system_prompt != RESEARCH_SYSTEM
+
+    language_directive = resolve_language_directive(state.get("response_language"))
+    if language_directive:
+        system_prompt = f"{system_prompt}\n\n{language_directive}"
 
     if is_document_mode and _digisearch_available():
         try:

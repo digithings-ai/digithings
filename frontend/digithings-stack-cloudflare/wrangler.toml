@@ -29,7 +29,7 @@ custom_domain = true
 class_name = "DigiStackContainer"
 # Build context is monorepo root (two levels up from this package).
 image = "../../Dockerfile.digithings-stack-cloudflare"
-max_instances = 3
+max_instances = 5
 # Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
 instance_type = "standard-2"
 
@@ -52,6 +52,8 @@ new_sqlite_classes = ["DigiStackContainer"]
 #   DIGIKEY_ADMIN_TOKEN       # optional; for key issue / ops
 #   GROQ_API_KEY / OPENROUTER_API_KEY / OPENAI_API_KEY  (as needed by LiteLLM)
 #   LITELLM_PROXY_API_KEY     # optional shared proxy key
+#   VECTORIZE_ACCOUNT_ID      # Cloudflare account id owning the Vectorize indexes
+#   VECTORIZE_API_TOKEN       # Vectorize access; prefer a read-scoped token if available
 #
 # After deploy, retarget digichat Worker secrets:
 #   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
@@ -80,4 +82,4 @@ DIGIVAULT_ROOT = "/data/vault"
 DIGIKEY_DATABASE_URL = "sqlite:////data/digikey.db"
 DIGISEARCH_INDEX = "digithings_docs"
 # Defense-in-depth corpus map (headers from digichat still win).
-DIGI_TENANT_CORPUS_MAP = "{\"occ\":{\"digisearchIndex\":\"occ_help\",\"vaultPathPrefix\":\"clients/online-compliance-center\"}}"
+DIGI_TENANT_CORPUS_MAP = "{\"digithings\":{\"digisearchIndex\":\"digithings_docs\",\"vaultPathPrefix\":\"clients/digithings\"},\"occ\":{\"digisearchIndex\":\"occ_help\",\"vaultPathPrefix\":\"clients/online-compliance-center\"}}"

@@ -33,6 +33,7 @@ export type EmbedTenantClientConfig = {
   showByok?: boolean;
   layout?: "page" | "embed";
   llmAccess?: EmbedLlmAccess;
+  showLanguageSelector?: boolean;
 };
 
 /** Legacy defaults — deliberately the *gated* configuration, so a slow or
@@ -45,6 +46,7 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   attribution: false,
   showByok: false,
   layout: "embed",
+  showLanguageSelector: false,
 };
 
 /** Registry entry → client-safe config. Copies declared fields only; `token`
@@ -64,6 +66,10 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     showByok: cfg.showByok ?? false,
     layout: cfg.layout ?? "embed",
     llmAccess: cfg.llmAccess,
+    // Default ON for any real, registered tenant — the opposite default from
+    // showByok, by product decision (#2103). DEFAULT_EMBED_TENANT_CONFIG
+    // above (the unresolved/gated fallback) stays false.
+    showLanguageSelector: cfg.showLanguageSelector ?? true,
   };
 }
 
