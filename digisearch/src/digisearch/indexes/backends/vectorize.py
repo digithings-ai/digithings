@@ -89,8 +89,14 @@ class VectorizeBackend(DigiIndex):
                         # float(v) guards against a numpy dtype (e.g. float32) reaching
                         # json.dumps — Chunk.embedding is typed list[float], but that is
                         # not runtime-enforced, and non-plain floats raise TypeError here.
-                        "values": [float(v) for v in (c.embedding or [])],
-                        "metadata": {"doc_id": c.doc_id, **dict(c.metadata)},
+                        # Iterate the embedding directly (never `or []`) — the filter
+                        # above already guarantees c.embedding is not None, and `or`
+                        # would truthiness-check it first, which raises ValueError for
+                        # a numpy array with more than one element.
+                        "values": [float(v) for v in c.embedding],
+                        # doc_id last so the canonical value always wins over a
+                        # caller-supplied metadata["doc_id"].
+                        "metadata": {**dict(c.metadata), "doc_id": c.doc_id},
                     }
                 )
                 for c in batch

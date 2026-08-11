@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import numpy as np
 import pytest
 from digisearch.core.models import Chunk
 from digisearch.indexes.backends.vectorize import VectorizeBackend
@@ -85,3 +86,44 @@ def test_add_empty_is_a_noop() -> None:
     post = _RecordingPost()
     VectorizeBackend("i", account_id="a", api_token="t", http_post=post).add([])
     assert post.calls == []
+
+
+@pytest.mark.unit
+def test_add_accepts_numpy_array_embedding() -> None:
+    post = _RecordingPost()
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    chunk = Chunk(
+        id="c0",
+        content="x",
+        doc_id="d1",
+        embedding=np.array([0.1, 0.2, 0.3], dtype=np.float32),
+        metadata={},
+    )
+    backend.add([chunk])
+    assert len(post.calls) == 1
+    _, _, body, _ = post.calls[0]
+    lines = [ln for ln in body.decode().splitlines() if ln.startswith('{"id"')]
+    assert len(lines) == 1
+    parsed = json.loads(lines[0])
+    # json.loads yields Python floats; re-encoding must succeed and every value
+    # must be a genuine Python float, not a numpy scalar hiding behind __float__.
+    assert json.dumps(parsed)
+    assert all(type(v) is float for v in parsed["values"])
+
+
+@pytest.mark.unit
+def test_add_keeps_canonical_doc_id_over_spoofed_metadata() -> None:
+    post = _RecordingPost()
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    chunk = Chunk(
+        id="c0",
+        content="x",
+        doc_id="real-doc-id",
+        embedding=[0.1, 0.2],
+        metadata={"doc_id": "spoofed-doc-id"},
+    )
+    backend.add([chunk])
+    _, _, body, _ = post.calls[0]
+    lines = [ln for ln in body.decode().splitlines() if ln.startswith('{"id"')]
+    parsed = json.loads(lines[0])
+    assert parsed["metadata"]["doc_id"] == "real-doc-id"
