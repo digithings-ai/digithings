@@ -1356,11 +1356,8 @@ dev = [
     { name = "langgraph" },
     { name = "mcp" },
     { name = "pdfplumber" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
     { name = "python-docx" },
     { name = "python-json-logger" },
-    { name = "ruff" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -1386,6 +1383,13 @@ server = [
     { name = "python-json-logger" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -1416,16 +1420,20 @@ requires-dist = [
     { name = "pdfplumber", marker = "extra == 'ingestion'", specifier = ">=0.10" },
     { name = "polars", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4,<8" },
     { name = "python-docx", marker = "extra == 'ingestion'", specifier = ">=1.0" },
     { name = "python-json-logger", marker = "extra == 'server'", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
     { name = "typer", marker = "extra == 'server'", specifier = ">=0.12" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.30" },
 ]
 provides-extras = ["server", "chroma", "embedding", "azure", "ingestion", "agent", "edgar-corpus", "dev", "otel", "all"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "pytest-cov", specifier = ">=4,<8" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "digiskills"

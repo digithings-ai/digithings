@@ -53,13 +53,20 @@ edgar-corpus = ["datasets>=3.0"]
 # dev folds in [server] + [ingestion] so every CI/dev install (and pip-audit's
 # [dev] row) exercises and audits the full shipped surface, not just the light
 # base. Keep this in sync when adding runtime/parser deps.
-dev = ["digisearch[server]", "digisearch[ingestion]", "pytest>=8,<10", "pytest-cov>=4,<8", "ruff>=0.16,<0.17", "langgraph>=0.2"]
+dev = ["digisearch[server]", "digisearch[ingestion]", "langgraph>=0.2"]
 otel = ["digibase[otel]"]
 all = ["digisearch[server]", "digisearch[chroma]", "digisearch[embedding]", "digisearch[azure]", "digisearch[ingestion]", "digisearch[agent]"]
 
 [project.scripts]
 digisearch = "digisearch.cli:main"
 digisearch-worker = "digisearch.ingest_worker:main"
+
+[dependency-groups]
+# Synced by default with plain `uv sync` (unlike [project.optional-dependencies], which
+# needs --extra/--all-extras) -- so these tools are always present in digisearch's own venv
+# regardless of which extras a given `uv sync` invocation requests. Bounds match CLAUDE.md's
+# "Dependency version bounds": tools whose output gates CI are capped to their current major.
+dev = ["pytest>=8,<10", "pytest-cov>=4,<8", "ruff>=0.16,<0.17"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
