@@ -155,6 +155,111 @@ def test_contentless_operation_gets_its_own_segment(tmp_path: Path) -> None:
     assert any(label.endswith("GET /b/full") for label in labels)
 
 
+def test_tags_with_unterminated_fence_does_not_swallow_next_operations(
+    tmp_path: Path,
+) -> None:
+    """Finding 1: ``tags`` is an ordinary JSON string list, not "prose" — an unbalanced
+    fence embedded in a tag must not swallow every following operation, exactly like
+    the same hazard in ``description`` (see the fence test above)."""
+    spec = {
+        "paths": {
+            "/a": {"get": {"tags": ["x\n\n```json\nunterminated"]}},
+            "/b": {"post": {}},
+            "/c": {"get": {}},
+        }
+    }
+    md = openapi_to_markdown(_write(tmp_path, "spec.json", spec), note_type="api_reference")
+    labels = [s.label for s in heading_segments(md)]
+    assert len(labels) == 4
+    assert any(label.endswith("GET /a") for label in labels)
+    assert any(label.endswith("POST /b") for label in labels)
+    assert any(label.endswith("GET /c") for label in labels)
+
+
+def test_operation_id_with_unterminated_fence_does_not_swallow_next_operations(
+    tmp_path: Path,
+) -> None:
+    """Finding 1: same hazard via ``operationId``."""
+    spec = {
+        "paths": {
+            "/a": {"get": {"operationId": "op\n\n```json\nunterminated"}},
+            "/b": {"post": {}},
+            "/c": {"get": {}},
+        }
+    }
+    md = openapi_to_markdown(_write(tmp_path, "spec.json", spec), note_type="api_reference")
+    labels = [s.label for s in heading_segments(md)]
+    assert len(labels) == 4
+    assert any(label.endswith("GET /a") for label in labels)
+    assert any(label.endswith("POST /b") for label in labels)
+    assert any(label.endswith("GET /c") for label in labels)
+
+
+def test_parameter_name_with_unterminated_fence_does_not_swallow_next_operations(
+    tmp_path: Path,
+) -> None:
+    """Finding 1: same hazard via a parameter's ``name``."""
+    spec = {
+        "paths": {
+            "/a": {
+                "get": {
+                    "parameters": [{"name": "x\n\n```json\nunterminated", "in": "query"}],
+                }
+            },
+            "/b": {"post": {}},
+            "/c": {"get": {}},
+        }
+    }
+    md = openapi_to_markdown(_write(tmp_path, "spec.json", spec), note_type="api_reference")
+    labels = [s.label for s in heading_segments(md)]
+    assert len(labels) == 4
+    assert any(label.endswith("GET /a") for label in labels)
+    assert any(label.endswith("POST /b") for label in labels)
+    assert any(label.endswith("GET /c") for label in labels)
+
+
+def test_tags_with_heading_does_not_hijack_structure(tmp_path: Path) -> None:
+    """Finding 1 (heading-hijack variant): a heading embedded in a ``tags`` entry must
+    not become a split point that corrupts breadcrumbs for following operations."""
+    spec = {
+        "paths": {
+            "/a": {"get": {"tags": ["x\n\n# Sneaky via tags\n\nmore"]}},
+            "/b": {"post": {}},
+        }
+    }
+    md = openapi_to_markdown(_write(tmp_path, "spec.json", spec), note_type="api_reference")
+    segments = heading_segments(md)
+    labels = [s.label for s in segments]
+    assert len(labels) == 3
+    assert not any("Sneaky via tags" in label for label in labels)
+    assert any(label.endswith("GET /a") for label in labels)
+    assert any(label.endswith("POST /b") for label in labels)
+    # The words survive even though the heading marker is neutralized.
+    assert any("Sneaky via tags" in s.text for s in segments)
+
+
+def test_fenced_code_is_not_escaped_inside_balanced_fence(tmp_path: Path) -> None:
+    """Finding 2: ``_sanitize_free_text`` must not escape a ``#`` that sits inside a
+    balanced fenced code block — it can't act as a split point there anyway, because
+    the downstream segmenter is itself fence-aware, and escaping it corrupts code that
+    should render verbatim."""
+    spec = {
+        "paths": {
+            "/a": {
+                "get": {
+                    "description": (
+                        "Example:\n\n```python\n# This is a comment at line start\n"
+                        "x = 1\n```\n\nDone."
+                    )
+                }
+            }
+        }
+    }
+    md = openapi_to_markdown(_write(tmp_path, "spec.json", spec), note_type="api_reference")
+    assert "# This is a comment at line start" in md
+    assert "\\# This is a comment at line start" not in md
+
+
 def test_array_type_schema_renders_readably(tmp_path: Path) -> None:
     """Finding 4: OpenAPI 3.1 array-type schemas (e.g. ``["string", "null"]``) must
     not render as a Python list repr."""

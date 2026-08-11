@@ -33,10 +33,9 @@ _FENCE_LINE = re.compile(r"^(`{3,}|~{3,})")
 def _sanitize_free_text(text: str) -> str:
     """Escape markdown structure hazards in spec-author-supplied free text.
 
-    ``openapi_to_markdown`` embeds spec-author text (summary, description) verbatim
-    into a markdown document that ``heading_segments`` then parses for its own
-    section boundaries. Left unescaped, that text can hijack the document's
-    structure two ways:
+    ``openapi_to_markdown`` embeds spec-author text verbatim into a markdown document
+    that ``heading_segments`` then parses for its own section boundaries. Left
+    unescaped, that text can hijack the document's structure two ways:
 
     - An ATX heading line (``# ...`` .. ``###### ...``) becomes a spurious split
       point, stealing the rest of the enclosing operation's body into its own
@@ -47,17 +46,21 @@ def _sanitize_free_text(text: str) -> str:
 
     This function neutralizes both without dropping any words: heading markers are
     escaped in place (the line no longer starts with ``#``, but its text survives),
-    and any fence left open by the end of the text is closed.
+    and any fence left open by the end of the text is closed. Heading escaping is
+    fence-aware: a line inside a *balanced* fenced region is never touched, because
+    it cannot act as a split point there anyway (the downstream segmenter is itself
+    fence-aware) and escaping it would corrupt code meant to render verbatim.
     """
     if not text:
         return text
-    escaped = _ATX_HEADING_START.sub(lambda m: "\\" + m.group(1) + m.group(2), text)
     fence_char = ""
     fence_len = 0
     in_fence = False
-    for line in escaped.split("\n"):
+    out_lines: list[str] = []
+    for line in text.split("\n"):
         stripped = line.lstrip()
         if in_fence:
+            out_lines.append(line)
             candidate = _FENCE_LINE.match(stripped)
             if (
                 candidate is not None
@@ -73,20 +76,39 @@ def _sanitize_free_text(text: str) -> str:
             in_fence = True
             fence_char = opener.group(1)[0]
             fence_len = len(opener.group(1))
+            out_lines.append(line)
+            continue
+        out_lines.append(_ATX_HEADING_START.sub(lambda m: "\\" + m.group(1) + m.group(2), line))
+    escaped = "\n".join(out_lines)
     if in_fence:
         escaped = f"{escaped}\n{fence_char * fence_len}"
     return escaped
+
+
+def _safe(value: object) -> str:
+    """Sanitize any spec-author-supplied value before it is embedded in markdown.
+
+    This is the single choke point every interpolation site in this module must route
+    through — not just the "prose" fields (``summary``, ``description``). ``tags``,
+    ``operationId``, a parameter's ``name``/``in``, a media-type key, a schema name
+    derived from ``$ref``, ``info.title``, and the route string are all ordinary JSON
+    strings that can legally contain an embedded newline, and are therefore exactly as
+    capable of hijacking the document's structure as free-form prose is. Calling
+    ``str(value)`` directly at a new interpolation site — instead of ``_safe(value)`` —
+    is what left that gap open the first time.
+    """
+    return _sanitize_free_text(str(value))
 
 
 def _schema_name(schema: dict[str, Any]) -> str:
     """Readable name for a schema node: the $ref tail, or its declared type."""
     ref = schema.get("$ref")
     if isinstance(ref, str):
-        return ref.rsplit("/", 1)[-1]
+        return _safe(ref.rsplit("/", 1)[-1])
     declared = schema.get("type")
     if isinstance(declared, list):
-        return " | ".join(str(t) for t in declared) if declared else "object"
-    return str(declared) if declared else "object"
+        return _safe(" | ".join(str(t) for t in declared)) if declared else "object"
+    return _safe(declared) if declared else "object"
 
 
 def _operation_lines(route: str, method: str, operation: dict[str, Any]) -> list[str]:
@@ -94,7 +116,13 @@ def _operation_lines(route: str, method: str, operation: dict[str, Any]) -> list
     # The "Endpoint:" line is unconditional: it guarantees every operation section
     # has body content beyond its heading line, so heading_segments never treats it
     # as a contentless stub and merges it into a neighbouring operation (finding 3).
-    lines = [f"## {method.upper()} {route}", "", f"Endpoint: {method.upper()} {route}", ""]
+    safe_route = _safe(route)
+    lines = [
+        f"## {method.upper()} {safe_route}",
+        "",
+        f"Endpoint: {method.upper()} {safe_route}",
+        "",
+    ]
     summary = _sanitize_free_text(str(operation.get("summary") or "").strip())
     if summary:
         lines.extend([f"**{summary}**", ""])
@@ -103,10 +131,10 @@ def _operation_lines(route: str, method: str, operation: dict[str, Any]) -> list
         lines.extend([detail, ""])
     tags = operation.get("tags")
     if isinstance(tags, list) and tags:
-        lines.extend([f"Tags: {', '.join(str(t) for t in tags)}", ""])
+        lines.extend([f"Tags: {_safe(', '.join(str(t) for t in tags))}", ""])
     operation_id = operation.get("operationId")
     if operation_id:
-        lines.extend([f"Operation ID: `{operation_id}`", ""])
+        lines.extend([f"Operation ID: `{_safe(operation_id)}`", ""])
 
     parameters = operation.get("parameters")
     if isinstance(parameters, list) and parameters:
@@ -117,8 +145,9 @@ def _operation_lines(route: str, method: str, operation: dict[str, Any]) -> list
             schema = parameter.get("schema")
             kind = _schema_name(schema) if isinstance(schema, dict) else "object"
             required = " (required)" if parameter.get("required") else ""
-            location = parameter.get("in", "query")
-            lines.append(f"- `{parameter.get('name', '?')}` in {location}: {kind}{required}")
+            name = _safe(parameter.get("name", "?"))
+            location = _safe(parameter.get("in", "query"))
+            lines.append(f"- `{name}` in {location}: {kind}{required}")
         lines.append("")
 
     body = operation.get("requestBody")
@@ -128,7 +157,8 @@ def _operation_lines(route: str, method: str, operation: dict[str, Any]) -> list
             for media_type, media in sorted(content.items()):
                 schema = media.get("schema") if isinstance(media, dict) else None
                 if isinstance(schema, dict):
-                    lines.append(f"Request body (`{media_type}`): {_schema_name(schema)}")
+                    safe_media_type = _safe(media_type)
+                    lines.append(f"Request body (`{safe_media_type}`): {_schema_name(schema)}")
             lines.append("")
 
     responses = operation.get("responses")
@@ -145,7 +175,7 @@ def _operation_lines(route: str, method: str, operation: dict[str, Any]) -> list
                     if isinstance(schema, dict):
                         schema_note = f" → {_schema_name(schema)}"
                         break
-            lines.append(f"- `{code}`: {text}{schema_note}".rstrip())
+            lines.append(f"- `{_safe(code)}`: {text}{schema_note}".rstrip())
         lines.append("")
     return lines
 
@@ -162,8 +192,8 @@ def openapi_to_markdown(path: Path, *, note_type: str) -> str:
     version = ""
     description = ""
     if isinstance(info, dict):
-        title = str(info.get("title") or title)
-        version = str(info.get("version") or "")
+        title = _safe(info.get("title") or title)
+        version = _safe(info.get("version") or "")
         description = str(info.get("description") or "")
     paths = data.get("paths") if isinstance(data, dict) else None
     path_items = sorted(paths.items()) if isinstance(paths, dict) else []
