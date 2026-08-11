@@ -50,7 +50,9 @@ git push            # re-triggers CI
 
 ## PR linkage failures
 
-The "Require Fixes" check fails when the PR branch doesn't match `task/N-*` AND the PR body has no `Fixes #N` / `Closes #N` / `Resolves #N`. Fix:
+The "Require Fixes" check fails only when **none** of the gate's bypasses apply. In the order `.github/workflows/ci-pr-hygiene.yml` tests them: a promotion PR (head `develop` → base `main`, from this repo); a `module/*` head; a `docs/*` or `chore/*` head; a `task/<N>-*` head; or a `Fixes/Closes/Resolves #N` keyword in the PR body **or title**.
+
+So a red `Require Fixes` means the head is something else — typically `feat/<slug>`, `fix/<slug>`, or an agent namespace like `claude/<slug>` — with no keyword. Fix:
 
 1. Create a backing issue if none exists:
    ```bash
