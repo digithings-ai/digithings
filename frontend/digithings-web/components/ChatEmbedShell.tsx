@@ -230,6 +230,17 @@ export function ChatEmbedShell({
         height: "100%",
         minHeight: 0,
         position: "relative",
+        // The proportioned-page look (gutters, breathing room off the floor)
+        // belongs to this host page, not the guest iframe — the iframe just
+        // fills whatever box it's given, edge-to-edge (digichat's own
+        // .dc-session--wide does the same: no internal cap once `wide=1`).
+        // Sizing it here instead of inside digichat also means it responds
+        // to this page's own breakpoints, not a copy of them maintained on
+        // the other side of the iframe boundary.
+        width: "100%",
+        maxWidth: "min(1280px, 90vw)",
+        marginInline: "auto",
+        paddingBottom: "clamp(0.75rem, 2.5vw, 1.75rem)",
         // Transparent, not var(--bg): the page's fixed .grain/.glow layers (site.css,
         // z-index 0) sit behind this shell, and an opaque fill here paints a visible
         // rectangle over them. The boot overlay below still fills solid while it's up

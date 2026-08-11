@@ -206,6 +206,15 @@
   max-height: 140px;
   padding: 0.35rem 0;
 }
+/* iOS Safari auto-zooms the page on focusing any input/textarea under 16px —
+ * there is no CSS opt-out for that behavior, only staying above the
+ * threshold. Scoped to the width Safari treats as a phone, not a general
+ * mobile/touch query, so a compact tablet or desktop keeps the tighter 0.8rem. */
+@media (max-width: 640px) {
+  .dc-textarea {
+    font-size: 1rem;
+  }
+}
 .dc-textarea::placeholder {
   color: var(--ink-soft);
 }

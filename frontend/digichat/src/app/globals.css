@@ -573,32 +573,16 @@
 }
 
 /* Full-page embedder opt-out (?wide=1 — digithings.ai /chat, /chat/occ): the
- * shell IS the page there, not a widget dropped into someone else's layout,
- * so the 1080px readable-measure cap above reads as a narrow floating box on
- * a widescreen viewport. Not full-bleed either, though — an edge-to-edge
- * transcript on a 1920px+ monitor loses the proportioned, intentional feel a
- * page (vs. a bare widget) should have.
- *
- * 1280px / 90vw is deliberately more generous than the 1080px/96vw the
- * narrow-widget rule above uses: the gutter is the point here (a page, with
- * room to breathe), not a minimal margin. Still fluid — `90vw` means the
- * gutter is proportional, not a fixed pixel floor, so it keeps shrinking as
- * the viewport does (down to ~40px either side at an 800px-wide iframe)
- * rather than holding a large gutter on a small screen. Same (0,2,0)
- * specificity as the rule it overrides — source order (this comes after)
- * breaks the tie. */
+ * embed IS the page there, not a widget dropped into someone else's layout,
+ * so the 1080px readable-measure cap above has no host-page gutter to
+ * protect — it would just be a second, redundant cap stacked underneath
+ * whatever box the *host page* already sized. The gutter, and the bottom
+ * breathing room, are ChatEmbedShell's job now (digithings-web) — sized
+ * against the host page's own breakpoints, not a copy of them kept in sync
+ * across the iframe boundary. Same (0,2,0) specificity as the rule it
+ * overrides — source order (this comes after) breaks the tie. */
 .dc-embed-shell .dc-session--wide {
-  max-width: min(1280px, 90vw);
-}
-
-/* Same page-not-widget reasoning, for the bottom edge: .dc-form's own 0.75rem
- * padding-bottom (session.css) is sized for a widget that's *inside*
- * something else's page chrome, not for sitting flush against the actual
- * bottom of a browser viewport — the textarea read as glued to the edge.
- * Overrides just the bottom component of .dc-form's padding shorthand; still
- * fluid (shrinks with the viewport) per the same request as the gutter above. */
-.dc-embed-shell .dc-session--wide .dc-form {
-  padding-bottom: clamp(0.75rem, 2.5vw, 1.75rem);
+  max-width: none;
 }
 
 /* Same opt-out, for background: `.dc-embed-shell` and `body` both paint an
