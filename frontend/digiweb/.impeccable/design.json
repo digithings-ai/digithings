@@ -150,7 +150,7 @@
       "Don't let atlas, hermes, or kairos render as colored products on a redesigned surface — they name backend LangGraph sub-graphs and must collapse to plain ink.",
       "Don't reuse the diff palette (--rv-add/--rv-del) for anything except unified-diff review UI, and don't reuse money colors for a non-financial positive/negative read.",
       "Don't put a message in a bubble or box inside the chat transcript — plain turns are grid rows; only rich embedded objects earn a frame.",
-      "Don't carry forward the reference implementation's known gaps (undeclared --surface-inverse fallback, missing :disabled styling on ghost/quiet/danger buttons, digichat's light-theme accent contrast failure) as if they were intentional patterns."
+      "Don't carry forward the reference implementation's remaining known gaps (missing :disabled styling on ghost/quiet/danger buttons, digichat's light-theme accent contrast failure) as if they were intentional patterns. (The undeclared --surface-inverse fallback was fixed — every consumer now routes through the already-correct --on-accent token.)"
     ]
   }
 }
