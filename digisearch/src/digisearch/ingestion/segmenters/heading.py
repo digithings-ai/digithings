@@ -94,8 +94,12 @@ def heading_segments(markdown_text: str, *, max_split_level: int = 3) -> list[Se
     contains those lines verbatim, they just cannot start a new section.
 
     A heading whose section has no content beyond the heading line itself (i.e. another
-    qualifying heading follows immediately) is skipped rather than emitted as an empty
-    stub segment; ``index`` stays sequential over the segments that ARE emitted.
+    qualifying heading follows immediately) is skipped as a segment *boundary* — it does
+    not become its own stub segment — but its heading line is never dropped. It is
+    carried forward and prepended to the next emitted segment's text; a trailing stub
+    with no following segment is appended to the previously emitted segment instead, or
+    becomes its own segment if there is no previous segment either. ``index`` stays
+    sequential over the segments that ARE emitted.
 
     Returns an empty list when the text contains no qualifying heading, which callers
     treat as "no known structure" and fall back to whole-document handling.
@@ -112,6 +116,10 @@ def heading_segments(markdown_text: str, *, max_split_level: int = 3) -> list[Se
         segments.append(Segment(index=0, label=INTRO_LABEL, text=preamble))
 
     stack: list[tuple[int, str]] = []  # (level, heading text) ancestor chain
+    # Stub headings skipped so far, not yet surfaced anywhere: (level, heading, breadcrumb,
+    # heading_line). Carried forward onto the next emitted segment's text; flushed at the
+    # end if the document's last heading(s) are stubs with no following segment.
+    pending_stubs: list[tuple[int, str, str, str]] = []
     for position, match in enumerate(matches):
         level = len(match.group(1))
         heading = match.group(2).strip()
@@ -122,11 +130,16 @@ def heading_segments(markdown_text: str, *, max_split_level: int = 3) -> list[Se
         end = matches[position + 1].start() if position + 1 < len(matches) else len(markdown_text)
         body = markdown_text[match.start() : end].strip()
         # A stub heading's body is exactly its own heading line (nothing follows before
-        # the next qualifying heading or end of document) — skip it so it doesn't become
-        # its own vault note.
+        # the next qualifying heading or end of document) — skip it as a segment so it
+        # doesn't become its own vault note, but remember its heading line so it can be
+        # carried into whichever segment ends up surfacing next.
         heading_line = match.group(0).strip()
         if body == heading_line:
+            pending_stubs.append((level, heading, breadcrumb, heading_line))
             continue
+        if pending_stubs:
+            body = "\n".join([*(stub[3] for stub in pending_stubs), body])
+            pending_stubs = []
         segments.append(
             Segment(
                 index=len(segments),
@@ -135,4 +148,19 @@ def heading_segments(markdown_text: str, *, max_split_level: int = 3) -> list[Se
                 metadata={"heading": heading, "level": level},
             )
         )
+
+    if pending_stubs:
+        carried = "\n".join(stub[3] for stub in pending_stubs)
+        if segments:
+            segments[-1].text = f"{segments[-1].text}\n{carried}"
+        else:
+            level, heading, breadcrumb, _ = pending_stubs[-1]
+            segments.append(
+                Segment(
+                    index=0,
+                    label=f"heading:{breadcrumb}",
+                    text=carried,
+                    metadata={"heading": heading, "level": level},
+                )
+            )
     return segments
