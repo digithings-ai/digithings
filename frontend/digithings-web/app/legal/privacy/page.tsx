@@ -66,7 +66,9 @@ export default function PrivacyPage() {
                       className="text-accent [text-underline-offset:2px] hover:text-ink"
                       subject="digithings%20privacy%20question"
                       showAddress
-                    />
+                    >
+                      Email us
+                    </ContactMailto>
                   </dd>
                 </div>
                 <div>
@@ -160,7 +162,9 @@ export default function PrivacyPage() {
                     className="text-accent [text-underline-offset:2px] hover:text-ink"
                     subject="digithings%20privacy%20request"
                     showAddress
-                  />
+                  >
+                    us
+                  </ContactMailto>
                   . We may need enough information to verify and act on the request.
                 </p>
                 <p>

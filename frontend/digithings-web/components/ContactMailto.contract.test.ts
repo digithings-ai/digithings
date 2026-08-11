@@ -53,4 +53,35 @@ describe("ContactMailto contracts", () => {
       expect(src).toContain("<ContactMailto");
     }
   });
+
+  it("always renders children, even for showAddress, so the link has visible text and an accessible name before mount", () => {
+    // A prior version suppressed children whenever showAddress was set
+    // (`{showAddress ? null : children}`), so any showAddress usage with no
+    // children server-rendered as `<a href="#"></a>` -- empty and unlabeled
+    // until JS ran, and on legal/privacy/page.tsx it broke the surrounding
+    // sentence outright ("...email . We may need..."). children is now
+    // always rendered; showAddress only controls whether the mount effect
+    // swaps it for the real address afterward.
+    const path = fileURLToPath(new URL("./ContactMailto.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+    expect(src).not.toMatch(/showAddress\s*\?\s*null/);
+    expect(src).toContain("{children}");
+  });
+
+  it("gives every showAddress call site non-empty fallback text, not a self-closing tag", () => {
+    const pages = [
+      "../app/page.tsx",
+      "../app/services/page.tsx",
+      "../app/legal/privacy/page.tsx",
+    ];
+    for (const rel of pages) {
+      const path = fileURLToPath(new URL(rel, import.meta.url));
+      const src = readFileSync(path, "utf8");
+      const showAddressUsages = src.match(/<ContactMailto\b[^>]*showAddress[^>]*\/?>/gs) ?? [];
+      expect(showAddressUsages.length).toBeGreaterThan(0);
+      for (const usage of showAddressUsages) {
+        expect(usage.trimEnd().endsWith("/>")).toBe(false);
+      }
+    }
+  });
 });

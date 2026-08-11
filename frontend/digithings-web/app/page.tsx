@@ -291,7 +291,9 @@ export default function Home() {
               <ContactMailto
                 className="text-accent [text-underline-offset:2px] hover:text-ink"
                 showAddress
-              />
+              >
+                Or email us directly
+              </ContactMailto>
             </p>
           </Reveal>
         </section>

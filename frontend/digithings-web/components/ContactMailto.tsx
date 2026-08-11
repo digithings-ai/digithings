@@ -26,6 +26,13 @@ import { DT_CONTACT_EMAIL } from "@/app/_nav";
  * Cloudflare's rewriter nothing to rewrite, so server and client agree.
  * Real users with JS still get a working mailto: link; without JS the link
  * is inert, the same tradeoff any client-only-assigned href accepts.
+ *
+ * `showAddress` callers must still pass `children` — a non-address fallback
+ * ("Email us", "us", …) that server-renders as the link's visible text and
+ * accessible name, swapped for the real address once mounted. Server-
+ * rendering `showAddress` with no children at all leaves the link visibly
+ * empty and unlabeled until JS runs — a discernible-text regression, not
+ * the documented "inert without JS" tradeoff above.
  */
 
 /** Pure so the query-string assembly is unit-testable without rendering. */
@@ -46,10 +53,11 @@ export function ContactMailto({
   subject?: string;
   className?: string;
   ariaLabel?: string;
-  /** Show DT_CONTACT_EMAIL itself as the link text, set after mount rather
-   *  than passed as `children` (which would bake the bare address into the
-   *  server-rendered text node, the same problem this component exists to
-   *  avoid). Mutually exclusive with `children` in practice — pass one. */
+  /** Swap `children` for DT_CONTACT_EMAIL itself once mounted, rather than
+   *  passing the address as `children` directly (which would bake the bare
+   *  address into the server-rendered text node — the same problem this
+   *  component exists to avoid). `children` is still required: it's the
+   *  server-rendered fallback text and accessible name until the swap. */
   showAddress?: boolean;
   children?: ReactNode;
 }) {
@@ -64,7 +72,7 @@ export function ContactMailto({
 
   return (
     <a ref={ref} href="#" className={className} aria-label={ariaLabel}>
-      {showAddress ? null : children}
+      {children}
     </a>
   );
 }
