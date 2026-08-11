@@ -72,8 +72,18 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # The gate starts here. e03c7095 is develop at the time this script landed;
-# everything up to and including it predates the rule.
-BASELINE_SHA = "e03c7095"
+# everything up to and including it predates the rule. Advanced to 4553acf30f
+# (2026-08-11): PR #2124's squash-merge of develop -> main discarded prior
+# commits as recognized ancestors of main, orphaning older commits like #1265
+# and #1247 from *any* merge-commit path to main even though their content
+# already shipped -- so they resurfaced as "unreviewed" on every later
+# promotion despite predating this gate by weeks. #2142 restored a
+# byte-identical tree between main and develop at 4553acf30f (verified: same
+# tree hash) without restoring the severed commit ancestry, so this is the
+# real "everything before this already reached production" checkpoint. Move
+# forward again only after confirming a fresh squash (or similar) has severed
+# ancestry beyond this point, the same way this move was justified.
+BASELINE_SHA = "4553acf30f"
 
 # Squash merges land as "subject (#1234)"; GitHub merge commits as
 # "Merge pull request #1234 from ...". Child commits preserved by a merge commit
@@ -144,6 +154,27 @@ def associated_pr_number(sha: str) -> int | None:
 
 def is_merge_commit(parents: str) -> bool:
     return len(parents.split()) > 1
+
+
+def resolve_pr_number(subject: str, sha: str, cache: dict[int, dict]) -> int | None:
+    """The PR whose review state judges this commit, or None if it has none.
+
+    `parse_pr_number`'s trailing "(#N)" match assumes a squash-merge PR
+    reference, but a commit subject can cite an issue number in the same
+    shape (e.g. "docs: foo (#2103)" naming issue #2103, not a PR) --
+    `_pr_review_state` on a number that isn't a real PR raises. Rather than
+    letting that crash the whole gate, fall back to the real commit -> PR
+    association, the same path unnumbered commits already use.
+    """
+    number = parse_pr_number(subject)
+    if number is not None and number not in cache:
+        try:
+            cache[number] = _pr_review_state(number)
+        except subprocess.CalledProcessError:
+            number = None
+    if number is None:
+        number = associated_pr_number(sha)
+    return number
 
 
 def commits_in_range(base: str, head: str) -> list[dict]:
@@ -335,9 +366,7 @@ def main() -> int:
             checked.append(row)
             continue
 
-        number = parse_pr_number(commit["subject"])
-        if number is None:
-            number = associated_pr_number(commit["sha"])
+        number = resolve_pr_number(commit["subject"], commit["sha"], cache)
         if number is None:
             row.update(
                 reviewed=False,

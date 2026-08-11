@@ -309,6 +309,57 @@ def test_github_association_failure_fails_closed(monkeypatch: pytest.MonkeyPatch
     assert crc.associated_pr_number("unknown123") is None
 
 
+def test_a_trailing_issue_number_that_is_not_a_real_pr_falls_back_to_association(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ "docs: foo (#2103)" citing issue #2103 must not crash the gate.
+
+    `parse_pr_number` cannot tell a squash-merge PR reference apart from a
+    commit subject that cites an issue in the same "(#N)" shape. `gh pr view`
+    on a number that isn't a real PR raises -- this pins that
+    `resolve_pr_number` catches it and falls back to the real commit -> PR
+    association instead of propagating the crash.
+    """
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+
+    def fake_pr_view(number: int) -> dict[str, Any]:
+        raise subprocess.CalledProcessError(1, "gh pr view", output=b"", stderr=b"not a PR")
+
+    monkeypatch.setattr(crc, "_pr_review_state", fake_pr_view)
+    monkeypatch.setattr(crc, "associated_pr_number", lambda _sha: 2106)
+
+    resolved = crc.resolve_pr_number(
+        "docs: DigiChat language selector design (#2103)", "abc123", {}
+    )
+    assert resolved == 2106
+
+
+def test_a_real_squash_merge_pr_number_is_cached_and_not_re_fetched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The common case: a genuine squash-merge "(#N)" resolves without falling back."""
+    calls: list[int] = []
+
+    def fake_pr_view(number: int) -> dict[str, Any]:
+        calls.append(number)
+        return _state()
+
+    monkeypatch.setattr(crc, "_pr_review_state", fake_pr_view)
+    monkeypatch.setattr(
+        crc,
+        "associated_pr_number",
+        lambda _sha: (_ for _ in ()).throw(AssertionError("should not be called")),
+    )
+
+    cache: dict[int, dict[str, Any]] = {}
+    resolved = crc.resolve_pr_number(
+        "chore(ci): retire the Copilot review request (#1894)", "def456", cache
+    )
+    assert resolved == 1894
+    assert calls == [1894]
+    assert 1894 in cache
+
+
 # ── workflow wiring: a gate that never runs gates nothing ────────────────────
 
 
