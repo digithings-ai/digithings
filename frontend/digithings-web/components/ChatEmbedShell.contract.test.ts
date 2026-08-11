@@ -73,6 +73,36 @@ describe("ChatEmbedShell contracts", () => {
     expect(src).toContain('digichat:ready');
     expect(src).toContain("opacity: embedReady ? 1 : 0");
     expect(src).toContain('backgroundColor: "transparent"');
-    expect(src).toContain("var(--bg)");
+  });
+
+  it("keeps the boot overlay transparent so .grain/.glow show through while loading", async () => {
+    // The overlay used to fill solid `var(--bg)` on the assumption it was the
+    // only thing standing between a pre-ready iframe and a white flash -- the
+    // iframe's own opacity:0 (asserted above) already does that job. A solid
+    // fill there painted a flat rectangle over the page's .grain/.glow the
+    // whole time the boot loader was up, then popped to the real background
+    // on ready, reading as "a black box that disappears" once digichat loaded.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const shellPath = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const shellSrc = readFileSync(shellPath, "utf8");
+
+    // The overlay div wrapping ContainerBootLoader: transparent, not var(--bg).
+    const overlayBlock = shellSrc.slice(
+      shellSrc.indexOf("showBoot ? ("),
+      shellSrc.indexOf("<ContainerBootLoader"),
+    );
+    expect(overlayBlock).toContain('background: "transparent"');
+    expect(overlayBlock).not.toContain('background: "var(--bg)"');
+
+    // ContainerBootLoader's own .tl-boot class fills var(--bg) by default (right
+    // for its usual standalone-app mode) -- this usage must override it via a
+    // scoped className, not by changing the shared component's default.
+    expect(shellSrc).toContain('className="dc-embed-boot"');
+
+    const cssPath = fileURLToPath(new URL("../app/globals.css", import.meta.url));
+    const css = readFileSync(cssPath, "utf8");
+    expect(css).toContain(".tl-boot.dc-embed-boot");
+    expect(css.match(/\.tl-boot\.dc-embed-boot\s*\{[^}]*background:\s*transparent/)).toBeTruthy();
   });
 });

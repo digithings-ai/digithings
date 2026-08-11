@@ -219,6 +219,15 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dc-settings-error { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--down); }
 .dc-settings-test-ok { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--up); }
 
+/* digichat embed boot loader (ChatEmbedShell.tsx) sits over the page's own
+   fixed .grain/.glow layers, not a plain app background. ContainerBootLoader's
+   shared .tl-boot class fills var(--bg) by default (right for its usual mode:
+   pinned over an app that has not rendered, with nothing behind it) -- scoped
+   override for this usage only, so .grain/.glow stay visible through the
+   loading phase instead of disappearing behind a flat rectangle that then pops
+   away once digichat itself loads. */
+.tl-boot.dc-embed-boot { background: transparent; }
+
 
 /* Landing / module cards continue below */
 
