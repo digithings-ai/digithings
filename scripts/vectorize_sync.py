@@ -91,8 +91,8 @@ def _segments_for(body: str) -> list[Segment]:
 
 
 #: Frontmatter keys worth carrying onto every chunk's metadata. Deliberately not a
-#: blind splat of the whole frontmatter dict (see the module docstring for the
-#: 10 KiB-per-vector Vectorize cap): everything here earns its place at retrieval
+#: blind splat of the whole frontmatter dict, because Vectorize caps metadata at
+#: 10 KiB per vector: everything here earns its place at retrieval
 #: or citation time --
 #:   segment_label / segment_index -- page/heading identity for a note that is
 #:     itself already one PDF page or section (the OCC child-note shape this
