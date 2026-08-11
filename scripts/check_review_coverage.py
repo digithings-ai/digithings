@@ -72,18 +72,20 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # The gate starts here. e03c7095 is develop at the time this script landed;
-# everything up to and including it predates the rule. Advanced to 4553acf30f
-# (2026-08-11): PR #2124's squash-merge of develop -> main discarded prior
-# commits as recognized ancestors of main, orphaning older commits like #1265
-# and #1247 from *any* merge-commit path to main even though their content
-# already shipped -- so they resurfaced as "unreviewed" on every later
-# promotion despite predating this gate by weeks. #2142 restored a
-# byte-identical tree between main and develop at 4553acf30f (verified: same
-# tree hash) without restoring the severed commit ancestry, so this is the
-# real "everything before this already reached production" checkpoint. Move
-# forward again only after confirming a fresh squash (or similar) has severed
-# ancestry beyond this point, the same way this move was justified.
-BASELINE_SHA = "4553acf30f"
+# everything up to and including it predates the rule.
+#
+# Do NOT "fix" old orphaned PRs (e.g. #1265, #1247 -- merged in early July, long
+# before this gate existed) by advancing this value. Checked while investigating
+# exactly that on 2026-08-11: those two commits are not ancestors of e03c7095
+# *or* of any later commit on main's post-squash lineage (PR #2124 squash-merged
+# develop -> main and discarded prior commits as recognized ancestors), so no
+# baseline value skips them -- advancing the baseline to main's current tip
+# changed zero commits' status when tested against a live 111-commit range.
+# e03c7095 itself is still a correct, working ancestor of both main and develop
+# today and needs no change. Orphaned pre-gate commits like these need their own
+# hatch label (risk:low / reviewed:owner) applied directly -- there is no
+# baseline value that retroactively covers a severed-ancestry commit.
+BASELINE_SHA = "e03c7095"
 
 # Squash merges land as "subject (#1234)"; GitHub merge commits as
 # "Merge pull request #1234 from ...". Child commits preserved by a merge commit
@@ -156,7 +158,9 @@ def is_merge_commit(parents: str) -> bool:
     return len(parents.split()) > 1
 
 
-def resolve_pr_number(subject: str, sha: str, cache: dict[int, dict]) -> int | None:
+def resolve_pr_number(
+    subject: str, sha: str, cache: dict[int, dict], invalid: set[int] | None = None
+) -> int | None:
     """The PR whose review state judges this commit, or None if it has none.
 
     `parse_pr_number`'s trailing "(#N)" match assumes a squash-merge PR
@@ -165,12 +169,21 @@ def resolve_pr_number(subject: str, sha: str, cache: dict[int, dict]) -> int | N
     `_pr_review_state` on a number that isn't a real PR raises. Rather than
     letting that crash the whole gate, fall back to the real commit -> PR
     association, the same path unnumbered commits already use.
+
+    `invalid` memoizes numbers already found bogus this run, so a repo where
+    several commits cite the same non-PR number (e.g. a whole PR's worth of
+    commits referencing one tracking issue) doesn't re-attempt the same
+    failing `gh pr view` call per commit.
     """
     number = parse_pr_number(subject)
-    if number is not None and number not in cache:
+    if number is not None and invalid is not None and number in invalid:
+        number = None
+    elif number is not None and number not in cache:
         try:
             cache[number] = _pr_review_state(number)
         except subprocess.CalledProcessError:
+            if invalid is not None:
+                invalid.add(number)
             number = None
     if number is None:
         number = associated_pr_number(sha)
@@ -348,6 +361,7 @@ def main() -> int:
     checked: list[dict] = []
     unreviewed: list[dict] = []
     cache: dict[int, dict] = {}
+    invalid_numbers: set[int] = set()
 
     for commit in commits:
         short = commit["sha"][:8]
@@ -366,7 +380,7 @@ def main() -> int:
             checked.append(row)
             continue
 
-        number = resolve_pr_number(commit["subject"], commit["sha"], cache)
+        number = resolve_pr_number(commit["subject"], commit["sha"], cache, invalid_numbers)
         if number is None:
             row.update(
                 reviewed=False,
