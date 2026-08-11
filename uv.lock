@@ -1536,10 +1536,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
-]
 service = [
     { name = "fastapi" },
     { name = "mcp" },
@@ -1550,19 +1546,29 @@ supabase = [
     { name = "supabase" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "fastapi", marker = "extra == 'service'", specifier = ">=0.110" },
     { name = "mcp", marker = "extra == 'service'", specifier = ">=1.0,<2" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
     { name = "supabase", marker = "extra == 'supabase'", specifier = ">=2" },
     { name = "typer", marker = "extra == 'service'", specifier = ">=0.12" },
     { name = "uvicorn", marker = "extra == 'service'", specifier = ">=0.29" },
 ]
-provides-extras = ["service", "dev", "supabase"]
+provides-extras = ["service", "supabase"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "dill"
