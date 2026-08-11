@@ -19,6 +19,7 @@ import { DigiChatSession } from "@digithings/digichat-ui";
 import { Key, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
+import { ContactMailto } from "@/components/ContactMailto";
 import {
   useBYOKKey,
   type BYOKProvider,
@@ -825,13 +826,11 @@ function PaywallCard({
         </p>
         <p className="text-xs text-muted-foreground">
           For more, get in touch at{" "}
-          <a
-            href={`mailto:${lockedContact}`}
+          <ContactMailto
+            email={lockedContact}
             className="font-medium underline"
             style={{ color: "var(--accent)" }}
-          >
-            {lockedContact}
-          </a>
+          />
           .
         </p>
       </div>
