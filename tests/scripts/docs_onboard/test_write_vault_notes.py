@@ -219,6 +219,110 @@ def test_multi_segment_pdf_writes_children_and_hub(tmp_path: Path) -> None:
     assert child["frontmatter"]["parent_doc"] == hub
 
 
+def test_duplicate_sibling_headings_produce_distinct_notes(tmp_path: Path) -> None:
+    """Two ``## Notes`` sections under the same H1 must not overwrite each other."""
+    ws = Workspace.create(tmp_path / "work")
+    local = ws.root / "files" / "guide.md"
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_text(
+        "# Title\n"
+        "## Notes\n"
+        "First section notes with unique content ALPHA.\n"
+        "## Details\n"
+        "Some details BETA.\n"
+        "## Notes\n"
+        "Second section notes with unique content GAMMA.\n",
+        encoding="utf-8",
+    )
+    ws.append_classified(
+        ClassifiedPage(
+            page=DiscoveredPage(
+                url="repo://acme/guide.md",
+                final_url="repo://acme/guide.md",
+                content_type="text/markdown",
+                title="Guide",
+                depth=0,
+                local_path="files/guide.md",
+                discovered_from="repo_source",
+            ),
+            page_class=PageClass.repo_doc,
+            score=90.0,
+            reasons=("repo",),
+        )
+    )
+    writer = _RecordingWriter()
+    manifest = OnboardManifest(
+        client="acme", seed_url="https://example.com/", vault_subdir="clients/acme"
+    )
+    count = write_vault_notes(manifest, ws, writer)
+
+    names = [call["name"] for call in writer.calls]
+    assert count == len(writer.calls)
+    assert len(set(names)) == len(names), f"collided note names: {names}"
+
+    bodies_by_name = {call["name"]: call["body"] for call in writer.calls}
+    alpha_notes = [name for name, body in bodies_by_name.items() if "ALPHA" in body]
+    gamma_notes = [name for name, body in bodies_by_name.items() if "GAMMA" in body]
+    assert len(alpha_notes) == 1
+    assert len(gamma_notes) == 1
+    assert alpha_notes != gamma_notes
+
+    hub_call = writer.calls[-1]
+    child_names = names[:-1]
+    for child_name in child_names:
+        assert f"[[{child_name}]]" in hub_call["body"]
+
+    # Minor fix: display title strips the "heading:" prefix but segment_label keeps it.
+    alpha_call = next(call for call in writer.calls if "ALPHA" in call["body"])
+    assert alpha_call["frontmatter"]["segment_label"].startswith("heading:")
+    assert "heading:" not in alpha_call["frontmatter"]["title"]
+
+
+def test_long_shared_prefix_headings_produce_distinct_notes(tmp_path: Path) -> None:
+    """Two headings whose slugs collide after 48-char truncation must not overwrite."""
+    ws = Workspace.create(tmp_path / "work")
+    local = ws.root / "files" / "longheadings.md"
+    local.parent.mkdir(parents=True, exist_ok=True)
+    heading_one = "This Is A Very Long Heading Title That Goes On For Section Part One"
+    heading_two = "This Is A Very Long Heading Title That Goes On For Section Part Two"
+    local.write_text(
+        f"# Title\n## {heading_one}\nUnique content ONE.\n## {heading_two}\nUnique content TWO.\n",
+        encoding="utf-8",
+    )
+    ws.append_classified(
+        ClassifiedPage(
+            page=DiscoveredPage(
+                url="repo://acme/longheadings.md",
+                final_url="repo://acme/longheadings.md",
+                content_type="text/markdown",
+                title="Guide",
+                depth=0,
+                local_path="files/longheadings.md",
+                discovered_from="repo_source",
+            ),
+            page_class=PageClass.repo_doc,
+            score=90.0,
+            reasons=("repo",),
+        )
+    )
+    writer = _RecordingWriter()
+    manifest = OnboardManifest(
+        client="acme", seed_url="https://example.com/", vault_subdir="clients/acme"
+    )
+    count = write_vault_notes(manifest, ws, writer)
+
+    names = [call["name"] for call in writer.calls]
+    assert count == len(writer.calls)
+    assert len(set(names)) == len(names), f"collided note names: {names}"
+
+    bodies_by_name = {call["name"]: call["body"] for call in writer.calls}
+    one_notes = [name for name, body in bodies_by_name.items() if "ONE" in body]
+    two_notes = [name for name, body in bodies_by_name.items() if "TWO" in body]
+    assert len(one_notes) == 1
+    assert len(two_notes) == 1
+    assert one_notes != two_notes
+
+
 def test_single_segment_document_writes_one_note(tmp_path: Path) -> None:
     ws = Workspace.create(tmp_path / "work")
     local = ws.root / "files" / "readme.md"

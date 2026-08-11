@@ -38,13 +38,65 @@ def _markdown_title_from_body(body: str, fallback: str) -> str:
 
 
 def _segment_slug(segment: Segment) -> str:
-    """Filesystem-safe suffix identifying a segment within its parent document."""
+    """Filesystem-safe suffix identifying a segment within its parent document.
+
+    Not guaranteed unique across a document's segments on its own: two headings can
+    share a label (duplicate sibling sections) or truncate to the same 48-char prefix.
+    Use ``_child_segment_slugs`` to get a per-document disambiguated set.
+    """
     page = segment.metadata.get("page")
     if isinstance(page, int):
         return f"p{page:03d}"
     raw = segment.label.split(":", 1)[-1]
     slug = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-")
     return (slug or f"seg{segment.index:03d}")[:48]
+
+
+def _child_segment_slugs(segments: list[Segment]) -> list[str]:
+    """Per-document slugs, disambiguated so no two segments collide.
+
+    Deterministic and stable across reruns on unchanged input: a slug that repeats
+    within this document gets ``segment.index`` folded in (never randomness, hashes of
+    mutable state, or wall-clock time), and PDF ``page:N`` slugs are already unique
+    (page numbers can't repeat) so they pass through untouched.
+    """
+    base_slugs = [_segment_slug(segment) for segment in segments]
+    counts: dict[str, int] = {}
+    for base in base_slugs:
+        counts[base] = counts.get(base, 0) + 1
+
+    used: set[str] = set()
+    result: list[str] = []
+    for segment, base in zip(segments, base_slugs, strict=True):
+        if counts[base] > 1:
+            suffix = f"-i{segment.index:03d}"
+            name = f"{base[: 48 - len(suffix)]}{suffix}"
+        else:
+            name = base
+        # Safety net for the pathological case where a disambiguated name still
+        # collides with another segment's slug — guarantees strict uniqueness.
+        candidate = name
+        n = 1
+        while candidate in used:
+            candidate = f"{name[:44]}-d{n}"
+            n += 1
+        used.add(candidate)
+        result.append(candidate)
+    return result
+
+
+def _segment_display_label(segment: Segment) -> str:
+    """Human-facing label for a segment: raw label minus its type prefix.
+
+    ``segment_label`` in frontmatter keeps the raw ``heading:``/``page:``-prefixed
+    label unchanged; this is only for the display ``title`` field.
+    """
+    label = segment.label
+    if label.startswith("heading:"):
+        return label[len("heading:") :]
+    if label.startswith("page:"):
+        return f"page {label[len('page:') :]}"
+    return label
 
 
 def _hub_body(title: str, child_names: list[str]) -> str:
@@ -226,11 +278,12 @@ def write_vault_notes(
             written += 1
             continue
         child_names: list[str] = []
-        for segment in segments:
-            child_name = f"{slug}__{_segment_slug(segment)}"
+        child_slugs = _child_segment_slugs(segments)
+        for segment, child_slug in zip(segments, child_slugs, strict=True):
+            child_name = f"{slug}__{child_slug}"
             child_fm = {
                 **frontmatter,
-                "title": f"{title} — {segment.label}",
+                "title": f"{title} — {_segment_display_label(segment)}",
                 "segment_label": segment.label,
                 "segment_index": segment.index,
                 "parent_doc": slug,
