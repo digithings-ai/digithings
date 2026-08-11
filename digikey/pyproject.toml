@@ -24,10 +24,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "mypy>=2,<3", "fakeredis>=2.20"]
+dev = ["fakeredis>=2.20"]
 
 [project.scripts]
 digikey = "digikey.cli:main"
+
+[dependency-groups]
+# Synced by default with plain `uv sync` (unlike [project.optional-dependencies], which
+# needs --extra/--all-extras) -- so these tools are always present in digikey's own venv
+# regardless of which extras a given `uv sync` invocation requests. Bounds match CLAUDE.md's
+# "Dependency version bounds": tools whose output gates CI are capped to their current major.
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "mypy>=2,<3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
