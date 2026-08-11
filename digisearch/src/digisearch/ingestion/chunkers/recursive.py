@@ -82,52 +82,53 @@ class RecursiveChunker(Chunker):
             candidate = current + (sep if current and sep else "") + p
             if len(candidate) <= self.chunk_size:
                 current = candidate
-            else:
-                if current:
-                    chunks.append(
-                        Chunk(
-                            id=f"{doc_id}_{idx}",
-                            content=current.strip(),
-                            doc_id=doc_id,
-                            embedding=None,
-                            metadata={"chunk_index": idx},
-                        )
+                continue
+
+            if current:
+                chunks.append(
+                    Chunk(
+                        id=f"{doc_id}_{idx}",
+                        content=current.strip(),
+                        doc_id=doc_id,
+                        embedding=None,
+                        metadata={"chunk_index": idx},
                     )
-                    idx += 1
-                    overlap = current[-self.chunk_overlap :] if self.chunk_overlap else ""
-                    current = overlap + (sep if sep else "") + p
+                )
+                idx += 1
+                overlap = current[-self.chunk_overlap :] if self.chunk_overlap else ""
+                merged = overlap + (sep if sep else "") + p
+            else:
+                merged = p
+
+            if len(merged) > self.chunk_size:
+                # `merged` (an overlap/separator prefix plus `p`) doesn't fit.
+                # Whether that's because `p` alone exceeds chunk_size or the
+                # overlap prefix pushed an otherwise-fitting `p` over the edge,
+                # the fix is the same: drop the prefix (it can't fit alongside
+                # p either way) and resolve `p` on its own, exactly like the
+                # current-was-empty case below always has.
+                #
+                # Guard against non-progress: str.split on a non-empty
+                # separator that is actually present always yields parts
+                # strictly shorter than the input, so len(p) < len(text)
+                # here for every normal delimited split. The only way p
+                # comes back the same length as text is the separator
+                # search exhausting every real separator and falling
+                # through to sep="" (parts = [text] unchanged) — i.e. a
+                # delimiter-free run. Checking length directly (instead
+                # of trusting the separator list) means even a future
+                # edit to `_separators` can't reopen the infinite
+                # recursion from issue #2180: recursing on unreduced
+                # input is structurally impossible, not just unlikely.
+                if len(p) < len(text):
+                    sub = self._split(p, doc_id, idx)
                 else:
-                    if len(p) > self.chunk_size:
-                        # Guard against non-progress: str.split on a non-empty
-                        # separator that is actually present always yields parts
-                        # strictly shorter than the input, so len(p) < len(text)
-                        # here for every normal delimited split. The only way p
-                        # comes back the same length as text is the separator
-                        # search exhausting every real separator and falling
-                        # through to sep="" (parts = [text] unchanged) — i.e. a
-                        # delimiter-free run. Checking length directly (instead
-                        # of trusting the separator list) means even a future
-                        # edit to `_separators` can't reopen the infinite
-                        # recursion from issue #2180: recursing on unreduced
-                        # input is structurally impossible, not just unlikely.
-                        if len(p) < len(text):
-                            sub = self._split(p, doc_id, idx)
-                        else:
-                            sub = self._hard_split(p, doc_id, idx)
-                        chunks.extend(sub)
-                        idx += len(sub)
-                    else:
-                        chunks.append(
-                            Chunk(
-                                id=f"{doc_id}_{idx}",
-                                content=p.strip(),
-                                doc_id=doc_id,
-                                embedding=None,
-                                metadata={"chunk_index": idx},
-                            )
-                        )
-                        idx += 1
-                    current = ""
+                    sub = self._hard_split(p, doc_id, idx)
+                chunks.extend(sub)
+                idx += len(sub)
+                current = ""
+            else:
+                current = merged
         if current.strip():
             chunks.append(
                 Chunk(
